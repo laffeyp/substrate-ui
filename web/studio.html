@@ -68,17 +68,26 @@ input.k{ min-width:150px; } input.sm{ width:54px; } input.med{ width:120px; }
   </div>
 
   <div class="sec">
+    <div class="sec-h">routes <span class="add" id="addRoute">+ route</span></div>
+    <div id="routes"></div>
+    <div class="hint">a Route stages an event of a kind into a future Producer's named input slot — carrying data into instances the Trigger will create.</div>
+  </div>
+
+  <div class="sec">
     <div class="sec-h">termination policy</div>
     <div class="row">
       <select id="termKind">
         <option value="quiescence_with_watchdog">quiescence_with_watchdog</option>
         <option value="all_completed">all_completed</option>
         <option value="threshold_count">threshold_count</option>
-        <option value="any_of">any_of(all_completed, quiescence)</option>
+        <option value="cancel_all_others">cancel_all_others</option>
+        <option value="any_of">any_of (… OR …)</option>
+        <option value="all_of">all_of (… AND …)</option>
       </select>
       <span class="term-params" id="termParams"></span>
     </div>
-    <div class="hint">the TerminationPolicy ends the run. any_of here = all_completed OR quiescence (a safe default).</div>
+    <div id="termMembers"></div>
+    <div class="hint">the TerminationPolicy ends the run. any_of / all_of compose member policies (OR / AND); add members below.</div>
   </div>
 
   <div class="actions">
