@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="icon" href="data:," />
+<title>substrate · run console (live)</title>
+<style>
+:root{
+  --bg:#080a0d; --bg2:#0c0f14; --panel:#0f131a; --panel2:#141a22; --raised:#1a212b;
+  --line:#1f2731; --line2:#2b3542; --line3:#3a4654;
+  --tx:#d6dfea; --tx-dim:#8995a4; --tx-faint:#566273; --tx-ghost:#3a4452;
+  --green:#3fb950; --blue:#4493f8; --amber:#d6a032; --red:#f85149; --cyan:#39c5cf;
+  --violet:#a878f5; --slate:#6b7785;
+  --mono:'JetBrains Mono','SF Mono',ui-monospace,Menlo,Consolas,monospace;
+  --rail-w:280px; --insp-w:340px;
+}
+*{box-sizing:border-box;}
+html,body{height:100%;margin:0;}
+body{ background:var(--bg); color:var(--tx); font-family:var(--mono); font-size:13px; line-height:1.45; overflow:hidden; -webkit-font-smoothing:antialiased; }
+button{font-family:inherit;color:inherit;cursor:pointer;background:none;border:none;}
+::-webkit-scrollbar{width:10px;height:10px;} ::-webkit-scrollbar-thumb{background:var(--line2);border-radius:6px;border:2px solid var(--bg);}
+.dim{color:var(--tx-faint);} .sm{font-size:11px;}
+
+.app{ height:100%; display:grid; grid-template-rows:auto auto 1fr auto; }
+
+/* header */
+.head{ display:flex; align-items:center; gap:16px; padding:10px 16px; border-bottom:1px solid var(--line2); }
+.brand{ font-weight:700; letter-spacing:.04em; } .brand .mk{ color:var(--green); }
+.head .ttl{ margin-left:6px; color:var(--tx-faint); letter-spacing:.18em; font-size:11px; text-transform:uppercase; }
+.spacer{ flex:1; }
+.runname{ font-weight:600; } .runid{ color:var(--tx-faint); margin-left:8px; font-size:11px; }
+.verdict{ font-weight:700; padding:5px 12px; border-radius:7px; border:1px solid; font-size:12px; letter-spacing:.04em; }
+.v-finalised{ color:var(--green); border-color:var(--green); }
+.v-failed{ color:var(--red); border-color:var(--red); background:rgba(248,81,73,.08); }
+.v-paused{ color:var(--cyan); border-color:var(--cyan); }
+.v-incomplete{ color:var(--amber); border-color:var(--amber); }
+.v-live{ color:var(--green); border-color:var(--green); animation:pulse 1.4s ease-in-out infinite; }
+@keyframes pulse{ 0%,100%{ opacity:1; } 50%{ opacity:.5; } }
+
+/* cursor bar */
+.cursor{ display:flex; align-items:center; gap:14px; padding:8px 16px; border-bottom:1px solid var(--line); }
+.cursor input[type=range]{ flex:1; accent-color:var(--blue); }
+.cursor .seq{ font-size:12px; } .cursor .seq b{ color:var(--tx); }
+.btn{ border:1px solid var(--line2); border-radius:6px; padding:3px 9px; font-size:12px; color:var(--tx-dim); }
+.btn:hover{ border-color:var(--line3); color:var(--tx); }
+#diffsel{ background:var(--panel); border:1px solid var(--line2); border-radius:6px; padding:3px 7px; color:var(--tx-dim); font-size:11px; }
+.diff-hi{ color:var(--amber); } .diff-eq{ color:var(--green); }
+
+/* body grid */
+.body{ display:grid; grid-template-columns:var(--rail-w) 1fr var(--insp-w); min-height:0; }
+.col{ min-height:0; overflow:auto; border-right:1px solid var(--line); }
+.col-h{ padding:9px 14px; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--tx-faint); border-bottom:1px solid var(--line); position:sticky; top:0; background:var(--bg); z-index:1; }
+
+/* launch control (thin control layer) */
+#launchbar{ display:flex; gap:6px; align-items:center; flex-wrap:wrap; padding:8px 12px; border-bottom:1px solid var(--line); }
+#launchsel{ flex:1; min-width:120px; background:var(--panel); border:1px solid var(--line2); border-radius:6px; padding:4px 6px; color:var(--tx-dim); font-size:11px; }
+#launchmsg{ flex-basis:100%; }
+
+/* rail */
+.rec{ padding:11px 14px; border-bottom:1px solid var(--line); cursor:pointer; }
+.rec:hover{ background:var(--panel); } .rec.sel{ background:var(--panel2); box-shadow:inset 2px 0 var(--blue); }
+.rec .nm{ font-weight:600; } .rec .meta{ font-size:11px; color:var(--tx-faint); margin-top:2px; }
+.rec .dot{ float:right; width:8px; height:8px; border-radius:50%; margin-top:4px; }
+.rec .broken{ color:var(--red); }
+
+/* graph */
+.graph{ padding:14px 16px; }
+.legend{ display:flex; gap:14px; font-size:11px; color:var(--tx-faint); margin-bottom:14px; flex-wrap:wrap; }
+.legend i{ display:inline-block; width:9px; height:9px; border-radius:2px; margin-right:5px; vertical-align:middle; }
+.lane{ display:flex; align-items:center; height:30px; }
+.lane .lbl{ width:170px; flex:0 0 170px; font-size:12px; color:var(--tx-dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.lane .lbl .inst{ color:var(--tx-ghost); font-size:10px; }
+.track{ position:relative; flex:1; height:30px; }
+.bar{ position:absolute; top:7px; height:16px; border-radius:4px; display:flex; align-items:center; justify-content:center; font-size:10px; overflow:hidden; }
+.bar.completed{ background:rgba(63,185,80,.32); border:1px solid var(--green); }
+.bar.failed{ background:rgba(248,81,73,.34); border:1px solid var(--red); }
+.bar.cancelled{ background:rgba(107,119,133,.22); border:1px dashed var(--slate); }
+.bar.running{ background:rgba(68,147,248,.26); border:1px solid var(--blue); }
+.bar.interrupted{ background:rgba(214,160,50,.18); border:1px dashed var(--amber); }
+.spawn{ position:absolute; top:11px; width:8px; height:8px; border-radius:50%; background:var(--amber); transform:translateX(-4px); }
+.cohort{ position:absolute; border:1px dashed var(--line3); border-radius:6px; pointer-events:none; }
+.cohort .ct{ position:absolute; top:-9px; left:6px; font-size:10px; color:var(--cyan); background:var(--bg); padding:0 4px; }
+
+/* stream */
+.ev{ display:flex; gap:10px; padding:3px 14px; font-size:12px; border-bottom:1px solid rgba(31,39,49,.5); cursor:pointer; }
+.ev:hover{ background:var(--panel); } .ev.sel{ background:var(--panel2); }
+.ev.future{ opacity:.28; }
+.ev .sq{ color:var(--tx-faint); flex:0 0 56px; }
+.ev .kd{ flex:0 0 200px; }
+.ev .pl{ color:var(--tx-faint); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.k-application{ color:var(--green); } .k-trigger{ color:var(--amber); } .k-failure{ color:var(--red); font-weight:600; }
+.k-cancelled{ color:var(--slate); } .k-termination,.k-finalise,.k-open{ color:var(--violet); } .k-lifecycle{ color:var(--tx-faint); }
+
+/* inspector */
+.insp{ padding:14px 16px; }
+.insp .row{ display:grid; grid-template-columns:78px 1fr; gap:10px; padding:5px 0; font-size:12px; }
+.insp .row .l{ color:var(--tx-faint); font-size:10px; letter-spacing:.1em; text-transform:uppercase; padding-top:3px; }
+.insp pre{ background:var(--bg2); border:1px solid var(--line); border-radius:8px; padding:11px 13px; font-size:11.5px; color:var(--tx-dim); overflow:auto; white-space:pre-wrap; word-break:break-word; }
+.insp .badge{ padding:2px 8px; border-radius:5px; border:1px solid var(--line2); font-size:11px; }
+
+/* I/O pane */
+.io-h{ padding:10px 16px; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--tx-faint); border-bottom:1px solid var(--line); }
+.io-h .r{ float:right; color:var(--tx-ghost); text-transform:none; letter-spacing:0; }
+.io-doc{ margin:12px 16px; border:1px solid var(--line2); border-radius:8px; overflow:hidden; }
+.io-doc .t{ padding:8px 12px; background:var(--bg2); border-bottom:1px solid var(--line); font-size:12px; color:var(--tx-dim); }
+.io-doc .t .seq{ color:var(--tx-faint); float:right; font-size:11px; }
+.io-doc pre{ margin:0; padding:11px 13px; font-size:11.5px; color:var(--tx-dim); white-space:pre-wrap; word-break:break-word; max-height:240px; overflow:auto; }
+.io-empty{ margin:12px 16px; color:var(--tx-faint); font-size:12px; }
+.art{ display:flex; gap:10px; padding:8px 16px; border-bottom:1px solid rgba(31,39,49,.5); font-size:12px; }
+.art .sq{ color:var(--tx-faint); flex:0 0 58px; } .art .kd{ flex:0 0 160px; color:var(--green); }
+.art .pl{ color:var(--tx-faint); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+/* health bar */
+.health{ display:flex; align-items:center; gap:20px; padding:12px 18px; border-top:1px solid var(--line2); }
+.health.broken{ background:rgba(248,81,73,.06); }
+.health .stat{ text-align:center; } .health .stat b{ font-size:17px; display:block; } .health .stat .l{ font-size:10px; color:var(--tx-faint); letter-spacing:.08em; }
+.health .red b{ color:var(--red); } .health .grn b{ color:var(--green); }
+.health .msg{ color:var(--tx-faint); font-size:12px; }
+.work{ margin-left:auto; font-size:11px; color:var(--tx-faint); }
+.work .chip{ border:1px solid var(--line2); border-radius:5px; padding:2px 7px; margin-left:6px; color:var(--green); }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="head">
+    <span class="brand"><span class="mk">▓▒░</span> substrate</span><span class="ttl">run console · live</span>
+    <span class="spacer"></span>
+    <span id="runname" class="runname"></span><span id="runid" class="runid"></span>
+    <button class="btn" id="modeToggle" title="toggle Inputs &amp; Outputs">I/O</button>
+    <select id="diffsel" class="btn" title="diff this record against another (first divergence by seq, D-8)"><option value="">⇄ diff vs…</option></select>
+    <span id="verdict" class="verdict"></span>
+    <button class="btn" id="resumebtn" title="feed the awaited input and resume this paused run" style="display:none">▶ resume</button>
+  </div>
+  <div class="cursor">
+    <button class="btn" id="toStart">⏮</button>
+    <input type="range" id="seq" min="0" max="0" value="0" />
+    <span class="seq">seq <b id="seqnow">0</b> / <span id="seqmax">0</span></span>
+    <button class="btn" id="toEnd">⏭</button>
+  </div>
+  <div class="body">
+    <div class="col"><div class="col-h">run records</div>
+      <div id="launchbar"><select id="launchsel"><option value="">+ launch a topology…</option></select><button class="btn" id="launchbtn">run ▸</button><span id="launchmsg" class="dim sm"></span></div>
+      <div id="rail"></div></div>
+    <div class="col">
+      <div id="readpane"><div class="col-h">topology · run-as-graph</div><div class="graph" id="graph"></div>
+        <div class="col-h" style="border-top:1px solid var(--line)">bus · event stream</div><div id="stream"></div></div>
+      <div id="iopane" style="display:none"></div>
+    </div>
+    <div class="col"><div class="col-h">inspector</div><div class="insp" id="insp"><span class="dim">Select an event or a Producer to trace its provenance.</span></div></div>
+  </div>
+  <div class="health" id="health"></div>
+</div>
+<script src="app.js"></script>
+</body>
+</html>

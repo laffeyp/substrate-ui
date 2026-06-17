@@ -1,0 +1,132 @@
+"""Topology SPEC -> a real TopologyBuilder topology (the Studio's "build & launch" seam).
+
+The visual Studio authors a topology as JSON; this translates it into an ACTUAL topology(b)
+function the runtime runs — no faking. It dynamically mints a frozen msgspec Struct per authored
+event kind, a deterministic stub Producer per kind (emits its event(s) so the WIRING runs), and
+wires Views / Predicates / Triggers / Routes / TerminationPolicy (incl. any_of/all_of composition)
+through the real `substrate.api` builder. (Real model Producers behind a Responder are a later
+step; the deterministic stub proves the authored wiring runs and records, exactly like CI mode.)
+
+Spec shape (the visual canvas emits this):
+  {
+    "name": "my_topology",
+    "producers": [{"kind": "reviewer", "emits": ["Critique"], "initial": true, "deterministic": true}],
+    "views":     [{"name": "crits", "kind": "KindCount", "of": "Critique"}],
+    "triggers":  [{"id": "adj", "on": "Critique", "predicate": {"view": "crits", "op": ">=", "n": 2},
+                   "starts": "judge", "policy": "Once"}],
+    "routes":    [{"id": "stage", "of": "Critique", "slot": "crits"}],
+    "termination": {"kind": "any_of", "members": [{"kind": "all_completed"},
+                                                  {"kind": "quiescence_with_watchdog", "seconds": 1}]}
+  }
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+import msgspec
+from substrate import api
+
+_OPS = {
+    ">=": lambda a, b: a >= b, ">": lambda a, b: a > b, "==": lambda a, b: a == b,
+    "<=": lambda a, b: a <= b, "<": lambda a, b: a < b,
+}
+_VIEWS = {"KindCount": api.KindCount, "KindBuffer": api.KindBuffer, "PerKindLatest": api.PerKindLatest}
+_POLICIES = {"Once": api.Once, "PerEvent": api.PerEvent, "PerKey": api.PerKey, "WhileTrue": api.WhileTrue}
+
+
+class SpecError(ValueError):
+    """The authored spec is malformed — surfaced cleanly, never an opaque crash."""
+
+
+def _predicate(spec: dict[str, Any] | None) -> Any:
+    if not spec:
+        return lambda ctx: True
+    view, op, n = spec["view"], spec["op"], int(spec["n"])
+    if op not in _OPS:
+        raise SpecError(f"unknown predicate op {op!r}")
+    fn = _OPS[op]
+
+    def pred(ctx: Any) -> bool:
+        v = ctx.views[view].value()
+        v = v if isinstance(v, int) else len(v)  # KindCount -> int; KindBuffer -> list
+        return bool(fn(v, n))
+
+    return pred
+
+
+def _termination(spec: dict[str, Any]) -> Any:
+    k = spec.get("kind")
+    if k == "threshold_count":
+        return api.threshold_count(spec["of"], int(spec["n"]))
+    if k == "quiescence_with_watchdog":
+        return api.quiescence_with_watchdog(seconds=float(spec.get("seconds", 5)))
+    if k == "all_completed":
+        return api.all_completed()
+    if k == "cancel_all_others":
+        return api.cancel_all_others(when=lambda ctx: True)
+    if k in ("any_of", "all_of"):
+        members = [_termination(m) for m in spec.get("members", [])]
+        if not members:
+            raise SpecError(f"{k} needs at least one member")
+        return (api.any_of if k == "any_of" else api.all_of)(*members)
+    raise SpecError(f"unknown termination {k!r}")
+
+
+def build_from_spec(spec: dict[str, Any]) -> Any:
+    """Translate an authored spec into a real topology(b) function (raises SpecError if malformed)."""
+    if not spec.get("producers"):
+        raise SpecError("a topology needs at least one Producer")
+    # one frozen Struct per authored event kind (a generic `note: str` payload — the stub's output).
+    structs: dict[str, type] = {}
+    for p in spec["producers"]:
+        for ev in p.get("emits", []):
+            if ev not in structs:
+                structs[ev] = msgspec.defstruct(ev, [("note", str, "")], frozen=True)
+
+    def make_stub(kind: str, emit_structs: list[type]) -> Any:
+        async def producer(_inp: Any) -> Any:
+            for s in emit_structs:
+                yield s(note=kind)  # deterministic stub: emit each declared kind once
+        return producer
+
+    def topo(b: Any) -> None:
+        for p in spec["producers"]:
+            emits = p.get("emits", [])
+            if not emits:
+                raise SpecError(f"Producer {p.get('kind')!r} emits nothing")
+            kind = p["kind"]
+            schemas = [structs[e] for e in emits]
+            b.producer_kind(
+                kind, schemas=schemas, schema_version=1,
+                start=make_stub(kind, schemas), deterministic=bool(p.get("deterministic", True)),
+            )
+            if p.get("initial"):
+                b.initial(kind)
+        for v in spec.get("views", []):
+            view_cls = _VIEWS.get(v["kind"])
+            if view_cls is None:
+                raise SpecError(f"unknown View {v['kind']!r}")
+            b.view(v["name"], view_cls(v["of"]))
+        for t in spec.get("triggers", []):
+            policy_cls = _POLICIES.get(t.get("policy", "PerEvent"), api.PerEvent)
+            b.trigger(
+                t["id"],
+                subscription=api.Subscription(kinds=frozenset({t["on"]})),
+                predicate=_predicate(t.get("predicate")),
+                input_builder=lambda ctx: ctx.event.payload,
+                starts=t["starts"],
+                policy=policy_cls(),
+            )
+        for r in spec.get("routes", []):
+            b.route(
+                r["id"],
+                subscription=api.Subscription(kinds=frozenset({r["of"]})),
+                slot=r["slot"],
+                transform=lambda event: event.payload,
+            )
+        b.termination(_termination(spec.get("termination") or {"kind": "quiescence_with_watchdog"}))
+        if spec.get("name"):
+            b.baseline(authored=spec["name"])
+
+    return topo

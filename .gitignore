@@ -1,0 +1,12 @@
+# Generated run records — demo_* are reproducible via gen_demo_records.py;
+# launch_*/build_*/resume_* are transient test/server output. None are source.
+runs/*.record/
+runs/*.record
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# OS
+.DS_Store
