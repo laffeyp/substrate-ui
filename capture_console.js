@@ -45,6 +45,12 @@ const selectRec = async (p, name) => {
   await selectRec(p, "code_review");
   await shot("02-code_review-graph", "run-as-graph: 6 lanes, spawn-cohort band, FINALISED verdict, 2 cancelled");
 
+  await p.evaluate(() => document.getElementById("gvTopo").click());
+  await p.waitForTimeout(400);
+  await shot("02b-topology-structure", "static topology-structure view: authored Producers/Triggers/Views/Routes/Termination (design §6)");
+  await p.evaluate(() => document.getElementById("gvRun").click());
+  await p.waitForTimeout(300);
+
   await p.evaluate(() => { const l = [...document.querySelectorAll(".lane")].find((e) => /judge/.test(e.textContent)); if (l) l.click(); });
   await p.waitForTimeout(600);
   await shot("03-provenance-judge", "provenance inspector for the judge: its Trigger (adjudicate) + ancestry");

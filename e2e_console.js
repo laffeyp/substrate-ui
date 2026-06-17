@@ -41,6 +41,20 @@ const check = (cond, msg) => { if (!cond) fails.push(msg); else console.log("  o
   const verdict = await p.$eval("#verdict", (e) => e.textContent.trim());
   check(/FINALISED/.test(verdict), `health verdict from run_graph.status: "${verdict}"`);
 
+  // 2b) static topology-structure view (sprint 002 — the design-§6 read-side gap the perceptual
+  // verification surfaced): toggle to TOPOLOGY -> authored structure (initial Producers + the
+  // adjudicate Trigger); toggle back -> the run-as-graph lanes return.
+  await p.evaluate(() => document.getElementById("gvTopo").click());
+  await p.waitForTimeout(400);
+  const topoText = (await p.$eval("#graph", (e) => e.textContent)).replace(/\s+/g, " ");
+  check(/reviewer-security/.test(topoText) && /initial/.test(topoText) && /adjudicate/.test(topoText) && /starts judge/.test(topoText),
+    `topology view: authored Producers (initial-marked) + the adjudicate Trigger ("${topoText.slice(0, 64)}")`);
+  const lanesInTopo = await p.$$eval(".lane", (e) => e.length);
+  check(lanesInTopo === 0, `topology view is static structure, not run lanes (${lanesInTopo} lanes)`);
+  await p.evaluate(() => document.getElementById("gvRun").click());
+  await p.waitForTimeout(400);
+  check((await p.$$eval(".lane", (e) => e.length)) === 6, "toggle back to run-as-graph restores the 6 lanes");
+
   // 3) provenance: click the judge lane -> the inspector shows its cause + ancestry
   await p.evaluate(() => { const l = [...document.querySelectorAll(".lane")].find((e) => /judge/.test(e.textContent)); if (l) l.click(); });
   await p.waitForTimeout(700);
