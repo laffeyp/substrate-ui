@@ -37,7 +37,9 @@
   - The 5 "UI BUILD step N" entries currently in `../substrate/BLACKBOARD.md ## Built` (a category leak into substrate's board; to be physically relocated here at the next substrate housekeeping pass — review #39 finding 4, low urgency).
   - Net shipped #30–#38: record rail + run-as-graph + event stream + provenance + health verdict + diff + I/O pane (#30–#34); thin control — launch (#35), live-attach + torn-record handling (#36–#37), resume + the "interrupted" status + the NOT-CLEAN-flicker fix (#38). All under `test_server.py` (18) + `e2e_console.js` (live).
 
-- **2026-06-17 — Artifact-discipline retrofit (review #39 fold).** Gave substrate-ui its own git repo (`git init -b main`, `.gitignore` for generated `runs/*.record` + bytecode, baseline commit `cbdd22e` capturing the #30–#38 green tree). Instantiated the three core kit artifacts: this `BLACKBOARD.md`, `WORKING_AGREEMENT.md` (class web+backend; canonical home registry; `substrate.api`-only dependency boundary; the eight-word tone canon + its standing grep), `KIT_DIARY.md`. No own `signals/` vocabulary (the UI reads substrate's v0.2; a second lock would be ceremony — review #39 ruling). Dual contract: artifact (the files exist + parse) + signal (vacuous — content sprint). Closes review #39 finding D.
+- **2026-06-17 — Artifact-discipline retrofit (review #39 fold).** Gave substrate-ui its own git repo (`git init -b main`, `.gitignore` for generated `runs/*.record` + bytecode, baseline commit `cbdd22e` capturing the #30–#38 green tree). Instantiated the three core kit artifacts: this `BLACKBOARD.md`, `WORKING_AGREEMENT.md` (class web+backend; canonical home registry; `substrate.api`-only dependency boundary; the eight-word tone canon + its standing grep), `KIT_DIARY.md` (commit `3af7b52`). No own `signals/` vocabulary (the UI reads substrate's v0.2; a second lock would be ceremony — review #39 ruling). Dual contract: artifact (the files exist + parse) + signal (vacuous — content sprint). Closes review #39 finding D.
+
+- **2026-06-17 — Sprint 001: Studio build seam under test + made honest (review #39 findings 2+3).** FIRST increment under formal discipline (sprint card `sprints/sprint-001-studio-build-seam.md` declared its dual+observation contract BEFORE the code landed — the exact fix review #39 prescribed). Added the two translator tests the live seam was missing (`test_build_runs_an_authored_topology` — proves an authored topology EXECUTES: a triggered judge emits `Verdict` only because `adjudicate` fired on the `KindCount(Critique)>=2` quorum; `test_validate_accepts_good_rejects_bad` — good→valid, no-producers/unknown-starts→clean typed invalid). Closed the stub honesty edge: `build_from_spec` docstrings the emit-once count-ceiling, and `/api/build` now surfaces `unfired_triggers` (authored Triggers whose Predicate never matured) — tested by `test_build_surfaces_unfired_triggers` (an unreachable `KindCount(X)>=3` finalises green but names the unfired Trigger + emits no `Y`). Dual contract: artifact (test_server.py 21 pass; ruff clean on builder/server/tests) + observation (the authored build records assert the Trigger demonstrably fired). Live E2E NOT run this session (Playwright absent in this env; backend-only change, the E2E exercises no `/api/build` path) — honest gap, flagged. Closes review #39 findings 2 + 3.
 
 ---
 
@@ -70,11 +72,15 @@
 
 *Agent maintains. Last 10 increment closes; older roll into ## Built as compressed paragraphs.*
 
-### Retrofit (2026-06-17, closed) — review #39 fold
-- **Scope:** git home + the 3 core artifacts for substrate-ui. No code behavior change.
-- **Dual contract:** artifact pass (repo initialized, baseline `cbdd22e`, three artifacts authored + parse); signal vacuous (content sprint).
-- **Rubber Duck Pass:** vacuous (no runtime trace this increment). Closed clean.
-- **Next:** the Studio increment proper — FIRST a sprint card with declared dual + observation contract, THEN finish the two translator tests (the live-but-untested seam, review #39 finding 2), THEN the visual canvas.
+### Sprint 001 (2026-06-17, closed) — Studio build seam under test + honest
+- **Scope:** the two translator tests + the stub honesty fix. Two concept-files: `test_server.py` (coverage), `builder.py`/`server.py` (the unfired-Trigger surface).
+- **Dual contract:** artifact pass (`test_server.py` 21 passed; ruff clean on builder/server/tests); observation pass (the authored build records prove the Trigger fired). Live E2E not run this env (Playwright absent) — backend-only, flagged honest.
+- **Rubber Duck Pass:**
+  - *Sequence narration (the `/api/build` of `_AUTHORED` as the signal trace):* `substrate.RunStarted` → `TriggerFired{__initial__}` ×2 (reviewer-a, reviewer-b) → `ProducerStarted` ×2 → `Critique`(note=reviewer-a) → `Critique`(note=reviewer-b) → at quorum the `crits` View `KindCount` reaches 2 → `TriggerFired{trigger_id=adjudicate}` (Once) → judge `ProducerStarted` → `Verdict` → `TerminationMatched{any_of(all_completed, quiescence_with_watchdog)}` → `RunFinalised`. The unreachable-spec trace is identical up to the initials, then quiesces with `needs_three` never firing (no judge/`Y`).
+  - *Observations (six categories):* missing pair — none (every `ProducerStarted` has its `ProducerCompleted`). order violation — none (`RunStarted` first, `RunFinalised` terminal). vocabulary gap — none (the UI emits no signals; the tests ASSERT on substrate's v0.2 kinds). payload anomaly — none. timing surprise — the unreachable case finalising green is the designed quiescence, now SURFACED via `unfired_triggers` rather than silent (the honesty fix). tone trace — `unfired_triggers` is plain vocabulary (Trigger, not "rule"/"step"); grep clean.
+  - *Dispositions:* the silent-green ceiling — `resolved-here` (surfaced in the build result + docstring + test). All else clean. Zero `halted`.
+- **Files:** test_server.py, builder.py, server.py, sprints/sprint-001-studio-build-seam.md
+- **Next:** sprint 002 — the visual canvas (the front-end authoring surface) against this now-tested seam. Send #39's fixes to the reviewer to CONFIRM (the runbook's find-AND-confirm discipline) before building the canvas.
 
 ---
 

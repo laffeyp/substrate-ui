@@ -74,7 +74,17 @@ def _termination(spec: dict[str, Any]) -> Any:
 
 
 def build_from_spec(spec: dict[str, Any]) -> Any:
-    """Translate an authored spec into a real topology(b) function (raises SpecError if malformed)."""
+    """Translate an authored spec into a real topology(b) function (raises SpecError if malformed).
+
+    HONESTY NOTE (the deterministic stub's count-ceiling): each stub Producer emits each of its
+    declared kinds EXACTLY ONCE per instance (see make_stub below). So a count Predicate over a
+    kind can only ever reach N = the number of Producer-instances emitting that kind — a
+    `KindCount(X) >= 3` with a single X-emitter is UNREACHABLE, and the run will finalise green via
+    quiescence having fired nothing past the initials. That is an honest finalise, but silent. The
+    /api/build result surfaces any authored Trigger that never fired (`unfired_triggers`) so the
+    Studio can warn rather than imply the wiring worked. (Real model Producers, a later step, emit
+    streams and lift this ceiling; the stub proves WIRING, deterministically.)
+    """
     if not spec.get("producers"):
         raise SpecError("a topology needs at least one Producer")
     # one frozen Struct per authored event kind (a generic `note: str` payload — the stub's output).

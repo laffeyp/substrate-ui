@@ -263,6 +263,61 @@ def test_resume_non_resumable_is_404(base: str) -> None:
     assert exc.value.code == 404
 
 
+def test_build_runs_an_authored_topology(base: str) -> None:
+    # the Studio seam (ruling E2): an authored JSON spec -> a REAL TopologyBuilder topology -> a
+    # recorded run. The decisive assertion (review #39): a TRIGGERED Producer actually emits, proving
+    # the authored wiring EXECUTED, not a faked finalise. 2 reviewers -> KindCount(Critique)>=2 matures
+    # -> adjudicate fires the judge -> judge emits Verdict.
+    res = post_json(base, "/api/build", _AUTHORED)
+    assert res["status"] == "finalised" and res["built"] == "authored_review"
+    name = res["name"]
+    kinds = [e["kind"] for e in get(base, f"/api/records/{name}/events")]
+    assert kinds[0] == "substrate.RunStarted" and kinds[-1] == "substrate.RunFinalised"
+    # Verdict exists ONLY because adjudicate fired the judge after the quorum of 2 Critiques:
+    assert kinds.count("Critique") == 2 and "Verdict" in kinds
+    # the read projection over the real run confirms the judge is anchored on the authored Trigger:
+    rg = get(base, f"/api/records/{name}/run_graph")
+    judge = next(i for i in rg["instances"] if i["kind"] == "judge")
+    assert judge["status"] == "completed" and judge["trigger_id"] == "adjudicate"
+    assert judge["fired_seq"] is not None  # it spawned from a firing, not an initial
+
+
+def test_validate_accepts_good_rejects_bad(base: str) -> None:
+    # the Studio's live validation (static TopologyBuilder.build() — the runtime's OWN "allowable
+    # ways"): a good spec validates; bad wiring is rejected with a clean typed message, never a crash.
+    assert post_json(base, "/api/validate", _AUTHORED) == {"valid": True}
+    no_producers = post_json(base, "/api/validate", {"producers": [], "termination": {"kind": "all_completed"}})
+    assert no_producers["valid"] is False and "Producer" in no_producers["error"]
+    unknown_starts = post_json(base, "/api/validate", {
+        "producers": [{"kind": "a", "emits": ["X"], "initial": True}],
+        "triggers": [{"id": "t", "on": "X", "starts": "ghost"}],
+        "termination": {"kind": "all_completed"},
+    })
+    assert unknown_starts["valid"] is False and "ghost" in unknown_starts["error"]
+
+
+def test_build_surfaces_unfired_triggers(base: str) -> None:
+    # review #39 finding 3 (honesty edge): the deterministic stub emits each kind ONCE, so a count
+    # Predicate above the producer count is UNREACHABLE — the run finalises green having fired nothing
+    # past the initials. That must not be silent: /api/build names the authored Trigger that never
+    # fired, so the Studio can warn instead of implying the wiring worked.
+    res = post_json(base, "/api/build", {
+        "name": "unreachable",
+        "producers": [{"kind": "a", "emits": ["X"], "initial": True},
+                      {"kind": "b", "emits": ["Y"]}],
+        "views": [{"name": "xs", "kind": "KindCount", "of": "X"}],
+        "triggers": [{"id": "needs_three", "on": "X",
+                      "predicate": {"view": "xs", "op": ">=", "n": 3}, "starts": "b", "policy": "Once"}],
+        "termination": {"kind": "any_of",
+                        "members": [{"kind": "all_completed"}, {"kind": "quiescence_with_watchdog", "seconds": 1}]},
+    })
+    assert res["status"] == "finalised"  # honestly finalised via quiescence...
+    assert res.get("unfired_triggers") == ["needs_three"]  # ...but the unfired Trigger is surfaced
+    # and indeed no Y was emitted (b never started) — the surfaced signal is true, not decorative:
+    kinds = [e["kind"] for e in get(base, f"/api/records/{res['name']}/events")]
+    assert "Y" not in kinds
+
+
 def test_static_index_is_served(base: str) -> None:
     with urlopen(base + "/", timeout=10) as r:
         body = r.read().decode()

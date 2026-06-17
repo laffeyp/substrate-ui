@@ -333,15 +333,26 @@ class Handler(BaseHTTPRequestHandler):
         th = threading.Thread(target=lambda: asyncio.run(api.Runtime(root).run(topo)), daemon=True)
         _LAUNCHES[run_name] = th
         th.start()
-        for _ in range(80):
+        # authored stub topologies are deterministic + fast — wait briefly for a TERMINAL so the
+        # build result can be honest about which authored Triggers actually fired (review #39).
+        g = None
+        for _ in range(80):  # up to ~4s
             try:
-                if root.exists() and any(e.get("kind") == "substrate.RunStarted" for e in api.read_record(root)):
-                    break
-            except Exception:  # noqa: BLE001
+                if root.exists():
+                    g = api.run_graph(root)
+                    if g.status != "incomplete":
+                        break
+            except Exception:  # noqa: BLE001 - record not yet readable (pre-RunStarted)
                 pass
             time.sleep(0.05)
-        status = api.run_graph(root).status if root.exists() else "incomplete"
-        self._json({"name": run_name, "status": status, "built": name})
+        out: dict[str, object] = {"name": run_name, "status": g.status if g else "incomplete", "built": name}
+        if g is not None:
+            authored = [t["id"] for t in spec.get("triggers", [])]
+            fired = {i.trigger_id for i in g.instances if i.trigger_id}
+            unfired = [t for t in authored if t not in fired]
+            if unfired:
+                out["unfired_triggers"] = unfired  # authored Triggers whose Predicate never matured
+        self._json(out)
 
     def do_GET(self) -> None:  # noqa: N802
         path = unquote(urlparse(self.path).path)
