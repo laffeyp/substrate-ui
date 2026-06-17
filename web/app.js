@@ -67,7 +67,13 @@ async function loadRecords() {
   sel.onchange = () => { if (sel.value) renderDiff(sel.value); };
   // auto-select only on FIRST load (else a refresh after launch/resume yanks selection to the top
   // record with a dangling fetch — the race behind the verdict flicker. review #38, obs b).
-  if (recs[0] && STATE.name === null) selectRecord(recs[0].name);
+  if (STATE.name === null) {
+    // honor a ?record=<name> deep-link (the Studio's "view the run in the console" lands here);
+    // fall back to the first record. Only if the named record actually exists.
+    const want = new URLSearchParams(location.search).get("record");
+    const target = (want && recs.some((r) => r.name === want)) ? want : (recs[0] && recs[0].name);
+    if (target) selectRecord(target);
+  }
 }
 
 // ---------- thin control: launch a bundled topology (records RunStarted, §7.7) ----------
