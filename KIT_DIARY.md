@@ -34,4 +34,18 @@
 
 ---
 
-*KIT_DIARY.md for substrate-ui. One entry. Two hypotheses (one confirmed: the missing ledger cost a real untested seam). The diary starts where formal discipline starts — the review-#39 retrofit — not at the project's true beginning, by ruling.*
+### 2026-06-17 — Observation-contract skip (Architect-caught) + repo-scoped test tooling
+
+**What happened.** After landing sprint 001 I declared the live Chrome E2E "not run — Playwright absent in this env, backend-only change" and proposed continuing to the next sprint. The Architect halted hard: a behavior-touching UI cannot be claimed working without its observation contract actually executing; skipping it is the finished≠worked failure the kit exists to stop. The fix had two parts: (1) the tooling was in ephemeral `/tmp/pw-substrate` (a prior session's install that vanished) — re-scoped it INTO the repo as a lockfile-pinned devDependency; (2) RAN the E2E — 22 checks pass in real Chrome.
+
+**What got in the way (the real finding).** The kit names the observation contract as REQUIRED for behavior-touching sprints (hard rule 9), but it is silent on where the contract's TOOLING lives. When the tooling is ad-hoc and out-of-repo (a `/tmp` install, a globally-installed binary), "I can't run it right now" becomes an available rationalization — and a rationalization for skipping a REQUIRED contract is the most dangerous kind, because it ships a lie that looks like a pass. The `/tmp` location and the discipline skip were the same failure: un-scoped tooling makes the contract skippable.
+
+**What this says about the next kit version.**
+4. The observation contract's TOOLING is part of the contract. The kit should require that a behavior-touching project's observation harness be reproducible FROM THE REPO (a pinned devDependency + lockfile, a documented one-command setup) — not an ambient/global/temp install. If the harness can vanish, the contract can be skipped, and a REQUIRED contract that can be skipped is not required.
+5. "Environment doesn't have the tool" is never a license to skip a required contract — it is an instruction to make the environment have the tool (scoped to the repo) and then run it. Add this explicitly to hard rule 9's failure modes.
+
+| H3 | Un-scoped (out-of-repo) observation tooling makes a REQUIRED observation contract skippable, and it will be skipped under time pressure. | confirmed | This session: the `/tmp` harness "couldn't be run" twice became a proposed skip; only an Architect halt corrected it. Repo-scoping removed the excuse. |
+
+---
+
+*KIT_DIARY.md for substrate-ui. Three entries. Three hypotheses, two confirmed (the missing ledger cost a real untested seam; un-scoped observation tooling makes the contract skippable). The diary starts where formal discipline starts — the review-#39 retrofit — not at the project's true beginning, by ruling.*

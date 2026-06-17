@@ -3,9 +3,10 @@
    backend, the run-as-graph shows firing-anchored lifespans + the spawn-cohort band, provenance
    resolves, and the seq-cursor truncates the run in lock-step. Exit 0 = pass, 1 = fail.
 
-   Run (server up on :8765, playwright installed somewhere):
-     cd substrate && uv run python ../substrate-ui/server.py &      # the real backend
-     NODE_PATH=/path/to/node_modules node substrate-ui/e2e_console.js
+   Playwright is a repo-local devDependency (run `npm install` once in substrate-ui/; it drives the
+   system Chrome via channel:'chrome', so no browser download). Run:
+     cd substrate && uv run python ../substrate-ui/server.py &      # the real backend on :8765
+     cd substrate-ui && npm run e2e                                 # drives real Chrome; exit 0 = pass
 */
 "use strict";
 const { chromium } = require("playwright");
