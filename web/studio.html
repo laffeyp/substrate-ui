@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>substrate · studio</title>
+<style>
+:root{
+  --bg:#0a0c10; --panel:#11141a; --panel2:#161a22; --line:#1e2430; --line2:#2a3140;
+  --tx:#d7dde7; --tx-dim:#9aa4b2; --tx-faint:#5e6573;
+  --green:#3fb950; --blue:#4493f8; --amber:#d6a032; --red:#f85149; --cyan:#39c5cf; --violet:#a878f5; --slate:#6b7785;
+}
+*{ box-sizing:border-box; } html,body{ margin:0; background:var(--bg); color:var(--tx); font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; }
+.app{ max-width:1100px; margin:0 auto; padding:0 18px 60px; }
+.head{ display:flex; align-items:center; gap:12px; padding:12px 0; border-bottom:1px solid var(--line); position:sticky; top:0; background:var(--bg); z-index:5; }
+.brand{ font-weight:700; letter-spacing:.04em; } .brand .mk{ color:var(--green); }
+.ttl{ color:var(--tx-dim); } .spacer{ flex:1; }
+a.consolelink{ color:var(--cyan); text-decoration:none; } a.consolelink:hover{ text-decoration:underline; }
+.sec{ margin-top:20px; } .sec-h{ color:var(--tx-faint); text-transform:uppercase; letter-spacing:.06em; font-size:11px; margin-bottom:8px; display:flex; align-items:center; gap:10px; }
+.sec-h .add{ cursor:pointer; color:var(--green); border:1px solid var(--line2); border-radius:5px; padding:1px 8px; font-size:11px; }
+.sec-h .add:hover{ background:var(--panel2); }
+.row{ display:flex; align-items:center; gap:8px; padding:4px 0; flex-wrap:wrap; }
+.row .rm{ cursor:pointer; color:var(--tx-faint); border:1px solid var(--line); border-radius:5px; padding:0 7px; } .row .rm:hover{ color:var(--red); border-color:var(--red); }
+.lbl{ color:var(--tx-faint); font-size:11px; }
+input,select{ background:var(--panel); border:1px solid var(--line2); border-radius:6px; padding:4px 8px; color:var(--tx); font:inherit; font-size:12px; }
+input[type=checkbox]{ accent-color:var(--green); }
+input.k{ min-width:150px; } input.sm{ width:54px; } input.med{ width:120px; }
+.term-params{ display:inline-flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.actions{ margin-top:24px; display:flex; gap:10px; align-items:center; }
+.btn{ cursor:pointer; background:var(--panel2); border:1px solid var(--line2); border-radius:6px; padding:6px 14px; color:var(--tx); font:inherit; font-size:12px; }
+.btn:hover{ border-color:var(--tx-faint); } .btn.primary{ border-color:var(--green); color:var(--green); }
+.out{ margin-top:18px; padding:12px 14px; border:1px solid var(--line); border-radius:8px; background:var(--panel); min-height:40px; }
+.out .ok{ color:var(--green); } .out .err{ color:var(--red); } .out .warn{ color:var(--amber); }
+.out .l{ color:var(--tx-faint); margin-right:8px; }
+.hint{ color:var(--tx-faint); font-size:11px; margin-top:4px; }
+.note{ color:var(--violet); }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="head">
+    <span class="brand"><span class="mk">▓▒░</span> substrate</span><span class="ttl">studio · author a topology</span>
+    <span class="spacer"></span>
+    <a class="consolelink" href="/">← run console</a>
+  </div>
+
+  <div class="sec">
+    <div class="sec-h">topology name</div>
+    <input class="k" id="topoName" placeholder="my_topology" value="authored_demo" />
+  </div>
+
+  <div class="sec">
+    <div class="sec-h">producers <span class="add" id="addProducer">+ producer</span></div>
+    <div id="producers"></div>
+    <div class="hint">a Producer brings a computation; "initial" Producers run on the run's opening cohort. emits = comma-separated event kinds.</div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-h">views <span class="add" id="addView">+ view</span></div>
+    <div id="views"></div>
+    <div class="hint">a View is a running projection of the Bus a Predicate reads. KindCount(of) counts a kind; KindBuffer(of) buffers it.</div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-h">triggers <span class="add" id="addTrigger">+ trigger</span></div>
+    <div id="triggers"></div>
+    <div class="hint">a Trigger starts a Producer when its Predicate over a View matures. predicate: View &lt;op&gt; n (leave View blank for always).</div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-h">termination policy</div>
+    <div class="row">
+      <select id="termKind">
+        <option value="quiescence_with_watchdog">quiescence_with_watchdog</option>
+        <option value="all_completed">all_completed</option>
+        <option value="threshold_count">threshold_count</option>
+        <option value="any_of">any_of(all_completed, quiescence)</option>
+      </select>
+      <span class="term-params" id="termParams"></span>
+    </div>
+    <div class="hint">the TerminationPolicy ends the run. any_of here = all_completed OR quiescence (a safe default).</div>
+  </div>
+
+  <div class="actions">
+    <button class="btn" id="validateBtn">validate</button>
+    <button class="btn primary" id="buildBtn">build &amp; launch ▸</button>
+  </div>
+  <div class="out" id="out"><span class="l">output</span><span class="dim">author a topology, then validate or build.</span></div>
+</div>
+<script src="/studio.js"></script>
+</body>
+</html>
