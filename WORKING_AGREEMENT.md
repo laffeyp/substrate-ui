@@ -86,7 +86,7 @@ grep -rEn 'agent|workflow|orchestrat|\bactor\b|\bspeaker\b' server.py builder.py
 *The Architect runs these; the Agent reports exit codes, does not silently retry.*
 
 - **Backend tests:** `cd ../substrate && uv run pytest ../substrate-ui/test_server.py -q` — expected exit 0 (spins a real server on an ephemeral port; exercises the real `substrate.api` over HTTP).
-- **Live E2E:** start the real backend (`cd ../substrate && uv run python ../substrate-ui/server.py &`), then `NODE_PATH=/tmp/pw-substrate/node_modules node e2e_console.js` — expected exit 0 (real Chrome via Playwright `channel:'chrome'`; §7 asserted in the DOM).
+- **Live E2E (the observation contract — REQUIRED for any front-end / behavior-touching change):** `npm install` once in `substrate-ui/` (repo-local Playwright devDependency, pinned by `package-lock.json`; drives the system Chrome via `channel:'chrome'`, no browser download), start the real backend (`cd ../substrate && uv run python ../substrate-ui/server.py &`), then `cd substrate-ui && npm run e2e` — expected exit 0 (real Chrome; §7 asserted in the DOM). Do NOT skip this with a "backend-only" rationalization for a behavior-touching change — running it is the contract.
 - **Regenerate demo fixtures:** `cd ../substrate && uv run python ../substrate-ui/gen_demo_records.py` (rebuilds the `demo_*` records the tests + E2E read).
 - **Lint:** `cd ../substrate && uv run ruff check ../substrate-ui/server.py ../substrate-ui/builder.py` — expected exit 0.
 
