@@ -87,14 +87,20 @@ grep -rEn 'agent|workflow|orchestrat|\bactor\b|\bspeaker\b' server.py builder.py
 
 - **Backend tests:** `cd ../substrate && uv run pytest ../substrate-ui/test_server.py -q` — expected exit 0 (spins a real server on an ephemeral port; exercises the real `substrate.api` over HTTP).
 - **Live E2E (the observation contract — REQUIRED for any front-end / behavior-touching change):** `npm install` once in `substrate-ui/` (repo-local Playwright devDependency, pinned by `package-lock.json`; drives the system Chrome via `channel:'chrome'`, no browser download), start the real backend (`cd ../substrate && uv run python ../substrate-ui/server.py &`), then `cd substrate-ui && npm run e2e` — expected exit 0 (real Chrome; §7 asserted in the DOM). Do NOT skip this with a "backend-only" rationalization for a behavior-touching change — running it is the contract.
+- **Perceptual capture (the second observation-contract track — REQUIRED for front-end changes):** start the real backend, then `cd substrate-ui && npm run capture` — writes key-frame screenshots to `screenshots/`; the agent then Reads each PNG and grades it. Looking is the contract, not optional.
 - **Regenerate demo fixtures:** `cd ../substrate && uv run python ../substrate-ui/gen_demo_records.py` (rebuilds the `demo_*` records the tests + E2E read).
 - **Lint:** `cd ../substrate && uv run ruff check ../substrate-ui/server.py ../substrate-ui/builder.py` — expected exit 0.
 
 ---
 
-## Observation contract environment
+## Observation contract environment — TWO-TRACK visual grading (REQUIRED, both tracks)
 
-The "observation" surface is the running console driven against a real backend reading real records. Behavior-touching changes (any projection, the run-as-graph, launch/resume/build, the verdict) declare an observation contract whose driving steps run the live console in `e2e_console.js` and whose assertions are: expected DOM state after the steps, expected verdict class, expected lane/cohort counts, expected record appearing after a launch/build. A confirmed-good record is the regression fixture (technique 38).
+Per AGENTS.md hard rule 9, foundation 01 signal type #2 ("Screenshots at Key Frames"), and TECHNIQUES Visual/UI "Two-track visual grading": a behavior-touching change to this console (any projection, the run-as-graph, launch/resume/build, the verdict, the inspector, the I/O pane) is NOT done until BOTH tracks pass. This is non-negotiable; "the DOM assertions pass" is only half.
+
+- **Track 1 — STRUCTURAL (mechanical):** `e2e_console.js` (`npm run e2e`) drives the live console in real Chrome against the real backend and asserts the DOM: verdict class, lane/cohort counts, expected substrings, that stale content CLEARS on record switch, that a launched record appears. Catches "is the right thing wired".
+- **Track 2 — PERCEPTUAL (vision-model judge = the agent):** `capture_console.js` (`npm run capture`) drives the same console and saves a screenshot at each key frame to `screenshots/` (gitignored). The agent then **Reads each PNG and grades what it actually looks like** — layout renders, the graph bars/cohort bands are positioned right, verdict COLORS are correct (red FAILED, cyan PAUSED, red NOT-CLEAN, green FINALISED), no overlap/overflow/stale-pane, the copy is on-vocabulary. Catches "does it actually LOOK right" — the half that text-equality cannot cover. (Review #39-followups: this track, skipped for #30–#38, found a real stale-inspector bug the DOM E2E missed.)
+
+A confirmed-good record is the regression fixture (technique 38). When the perceptual pass finds a defect, add a structural assertion that pins it (so it can't silently recur) AND keep the perceptual pass (text assertions cannot fully replace looking).
 
 ---
 

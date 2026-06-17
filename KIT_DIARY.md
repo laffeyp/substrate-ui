@@ -48,4 +48,19 @@
 
 ---
 
-*KIT_DIARY.md for substrate-ui. Three entries. Three hypotheses, two confirmed (the missing ledger cost a real untested seam; un-scoped observation tooling makes the contract skippable). The diary starts where formal discipline starts — the review-#39 retrofit — not at the project's true beginning, by ruling.*
+### 2026-06-17 — The perceptual track was skipped for the whole UI (Architect full-stop) — and it found a real bug
+
+**What happened.** After the E2E was scoped in and run, the Architect called a full stop and a re-centering: was I even set up to verify SDD-style, perceptually? I was not. For nine review rounds (#30–#38) and three more this session, I had run only the STRUCTURAL track (DOM text assertions) and never the PERCEPTUAL one (looking at a screenshot). I re-read all of sdd-kit-2, built `capture_console.js`, captured 11 key frames, and viewed each. The console looked right — but the look-pass found a real bug the DOM E2E had no way to catch: the inspector/diff pane never cleared on record switch, so one record's provenance/diff bled into the next.
+
+**What got in the way (the finding).** The kit names the perceptual requirement in three places — hard rule 9 ("expected screenshot / visible behavior"), foundation 01 signal type #2 ("Screenshots at Key Frames"), TECHNIQUES "Two-track visual grading" ("perceptual requires the human OR a vision-model judge"). I am a vision-model judge. I read all three and still ran only track one, because the DOM E2E *felt* like "the observation contract" — it drives the real app, asserts real state, goes green. A green structural track is the most seductive possible cover for skipping the perceptual one: it is real, it is rigorous, and it is half. The exact soundfield-round-23 failure, reproduced: graded the contents, never looked at the pixels.
+
+**What this says about the next kit version.**
+6. For any VISUAL surface, the observation contract is not satisfied by DOM/structural assertions alone — the agent (a vision-model judge) MUST capture key-frame screenshots and VIEW them. Make this an explicit, separate checkbox in the SPRINT_CARD observation contract: "[ ] Track 1 structural (asserted)  [ ] Track 2 perceptual (screenshots captured AND viewed by the agent)". A single "observation contract: pass" line lets the perceptual half hide.
+7. A green structural test is the most dangerous cover for a skipped perceptual pass, precisely because it is genuinely rigorous. The kit should warn: "the DOM passing is necessary, not sufficient; if you cannot point to a screenshot you looked at, the visual observation contract is unmet."
+8. When the perceptual pass finds a defect, pin it with a structural assertion (so it can't regress silently) AND keep the perceptual pass (text cannot fully encode "looks right"). Both, not either.
+
+| H4 | The perceptual track catches real defects the structural (DOM) track cannot, and a green structural track makes skipping the perceptual one feel safe. | confirmed | This session: DOM E2E green at 22 checks; the screenshot pass found the stale-inspector bug (a prior record's diff/provenance bleeding across switches) that no text assertion was looking for. |
+
+---
+
+*KIT_DIARY.md for substrate-ui. Four entries. Three hypotheses, two confirmed (the missing ledger cost a real untested seam; un-scoped observation tooling makes the contract skippable). The diary starts where formal discipline starts — the review-#39 retrofit — not at the project's true beginning, by ruling.*

@@ -79,6 +79,14 @@ const check = (cond, msg) => { if (!cond) fails.push(msg); else console.log("  o
   const diffText = (await p.$eval("#insp", (e) => e.textContent)).replace(/\s+/g, " ");
   check(/first divergence at seq 5/.test(diffText), `diff a-vs-b renders first divergence at seq 5 ("${diffText.slice(0, 60)}")`);
 
+  // 7b) perceptual-pass regression (the stale-inspector bug the screenshot capture found, the DOM
+  // E2E missed): switching records MUST clear the inspector — else the prior record's diff/provenance
+  // bleeds into the next one (e.g. a diff of two OTHER records showing while viewing demo_paused).
+  await selectRec("demo_paused");
+  const inspAfterSwitch = await p.$eval("#insp", (e) => e.textContent);
+  check(/Select an event or a Producer/.test(inspAfterSwitch) && !/divergence|demo_diff/.test(inspAfterSwitch),
+    `inspector clears on record switch — no stale diff/provenance bleeds through ("${inspAfterSwitch.trim().slice(0, 44)}")`);
+
   // 8) I/O surface: demo_solo_chat — the seed in, the Message artifact out (toggle to I/O)
   await selectRec("demo_solo_chat");
   await p.evaluate(() => document.getElementById("modeToggle").click());
