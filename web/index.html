@@ -79,6 +79,16 @@ button{font-family:inherit;color:inherit;cursor:pointer;background:none;border:n
 .bar.running{ background:rgba(68,147,248,.26); border:1px solid var(--blue); }
 .bar.interrupted{ background:rgba(214,160,50,.18); border:1px dashed var(--amber); }
 .spawn{ position:absolute; top:11px; width:8px; height:8px; border-radius:50%; background:var(--amber); transform:translateX(-4px); }
+/* static topology-structure view (the run-as-graph ↔ structure toggle) */
+.gv{ cursor:pointer; color:var(--tx-faint); } .gv:hover{ color:var(--tx-dim); } .gv.active{ color:var(--green); }
+.topo{ padding:8px 12px; font-size:12px; }
+.topo .grp{ color:var(--tx-faint); text-transform:uppercase; letter-spacing:.06em; font-size:10px; margin:10px 0 4px; }
+.topo .grp:first-child{ margin-top:0; }
+.topo .pr{ display:flex; align-items:baseline; gap:8px; padding:2px 0; }
+.topo .pr .k{ color:var(--tx); min-width:170px; } .topo .pr .em{ color:var(--green); } .topo .pr .ini{ color:var(--amber); font-size:10px; }
+.topo .tg{ padding:2px 0; } .topo .tg .id{ color:var(--amber); } .topo .tg .ar{ color:var(--tx-faint); } .topo .tg .on{ color:var(--green); } .topo .tg .st{ color:var(--tx); }
+.topo .vw,.topo .rt{ padding:2px 0; color:var(--tx-dim); } .topo .vw .n{ color:var(--cyan); } .topo .rt .sl{ color:var(--violet); }
+.topo .tm{ padding:2px 0; color:var(--violet); }
 .cohort{ position:absolute; border:1px dashed var(--line3); border-radius:6px; pointer-events:none; }
 .cohort .ct{ position:absolute; top:-9px; left:6px; font-size:10px; color:var(--cyan); background:var(--bg); padding:0 4px; }
 
@@ -143,7 +153,7 @@ button{font-family:inherit;color:inherit;cursor:pointer;background:none;border:n
       <div id="launchbar"><select id="launchsel"><option value="">+ launch a topology…</option></select><button class="btn" id="launchbtn">run ▸</button><span id="launchmsg" class="dim sm"></span></div>
       <div id="rail"></div></div>
     <div class="col">
-      <div id="readpane"><div class="col-h">topology · run-as-graph</div><div class="graph" id="graph"></div>
+      <div id="readpane"><div class="col-h">topology · <span class="gv active" id="gvRun">run-as-graph</span> · <span class="gv" id="gvTopo">structure</span></div><div class="graph" id="graph"></div>
         <div class="col-h" style="border-top:1px solid var(--line)">bus · event stream</div><div id="stream"></div></div>
       <div id="iopane" style="display:none"></div>
     </div>

@@ -38,7 +38,7 @@ function gist(ev) {
   return "";
 }
 
-let STATE = { name: null, events: [], graph: null, summary: null, manifest: null, cursor: 0, sel: null, mode: "read", live: null, resumable: new Set() };
+let STATE = { name: null, events: [], graph: null, summary: null, manifest: null, topology: null, cursor: 0, sel: null, mode: "read", graphView: "run", live: null, resumable: new Set() };
 
 // ---------- record rail ----------
 async function loadRecords() {
@@ -156,14 +156,15 @@ async function selectRecord(name) {
   $("insp").innerHTML = `<span class="dim">Select an event or a Producer to trace its provenance.</span>`;
   const ds = $("diffsel"); if (ds) ds.value = "";
   document.querySelectorAll(".rec").forEach((e) => e.classList.toggle("sel", e.dataset.name === name));
-  const [full, graph, summary] = await Promise.all([
+  const [full, graph, summary, topology] = await Promise.all([
     api(`/api/records/${name}`), api(`/api/records/${name}/run_graph`), api(`/api/records/${name}/summary`),
+    api(`/api/records/${name}/topology_graph`),
   ]);
   // staleness guard: if a newer selectRecord started while these fetches were in flight, DROP this
   // stale result — else one record's summary lands with another's graph on shared STATE and the
   // verdict flickers a false "NOT CLEAN" (review #38, obs b; mirrors followLive's guard).
   if (STATE.name !== name) return;
-  STATE.events = full.events; STATE.manifest = full.manifest; STATE.graph = graph; STATE.summary = summary;
+  STATE.events = full.events; STATE.manifest = full.manifest; STATE.graph = graph; STATE.summary = summary; STATE.topology = topology;
   const maxSeq = STATE.events.length ? STATE.events[STATE.events.length - 1].seq : 0;
   STATE.cursor = maxSeq;
   $("seq").max = maxSeq; $("seq").value = maxSeq; $("seqmax").textContent = maxSeq; $("seqnow").textContent = maxSeq;
@@ -197,7 +198,12 @@ function render() {
   $("modeToggle").textContent = STATE.mode === "io" ? "← graph" : "I/O";
   $("resumebtn").style.display = (STATE.graph && STATE.graph.status === "paused" && STATE.resumable.has(STATE.name)) ? "" : "none";
   if (STATE.mode === "io") renderIO();
-  else { renderGraph(); renderStream(); }
+  else {
+    $("gvRun").classList.toggle("active", STATE.graphView === "run");
+    $("gvTopo").classList.toggle("active", STATE.graphView === "topo");
+    if (STATE.graphView === "topo") renderTopology(); else renderGraph();
+    renderStream();
+  }
   renderHealth();
 }
 
@@ -269,6 +275,34 @@ function renderGraph() {
   $("graph").querySelectorAll(".lane").forEach((l) => (l.onclick = () => inspectProducer(l.dataset.inst)));
 }
 
+// ---------- static topology-structure view: the topology AS AUTHORED (design §6) ----------
+// Seq-independent — the structure (Producers / Triggers / Views / Routes / TerminationPolicy) is
+// the same at every cursor position; the run-as-graph is the dynamic counterpart. Reads the
+// /topology_graph projection cached on STATE.topology (fetched in selectRecord). The eight words only.
+function renderTopology() {
+  const t = STATE.topology;
+  if (!t) { $("graph").innerHTML = `<div class="topo dim">No topology manifest for this record.</div>`; return; }
+  const e = escapeHtml;
+  const prod = t.producers.map((p) =>
+    `<div class="pr"><span class="k">${e(p.kind)}${p.is_initial ? ' <span class="ini">▸ initial</span>' : ""}</span>` +
+    `<span class="em">emits ${p.emits.map(e).join(", ")}</span></div>`).join("");
+  const trig = t.triggers.length ? t.triggers.map((tr) =>
+    `<div class="tg"><span class="id">${e(tr.id)}</span> <span class="ar">on</span> <span class="on">${tr.on.map(e).join(", ")}</span>` +
+    ` <span class="ar">→ starts</span> <span class="st">${e(tr.starts)}</span> <span class="dim">(${e(tr.policy)})</span></div>`).join("")
+    : `<div class="dim">none</div>`;
+  const views = t.views.length ? t.views.map((v) => `<div class="vw"><span class="n">${e(v)}</span></div>`).join("") : `<div class="dim">none</div>`;
+  const routes = t.routes.length ? t.routes.map((r) =>
+    `<div class="rt"><span class="id">${e(r.id)}</span> <span class="ar">→ slot</span> <span class="sl">${e(r.slot)}</span></div>`).join("")
+    : `<div class="dim">none (no Routes authored)</div>`;
+  const term = (t.termination || []).length ? t.termination.map((s) => `<div class="tm">${e(s)}</div>`).join("") : `<div class="dim">none</div>`;
+  $("graph").innerHTML = `<div class="topo">
+    <div class="grp">producers (${t.producers.length}) · ▸ initial = on the run's opening cohort</div>${prod}
+    <div class="grp">triggers</div>${trig}
+    <div class="grp">views</div>${views}
+    <div class="grp">routes</div>${routes}
+    <div class="grp">termination policy</div>${term}</div>`;
+}
+
 // ---------- event stream: seq-cited, colored, cursor-truncated ----------
 function renderStream() {
   const cur = STATE.cursor;
@@ -333,6 +367,8 @@ const escapeHtml = (s) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;
 
 // ---------- cursor wiring ----------
 $("modeToggle").onclick = () => { STATE.mode = STATE.mode === "io" ? "read" : "io"; render(); };
+$("gvRun").onclick = () => { if (STATE.graphView !== "run") { STATE.graphView = "run"; render(); } };
+$("gvTopo").onclick = () => { if (STATE.graphView !== "topo") { STATE.graphView = "topo"; render(); } };
 $("seq").oninput = (e) => { STATE.cursor = +e.target.value; $("seqnow").textContent = STATE.cursor; render(); };
 $("toStart").onclick = () => { $("seq").value = 0; $("seq").oninput({ target: $("seq") }); };
 $("toEnd").onclick = () => { $("seq").value = $("seq").max; $("seq").oninput({ target: $("seq") }); };
