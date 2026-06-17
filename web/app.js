@@ -151,6 +151,10 @@ async function renderDiff(other) {
 async function selectRecord(name) {
   if (STATE.live && STATE.live !== name) STATE.live = null;  // navigating away stops the follow
   STATE.name = name; STATE.sel = null;
+  // clear the inspector + diff selection from the PRIOR record — else a stale provenance/diff from
+  // a different record bleeds into this one (caught by the perceptual capture pass, not the DOM E2E).
+  $("insp").innerHTML = `<span class="dim">Select an event or a Producer to trace its provenance.</span>`;
+  const ds = $("diffsel"); if (ds) ds.value = "";
   document.querySelectorAll(".rec").forEach((e) => e.classList.toggle("sel", e.dataset.name === name));
   const [full, graph, summary] = await Promise.all([
     api(`/api/records/${name}`), api(`/api/records/${name}/run_graph`), api(`/api/records/${name}/summary`),
