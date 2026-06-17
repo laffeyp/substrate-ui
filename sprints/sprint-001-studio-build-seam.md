@@ -66,7 +66,7 @@ No NEW substrate vocabulary (the UI reads substrate's v0.2). The tests ASSERT on
 
 ### Command exit codes
 
-- `cd ../substrate && uv run pytest ../substrate-ui/test_server.py -q` returns 0 (now 20 tests).
+- `cd ../substrate && uv run pytest ../substrate-ui/test_server.py -q` returns 0 (now 21 tests: 18 prior + build, validate, unfired-triggers).
 - `cd ../substrate && uv run ruff check ../substrate-ui/builder.py ../substrate-ui/test_server.py` returns 0.
 
 ---
@@ -92,7 +92,7 @@ No NEW substrate vocabulary (the UI reads substrate's v0.2). The tests ASSERT on
 
 ## done criteria
 
-The Studio build seam has real coverage proving an authored topology EXECUTES (not just finalises), validation rejects bad wiring cleanly, and the stub's count-ceiling is no longer silently misleading. `pytest test_server.py` green at 20; ruff clean; the live E2E unaffected. Sent to the duplex-pipe reviewer.
+The Studio build seam has real coverage proving an authored topology EXECUTES (not just finalises), validation rejects bad wiring cleanly, and the stub's count-ceiling is no longer silently misleading. `pytest test_server.py` green at 21; ruff clean; the live E2E unaffected. Sent to the duplex-pipe reviewer.
 
 ---
 

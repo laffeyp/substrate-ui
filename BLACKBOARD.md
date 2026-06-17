@@ -66,6 +66,8 @@
 - **Eight-word tone canon** — run the standing grep (WORKING_AGREEMENT § Tone canon) before any close. Clean at baseline (review #39); a Studio UI with many authored labels is the most likely place anthropomorphism/marketing-reframe drift would creep in.
 - **`substrate.api`-only boundary** — the backend must never import substrate kernel internals. If a Studio feature tempts a kernel import, that is a finding (build the projection on the public surface instead, the established pattern).
 
+- **`unfired_triggers` false-positive on matured-but-input-build-failed Triggers (review #41, LATENT).** `/api/build` derives "fired" from the trigger_ids present on `run_graph` instances. But a Trigger whose Predicate matured yet whose `input_builder` raised/returned non-canonical output emits `substrate.InputBuildFailed` with NO `TriggerFired` and NO instance (`sequencer.py`: input_builder runs before TriggerFired is emitted) — so `unfired_triggers` would list it as "never fired" when it actually fired-but-failed-to-build-input, conflating two states the Studio will want to show differently. **NOT reachable today:** the stub's `input_builder` is `lambda ctx: ctx.event.payload` (already-canonical, can't raise). **Re-visit condition:** BEFORE real-model Producers / custom input_builders land — then derive "fired" from the `TriggerFired`/`InputBuildFailed` events keyed by trigger_id (not from run_graph instances), or segment the signal into "unreachable predicate" vs "fired-but-failed-input".
+
 ---
 
 ## Sprint tail
