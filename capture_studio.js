@@ -22,6 +22,15 @@ const OUT = path.join(__dirname, "screenshots");
   await p.click("#buildBtn"); await p.waitForTimeout(2800);
   await shot("32-studio-built", "build -> built · finalised + record name + view-in-console link");
 
+  // sprint 004: routes + composed termination
+  await p.goto(BASE + "/studio.html", { waitUntil: "networkidle", timeout: 20000 });
+  await p.waitForTimeout(700);
+  await p.click("#addRoute");
+  await p.evaluate(() => { const r = document.querySelector("#routes .row"); r.querySelector(".rid").value = "stage-crit"; r.querySelector(".rof").value = "Critique"; r.querySelector(".rslot").value = "crit_ctx"; });
+  await p.evaluate(() => { const s = document.getElementById("termKind"); s.value = "all_of"; s.onchange(); });
+  await p.waitForTimeout(300);
+  await shot("33-studio-routes-composition", "routes section filled + all_of composed termination with member policies");
+
   await b.close();
   console.log("\nSTUDIO CAPTURE DONE — view screenshots/3*-*.png, then grade perceptually.");
 })().catch((e) => { console.error("CAPTURE ERROR", e); process.exit(1); });

@@ -26,6 +26,16 @@ const TRIGGER_ROW = `<div class="row">
   <select class="tpolicy"><option>Once</option><option>PerEvent</option><option>PerKey</option><option>WhileTrue</option></select>
   <span class="rm" title="remove">✕</span></div>`;
 
+const ROUTE_ROW = `<div class="row">
+  <input class="rid med" placeholder="id" />
+  <span class="lbl">of</span><input class="rof med" placeholder="Kind" />
+  <span class="lbl">→ slot</span><input class="rslot med" placeholder="slot" />
+  <span class="rm" title="remove">✕</span></div>`;
+const MEMBER_ROW = `<div class="row member">
+  <select class="mkind"><option>all_completed</option><option>quiescence_with_watchdog</option><option>threshold_count</option><option>cancel_all_others</option></select>
+  <span class="mparams"></span>
+  <span class="rm" title="remove">✕</span></div>`;
+
 function addRow(containerId, html, fill) {
   const wrap = document.createElement("div");
   wrap.innerHTML = html.trim();
@@ -55,22 +65,56 @@ function buildSpec() {
       predicate, starts: r.querySelector(".tstarts").value.trim(), policy: r.querySelector(".tpolicy").value,
     };
   }).filter((t) => t.id && t.on && t.starts);
-  return { name: $("topoName").value.trim() || "authored", producers, views, triggers, termination: buildTermination() };
+  const routes = [...$("routes").querySelectorAll(".row")].map((r) => ({
+    id: r.querySelector(".rid").value.trim(), of: r.querySelector(".rof").value.trim(), slot: r.querySelector(".rslot").value.trim(),
+  })).filter((r) => r.id && r.of && r.slot);
+  return { name: $("topoName").value.trim() || "authored", producers, views, triggers, routes, termination: buildTermination() };
+}
+
+function buildMember(row) {
+  const k = row.querySelector(".mkind").value;
+  if (k === "quiescence_with_watchdog") return { kind: k, seconds: Number((row.querySelector(".mseconds") || {}).value) || 1 };
+  if (k === "threshold_count") return { kind: k, of: (row.querySelector(".mof") || {}).value || "", n: Number((row.querySelector(".mn") || {}).value) || 1 };
+  return { kind: k };
 }
 
 function buildTermination() {
   const k = $("termKind").value;
   if (k === "all_completed") return { kind: "all_completed" };
+  if (k === "cancel_all_others") return { kind: "cancel_all_others" };
   if (k === "threshold_count") return { kind: "threshold_count", of: ($("termOf") || {}).value || "", n: Number(($("termN") || {}).value) || 1 };
-  if (k === "any_of") return { kind: "any_of", members: [{ kind: "all_completed" }, { kind: "quiescence_with_watchdog", seconds: 1 }] };
+  if (k === "any_of" || k === "all_of") {
+    const members = [...$("termMembers").querySelectorAll(".member")].map(buildMember);
+    return { kind: k, members: members.length ? members : [{ kind: "all_completed" }, { kind: "quiescence_with_watchdog", seconds: 1 }] };
+  }
   return { kind: "quiescence_with_watchdog", seconds: Number(($("termSeconds") || {}).value) || 1 };
 }
 
+function renderMemberParams(row) {
+  const k = row.querySelector(".mkind").value, el = row.querySelector(".mparams");
+  if (k === "quiescence_with_watchdog") el.innerHTML = `<span class="lbl">seconds</span><input class="sm mseconds" value="1" />`;
+  else if (k === "threshold_count") el.innerHTML = `<span class="lbl">of</span><input class="med mof" placeholder="Kind" /><span class="lbl">n</span><input class="sm mn" value="1" />`;
+  else el.innerHTML = "";
+}
+function addMember(kind) {
+  const row = addRow("termMembers", MEMBER_ROW);
+  if (kind) row.querySelector(".mkind").value = kind;
+  renderMemberParams(row);
+  return row;
+}
+
 function renderTermParams() {
-  const k = $("termKind").value;
+  const k = $("termKind").value, composite = (k === "any_of" || k === "all_of");
   if (k === "quiescence_with_watchdog") $("termParams").innerHTML = `<span class="lbl">seconds</span><input class="sm" id="termSeconds" value="1" />`;
   else if (k === "threshold_count") $("termParams").innerHTML = `<span class="lbl">of</span><input class="med" id="termOf" placeholder="Kind" /><span class="lbl">n</span><input class="sm" id="termN" value="1" />`;
+  else if (composite) $("termParams").innerHTML = `<span class="add" id="addMember">+ member</span>`;
   else $("termParams").innerHTML = "";
+  if (composite) {
+    $("addMember").onclick = () => addMember();
+    if (!$("termMembers").children.length) { addMember("all_completed"); addMember("quiescence_with_watchdog"); }
+  } else {
+    $("termMembers").innerHTML = "";
+  }
 }
 
 // ---------- the real seam ----------
@@ -107,7 +151,9 @@ async function doBuild() {
 $("addProducer").onclick = () => addRow("producers", PRODUCER_ROW);
 $("addView").onclick = () => addRow("views", VIEW_ROW);
 $("addTrigger").onclick = () => addRow("triggers", TRIGGER_ROW);
+$("addRoute").onclick = () => addRow("routes", ROUTE_ROW);
 document.body.addEventListener("click", (e) => { if (e.target.classList.contains("rm")) e.target.closest(".row").remove(); });
+document.body.addEventListener("change", (e) => { if (e.target.classList.contains("mkind")) renderMemberParams(e.target.closest(".row")); });
 $("termKind").onchange = renderTermParams;
 $("validateBtn").onclick = doValidate;
 $("buildBtn").onclick = doBuild;

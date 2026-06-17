@@ -48,7 +48,22 @@ const check = (c, m) => { if (!c) fails.push(m); else console.log("  ok  " + m);
   o = (await p.$eval("#out", (e) => e.textContent)).replace(/\s+/g, " ");
   check(/invalid/.test(o) && /ghost/.test(o), `unknown-starts Trigger -> clean typed invalid ("${o.slice(0, 56)}")`);
 
+  // sprint 004: a Route + a composed all_of TerminationPolicy -> validate -> build (a real run)
+  await p.goto(BASE + "/studio.html", { waitUntil: "networkidle", timeout: 20000 });
+  await p.waitForTimeout(700);
+  await p.click("#addRoute");
+  await p.evaluate(() => { const r = document.querySelector("#routes .row"); r.querySelector(".rid").value = "stage-crit"; r.querySelector(".rof").value = "Critique"; r.querySelector(".rslot").value = "crit_ctx"; });
+  await p.evaluate(() => { const s = document.getElementById("termKind"); s.value = "all_of"; s.onchange(); });
+  await p.waitForTimeout(300);
+  check((await p.$$eval("#termMembers .member", (e) => e.length)) === 2, "all_of composition shows 2 default member policies");
+  await p.click("#validateBtn"); await p.waitForTimeout(600);
+  let r4 = (await p.$eval("#out", (e) => e.textContent)).replace(/\s+/g, " ");
+  check(/valid/.test(r4) && !/invalid/.test(r4), `Route + all_of composition -> valid ("${r4.slice(0, 44)}")`);
+  await p.click("#buildBtn"); await p.waitForTimeout(2800);
+  r4 = (await p.$eval("#out", (e) => e.textContent)).replace(/\s+/g, " ");
+  check(/built · finalised/.test(r4), `Route + all_of composition -> built · finalised ("${r4.slice(0, 50)}")`);
+
   await b.close();
   if (fails.length) { console.error("\nFAILED:\n  - " + fails.join("\n  - ")); process.exit(1); }
-  console.log("\nSTUDIO E2E PASS — author -> validate -> build (a real run) -> view, all live.");
+  console.log("\nSTUDIO E2E PASS — author (incl. Routes + composed termination) -> validate -> build -> view, all live.");
 })().catch((e) => { console.error("STUDIO E2E ERROR", e); process.exit(1); });
