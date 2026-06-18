@@ -34,6 +34,14 @@ input.k{ min-width:150px; } input.sm{ width:54px; } input.med{ width:120px; }
 .out .l{ color:var(--tx-faint); margin-right:8px; }
 .hint{ color:var(--tx-faint); font-size:11px; margin-top:4px; }
 .note{ color:var(--violet); }
+.gv{ cursor:pointer; color:var(--tx-faint); } .gv:hover{ color:var(--tx-dim); } .gv.active{ color:var(--green); }
+#canvas{ position:relative; height:460px; border:1px solid var(--line); border-radius:8px; background:var(--panel); overflow:hidden; margin-top:8px; }
+#canvas svg{ position:absolute; inset:0; width:100%; height:100%; pointer-events:none; z-index:0; }
+.card{ position:absolute; z-index:1; background:var(--panel2); border:1px solid var(--line2); border-radius:8px; padding:7px 10px; min-width:118px; cursor:grab; user-select:none; }
+.card:active{ cursor:grabbing; } .card.initial{ border-color:var(--green); }
+.card .ck{ color:var(--tx); font-weight:600; } .card .ce{ color:var(--green); font-size:11px; } .card .cb{ color:var(--amber); font-size:10px; }
+.edge{ stroke:var(--tx-faint); stroke-width:1.5; fill:none; } .edge.route{ stroke:var(--violet); stroke-dasharray:4 3; }
+.edge-lbl{ fill:var(--amber); font-size:10px; } .edge-lbl.route{ fill:var(--violet); }
 </style>
 </head>
 <body>
@@ -41,9 +49,12 @@ input.k{ min-width:150px; } input.sm{ width:54px; } input.med{ width:120px; }
   <div class="head">
     <span class="brand"><span class="mk">▓▒░</span> substrate</span><span class="ttl">studio · author a topology</span>
     <span class="spacer"></span>
+    <span class="gv active" id="vForm">form</span> · <span class="gv" id="vCanvas">canvas</span>
+    <span style="display:inline-block;width:16px"></span>
     <a class="consolelink" href="/">← run console</a>
   </div>
 
+  <div id="formView">
   <div class="sec">
     <div class="sec-h">topology name</div>
     <input class="k" id="topoName" placeholder="my_topology" value="authored_demo" />
@@ -88,6 +99,12 @@ input.k{ min-width:150px; } input.sm{ width:54px; } input.med{ width:120px; }
     </div>
     <div id="termMembers"></div>
     <div class="hint">the TerminationPolicy ends the run. any_of / all_of compose member policies (OR / AND); add members below.</div>
+  </div>
+  </div><!-- /formView -->
+
+  <div id="canvasView" style="display:none">
+    <div class="sec-h" style="margin-top:14px">topology · node-graph <span class="hint" style="margin:0">drag the Producer cards; solid edges are Triggers, dashed are Routes</span></div>
+    <div id="canvas"></div>
   </div>
 
   <div class="actions">

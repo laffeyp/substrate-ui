@@ -63,7 +63,25 @@ const check = (c, m) => { if (!c) fails.push(m); else console.log("  ok  " + m);
   r4 = (await p.$eval("#out", (e) => e.textContent)).replace(/\s+/g, " ");
   check(/built · finalised/.test(r4), `Route + all_of composition -> built · finalised ("${r4.slice(0, 50)}")`);
 
+  // sprint 005: the drag-canvas view of the authored topology
+  await p.goto(BASE + "/studio.html", { waitUntil: "networkidle", timeout: 20000 });
+  await p.waitForTimeout(700);
+  await p.click("#vCanvas"); await p.waitForTimeout(400);
+  check((await p.$$eval("#canvas .card", (e) => e.length)) === 3, "canvas renders 3 Producer cards");
+  check((await p.$$eval("#canvas .card.initial", (e) => e.length)) === 2, "2 initial Producer cards marked");
+  const edgeLbls = await p.$$eval("#canvas .edge-lbl", (e) => e.map((x) => x.textContent));
+  check(edgeLbls.includes("adjudicate"), `a Trigger edge labelled "adjudicate" is drawn (${JSON.stringify(edgeLbls)})`);
+  const before = await p.$eval('#canvas .card[data-kind="judge"]', (e) => e.style.left);
+  const box = await p.$eval('#canvas .card[data-kind="judge"]', (e) => { const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
+  await p.mouse.move(box.x, box.y); await p.mouse.down(); await p.mouse.move(box.x + 90, box.y + 40, { steps: 5 }); await p.mouse.up();
+  await p.waitForTimeout(200);
+  check(before !== (await p.$eval('#canvas .card[data-kind="judge"]', (e) => e.style.left)), "dragging the judge card moved it");
+  await p.click("#vForm"); await p.waitForTimeout(300);
+  check((await p.$$eval("#producers .row", (e) => e.length)) === 3, "toggle back to form: 3 Producer rows intact");
+  await p.click("#validateBtn"); await p.waitForTimeout(500);
+  check(/valid/.test(await p.$eval("#out", (e) => e.textContent)), "form still validates after the canvas round-trip");
+
   await b.close();
   if (fails.length) { console.error("\nFAILED:\n  - " + fails.join("\n  - ")); process.exit(1); }
-  console.log("\nSTUDIO E2E PASS — author (incl. Routes + composed termination) -> validate -> build -> view, all live.");
+  console.log("\nSTUDIO E2E PASS — author (form + drag-canvas, Routes + composed termination) -> validate -> build -> view, all live.");
 })().catch((e) => { console.error("STUDIO E2E ERROR", e); process.exit(1); });
