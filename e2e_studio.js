@@ -63,12 +63,15 @@ const check = (c, m) => { if (!c) fails.push(m); else console.log("  ok  " + m);
   r4 = (await p.$eval("#out", (e) => e.textContent)).replace(/\s+/g, " ");
   check(/built · finalised/.test(r4), `Route + all_of composition -> built · finalised ("${r4.slice(0, 50)}")`);
 
-  // sprint 005: the drag-canvas view of the authored topology
+  // sprint 005 + the review-#42 slot-node fold: the drag-canvas view of the authored topology
   await p.goto(BASE + "/studio.html", { waitUntil: "networkidle", timeout: 20000 });
   await p.waitForTimeout(700);
+  await p.click("#addRoute");
+  await p.evaluate(() => { const r = document.querySelector("#routes .row"); r.querySelector(".rid").value = "stage-crit"; r.querySelector(".rof").value = "Critique"; r.querySelector(".rslot").value = "crit_ctx"; });
   await p.click("#vCanvas"); await p.waitForTimeout(400);
   check((await p.$$eval("#canvas .card", (e) => e.length)) === 3, "canvas renders 3 Producer cards");
   check((await p.$$eval("#canvas .card.initial", (e) => e.length)) === 2, "2 initial Producer cards marked");
+  check((await p.$$eval("#canvas .slotnode", (e) => e.length)) === 1, "review #42 fold: a Route draws to a slot NODE (not to every Producer)");
   const edgeLbls = await p.$$eval("#canvas .edge-lbl", (e) => e.map((x) => x.textContent));
   check(edgeLbls.includes("adjudicate"), `a Trigger edge labelled "adjudicate" is drawn (${JSON.stringify(edgeLbls)})`);
   const before = await p.$eval('#canvas .card[data-kind="judge"]', (e) => e.style.left);
