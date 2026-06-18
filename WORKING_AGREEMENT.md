@@ -39,14 +39,17 @@ The UI EMITS no signals of its own — it is a reader/projector of substrate's l
 | Surface / type | Canonical home | Notes |
 |---|---|---|
 | HTTP routing + read projections over `substrate.api` (`_records_index`, `_io`, `_PROJECTIONS`, the `/api/records*` GETs) | `server.py` | Sole backend. Reads only `substrate.api`. |
-| Thin control endpoints (`/api/launch`, `/api/resume`, `/api/validate`, `/api/build`) | `server.py` | Backgrounded daemon threads tracked in `_LAUNCHES`; launch/resume/build run real `api.Runtime`. |
-| Authored spec → real `topology(b)` translator (`build_from_spec`, `SpecError`) | `builder.py` | The Studio's build-and-launch seam. Mints a frozen msgspec Struct per kind; wires Views/Predicates/Triggers/Routes/TerminationPolicy. |
-| The console front-end (state, rendering, polling, the run-as-graph, verdict logic) | `web/app.js` | Vanilla JS, no framework. |
-| DOM scaffold + styles | `web/index.html` | No CDN deps. |
+| Thin control endpoints (`/api/launch`, `/api/resume`, `/api/validate`, `/api/build`) + the responder selector (`_responder_for`) | `server.py` | Backgrounded daemon threads tracked in `_LAUNCHES`; launch/resume/build run real `api.Runtime`; `_responder_for` picks DeterministicResponder (default) / OllamaResponder. |
+| Authored spec → real `topology(b)` translator (`build_from_spec`, `SpecError`) | `builder.py` | The Studio's build seam. Mints a frozen msgspec Struct per kind; wires Views/Predicates/Triggers/Routes/TerminationPolicy. Producers are deterministic stubs OR model-backed (call the runtime's real `Responder`). |
+| The console front-end (state, rendering, polling, the run-as-graph + topology-structure view, verdict logic) | `web/app.js` | Vanilla JS, no framework. |
+| Console DOM scaffold + styles | `web/index.html` | No CDN deps. |
+| The Studio authoring front-end (form + drag-canvas; `buildSpec`, `renderCanvas`, validate/build) | `web/studio.js` | Assembles the authored spec EXACTLY per `builder.py`; the canvas is a view of `buildSpec()`. |
+| Studio DOM scaffold + styles | `web/studio.html` | Served at `/studio.html` by the static handler. |
 | Shared demo topologies (`resumable_topology`, `approval_event`) | `demo_topologies.py` | Mirrors the runtime's pause/resume reference. |
 | Demo fixture generation (the `demo_*` records) | `gen_demo_records.py` | Reproducible; regenerate the fixture set. |
 | Server tests (real server, real api over HTTP) | `test_server.py` | The artifact contract for backend changes. |
-| Live end-to-end test (real Chrome, real backend) | `e2e_console.js` | The observation contract for behavior-touching changes. |
+| Live structural E2E — console / Studio (real Chrome) | `e2e_console.js` / `e2e_studio.js` | Track 1 of the observation contract (DOM assertions). |
+| Perceptual capture harness — console / dynamic states / Studio | `capture_console.js` / `capture_states.js` / `capture_studio.js` | Track 2 of the observation contract (screenshots the agent VIEWS). |
 
 ---
 
