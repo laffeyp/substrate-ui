@@ -63,4 +63,24 @@
 
 ---
 
-*KIT_DIARY.md for substrate-ui. Four entries. Three hypotheses, two confirmed (the missing ledger cost a real untested seam; un-scoped observation tooling makes the contract skippable). The diary starts where formal discipline starts — the review-#39 retrofit — not at the project's true beginning, by ruling.*
+### 2026-06-17 — The Studio to full parity under full discipline (sprints 002–007) + review #42
+
+**What happened.** With the discipline finally in force (sprint card → build → BOTH observation tracks → LOOK at the screenshots → fold), the Studio went from a tested build seam to E2-ruling "full parity" in six clean increments: static topology view (002), form-first authoring (003), Routes + `any_of`/`all_of` composition (004), drag-canvas (005), model-backed Producer seam (006), model authoring UI (007). Then an independent review (#42) of the canvas + model Producers ruled it REAL and HONEST and folded two findings.
+
+**What worked.**
+- **Once the full discipline was running, the Architect stopped having to catch me.** The first half of the session was three Architect interventions (artifact discipline, observation-contract skip, perceptual-track skip). The second half — six increments — needed none: every front-end sprint ran the structural E2E AND captured-and-viewed the frames, every card declared its contract first, every close ran the Rubber Duck pass. The failures of the first half were failures of *skipping* the discipline; running it is what made the second half boring (the good kind).
+- **The two-track + adversarial-review stack catches honesty defects, not just bugs.** Review #42's load-bearing finding was not a crash — it was that the canvas drew Route edges to every triggered Producer, *implying data flow that doesn't occur* (the stub consumes no slot). A structural test passes that; a perceptual look might miss it; an adversarial reviewer asking "could this misrepresent the spec?" caught it. Three different lenses, and only the third saw it. The model-seam check was the same shape: the reviewer's job was to prove it *could* ship a fake, and proving it couldn't (byte-for-byte against the runtime's own DeterministicResponder; Ollama fails loud) is what earned the "HONEST" verdict.
+- **Building the authoring UI against the runtime's OWN seam kept it honest by construction.** Model Producers call `substrate.reference`'s real `Responder` (the same one the reference topologies use); the deterministic responder is the runtime's CI mode, not a fake I wrote. There was no opportunity to ship a fake because I reused the runtime's truth.
+
+**What got in the way.**
+- **A perceptual-track tooling gotcha: fullPage × deviceScaleFactor:2 screenshots blew past the image-view size limit** (>2000px), so a frame I "captured" I couldn't actually VIEW — which is the whole point of the track. Fixed by element-screenshotting bounded surfaces (the canvas) and viewport-only shots. Minor, but it's exactly the kind of thing that silently degrades the perceptual track back into "captured but not looked at".
+
+**What this says about the next kit version.**
+9. The perceptual track needs a tooling note: capture VIEWABLE artifacts (element or viewport screenshots of bounded surfaces; cap dimensions), because a screenshot too large to open is a screenshot not looked at — the track quietly fails closed.
+10. The strongest defect net for a visual/authoring surface is THREE lenses, not two: structural (does the wiring work), perceptual (does it look right), and adversarial-review (could it misrepresent / ship a fake). #42's only real finding lived in the gap only the third lens covers. Name the trio.
+
+| H5 | Once the full discipline (card → both tracks → look → review) is actually running, the build proceeds without the failures that needed Architect catches. | confirmed | The session's two halves: three Architect interventions while skipping discipline; zero across six increments while running it. |
+
+---
+
+*KIT_DIARY.md for substrate-ui. Five entries. Five hypotheses, four confirmed (missing ledger cost an untested seam; un-scoped tooling makes the contract skippable; the perceptual track catches what DOM can't; running the full discipline removes the need for Architect catches). The diary starts where formal discipline starts — the review-#39 retrofit — not at the project's true beginning, by ruling.*

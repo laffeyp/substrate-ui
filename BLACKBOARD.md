@@ -34,6 +34,10 @@
 
 - **2026-06-17 — The five product calls (ruled in-session, "derisk the eventual build").** **Q-A2 (tool-use):** GENERIC — the UI does not special-case any tool/model; a Producer is a Producer. **Q-C1 (control surface):** LAUNCH + RESUME-ONLY — no mid-run mutation of run semantics from the UI. **Q-C2 (operators):** SINGLE-OPERATOR. **Q-D1 (scale):** DOZENS of Producers per run (not thousands). **Q-E2 (Studio):** NEAR-TERM FULL PARITY — a visual TopologyBuilder (Producers/Triggers/Views/Predicates/TerminationPolicy + Routes + any_of/all_of composition + REAL build-and-launch to a Runtime).
 
+- **2026-06-17 — Studio build sequence + discipline (binding direction, this session).** Build the E2 full-parity Studio in this order: build seam under test (001) → static topology view (002) → form-first authoring (003) → Routes + any_of/all_of composition (004) → drag-canvas (005) → model-backed Producer seam (006) → model authoring UI (007). **Discipline (now mandatory):** every front-end increment runs BOTH observation tracks — structural E2E AND perceptual capture-AND-VIEW — before "done"; sprint card with declared contracts before code; the eight-word vocabulary binds (no own signals vocabulary — the UI reads substrate's v0.2). The Architect re-centered this twice early (observation-contract skip; perceptual-track skip) — both folded into KIT_DIARY as standing rules.
+
+- **2026-06-17 — Model-backed Producers use the runtime's OWN Responder (no fakes).** A model Producer calls `substrate.reference`'s real `Responder`: `DeterministicResponder` (CI mode — pure, seeded; the DEFAULT, so authored model topologies replay byte-identically and need no network) or `OllamaResponder` (real LLM, selected at build; FAILS LOUD as ProducerFailed if Ollama is absent — never a silent stub). Reuse the runtime's truth rather than reinvent a fake. Ratified by review #42 ("REAL and HONEST").
+
 ---
 
 ## Built
