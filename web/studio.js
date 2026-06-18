@@ -147,6 +147,60 @@ async function doBuild() {
     <div style="margin-top:8px"><a class="consolelink" href="/?record=${encodeURIComponent(r.name)}">view the run in the console →</a></div>`);
 }
 
+// ---------- drag-canvas: a node-graph VIEW of the authored spec (buildSpec) ----------
+const CARD_W = 130, CARD_H = 48;
+let CANVAS_POS = {};  // kind -> {x,y}; persists across re-renders + drags
+const MARKER = `<defs><marker id="arrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" fill="#5e6573"/></marker></defs>`;
+
+function layoutCanvas(spec, W) {
+  const initials = spec.producers.filter((p) => p.initial), others = spec.producers.filter((p) => !p.initial);
+  const place = (list, y) => list.forEach((p, i) => {
+    if (!CANVAS_POS[p.kind]) {
+      const gap = Math.min(195, Math.max(150, (W - 60) / Math.max(1, list.length)));
+      CANVAS_POS[p.kind] = { x: 24 + i * gap, y };
+    }
+  });
+  place(initials, 36); place(others, 250);
+  const kinds = new Set(spec.producers.map((p) => p.kind));
+  Object.keys(CANVAS_POS).forEach((k) => { if (!kinds.has(k)) delete CANVAS_POS[k]; });
+}
+
+function renderCanvas() {
+  const spec = buildSpec(), canvas = $("canvas"), W = canvas.clientWidth || 820;
+  layoutCanvas(spec, W);
+  const bottom = (k) => ({ x: CANVAS_POS[k].x + CARD_W / 2, y: CANVAS_POS[k].y + CARD_H });
+  const top = (k) => ({ x: CANVAS_POS[k].x + CARD_W / 2, y: CANVAS_POS[k].y });
+  const emittersOf = (kind) => spec.producers.filter((p) => p.emits.includes(kind)).map((p) => p.kind);
+  const edge = (a, b, cls) => `<path class="edge ${cls}" d="M${a.x},${a.y} C${a.x},${(a.y + b.y) / 2} ${b.x},${(a.y + b.y) / 2} ${b.x},${b.y}" marker-end="url(#arrow)" />`;
+  const label = (a, b, t, cls) => `<text class="edge-lbl ${cls}" x="${(a.x + b.x) / 2}" y="${(a.y + b.y) / 2}" text-anchor="middle">${esc(t)}</text>`;
+  let edges = "";
+  spec.triggers.forEach((t) => { if (CANVAS_POS[t.starts]) emittersOf(t.on).forEach((src) => { if (CANVAS_POS[src] && src !== t.starts) { edges += edge(bottom(src), top(t.starts), "") + label(bottom(src), top(t.starts), t.id, ""); } }); });
+  spec.routes.forEach((r) => { const dsts = [...new Set(spec.triggers.map((t) => t.starts))]; emittersOf(r.of).forEach((src) => dsts.forEach((dst) => { if (CANVAS_POS[src] && CANVAS_POS[dst] && src !== dst) edges += edge(bottom(src), top(dst), "route") + label(bottom(src), top(dst), r.slot, "route"); })); });
+  const cards = spec.producers.map((p) => {
+    const pp = CANVAS_POS[p.kind];
+    return `<div class="card ${p.initial ? "initial" : ""}" data-kind="${esc(p.kind)}" style="left:${pp.x}px;top:${pp.y}px">
+      <div class="ck">${esc(p.kind)}</div><div class="ce">emits ${p.emits.map(esc).join(", ") || "—"}</div>${p.initial ? '<div class="cb">▸ initial</div>' : ""}</div>`;
+  }).join("");
+  canvas.innerHTML = `<svg>${MARKER}${edges}</svg>${cards}`;
+  canvas.querySelectorAll(".card").forEach((card) => { card.onmousedown = (e) => startDrag(e, card.dataset.kind); });
+}
+
+function startDrag(e, kind) {
+  e.preventDefault();
+  const sx = e.clientX, sy = e.clientY, orig = { ...CANVAS_POS[kind] };
+  const move = (ev) => { CANVAS_POS[kind] = { x: Math.max(0, orig.x + ev.clientX - sx), y: Math.max(0, orig.y + ev.clientY - sy) }; renderCanvas(); };
+  const up = () => { document.removeEventListener("mousemove", move); document.removeEventListener("mouseup", up); };
+  document.addEventListener("mousemove", move); document.addEventListener("mouseup", up);
+}
+
+function setView(v) {
+  $("vForm").classList.toggle("active", v === "form");
+  $("vCanvas").classList.toggle("active", v === "canvas");
+  $("formView").style.display = v === "form" ? "" : "none";
+  $("canvasView").style.display = v === "canvas" ? "" : "none";
+  if (v === "canvas") renderCanvas();
+}
+
 // ---------- wire ----------
 $("addProducer").onclick = () => addRow("producers", PRODUCER_ROW);
 $("addView").onclick = () => addRow("views", VIEW_ROW);
@@ -157,6 +211,8 @@ document.body.addEventListener("change", (e) => { if (e.target.classList.contain
 $("termKind").onchange = renderTermParams;
 $("validateBtn").onclick = doValidate;
 $("buildBtn").onclick = doBuild;
+$("vForm").onclick = () => setView("form");
+$("vCanvas").onclick = () => setView("canvas");
 
 // ---------- pre-fill the known-good reviewer/judge example (immediately buildable) ----------
 renderTermParams();

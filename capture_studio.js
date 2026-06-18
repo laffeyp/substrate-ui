@@ -31,6 +31,14 @@ const OUT = path.join(__dirname, "screenshots");
   await p.waitForTimeout(300);
   await shot("33-studio-routes-composition", "routes section filled + all_of composed termination with member policies");
 
+  // sprint 005: the drag-canvas
+  await p.goto(BASE + "/studio.html", { waitUntil: "networkidle", timeout: 20000 });
+  await p.waitForTimeout(700);
+  await p.click("#vCanvas"); await p.waitForTimeout(500);
+  // element screenshot (the canvas is bounded ~960x460) — fullPage×2 would exceed the viewer limit
+  await (await p.$("#canvas")).screenshot({ path: path.join(OUT, "34-studio-canvas.png") });
+  console.log("  shot  34-studio-canvas.png — drag-canvas node-graph (Producer cards + labelled Trigger edges)");
+
   await b.close();
   console.log("\nSTUDIO CAPTURE DONE — view screenshots/3*-*.png, then grade perceptually.");
 })().catch((e) => { console.error("CAPTURE ERROR", e); process.exit(1); });
