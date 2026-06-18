@@ -4,8 +4,12 @@ The read + control + author console over the **Substrate** runtime. It reads run
 through substrate's **public surfaces** — `substrate.api` for records/projections + control, the public
 `substrate.reference` Responders for the model seam, `substrate.topologies` for the bundled demos —
 **never kernel internals**. It lets a single operator observe runs, drive thin control (launch /
-resume), and author new topologies that build-and-launch for real. Built SDD-style (sdd-kit-2): every increment behind a sprint card with a dual + observation
-contract; the build history is the audit trail.
+resume), and author new topologies that build-and-launch for real. Built with sdd-kit-2 discipline —
+a dual + observation contract and independent review per increment. In full disclosure (and as
+`KIT_DIARY.md` records): the early console (#30–#38) was built test-first and observation-tracked but
+*before* the sprint-card / git ledger was in place — that gap was caught by an external review (#39)
+and retrofitted, after which the full discipline held. The substance held throughout; the ceremony
+arrived mid-build, not at the start.
 
 ## Quickstart
 
