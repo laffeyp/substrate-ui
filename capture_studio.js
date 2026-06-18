@@ -39,6 +39,19 @@ const OUT = path.join(__dirname, "screenshots");
   await (await p.$("#canvas")).screenshot({ path: path.join(OUT, "34-studio-canvas.png") });
   console.log("  shot  34-studio-canvas.png — drag-canvas node-graph (Producer cards + labelled Trigger edges)");
 
+  // sprint 007: model-Producer authoring controls (model checkbox + prompt on the rows) — viewport
+  // shot (not fullPage) so it stays under the viewer size limit.
+  await p.goto(BASE + "/studio.html", { waitUntil: "networkidle", timeout: 20000 });
+  await p.waitForTimeout(700);
+  await p.evaluate(() => {
+    const judge = [...document.querySelectorAll("#producers .row")].find((r) => r.querySelector(".pkind").value === "judge");
+    judge.querySelector(".pmodel").checked = true;
+    judge.querySelector(".pprompt").value = "rate the critiques";
+  });
+  await p.waitForTimeout(200);
+  await p.screenshot({ path: path.join(OUT, "35-studio-model.png") });  // viewport (top): producer rows w/ model controls
+  console.log("  shot  35-studio-model.png — model-Producer authoring (judge model-checked + prompt)");
+
   await b.close();
   console.log("\nSTUDIO CAPTURE DONE — view screenshots/3*-*.png, then grade perceptually.");
 })().catch((e) => { console.error("CAPTURE ERROR", e); process.exit(1); });
