@@ -318,6 +318,28 @@ def test_build_surfaces_unfired_triggers(base: str) -> None:
     assert "Y" not in kinds
 
 
+def test_build_model_producer_runs_the_responder(base: str) -> None:
+    # sprint 006: a MODEL-backed Producer calls the runtime's REAL Responder. Built with the default
+    # DeterministicResponder (CI mode — pure, seeded), the emitted payload carries the responder's
+    # deterministic output, proving the responder genuinely RAN (not the stub's note=kind).
+    from substrate.reference import DeterministicResponder
+
+    spec = {
+        "name": "model_demo",
+        "producers": [{"kind": "rater", "emits": ["Verdict"], "initial": True, "model": True, "prompt": "rate this"}],
+        "termination": {"kind": "any_of",
+                        "members": [{"kind": "all_completed"}, {"kind": "quiescence_with_watchdog", "seconds": 1}]},
+    }
+    res = post_json(base, "/api/build", spec)
+    assert res["status"] == "finalised"
+    outs = get(base, f"/api/records/{res['name']}/io")["outputs"]
+    verdicts = [o for o in outs if o["kind"] == "Verdict"]
+    assert len(verdicts) == 1
+    expected = DeterministicResponder(seed=0).respond("rate this")
+    assert verdicts[0]["payload"]["note"] == expected  # the REAL responder's output...
+    assert expected != "rater"  # ...not the stub's note=kind — the responder genuinely ran
+
+
 def test_static_index_is_served(base: str) -> None:
     with urlopen(base + "/", timeout=10) as r:
         body = r.read().decode()

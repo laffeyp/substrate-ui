@@ -38,6 +38,16 @@ from substrate.topologies import bundled
 
 from builder import SpecError, build_from_spec
 from demo_topologies import approval_event, resumable_topology
+from substrate.reference import DeterministicResponder, OllamaResponder
+
+
+def _responder_for(spec: dict[str, object]) -> object:
+    """The Responder a model-backed authored topology runs against: 'deterministic' (CI mode, pure +
+    seeded — the default; no network, replay-stable) or 'ollama' (a real local LLM; loud failure if
+    Ollama is not running — never a silent stub)."""
+    if str(spec.get("responder") or "deterministic").lower() == "ollama":
+        return OllamaResponder(model=str(spec.get("model_name") or "llama3.2"))
+    return DeterministicResponder(seed=int(spec.get("seed", 0)))  # type: ignore[arg-type]
 
 # paused demo record -> (topology to re-resolve, the external resume event). Resume reattaches to
 # the record and injects the event so the resume Trigger fires the continuation (review #37: resume
@@ -317,7 +327,7 @@ class Handler(BaseHTTPRequestHandler):
         Studio's 'one act that causes things'). Backgrounded + tracked like launch (§7.7)."""
         try:
             spec = self._body()
-            topo = build_from_spec(spec)
+            topo = build_from_spec(spec, _responder_for(spec))
             b = api.TopologyBuilder()
             topo(b)
             b.build()  # validate the wiring before running
