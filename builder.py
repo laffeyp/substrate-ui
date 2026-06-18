@@ -26,6 +26,7 @@ from typing import Any
 
 import msgspec
 from substrate import api
+from substrate.reference import DeterministicResponder  # the runtime's CI-mode Responder (pure, seeded)
 
 _OPS = {
     ">=": lambda a, b: a >= b, ">": lambda a, b: a > b, "==": lambda a, b: a == b,
@@ -73,31 +74,43 @@ def _termination(spec: dict[str, Any]) -> Any:
     raise SpecError(f"unknown termination {k!r}")
 
 
-def build_from_spec(spec: dict[str, Any]) -> Any:
+def build_from_spec(spec: dict[str, Any], responder: Any = None) -> Any:
     """Translate an authored spec into a real topology(b) function (raises SpecError if malformed).
 
-    HONESTY NOTE (the deterministic stub's count-ceiling): each stub Producer emits each of its
-    declared kinds EXACTLY ONCE per instance (see make_stub below). So a count Predicate over a
-    kind can only ever reach N = the number of Producer-instances emitting that kind — a
-    `KindCount(X) >= 3` with a single X-emitter is UNREACHABLE, and the run will finalise green via
-    quiescence having fired nothing past the initials. That is an honest finalise, but silent. The
-    /api/build result surfaces any authored Trigger that never fired (`unfired_triggers`) so the
-    Studio can warn rather than imply the wiring worked. (Real model Producers, a later step, emit
-    streams and lift this ceiling; the stub proves WIRING, deterministically.)
+    A Producer may be DETERMINISTIC-STUB (default) or MODEL-BACKED (`model: true`). A stub emits
+    each declared kind once with `note=kind`; a model Producer calls the runtime's real
+    `Responder.respond(prompt)` and emits its kind carrying the response. `responder` defaults to the
+    runtime's `DeterministicResponder` (CI mode — pure, seeded, no network; same prompt+seed → same
+    answer, so model topologies replay byte-identically). Pass an `OllamaResponder` for a real LLM.
+
+    HONESTY NOTE (the stub's count-ceiling): a STUB Producer emits each kind EXACTLY ONCE per
+    instance, so a `KindCount(X) >= 3` with a single X-emitter is UNREACHABLE and the run finalises
+    green via quiescence having fired nothing past the initials — honest but silent, so /api/build
+    surfaces `unfired_triggers`. A MODEL Producer with a DeterministicResponder still emits once
+    (the ceiling applies); the difference is the payload carries real Responder output, not `kind`.
     """
     if not spec.get("producers"):
         raise SpecError("a topology needs at least one Producer")
-    # one frozen Struct per authored event kind (a generic `note: str` payload — the stub's output).
+    if responder is None:
+        responder = DeterministicResponder(seed=int(spec.get("seed", 0)))
+    responder_is_deterministic = isinstance(responder, DeterministicResponder)
+    # one frozen Struct per authored event kind (a generic `note: str` payload — stub kind or model output).
     structs: dict[str, type] = {}
     for p in spec["producers"]:
         for ev in p.get("emits", []):
             if ev not in structs:
                 structs[ev] = msgspec.defstruct(ev, [("note", str, "")], frozen=True)
 
-    def make_stub(kind: str, emit_structs: list[type]) -> Any:
-        async def producer(_inp: Any) -> Any:
-            for s in emit_structs:
-                yield s(note=kind)  # deterministic stub: emit each declared kind once
+    def make_producer(kind: str, emit_structs: list[type], model: bool, prompt: str) -> Any:
+        if model:
+            async def producer(_inp: Any) -> Any:
+                text = responder.respond(prompt)  # the runtime's real Responder (CI or Ollama)
+                for s in emit_structs:
+                    yield s(note=text)
+        else:
+            async def producer(_inp: Any) -> Any:
+                for s in emit_structs:
+                    yield s(note=kind)  # deterministic stub: emit each declared kind once
         return producer
 
     def topo(b: Any) -> None:
@@ -107,9 +120,13 @@ def build_from_spec(spec: dict[str, Any]) -> Any:
                 raise SpecError(f"Producer {p.get('kind')!r} emits nothing")
             kind = p["kind"]
             schemas = [structs[e] for e in emits]
+            model = bool(p.get("model"))
+            prompt = str(p.get("prompt") or f"You are {kind}.")
+            # a model Producer is replay-deterministic iff its Responder is (Ollama is NOT — declare it so)
+            det = bool(p.get("deterministic", True)) and (responder_is_deterministic if model else True)
             b.producer_kind(
                 kind, schemas=schemas, schema_version=1,
-                start=make_stub(kind, schemas), deterministic=bool(p.get("deterministic", True)),
+                start=make_producer(kind, schemas, model, prompt), deterministic=det,
             )
             if p.get("initial"):
                 b.initial(kind)
