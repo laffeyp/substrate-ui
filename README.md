@@ -1,9 +1,10 @@
 # substrate-ui
 
 The read + control + author console over the **Substrate** runtime. It reads run records and live runs
-through the public `substrate.api` seam **only** (no kernel internals), and lets a single operator
-observe runs, drive thin control (launch / resume), and author new topologies that build-and-launch for
-real. Built SDD-style (sdd-kit-2): every increment behind a sprint card with a dual + observation
+through substrate's **public surfaces** — `substrate.api` for records/projections + control, the public
+`substrate.reference` Responders for the model seam, `substrate.topologies` for the bundled demos —
+**never kernel internals**. It lets a single operator observe runs, drive thin control (launch /
+resume), and author new topologies that build-and-launch for real. Built SDD-style (sdd-kit-2): every increment behind a sprint card with a dual + observation
 contract; the build history is the audit trail.
 
 ---
@@ -33,7 +34,7 @@ A thin, dependency-light stack — the runtime is the source of truth; the UI is
 
 | File | Owns |
 |---|---|
-| `server.py` | stdlib `http.server` + msgspec backend. HTTP routing + read projections over `substrate.api` (records index, run_graph, topology_graph, summary, io, diff, explain). Thin control (`/api/launch`, `/api/resume`) + the Studio seam (`/api/validate`, `/api/build`). Reads `substrate.api` only. |
+| `server.py` | stdlib `http.server` + msgspec backend. HTTP routing + read projections over `substrate.api` (records index, run_graph, topology_graph, summary, io, diff, explain). Thin control (`/api/launch`, `/api/resume`) + the Studio seam (`/api/validate`, `/api/build`). Imports `substrate.api`, the public `substrate.reference` Responders, and `substrate.topologies` — no kernel internals. |
 | `builder.py` | The authoring translator: an authored JSON spec → a real `topology(b)` function. Mints a frozen msgspec Struct per event kind; Producers are deterministic stubs or **model-backed** (call the runtime's real `Responder.respond(prompt)`). |
 | `web/index.html` + `web/app.js` | The console (vanilla JS, no build step): rail, run-as-graph + topology-structure, stream, inspector, verdict, diff, I/O, launch/resume, live-follow. |
 | `web/studio.html` + `web/studio.js` | The Studio: form + drag-canvas authoring → validate/build. |
@@ -41,7 +42,9 @@ A thin, dependency-light stack — the runtime is the source of truth; the UI is
 
 No web framework, no ORM, no frontend bundler, no CDN. Backend deps: Python stdlib + `msgspec` +
 `substrate` (installed library). The UI is its **own git repo** because it consumes substrate only as a
-library through `substrate.api` (F-API-6) — the honest boundary.
+library, through its **public** surfaces — `substrate.api`, the public `substrate.reference` Responders,
+`substrate.topologies` — never kernel internals. That boundary is enforced by `test_server.py`'s
+import-boundary test, not just by convention.
 
 ---
 

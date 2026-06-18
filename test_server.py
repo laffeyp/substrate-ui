@@ -340,6 +340,32 @@ def test_build_model_producer_runs_the_responder(base: str) -> None:
     assert expected != "rater"  # ...not the stub's note=kind — the responder genuinely ran
 
 
+def test_ui_imports_only_sanctioned_substrate_surfaces() -> None:
+    # review #43: protect the UI->substrate boundary MECHANICALLY. substrate enforces its own kernel/app
+    # boundary with a CI gate (import-linter + an AST test); the UI's was convention + a grep. The UI may
+    # import ONLY substrate's PUBLIC surfaces — substrate.api, the public reference Responders, the
+    # bundled topologies — never a kernel internal (runtime/sequencer/record/encoding/attach/...).
+    import ast
+
+    sanctioned = {"substrate.api", "substrate.reference", "substrate.topologies"}
+    ui_dir = Path(__file__).resolve().parent
+    offenders = []
+    for py in sorted(ui_dir.glob("*.py")):
+        tree = ast.parse(py.read_text(), filename=str(py))
+        for node in ast.walk(tree):
+            mods: list[str] = []
+            if isinstance(node, ast.ImportFrom) and node.module:
+                mods = [node.module]
+            elif isinstance(node, ast.Import):
+                mods = [a.name for a in node.names]
+            for m in mods:
+                if (m == "substrate" or m.startswith("substrate.")) and m != "substrate":
+                    top2 = ".".join(m.split(".")[:2])
+                    if top2 not in sanctioned:
+                        offenders.append(f"{py.name}: {m}")
+    assert not offenders, f"UI reached past substrate's public surfaces into kernel internals: {offenders}"
+
+
 def test_static_index_is_served(base: str) -> None:
     with urlopen(base + "/", timeout=10) as r:
         body = r.read().decode()
