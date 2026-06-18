@@ -26,7 +26,10 @@ from typing import Any
 
 import msgspec
 from substrate import api
-from substrate.reference import DeterministicResponder  # the runtime's CI-mode Responder (pure, seeded)
+from substrate.reference import (  # the runtime's CI-mode Responder (pure, seeded) + the offload helper
+    DeterministicResponder,
+    call_responder,
+)
 
 _OPS = {
     ">=": lambda a, b: a >= b, ">": lambda a, b: a > b, "==": lambda a, b: a == b,
@@ -104,7 +107,9 @@ def build_from_spec(spec: dict[str, Any], responder: Any = None) -> Any:
     def make_producer(kind: str, emit_structs: list[type], model: bool, prompt: str) -> Any:
         if model:
             async def producer(_inp: Any) -> Any:
-                text = responder.respond(prompt)  # the runtime's real Responder (CI or Ollama)
+                # route through call_responder so a real (Ollama) model call is offloaded/cancellable
+                # and doesn't block the event loop — same discipline the runtime topologies use.
+                text = await call_responder(responder, prompt)
                 for s in emit_structs:
                     yield s(note=text)
         else:

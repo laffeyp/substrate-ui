@@ -55,7 +55,7 @@ async function loadRecords() {
       : r.status === "paused" ? `paused · awaiting ${r.paused_on || "input"}`
       : broken ? `${r.producers_failed} failures · finalised` : `${r.status} · ${r.total_events} events`;
     div.innerHTML = `<span class="dot" style="background:${color}"></span>
-      <div class="nm">${r.name}</div><div class="meta ${broken ? "broken" : ""}">${r.run_id.slice(0, 8)}… · ${meta}</div>`;
+      <div class="nm">${escapeHtml(r.name)}</div><div class="meta ${broken ? "broken" : ""}">${escapeHtml(r.run_id.slice(0, 8))}… · ${escapeHtml(meta)}</div>`;
     div.onclick = () => selectRecord(r.name);
     $("rail").appendChild(div);
   }
@@ -63,7 +63,7 @@ async function loadRecords() {
   // populate the diff selector (compare this record against another — first divergence by seq)
   const sel = $("diffsel");
   sel.innerHTML = '<option value="">⇄ diff vs…</option>' +
-    recs.map((r) => `<option value="${r.name}">${r.name}</option>`).join("");
+    recs.map((r) => `<option value="${escapeHtml(r.name)}">${escapeHtml(r.name)}</option>`).join("");
   sel.onchange = () => { if (sel.value) renderDiff(sel.value); };
   // auto-select only on FIRST load (else a refresh after launch/resume yanks selection to the top
   // record with a dangling fetch — the race behind the verdict flicker. review #38, obs b).
@@ -80,7 +80,7 @@ async function loadRecords() {
 async function loadTopologies() {
   const topos = await api("/api/topologies");
   $("launchsel").innerHTML = '<option value="">+ launch a topology…</option>' +
-    topos.map((t) => `<option value="${t}">${t}</option>`).join("");
+    topos.map((t) => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join("");
 }
 $("launchbtn").onclick = async () => {
   const t = $("launchsel").value;
@@ -141,15 +141,15 @@ async function followLive(name) {
 async function renderDiff(other) {
   const d = await api(`/api/diff?a=${encodeURIComponent(STATE.name)}&b=${encodeURIComponent(other)}`);
   if (d.equivalent) {
-    $("insp").innerHTML = `<div class="row"><span class="l">diff</span><span><b>${d.a}</b> vs <b>${d.b}</b></span></div>
+    $("insp").innerHTML = `<div class="row"><span class="l">diff</span><span><b>${escapeHtml(d.a)}</b> vs <b>${escapeHtml(d.b)}</b></span></div>
       <div class="row"><span class="l">result</span><span class="diff-eq">● equivalent under D-8 (no divergence)</span></div>
       <div class="row"><span class="l">means</span><span class="dim">same kinds + decision identities + payload hashes in seq order (modulo run_id / instance / t).</span></div>`;
   } else {
     const x = d.divergence;
-    $("insp").innerHTML = `<div class="row"><span class="l">diff</span><span><b>${d.a}</b> vs <b>${d.b}</b></span></div>
+    $("insp").innerHTML = `<div class="row"><span class="l">diff</span><span><b>${escapeHtml(d.a)}</b> vs <b>${escapeHtml(d.b)}</b></span></div>
       <div class="row"><span class="l">diverge</span><span class="diff-hi">● first divergence at <b>seq ${x.seq}</b> (index ${x.index})</span></div>
-      <div class="row"><span class="l">${d.a}</span><span>${x.kind_a} <span class="dim">${(x.hash_a || "").slice(0, 24)}…</span></span></div>
-      <div class="row"><span class="l">${d.b}</span><span>${x.kind_b} <span class="dim">${(x.hash_b || "").slice(0, 24)}…</span></span></div>`;
+      <div class="row"><span class="l">${escapeHtml(d.a)}</span><span>${escapeHtml(x.kind_a)} <span class="dim">${escapeHtml((x.hash_a || "").slice(0, 24))}…</span></span></div>
+      <div class="row"><span class="l">${escapeHtml(d.b)}</span><span>${escapeHtml(x.kind_b)} <span class="dim">${escapeHtml((x.hash_b || "").slice(0, 24))}…</span></span></div>`;
   }
 }
 
@@ -232,7 +232,7 @@ async function renderIO() {
   // outputs materialize as the cursor reaches the seq that produced them; each cites that seq.
   const outs = io.outputs.filter((o) => o.seq <= cur);
   const arts = outs.length
-    ? outs.map((o) => `<div class="art"><span class="sq">seq ${String(o.seq).padStart(3, "0")}</span><span class="kd">${o.kind}</span><span class="pl">${escapeHtml(gistPayload(o.payload))}</span></div>`).join("")
+    ? outs.map((o) => `<div class="art"><span class="sq">seq ${String(o.seq).padStart(3, "0")}</span><span class="kd">${escapeHtml(o.kind)}</span><span class="pl">${escapeHtml(gistPayload(o.payload))}</span></div>`).join("")
     : `<div class="io-empty">No application output yet at seq ${cur}.</div>`;
   const fin = io.finalisation && Object.keys(io.finalisation).length
     ? `<div class="io-doc"><div class="t">finalisation_payload</div><pre>${escapeHtml(JSON.stringify(io.finalisation, null, 1))}</pre></div>` : "";
@@ -270,10 +270,10 @@ function renderGraph() {
     const end = i.ended_seq == null ? cur : Math.min(i.ended_seq, cur);
     const left = x(i.fired_seq), w = Math.max(1.2, x(end) - left);
     const startMark = i.started_seq != null && i.started_seq <= cur ? `<span class="spawn" style="left:${x(i.started_seq)}%"></span>` : "";
-    html += `<div class="lane" data-inst="${i.instance}">
-      <div class="lbl">${i.kind} <span class="inst">${i.instance.slice(-4)}</span></div>
+    html += `<div class="lane" data-inst="${escapeHtml(i.instance)}">
+      <div class="lbl">${escapeHtml(i.kind)} <span class="inst">${escapeHtml(i.instance.slice(-4))}</span></div>
       <div class="track">${startMark}
-        <div class="bar ${i.status}" style="left:${left}%;width:${w}%" title="${i.kind} ${i.fired_seq}→${i.ended_seq ?? "…"} ${i.status}"></div>
+        <div class="bar ${i.status}" style="left:${left}%;width:${w}%" title="${escapeHtml(i.kind)} ${i.fired_seq}→${i.ended_seq ?? "…"} ${i.status}"></div>
       </div></div>`;
   });
   html += `</div>`;
@@ -317,8 +317,8 @@ function renderStream() {
     const prod = e.producer && e.producer.kind ? e.producer.kind : "runtime";
     return `<div class="ev ${future ? "future" : ""} ${STATE.sel === e.seq ? "sel" : ""}" data-seq="${e.seq}">
       <span class="sq">seq ${String(e.seq).padStart(3, "0")}</span>
-      <span class="kd k-${cat}">${shortKind(e.kind)}</span>
-      <span class="pl">${prod} · ${gist(e)}</span></div>`;
+      <span class="kd k-${cat}">${escapeHtml(shortKind(e.kind))}</span>
+      <span class="pl">${escapeHtml(prod)} · ${escapeHtml(gist(e))}</span></div>`;
   }).join("");
   $("stream").querySelectorAll(".ev").forEach((el) => (el.onclick = () => inspectEvent(+el.dataset.seq)));
 }
@@ -328,16 +328,16 @@ function renderHealth() {
   const s = STATE.summary, st = STATE.graph.status;
   const fails = s.producers_failed + s.input_build_failures + s.predicate_quarantines + s.invalid_emissions;
   const broken = st === "failed" || fails > 0 || st === "incomplete";
-  const verdict = st === "failed" ? "● FAILED · " + (STATE.graph.final_reason || "").toUpperCase().replace(/_/g, " ")
+  const verdict = st === "failed" ? "● FAILED · " + escapeHtml((STATE.graph.final_reason || "").toUpperCase().replace(/_/g, " "))
     : st === "paused" ? "● PAUSED" : st === "incomplete" ? "● INCOMPLETE (no terminal)"
     : fails > 0 ? "● FINALISED · NOT CLEAN" : "● FINALISED · CLEAN";
   const msg = st === "failed" ? "the run itself failed — finished is not worked."
     : st === "incomplete" ? "no terminal RunFinalised — torn or still being written."
-    : st === "paused" ? `halted resumably — awaiting ${STATE.graph.paused_on || "input"}`
+    : st === "paused" ? `halted resumably — awaiting ${escapeHtml(STATE.graph.paused_on || "input")}`
     : fails > 0 ? `reached RunFinalised — but ${fails} thing(s) inside failed. Finished is not worked.`
     : "reached RunFinalised with no failures.";
   const stat = (n, l, cls) => `<div class="stat ${cls}"><b>${n}</b><span class="l">${l}</span></div>`;
-  const work = Object.entries(s.application_events).map(([k, n]) => `<span class="chip">${n} ${k}</span>`).join("");
+  const work = Object.entries(s.application_events).map(([k, n]) => `<span class="chip">${n} ${escapeHtml(k)}</span>`).join("");
   $("health").className = "health" + (broken ? " broken" : "");
   $("health").innerHTML = `<span class="verdict ${broken ? "v-failed" : "v-finalised"}">${verdict}</span>
     ${stat(s.producers_started, "STARTED", "")}${stat(s.producers_completed, "COMPLETED", "grn")}
@@ -351,25 +351,28 @@ function inspectEvent(seq) {
   STATE.sel = seq; renderStream();
   const e = STATE.events.find((x) => x.seq === seq); if (!e) return;
   const cat = category(e.kind);
-  $("insp").innerHTML = `<div class="row"><span class="l">event</span><span><span class="badge k-${cat}">${shortKind(e.kind)}</span> <span class="dim">seq ${e.seq}</span></span></div>
-    <div class="row"><span class="l">schema</span><span>${e.schema || ""}</span></div>
-    <div class="row"><span class="l">producer</span><span>${e.producer && e.producer.kind ? e.producer.kind + " <span class='dim'>" + e.producer.instance + "</span>" : "— runtime"}</span></div>
+  $("insp").innerHTML = `<div class="row"><span class="l">event</span><span><span class="badge k-${cat}">${escapeHtml(shortKind(e.kind))}</span> <span class="dim">seq ${e.seq}</span></span></div>
+    <div class="row"><span class="l">schema</span><span>${escapeHtml(e.schema || "")}</span></div>
+    <div class="row"><span class="l">producer</span><span>${e.producer && e.producer.kind ? escapeHtml(e.producer.kind) + " <span class='dim'>" + escapeHtml(e.producer.instance) + "</span>" : "— runtime"}</span></div>
     <div class="row"><span class="l">payload</span></div><pre>${escapeHtml(JSON.stringify(e.payload, null, 1))}</pre>`;
 }
 
 async function inspectProducer(instance) {
   const data = await api(`/api/records/${STATE.name}/explain/${instance}`).catch(() => null);
-  if (!data || data.error) { $("insp").innerHTML = `<span class="dim">No provenance for ${instance}.</span>`; return; }
+  if (!data || data.error) { $("insp").innerHTML = `<span class="dim">No provenance for ${escapeHtml(instance)}.</span>`; return; }
   const x = data.explanation;
-  const chain = data.ancestry.map((a) => `${a.kind}[${a.instance.slice(-4)}]`).join(" → ");
-  $("insp").innerHTML = `<div class="row"><span class="l">producer</span><span><b>${x.kind}</b> <span class="dim">${x.instance.slice(-6)}</span></span></div>
-    <div class="row"><span class="l">cause</span><span>${x.cause}${x.trigger_id ? ` <span class="k-trigger">${x.trigger_id}</span>` : ""}</span></div>
+  const chain = data.ancestry.map((a) => `${escapeHtml(a.kind)}[${escapeHtml(a.instance.slice(-4))}]`).join(" → ");
+  $("insp").innerHTML = `<div class="row"><span class="l">producer</span><span><b>${escapeHtml(x.kind)}</b> <span class="dim">${escapeHtml(x.instance.slice(-6))}</span></span></div>
+    <div class="row"><span class="l">cause</span><span>${escapeHtml(x.cause)}${x.trigger_id ? ` <span class="k-trigger">${escapeHtml(x.trigger_id)}</span>` : ""}</span></div>
     <div class="row"><span class="l">at seq</span><span>${x.at_seq}</span></div>
-    <div class="row"><span class="l">input</span><span class="dim">${x.input_sha256 || "—"}</span></div>
+    <div class="row"><span class="l">input</span><span class="dim">${escapeHtml(x.input_sha256 || "—")}</span></div>
     <div class="row"><span class="l">ancestry</span><span>${chain}</span></div>`;
 }
 
-const escapeHtml = (s) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+// escape ALL of & < > " ' (quotes too — used in attribute contexts) and coerce to string, so any
+// record-derived identifier (topology / event / producer / trigger name, run id) is inert in the DOM.
+const escapeHtml = (s) =>
+  String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
 // ---------- cursor wiring ----------
 $("modeToggle").onclick = () => { STATE.mode = STATE.mode === "io" ? "read" : "io"; render(); };
