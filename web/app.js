@@ -144,7 +144,9 @@ async function followLive(name) {
 
 // ---------- diff: first divergence by seq (D-8), §7.1 cited ----------
 async function renderDiff(other) {
-  const d = await api(`/api/diff?a=${encodeURIComponent(STATE.name)}&b=${encodeURIComponent(other)}`);
+  const name = STATE.name;  // capture: a slow diff fetch must not land in a record the user switched to
+  const d = await api(`/api/diff?a=${encodeURIComponent(name)}&b=${encodeURIComponent(other)}`);
+  if (STATE.name !== name) return;  // switched records while the fetch was in flight (ui-frontend-3)
   if (d.equivalent) {
     $("insp").innerHTML = `<div class="row"><span class="l">diff</span><span><b>${escapeHtml(d.a)}</b> vs <b>${escapeHtml(d.b)}</b></span></div>
       <div class="row"><span class="l">result</span><span class="diff-eq">● equivalent under D-8 (no divergence)</span></div>
@@ -363,7 +365,9 @@ function inspectEvent(seq) {
 }
 
 async function inspectProducer(instance) {
-  const data = await api(`/api/records/${STATE.name}/explain/${instance}`).catch(() => null);
+  const name = STATE.name;  // capture for the same staleness guard as renderDiff (ui-frontend-3)
+  const data = await api(`/api/records/${name}/explain/${instance}`).catch(() => null);
+  if (STATE.name !== name) return;  // switched records mid-fetch — don't overwrite the new inspector
   if (!data || data.error) { $("insp").innerHTML = `<span class="dim">No provenance for ${escapeHtml(instance)}.</span>`; return; }
   const x = data.explanation;
   const chain = data.ancestry.map((a) => `${escapeHtml(a.kind)}[${escapeHtml(a.instance.slice(-4))}]`).join(" → ");

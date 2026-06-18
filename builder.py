@@ -36,19 +36,28 @@ _OPS = {
     "<=": lambda a, b: a <= b, "<": lambda a, b: a < b,
 }
 _VIEWS = {"KindCount": api.KindCount, "KindBuffer": api.KindBuffer, "PerKindLatest": api.PerKindLatest}
-_POLICIES = {"Once": api.Once, "PerEvent": api.PerEvent, "PerKey": api.PerKey, "WhileTrue": api.WhileTrue}
+# PerKey is deliberately NOT offered: it requires a key-extraction fn the authored-spec shape has no
+# field for, so policy_cls() would crash the build with a raw TypeError (ui-backend-4).
+_POLICIES = {"Once": api.Once, "PerEvent": api.PerEvent, "WhileTrue": api.WhileTrue}
 
 
 class SpecError(ValueError):
     """The authored spec is malformed — surfaced cleanly, never an opaque crash."""
 
 
-def _predicate(spec: dict[str, Any] | None) -> Any:
+def _predicate(spec: dict[str, Any] | None, view_kinds: dict[str, str]) -> Any:
     if not spec:
         return lambda ctx: True
     view, op, n = spec["view"], spec["op"], int(spec["n"])
     if op not in _OPS:
         raise SpecError(f"unknown predicate op {op!r}")
+    if view_kinds.get(view) == "PerKindLatest":
+        # PerKindLatest.value() is the latest payload, not a count -- comparing it with >=/< silently
+        # measures its FIELD-count, a meaningless gate (ui-backend-3). Predicates count.
+        raise SpecError(
+            f"predicate on View {view!r} (PerKindLatest) is not a countable gate; "
+            "use a KindCount or KindBuffer View for a numeric predicate"
+        )
     fn = _OPS[op]
 
     def pred(ctx: Any) -> bool:
@@ -144,16 +153,24 @@ def build_from_spec(spec: dict[str, Any], responder: Any = None) -> Any:
                 if view_cls is None:
                     raise SpecError(f"unknown View {v['kind']!r}")
                 b.view(v["name"], view_cls(v["of"]))
+            view_kinds = {v["name"]: v.get("kind") for v in spec.get("views", [])}
             for t in spec.get("triggers", []):
-                policy_cls = _POLICIES.get(t.get("policy", "PerEvent"), api.PerEvent)
+                policy_name = t.get("policy", "PerEvent")
+                if policy_name not in _POLICIES:  # don't silently fall back to PerEvent (ui-backend-4)
+                    raise SpecError(f"unsupported trigger policy {policy_name!r} (choose: {', '.join(_POLICIES)})")
                 b.trigger(
                     t["id"],
                     subscription=api.Subscription(kinds=frozenset({t["on"]})),
-                    predicate=_predicate(t.get("predicate")),
+                    predicate=_predicate(t.get("predicate"), view_kinds),
                     input_builder=lambda ctx: ctx.event.payload,
                     starts=t["starts"],
-                    policy=policy_cls(),
+                    policy=_POLICIES[policy_name](),
                 )
+            # NOTE (ui-backend-6): authored Routes are OBSERVATIONAL-only today. A Route stages data
+            # into ctx.staged[slot], but every authored Trigger reads ctx.event.payload (above), never
+            # ctx.staged -- so routed data is recorded + visible in the graph but no Producer input
+            # consumes it. Consuming it needs a trigger<->slot link in the spec shape (a Studio
+            # feature, not a builder fix); until then the Route is a visible-but-inert edge.
             for r in spec.get("routes", []):
                 b.route(
                     r["id"],

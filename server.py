@@ -390,7 +390,10 @@ class Handler(BaseHTTPRequestHandler):
                 pass
             time.sleep(0.05)
         out: dict[str, object] = {"name": run_name, "status": g.status if g else "incomplete", "built": name}
-        if g is not None:
+        # "never matured" is only true against a TERMINAL graph. If the wait timed out and the run is
+        # still incomplete, a trigger is "unfired" merely because the run hasn't reached it yet -- a
+        # spurious signal on the slow (Ollama) path (ui-backend-5). Only report it for a settled run.
+        if g is not None and g.status != "incomplete":
             authored = [t["id"] for t in spec.get("triggers", [])]
             fired = {i.trigger_id for i in g.instances if i.trigger_id}
             unfired = [t for t in authored if t not in fired]
