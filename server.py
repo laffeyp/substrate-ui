@@ -22,6 +22,7 @@ Then open http://127.0.0.1:8765/ .
 from __future__ import annotations
 
 import asyncio
+import re
 import threading
 import time
 import traceback
@@ -79,6 +80,7 @@ _EXTRA_TOPOS = {"live_demo": _slow_topology}  # launchable, alongside the bundle
 # a launch whose thread is dead with no terminal RunFinalised has TORN — the authoritative signal
 # that distinguishes "incomplete = live (still writing)" from "incomplete = torn (dead)" (review #36).
 _LAUNCHES: dict[str, "threading.Thread"] = {}
+MAX_LIVE_RUNS = 8  # concurrency cap: a POST flood can't spawn unbounded run threads (security-3)
 
 
 def _is_live(name: str) -> bool:
@@ -96,9 +98,16 @@ RUNS = Path(__file__).resolve().parent / "runs"  # generated/live records (faile
 _CT = {".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".json": "application/json"}
 
 
+_SAFE_RECORD_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+
+
 def _record_path(name: str) -> Path | None:
     """Resolve a record name to a path: a generated/live record under runs/ first, else a bundled
-    demo record. The production seam points runs/ at a live records directory."""
+    demo record. The production seam points runs/ at a live records directory. A record name is a
+    flat identifier — reject anything with a path separator or `..` so a request cannot read outside
+    runs/ (a traversal like `../../etc/x`)."""
+    if not _SAFE_RECORD_NAME.match(name) or ".." in name:
+        return None
     local = RUNS / f"{name}.record"
     if local.exists():
         return local
@@ -212,8 +221,24 @@ class Handler(BaseHTTPRequestHandler):
     def _error(self, code: int, message: str) -> None:
         self._json({"error": message}, code)
 
+    def _origin_ok(self) -> bool:
+        # CSRF defence on the state-changing POSTs: a browser request carries an Origin; require it to
+        # match the Host it arrived on (same-origin). A cross-site form or a DNS-rebound page carries a
+        # foreign Origin -> rejected. Non-browser clients (curl, the test runner) send no Origin.
+        origin = self.headers.get("Origin")
+        if not origin:
+            return True
+        return urlparse(origin).netloc == self.headers.get("Host", "")
+
+    def _at_run_capacity(self) -> bool:
+        # cap concurrent spawned runs so an unauthenticated POST flood can't exhaust threads/memory.
+        return sum(1 for t in _LAUNCHES.values() if t.is_alive()) >= MAX_LIVE_RUNS
+
     def do_POST(self) -> None:  # noqa: N802 — the thin control layer (launch + resume only, per ruling C1)
         path = unquote(urlparse(self.path).path)
+        if not self._origin_ok():
+            self._error(403, "cross-origin request rejected (Origin does not match Host)")
+            return
         try:
             if path == "/api/launch":
                 self._launch(parse_qs(urlparse(self.path).query))
@@ -239,6 +264,9 @@ class Handler(BaseHTTPRequestHandler):
         factory = bundled.BUNDLED.get(name) or _EXTRA_TOPOS.get(name)
         if factory is None:
             self._error(404, f"unknown topology {name!r}")
+            return
+        if self._at_run_capacity():
+            self._error(429, "too many concurrent runs; wait for some to finish")
             return
         # name the record by a UNIQUE id — never an in-memory counter (a counter resets on restart
         # and collides with a prior on-disk record; clobbering it is silent data loss on a durable
@@ -279,6 +307,9 @@ class Handler(BaseHTTPRequestHandler):
         topo, ev_factory = spec
         import shutil
 
+        if self._at_run_capacity():
+            self._error(429, "too many concurrent runs; wait for some to finish")
+            return
         resume_name = f"resume_{name}_{uuid.uuid4().hex[:12]}"
         root = RUNS / f"{resume_name}.record"
         shutil.copytree(src, root)
@@ -338,6 +369,9 @@ class Handler(BaseHTTPRequestHandler):
             self._error(400, f"{type(exc).__name__}: {exc}")
             return
         name = str(spec.get("name") or "authored")
+        if self._at_run_capacity():
+            self._error(429, "too many concurrent runs; wait for some to finish")
+            return
         run_name = f"build_{name}_{uuid.uuid4().hex[:12]}"
         root = RUNS / f"{run_name}.record"
         th = threading.Thread(target=lambda: asyncio.run(api.Runtime(root).run(topo)), daemon=True)
@@ -381,7 +415,10 @@ class Handler(BaseHTTPRequestHandler):
                 return
             self._static(path)
         except Exception as exc:  # noqa: BLE001 - surface any read error as JSON, never a crash
-            self._error(500, f"{type(exc).__name__}: {exc}\n{traceback.format_exc()}")
+            # do NOT leak a full traceback (absolute paths, internals) in the response body; the
+            # typed name + message is enough for the client. Log the traceback server-side instead.
+            traceback.print_exc()
+            self._error(500, f"{type(exc).__name__}: {exc}")
 
     def _api_record(self, rest: str) -> None:
         parts = rest.split("/")
@@ -437,7 +474,14 @@ class Handler(BaseHTTPRequestHandler):
     def _static(self, path: str) -> None:
         rel = "index.html" if path in ("", "/") else path.lstrip("/")
         target = (WEB / rel).resolve()
-        if not str(target).startswith(str(WEB.resolve())) or not target.is_file():
+        # contain to WEB/ via relative_to, not startswith — startswith("…/web") also passes a sibling
+        # like "…/web-evil/secret", a prefix-traversal. relative_to raises when target escapes WEB.
+        try:
+            target.relative_to(WEB.resolve())
+        except ValueError:
+            self._error(404, f"not found: {path}")
+            return
+        if not target.is_file():
             self._error(404, f"not found: {path}")
             return
         self._send(200, target.read_bytes(), _CT.get(target.suffix, "application/octet-stream"))
