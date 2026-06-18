@@ -31,9 +31,11 @@ const OUT = path.join(__dirname, "screenshots");
   await p.waitForTimeout(300);
   await shot("33-studio-routes-composition", "routes section filled + all_of composed termination with member policies");
 
-  // sprint 005: the drag-canvas
+  // sprint 005 + review-#42 slot-node fold: the drag-canvas (with a Route -> slot node)
   await p.goto(BASE + "/studio.html", { waitUntil: "networkidle", timeout: 20000 });
   await p.waitForTimeout(700);
+  await p.click("#addRoute");
+  await p.evaluate(() => { const r = document.querySelector("#routes .row"); r.querySelector(".rid").value = "stage-crit"; r.querySelector(".rof").value = "Critique"; r.querySelector(".rslot").value = "crit_ctx"; });
   await p.click("#vCanvas"); await p.waitForTimeout(500);
   // element screenshot (the canvas is bounded ~960x460) — fullPage×2 would exceed the viewer limit
   await (await p.$("#canvas")).screenshot({ path: path.join(OUT, "34-studio-canvas.png") });

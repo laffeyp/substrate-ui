@@ -42,6 +42,7 @@ input.k{ min-width:150px; } input.sm{ width:54px; } input.med{ width:120px; }
 .card .ck{ color:var(--tx); font-weight:600; } .card .ce{ color:var(--green); font-size:11px; } .card .cb{ color:var(--amber); font-size:10px; }
 .edge{ stroke:var(--tx-faint); stroke-width:1.5; fill:none; } .edge.route{ stroke:var(--violet); stroke-dasharray:4 3; }
 .edge-lbl{ fill:var(--amber); font-size:10px; } .edge-lbl.route{ fill:var(--violet); }
+.slotnode{ position:absolute; z-index:1; background:rgba(168,120,245,.12); border:1px dashed var(--violet); border-radius:6px; padding:5px 9px; color:var(--violet); font-size:11px; }
 </style>
 </head>
 <body>
@@ -103,13 +104,15 @@ input.k{ min-width:150px; } input.sm{ width:54px; } input.med{ width:120px; }
   </div><!-- /formView -->
 
   <div id="canvasView" style="display:none">
-    <div class="sec-h" style="margin-top:14px">topology · node-graph <span class="hint" style="margin:0">drag the Producer cards; solid edges are Triggers, dashed are Routes</span></div>
+    <div class="sec-h" style="margin-top:14px">topology · node-graph <span class="hint" style="margin:0">drag the Producer cards; solid edges are Triggers; dashed edges feed a Route's named slot (the consuming Producer is the author's intent, not drawn)</span></div>
     <div id="canvas"></div>
   </div>
 
   <div class="actions">
     <span class="lbl">responder</span>
     <select id="responderSel"><option value="deterministic">deterministic (CI · pure)</option><option value="ollama">ollama (real LLM)</option></select>
+    <span class="lbl">seed</span><input class="sm" id="seedInput" value="0" title="DeterministicResponder seed" />
+    <span class="lbl">model</span><input class="med" id="modelName" placeholder="llama3.2" title="ollama model name" />
     <button class="btn" id="validateBtn">validate</button>
     <button class="btn primary" id="buildBtn">build &amp; launch ▸</button>
   </div>

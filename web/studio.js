@@ -75,6 +75,7 @@ function buildSpec() {
   return {
     name: $("topoName").value.trim() || "authored", producers, views, triggers, routes,
     termination: buildTermination(), responder: ($("responderSel") || {}).value || "deterministic",
+    seed: Number(($("seedInput") || {}).value) || 0, model_name: (($("modelName") || {}).value || "").trim(),
   };
 }
 
@@ -168,8 +169,12 @@ function layoutCanvas(spec, W) {
     }
   });
   place(initials, 36); place(others, 250);
-  const kinds = new Set(spec.producers.map((p) => p.kind));
-  Object.keys(CANVAS_POS).forEach((k) => { if (!kinds.has(k)) delete CANVAS_POS[k]; });
+  // slot nodes for Routes — a Route stages INTO a named slot; we draw to the slot, never to a guessed
+  // consumer (review #42: drawing routes to every triggered Producer over-stated connectivity).
+  const slots = [...new Set(spec.routes.map((r) => r.slot).filter(Boolean))];
+  slots.forEach((s, i) => { const key = "slot:" + s; if (!CANVAS_POS[key]) CANVAS_POS[key] = { x: 24 + i * 180, y: 408 }; });
+  const keep = new Set([...spec.producers.map((p) => p.kind), ...slots.map((s) => "slot:" + s)]);
+  Object.keys(CANVAS_POS).forEach((k) => { if (!keep.has(k)) delete CANVAS_POS[k]; });
 }
 
 function renderCanvas() {
@@ -182,13 +187,19 @@ function renderCanvas() {
   const label = (a, b, t, cls) => `<text class="edge-lbl ${cls}" x="${(a.x + b.x) / 2}" y="${(a.y + b.y) / 2}" text-anchor="middle">${esc(t)}</text>`;
   let edges = "";
   spec.triggers.forEach((t) => { if (CANVAS_POS[t.starts]) emittersOf(t.on).forEach((src) => { if (CANVAS_POS[src] && src !== t.starts) { edges += edge(bottom(src), top(t.starts), "") + label(bottom(src), top(t.starts), t.id, ""); } }); });
-  spec.routes.forEach((r) => { const dsts = [...new Set(spec.triggers.map((t) => t.starts))]; emittersOf(r.of).forEach((src) => dsts.forEach((dst) => { if (CANVAS_POS[src] && CANVAS_POS[dst] && src !== dst) edges += edge(bottom(src), top(dst), "route") + label(bottom(src), top(dst), r.slot, "route"); })); });
+  // Routes: of-emitter -> the slot node it stages into (honest — the consuming Producer is the
+  // author's intent, read via input_builder, not something the canvas can verify).
+  spec.routes.forEach((r) => { const sk = "slot:" + r.slot; if (!CANVAS_POS[sk]) return; emittersOf(r.of).forEach((src) => { if (!CANVAS_POS[src]) return; const a = bottom(src), b = { x: CANVAS_POS[sk].x + 52, y: CANVAS_POS[sk].y }; edges += edge(a, b, "route") + label(a, b, r.id, "route"); }); });
   const cards = spec.producers.map((p) => {
     const pp = CANVAS_POS[p.kind];
     return `<div class="card ${p.initial ? "initial" : ""}" data-kind="${esc(p.kind)}" style="left:${pp.x}px;top:${pp.y}px">
       <div class="ck">${esc(p.kind)}</div><div class="ce">emits ${p.emits.map(esc).join(", ") || "—"}</div>${p.initial ? '<div class="cb">▸ initial</div>' : ""}</div>`;
   }).join("");
-  canvas.innerHTML = `<svg>${MARKER}${edges}</svg>${cards}`;
+  const slotNodes = [...new Set(spec.routes.map((r) => r.slot).filter(Boolean))].map((s) => {
+    const pp = CANVAS_POS["slot:" + s];
+    return `<div class="slotnode" style="left:${pp.x}px;top:${pp.y}px">slot · ${esc(s)}</div>`;
+  }).join("");
+  canvas.innerHTML = `<svg>${MARKER}${edges}</svg>${cards}${slotNodes}`;
   canvas.querySelectorAll(".card").forEach((card) => { card.onmousedown = (e) => startDrag(e, card.dataset.kind); });
 }
 
