@@ -7,6 +7,19 @@ through substrate's **public surfaces** — `substrate.api` for records/projecti
 resume), and author new topologies that build-and-launch for real. Built SDD-style (sdd-kit-2): every increment behind a sprint card with a dual + observation
 contract; the build history is the audit trail.
 
+## Quickstart
+
+The console runs against **substrate's** venv — it imports `substrate` as a library and has no venv of
+its own. From the parent directory that holds both repos:
+
+```bash
+cd substrate && uv run python ../substrate-ui/server.py    # backend on :8765
+open http://127.0.0.1:8765/                                # the console
+```
+
+No build step, no framework, no CDN. It opens on the bundled demo records immediately — pick one from
+the rail and the graph + stream light up. **Running it** below has the fuller notes (tests, fixtures).
+
 ---
 
 ## What it does
