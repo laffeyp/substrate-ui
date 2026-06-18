@@ -6,7 +6,7 @@ through substrate's **public surfaces** — `substrate.api` for records/projecti
 **never kernel internals**. It lets a single operator observe runs, drive thin control (launch /
 resume), and author new topologies that build-and-launch for real. Built with sdd-kit-2 discipline —
 a dual + observation contract and independent review per increment. In full disclosure (and as
-`KIT_DIARY.md` records): the early console (#30–#38) was built test-first and observation-tracked but
+`process/KIT_DIARY.md` records): the early console (#30–#38) was built test-first and observation-tracked but
 *before* the sprint-card / git ledger was in place — that gap was caught by an external review (#39)
 and retrofitted, after which the full discipline held. The substance held throughout; the ceremony
 arrived mid-build, not at the start.
@@ -57,10 +57,15 @@ A thin, dependency-light stack — the runtime is the source of truth; the UI is
 | `web/studio.html` + `web/studio.js` | The Studio: form + drag-canvas authoring → validate/build. |
 | `demo_topologies.py` / `gen_demo_records.py` | Shared demo topologies + reproducible `demo_*` fixture records. |
 
+**Repository layout.** The backend Python (`server.py`, `builder.py`, the demo generators) sits at
+the root; the rest is grouped: `web/` (frontend), `harness/` (the Playwright e2e + capture scripts,
+driven by the `npm run` scripts), `tests/` (`test_server.py`), and `process/` (the SDD audit trail —
+`BLACKBOARD.md`, `KIT_DIARY.md`, `WORKING_AGREEMENT.md`, `sprints/`).
+
 No web framework, no ORM, no frontend bundler, no CDN. Backend deps: Python stdlib + `msgspec` +
 `substrate` (installed library). The UI is its **own git repo** because it consumes substrate only as a
 library, through its **public** surfaces — `substrate.api`, the public `substrate.reference` Responders,
-`substrate.topologies` — never kernel internals. That boundary is enforced by `test_server.py`'s
+`substrate.topologies` — never kernel internals. That boundary is enforced by `tests/test_server.py`'s
 import-boundary test, not just by convention.
 
 ---
@@ -82,11 +87,11 @@ open http://127.0.0.1:8765/studio.html
 
 ### Tests + the two-track observation contract
 
-Behavior-touching changes are graded on **both** tracks (this is mandatory — see WORKING_AGREEMENT):
+Behavior-touching changes are graded on **both** tracks (this is mandatory — see process/WORKING_AGREEMENT.md):
 
 ```bash
 # Track 0 — server (real server on an ephemeral port, real substrate.api over HTTP)
-cd substrate && uv run python -m pytest ../substrate-ui/test_server.py -q          # 22 tests
+cd substrate && uv run python -m pytest ../substrate-ui/tests/test_server.py -q   # 23 tests
 
 # Playwright is a repo-local devDependency (run once)
 cd substrate-ui && npm install
@@ -115,12 +120,12 @@ necessary, not sufficient, for a visual surface.
 This UI is the worked record of sdd-kit-2 applied to a real product. The build history lives in the
 project's own artifacts — read them in this order:
 
-- **`BLACKBOARD.md`** — `## Decisions` (scope + binding rulings), `## Built` (one entry per increment),
+- **`process/BLACKBOARD.md`** — `## Decisions` (scope + binding rulings), `## Built` (one entry per increment),
   `## Sprint tail` (the Rubber Duck pass per close), `## Surfaced for review` (the discipline failures
   the Architect caught + their fixes), `## Drift watchlist`.
-- **`sprints/`** — `sprint-001` … `sprint-007`, each a dual + observation contract declared **before**
+- **`process/sprints/`** — `sprint-001` … `sprint-007`, each a dual + observation contract declared **before**
   the code.
-- **`KIT_DIARY.md`** — what the kit did well, what got in the way, the next-kit-version findings + the
+- **`process/KIT_DIARY.md`** — what the kit did well, what got in the way, the next-kit-version findings + the
   hypotheses (the lessons, including the two the Architect had to catch).
 - **`../.review-pipe/resp-0NN.txt`** — the independent duplex-pipe reviews (#30–#42); the reviewer
   verifies by running, not by trusting the builder's "green".
@@ -135,7 +140,7 @@ The arc, briefly:
 - **002** — the static topology-structure view (closed a design-§6 read gap the verification surfaced).
 - Two discipline failures the Architect caught, both folded into the kit's lessons: the **observation
   contract skipped** ("backend-only" rationalization → repo-scoped harness), and the **perceptual track
-  skipped for the whole UI** (DOM-only → built `capture_*.js`, looked, and it found a real stale-inspector
+  skipped for the whole UI** (DOM-only → built `harness/capture_*.js`, looked, and it found a real stale-inspector
   bug a green DOM E2E never could).
 - **003–007** — the Studio to full parity: form-first authoring → Routes + `any_of`/`all_of` composition
   → drag-canvas → model-backed Producers (seam) → model authoring (UI).
@@ -152,7 +157,7 @@ both observation tracks green and the frames viewed, independently reviewed (#42
 SDD discipline — cards, Rubber Duck passes, two-track observation, the eight-word vocabulary — held
 throughout (after the Architect re-centered it twice early on).
 
-Known, recorded follow-ups (none blocking; see `BLACKBOARD.md ## Drift watchlist`): `runs/` has no
+Known, recorded follow-ups (none blocking; see `process/BLACKBOARD.md ## Drift watchlist`): `runs/` has no
 lifecycle management (launched/built records accumulate); the `unfired_triggers` signal will need
 hardening once real-model Producers with custom input_builders land; canvas-based *creation* (drop
 nodes / draw edges to author) is deferred — the canvas is a view, the form is the editor.

@@ -20,7 +20,7 @@ from urllib.request import urlopen
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import server  # noqa: E402  the module under test
 
 from substrate import api  # noqa: E402

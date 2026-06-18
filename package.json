@@ -4,11 +4,11 @@
   "private": true,
   "description": "Live end-to-end test harness for the substrate-ui console — drives the real console in real Chrome (Playwright channel:'chrome') against the real server. The observation contract's tooling, scoped to this repo and pinned by package-lock.json so it is reproducible, not an ad-hoc /tmp install.",
   "scripts": {
-    "e2e": "node e2e_console.js",
-    "e2e:studio": "node e2e_studio.js",
-    "capture": "node capture_console.js",
-    "capture:states": "node capture_states.js",
-    "capture:studio": "node capture_studio.js"
+    "e2e": "node harness/e2e_console.js",
+    "e2e:studio": "node harness/e2e_studio.js",
+    "capture": "node harness/capture_console.js",
+    "capture:states": "node harness/capture_states.js",
+    "capture:studio": "node harness/capture_studio.js"
   },
   "devDependencies": {
     "playwright": "^1.49.0"

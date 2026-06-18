@@ -15,7 +15,7 @@ const { chromium } = require("playwright");
 const fs = require("fs");
 const path = require("path");
 const BASE = process.env.UI_BASE || "http://127.0.0.1:8765";
-const OUT = path.join(__dirname, "screenshots");
+const OUT = path.join(__dirname, "..", "screenshots");
 
 const selectRec = async (p, name) => {
   await p.evaluate((n) => {
