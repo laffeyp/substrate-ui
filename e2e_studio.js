@@ -81,7 +81,27 @@ const check = (c, m) => { if (!c) fails.push(m); else console.log("  ok  " + m);
   await p.click("#validateBtn"); await p.waitForTimeout(500);
   check(/valid/.test(await p.$eval("#out", (e) => e.textContent)), "form still validates after the canvas round-trip");
 
+  // sprint 007: a MODEL-backed Producer (judge model + prompt, deterministic responder) -> build ->
+  // the run's Verdict carries the Responder's output (not note=kind) — a model-backed run that executed.
+  await p.goto(BASE + "/studio.html", { waitUntil: "networkidle", timeout: 20000 });
+  await p.waitForTimeout(700);
+  check((await p.$$eval("#producers .row .pmodel", (e) => e.length)) === 3, "each Producer row has a model checkbox");
+  check((await p.$$eval("#responderSel", (e) => e.length)) === 1, "a responder selector is present");
+  await p.evaluate(() => {
+    const judge = [...document.querySelectorAll("#producers .row")].find((r) => r.querySelector(".pkind").value === "judge");
+    judge.querySelector(".pmodel").checked = true;
+    judge.querySelector(".pprompt").value = "rate the critiques";
+  });
+  await p.click("#buildBtn"); await p.waitForTimeout(2800);
+  const mhref = await p.$eval("#out a.consolelink", (e) => e.getAttribute("href")).catch(() => null);
+  check(mhref && /build_/.test(mhref), "model-backed topology built");
+  const mname = mhref ? mhref.split("record=")[1] : "";
+  const io = await p.evaluate((n) => fetch(`/api/records/${n}/io`).then((r) => r.json()), mname);
+  const verdict = (io.outputs || []).find((o) => o.kind === "Verdict");
+  check(verdict && /^stub\[/.test(verdict.payload.note) && verdict.payload.note !== "judge",
+    `model judge emitted the Responder's output, not note=kind ("${verdict && verdict.payload.note}")`);
+
   await b.close();
   if (fails.length) { console.error("\nFAILED:\n  - " + fails.join("\n  - ")); process.exit(1); }
-  console.log("\nSTUDIO E2E PASS — author (form + drag-canvas, Routes + composed termination) -> validate -> build -> view, all live.");
+  console.log("\nSTUDIO E2E PASS — author (form + canvas, Routes + composition + model Producers) -> validate -> build -> view, all live.");
 })().catch((e) => { console.error("STUDIO E2E ERROR", e); process.exit(1); });

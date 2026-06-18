@@ -108,9 +108,12 @@ input.k{ min-width:150px; } input.sm{ width:54px; } input.med{ width:120px; }
   </div>
 
   <div class="actions">
+    <span class="lbl">responder</span>
+    <select id="responderSel"><option value="deterministic">deterministic (CI · pure)</option><option value="ollama">ollama (real LLM)</option></select>
     <button class="btn" id="validateBtn">validate</button>
     <button class="btn primary" id="buildBtn">build &amp; launch ▸</button>
   </div>
+  <div class="hint">model-backed Producers call the chosen Responder. deterministic = pure + seeded (no network, replay-stable); ollama = a real local LLM (fails loudly if not running).</div>
   <div class="out" id="out"><span class="l">output</span><span class="dim">author a topology, then validate or build.</span></div>
 </div>
 <script src="/studio.js"></script>

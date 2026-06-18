@@ -10,6 +10,8 @@ const PRODUCER_ROW = `<div class="row">
   <input class="pkind k" placeholder="kind (e.g. reviewer)" />
   <span class="lbl">emits</span><input class="pemits med" placeholder="KindA, KindB" />
   <label class="lbl"><input type="checkbox" class="pinit" /> initial</label>
+  <label class="lbl"><input type="checkbox" class="pmodel" /> model</label>
+  <input class="pprompt med" placeholder="prompt (if model)" />
   <span class="rm" title="remove">✕</span></div>`;
 const VIEW_ROW = `<div class="row">
   <input class="vname med" placeholder="name" />
@@ -51,6 +53,8 @@ function buildSpec() {
     kind: r.querySelector(".pkind").value.trim(),
     emits: r.querySelector(".pemits").value.split(",").map((s) => s.trim()).filter(Boolean),
     initial: r.querySelector(".pinit").checked,
+    model: r.querySelector(".pmodel").checked,
+    prompt: r.querySelector(".pprompt").value.trim(),
   })).filter((p) => p.kind);
   const views = [...$("views").querySelectorAll(".row")].map((r) => ({
     name: r.querySelector(".vname").value.trim(),
@@ -68,7 +72,10 @@ function buildSpec() {
   const routes = [...$("routes").querySelectorAll(".row")].map((r) => ({
     id: r.querySelector(".rid").value.trim(), of: r.querySelector(".rof").value.trim(), slot: r.querySelector(".rslot").value.trim(),
   })).filter((r) => r.id && r.of && r.slot);
-  return { name: $("topoName").value.trim() || "authored", producers, views, triggers, routes, termination: buildTermination() };
+  return {
+    name: $("topoName").value.trim() || "authored", producers, views, triggers, routes,
+    termination: buildTermination(), responder: ($("responderSel") || {}).value || "deterministic",
+  };
 }
 
 function buildMember(row) {
