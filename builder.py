@@ -119,46 +119,52 @@ def build_from_spec(spec: dict[str, Any], responder: Any = None) -> Any:
         return producer
 
     def topo(b: Any) -> None:
-        for p in spec["producers"]:
-            emits = p.get("emits", [])
-            if not emits:
-                raise SpecError(f"Producer {p.get('kind')!r} emits nothing")
-            kind = p["kind"]
-            schemas = [structs[e] for e in emits]
-            model = bool(p.get("model"))
-            prompt = str(p.get("prompt") or f"You are {kind}.")
-            # a model Producer is replay-deterministic iff its Responder is (Ollama is NOT — declare it so)
-            det = bool(p.get("deterministic", True)) and (responder_is_deterministic if model else True)
-            b.producer_kind(
-                kind, schemas=schemas, schema_version=1,
-                start=make_producer(kind, schemas, model, prompt), deterministic=det,
-            )
-            if p.get("initial"):
-                b.initial(kind)
-        for v in spec.get("views", []):
-            view_cls = _VIEWS.get(v["kind"])
-            if view_cls is None:
-                raise SpecError(f"unknown View {v['kind']!r}")
-            b.view(v["name"], view_cls(v["of"]))
-        for t in spec.get("triggers", []):
-            policy_cls = _POLICIES.get(t.get("policy", "PerEvent"), api.PerEvent)
-            b.trigger(
-                t["id"],
-                subscription=api.Subscription(kinds=frozenset({t["on"]})),
-                predicate=_predicate(t.get("predicate")),
-                input_builder=lambda ctx: ctx.event.payload,
-                starts=t["starts"],
-                policy=policy_cls(),
-            )
-        for r in spec.get("routes", []):
-            b.route(
-                r["id"],
-                subscription=api.Subscription(kinds=frozenset({r["of"]})),
-                slot=r["slot"],
-                transform=lambda event: event.payload,
-            )
-        b.termination(_termination(spec.get("termination") or {"kind": "quiescence_with_watchdog"}))
-        if spec.get("name"):
-            b.baseline(authored=spec["name"])
+        # a malformed authored spec (a missing or mistyped field) must surface as the promised
+        # SpecError, not a raw KeyError / TypeError leaking from dict access (ui-backend-7). The
+        # explicit SpecError raises below are not KeyError/TypeError, so they propagate unchanged.
+        try:
+            for p in spec["producers"]:
+                emits = p.get("emits", [])
+                if not emits:
+                    raise SpecError(f"Producer {p.get('kind')!r} emits nothing")
+                kind = p["kind"]
+                schemas = [structs[e] for e in emits]
+                model = bool(p.get("model"))
+                prompt = str(p.get("prompt") or f"You are {kind}.")
+                # a model Producer is replay-deterministic iff its Responder is (Ollama is NOT)
+                det = bool(p.get("deterministic", True)) and (responder_is_deterministic if model else True)
+                b.producer_kind(
+                    kind, schemas=schemas, schema_version=1,
+                    start=make_producer(kind, schemas, model, prompt), deterministic=det,
+                )
+                if p.get("initial"):
+                    b.initial(kind)
+            for v in spec.get("views", []):
+                view_cls = _VIEWS.get(v["kind"])
+                if view_cls is None:
+                    raise SpecError(f"unknown View {v['kind']!r}")
+                b.view(v["name"], view_cls(v["of"]))
+            for t in spec.get("triggers", []):
+                policy_cls = _POLICIES.get(t.get("policy", "PerEvent"), api.PerEvent)
+                b.trigger(
+                    t["id"],
+                    subscription=api.Subscription(kinds=frozenset({t["on"]})),
+                    predicate=_predicate(t.get("predicate")),
+                    input_builder=lambda ctx: ctx.event.payload,
+                    starts=t["starts"],
+                    policy=policy_cls(),
+                )
+            for r in spec.get("routes", []):
+                b.route(
+                    r["id"],
+                    subscription=api.Subscription(kinds=frozenset({r["of"]})),
+                    slot=r["slot"],
+                    transform=lambda event: event.payload,
+                )
+            b.termination(_termination(spec.get("termination") or {"kind": "quiescence_with_watchdog"}))
+            if spec.get("name"):
+                b.baseline(authored=spec["name"])
+        except (KeyError, TypeError) as exc:
+            raise SpecError(f"malformed spec (missing or mistyped field): {exc}") from exc
 
     return topo
