@@ -11,7 +11,6 @@ const FAILURE = new Set([
   "substrate.ProducerFailed", "substrate.InputBuildFailed",
   "substrate.PredicateQuarantined", "substrate.ProducerEmittedInvalidEvent",
 ]);
-const BOOKKEEPING = new Set(["substrate.ProducerStarted", "substrate.ProducerCompleted", "substrate.InjectionApplied"]);
 
 function category(kind) {
   if (FAILURE.has(kind)) return "failure";
@@ -118,8 +117,14 @@ async function followLive(name) {
     if (STATE.name !== name) return;
     STATE.graph = g; STATE.events = full.events; STATE.summary = summary;
     const maxSeq = STATE.events.length ? STATE.events[STATE.events.length - 1].seq : 0;
-    $("seq").max = maxSeq; $("seq").value = maxSeq; $("seqmax").textContent = maxSeq; $("seqnow").textContent = maxSeq;
-    STATE.cursor = maxSeq;  // live tail — the cursor rides the latest event
+    // follow the tail ONLY if the user is already at it; if they scrubbed back to inspect an earlier
+    // seq during a live run, don't yank the cursor forward under them every 400ms (ui-frontend-5).
+    const tailing = STATE.cursor >= lastSeq;
+    $("seq").max = maxSeq; $("seqmax").textContent = maxSeq;
+    if (tailing) {
+      $("seq").value = maxSeq; $("seqnow").textContent = maxSeq;
+      STATE.cursor = maxSeq;  // live tail — the cursor rides the latest event
+    }
     // STOP only on a terminal or on server-authoritative DEATH — never on no-growth alone, so a
     // dead run can't read "● LIVE forever" (§7.2, #36) AND a slow-but-alive LLM run is never
     // abandoned (#37: live=true + no-growth is NORMAL for a long generation; server-liveness, not
