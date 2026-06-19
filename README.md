@@ -1,15 +1,9 @@
 # substrate-ui
 
-The read + control + author console over the **Substrate** runtime. It reads run records and live runs
-through substrate's **public surfaces** — `substrate.api` for records/projections + control, the public
-`substrate.reference` Responders for the model seam, `substrate.topologies` for the bundled demos —
-**never kernel internals**. It lets a single operator observe runs, drive thin control (launch /
-resume), and author new topologies that build-and-launch for real. Built with sdd-kit-2 discipline —
-a dual + observation contract and independent review per increment. In full disclosure (and as
-`process/KIT_DIARY.md` records): the early console (#30–#38) was built test-first and observation-tracked but
-*before* the sprint-card / git ledger was in place — that gap was caught by an external review (#39)
-and retrofitted, after which the full discipline held. The substance held throughout; the ceremony
-arrived mid-build, not at the start.
+A console for watching, steering, and authoring runs on the **Substrate** runtime. Pick a run from
+the rail and watch its graph and event stream unfold; launch or resume a run; or author a new
+topology and build it for real. substrate-ui is a lens — it reads the runtime through its public
+surfaces only, never kernel internals, and never changes what a run means.
 
 ## Quickstart
 
@@ -51,7 +45,7 @@ A thin, dependency-light stack — the runtime is the source of truth; the UI is
 
 | File | Owns |
 |---|---|
-| `server.py` | stdlib `http.server` + msgspec backend. HTTP routing + read projections over `substrate.api` (records index, run_graph, topology_graph, summary, io, diff, explain). Thin control (`/api/launch`, `/api/resume`) + the Studio seam (`/api/validate`, `/api/build`). Imports `substrate.api`, the public `substrate.reference` Responders, and `substrate.topologies` — no kernel internals. |
+| `server.py` | stdlib `http.server` + msgspec backend. HTTP routing + read projections over `substrate.api` (records index, run_graph, topology_graph, summary, io, diff, explain). Thin control (`/api/launch`, `/api/resume`) + the Studio seam (`/api/validate`, `/api/build`). Imports only substrate's public surfaces — no kernel internals. |
 | `builder.py` | The authoring translator: an authored JSON spec → a real `topology(b)` function. Mints a frozen msgspec Struct per event kind; Producers are deterministic stubs or **model-backed** (call the runtime's real `Responder.respond(prompt)`). |
 | `web/index.html` + `web/app.js` | The console (vanilla JS, no build step): rail, run-as-graph + topology-structure, stream, inspector, verdict, diff, I/O, launch/resume, live-follow. |
 | `web/studio.html` + `web/studio.js` | The Studio: form + drag-canvas authoring → validate/build. |
@@ -72,18 +66,7 @@ import-boundary test, not just by convention.
 
 ## Running it
 
-The UI runs against the substrate venv (it imports `substrate`):
-
-```bash
-# the real backend on :8765
-cd substrate && uv run python ../substrate-ui/server.py &
-
-# the console
-open http://127.0.0.1:8765/
-
-# the Studio
-open http://127.0.0.1:8765/studio.html
-```
+The Quickstart above starts the backend and console; the Studio is at `/studio.html`.
 
 ### Tests + the two-track observation contract
 
@@ -117,8 +100,11 @@ necessary, not sufficient, for a visual surface.
 
 ## How it was built (the SDD audit trail)
 
-This UI is the worked record of sdd-kit-2 applied to a real product. The build history lives in the
-project's own artifacts — read them in this order:
+This UI is the worked record of sdd-kit-2 applied to a real build. The substance held throughout, but
+the discipline's ceremony — sprint cards, the git ledger — arrived mid-build, not at the start: the
+early console (#30–#38) was built test-first and observation-tracked *before* that ledger was in
+place, a gap an external review (#39) caught and retrofitted. The history lives in the project's own
+artifacts — read them in this order:
 
 - **`process/BLACKBOARD.md`** — `## Decisions` (scope + binding rulings), `## Built` (one entry per increment),
   `## Sprint tail` (the Rubber Duck pass per close), `## Surfaced for review` (the discipline failures
@@ -152,10 +138,9 @@ The arc, briefly:
 
 ## Where we are
 
-The product is complete and verified end-to-end on the real runtime: **observe + control + author**,
-both observation tracks green and the frames viewed, independently reviewed (#42: REAL and HONEST). The
-SDD discipline — cards, Rubber Duck passes, two-track observation, the eight-word vocabulary — held
-throughout (after the Architect re-centered it twice early on).
+**Observe, control, and author** all work end-to-end on the real runtime: both observation tracks
+green and the frames viewed, independently reviewed (#42: REAL and HONEST). The SDD discipline —
+cards, Rubber Duck passes, two-track observation, the eight-word vocabulary — held throughout.
 
 Known, recorded follow-ups (none blocking; see `process/BLACKBOARD.md ## Drift watchlist`): `runs/` has no
 lifecycle management (launched/built records accumulate); the `unfired_triggers` signal will need
