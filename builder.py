@@ -68,6 +68,15 @@ def _predicate(spec: dict[str, Any] | None, view_kinds: dict[str, str]) -> Any:
     return pred
 
 
+def _trigger_input(reads: str | None) -> Any:
+    """The started Producer's input. If the trigger declares `reads: <slot>`, hand it the data a Route
+    staged into that slot (the routed data + the triggering event); otherwise just the event payload.
+    A factory (not an inline lambda) so each trigger captures its OWN `reads` — no loop late-binding."""
+    if reads:
+        return lambda ctx: {"staged": ctx.staged.get(reads), "event": ctx.event.payload}
+    return lambda ctx: ctx.event.payload
+
+
 def _termination(spec: dict[str, Any]) -> Any:
     k = spec.get("kind")
     if k == "threshold_count":
@@ -115,16 +124,20 @@ def build_from_spec(spec: dict[str, Any], responder: Any = None) -> Any:
 
     def make_producer(kind: str, emit_structs: list[type], model: bool, prompt: str) -> Any:
         if model:
-            async def producer(_inp: Any) -> Any:
+            async def producer(inp: Any) -> Any:
                 # route through call_responder so a real (Ollama) model call is offloaded/cancellable
                 # and doesn't block the event loop — same discipline the runtime topologies use.
-                text = await call_responder(responder, prompt)
+                # Incorporate any upstream input (a Route's staged data, or the triggering event) so
+                # routed data actually shapes this Producer's output — see the trigger `reads` wiring.
+                full = prompt if not inp else f"{prompt}\n\nUpstream context: {inp}"
+                text = await call_responder(responder, full)
                 for s in emit_structs:
                     yield s(note=text)
         else:
-            async def producer(_inp: Any) -> Any:
+            async def producer(inp: Any) -> Any:
+                note = kind if not inp else f"{kind} <- {inp}"  # the stub reflects the input it got
                 for s in emit_structs:
-                    yield s(note=kind)  # deterministic stub: emit each declared kind once
+                    yield s(note=note)
         return producer
 
     def topo(b: Any) -> None:
@@ -162,15 +175,14 @@ def build_from_spec(spec: dict[str, Any], responder: Any = None) -> Any:
                     t["id"],
                     subscription=api.Subscription(kinds=frozenset({t["on"]})),
                     predicate=_predicate(t.get("predicate"), view_kinds),
-                    input_builder=lambda ctx: ctx.event.payload,
+                    # a trigger may declare `reads: <slot>` to feed a Route's staged data into the
+                    # Producer it starts; otherwise it passes the triggering event's payload (ui-backend-6).
+                    input_builder=_trigger_input(t.get("reads")),
                     starts=t["starts"],
                     policy=_POLICIES[policy_name](),
                 )
-            # NOTE (ui-backend-6): authored Routes are OBSERVATIONAL-only today. A Route stages data
-            # into ctx.staged[slot], but every authored Trigger reads ctx.event.payload (above), never
-            # ctx.staged -- so routed data is recorded + visible in the graph but no Producer input
-            # consumes it. Consuming it needs a trigger<->slot link in the spec shape (a Studio
-            # feature, not a builder fix); until then the Route is a visible-but-inert edge.
+            # Routes stage data into ctx.staged[slot]; a Trigger with `reads: <slot>` (above) consumes
+            # it, so an authored Route now feeds a Producer's input — not just a visible graph edge.
             for r in spec.get("routes", []):
                 b.route(
                     r["id"],

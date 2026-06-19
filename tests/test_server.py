@@ -370,3 +370,32 @@ def test_static_index_is_served(base: str) -> None:
     with urlopen(base + "/", timeout=10) as r:
         body = r.read().decode()
     assert "run console" in body.lower()
+
+
+def test_authored_route_feeds_a_reading_trigger(tmp_path) -> None:
+    # ui-backend-6: a Route stages data into a slot; a Trigger that declares `reads: <slot>` feeds
+    # that staged data into the Producer it starts — so an authored Route is CONSUMED, not inert.
+    import asyncio  # noqa: PLC0415
+
+    from builder import build_from_spec  # noqa: PLC0415
+
+    from substrate.reference import DeterministicResponder  # noqa: PLC0415
+
+    spec = {
+        "name": "route_consumed",
+        "producers": [
+            {"kind": "Crit", "emits": ["Critique"], "initial": True, "model": False},
+            {"kind": "Fixer", "emits": ["Patch"], "model": False},
+        ],
+        "routes": [{"id": "stage", "of": "Critique", "slot": "crits"}],
+        "triggers": [
+            {"id": "fix", "on": "Critique", "starts": "Fixer", "reads": "crits", "policy": "PerEvent"}
+        ],
+        "termination": {"kind": "quiescence_with_watchdog", "seconds": 1},
+    }
+    topo = build_from_spec(spec, DeterministicResponder(seed=0))
+    asyncio.run(api.Runtime(tmp_path / "run").run(topo))
+
+    patches = [e["payload"]["note"] for e in api.read_record(tmp_path / "run") if e["kind"] == "Patch"]
+    assert patches, "the Fixer ran on the routed Critique"
+    assert "staged" in patches[0]  # the Fixer's input carried the Route's staged data, not just the event
