@@ -15,6 +15,17 @@ concurrency:
 # private, set a repo secret CROSS_REPO_TOKEN to a PAT with read access and it is used instead.
 
 jobs:
+  lint:
+    name: lint (ruff, backend Python)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+      # static lint only (no substrate needed) on the backend Python the console ships. Format is
+      # deliberately NOT gated here -- the UI Python isn't ruff-formatted and that's its own style.
+      - name: Ruff
+        run: uvx ruff check server.py builder.py demo_topologies.py gen_demo_records.py tests/
+
   server-tests:
     name: server tests (real substrate.api over HTTP)
     runs-on: ubuntu-latest
