@@ -25,7 +25,8 @@ const TRIGGER_ROW = `<div class="row">
   <select class="top"><option value=">=">&ge;</option><option value=">">&gt;</option><option value="==">==</option><option value="<=">&le;</option><option value="<">&lt;</option></select>
   <input class="tn sm" placeholder="n" />
   <span class="lbl">starts</span><input class="tstarts med" placeholder="kind" />
-  <select class="tpolicy"><option>Once</option><option>PerEvent</option><option>PerKey</option><option>WhileTrue</option></select>
+  <span class="lbl">reads</span><input class="treads sm" placeholder="slot (opt)" title="feed a Route's staged slot into the started Producer" />
+  <select class="tpolicy"><option>Once</option><option>PerEvent</option><option>WhileTrue</option></select>
   <span class="rm" title="remove">✕</span></div>`;
 
 const ROUTE_ROW = `<div class="row">
@@ -67,6 +68,7 @@ function buildSpec() {
     return {
       id: r.querySelector(".tid").value.trim(), on: r.querySelector(".ton").value.trim(),
       predicate, starts: r.querySelector(".tstarts").value.trim(), policy: r.querySelector(".tpolicy").value,
+      reads: r.querySelector(".treads").value.trim(),  // a Route slot to feed the started Producer (opt)
     };
   }).filter((t) => t.id && t.on && t.starts);
   const routes = [...$("routes").querySelectorAll(".row")].map((r) => ({
