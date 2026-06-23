@@ -37,7 +37,7 @@ function gist(ev) {
   return "";
 }
 
-let STATE = { name: null, events: [], graph: null, summary: null, manifest: null, topology: null, scene: null, cursor: 0, sel: null, mode: "read", graphView: "run", live: null, resumable: new Set() };
+let STATE = { name: null, events: [], graph: null, summary: null, manifest: null, topology: null, scene: null, cursor: 0, playing: false, speed: 80, sel: null, mode: "read", graphView: "run", live: null, resumable: new Set() };
 
 // ---------- record rail ----------
 async function loadRecords() {
@@ -162,6 +162,7 @@ async function renderDiff(other) {
 
 // ---------- select + fetch a record's projections ----------
 async function selectRecord(name) {
+  stopPlay();  // switching records stops any in-flight replay (no loop leaking across records)
   if (STATE.live && STATE.live !== name) STATE.live = null;  // navigating away stops the follow
   STATE.name = name; STATE.sel = null;
   // clear the inspector + diff selection from the PRIOR record — else a stale provenance/diff from
@@ -445,6 +446,31 @@ $("gvScene").onclick = () => { if (STATE.graphView !== "scene") { STATE.graphVie
 $("seq").oninput = (e) => { STATE.cursor = +e.target.value; $("seqnow").textContent = STATE.cursor; render(); };
 $("toStart").onclick = () => { $("seq").value = 0; $("seq").oninput({ target: $("seq") }); };
 $("toEnd").onclick = () => { $("seq").value = $("seq").max; $("seq").oninput({ target: $("seq") }); };
+
+// ---------- replay Transport: play/pause/speed advance the ONE seq-cursor over time ----------
+// No new time axis — the play loop just steps the same cursor the graph/stream/scene read in
+// lock-step, so replay animates every surface at once. Fixed-rate (seq/sec); original-timing via
+// the events' `t` is a later add (near-instant on the deterministic CI records).
+let _playTimer = null;
+function _setSeq(v) { $("seq").value = v; $("seq").oninput({ target: $("seq") }); }
+function _updatePlayBtn() { $("play").textContent = STATE.playing ? "⏸" : "▶"; $("play").classList.toggle("playing", STATE.playing); }
+function stopPlay() { if (_playTimer) { clearInterval(_playTimer); _playTimer = null; } if (STATE.playing) { STATE.playing = false; _updatePlayBtn(); } }
+function _tick() {
+  const max = +$("seq").max, next = STATE.cursor + 1;
+  if (next > max) { stopPlay(); return; }  // reached the end -> stop here
+  _setSeq(next);
+}
+function startPlay() {
+  if (STATE.cursor >= +$("seq").max) _setSeq(0);  // at the end -> replay from the start (rewind)
+  STATE.playing = true; _updatePlayBtn();
+  _playTimer = setInterval(_tick, Math.max(16, 1000 / STATE.speed));
+}
+$("play").onclick = () => (STATE.playing ? stopPlay() : startPlay());
+$("speedsel").onchange = () => {
+  STATE.speed = +$("speedsel").value;
+  if (_playTimer) { clearInterval(_playTimer); _playTimer = setInterval(_tick, Math.max(16, 1000 / STATE.speed)); }
+};
+$("seq").addEventListener("pointerdown", stopPlay);  // grabbing the slider pauses (don't fight the user)
 
 loadTopologies();
 loadRecords();
