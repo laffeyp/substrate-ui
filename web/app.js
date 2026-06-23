@@ -68,7 +68,20 @@ async function loadRecords() {
   // "demos" fixtures, so accumulating session runs stay corralled + scannable (Drift watchlist fold).
   const runs = recs.filter((r) => r.source === "run").sort((a, b) => (b.run_id || "").localeCompare(a.run_id || ""));
   const demos = recs.filter((r) => r.source !== "run");
-  if (runs.length) { groupHdr(`your runs · ${runs.length}`); runs.forEach((r) => $("rail").appendChild(mkRec(r))); }
+  if (runs.length) {
+    const h = document.createElement("div");
+    h.className = "rail-group";
+    h.innerHTML = `your runs · ${runs.length} <span class="rail-clear" title="delete all your session runs — the demos are kept">clear</span>`;
+    h.querySelector(".rail-clear").onclick = async (ev) => {
+      ev.stopPropagation();
+      if (!window.confirm(`Delete all ${runs.length} session runs? (the demos are kept)`)) return;
+      await fetch("/api/runs/clear", { method: "POST" }).then((x) => x.json());
+      STATE.name = null;  // the selected run may be gone -> re-land on a demo
+      await loadRecords();
+    };
+    $("rail").appendChild(h);
+    runs.forEach((r) => $("rail").appendChild(mkRec(r)));
+  }
   groupHdr("demos"); demos.forEach((r) => $("rail").appendChild(mkRec(r)));
   const ordered = [...runs, ...demos];  // visual order: newest run first, else first demo
   STATE.resumable = new Set(recs.filter((r) => r.resumable).map((r) => r.name));  // paused + has a continuation
