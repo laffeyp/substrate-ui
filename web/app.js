@@ -492,6 +492,7 @@ function termSetOpen(v) {
   STATE.term.open = v;
   $("termdock").style.display = v ? "" : "none";
   $("termOpen").style.display = v ? "none" : "";
+  $("termToggle").classList.toggle("on", v);
   if (v) {
     if (!STATE.term.lines.length) STATE.term.lines.push({ cls: "dim", text: "substrate read interface · reads the same record the GUI shows · type `help`" });
     renderTerm(); $("terminput").focus();
@@ -589,6 +590,7 @@ $("terminput").addEventListener("keydown", (e) => {
 });
 $("termOpen").onclick = () => termSetOpen(true);
 $("termClose").onclick = () => termSetOpen(false);
+$("termToggle").onclick = () => termSetOpen(!STATE.term.open);
 window.addEventListener("keydown", (e) => { if (e.ctrlKey && (e.key === "`" || e.key === "Dead")) { e.preventDefault(); termSetOpen(!STATE.term.open); } });
 
 loadTopologies();
