@@ -440,7 +440,7 @@ function inspectEvent(seq) {
     .join("");
   $("insp").innerHTML = `<div class="row"><span class="l">event</span><span><span class="badge k-${cat}">${escapeHtml(shortKind(e.kind))}</span> <span class="dim">seq ${e.seq}</span></span></div>
     <div class="row"><span class="l">schema</span><span>${escapeHtml(e.schema || "")}</span></div>
-    <div class="row"><span class="l">time</span><span>${escapeHtml(relT(e.t))} <span class="dim">· order by seq, time by t (epoch ${e.t})</span></span></div>
+    <div class="row"><span class="l">time</span><span>${escapeHtml(relT(e.t))} <span class="dim">${e.t}</span></span></div>
     <div class="row"><span class="l">producer</span><span>${e.producer && e.producer.kind ? escapeHtml(e.producer.kind) + " <span class='dim'>" + escapeHtml(e.producer.instance) + "</span>" : "— runtime"}</span></div>
     ${content}
     <div class="row"><span class="l">payload</span></div><pre>${escapeHtml(JSON.stringify(e.payload, null, 1))}</pre>`;
