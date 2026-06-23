@@ -22,12 +22,13 @@ card when picked up. Append-only-ish; mark items done/promoted rather than delet
   first-class too — a readable code/prose pane, ideally syntax-aware, not a one-line gist. This is
   the core of "I want to see more of the application-level code in here."
 
-- **[2026-06-22] Run-as-graph: the spawn dot lands mid-bar and reads as "spawned inside itself."**
-  The lane bar is FIRING-anchored (`fired_seq` -> `ended_seq`); the amber dot is the actual START
-  (`started_seq`), which sits inside the bar because other Producers' events fill the seqs between
-  scheduling and start. Correct, but confusing. Fix idea: draw the `fired_seq`->`started_seq` leading
-  slice faint/hatched ("scheduled, not yet running"), the dot = start, the solid bar = running ->
-  ended; and/or sharpen the legend + keep the existing tooltip. (Looks great visually as-is.)
+- **[2026-06-22] [DONE] Run-as-graph: the spawn dot lands mid-bar and reads as "spawned inside
+  itself."** Diagnosed by correlating `run_graph` (cells: fired=5/7/9…, started=55/58/61…,
+  ended=57/60/63…; dot@0.96 of the firing-anchored bar) with the screenshot — the bar conflated
+  QUEUED time (94%, waiting in the single-writer admission queue) with RUNNING time (~4%). FIXED:
+  each lane now splits into a faint hatched `fired->started` (queued) segment + a solid status-
+  coloured `started->ended` (ran) segment, with the dot at the boundary (the run START). Verified
+  both ways: 53/53 lanes correlate render↔log (`dot==run-start`); viewed. Gated in e2e_console.js §2.
 
 ## Research directions (park; revisit when the interactive-agent terminal lands)
 

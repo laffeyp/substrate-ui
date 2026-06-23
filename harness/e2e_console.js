@@ -38,6 +38,15 @@ const check = (cond, msg) => { if (!cond) fails.push(msg); else console.log("  o
   check(cohort && /5 concurrent/.test(cohort), `spawn-cohort band reads "${cohort}" (5 concurrent reviewers)`);
   const cancelled = await p.$$eval(".bar.cancelled", (e) => e.length);
   check(cancelled === 2, `2 reviewers rendered cancelled (cancel-others) (${cancelled})`);
+  // two-segment lanes (legibility fix): each lane = queued (fired->started, faint) + ran
+  // (started->ended, solid); the spawn dot marks the START of the run (the bar's left edge), NOT
+  // the end. (Diagnosed by correlating run_graph fired/started/ended with the rendered geometry.)
+  const segOk = await p.$$eval(".lane", (els) => els.every((l) => {
+    const bar = l.querySelector(".bar"), dot = l.querySelector(".spawn"), q = l.querySelector(".qbar");
+    if (!bar || !dot) return !!q;  // a not-yet-started lane is queued-only — still valid
+    return !!q && Math.abs(parseFloat(dot.style.left) - parseFloat(bar.style.left)) < 0.5;
+  }));
+  check(segOk, "run-as-graph lanes split queued|ran with the spawn dot at the run START (bar left), not the end");
   const verdict = await p.$eval("#verdict", (e) => e.textContent.trim());
   check(/FINALISED/.test(verdict), `health verdict from run_graph.status: "${verdict}"`);
 

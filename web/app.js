@@ -263,9 +263,10 @@ function renderGraph() {
   const insts = g.instances.filter((i) => i.fired_seq != null && i.fired_seq <= cur);
   const x = (s) => (Math.min(s, maxSeq) / maxSeq) * 100;
   let html = `<div class="legend">
-    <span><i style="background:var(--green)"></i>completed</span><span><i style="background:var(--blue)"></i>running</span>
-    <span><i style="background:var(--red)"></i>failed</span><span><i style="background:var(--slate)"></i>cancelled</span>
-    <span><i style="background:var(--amber);border-radius:50%"></i>spawn</span><span style="color:var(--cyan)">∥ spawn cohort = concurrent</span></div>`;
+    <span><i class="leg-q"></i>scheduled (queued)</span><span><i style="background:var(--green)"></i>ran → completed</span>
+    <span><i style="background:var(--blue)"></i>running</span><span><i style="background:var(--red)"></i>failed</span>
+    <span><i style="background:var(--slate)"></i>cancelled</span>
+    <span><i style="background:var(--amber);border-radius:50%"></i>started</span><span style="color:var(--cyan)">∥ spawn cohort = concurrent</span></div>`;
   // spawn cohorts: consecutive instances sharing a PARENT = siblings spawned by one event = concurrent
   // (§7.3). NOT trigger_id — one event fires several triggers (natural_conversation's per-Turn
   // common-ground/repair/grader/next-speaker share a parent but have 4 trigger_ids); NOT span-overlap
@@ -284,14 +285,24 @@ function renderGraph() {
     html += `<div class="cohort" style="left:170px;right:0;top:${top}px;height:${h}px"><span class="ct">∥ ${c.length} concurrent</span></div>`;
   });
   insts.forEach((i) => {
-    const end = i.ended_seq == null ? cur : Math.min(i.ended_seq, cur);
-    const left = x(i.fired_seq), w = Math.max(1.2, x(end) - left);
-    const startMark = i.started_seq != null && i.started_seq <= cur ? `<span class="spawn" style="left:${x(i.started_seq)}%"></span>` : "";
+    const left = x(i.fired_seq);
+    const startedShown = i.started_seq != null && i.started_seq <= cur;
+    // QUEUED segment: fired_seq -> started_seq — the Producer is scheduled but WAITING (in the
+    // single-writer admission queue) while other Producers' events land. Faint + hatched.
+    const qEnd = startedShown ? i.started_seq : cur;
+    const qbar = `<div class="qbar" style="left:${left}%;width:${Math.max(0.6, x(qEnd) - left)}%" title="${escapeHtml(i.kind)} scheduled (queued) ${i.fired_seq}→${startedShown ? i.started_seq : "…"}"></div>`;
+    // RUNNING segment: started_seq -> ended_seq — the actual run, solid status colour. The dot marks
+    // the START (the boundary between waiting and running), not "spawned at the end".
+    let runbar = "", dot = "";
+    if (startedShown) {
+      const rEnd = i.ended_seq == null ? cur : Math.min(i.ended_seq, cur);
+      const rLeft = x(i.started_seq), rW = Math.max(1.2, x(rEnd) - rLeft);
+      runbar = `<div class="bar ${i.status}" style="left:${rLeft}%;width:${rW}%" title="${escapeHtml(i.kind)} ran ${i.started_seq}→${i.ended_seq ?? "…"} ${i.status}"></div>`;
+      dot = `<span class="spawn" style="left:${rLeft}%"></span>`;
+    }
     html += `<div class="lane" data-inst="${escapeHtml(i.instance)}">
       <div class="lbl">${escapeHtml(i.kind)} <span class="inst">${escapeHtml(i.instance.slice(-4))}</span></div>
-      <div class="track">${startMark}
-        <div class="bar ${i.status}" style="left:${left}%;width:${w}%" title="${escapeHtml(i.kind)} ${i.fired_seq}→${i.ended_seq ?? "…"} ${i.status}"></div>
-      </div></div>`;
+      <div class="track">${qbar}${runbar}${dot}</div></div>`;
   });
   html += `</div>`;
   $("graph").innerHTML = html;
