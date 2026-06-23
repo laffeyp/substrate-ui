@@ -95,6 +95,7 @@ def _is_live(name: str) -> bool:
 HOST, PORT = "127.0.0.1", 8765
 WEB = Path(__file__).resolve().parent / "web"  # the static frontend
 RUNS = Path(__file__).resolve().parent / "runs"  # generated/live records (failed/paused/broken demos)
+_SESSION_PREFIXES = ("launch_", "build_", "resume_")  # hash-suffixed session runs (prunable; vs the stable demo_* fixtures)
 _CT = {".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".json": "application/json"}
 
 
@@ -131,7 +132,6 @@ def _records_index() -> list[dict[str, object]]:
     """The record list for the rail: each record's real run-level status + a one-glance summary
     (so a broken/paused run is flagged in the list itself — §7.2)."""
     out: list[dict[str, object]] = []
-    _demo_names = set(bundled.names())  # bundled = committed demos; everything under runs/ is a session run
     for name in _record_names():
         path = _record_path(name)
         if path is None:
@@ -157,7 +157,9 @@ def _records_index() -> list[dict[str, object]]:
                 + s.predicate_quarantines
                 + s.invalid_emissions,
                 "application_events": s.application_events,
-                "source": "demo" if name in _demo_names else "run",
+                # a prunable session run is hash-suffixed (launch_/build_/resume_); bundled demos +
+                # the named demo_* fixtures are stable "demos" (kept by the prune).
+                "source": "run" if name.startswith(_SESSION_PREFIXES) else "demo",
             }
         )
     return out
@@ -254,9 +256,32 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/build":
                 self._build()
                 return
+            if path == "/api/runs/clear":
+                self._clear_runs()
+                return
             self._error(404, f"no control endpoint {path!r}")
         except Exception as exc:  # noqa: BLE001
             self._error(500, f"{type(exc).__name__}: {exc}")
+
+    def _clear_runs(self) -> None:
+        """Prune the accumulating session runs under runs/ — the hash-suffixed launch_/build_/resume_
+        records. Bundled demos live in the topology packages (not runs/) and the named demo_* fixtures
+        are KEPT; only session runs are deleted. Skip a record a live launch thread is still writing."""
+        import shutil
+
+        live = {name for name, t in _LAUNCHES.items() if t.is_alive()}
+        removed, kept = 0, 0
+        if RUNS.exists():
+            for rec in sorted(RUNS.glob("*.record")):
+                if not rec.stem.startswith(_SESSION_PREFIXES) or rec.stem in live:
+                    kept += 1
+                    continue
+                try:
+                    shutil.rmtree(rec)
+                    removed += 1
+                except OSError:
+                    kept += 1
+        self._json({"removed": removed, "kept": kept})
 
     def _launch(self, q: dict[str, list[str]]) -> None:
         """Launch a bundled topology to a fresh record. The launch IS the recorded control action —

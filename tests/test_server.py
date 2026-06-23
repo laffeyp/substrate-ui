@@ -399,3 +399,19 @@ def test_authored_route_feeds_a_reading_trigger(tmp_path) -> None:
     patches = [e["payload"]["note"] for e in api.read_record(tmp_path / "run") if e["kind"] == "Patch"]
     assert patches, "the Fixer ran on the routed Critique"
     assert "staged" in patches[0]  # the Fixer's input carried the Route's staged data, not just the event
+
+
+def test_clear_runs_prunes_session_runs_but_keeps_demos_and_fixtures(base: str) -> None:
+    # the prune (sprint 012, item C2): POST /api/runs/clear deletes ONLY the hash-suffixed session
+    # runs (launch_/build_/resume_); bundled demos + the named demo_* fixtures are KEPT. An EXPLICIT
+    # user action, not a silent clobber — so the #35 durability ruling (no SILENT deletion) holds.
+    demos_before = {r["name"] for r in get(base, "/api/records") if r["source"] == "demo"}
+    launched = post(base, "/api/launch?topology=game_of_life")["name"]
+    assert launched.startswith("launch_")  # a hash-suffixed session run
+    res = post(base, "/api/runs/clear")
+    assert res["removed"] >= 1
+    names_after = {r["name"] for r in get(base, "/api/records")}
+    assert launched not in names_after  # the session run was pruned
+    assert demos_before <= names_after  # every demo + fixture kept
+    assert "demo_failed" in names_after and "game_of_life" in names_after  # fixture + bundled, explicitly
+    assert post(base, "/api/launch?topology=game_of_life")["status"] == "finalised"  # launch still works
