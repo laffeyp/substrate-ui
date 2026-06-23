@@ -1,7 +1,7 @@
 ---
 sprint: 012
 slug: drift-polish
-status: in-progress
+status: closed
 pass_kind: web-frontend + backend
 cadence: auto-within-phase
 context_files:

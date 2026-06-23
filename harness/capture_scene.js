@@ -76,29 +76,40 @@ const ascii = (grid) => grid.map((row) => row.map((c) => (c ? "#" : ".")).join("
   const page = await b.newPage({ viewport: { width: 1400, height: 900 } });
   await page.goto(BASE + "/");
   await page.waitForSelector(".rec");
-  await page.click('.rec[data-name="game_of_life"]');
-  await page.waitForSelector("#gvScene");
-  const tabVisible = await page.$eval("#gvScene", (e) => getComputedStyle(e).display !== "none");
-  await page.click("#gvScene");
-  await page.waitForSelector(".scene-grid");
   const setSeq = async (v) => {
     await page.$eval("#seq", (el, val) => { el.value = val; el.dispatchEvent(new Event("input")); }, String(v));
     await page.waitForTimeout(150);
   };
-
-  let allMatch = true;
-  // the blinker's three generations, by the seq each Generation lands on.
-  for (const [seq, label] of [[3, "gen0"], [132, "gen1"], [261, "gen2"]]) {
+  // select a scene record, open the scene tab, return whether the tab showed + every Generation seq.
+  async function openScene(name) {
+    await page.click(`.rec[data-name="${name}"]`);
+    // ground-truth Generation seqs from the RECORD (race-free), + the record's last seq to confirm load.
+    const { seqs, maxSeq } = await page.evaluate(async (n) => {
+      const rec = await fetch(`/api/records/${n}`).then((r) => r.json());
+      return {
+        seqs: rec.events.filter((e) => e.kind === "Generation").map((e) => e.seq),
+        maxSeq: rec.events[rec.events.length - 1].seq,
+      };
+    }, name);
+    // wait until the page STATE actually reflects THIS record (events loaded -> scene rebuilt), so the
+    // decode reads the right scene, not the previous record's — the race that misaligned the glider gen0.
+    await page.waitForFunction((m) => typeof STATE !== "undefined" && STATE.events.length && STATE.events[STATE.events.length - 1].seq === m, maxSeq);
+    const visible = await page.$eval("#gvScene", (e) => getComputedStyle(e).display !== "none");
+    await page.click("#gvScene");
+    await page.waitForSelector(".scene-grid");
+    return { visible, seqs };
+  }
+  // decode ONE frame: screenshot the rendered grid, decode each cell from its pixel centre, compare
+  // to the record's ground-truth Generation.grid. Returns {decoded, match}.
+  async function decodeFrame(label, seq) {
     await setSeq(seq);
-    // GROUND TRUTH: the record's actual grid the panel should be rendering at this cursor.
     const truth = await page.evaluate((s) => {
       const fr = STATE.scene.frames.filter((f) => f.seq <= s).slice(-1)[0];
       return { grid: fr.grid, rows: fr.grid.length, cols: fr.grid[0].length };
     }, seq);
-    const png = `screenshots/scene_gol_${label}.png`;
+    const png = `screenshots/scene_${label}.png`;
     await page.locator(".scene-grid").screenshot({ path: png }); // element shot = just the grid
     const img = decodePNG(png);
-    // DECODE the rendered pixels at each cell centre -> reconstruct the alive/dead grid
     const decoded = [];
     for (let r = 0; r < truth.rows; r++) {
       const row = [];
@@ -110,14 +121,33 @@ const ascii = (grid) => grid.map((row) => row.map((c) => (c ? "#" : ".")).join("
       decoded.push(row);
     }
     const match = JSON.stringify(decoded) === JSON.stringify(truth.grid);
-    allMatch = allMatch && match;
     console.log(`\nSCENE_DECODE ${label} seq=${seq} ${truth.rows}x${truth.cols} match=${match}`);
-    console.log("  decoded from screenshot pixels:");
     console.log(ascii(decoded).split("\n").map((l) => "    " + l).join("\n"));
     if (!match) {  // assertion-with-context: on mismatch, show the divergence, not just "fail"
       console.log("  EXPECTED (record Generation.grid):");
       console.log(ascii(truth.grid).split("\n").map((l) => "    " + l).join("\n"));
     }
+    return { decoded, match };
+  }
+
+  let allMatch = true;
+  // 1) the BLINKER (symmetric oscillator) — its generations, V/H/V.
+  const gol = await openScene("game_of_life");
+  for (let i = 0; i < gol.seqs.length; i++) {
+    allMatch = allMatch && (await decodeFrame(`gol_gen${i}`, gol.seqs[i])).match;
+  }
+  // 2) the GLIDER (asymmetric, MOVING) — closes the mirror-blind spot (review #50). Decode EVERY
+  // generation, and assert each decoded grid != its own L-R mirror: the blinker maps to itself under
+  // mirroring (so a pure mirror render bug is invisible), but the glider does not — so this decode
+  // WOULD diverge on a mirror bug. Mirror-sensitivity is the property the glider fixture buys.
+  const glider = await openScene("game_of_life_glider");
+  let mirrorSensitive = glider.seqs.length > 0;
+  for (let i = 0; i < glider.seqs.length; i++) {
+    const { decoded, match } = await decodeFrame(`glider_gen${i}`, glider.seqs[i]);
+    allMatch = allMatch && match;
+    const sensitive = JSON.stringify(decoded) !== JSON.stringify(decoded.map((row) => [...row].reverse()));
+    mirrorSensitive = mirrorSensitive && sensitive;
+    console.log(`  mirror-sensitive (decoded != its L-R mirror, so a mirror bug would diverge): ${sensitive}`);
   }
   // shape-detection negative: a record with no 2-D numeric field hides the scene tab.
   await page.click('.rec[data-name="code_review"]');
@@ -125,7 +155,7 @@ const ascii = (grid) => grid.map((row) => row.map((c) => (c ? "#" : ".")).join("
   const tabHidden = await page.$eval("#gvScene", (e) => getComputedStyle(e).display === "none");
   await b.close();
 
-  console.log(`\nSCENE_DECODE_SUMMARY tab_visible_gol=${tabVisible} tab_hidden_code_review=${tabHidden} all_generations_match=${allMatch}`);
-  if (!allMatch || !tabVisible || !tabHidden) { console.error("PIXEL-DECODE FAILED"); process.exit(1); }
-  console.log("PIXEL-DECODE PASS — every cell, decoded from the rendered screenshot, matches the record grid.");
+  console.log(`\nSCENE_DECODE_SUMMARY blinker_visible=${gol.visible} glider_visible=${glider.visible} tab_hidden_code_review=${tabHidden} all_match=${allMatch} glider_mirror_sensitive=${mirrorSensitive}`);
+  if (!allMatch || !gol.visible || !glider.visible || !tabHidden || !mirrorSensitive) { console.error("PIXEL-DECODE FAILED"); process.exit(1); }
+  console.log("PIXEL-DECODE PASS — every cell decoded from the screenshot matches the record; the glider is asymmetric on every frame, so the decode would now catch a pure mirror render bug the blinker can't.");
 })().catch((e) => { console.error(e); process.exit(1); });
