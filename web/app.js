@@ -37,7 +37,12 @@ function gist(ev) {
   return "";
 }
 
-let STATE = { name: null, events: [], graph: null, summary: null, manifest: null, topology: null, scene: null, cursor: 0, playing: false, speed: 30, sel: null, mode: "read", graphView: "run", live: null, resumable: new Set() };
+let STATE = { name: null, events: [], graph: null, summary: null, manifest: null, topology: null, scene: null, cursor: 0, playing: false, speed: 30, term: { open: false, lines: [], history: [], hi: -1 }, sel: null, mode: "read", graphView: "run", live: null, resumable: new Set() };
+
+// the time dimension alongside the order: seq is the order (no time), t the time (no order). Show
+// t RELATIVE to the run's start (events[0] = RunStarted) — ~0 on the deterministic CI demos (they
+// ARE instant), and the real per-turn gaps on a real-model run.
+function relT(t) { const t0 = STATE.events.length ? STATE.events[0].t : (t || 0); const d = (t || 0) - t0; return "t+" + (d < 10 ? d.toFixed(3) : d.toFixed(1)) + "s"; }
 
 // ---------- record rail ----------
 async function loadRecords() {
@@ -379,6 +384,7 @@ function renderStream() {
     const prod = e.producer && e.producer.kind ? e.producer.kind : "runtime";
     return `<div class="ev ${future ? "future" : ""} ${STATE.sel === e.seq ? "sel" : ""}" data-seq="${e.seq}">
       <span class="sq">seq ${String(e.seq).padStart(3, "0")}</span>
+      <span class="tt">${escapeHtml(relT(e.t))}</span>
       <span class="kd k-${cat}">${escapeHtml(shortKind(e.kind))}</span>
       <span class="pl">${escapeHtml(prod)} · ${escapeHtml(gist(e))}</span></div>`;
   }).join("");
@@ -415,6 +421,7 @@ function inspectEvent(seq) {
   const cat = category(e.kind);
   $("insp").innerHTML = `<div class="row"><span class="l">event</span><span><span class="badge k-${cat}">${escapeHtml(shortKind(e.kind))}</span> <span class="dim">seq ${e.seq}</span></span></div>
     <div class="row"><span class="l">schema</span><span>${escapeHtml(e.schema || "")}</span></div>
+    <div class="row"><span class="l">time</span><span>${escapeHtml(relT(e.t))} <span class="dim">· order by seq, time by t (epoch ${e.t})</span></span></div>
     <div class="row"><span class="l">producer</span><span>${e.producer && e.producer.kind ? escapeHtml(e.producer.kind) + " <span class='dim'>" + escapeHtml(e.producer.instance) + "</span>" : "— runtime"}</span></div>
     <div class="row"><span class="l">payload</span></div><pre>${escapeHtml(JSON.stringify(e.payload, null, 1))}</pre>`;
 }
@@ -471,6 +478,118 @@ $("speedsel").onchange = () => {
   if (_playTimer) { clearInterval(_playTimer); _playTimer = setInterval(_tick, Math.max(16, 1000 / STATE.speed)); }
 };
 $("seq").addEventListener("pointerdown", stopPlay);  // grabbing the slider pauses (don't fight the user)
+
+// ---------- integrated terminal: a read interface over the same record the GUI shows ----------
+function _narrateLine(e) { const g = gist(e); return shortKind(e.kind) + (g ? " — " + g : ""); }
+function renderTerm() {
+  const body = $("termbody");
+  body.innerHTML = STATE.term.lines.map((l) => `<div class="term-line tl-${l.cls}">${escapeHtml(l.text)}</div>`).join("");
+  body.scrollTop = body.scrollHeight;
+  $("termprompt").textContent = (STATE.name || "substrate") + "$";
+}
+function termPush(lines) { STATE.term.lines.push(...lines); renderTerm(); }
+function termSetOpen(v) {
+  STATE.term.open = v;
+  $("termdock").style.display = v ? "" : "none";
+  $("termOpen").style.display = v ? "none" : "";
+  if (v) {
+    if (!STATE.term.lines.length) STATE.term.lines.push({ cls: "dim", text: "substrate read interface · reads the same record the GUI shows · type `help`" });
+    renderTerm(); $("terminput").focus();
+  }
+}
+async function runTerm(line) {
+  const parts = line.trim().split(/\s+/), cmd = parts[0];
+  const out = []; const say = (text, cls) => out.push({ text, cls: cls || "out" });
+  if (!cmd) return out;
+  if (cmd === "clear") { STATE.term.lines = []; return null; }
+  if (cmd === "help" || cmd === "?") {
+    say("substrate — read interface (the same record the GUI shows, typeable)", "dim");
+    [["tail [--kind K] [--producer P] [--all]", "events up to the cursor (seq + t)"],
+     ["cat <seq>", "the full payload of the event at <seq> — the content"],
+     ["ls", "the application output events + their seqs"],
+     ["input", "the run's resolved seed"],
+     ["narrate", "the legible story (causal beats + work)"],
+     ["inspect <kind|instance>", "provenance: cause + ancestry"],
+     ["clear", "clear the terminal"]].forEach(([c, d]) => say("  " + c.padEnd(42) + d));
+    return out;
+  }
+  if (!STATE.name) { say("no record selected", "err"); return out; }
+  if (cmd === "tail") {
+    const all = parts.includes("--all");
+    const ki = parts.indexOf("--kind"), pr = parts.indexOf("--producer");
+    const kf = ki >= 0 ? parts[ki + 1] : null, pf = pr >= 0 ? parts[pr + 1] : null;
+    let evs = STATE.events.filter((e) => all || e.seq <= STATE.cursor);
+    if (kf) evs = evs.filter((e) => e.kind === kf || shortKind(e.kind) === kf);
+    if (pf) evs = evs.filter((e) => e.producer && e.producer.kind === pf);
+    if (!evs.length) { say("(no matching events" + (all ? "" : " at or before seq " + STATE.cursor) + ")", "dim"); return out; }
+    evs.forEach((e) => { const cat = category(e.kind); say("seq " + String(e.seq).padStart(3, "0") + "  " + relT(e.t).padEnd(11) + "  " + shortKind(e.kind).padEnd(28) + " " + (e.producer && e.producer.kind ? e.producer.kind : "·"), cat === "failure" ? "err" : cat === "application" ? "accent" : "out"); });
+    say(evs.length + " event(s)" + (all ? "" : " · cursor seq " + STATE.cursor), "dim");
+    return out;
+  }
+  if (cmd === "cat") {
+    const seq = parseInt(parts[1], 10);
+    if (isNaN(seq)) { say("usage: cat <seq>   (see `tail` / `ls`)", "err"); return out; }
+    const e = STATE.events.find((x) => x.seq === seq);
+    if (!e) { say("cat: no event at seq " + seq, "err"); return out; }
+    say("# seq " + e.seq + "  " + relT(e.t) + "  " + shortKind(e.kind) + (e.producer && e.producer.kind ? "  (" + e.producer.kind + ")" : ""), "dim");
+    JSON.stringify(e.payload, null, 2).split("\n").forEach((l) => say(l, category(e.kind) === "failure" ? "err" : "out"));
+    return out;
+  }
+  if (cmd === "ls") {
+    const io = await api(`/api/records/${STATE.name}/io`);
+    const outs = io.outputs || [];
+    if (!outs.length) { say("(no application outputs)", "dim"); return out; }
+    outs.forEach((o) => say("  seq " + String(o.seq).padStart(3, "0") + "  " + o.kind, o.seq <= STATE.cursor ? "out" : "dim"));
+    return out;
+  }
+  if (cmd === "input") {
+    const io = await api(`/api/records/${STATE.name}/io`);
+    if (io.input == null) { say("(no declared seed — this topology is parameterized at build time)", "dim"); return out; }
+    JSON.stringify(io.input, null, 2).split("\n").forEach((l) => say(l, "out"));
+    return out;
+  }
+  if (cmd === "narrate") {
+    const KEEP = new Set(["substrate.RunStarted", "substrate.TriggerFired", "substrate.TerminationMatched", "substrate.RunFinalised"]);
+    const beats = STATE.events.filter((e) => e.seq <= STATE.cursor && (category(e.kind) === "application" || category(e.kind) === "failure" || KEEP.has(e.kind)));
+    if (!beats.length) { say("(nothing at or before seq " + STATE.cursor + ")", "dim"); return out; }
+    beats.forEach((e) => { const cat = category(e.kind); say("seq " + String(e.seq).padStart(3, "0") + "  " + relT(e.t).padEnd(11) + "  " + _narrateLine(e), cat === "failure" ? "err" : cat === "application" ? "accent" : "out"); });
+    return out;
+  }
+  if (cmd === "inspect") {
+    const ref = parts[1];
+    if (!ref) { say("usage: inspect <producer-kind|instance>", "err"); return out; }
+    let instance = ref;
+    const inst = (STATE.graph.instances || []).find((i) => i.instance === ref || i.instance.endsWith(ref) || i.kind === ref);
+    if (inst) instance = inst.instance;
+    const data = await api(`/api/records/${STATE.name}/explain/${instance}`).catch(() => null);
+    if (!data || data.error) { say("inspect: no provenance for '" + ref + "'", "err"); return out; }
+    const x = data.explanation;
+    say(x.kind + "  (" + x.instance + ")", "accent");
+    say("  cause: " + x.cause + (x.trigger_id ? " [" + x.trigger_id + "]" : ""));
+    say("  at seq: " + x.at_seq);
+    say("  ancestry: " + (data.ancestry || []).map((a) => a.kind).join(" → "));
+    return out;
+  }
+  say(cmd + ": command not found — try `help`", "err");
+  return out;
+}
+async function termSubmit() {
+  const line = $("terminput").value;
+  termPush([{ cls: "in", text: $("termprompt").textContent + " " + line }]);
+  if (line.trim()) STATE.term.history.unshift(line);
+  STATE.term.hi = -1; $("terminput").value = "";
+  const res = await runTerm(line);
+  if (res === null) { renderTerm(); return; }
+  if (res && res.length) termPush(res);
+}
+$("terminput").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") { e.preventDefault(); termSubmit(); }
+  else if (e.key === "ArrowUp") { e.preventDefault(); const n = Math.min(STATE.term.history.length - 1, STATE.term.hi + 1); if (n >= 0) { STATE.term.hi = n; $("terminput").value = STATE.term.history[n]; } }
+  else if (e.key === "ArrowDown") { e.preventDefault(); const n = STATE.term.hi - 1; if (n < 0) { STATE.term.hi = -1; $("terminput").value = ""; } else { STATE.term.hi = n; $("terminput").value = STATE.term.history[n]; } }
+});
+$("termOpen").onclick = () => termSetOpen(true);
+$("termClose").onclick = () => termSetOpen(false);
+window.addEventListener("keydown", (e) => { if (e.ctrlKey && (e.key === "`" || e.key === "Dead")) { e.preventDefault(); termSetOpen(!STATE.term.open); } });
 
 loadTopologies();
 loadRecords();
