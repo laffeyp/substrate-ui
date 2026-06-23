@@ -250,6 +250,26 @@ const check = (cond, msg) => { if (!cond) fails.push(msg); else console.log("  o
   const streamHasT = await p.$$eval(".ev .tt", (els) => els.length > 0 && /t\+/.test(els[0].textContent));
   check(streamHasT, "the event stream shows a relative timestamp (t+) alongside seq");
 
+  // 16) content views (sprint 011): the inspector renders application CONTENT readable, and output
+  // artifacts are clickable. On pair_coding: a CodeChunk event -> a content block with the real code;
+  // an output artifact in the I/O pane -> clickable, inspects it.
+  await selectRec("pair_coding");
+  await p.waitForTimeout(300);
+  await p.evaluate(() => { if (document.getElementById("readpane").style.display === "none") document.getElementById("modeToggle").click(); });
+  await p.waitForTimeout(150);
+  const ccseq = await p.evaluate(() => (STATE.events.find((e) => e.kind === "CodeChunk") || {}).seq);
+  await p.evaluate((s) => { const el = [...document.querySelectorAll(".ev")].find((e) => +e.dataset.seq === s); if (el) el.click(); }, ccseq);
+  await p.waitForTimeout(200);
+  const insp1 = await p.$eval("#insp", (e) => e.innerText);
+  check(/def solve/.test(insp1), "inspector renders the CodeChunk content readable (the real code 'def solve')");
+  await p.evaluate(() => document.getElementById("modeToggle").click());  // to I/O
+  await p.waitForTimeout(300);
+  await p.evaluate(() => { const a = document.querySelector("#iopane .art[data-seq]"); if (a) a.click(); });
+  await p.waitForTimeout(200);
+  const insp2 = await p.$eval("#insp", (e) => e.innerText);
+  check(/seq \d/.test(insp2) && !/Select an event or a Producer/.test(insp2), "clicking an output artifact inspects it (BACKLOG: inspector works on artifacts)");
+  await p.evaluate(() => document.getElementById("modeToggle").click());  // back to read
+
   await b.close();
   if (fails.length) { console.error("\nFAILED:\n  - " + fails.join("\n  - ")); process.exit(1); }
   console.log("\nE2E PASS — the live console renders the real backend, §7 honored.");

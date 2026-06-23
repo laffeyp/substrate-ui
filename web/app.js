@@ -249,12 +249,14 @@ async function renderIO() {
   // outputs materialize as the cursor reaches the seq that produced them; each cites that seq.
   const outs = io.outputs.filter((o) => o.seq <= cur);
   const arts = outs.length
-    ? outs.map((o) => `<div class="art"><span class="sq">seq ${String(o.seq).padStart(3, "0")}</span><span class="kd">${escapeHtml(o.kind)}</span><span class="pl">${escapeHtml(gistPayload(o.payload))}</span></div>`).join("")
+    ? outs.map((o) => `<div class="art" data-seq="${o.seq}" title="inspect this artifact"><span class="sq">seq ${String(o.seq).padStart(3, "0")}</span><span class="kd">${escapeHtml(o.kind)}</span><span class="pl">${escapeHtml(gistPayload(o.payload))}</span></div>`).join("")
     : `<div class="io-empty">No application output yet at seq ${cur}.</div>`;
   const fin = io.finalisation && Object.keys(io.finalisation).length
     ? `<div class="io-doc"><div class="t">finalisation_payload</div><pre>${escapeHtml(JSON.stringify(io.finalisation, null, 1))}</pre></div>` : "";
   $("iopane").innerHTML = `<div class="io-h">input · fed to the run</div>${input}
     <div class="io-h">output · artifacts <span class="r">${outs.length}/${io.outputs.length} produced</span></div>${arts}${fin}`;
+  // an output artifact is an application event — clicking it inspects its full content (BACKLOG).
+  $("iopane").querySelectorAll(".art[data-seq]").forEach((el) => (el.onclick = () => inspectEvent(+el.dataset.seq)));
 }
 
 // ---------- run-as-graph: firing-anchored lifespans + spawn cohorts (§7.3) ----------
@@ -430,10 +432,17 @@ function inspectEvent(seq) {
   STATE.sel = seq; renderStream();
   const e = STATE.events.find((x) => x.seq === seq); if (!e) return;
   const cat = category(e.kind);
+  // CONTENT blocks: string payload fields that are code / prose / model output — rendered readable
+  // (real newlines, monospace), not buried in escaped JSON. The "see the code" view in the GUI.
+  const content = Object.entries(e.payload || {})
+    .filter(([, v]) => typeof v === "string" && (v.includes("\n") || v.length >= 40))
+    .map(([k, v]) => `<div class="row"><span class="l">${escapeHtml(k)}</span></div><pre class="content">${escapeHtml(v)}</pre>`)
+    .join("");
   $("insp").innerHTML = `<div class="row"><span class="l">event</span><span><span class="badge k-${cat}">${escapeHtml(shortKind(e.kind))}</span> <span class="dim">seq ${e.seq}</span></span></div>
     <div class="row"><span class="l">schema</span><span>${escapeHtml(e.schema || "")}</span></div>
     <div class="row"><span class="l">time</span><span>${escapeHtml(relT(e.t))} <span class="dim">· order by seq, time by t (epoch ${e.t})</span></span></div>
     <div class="row"><span class="l">producer</span><span>${e.producer && e.producer.kind ? escapeHtml(e.producer.kind) + " <span class='dim'>" + escapeHtml(e.producer.instance) + "</span>" : "— runtime"}</span></div>
+    ${content}
     <div class="row"><span class="l">payload</span></div><pre>${escapeHtml(JSON.stringify(e.payload, null, 1))}</pre>`;
 }
 
