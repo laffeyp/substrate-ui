@@ -22,7 +22,7 @@ button{font-family:inherit;color:inherit;cursor:pointer;background:none;border:n
 ::-webkit-scrollbar{width:10px;height:10px;} ::-webkit-scrollbar-thumb{background:var(--line2);border-radius:6px;border:2px solid var(--bg);}
 .dim{color:var(--tx-faint);} .sm{font-size:11px;}
 
-.app{ height:100%; display:grid; grid-template-rows:auto auto 1fr auto; }
+.app{ height:100%; display:grid; grid-template-rows:auto auto 1fr auto auto; }
 
 /* header */
 .head{ display:flex; align-items:center; gap:16px; padding:10px 16px; border-bottom:1px solid var(--line2); }
@@ -107,7 +107,8 @@ button{font-family:inherit;color:inherit;cursor:pointer;background:none;border:n
 .ev:hover{ background:var(--panel); } .ev.sel{ background:var(--panel2); }
 .ev.future{ opacity:.28; }
 .ev .sq{ color:var(--tx-faint); flex:0 0 56px; }
-.ev .kd{ flex:0 0 200px; }
+.ev .tt{ color:var(--tx-ghost); flex:0 0 82px; font-size:11px; }
+.ev .kd{ flex:0 0 188px; }
 .ev .pl{ color:var(--tx-faint); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .k-application{ color:var(--green); } .k-trigger{ color:var(--amber); } .k-failure{ color:var(--red); font-weight:600; }
 .k-cancelled{ color:var(--slate); } .k-termination,.k-finalise,.k-open{ color:var(--violet); } .k-lifecycle{ color:var(--tx-faint); }
@@ -139,6 +140,22 @@ button{font-family:inherit;color:inherit;cursor:pointer;background:none;border:n
 .health .msg{ color:var(--tx-faint); font-size:12px; }
 .work{ margin-left:auto; font-size:11px; color:var(--tx-faint); }
 .work .chip{ border:1px solid var(--line2); border-radius:5px; padding:2px 7px; margin-left:6px; color:var(--green); }
+
+/* integrated terminal — a read interface over the same record the GUI shows */
+.term-row{ border-top:1px solid var(--line2); }
+.term-reopen{ margin:6px 14px; color:var(--tx-dim); }
+.term-dock{ display:flex; flex-direction:column; height:236px; background:var(--bg2); }
+.term-head{ display:flex; align-items:center; gap:12px; padding:6px 14px; border-bottom:1px solid var(--line); }
+.term-title{ color:var(--green); font-size:12px; }
+.term-head .term-hint{ margin-left:auto; }
+.term-hint{ color:var(--tx-faint); font-size:11px; }
+.term-body{ flex:1; overflow:auto; padding:8px 14px; font-size:12px; line-height:1.5; }
+.term-line{ white-space:pre-wrap; word-break:break-word; }
+.tl-in{ color:var(--tx); } .tl-out{ color:var(--tx-dim); } .tl-dim{ color:var(--tx-faint); }
+.tl-err{ color:var(--red); } .tl-accent{ color:var(--green); }
+.term-input-row{ display:flex; align-items:center; gap:8px; padding:6px 14px; border-top:1px solid var(--line); }
+.term-prompt{ color:var(--green); font-size:12px; white-space:nowrap; }
+.term-input{ flex:1; background:none; border:none; outline:none; color:var(--tx); font-family:var(--mono); font-size:12px; }
 </style>
 </head>
 <body>
@@ -175,6 +192,21 @@ button{font-family:inherit;color:inherit;cursor:pointer;background:none;border:n
       <div id="iopane" style="display:none"></div>
     </div>
     <div class="col"><div class="col-h">inspector</div><div class="insp" id="insp"><span class="dim">Select an event or a Producer to trace its provenance.</span></div></div>
+  </div>
+  <div class="term-row" id="termrow">
+    <button class="btn term-reopen" id="termOpen" title="open the terminal (Ctrl+`)">▌ terminal <span class="term-hint">⌃`</span></button>
+    <div class="term-dock" id="termdock" style="display:none">
+      <div class="term-head">
+        <span class="term-title">▌ substrate — read interface</span>
+        <span class="term-hint">⌃` toggles · type help</span>
+        <button class="btn" id="termClose" title="collapse (Ctrl+`)">⌄</button>
+      </div>
+      <div class="term-body" id="termbody"></div>
+      <div class="term-input-row">
+        <span class="term-prompt" id="termprompt">substrate$</span>
+        <input class="term-input" id="terminput" spellcheck="false" autocomplete="off" placeholder="type a command — help" />
+      </div>
+    </div>
   </div>
   <div class="health" id="health"></div>
 </div>

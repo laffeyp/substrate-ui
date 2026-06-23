@@ -221,6 +221,26 @@ const check = (cond, msg) => { if (!cond) fails.push(msg); else console.log("  o
   check(sReplay > 0 && sReplay < Math.floor(sMax / 2), `replay from the end rewinds to ~0 and advances (seq ${sReplay})`);
   await p.evaluate(() => document.getElementById("play").click());   // stop
 
+  // 15) terminal (sprint 010): a read interface over the same record. Open it; cat an application
+  // event -> the dock shows its full payload (the content); narrate -> the legible beats with seq + t.
+  // Read the DOCK TEXT as the signal. Also: the event stream now carries a relative timestamp (t+).
+  await selectRec("pair_coding");
+  await p.waitForTimeout(300);
+  await p.evaluate(() => document.getElementById("termOpen").click());
+  await p.waitForTimeout(150);
+  const appseq = await p.evaluate(() => (STATE.events.find((e) => !e.kind.startsWith("substrate.")) || {}).seq);
+  await p.fill("#terminput", "cat " + appseq); await p.press("#terminput", "Enter");
+  await p.waitForTimeout(250);
+  let dock = await p.$eval("#termbody", (e) => e.innerText);
+  check(/"text"/.test(dock) && /solution\.py/.test(dock), `terminal cat <seq> prints the application event's full payload (the content)`);
+  await p.fill("#terminput", "narrate"); await p.press("#terminput", "Enter");
+  await p.waitForTimeout(250);
+  dock = await p.$eval("#termbody", (e) => e.innerText);
+  check(/RunFinalised/.test(dock) && /t\+/.test(dock), "terminal narrate prints the legible beats with seq + t");
+  await p.evaluate(() => document.getElementById("termClose").click());
+  const streamHasT = await p.$$eval(".ev .tt", (els) => els.length > 0 && /t\+/.test(els[0].textContent));
+  check(streamHasT, "the event stream shows a relative timestamp (t+) alongside seq");
+
   await b.close();
   if (fails.length) { console.error("\nFAILED:\n  - " + fails.join("\n  - ")); process.exit(1); }
   console.log("\nE2E PASS — the live console renders the real backend, §7 honored.");
