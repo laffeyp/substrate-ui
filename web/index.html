@@ -82,7 +82,9 @@ button{font-family:inherit;color:inherit;cursor:pointer;background:none;border:n
 .bar.cancelled{ background:rgba(107,119,133,.22); border:1px dashed var(--slate); }
 .bar.running{ background:rgba(68,147,248,.26); border:1px solid var(--blue); }
 .bar.interrupted{ background:rgba(214,160,50,.18); border:1px dashed var(--amber); }
-.spawn{ position:absolute; top:11px; width:8px; height:8px; border-radius:50%; background:var(--amber); transform:translateX(-4px); }
+.qbar{ position:absolute; top:7px; height:16px; border-radius:4px; border:1px dashed var(--line3); background:repeating-linear-gradient(45deg, rgba(107,119,133,.16) 0 5px, transparent 5px 10px); }
+.spawn{ position:absolute; top:9px; width:9px; height:9px; border-radius:50%; background:var(--amber); border:1px solid var(--bg); transform:translateX(-4px); z-index:2; }
+.legend i.leg-q{ background:repeating-linear-gradient(45deg, var(--line3) 0 3px, transparent 3px 6px); border:1px dashed var(--line3); }
 /* static topology-structure view (the run-as-graph ↔ structure toggle) */
 .gv{ cursor:pointer; color:var(--tx-faint); } .gv:hover{ color:var(--tx-dim); } .gv.active{ color:var(--green); }
 .topo{ padding:8px 12px; font-size:12px; }
