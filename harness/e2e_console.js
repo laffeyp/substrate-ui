@@ -209,7 +209,7 @@ const check = (cond, msg) => { if (!cond) fails.push(msg); else console.log("  o
   check((await seqNow()) === s2, `pause holds the cursor (held at ${s2})`);
   // play to the end: jump near the end, then play -> reaches max and STOPS (button returns to ▶).
   // (The per-tick render() makes the top speed render-bound, so we play a short tail, not the whole run.)
-  await p.evaluate((m) => { const s = document.getElementById("seq"); s.value = Math.max(0, m - 20); s.oninput({ target: s }); const sp = document.getElementById("speedsel"); sp.value = "80"; sp.onchange(); document.getElementById("play").click(); }, sMax);
+  await p.evaluate((m) => { const s = document.getElementById("seq"); s.value = Math.max(0, m - 20); s.oninput({ target: s }); const sp = document.getElementById("speedsel"); sp.value = "60"; sp.onchange(); document.getElementById("play").click(); }, sMax);
   await p.waitForTimeout(1800);
   const sEnd = await seqNow();
   check(sEnd === sMax, `play stops at the end (seq ${sEnd} == max ${sMax})`);
