@@ -8,19 +8,17 @@ card when picked up. Append-only-ish; mark items done/promoted rather than delet
 
 ## Actionable (small fixes)
 
-- **[2026-06-22] Inspector should work on the OUTPUT ARTIFACTS (I/O pane).** Clicking an artifact in
-  the output "file folder" should open the inspector with its full payload / content — the same way
-  clicking an event in the stream does. Today the I/O pane lists artifacts (gisted) but a click does
-  not inspect. (The new terminal `cat <seq>` reads the full content; the GUI should too.)
+- **[2026-06-22] [DONE — sprint 011] Inspector should work on the OUTPUT ARTIFACTS (I/O pane).** Each
+  output artifact row is now clickable -> `inspectEvent(seq)` (cursor + hover), filling the inspector
+  with its full content, like a stream event. Gated in e2e §16.
 
 ## Legibility
 
-- **[2026-06-22] Application-level content/code views are too terse.** The stream + inspector render
-  application events (e.g. pair_coding `CodeChunk` / `ChunkBoundary`) as a *gisted* payload (path +
-  kind); the actual CODE / turn text / model output is hard to read in the GUI. The terminal `cat
-  <seq>` (sprint 010) now shows the full payload, but the GUI inspector should render content
-  first-class too — a readable code/prose pane, ideally syntax-aware, not a one-line gist. This is
-  the core of "I want to see more of the application-level code in here."
+- **[2026-06-22] [DONE — sprint 011] Application content/code views are too terse.** The inspector now
+  renders string payload fields that are code/prose/model-output (newlines or ≥40 chars) as a
+  dedicated readable CONTENT block (real newlines, monospace, green left-border) above the raw
+  payload — e.g. a `CodeChunk` shows `def solve(x):` as actual code. Verified both tracks (e2e §16 +
+  viewed). RESIDUAL (future, low): syntax-aware highlighting; the content detection is a heuristic.
 
 - **[2026-06-22] [DONE] Run-as-graph: the spawn dot lands mid-bar and reads as "spawned inside
   itself."** Diagnosed by correlating `run_graph` (cells: fired=5/7/9…, started=55/58/61…,
