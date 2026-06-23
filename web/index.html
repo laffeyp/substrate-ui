@@ -158,11 +158,11 @@ button{font-family:inherit;color:inherit;cursor:pointer;background:none;border:n
     <input type="range" id="seq" min="0" max="0" value="0" />
     <span class="seq">seq <b id="seqnow">0</b> / <span id="seqmax">0</span></span>
     <button class="btn" id="toEnd" title="jump to the end">⏭</button>
-    <select class="btn" id="speedsel" title="replay speed (seq per second)">
-      <option value="8">8/s</option>
-      <option value="24">24/s</option>
-      <option value="80" selected>80/s</option>
-      <option value="240">240/s</option>
+    <select class="btn" id="speedsel" title="replay speed (seq per second) — render-bound near the top">
+      <option value="4">4/s</option>
+      <option value="12">12/s</option>
+      <option value="30" selected>30/s</option>
+      <option value="60">60/s</option>
     </select>
   </div>
   <div class="body">

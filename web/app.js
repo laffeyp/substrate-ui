@@ -37,7 +37,7 @@ function gist(ev) {
   return "";
 }
 
-let STATE = { name: null, events: [], graph: null, summary: null, manifest: null, topology: null, scene: null, cursor: 0, playing: false, speed: 80, sel: null, mode: "read", graphView: "run", live: null, resumable: new Set() };
+let STATE = { name: null, events: [], graph: null, summary: null, manifest: null, topology: null, scene: null, cursor: 0, playing: false, speed: 30, sel: null, mode: "read", graphView: "run", live: null, resumable: new Set() };
 
 // ---------- record rail ----------
 async function loadRecords() {

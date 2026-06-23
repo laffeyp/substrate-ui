@@ -10,6 +10,13 @@
    signal), not by eyeballing a PNG. The PNGs are still written to screenshots/ for a polish look
    (the vision-model-judge half of two-track grading); the decode is the mechanical half.
 
+   SCOPE (review #50): this verifies the panel faithfully PAINTS STATE.scene — render fidelity. It
+   catches a transpose / miscolor / missing-cell / class-not-mapping-to-green render bug. It does NOT
+   independently re-check that the record's grid is itself a correct blinker (that is covered by the
+   game_of_life pytest + the e2e index assertions); this is a render-fidelity track, not end-to-end
+   record verification. (The blinker is mirror-symmetric, so a pure L-R/U-D mirror bug is not caught
+   here — a glider fixture would; transpose IS caught since V<->H differ. Drift watchlist.)
+
    Run: npm run capture:scene   (backend on :8765). Exit 0 = every cell decoded matches the record. */
 "use strict";
 const { chromium } = require("playwright");
