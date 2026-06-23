@@ -162,6 +162,32 @@ const check = (cond, msg) => { if (!cond) fails.push(msg); else console.log("  o
   const interruptedBars = await p.$$eval(".bar.interrupted", (e) => e.length);
   check(runningBars === 0 && interruptedBars >= 1, `resumed run shows stage1 interrupted, no "running" lanes (run=${runningBars}, intr=${interruptedBars})`);
 
+  // 13) scene panel (sprint 008): game_of_life renders its Generation.grid as a cursor-driven cell
+  // grid; the tab is SHAPE-detected — visible for a record carrying a 2-D numeric field, hidden
+  // otherwise. (Structural track — moved here from capture_scene.js so CI gates it; review #49 fold 1.)
+  await selectRec("game_of_life");
+  await p.waitForTimeout(500);
+  const sceneVisible = await p.$eval("#gvScene", (e) => getComputedStyle(e).display !== "none");
+  check(sceneVisible, "scene tab appears for game_of_life (a renderable 2-D grid shape)");
+  // section 8 left the centre in I/O mode (readpane hidden); return to the graph pane so the scene
+  // can render into #graph before we assert its cells.
+  await p.evaluate(() => { if (document.getElementById("readpane").style.display === "none") document.getElementById("modeToggle").click(); });
+  await p.waitForTimeout(200);
+  await p.evaluate(() => document.getElementById("gvScene").click());
+  await p.waitForTimeout(300);
+  const cells = await p.$$eval(".scene-grid .cell", (e) => e.length);
+  check(cells === 25, `scene renders the 5x5 grid (${cells} cells)`);
+  const liveIdx = async () => p.$$eval(".scene-grid .cell", (cs) => cs.map((c, i) => c.classList.contains("on") ? i : -1).filter((i) => i >= 0));
+  const setSeq = async (v) => { await p.evaluate((val) => { const s = document.getElementById("seq"); s.value = val; s.oninput({ target: s }); }, v); await p.waitForTimeout(200); };
+  await setSeq(3); const g0 = await liveIdx();      // gen0: vertical blinker
+  await setSeq(132); const g1 = await liveIdx();    // gen1: horizontal blinker
+  check(g0.length === 3 && g1.length === 3, `blinker has 3 live cells each generation (g0=${g0.length}, g1=${g1.length})`);
+  check(JSON.stringify(g0) !== JSON.stringify(g1), `the cursor drives the scene: live cells move gen0->gen1 (the blinker oscillates) g0=${JSON.stringify(g0)} g1=${JSON.stringify(g1)}`);
+  await selectRec("code_review");
+  await p.waitForTimeout(300);
+  const sceneHidden = await p.$eval("#gvScene", (e) => getComputedStyle(e).display === "none");
+  check(sceneHidden, "scene tab hidden for code_review (no renderable 2-D grid shape)");
+
   await b.close();
   if (fails.length) { console.error("\nFAILED:\n  - " + fails.join("\n  - ")); process.exit(1); }
   console.log("\nE2E PASS — the live console renders the real backend, §7 honored.");
