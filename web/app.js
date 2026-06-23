@@ -48,7 +48,7 @@ function relT(t) { const t0 = STATE.events.length ? STATE.events[0].t : (t || 0)
 async function loadRecords() {
   const recs = await api("/api/records");
   $("rail").innerHTML = "";
-  for (const r of recs) {
+  const mkRec = (r) => {
     const div = document.createElement("div");
     div.className = "rec";
     div.dataset.name = r.name;
@@ -61,8 +61,16 @@ async function loadRecords() {
     div.innerHTML = `<span class="dot" style="background:${color}"></span>
       <div class="nm">${escapeHtml(r.name)}</div><div class="meta ${broken ? "broken" : ""}">${escapeHtml(r.run_id.slice(0, 8))}… · ${escapeHtml(meta)}</div>`;
     div.onclick = () => selectRecord(r.name);
-    $("rail").appendChild(div);
-  }
+    return div;
+  };
+  const groupHdr = (label) => { const h = document.createElement("div"); h.className = "rail-group"; h.textContent = label; $("rail").appendChild(h); };
+  // group "your runs" (the runs/ session records, newest-first by ULID run_id) ABOVE the stable
+  // "demos" fixtures, so accumulating session runs stay corralled + scannable (Drift watchlist fold).
+  const runs = recs.filter((r) => r.source === "run").sort((a, b) => (b.run_id || "").localeCompare(a.run_id || ""));
+  const demos = recs.filter((r) => r.source !== "run");
+  if (runs.length) { groupHdr(`your runs · ${runs.length}`); runs.forEach((r) => $("rail").appendChild(mkRec(r))); }
+  groupHdr("demos"); demos.forEach((r) => $("rail").appendChild(mkRec(r)));
+  const ordered = [...runs, ...demos];  // visual order: newest run first, else first demo
   STATE.resumable = new Set(recs.filter((r) => r.resumable).map((r) => r.name));  // paused + has a continuation
   // populate the diff selector (compare this record against another — first divergence by seq)
   const sel = $("diffsel");
@@ -75,7 +83,7 @@ async function loadRecords() {
     // honor a ?record=<name> deep-link (the Studio's "view the run in the console" lands here);
     // fall back to the first record. Only if the named record actually exists.
     const want = new URLSearchParams(location.search).get("record");
-    const target = (want && recs.some((r) => r.name === want)) ? want : (recs[0] && recs[0].name);
+    const target = (want && recs.some((r) => r.name === want)) ? want : (ordered[0] && ordered[0].name);
     if (target) selectRecord(target);
   }
 }
