@@ -478,25 +478,36 @@ $("toEnd").onclick = () => { $("seq").value = $("seq").max; $("seq").oninput({ t
 // No new time axis — the play loop just steps the same cursor the graph/stream/scene read in
 // lock-step, so replay animates every surface at once. Fixed-rate (seq/sec); original-timing via
 // the events' `t` is a later add (near-instant on the deterministic CI records).
-let _playTimer = null;
+let _raf = null, _playLast = 0, _playAccum = 0;
 function _setSeq(v) { $("seq").value = v; $("seq").oninput({ target: $("seq") }); }
 function _updatePlayBtn() { $("play").textContent = STATE.playing ? "⏸" : "▶"; $("play").classList.toggle("playing", STATE.playing); }
-function stopPlay() { if (_playTimer) { clearInterval(_playTimer); _playTimer = null; } if (STATE.playing) { STATE.playing = false; _updatePlayBtn(); } }
-function _tick() {
-  const max = +$("seq").max, next = STATE.cursor + 1;
-  if (next > max) { stopPlay(); return; }  // reached the end -> stop here
-  _setSeq(next);
+function stopPlay() { if (_raf) { cancelAnimationFrame(_raf); _raf = null; } if (STATE.playing) { STATE.playing = false; _updatePlayBtn(); } }
+// rAF loop: each frame advance the cursor by (elapsed * speed) seqs and render ONCE, so the replay
+// RATE (seq/sec) is decoupled from the render rate (~60 fps). High speeds advance several seqs per
+// frame instead of forcing a full render per seq — no longer render-bound (Drift watchlist fold).
+function _frame(ts) {
+  if (!STATE.playing) return;
+  const max = +$("seq").max;
+  if (!_playLast) _playLast = ts;
+  _playAccum += ((ts - _playLast) / 1000) * STATE.speed;  // seqs owed at the current rate
+  _playLast = ts;
+  if (_playAccum >= 1) {
+    const step = Math.floor(_playAccum);
+    _playAccum -= step;
+    const next = Math.min(max, STATE.cursor + step);
+    _setSeq(next);                                          // one render per frame, any step size
+    if (next >= max) { stopPlay(); return; }                // reached the end -> stop here
+  }
+  _raf = requestAnimationFrame(_frame);
 }
 function startPlay() {
-  if (STATE.cursor >= +$("seq").max) _setSeq(0);  // at the end -> replay from the start (rewind)
+  if (STATE.cursor >= +$("seq").max) _setSeq(0);   // at the end -> replay from the start (rewind)
   STATE.playing = true; _updatePlayBtn();
-  _playTimer = setInterval(_tick, Math.max(16, 1000 / STATE.speed));
+  _playLast = 0; _playAccum = 0;
+  _raf = requestAnimationFrame(_frame);
 }
 $("play").onclick = () => (STATE.playing ? stopPlay() : startPlay());
-$("speedsel").onchange = () => {
-  STATE.speed = +$("speedsel").value;
-  if (_playTimer) { clearInterval(_playTimer); _playTimer = setInterval(_tick, Math.max(16, 1000 / STATE.speed)); }
-};
+$("speedsel").onchange = () => { STATE.speed = +$("speedsel").value; };  // the rAF reads STATE.speed each frame
 $("seq").addEventListener("pointerdown", stopPlay);  // grabbing the slider pauses (don't fight the user)
 
 // ---------- integrated terminal: a read interface over the same record the GUI shows ----------

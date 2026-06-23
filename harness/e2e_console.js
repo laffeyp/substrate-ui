@@ -216,15 +216,16 @@ const check = (cond, msg) => { if (!cond) fails.push(msg); else console.log("  o
   const s2 = await seqNow();
   await p.waitForTimeout(500);
   check((await seqNow()) === s2, `pause holds the cursor (held at ${s2})`);
-  // play to the end: jump near the end, then play -> reaches max and STOPS (button returns to ▶).
-  // (The per-tick render() makes the top speed render-bound, so we play a short tail, not the whole run.)
-  await p.evaluate((m) => { const s = document.getElementById("seq"); s.value = Math.max(0, m - 20); s.oninput({ target: s }); const sp = document.getElementById("speedsel"); sp.value = "60"; sp.onchange(); document.getElementById("play").click(); }, sMax);
-  await p.waitForTimeout(1800);
+  // play to the end at TOP speed: rAF decouples advance-rate from render-rate, so 480/s reaches the
+  // end of a 200-seq tail fast — the old per-tick-render loop (~60/s) could NOT finish 200 seqs in
+  // this window, so reaching max here proves the decoupling, not just that play stops at the end.
+  await p.evaluate((m) => { const s = document.getElementById("seq"); s.value = Math.max(0, m - 200); s.oninput({ target: s }); const sp = document.getElementById("speedsel"); sp.value = "480"; sp.onchange(); document.getElementById("play").click(); }, sMax);
+  await p.waitForTimeout(1500);
   const sEnd = await seqNow();
-  check(sEnd === sMax, `play stops at the end (seq ${sEnd} == max ${sMax})`);
+  check(sEnd === sMax, `top-speed play clears a 200-seq tail and stops at the end (seq ${sEnd} == max ${sMax}); rAF-decoupled, not render-bound`);
   check(/▶/.test(await p.$eval("#play", (e) => e.textContent)), "at the end the play button returns to ▶");
-  // replay from the end -> clicking play rewinds to ~0 and advances
-  await p.evaluate(() => document.getElementById("play").click());
+  // replay from the end -> clicking play rewinds to ~0 and advances (slow speed so it stays near 0)
+  await p.evaluate(() => { const sp = document.getElementById("speedsel"); sp.value = "30"; sp.onchange(); document.getElementById("play").click(); });
   await p.waitForTimeout(450);
   const sReplay = await seqNow();
   check(sReplay > 0 && sReplay < Math.floor(sMax / 2), `replay from the end rewinds to ~0 and advances (seq ${sReplay})`);
