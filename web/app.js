@@ -324,8 +324,10 @@ function renderTopology() {
 // Opt-in by SHAPE, not by app code: the first event-payload field that is a 2-D numeric array
 // (e.g. game_of_life's Generation.grid) becomes the scene. Cursor-driven — the latest frame at or
 // before the cursor — so scrubbing animates the generations in lock-step. A lens, never run-state.
-const isGrid = (v) => Array.isArray(v) && v.length > 0 &&
-  v.every((r) => Array.isArray(r) && r.length > 0 && r.every((c) => typeof c === "number"));
+// requires RECTANGULAR rows (every row the same length) so a ragged matrix can't slip in and
+// misrender, and a stricter shape lowers the chance an incidental 2-D numeric payload hijacks the tab.
+const isGrid = (v) => Array.isArray(v) && v.length > 0 && Array.isArray(v[0]) && v[0].length > 0 &&
+  v.every((r) => Array.isArray(r) && r.length === v[0].length && r.every((c) => typeof c === "number"));
 
 function findGrids(events) {
   let field = null, kind = null;
@@ -365,7 +367,7 @@ function renderScene() {
     <div class="scene-cap">scene · <b>${escapeHtml(sc.kind)}.${escapeHtml(sc.field)}</b>
       <span class="dim">seq ${frame.seq} · ${rows}×${cols} · frame ${sc.frames.indexOf(frame) + 1}/${sc.frames.length}</span> ${scalars}</div>
     <div class="scene-grid" style="grid-template-columns:repeat(${cols},1fr)">${cells}</div>
-    <div class="scene-hint dim">the shared world-state at this seq — scrub the cursor to step the run</div>`;
+    <div class="scene-hint dim">the shared world-state at this seq — scrub the cursor to move through the run</div>`;
 }
 
 // ---------- event stream: seq-cited, colored, cursor-truncated ----------

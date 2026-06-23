@@ -8,7 +8,8 @@
     "e2e:studio": "node harness/e2e_studio.js",
     "capture": "node harness/capture_console.js",
     "capture:states": "node harness/capture_states.js",
-    "capture:studio": "node harness/capture_studio.js"
+    "capture:studio": "node harness/capture_studio.js",
+    "capture:scene": "node harness/capture_scene.js"
   },
   "devDependencies": {
     "playwright": "^1.49.0"

@@ -100,4 +100,20 @@
 
 ---
 
-*KIT_DIARY.md for substrate-ui. Six entries. Six hypotheses, five confirmed (missing ledger cost an untested seam; un-scoped tooling makes the contract skippable; the perceptual track catches what DOM can't; running the full discipline removes the need for Architect catches) + one tentative (the shape-driven scene panel extends the lens without coupling). The diary starts where formal discipline starts — the review-#39 retrofit — not at the project's true beginning, by ruling.*
+### 2026-06-22 — Deterministic pixel anchors: making the perceptual track mechanical (how the LLM "sees")
+
+**What happened.** Review #49 caught the scene's structural assertions riding outside CI (in `capture_scene.js`, not the gated `e2e`); folded that into `e2e_console.js`. Then the Architect pushed on the perceptual track: don't eyeball the screenshot — use the SDD visual-verification technique (deterministic pixel anchors) so the agent reads decoded STATE. Rebuilt `capture_scene.js` to screenshot the rendered grid, decode the PNG pixels (Node `zlib`, no deps) at each cell's known coordinate, classify alive/dead, reconstruct the grid, and assert it equals the record's `Generation.grid` — emitting the decoded grid as a signal.
+
+**What worked.**
+- **The decode is strictly higher-fidelity than viewing the PNG.** For a vision-model judge, eyeballing a screenshot is lossy and subjective; checking the `.on` class proves the DOM, not the paint. Decoding the actual rendered pixels at known coordinates and asserting against ground truth proves the thing on screen IS the data — catching a CSS/color/layout regression a class-check would miss. The agent "sees" by reading a decoded state snapshot (`..#..` / `.###.` ASCII + `match=true`), which is a signal, not an image.
+- **The visualization was already a deterministic anchor.** The scene grid paints green-at-a-known-coordinate per the data; that IS the technique's "deterministic pixel colors at known coordinates." The decoder is the other half — no instrumentation change was needed, the render was already legible to a decoder; it just needed one written.
+- **Two-track stayed intact, sharper.** The decode is the mechanical (deterministic-judgment) half; the PNGs remain for the polish look (vision-model-judge half). Both, as the technique says — the decode does not replace the look.
+
+**What this says about the next kit version.**
+13. For any visual whose meaning is decodable state (a grid, a board, a chart with known anchors), the perceptual observation contract should DECODE the rendered pixels and assert against ground truth — not stop at "captured and viewed." "Viewed" is the polish check; "decoded" is the state check, and a vision-model judge eyeballing a PNG is the weaker of the two where the state is mechanically recoverable. Make the perceptual contract name BOTH (decode + look) for decodable visuals.
+
+| H7 | Decoding the rendered pixels at known coordinates and asserting against ground truth is higher-fidelity visual verification than a vision-model judge eyeballing the screenshot, for any visual whose state is mechanically recoverable. | tentative-confirmed | The scene decode reconstructs the blinker (vertical/horizontal/vertical) from the actual screenshot pixels and matches the record grid cell-for-cell; a color/layout regression a `.on`-class check passes would be caught here. One surface, one data point. |
+
+---
+
+*KIT_DIARY.md for substrate-ui. Seven entries. Seven hypotheses, five confirmed (missing ledger cost an untested seam; un-scoped tooling makes the contract skippable; the perceptual track catches what DOM can't; running the full discipline removes the need for Architect catches) + two tentative (the shape-driven scene panel extends the lens without coupling; decoding rendered pixels beats eyeballing for recoverable state). The diary starts where formal discipline starts — the review-#39 retrofit — not at the project's true beginning, by ruling.*
