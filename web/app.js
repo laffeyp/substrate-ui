@@ -37,7 +37,7 @@ function gist(ev) {
   return "";
 }
 
-let STATE = { name: null, events: [], graph: null, summary: null, manifest: null, topology: null, cursor: 0, sel: null, mode: "read", graphView: "run", live: null, resumable: new Set() };
+let STATE = { name: null, events: [], graph: null, summary: null, manifest: null, topology: null, scene: null, cursor: 0, sel: null, mode: "read", graphView: "run", live: null, resumable: new Set() };
 
 // ---------- record rail ----------
 async function loadRecords() {
@@ -115,7 +115,7 @@ async function followLive(name) {
       api(`/api/records/${name}/run_graph`), api(`/api/records/${name}`), api(`/api/records/${name}/summary`),
     ]);
     if (STATE.name !== name) return;
-    STATE.graph = g; STATE.events = full.events; STATE.summary = summary;
+    STATE.graph = g; STATE.events = full.events; STATE.summary = summary; updateScene();
     const maxSeq = STATE.events.length ? STATE.events[STATE.events.length - 1].seq : 0;
     // follow the tail ONLY if the user is already at it; if they scrubbed back to inspect an earlier
     // seq during a live run, don't yank the cursor forward under them every 400ms (ui-frontend-5).
@@ -178,6 +178,7 @@ async function selectRecord(name) {
   // verdict flickers a false "NOT CLEAN" (review #38, obs b; mirrors followLive's guard).
   if (STATE.name !== name) return;
   STATE.events = full.events; STATE.manifest = full.manifest; STATE.graph = graph; STATE.summary = summary; STATE.topology = topology;
+  updateScene();
   const maxSeq = STATE.events.length ? STATE.events[STATE.events.length - 1].seq : 0;
   STATE.cursor = maxSeq;
   $("seq").max = maxSeq; $("seq").value = maxSeq; $("seqmax").textContent = maxSeq; $("seqnow").textContent = maxSeq;
@@ -214,7 +215,10 @@ function render() {
   else {
     $("gvRun").classList.toggle("active", STATE.graphView === "run");
     $("gvTopo").classList.toggle("active", STATE.graphView === "topo");
-    if (STATE.graphView === "topo") renderTopology(); else renderGraph();
+    $("gvScene").classList.toggle("active", STATE.graphView === "scene");
+    if (STATE.graphView === "topo") renderTopology();
+    else if (STATE.graphView === "scene") renderScene();
+    else renderGraph();
     renderStream();
   }
   renderHealth();
@@ -316,6 +320,54 @@ function renderTopology() {
     <div class="grp">termination policy</div>${term}</div>`;
 }
 
+// ---------- scene: a domain-visual view of a renderable payload shape (§7.1, read-only) ----------
+// Opt-in by SHAPE, not by app code: the first event-payload field that is a 2-D numeric array
+// (e.g. game_of_life's Generation.grid) becomes the scene. Cursor-driven — the latest frame at or
+// before the cursor — so scrubbing animates the generations in lock-step. A lens, never run-state.
+const isGrid = (v) => Array.isArray(v) && v.length > 0 &&
+  v.every((r) => Array.isArray(r) && r.length > 0 && r.every((c) => typeof c === "number"));
+
+function findGrids(events) {
+  let field = null, kind = null;
+  for (const e of events) {
+    for (const [k, v] of Object.entries(e.payload || {})) { if (isGrid(v)) { field = k; kind = e.kind; break; } }
+    if (field) break;
+  }
+  if (!field) return null;
+  const frames = events.filter((e) => e.kind === kind && isGrid((e.payload || {})[field]))
+    .map((e) => ({
+      seq: e.seq, grid: e.payload[field],
+      scalars: Object.entries(e.payload).filter(([k, v]) => k !== field &&
+        (typeof v === "number" || typeof v === "string" || typeof v === "boolean")),
+    }));
+  return { field, kind, frames };
+}
+
+// recomputed per record (selectRecord) and per live poll (followLive); shows/hides the scene tab.
+function updateScene() {
+  STATE.scene = findGrids(STATE.events);
+  const tab = $("gvScene");
+  if (tab) tab.style.display = STATE.scene ? "" : "none";
+  if (!STATE.scene && STATE.graphView === "scene") STATE.graphView = "run";
+}
+
+function renderScene() {
+  const sc = STATE.scene;
+  if (!sc) { $("graph").innerHTML = `<div class="scene-cap dim">No renderable shape in this record.</div>`; return; }
+  const cur = STATE.cursor;
+  const shown = sc.frames.filter((f) => f.seq <= cur);
+  const frame = shown.length ? shown[shown.length - 1] : null;
+  if (!frame) { $("graph").innerHTML = `<div class="scene-cap dim">No <b>${escapeHtml(sc.kind)}</b> yet at seq ${cur} — scrub forward.</div>`; return; }
+  const rows = frame.grid.length, cols = frame.grid[0].length;
+  const cells = frame.grid.map((row) => row.map((c) => `<div class="cell ${c ? "on" : ""}"></div>`).join("")).join("");
+  const scalars = frame.scalars.map(([k, v]) => `<span class="sv">${escapeHtml(k)}=<b>${escapeHtml(v)}</b></span>`).join("");
+  $("graph").innerHTML = `
+    <div class="scene-cap">scene · <b>${escapeHtml(sc.kind)}.${escapeHtml(sc.field)}</b>
+      <span class="dim">seq ${frame.seq} · ${rows}×${cols} · frame ${sc.frames.indexOf(frame) + 1}/${sc.frames.length}</span> ${scalars}</div>
+    <div class="scene-grid" style="grid-template-columns:repeat(${cols},1fr)">${cells}</div>
+    <div class="scene-hint dim">the shared world-state at this seq — scrub the cursor to step the run</div>`;
+}
+
 // ---------- event stream: seq-cited, colored, cursor-truncated ----------
 function renderStream() {
   const cur = STATE.cursor;
@@ -387,6 +439,7 @@ const escapeHtml = (s) =>
 $("modeToggle").onclick = () => { STATE.mode = STATE.mode === "io" ? "read" : "io"; render(); };
 $("gvRun").onclick = () => { if (STATE.graphView !== "run") { STATE.graphView = "run"; render(); } };
 $("gvTopo").onclick = () => { if (STATE.graphView !== "topo") { STATE.graphView = "topo"; render(); } };
+$("gvScene").onclick = () => { if (STATE.graphView !== "scene") { STATE.graphView = "scene"; render(); } };
 $("seq").oninput = (e) => { STATE.cursor = +e.target.value; $("seqnow").textContent = STATE.cursor; render(); };
 $("toStart").onclick = () => { $("seq").value = 0; $("seq").oninput({ target: $("seq") }); };
 $("toEnd").onclick = () => { $("seq").value = $("seq").max; $("seq").oninput({ target: $("seq") }); };

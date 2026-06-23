@@ -83,4 +83,21 @@
 
 ---
 
-*KIT_DIARY.md for substrate-ui. Five entries. Five hypotheses, four confirmed (missing ledger cost an untested seam; un-scoped tooling makes the contract skippable; the perceptual track catches what DOM can't; running the full discipline removes the need for Architect catches). The diary starts where formal discipline starts — the review-#39 retrofit — not at the project's true beginning, by ruling.*
+### 2026-06-22 — The scene panel: a generic domain-visual surface for the lens
+
+**What happened.** `game_of_life` (built in the parent substrate repo) exposed a gap the console's generic panels can't fill: its output is a grid that *means* a board of cells, and the run-as-graph / event stream render the substrate's shape, not the domain's. Built a third graph view, "scene", that detects a renderable payload shape (a 2-D numeric array) and renders it as a cursor-driven cell grid — opt-in by shape, no per-app code, read-only over the record's events. Verified both tracks: structural (tab shows/hides by shape, 25 cells, 3 live) + perceptual (viewed three frames; the blinker oscillates vertical -> horizontal -> vertical).
+
+**What worked.**
+- **"Opt-in by shape, not app code" kept the lens contract intact.** The temptation for a custom-visual panel is a per-app renderer — which couples the UI to the application. Detecting a generic shape (a 2-D numeric array) instead means the panel reads only the record's public events, declares nothing about semantics, and changes no run — still a lens. One detector covers game_of_life today and any board / heatmap / matrix topology tomorrow.
+- **Reusing the one-cursor architecture made the animation free.** The hard part of a visual — a time axis — already existed: the seq-cursor that drives the graph + stream. Hanging the scene on it meant scrubbing animates the generations with zero new machinery, in lock-step with the other panels. A new surface that composes with the existing invariant rather than adding its own.
+- **The perceptual track did the load-bearing verification, exactly as the discipline says.** The structural assertions (25 cells, 3 live) prove the wiring; they do NOT prove the blinker oscillates — three frames each with 3 live cells are structurally identical. Only LOOKING (vertical -> horizontal -> vertical) confirmed the thing works. A domain-visual surface is the purest case for why the perceptual track is non-optional.
+
+**What this says about the next kit version.**
+11. For a runtime whose demos emit domain artifacts (a grid, a board, a waveform), a generic SHAPE-DRIVEN viewer (detect a known payload shape -> render it, read-only, driven by the existing cursor) extends a lens-style console without breaking the lens contract — no per-app code, no semantic claims. Name this as the pattern for "custom visual output" so a per-app plugin (which couples) is not the default reach.
+12. The perceptual track is most load-bearing exactly where the structural track is weakest: when the domain meaning is positional, structurally-identical frames (same cell count) carry different meaning (different positions). A surface whose correctness is positional CANNOT be closed on counts/structure alone — looking is not optional, it is the only thing that checks the actual claim.
+
+| H6 | A generic shape-driven scene panel (detect a 2-D numeric payload field -> render, read-only, cursor-driven) gives a lens-style console custom visual output without per-app code or a breach of the lens contract. | tentative-confirmed | This session: game_of_life's Generation.grid renders + animates correctly via one shape detector; the tab hides for no-grid records; no backend change, no semantic coupling. One topology, one data point. |
+
+---
+
+*KIT_DIARY.md for substrate-ui. Six entries. Six hypotheses, five confirmed (missing ledger cost an untested seam; un-scoped tooling makes the contract skippable; the perceptual track catches what DOM can't; running the full discipline removes the need for Architect catches) + one tentative (the shape-driven scene panel extends the lens without coupling). The diary starts where formal discipline starts — the review-#39 retrofit — not at the project's true beginning, by ruling.*
