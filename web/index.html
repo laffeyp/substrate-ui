@@ -45,6 +45,9 @@ button{font-family:inherit;color:inherit;cursor:pointer;background:none;border:n
 .btn{ border:1px solid var(--line2); border-radius:6px; padding:3px 9px; font-size:12px; color:var(--tx-dim); }
 .btn:hover{ border-color:var(--line3); color:var(--tx); }
 #diffsel{ background:var(--panel); border:1px solid var(--line2); border-radius:6px; padding:3px 7px; color:var(--tx-dim); font-size:11px; }
+#play{ min-width:30px; text-align:center; }
+#play.playing{ color:var(--green); border-color:var(--green); }
+#speedsel{ background:var(--panel); border:1px solid var(--line2); border-radius:6px; padding:3px 6px; color:var(--tx-dim); font-size:11px; }
 .diff-hi{ color:var(--amber); } .diff-eq{ color:var(--green); }
 
 /* body grid */
@@ -150,10 +153,17 @@ button{font-family:inherit;color:inherit;cursor:pointer;background:none;border:n
     <button class="btn" id="resumebtn" title="feed the awaited input and resume this paused run" style="display:none">▶ resume</button>
   </div>
   <div class="cursor">
-    <button class="btn" id="toStart">⏮</button>
+    <button class="btn" id="toStart" title="jump to the start">⏮</button>
+    <button class="btn" id="play" title="replay the run (play / pause); at the end, replays from the start">▶</button>
     <input type="range" id="seq" min="0" max="0" value="0" />
     <span class="seq">seq <b id="seqnow">0</b> / <span id="seqmax">0</span></span>
-    <button class="btn" id="toEnd">⏭</button>
+    <button class="btn" id="toEnd" title="jump to the end">⏭</button>
+    <select class="btn" id="speedsel" title="replay speed (seq per second)">
+      <option value="8">8/s</option>
+      <option value="24">24/s</option>
+      <option value="80" selected>80/s</option>
+      <option value="240">240/s</option>
+    </select>
   </div>
   <div class="body">
     <div class="col"><div class="col-h">run records</div>

@@ -188,6 +188,39 @@ const check = (cond, msg) => { if (!cond) fails.push(msg); else console.log("  o
   const sceneHidden = await p.$eval("#gvScene", (e) => getComputedStyle(e).display === "none");
   check(sceneHidden, "scene tab hidden for code_review (no renderable 2-D grid shape)");
 
+  // 14) replay Transport (sprint 009): play advances the cursor through the run; pause holds it;
+  // reaching the end stops; replaying from the end rewinds to 0. Read the cursor STATE (#seqnow) as
+  // the signal — the cursor value IS the replay position, not the animation.
+  await selectRec("game_of_life");
+  await p.waitForTimeout(300);
+  await p.evaluate(() => { const s = document.getElementById("seq"); s.value = 0; s.oninput({ target: s }); });
+  const seqNow = () => p.$eval("#seqnow", (e) => +e.textContent);
+  const sMax = await p.$eval("#seqmax", (e) => +e.textContent);
+  const s0 = await seqNow();
+  await p.evaluate(() => document.getElementById("play").click());   // play
+  await p.waitForTimeout(700);
+  const s1 = await seqNow();
+  check(s1 > s0, `play advances the cursor through the run (#seqnow ${s0} -> ${s1})`);
+  check(/⏸/.test(await p.$eval("#play", (e) => e.textContent)), "play button shows pause (⏸) while playing");
+  await p.evaluate(() => document.getElementById("play").click());   // pause
+  await p.waitForTimeout(150);
+  const s2 = await seqNow();
+  await p.waitForTimeout(500);
+  check((await seqNow()) === s2, `pause holds the cursor (held at ${s2})`);
+  // play to the end: jump near the end, then play -> reaches max and STOPS (button returns to ▶).
+  // (The per-tick render() makes the top speed render-bound, so we play a short tail, not the whole run.)
+  await p.evaluate((m) => { const s = document.getElementById("seq"); s.value = Math.max(0, m - 20); s.oninput({ target: s }); const sp = document.getElementById("speedsel"); sp.value = "80"; sp.onchange(); document.getElementById("play").click(); }, sMax);
+  await p.waitForTimeout(1800);
+  const sEnd = await seqNow();
+  check(sEnd === sMax, `play stops at the end (seq ${sEnd} == max ${sMax})`);
+  check(/▶/.test(await p.$eval("#play", (e) => e.textContent)), "at the end the play button returns to ▶");
+  // replay from the end -> clicking play rewinds to ~0 and advances
+  await p.evaluate(() => document.getElementById("play").click());
+  await p.waitForTimeout(450);
+  const sReplay = await seqNow();
+  check(sReplay > 0 && sReplay < Math.floor(sMax / 2), `replay from the end rewinds to ~0 and advances (seq ${sReplay})`);
+  await p.evaluate(() => document.getElementById("play").click());   // stop
+
   await b.close();
   if (fails.length) { console.error("\nFAILED:\n  - " + fails.join("\n  - ")); process.exit(1); }
   console.log("\nE2E PASS — the live console renders the real backend, §7 honored.");
