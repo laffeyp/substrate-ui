@@ -131,6 +131,7 @@ def _records_index() -> list[dict[str, object]]:
     """The record list for the rail: each record's real run-level status + a one-glance summary
     (so a broken/paused run is flagged in the list itself — §7.2)."""
     out: list[dict[str, object]] = []
+    _demo_names = set(bundled.names())  # bundled = committed demos; everything under runs/ is a session run
     for name in _record_names():
         path = _record_path(name)
         if path is None:
@@ -156,6 +157,7 @@ def _records_index() -> list[dict[str, object]]:
                 + s.predicate_quarantines
                 + s.invalid_emissions,
                 "application_events": s.application_events,
+                "source": "demo" if name in _demo_names else "run",
             }
         )
     return out

@@ -28,6 +28,10 @@ const check = (cond, msg) => { if (!cond) fails.push(msg); else console.log("  o
   check(errors.length === 0, "no console/page errors (" + errors.slice(0, 2).join("; ") + ")");
   const recCount = await p.$$eval(".rec", (e) => e.length);
   check(recCount >= 9, `record rail shows the bundled records (${recCount} >= 9)`);
+  // the rail groups demos vs your-runs (Drift watchlist fold): a "demos" header + a "your runs"
+  // header (runs/ session records, newest-first), so accumulating runs stay corralled + scannable.
+  const groups = await p.$$eval(".rail-group", (els) => els.map((e) => e.textContent.trim()));
+  check(groups.some((g) => /^demos$/i.test(g)) && groups.some((g) => /your runs/i.test(g)), `rail groups demos vs your-runs (${groups.join(" | ")})`);
 
   // 2) select code_review -> the run-as-graph renders 6 instances + the spawn-cohort band (§7.3)
   await p.evaluate(() => [...document.querySelectorAll(".rec")].find((e) => /code_review/.test(e.textContent)).click());
