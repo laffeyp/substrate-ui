@@ -165,6 +165,41 @@ button{font-family:inherit;color:inherit;cursor:pointer;background:none;border:n
 .term-input-row{ display:flex; align-items:center; gap:8px; padding:6px 14px; border-top:1px solid var(--line); }
 .term-prompt{ color:var(--green); font-size:12px; white-space:nowrap; }
 .term-input{ flex:1; background:none; border:none; outline:none; color:var(--tx); font-family:var(--mono); font-size:12px; }
+
+/* assay — the arm matrix: many records (arms × cases × trials) read as one A/B (sprint 014) */
+.assay{ padding:11px 14px; border-bottom:1px solid var(--line); cursor:pointer; }
+.assay:hover{ background:var(--panel); } .assay.sel{ background:var(--panel2); box-shadow:inset 2px 0 var(--violet); }
+.assay .nm{ font-weight:600; } .assay .meta{ font-size:11px; color:var(--tx-faint); margin-top:2px; }
+.assay .dot{ float:right; width:8px; height:8px; border-radius:50%; margin-top:4px; background:var(--violet); }
+.am{ padding:16px; overflow:auto; }
+.am-prov{ display:flex; gap:18px; flex-wrap:wrap; font-size:11px; color:var(--tx-faint); margin-bottom:16px; padding-bottom:12px; border-bottom:1px solid var(--line); }
+.am-prov b{ color:var(--tx-dim); font-weight:600; } .am-prov .fp{ color:var(--violet); }
+.am table{ width:100%; border-collapse:collapse; font-size:12px; }
+.am th{ text-align:left; color:var(--tx-faint); font-size:10px; letter-spacing:.07em; text-transform:uppercase; padding:7px 10px; border-bottom:1px solid var(--line2); font-weight:500; white-space:nowrap; }
+.am td{ padding:10px; border-bottom:1px solid var(--line); vertical-align:middle; font-variant-numeric:tabular-nums; }
+.am tr.control td{ color:var(--tx); } .am tr.control .arm-nm::after{ content:" · the bar"; color:var(--cyan); font-size:10px; font-weight:400; }
+.am .arm-nm{ font-weight:600; } .am .role{ font-size:10px; color:var(--tx-ghost); margin-left:4px; }
+.am .rel{ display:flex; align-items:center; gap:8px; }
+.am .relbar{ width:60px; height:6px; border-radius:3px; background:var(--bg2); overflow:hidden; flex:0 0 60px; }
+.am .relbar i{ display:block; height:100%; background:var(--green); }
+.am .flake{ color:var(--amber); }
+.am .ci{ color:var(--tx-faint); font-size:11px; }
+.am .v-inferior{ color:var(--red); font-weight:600; } .am .v-equivalent{ color:var(--green); font-weight:600; }
+.am .v-superior{ color:var(--blue); font-weight:600; } .am .v-inconclusive{ color:var(--amber); font-weight:600; }
+.am .v-underpowered{ color:var(--amber); font-weight:600; }
+.am .sig{ font-size:10px; color:var(--tx-faint); margin-left:5px; }
+.am-note{ margin-top:18px; padding:13px 15px; background:var(--bg2); border-left:2px solid var(--violet); border-radius:6px; font-size:12.5px; color:var(--tx-dim); line-height:1.7; max-width:780px; }
+.am-note b{ color:var(--tx); } .am-note .ln{ display:block; margin:5px 0; }
+.am .hdr-sub{ display:block; font-size:9.5px; color:var(--tx-ghost); font-weight:400; text-transform:none; letter-spacing:0; margin-top:3px; }
+/* a plain word with the precise term tucked behind a hover/click definition (dotted underline = ask me) */
+.am .term, .am-note .term{ border-bottom:1px dotted var(--tx-faint); cursor:help; position:relative; }
+.am .term:hover, .am-note .term:hover, .term.pin{ border-bottom-color:var(--cyan); }
+.am .term:hover::after, .am-note .term:hover::after, .term.pin::after{
+  content:attr(data-def); position:absolute; left:0; bottom:150%; z-index:30; width:268px; padding:9px 11px;
+  background:var(--raised); border:1px solid var(--line3); border-radius:8px; font-family:var(--mono);
+  font-size:11px; line-height:1.55; color:var(--tx-dim); white-space:normal; text-transform:none;
+  letter-spacing:0; font-weight:400; box-shadow:0 8px 28px rgba(0,0,0,.55); pointer-events:none; }
+.term.pin{ color:var(--cyan); }
 </style>
 </head>
 <body>
@@ -200,6 +235,7 @@ button{font-family:inherit;color:inherit;cursor:pointer;background:none;border:n
       <div id="readpane"><div class="col-h">topology · <span class="gv active" id="gvRun">run-as-graph</span> · <span class="gv" id="gvTopo">structure</span><span class="gv" id="gvScene" style="display:none"> · scene</span></div><div class="graph" id="graph"></div>
         <div class="col-h" style="border-top:1px solid var(--line)">bus · event stream</div><div id="stream"></div></div>
       <div id="iopane" style="display:none"></div>
+      <div id="assaypane" style="display:none"></div>
     </div>
     <div class="col"><div class="col-h">inspector</div><div class="insp" id="insp"><span class="dim">Select an event or a Producer to trace its provenance.</span></div></div>
   </div>
