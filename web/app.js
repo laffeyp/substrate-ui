@@ -168,6 +168,7 @@ function renderAssayFrom(d) {
     ${m.weak_models ? `<span>challengers use: ${e(m.weak_models.join(", "))}</span>` : ""}
     <span>${N} problems${m.trials ? ` × ${m.trials} tries each` : ""}</span>
     ${m.config_fp ? `<span>run <span class="fp">${e(m.config_fp)}</span></span>` : ""}
+    <span>provenance: <b class="${m._provenance === "tampered" ? "k-failure" : m._provenance === "verified" ? "diff-eq" : "dim"}">${_term(m._provenance || "unverified", "verified = the recorded settings (margin, models) are cryptographically tied to this run, so nobody edited them afterward. tampered = the settings were changed after the run — do NOT trust the verdict. unverified = an older run with no fingerprint to check.")}</b></span>
     <span>every approach actually ran: <b class="${ran ? "diff-eq" : "k-failure"}">${ran ? "yes" : e(r.control_check.state)}</b></span></div>`;
   const rows = r.arms.map((a) => {
     const ctl = a.arm === r.control_arm;
