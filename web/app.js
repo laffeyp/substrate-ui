@@ -37,7 +37,7 @@ function gist(ev) {
   return "";
 }
 
-let STATE = { name: null, events: [], graph: null, summary: null, manifest: null, topology: null, scene: null, cursor: 0, playing: false, speed: 30, term: { open: false, lines: [], history: [], hi: -1 }, sel: null, mode: "read", graphView: "run", live: null, resumable: new Set() };
+let STATE = { name: null, events: [], graph: null, summary: null, manifest: null, topology: null, scene: null, cursor: 0, playing: false, speed: 30, term: { open: false, lines: [], history: [], hi: -1 }, sel: null, mode: "read", graphView: "run", live: null, resumable: new Set(), assay: null, assays: [], assayReport: null };
 
 // the time dimension alongside the order: seq is the order (no time), t the time (no order). Show
 // t RELATIVE to the run's start (events[0] = RunStarted) — ~0 on the deterministic CI demos (they
@@ -99,6 +99,109 @@ async function loadRecords() {
     const target = (want && recs.some((r) => r.name === want)) ? want : (ordered[0] && ordered[0].name);
     if (target) selectRecord(target);
   }
+}
+
+// ---------- assays: many records (arms × cases × trials) read as ONE arm comparison ----------
+// A different ALTITUDE than the per-run console. Read-only projection of /api/assays + /api/assay/<name>
+// (the same build_report the CLI prints). The review's invariants are DISPLAY RULES here: both
+// currencies always rendered (no metric-splice possible), the margin-verdict colored + distinct from
+// "significantly worse", null shown as "—", provenance pinned.
+async function loadAssays() {
+  const assays = await api("/api/assays").catch(() => []);
+  STATE.assays = assays;
+  if (!assays.length) return;
+  const rail = $("rail");
+  const grp = document.createElement("div");
+  grp.className = "rail-group";
+  grp.textContent = `assays · ${assays.length}`;
+  rail.insertBefore(grp, rail.firstChild);
+  assays.slice().reverse().forEach((a) => {  // newest visual position just under the group header
+    const div = document.createElement("div");
+    div.className = "assay";
+    div.dataset.name = a.name;
+    const models = a.strong_model ? `${a.strong_model} vs ${(a.weak_models || []).length} weak` : `${a.arms.length} arms`;
+    div.innerHTML = `<span class="dot"></span><div class="nm">${escapeHtml(a.name)}</div>
+      <div class="meta">${escapeHtml(models)} · ${a.n_cells} cells</div>`;
+    div.onclick = () => selectAssay(a.name);
+    rail.insertBefore(div, grp.nextSibling);
+  });
+}
+
+async function selectAssay(name) {
+  stopPlay();
+  STATE.live = null; STATE.name = null; STATE.mode = "assay"; STATE.assay = name; STATE.assayReport = null;
+  document.querySelectorAll(".rec").forEach((e) => e.classList.remove("sel"));
+  document.querySelectorAll(".assay").forEach((e) => e.classList.toggle("sel", e.dataset.name === name));
+  $("runname").textContent = name; $("runid").textContent = "";
+  $("assaypane").innerHTML = `<div class="col-h">assay · arm matrix — ${escapeHtml(name)}</div><div class="am dim">reading ${escapeHtml(name)}…</div>`;
+  render();  // flips the chrome to assay mode immediately
+  const d = await api(`/api/assay/${encodeURIComponent(name)}`).catch(() => ({ error: "fetch failed" }));
+  if (STATE.assay !== name) return;  // switched while the fetch was in flight (mirrors selectRecord's guard)
+  STATE.assayReport = d;
+  render();
+}
+
+const _fmtD = (v) => (v == null ? "—" : (v >= 0 ? "+" : "") + v.toFixed(3));
+const _pct = (v) => Math.round(v * 100) + "%";
+const _pctD = (v) => (v == null ? "—" : (v >= 0 ? "+" : "−") + Math.round(Math.abs(v) * 100) + " pts");
+// a plain word with the precise term tucked behind a hover/click definition (dotted underline = ask me).
+const _term = (word, def) => `<span class="term" data-def="${escapeHtml(def)}">${escapeHtml(word)}</span>`;
+// the four statistical verdicts, said in plain English (the stats name stays in the hover definition).
+const VERDICT = {
+  inferior: ["worse", "We're confident this is behind the bar by a meaningful amount. (stats: 'inferior')"],
+  equivalent: ["as good as", "Enough data to actually rule out a meaningful gap — a real tie, not just 'no result'. (stats: 'equivalent')"],
+  underpowered: ["can't claim a tie yet", "The gap looks small enough to be a tie, BUT there aren't enough problems to claim it at this margin — you'd need more runs. This is the honest brake on declaring 'as good as' too early. (stats: 'underpowered')"],
+  inconclusive: ["can't tell yet", "Not enough data to call it either way — the result straddles the line. (stats: 'inconclusive')"],
+  superior: ["better", "We're confident this is ahead of the bar. (stats: 'superior')"],
+};
+
+function renderAssayFrom(d) {
+  if (!d) return;
+  if (d.error) { $("assaypane").innerHTML = `<div class="col-h">assay · arm matrix</div><div class="am"><span class="dim">${escapeHtml(d.error)}</span></div>`; return; }
+  const r = d.report, m = d.meta || {}, e = escapeHtml;
+  const N = r.arms.length ? r.arms[0].n_cases : 0;
+  const tries = m.trials ? `${m.trials} tries` : "every try";
+  const ran = r.control_check.state === "pass";
+  const prov = `<div class="am-prov">
+    <span><b>${e(r.suite)}</b> — comparing ways to write code</span>
+    <span>the bar to beat: <b>${e(m.strong_model || r.control_arm)}</b></span>
+    ${m.weak_models ? `<span>challengers use: ${e(m.weak_models.join(", "))}</span>` : ""}
+    <span>${N} problems${m.trials ? ` × ${m.trials} tries each` : ""}</span>
+    ${m.config_fp ? `<span>run <span class="fp">${e(m.config_fp)}</span></span>` : ""}
+    <span>every approach actually ran: <b class="${ran ? "diff-eq" : "k-failure"}">${ran ? "yes" : e(r.control_check.state)}</b></span></div>`;
+  const rows = r.arms.map((a) => {
+    const ctl = a.arm === r.control_arm;
+    const incomplete = !ctl && a.complete === false;  // didn't grade every problem -> no verdict (the gate)
+    const flake = a.pass_at_1 - a.pass_rate;
+    let verdict = "—";
+    if (a.equivalence && VERDICT[a.equivalence]) { const [w, def] = VERDICT[a.equivalence]; verdict = `<span class="v-${e(a.equivalence)}">${_term(w, def)}</span>`; }
+    const gapRel = a.delta_vs_control == null ? "—"
+      : `${_pctD(a.delta_vs_control)}${a.p_value != null && a.p_value < 0.05 ? ` ${_term("real", `Unlikely to be luck — the gap is statistically significant (McNemar test, p=${a.p_value.toFixed(3)}).`)}` : a.p_value != null ? ` <span class="dim">(maybe luck)</span>` : ""}`;
+    const gapAtt = a.delta_pass_k == null ? "—"
+      : `${_pctD(a.delta_pass_k)} ${a.ci_low != null ? _term("± range", `We're 95% sure the true gap is between ${_pctD(a.ci_low)} and ${_pctD(a.ci_high)} (the confidence interval).`) : ""} ${verdict}`;
+    const stillRunning = `<span class="dim">${_term("still running — no verdict", "This approach hasn't finished every problem yet. We never show a verdict off a partial run — a half-finished sweep could look better (or worse) than it really is.")}</span>`;
+    return `<tr class="${ctl ? "control" : ""}" data-arm="${e(a.arm)}">
+      <td><span class="arm-nm">${e(a.arm)}</span></td>
+      <td><div class="rel"><span>${a.passes}/${a.n_cases}</span><span class="relbar"><i style="width:${Math.round(a.pass_rate * 100)}%"></i></span><span class="dim">${_pct(a.pass_rate)}</span></div></td>
+      <td>${_pct(a.pass_at_1)}</td>
+      <td class="flake">${flake > 0.005 ? "−" + Math.round(flake * 100) + " pts" : "—"}</td>
+      ${incomplete ? `<td colspan="2">${stillRunning}</td>` : `<td>${gapRel}</td><td>${gapAtt}</td>`}</tr>`;
+  }).join("");
+  const table = `<table><tr>
+    <th>approach</th>
+    <th>solved reliably<span class="hdr-sub">${_term("every try", `Passed the problem on all ${e(tries)} — dependable, not one lucky pass. (stats name: pass^k)`)}</span></th>
+    <th>solved sometimes<span class="hdr-sub">${_term("per attempt", "The share of individual tries that passed — counts a problem the approach only cracks now and then. (stats name: pass@1)")}</span></th>
+    <th>${_term("flakiness", "How far the score drops when you demand it works EVERY time vs. just sometimes. High = solves it, but not dependably.")}</th>
+    <th>gap vs the bar<span class="hdr-sub">on reliable score</span></th>
+    <th>gap vs the bar<span class="hdr-sub">on per-attempt + verdict</span></th></tr>${rows}</table>`;
+  const note = `<div class="am-note">
+    <span class="ln"><b>How to read this.</b> Each row is one way of writing code, measured against the strong model — <b>the bar</b>. There are two honest ways to count a "win", and they mean different things, so they're shown side by side instead of blended into one flattering number:</span>
+    <span class="ln">• <b>Solved reliably</b> — it passed the problem on <b>every single try</b>. The strict count.</span>
+    <span class="ln">• <b>Solved sometimes</b> — the share of individual tries that passed. Looser: it counts a problem the approach only gets right occasionally.</span>
+    <span class="ln">• <b>Flakiness</b> is the gap between those two — "−18 pts" means requiring it every time costs 18 points vs. just sometimes. Big = works, but not dependably.</span>
+    <span class="ln">The <b>verdict</b> says whether an approach is <span class="v-inferior">worse</span>, <span class="v-equivalent">as good as</span>, or <span class="v-superior">better</span> than the bar. "As good as" is only claimed with <b>enough data to truly rule out a gap</b>; on a small or unfinished run you'll honestly see <span class="v-inconclusive">can't tell yet</span> — that's the truth, not a failure. Hover or click a <span class="term" data-def="Exactly — the dotted words have a plain definition on hover or click.">dotted word</span> for what it means.</span></div>`;
+  $("assaypane").innerHTML = `<div class="col-h">assay · arm matrix — ${e(STATE.assay)}</div><div class="am">${prov}${table}${note}</div>`;
+  $("assaypane").querySelectorAll(".term").forEach((t) => (t.onclick = () => t.classList.toggle("pin")));
 }
 
 // ---------- thin control: launch a bundled topology (records RunStarted, §7.7) ----------
@@ -191,6 +294,8 @@ async function selectRecord(name) {
   stopPlay();  // switching records stops any in-flight replay (no loop leaking across records)
   if (STATE.live && STATE.live !== name) STATE.live = null;  // navigating away stops the follow
   STATE.name = name; STATE.sel = null;
+  STATE.assay = null; if (STATE.mode === "assay") STATE.mode = "read";  // leaving the assay altitude
+  document.querySelectorAll(".assay").forEach((el) => el.classList.remove("sel"));
   // clear the inspector + diff selection from the PRIOR record — else a stale provenance/diff from
   // a different record bleeds into this one (caught by the perceptual capture pass, not the DOM E2E).
   $("insp").innerHTML = `<span class="dim">Select an event or a Producer to trace its provenance.</span>`;
@@ -234,6 +339,14 @@ function renderVerdict() {
 
 // ---------- the one cursor drives everything ----------
 function render() {
+  // assay altitude: the arm matrix replaces the run views; the run-scoped chrome (cursor, health,
+  // health-verdict) is meaningless here, so it's hidden — not repurposed (no second meaning per element).
+  const assay = STATE.mode === "assay";
+  $("assaypane").style.display = assay ? "" : "none";
+  document.querySelector(".cursor").style.display = assay ? "none" : "flex";
+  $("health").style.display = assay ? "none" : "flex";
+  $("verdict").style.display = assay ? "none" : "";
+  if (assay) { $("readpane").style.display = "none"; $("iopane").style.display = "none"; renderAssayFrom(STATE.assayReport); return; }
   $("readpane").style.display = STATE.mode === "io" ? "none" : "";
   $("iopane").style.display = STATE.mode === "io" ? "" : "none";
   $("modeToggle").textContent = STATE.mode === "io" ? "← graph" : "I/O";
@@ -646,4 +759,4 @@ $("termToggle").onclick = () => termSetOpen(!STATE.term.open);
 window.addEventListener("keydown", (e) => { if (e.ctrlKey && (e.key === "`" || e.key === "Dead")) { e.preventDefault(); termSetOpen(!STATE.term.open); } });
 
 loadTopologies();
-loadRecords();
+loadRecords().then(() => loadAssays());  // assays prepend to the rail AFTER the records fill it

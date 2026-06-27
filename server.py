@@ -22,6 +22,7 @@ Then open http://127.0.0.1:8765/ .
 from __future__ import annotations
 
 import asyncio
+import os
 import re
 import threading
 import time
@@ -206,6 +207,61 @@ _PROJECTIONS = {
     "narrate_full": lambda ev: [_builtins(line) for line in api.narrate(ev, lifecycle=True)],
     "io": _io,
 }
+
+
+# ── the assay seam: a results file (arms x cases x trials) read as ONE arm comparison ──────────
+# Read-only projections, like the record ones, but at the ABOVE-a-run altitude: many records compared.
+BENCH_RESULTS = Path(
+    os.environ.get("BENCH_RESULTS", str(Path(__file__).resolve().parent.parent / "substrate" / "process" / "bench_results"))
+)
+
+
+def _assays_index() -> list[dict[str, object]]:
+    """The assay rail: each cells file + its provenance (fingerprint/models/margin/trials) + counts."""
+    from substrate.assay.cells import read_meta, read_rows
+
+    out: list[dict[str, object]] = []
+    if not BENCH_RESULTS.exists():
+        return out
+    for cells in sorted(BENCH_RESULTS.glob("*.jsonl")):
+        try:
+            meta, rows = read_meta(cells), read_rows(cells)
+        except Exception:  # noqa: BLE001 — a malformed/partial file shows empty, never crashes the rail
+            meta, rows = {}, []
+        out.append({
+            "name": cells.stem,
+            "fingerprint": meta.get("config_fp"),
+            "strong_model": meta.get("strong_model"),
+            "weak_models": meta.get("weak_models"),
+            "margin": meta.get("margin"),
+            "trials": meta.get("trials"),
+            "n_cells": len(rows),
+            "arms": sorted({str(r.get("arm")) for r in rows}),
+        })
+    return out
+
+
+# build_report runs a 5000-sample bootstrap (~8s on 71×10 cells), so cache by (name, file mtime): a
+# DONE run computes once then serves instantly; a LIVE run's file mtime changes as it grows, so it
+# recomputes only when there is new data — never stale, never recomputing the unchanged.
+_ASSAY_CACHE: dict[str, tuple[float, dict[str, object]]] = {}
+
+
+def _assay_report(name: str) -> dict[str, object]:
+    """The arm matrix: report_from_cells -> the per-arm read (both currencies, deltas, margin-verdict)."""
+    from substrate.assay.cells import report_from_cells
+
+    cells = BENCH_RESULTS / f"{name}.jsonl"
+    if not _SAFE_RECORD_NAME.match(name) or not cells.exists():
+        return {"error": f"no assay {name!r}"}
+    mtime = cells.stat().st_mtime
+    cached = _ASSAY_CACHE.get(name)
+    if cached and cached[0] == mtime:
+        return cached[1]
+    report, meta = report_from_cells(cells)
+    result: dict[str, object] = {"name": name, "meta": meta, "report": _builtins(report)}
+    _ASSAY_CACHE[name] = (mtime, result)
+    return result
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -433,6 +489,13 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if path == "/api/records":
                 self._json(_records_index())
+                return
+            if path == "/api/assays":
+                self._json(_assays_index())
+                return
+            if path.startswith("/api/assay/"):
+                res = _assay_report(unquote(path[len("/api/assay/") :]))
+                self._json(res, 404 if "error" in res else 200)
                 return
             if path == "/api/topologies":
                 self._json(bundled.names() + list(_EXTRA_TOPOS))  # the launchable topologies
