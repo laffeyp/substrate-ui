@@ -144,6 +144,7 @@ async function selectAssay(name) {
 const _fmtD = (v) => (v == null ? "—" : (v >= 0 ? "+" : "") + v.toFixed(3));
 const _pct = (v) => Math.round(v * 100) + "%";
 const _pctD = (v) => (v == null ? "—" : (v >= 0 ? "+" : "−") + Math.round(Math.abs(v) * 100) + " pts");
+const _kfmt = (n) => (!n ? "—" : n >= 1000 ? (n / 1000).toFixed(1) + "k" : String(n));
 // a plain word with the precise term tucked behind a hover/click definition (dotted underline = ask me).
 const _term = (word, def) => `<span class="term" data-def="${escapeHtml(def)}">${escapeHtml(word)}</span>`;
 // the four statistical verdicts, said in plain English (the stats name stays in the hover definition).
@@ -181,11 +182,15 @@ function renderAssayFrom(d) {
     const gapAtt = a.delta_pass_k == null ? "—"
       : `${_pctD(a.delta_pass_k)} ${a.ci_low != null ? _term("± range", `We're 95% sure the true gap is between ${_pctD(a.ci_low)} and ${_pctD(a.ci_high)} (the confidence interval).`) : ""} ${verdict}`;
     const stillRunning = `<span class="dim">${_term("still running — no verdict", "This approach hasn't finished every problem yet. We never show a verdict off a partial run — a half-finished sweep could look better (or worse) than it really is.")}</span>`;
+    const compute = a.model_calls
+      ? _term(_kfmt(a.model_calls) + " calls", `Total model calls this approach made across all problems and tries — its compute cost (${a.completion_tokens ? _kfmt(a.completion_tokens) + " output tokens" : "tokens not measured"}). Orchestration around free models usually costs MORE calls than the single strong model, so the fair question is 'as good as — at what compute?'`)
+      : `<span class="dim" title="this run was not metered">not measured</span>`;
     return `<tr class="${ctl ? "control" : ""}" data-arm="${e(a.arm)}">
       <td><span class="arm-nm">${e(a.arm)}</span></td>
       <td><div class="rel"><span>${a.passes}/${a.n_cases}</span><span class="relbar"><i style="width:${Math.round(a.pass_rate * 100)}%"></i></span><span class="dim">${_pct(a.pass_rate)}</span></div></td>
       <td>${_pct(a.pass_at_1)}</td>
       <td class="flake">${flake > 0.005 ? "−" + Math.round(flake * 100) + " pts" : "—"}</td>
+      <td class="dim">${compute}</td>
       ${incomplete ? `<td colspan="2">${stillRunning}</td>` : `<td>${gapRel}</td><td>${gapAtt}</td>`}</tr>`;
   }).join("");
   const table = `<table><tr>
@@ -193,6 +198,7 @@ function renderAssayFrom(d) {
     <th>solved reliably<span class="hdr-sub">${_term("every try", `Passed the problem on all ${e(tries)} — dependable, not one lucky pass. (stats name: pass^k)`)}</span></th>
     <th>solved sometimes<span class="hdr-sub">${_term("per attempt", "The share of individual tries that passed — counts a problem the approach only cracks now and then. (stats name: pass@1)")}</span></th>
     <th>${_term("flakiness", "How far the score drops when you demand it works EVERY time vs. just sometimes. High = solves it, but not dependably.")}</th>
+    <th>${_term("compute", "What each approach SPENT (model calls). The honest counterweight to a near-tie: orchestration around free models can match the strong model but at several times the calls.")}</th>
     <th>gap vs the bar<span class="hdr-sub">on reliable score</span></th>
     <th>gap vs the bar<span class="hdr-sub">on per-attempt + verdict</span></th></tr>${rows}</table>`;
   const note = `<div class="am-note">
