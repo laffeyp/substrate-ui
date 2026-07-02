@@ -284,6 +284,7 @@ const check = (cond, msg) => { if (!cond) fails.push(msg); else console.log("  o
   check(wsSet === "/tmp/agent-e2e", `cwd sets the per-conversation workspace ("${wsSet}")`);
   dock = await p.$eval("#termbody", (e) => e.innerText);
   check(/workspace = \/tmp\/agent-e2e/.test(dock), "cwd echoes the workspace into the terminal");
+  await p.locator("#termdock").screenshot({ path: "screenshots/agent-cwd.png" }).catch(() => {}); // perceptual track for /cwd
   await p.fill("#terminput", "hello, do some math"); await p.press("#terminput", "Enter"); // TURN 1 — bare text, NO prefix
   await p.waitForTimeout(1500); // POST + a followLive poll streams the turns + reply
   dock = await p.$eval("#termbody", (e) => e.innerText);
