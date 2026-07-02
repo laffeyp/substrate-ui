@@ -11,6 +11,7 @@ contract under test; it runs in the substrate venv:
 from __future__ import annotations
 
 import json
+import os
 import sys
 import threading
 import urllib.error
@@ -266,15 +267,21 @@ def test_agent_endpoint_launches_a_live_tool_using_loop(base: str) -> None:
 
 
 def test_agent_endpoint_reports_the_per_conversation_workspace(base: str, tmp_path) -> None:
-    # the cwd answer: the terminal can name the working directory the agent's tools operate in via
-    # ?workspace=, and the server echoes it back so the terminal can show it. Unset defaults to the
-    # server's launch cwd (the Claude-Code posture). Ergonomics, not a jail — absolute paths still go
-    # where named; here we just assert the workspace round-trips through the launch response.
+    # per-session workspace: an ABSOLUTE path is a project the user picked (used + created as-is); a
+    # BARE name is a dedicated session dir under ~/.substrate/sessions/ (the client passes the
+    # conversation id, so turns share one dir); an UNSET workspace defaults to a fresh session dir —
+    # NEVER the server's cwd (the scribble-in-the-repo footgun the cockpit hit live). Echoed back so
+    # the terminal can show it.
     ws = str(tmp_path)
     res = post(base, f"/api/agent?model=deterministic&workspace={ws}")
-    assert res["workspace"] == ws
-    # unset -> the server's own cwd, never empty.
-    assert post(base, "/api/agent?model=deterministic")["workspace"]
+    assert res["workspace"] == ws  # absolute path used as-is
+    assert Path(ws).is_dir()  # and created if missing
+    # a bare name resolves under the sessions base, not treated as a relative cwd path.
+    named = post(base, "/api/agent?model=deterministic&workspace=mysession")["workspace"]
+    assert named.endswith("/.substrate/sessions/mysession") and Path(named).is_dir()
+    # unset -> a dedicated session dir, NOT the server's cwd (the footgun).
+    default_ws = post(base, "/api/agent?model=deterministic")["workspace"]
+    assert "/.substrate/sessions/" in default_ws and default_ws != os.getcwd()
 
 
 def test_models_endpoint_lists_drivers_with_a_default(base: str) -> None:
