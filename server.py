@@ -178,6 +178,24 @@ def _session_worktree(repo: Path, session_id: str) -> tuple[Path, str]:
     return wt, branch
 
 
+def _worktree_diff(wt: Path) -> dict[str, object]:
+    """What the agent CHANGED in a session worktree — the 'show me what it did' half of B. `git diff`
+    including new files (intent-to-add), plus the changed-file list. Raises if not a git worktree."""
+    wt = Path(wt).expanduser().resolve()
+    if not (wt / ".git").exists():
+        raise ValueError(f"{wt} is not a git worktree")
+    subprocess.run(  # intent-to-add so write_file'd NEW files show in the diff too
+        ["git", "-C", str(wt), "add", "-A", "--intent-to-add"], check=False, capture_output=True
+    )
+    diff = subprocess.run(
+        ["git", "-C", str(wt), "diff"], capture_output=True, text=True
+    ).stdout
+    names = subprocess.run(
+        ["git", "-C", str(wt), "diff", "--name-status"], capture_output=True, text=True
+    ).stdout
+    return {"diff": diff, "files": names.strip().splitlines()}
+
+
 _SESSION_PREFIXES = (
     "launch_",
     "build_",
@@ -743,6 +761,13 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if path == "/api/models":
                 self._json(_agent_models())
+                return
+            if path == "/api/worktree_diff":  # what the agent changed in a session worktree
+                wt = parse_qs(urlparse(self.path).query).get("path", [""])[0]
+                try:
+                    self._json(_worktree_diff(Path(wt)))
+                except Exception as exc:  # noqa: BLE001 — not a worktree / git issue -> typed error
+                    self._json({"error": str(exc), "diff": "", "files": []})
                 return
             if path == "/api/assays":
                 self._json(_assays_index())

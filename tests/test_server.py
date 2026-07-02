@@ -366,6 +366,12 @@ def test_session_worktree_isolates_a_session_on_a_branch(tmp_path, monkeypatch) 
         head == "substrate/sess-abc"
     )  # on the session branch, not the repo's working tree
     assert server._session_worktree(repo, "sess-abc")[0] == wt  # idempotent
+    # the diff surface: what the agent changed in the worktree — an edit AND a new (write_file'd) file.
+    (wt / "a.txt").write_text("changed")
+    (wt / "new.py").write_text("print('hi')\n")
+    d = server._worktree_diff(wt)
+    assert "a.txt" in d["diff"] and "new.py" in d["diff"]  # both surface in the diff
+    assert any("new.py" in f for f in d["files"])  # the new file is listed
     # a non-repo path is refused (falls back to a plain session dir at the handler).
     import pytest as _pytest
 
