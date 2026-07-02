@@ -245,6 +245,46 @@ def test_launch_unknown_topology_is_404(base: str) -> None:
     assert exc.value.code == 404
 
 
+def test_agent_endpoint_launches_a_live_tool_using_loop(base: str) -> None:
+    # the interactive terminal POSTs a task and the server starts a LIVE tool-using agent run the
+    # console follows. CI drives the DETERMINISTIC agent (model=deterministic) — no Ollama — proving
+    # the endpoint wires a real tool_loop run to the record (the model -> tool -> model loop, ON THE
+    # LOG). The ollama path is the SAME seam with a real Responder (walkthrough), exercised live, not
+    # in CI. Observation contract for the interactive-agent sprint: the agent run is a real recorded
+    # tool loop the console can follow; the terminal-driving half is the two-track E2E (Addendum A).
+    res = post(base, "/api/agent?model=deterministic")
+    assert res["agent"] == "deterministic"
+    name = res["name"]
+    assert name.startswith("launch_agent")  # a prunable session run (launch_ prefix)
+    assert res["status"] == "finalised"  # the deterministic calculator loop finishes immediately
+    events = get(base, f"/api/records/{name}/events")
+    kinds = [e["kind"] for e in events]
+    assert kinds[0] == "substrate.RunStarted"
+    # the tool-using loop actually ran and is on the record: model -> tool -> model -> answer.
+    assert "ToolCall" in kinds and "ToolResult" in kinds and "FinalAnswer" in kinds
+    assert kinds[-1] == "substrate.RunFinalised"
+
+
+def test_agent_endpoint_reports_the_per_conversation_workspace(base: str, tmp_path) -> None:
+    # the cwd answer: the terminal can name the working directory the agent's tools operate in via
+    # ?workspace=, and the server echoes it back so the terminal can show it. Unset defaults to the
+    # server's launch cwd (the Claude-Code posture). Ergonomics, not a jail — absolute paths still go
+    # where named; here we just assert the workspace round-trips through the launch response.
+    ws = str(tmp_path)
+    res = post(base, f"/api/agent?model=deterministic&workspace={ws}")
+    assert res["workspace"] == ws
+    # unset -> the server's own cwd, never empty.
+    assert post(base, "/api/agent?model=deterministic")["workspace"]
+
+
+def test_models_endpoint_lists_drivers_with_a_default(base: str) -> None:
+    # the terminal's model picker: the drivers you can pick — Ollama models (live) + the CLI presets
+    # (claude / gemini) + the CI stand-in — with a default (the biggest OSS model if present, else CI).
+    d = get(base, "/api/models")
+    assert "claude" in d["models"] and "gemini" in d["models"] and "deterministic" in d["models"]
+    assert d["default"] in d["models"]  # the default is always one of the offered options
+
+
 def test_resume_continues_a_paused_run(base: str) -> None:
     # the other control (ruling C1): demo_resumable PAUSES awaiting ApprovalGranted. Resume injects
     # the event -> the resume Trigger fires the continuation -> finalised, on a COPY so the template

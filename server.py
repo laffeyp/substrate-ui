@@ -37,10 +37,12 @@ import msgspec
 from msgspec import Struct
 from substrate import api
 from substrate.topologies import bundled
+from substrate.topologies.tool_loop import tool_loop_topology
+from substrate.topologies.tool_loop.tools import full_suite
 
 from builder import SpecError, build_from_spec
 from demo_topologies import approval_event, resumable_topology
-from substrate.reference import DeterministicResponder, OllamaResponder
+from substrate.reference import CliResponder, DeterministicResponder, OllamaResponder
 
 
 def _responder_for(spec: dict[str, object]) -> object:
@@ -93,7 +95,25 @@ def _is_live(name: str) -> bool:
     _LAUNCHES.pop(name, None)  # evict the dead thread (no unbounded growth on a long-lived server)
     return False
 
-HOST, PORT = "127.0.0.1", 8765
+
+def _agent_models() -> dict[str, object]:
+    """The drivers the terminal can pick: local Ollama models (read live) + the CLI presets
+    (claude/gemini) + the CI stand-in. Ollama tags are best-effort (empty if the daemon is down — the
+    UI still offers the CLI + deterministic). The default is the biggest local OSS model if present."""
+    import urllib.request as _u
+
+    ollama: list[str] = []
+    try:
+        with _u.urlopen("http://localhost:11434/api/tags", timeout=2) as r:  # noqa: S310 - localhost
+            tags = msgspec.json.decode(r.read())
+        ollama = sorted(str(m.get("name", "")) for m in tags.get("models", []) if m.get("name"))
+    except Exception:  # noqa: BLE001 — no ollama / daemon down: still offer claude/gemini/deterministic
+        ollama = []
+    prefer = "qwen3-coder:480b-cloud"  # the biggest OSS model on this box; default to it if present
+    default = prefer if prefer in ollama else (ollama[0] if ollama else "deterministic")
+    return {"models": [*ollama, "claude", "gemini", "deterministic"], "cli": ["claude", "gemini"], "default": default}
+
+HOST, PORT = os.environ.get("SUBSTRATE_UI_HOST", "127.0.0.1"), int(os.environ.get("SUBSTRATE_UI_PORT", "8765"))
 WEB = Path(__file__).resolve().parent / "web"  # the static frontend
 RUNS = Path(__file__).resolve().parent / "runs"  # generated/live records (failed/paused/broken demos)
 _SESSION_PREFIXES = ("launch_", "build_", "resume_")  # hash-suffixed session runs (prunable; vs the stable demo_* fixtures)
@@ -303,6 +323,9 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/launch":
                 self._launch(parse_qs(urlparse(self.path).query))
                 return
+            if path == "/api/agent":
+                self._agent(parse_qs(urlparse(self.path).query))
+                return
             if path == "/api/resume":
                 self._resume(parse_qs(urlparse(self.path).query))
                 return
@@ -371,6 +394,78 @@ class Handler(BaseHTTPRequestHandler):
             time.sleep(0.05)
         status = api.run_graph(root).status if root.exists() else "incomplete"
         self._json({"name": run_name, "status": status, "launched": name})
+
+    def _agent(self, q: dict[str, list[str]]) -> None:
+        """Launch a LIVE tool-using agent run — this is what the interactive terminal drives. With
+        `model=ollama` (+ `name`, `task`) a real local LLM drives the FULL_SUITE tool loop toward the
+        task; the default `model=deterministic` runs the pure calculator loop (fast, no network) so
+        the console and CI can drive an agent with no Ollama. Backgrounded exactly like /api/launch —
+        the console followLive's the record: the terminal streams the model turns + tool results as
+        they land, and the graph/stream/scene animate. The agent run is itself a recorded run (the
+        model->tool->model loop is on the log), replayable and inspectable like any other."""
+        model = (q.get("model", ["deterministic"])[0] or "deterministic").lower()
+        if self._at_run_capacity():
+            self._error(429, "too many concurrent runs; wait for some to finish")
+            return
+        # the per-conversation WORKSPACE: the directory the agent's tools operate in (relative paths
+        # + bash resolve there, absolute paths still go where named). Default = the server's launch
+        # cwd, the Claude-Code posture ("operate in the project you started me in"); `?workspace=`
+        # overrides per conversation. This is ergonomics, not a jail — the autonomy is unchanged.
+        ws_arg = q.get("workspace", [""])[0]  # `?workspace=` (empty) is unset, not Path(".")
+        workspace = Path(ws_arg).expanduser() if ws_arg else Path.cwd()
+        suite = full_suite(workspace)
+        if model == "ollama":
+            model_name = q.get("name", ["llama3.2:1b"])[0]
+            task = q.get("task", [""])[0] or "Use the available tools to help."
+            topo = tool_loop_topology(
+                model=OllamaResponder(model=model_name),
+                walkthrough=True,
+                deterministic=False,
+                tools=suite,
+                task=task,
+                max_steps=8,
+            )
+            label = "agent_" + re.sub(r"[^A-Za-z0-9]+", "-", model_name.split(":")[0])
+        elif model in ("claude", "gemini", "cli"):
+            # a command-line model/agent drives the loop (CliResponder). `claude`/`gemini` are presets;
+            # `cli` takes an arbitrary `?command=...`. Substrate provides the tools, so even a plain
+            # prompt->text CLI (gemini) is a tool-using agent here. (gemini needs its own auth to run.)
+            task = q.get("task", [""])[0] or "Use the available tools to help."
+            preset = {"claude": ["claude", "-p"], "gemini": ["gemini", "-p"]}
+            cmd = preset.get(model) or q.get("command", [""])[0].split()
+            if not cmd:
+                self._error(400, "cli agent needs a command (model=claude|gemini, or ?command=...)")
+                return
+            topo = tool_loop_topology(
+                model=CliResponder(cmd, name=model),
+                walkthrough=True,
+                deterministic=False,
+                tools=suite,
+                task=task,
+                max_steps=8,
+            )
+            label = "agent_" + model
+        else:
+            topo = tool_loop_topology()  # deterministic calculator loop — CI-safe, no network
+            label = "agent_calc"
+        run_name = f"launch_{label}_{uuid.uuid4().hex[:12]}"  # launch_ prefix => prunable session run
+        root = RUNS / f"{run_name}.record"
+        th = threading.Thread(target=lambda: asyncio.run(api.Runtime(root).run(topo)), daemon=True)
+        _LAUNCHES[run_name] = th
+        th.start()
+        for _ in range(80):  # wait only until RunStarted lands, so the console can follow immediately
+            try:
+                if root.exists() and any(
+                    e.get("kind") == "substrate.RunStarted" for e in api.read_record(root)
+                ):
+                    break
+            except Exception:  # noqa: BLE001 - record mid-write; keep waiting
+                pass
+            time.sleep(0.05)
+        status = api.run_graph(root).status if root.exists() else "incomplete"
+        self._json(
+            {"name": run_name, "status": status, "agent": model, "workspace": str(workspace)}
+        )
 
     def _resume(self, q: dict[str, list[str]]) -> None:
         """Resume a paused run (ruling C1: the other control). Resume a COPY (unique id) so the
@@ -489,6 +584,9 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if path == "/api/records":
                 self._json(_records_index())
+                return
+            if path == "/api/models":
+                self._json(_agent_models())
                 return
             if path == "/api/assays":
                 self._json(_assays_index())

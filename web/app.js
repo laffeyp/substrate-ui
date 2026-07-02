@@ -239,6 +239,81 @@ $("resumebtn").onclick = async () => {
   else $("launchmsg").textContent = `resumed ${res.resumed} → ${res.name} · ${res.status}`;
 };
 
+// ---------- interactive agent: stream the tool-loop conversation into the terminal as it runs ----------
+// The terminal drives a live agent (POST /api/agent) and followLive polls the record; each poll, the
+// NEW conversation events (ToolCall / ToolResult / FinalAnswer) are appended to the terminal dock — so
+// you talk to a tool-using LLM in the terminal AND watch it run in the graph, the same record, two views.
+function _agentLine(e) {
+  const p = e.payload || {};
+  if (e.kind === "ToolCall") return { cls: "accent", text: `→ ${p.tool}(${JSON.stringify(p.args)})` };
+  if (e.kind === "ToolResult")
+    return { cls: p.ok ? "out" : "err", text: "  " + (p.ok ? String(p.output).slice(0, 120) : p.error) };
+  if (e.kind === "FinalAnswer") return { cls: "accent", text: `✓ ${p.text}` };
+  return null;
+}
+function streamAgentTurns() {
+  const fresh = STATE.events.filter(
+    (e) => e.seq > STATE.term.agentSeq &&
+      (e.kind === "ToolCall" || e.kind === "ToolResult" || e.kind === "FinalAnswer"),
+  );
+  if (!fresh.length) return;
+  STATE.term.agentSeq = fresh[fresh.length - 1].seq;
+  termPush(fresh.map(_agentLine).filter(Boolean));
+  // record the model's final reply into the CONVERSATION so the next turn carries it (multi-turn).
+  const fa = fresh.filter((e) => e.kind === "FinalAnswer").pop();
+  if (fa && STATE.term.chat && STATE.term.chat.active) {
+    STATE.term.chat.convo.push({ role: "assistant", content: fa.payload.text });
+    termPush([{ cls: "dim", text: "· your turn — type to continue, `exit` to leave" }]);
+  }
+}
+
+// A conversation is a transcript carried across turns: each message you send re-runs the agent seeded
+// with the whole conversation, so the model RESPONDS to you and you keep talking (like Claude Code),
+// while each turn animates in the graph. The driver is any model — an Ollama model, a CLI agent
+// (claude/gemini), or the CI stand-in — chosen in the model picker.
+function renderConvo(convo) {
+  const lines = convo.map((m) => (m.role === "user" ? "User: " : "Assistant: ") + m.content);
+  return (
+    "You are a helpful assistant with tools. Hold a conversation and respond to the LAST user message.\n\n" +
+    lines.join("\n")
+  );
+}
+async function sendChatMessage(text) {
+  if (!text) return;
+  if (!STATE.term.chat) STATE.term.chat = { active: true, convo: [] };
+  STATE.term.chat.convo.push({ role: "user", content: text });
+  const model = STATE.term.model || "deterministic";
+  const transcript = renderConvo(STATE.term.chat.convo);
+  const cli = new Set(["claude", "gemini"]);
+  const ws = STATE.term.workspace ? `&workspace=${encodeURIComponent(STATE.term.workspace)}` : "";
+  const qs =
+    (model === "deterministic"
+      ? "model=deterministic"
+      : cli.has(model)
+        ? `model=${model}&task=${encodeURIComponent(transcript)}`
+        : `model=ollama&name=${encodeURIComponent(model)}&task=${encodeURIComponent(transcript)}`) + ws;
+  termPush([{ cls: "dim", text: `· ${model} is working…` }]);
+  const res = await fetch(`/api/agent?${qs}`, { method: "POST" }).then((r) => r.json()).catch(() => null);
+  if (!res || res.error || !res.name) { termPush([{ cls: "err", text: "agent: launch failed" }]); return; }
+  // remember + show the workspace the tools operate in the first time it's reported (the cwd answer).
+  if (res.workspace && STATE.term.workspace !== res.workspace) {
+    STATE.term.workspace = res.workspace;
+    termPush([{ cls: "dim", text: `· workspace: ${res.workspace}` }]);
+  }
+  STATE.term.agent = res.name; STATE.term.agentSeq = -1;
+  await selectRecord(res.name);
+  followLive(res.name); // streams the model's turns into the dock; streamAgentTurns records the reply
+}
+async function loadModels() {
+  const el = $("agentmodel");
+  if (!el) return;
+  const d = await api("/api/models").catch(() => ({ models: ["deterministic"], default: "deterministic" }));
+  el.innerHTML = (d.models || ["deterministic"]).map((m) => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join("");
+  el.value = d.default || "deterministic";
+  STATE.term.model = el.value; // default to the biggest OSS model the server picked
+  el.onchange = () => { STATE.term.model = el.value; };
+}
+
 // ---------- live-attach: follow a launched run AS it is written (attach/F-PERS-4, read-only) ----------
 async function followLive(name) {
   STATE.live = name;
@@ -252,6 +327,7 @@ async function followLive(name) {
     ]);
     if (STATE.name !== name) return;
     STATE.graph = g; STATE.events = full.events; STATE.summary = summary; updateScene();
+    if (STATE.term.agent === name) streamAgentTurns();  // stream the agent's turns into the terminal
     const maxSeq = STATE.events.length ? STATE.events[STATE.events.length - 1].seq : 0;
     // follow the tail ONLY if the user is already at it; if they scrubbed back to inspect an earlier
     // seq during a live run, don't yank the cursor forward under them every 400ms (ui-frontend-5).
@@ -657,7 +733,15 @@ function renderTerm() {
   const body = $("termbody");
   body.innerHTML = STATE.term.lines.map((l) => `<div class="term-line tl-${l.cls}">${escapeHtml(l.text)}</div>`).join("");
   body.scrollTop = body.scrollHeight;
-  $("termprompt").textContent = (STATE.name || "substrate") + "$";
+  const chatting = STATE.term.chat && STATE.term.chat.active;
+  $("termprompt").textContent = chatting ? `${STATE.term.model || "deterministic"} ›` : (STATE.name || "substrate") + "$";
+  // the header hint + placeholder tell you the mode: how to talk (idle) vs how to leave (chatting).
+  const hint = $("termhint");
+  if (hint) hint.innerHTML = chatting ? "just type to talk · <b>/exit</b> to leave" : "<b>chat</b> to talk · <b>help</b>";
+  const inp = $("terminput");
+  if (inp) inp.placeholder = chatting
+    ? "type your message to the model — /exit to leave"
+    : "type 'chat' to talk to the model — or a command (help)";
 }
 function termPush(lines) { STATE.term.lines.push(...lines); renderTerm(); }
 function termSetOpen(v) {
@@ -671,19 +755,68 @@ function termSetOpen(v) {
   }
 }
 async function runTerm(line) {
-  const parts = line.trim().split(/\s+/), cmd = parts[0];
   const out = []; const say = (text, cls) => out.push({ text, cls: cls || "out" });
+  let l = line.trim();
+  // In a CONVERSATION, you just TYPE to talk (no `chat` prefix, like Claude Code): plain text is a
+  // message to the model; a /slash prefix runs a command (e.g. /exit, /tail). Outside chat, bare.
+  if (STATE.term.chat && STATE.term.chat.active) {
+    if (l.startsWith("/")) { l = l.slice(1).trim(); }
+    else { if (l) await sendChatMessage(l); return out; }
+  }
+  const parts = l.split(/\s+/), cmd = parts[0];
   if (!cmd) return out;
   if (cmd === "clear") { STATE.term.lines = []; return null; }
   if (cmd === "help" || cmd === "?") {
     say("substrate — read interface (the same record the GUI shows, typeable)", "dim");
-    [["tail [--kind K] [--producer P] [--all]", "events up to the cursor (seq + t)"],
+    [["chat", "start/reconnect a conversation — then just TYPE to talk (watch it run in the graph)"],
+     ["/exit", "while chatting: leave (the conversation is kept; `chat` reconnects). /cmd runs a command"],
+     ["model <name>", "pick the driver (or use the picker): an Ollama model, claude, gemini, deterministic"],
+     ["cwd [<path>]", "the working directory the agent operates in (unset = server launch dir)"],
+     ["tail [--kind K] [--producer P] [--all]", "events up to the cursor (seq + t)"],
      ["cat <seq>", "the full payload of the event at <seq> — the content"],
      ["ls", "the application output events + their seqs"],
      ["input", "the run's resolved seed"],
      ["narrate", "the legible story (causal beats + work)"],
      ["inspect <kind|instance>", "provenance: cause + ancestry"],
      ["clear", "clear the terminal"]].forEach(([c, d]) => say("  " + c.padEnd(42) + d));
+    return out;
+  }
+  if (cmd === "model") {
+    if (parts[1]) {
+      STATE.term.model = parts[1];
+      const el = $("agentmodel"); if (el) el.value = parts[1];  // keep the picker in sync
+      say("driver model = " + parts[1], "dim");
+    } else say("driver model = " + (STATE.term.model || "deterministic") + "   (or use the picker)", "dim");
+    return out;
+  }
+  if (cmd === "cwd" || cmd === "workspace") {
+    // the working directory the agent's tools operate in (relative paths + bash resolve there). Set it
+    // BEFORE you talk to pick where the agent works; unset = the server's launch dir. Like `cd`-ing
+    // into a repo before starting Claude Code. Absolute paths the model names still go where named.
+    if (parts[1]) { STATE.term.workspace = parts.slice(1).join(" "); say("workspace = " + STATE.term.workspace, "dim"); }
+    else say("workspace = " + (STATE.term.workspace || "(server launch dir — set with `cwd <path>`)"), "dim");
+    return out;
+  }
+  if (cmd === "chat" || cmd === "agent") {
+    // enter (or RECONNECT to) the conversation — like opening a terminal session. The conversation
+    // persists across /exit, so `chat` picks up where you left off; then you just TYPE to talk.
+    if (!STATE.term.chat) STATE.term.chat = { active: false, convo: [] };
+    const turns = STATE.term.chat.convo.length;
+    STATE.term.chat.active = true;
+    const model = STATE.term.model || "deterministic";
+    say(
+      turns
+        ? `reconnected to your conversation with ${model} (${turns} turns) — type to talk · /exit to leave`
+        : `chat with ${model} — just type to talk · /exit to leave · switch model with the picker`,
+      "dim",
+    );
+    return out;
+  }
+  if (cmd === "exit") {
+    if (STATE.term.chat && STATE.term.chat.active) {
+      STATE.term.chat.active = false;
+      say("left chat — your conversation is kept; type `chat` to reconnect", "dim");
+    } else say("(not in a conversation — type `chat` to start one)", "dim");
     return out;
   }
   if (!STATE.name) { say("no record selected", "err"); return out; }
@@ -766,4 +899,5 @@ $("termToggle").onclick = () => termSetOpen(!STATE.term.open);
 window.addEventListener("keydown", (e) => { if (e.ctrlKey && (e.key === "`" || e.key === "Dead")) { e.preventDefault(); termSetOpen(!STATE.term.open); } });
 
 loadTopologies();
+loadModels();  // populate the terminal's model picker (defaults to the biggest OSS model)
 loadRecords().then(() => loadAssays());  // assays prepend to the rail AFTER the records fill it
