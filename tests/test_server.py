@@ -51,8 +51,12 @@ def post(base: str, path: str) -> object:
 def post_json(base: str, path: str, body: object) -> object:
     from urllib.request import Request
 
-    req = Request(base + path, data=json.dumps(body).encode(), method="POST",
-                  headers={"Content-Type": "application/json"})
+    req = Request(
+        base + path,
+        data=json.dumps(body).encode(),
+        method="POST",
+        headers={"Content-Type": "application/json"},
+    )
     with urlopen(req, timeout=30) as r:
         return json.load(r)
 
@@ -65,10 +69,22 @@ _AUTHORED = {
         {"kind": "judge", "emits": ["Verdict"]},
     ],
     "views": [{"name": "crits", "kind": "KindCount", "of": "Critique"}],
-    "triggers": [{"id": "adjudicate", "on": "Critique",
-                  "predicate": {"view": "crits", "op": ">=", "n": 2}, "starts": "judge", "policy": "Once"}],
-    "termination": {"kind": "any_of",
-                    "members": [{"kind": "all_completed"}, {"kind": "quiescence_with_watchdog", "seconds": 1}]},
+    "triggers": [
+        {
+            "id": "adjudicate",
+            "on": "Critique",
+            "predicate": {"view": "crits", "op": ">=", "n": 2},
+            "starts": "judge",
+            "policy": "Once",
+        }
+    ],
+    "termination": {
+        "kind": "any_of",
+        "members": [
+            {"kind": "all_completed"},
+            {"kind": "quiescence_with_watchdog", "seconds": 1},
+        ],
+    },
 }
 
 
@@ -97,7 +113,9 @@ def test_run_graph_endpoint_matches_the_projection(base: str) -> None:
 
 def test_topology_graph_endpoint_nodes_and_edges(base: str) -> None:
     g = get(base, "/api/records/code_review/topology_graph")
-    assert any(p["kind"] == "reviewer-security" and p["is_initial"] for p in g["producers"])
+    assert any(
+        p["kind"] == "reviewer-security" and p["is_initial"] for p in g["producers"]
+    )
     assert any(p["kind"] == "judge" and not p["is_initial"] for p in g["producers"])
     adj = next(t for t in g["triggers"] if t["id"] == "adjudicate")
     assert adj["starts"] == "judge" and adj["on"] == ["CritiquePosted"]
@@ -115,7 +133,9 @@ def test_explain_endpoint_serves_provenance(base: str) -> None:
     prov = get(base, f"/api/records/code_review/explain/{judge['instance']}")
     assert prov["explanation"]["kind"] == "judge"
     assert prov["explanation"]["trigger_id"] == "adjudicate"
-    assert any(a["kind"] == "judge" for a in prov["ancestry"])  # the chain includes the judge itself
+    assert any(
+        a["kind"] == "judge" for a in prov["ancestry"]
+    )  # the chain includes the judge itself
 
 
 def test_full_record_endpoint_has_events_and_manifest(base: str) -> None:
@@ -150,7 +170,10 @@ def test_diff_endpoint_first_divergence(base: str) -> None:
     # manifest (NOT a false "equivalent") — pin it so a change can't silently break it (review #34).
     cross = get(base, "/api/diff?a=code_review&b=debate")
     assert cross["equivalent"] is False
-    assert cross["divergence"]["seq"] == 0 and cross["divergence"]["kind_a"] == "substrate.RunStarted"
+    assert (
+        cross["divergence"]["seq"] == 0
+        and cross["divergence"]["kind_a"] == "substrate.RunStarted"
+    )
 
 
 def test_io_endpoint_derives_input_and_outputs(base: str) -> None:
@@ -162,11 +185,18 @@ def test_io_endpoint_derives_input_and_outputs(base: str) -> None:
     assert solo["baseline"] == {"dataset": "q3_incidents", "seed": 42}
     assert [o["kind"] for o in solo["outputs"]] == ["Message"]
     cr = get(base, "/api/records/code_review/io")
-    assert cr["input"] is None  # no runtime seed (parameterized at build), honestly null
+    assert (
+        cr["input"] is None
+    )  # no runtime seed (parameterized at build), honestly null
     assert [o["kind"] for o in cr["outputs"]] == [
-        "CritiquePosted", "CritiquePosted", "CritiquePosted", "VerdictRendered",
+        "CritiquePosted",
+        "CritiquePosted",
+        "CritiquePosted",
+        "VerdictRendered",
     ]
-    assert all("seq" in o for o in cr["outputs"])  # every artifact cites its producing seq
+    assert all(
+        "seq" in o for o in cr["outputs"]
+    )  # every artifact cites its producing seq
 
 
 def test_unknown_record_is_404(base: str) -> None:
@@ -182,7 +212,9 @@ def test_launch_runs_a_topology_and_records_it(base: str) -> None:
     assert res["status"] == "finalised" and res["launched"] == "code_review"
     name = res["name"]
     rg = get(base, f"/api/records/{name}/run_graph")
-    assert rg["status"] == "finalised" and len(rg["instances"]) == 6  # a genuine code_review run
+    assert (
+        rg["status"] == "finalised" and len(rg["instances"]) == 6
+    )  # a genuine code_review run
     assert get(base, f"/api/records/{name}/events")[0]["kind"] == "substrate.RunStarted"
     assert get(base, "/api/topologies")  # the launchable list is served
 
@@ -194,7 +226,9 @@ def test_launch_records_are_durable_never_clobbered(base: str) -> None:
     a = post(base, "/api/launch?topology=debate")["name"]
     b = post(base, "/api/launch?topology=debate")["name"]
     assert a != b  # unique-id naming never collides, so neither is clobbered
-    assert get(base, f"/api/records/{a}/run_graph")["status"] == "finalised"  # the FIRST still exists
+    assert (
+        get(base, f"/api/records/{a}/run_graph")["status"] == "finalised"
+    )  # the FIRST still exists
     assert get(base, f"/api/records/{b}/run_graph")["status"] == "finalised"
 
 
@@ -204,7 +238,9 @@ def test_launch_is_backgrounded_and_the_record_grows(base: str) -> None:
     import time
 
     res = post(base, "/api/launch?topology=live_demo")  # ~3s run
-    assert res["status"] == "incomplete"  # returned before the run finished -> backgrounded
+    assert (
+        res["status"] == "incomplete"
+    )  # returned before the run finished -> backgrounded
     name = res["name"]
     final = None
     for _ in range(40):
@@ -212,7 +248,9 @@ def test_launch_is_backgrounded_and_the_record_grows(base: str) -> None:
         final = get(base, f"/api/records/{name}/run_graph")["status"]
         if final != "incomplete":
             break
-    assert final == "finalised"  # the backgrounded run reached its terminal, readable over HTTP
+    assert (
+        final == "finalised"
+    )  # the backgrounded run reached its terminal, readable over HTTP
 
 
 def test_run_graph_reports_server_authoritative_liveness(base: str) -> None:
@@ -230,7 +268,9 @@ def test_run_graph_reports_server_authoritative_liveness(base: str) -> None:
         g = get(base, f"/api/records/{name}/run_graph")
         if g["status"] != "incomplete":
             break
-    assert g["status"] == "finalised" and g["live"] is False  # finished -> thread dead -> not live
+    assert (
+        g["status"] == "finalised" and g["live"] is False
+    )  # finished -> thread dead -> not live
     # a static (non-launch) record reports live=False (it isn't being written) — so the console
     # treats a static no-terminal record as torn/incomplete, never live.
     assert get(base, "/api/records/code_review/run_graph")["live"] is False
@@ -257,7 +297,9 @@ def test_agent_endpoint_launches_a_live_tool_using_loop(base: str) -> None:
     assert res["agent"] == "deterministic"
     name = res["name"]
     assert name.startswith("launch_agent")  # a prunable session run (launch_ prefix)
-    assert res["status"] == "finalised"  # the deterministic calculator loop finishes immediately
+    assert (
+        res["status"] == "finalised"
+    )  # the deterministic calculator loop finishes immediately
     events = get(base, f"/api/records/{name}/events")
     kinds = [e["kind"] for e in events]
     assert kinds[0] == "substrate.RunStarted"
@@ -266,7 +308,9 @@ def test_agent_endpoint_launches_a_live_tool_using_loop(base: str) -> None:
     assert kinds[-1] == "substrate.RunFinalised"
 
 
-def test_agent_endpoint_reports_the_per_conversation_workspace(base: str, tmp_path) -> None:
+def test_agent_endpoint_reports_the_per_conversation_workspace(
+    base: str, tmp_path
+) -> None:
     # per-session workspace: an ABSOLUTE path is a project the user picked (used + created as-is); a
     # BARE name is a dedicated session dir under ~/.substrate/sessions/ (the client passes the
     # conversation id, so turns share one dir); an UNSET workspace defaults to a fresh session dir —
@@ -277,19 +321,70 @@ def test_agent_endpoint_reports_the_per_conversation_workspace(base: str, tmp_pa
     assert res["workspace"] == ws  # absolute path used as-is
     assert Path(ws).is_dir()  # and created if missing
     # a bare name resolves under the sessions base, not treated as a relative cwd path.
-    named = post(base, "/api/agent?model=deterministic&workspace=mysession")["workspace"]
+    named = post(base, "/api/agent?model=deterministic&workspace=mysession")[
+        "workspace"
+    ]
     assert named.endswith("/.substrate/sessions/mysession") and Path(named).is_dir()
     # unset -> a dedicated session dir, NOT the server's cwd (the footgun).
     default_ws = post(base, "/api/agent?model=deterministic")["workspace"]
     assert "/.substrate/sessions/" in default_ws and default_ws != os.getcwd()
 
 
+def test_session_worktree_isolates_a_session_on_a_branch(tmp_path, monkeypatch) -> None:
+    # B: git-worktree-per-session. Driving against a repo puts the session in its OWN worktree — a
+    # checkout on branch substrate/<session>, adjacent to the repo, so the agent works isolated from the
+    # user's working tree and its changes are a diffable branch. Idempotent. (Base monkeypatched so it
+    # doesn't pollute ~/.substrate.)
+    import subprocess
+
+    import server
+
+    monkeypatch.setattr(server, "_SESSIONS_BASE", tmp_path / "sessions")
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    for cmd in (
+        ["git", "init", "-q", str(repo)],
+        ["git", "-C", str(repo), "config", "user.email", "t@t"],
+        ["git", "-C", str(repo), "config", "user.name", "t"],
+    ):
+        subprocess.run(cmd, check=True)
+    (repo / "a.txt").write_text("hello")
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-qm", "init"], check=True)
+
+    wt, branch = server._session_worktree(repo, "sess-abc")
+    assert branch == "substrate/sess-abc"
+    assert (
+        wt.is_dir() and (wt / "a.txt").read_text() == "hello"
+    )  # repo content, isolated copy
+    head = subprocess.run(
+        ["git", "-C", str(wt), "rev-parse", "--abbrev-ref", "HEAD"],
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    assert (
+        head == "substrate/sess-abc"
+    )  # on the session branch, not the repo's working tree
+    assert server._session_worktree(repo, "sess-abc")[0] == wt  # idempotent
+    # a non-repo path is refused (falls back to a plain session dir at the handler).
+    import pytest as _pytest
+
+    with _pytest.raises(ValueError, match="not a git repo"):
+        server._session_worktree(tmp_path / "notarepo", "s")
+
+
 def test_models_endpoint_lists_drivers_with_a_default(base: str) -> None:
     # the terminal's model picker: the drivers you can pick — Ollama models (live) + the CLI presets
     # (claude / gemini) + the CI stand-in — with a default (the biggest OSS model if present, else CI).
     d = get(base, "/api/models")
-    assert "claude" in d["models"] and "gemini" in d["models"] and "deterministic" in d["models"]
-    assert d["default"] in d["models"]  # the default is always one of the offered options
+    assert (
+        "claude" in d["models"]
+        and "gemini" in d["models"]
+        and "deterministic" in d["models"]
+    )
+    assert (
+        d["default"] in d["models"]
+    )  # the default is always one of the offered options
 
 
 def test_resume_continues_a_paused_run(base: str) -> None:
@@ -300,13 +395,21 @@ def test_resume_continues_a_paused_run(base: str) -> None:
     res = post(base, "/api/resume?record=demo_resumable")
     assert res["status"] == "finalised" and res["resumed"] == "demo_resumable"
     kinds = {e["kind"] for e in get(base, f"/api/records/{res['name']}/events")}
-    assert {"ApprovalGranted", "Stage2Done", "substrate.RunFinalised"} <= kinds  # the run continued
-    assert get(base, "/api/records/demo_resumable/run_graph")["status"] == "paused"  # template untouched
+    assert {
+        "ApprovalGranted",
+        "Stage2Done",
+        "substrate.RunFinalised",
+    } <= kinds  # the run continued
+    assert (
+        get(base, "/api/records/demo_resumable/run_graph")["status"] == "paused"
+    )  # template untouched
 
 
 def test_resume_non_resumable_is_404(base: str) -> None:
     with pytest.raises(urllib.error.HTTPError) as exc:
-        post(base, "/api/resume?record=code_review")  # a finalised, non-resumable record
+        post(
+            base, "/api/resume?record=code_review"
+        )  # a finalised, non-resumable record
     assert exc.value.code == 404
 
 
@@ -333,13 +436,21 @@ def test_validate_accepts_good_rejects_bad(base: str) -> None:
     # the Studio's live validation (static TopologyBuilder.build() — the runtime's OWN "allowable
     # ways"): a good spec validates; bad wiring is rejected with a clean typed message, never a crash.
     assert post_json(base, "/api/validate", _AUTHORED) == {"valid": True}
-    no_producers = post_json(base, "/api/validate", {"producers": [], "termination": {"kind": "all_completed"}})
+    no_producers = post_json(
+        base,
+        "/api/validate",
+        {"producers": [], "termination": {"kind": "all_completed"}},
+    )
     assert no_producers["valid"] is False and "Producer" in no_producers["error"]
-    unknown_starts = post_json(base, "/api/validate", {
-        "producers": [{"kind": "a", "emits": ["X"], "initial": True}],
-        "triggers": [{"id": "t", "on": "X", "starts": "ghost"}],
-        "termination": {"kind": "all_completed"},
-    })
+    unknown_starts = post_json(
+        base,
+        "/api/validate",
+        {
+            "producers": [{"kind": "a", "emits": ["X"], "initial": True}],
+            "triggers": [{"id": "t", "on": "X", "starts": "ghost"}],
+            "termination": {"kind": "all_completed"},
+        },
+    )
     assert unknown_starts["valid"] is False and "ghost" in unknown_starts["error"]
 
 
@@ -348,18 +459,38 @@ def test_build_surfaces_unfired_triggers(base: str) -> None:
     # Predicate above the producer count is UNREACHABLE — the run finalises green having fired nothing
     # past the initials. That must not be silent: /api/build names the authored Trigger that never
     # fired, so the Studio can warn instead of implying the wiring worked.
-    res = post_json(base, "/api/build", {
-        "name": "unreachable",
-        "producers": [{"kind": "a", "emits": ["X"], "initial": True},
-                      {"kind": "b", "emits": ["Y"]}],
-        "views": [{"name": "xs", "kind": "KindCount", "of": "X"}],
-        "triggers": [{"id": "needs_three", "on": "X",
-                      "predicate": {"view": "xs", "op": ">=", "n": 3}, "starts": "b", "policy": "Once"}],
-        "termination": {"kind": "any_of",
-                        "members": [{"kind": "all_completed"}, {"kind": "quiescence_with_watchdog", "seconds": 1}]},
-    })
+    res = post_json(
+        base,
+        "/api/build",
+        {
+            "name": "unreachable",
+            "producers": [
+                {"kind": "a", "emits": ["X"], "initial": True},
+                {"kind": "b", "emits": ["Y"]},
+            ],
+            "views": [{"name": "xs", "kind": "KindCount", "of": "X"}],
+            "triggers": [
+                {
+                    "id": "needs_three",
+                    "on": "X",
+                    "predicate": {"view": "xs", "op": ">=", "n": 3},
+                    "starts": "b",
+                    "policy": "Once",
+                }
+            ],
+            "termination": {
+                "kind": "any_of",
+                "members": [
+                    {"kind": "all_completed"},
+                    {"kind": "quiescence_with_watchdog", "seconds": 1},
+                ],
+            },
+        },
+    )
     assert res["status"] == "finalised"  # honestly finalised via quiescence...
-    assert res.get("unfired_triggers") == ["needs_three"]  # ...but the unfired Trigger is surfaced
+    assert res.get("unfired_triggers") == [
+        "needs_three"
+    ]  # ...but the unfired Trigger is surfaced
     # and indeed no Y was emitted (b never started) — the surfaced signal is true, not decorative:
     kinds = [e["kind"] for e in get(base, f"/api/records/{res['name']}/events")]
     assert "Y" not in kinds
@@ -373,9 +504,22 @@ def test_build_model_producer_runs_the_responder(base: str) -> None:
 
     spec = {
         "name": "model_demo",
-        "producers": [{"kind": "rater", "emits": ["Verdict"], "initial": True, "model": True, "prompt": "rate this"}],
-        "termination": {"kind": "any_of",
-                        "members": [{"kind": "all_completed"}, {"kind": "quiescence_with_watchdog", "seconds": 1}]},
+        "producers": [
+            {
+                "kind": "rater",
+                "emits": ["Verdict"],
+                "initial": True,
+                "model": True,
+                "prompt": "rate this",
+            }
+        ],
+        "termination": {
+            "kind": "any_of",
+            "members": [
+                {"kind": "all_completed"},
+                {"kind": "quiescence_with_watchdog", "seconds": 1},
+            ],
+        },
     }
     res = post_json(base, "/api/build", spec)
     assert res["status"] == "finalised"
@@ -384,7 +528,9 @@ def test_build_model_producer_runs_the_responder(base: str) -> None:
     assert len(verdicts) == 1
     expected = DeterministicResponder(seed=0).respond("rate this")
     assert verdicts[0]["payload"]["note"] == expected  # the REAL responder's output...
-    assert expected != "rater"  # ...not the stub's note=kind — the responder genuinely ran
+    assert (
+        expected != "rater"
+    )  # ...not the stub's note=kind — the responder genuinely ran
 
 
 def test_ui_imports_only_sanctioned_substrate_surfaces() -> None:
@@ -406,11 +552,15 @@ def test_ui_imports_only_sanctioned_substrate_surfaces() -> None:
             elif isinstance(node, ast.Import):
                 mods = [a.name for a in node.names]
             for m in mods:
-                if (m == "substrate" or m.startswith("substrate.")) and m != "substrate":
+                if (
+                    m == "substrate" or m.startswith("substrate.")
+                ) and m != "substrate":
                     top2 = ".".join(m.split(".")[:2])
                     if top2 not in sanctioned:
                         offenders.append(f"{py.name}: {m}")
-    assert not offenders, f"UI reached past substrate's public surfaces into kernel internals: {offenders}"
+    assert not offenders, (
+        f"UI reached past substrate's public surfaces into kernel internals: {offenders}"
+    )
 
 
 def test_static_index_is_served(base: str) -> None:
@@ -436,23 +586,37 @@ def test_authored_route_feeds_a_reading_trigger(tmp_path) -> None:
         ],
         "routes": [{"id": "stage", "of": "Critique", "slot": "crits"}],
         "triggers": [
-            {"id": "fix", "on": "Critique", "starts": "Fixer", "reads": "crits", "policy": "PerEvent"}
+            {
+                "id": "fix",
+                "on": "Critique",
+                "starts": "Fixer",
+                "reads": "crits",
+                "policy": "PerEvent",
+            }
         ],
         "termination": {"kind": "quiescence_with_watchdog", "seconds": 1},
     }
     topo = build_from_spec(spec, DeterministicResponder(seed=0))
     asyncio.run(api.Runtime(tmp_path / "run").run(topo))
 
-    patches = [e["payload"]["note"] for e in api.read_record(tmp_path / "run") if e["kind"] == "Patch"]
+    patches = [
+        e["payload"]["note"]
+        for e in api.read_record(tmp_path / "run")
+        if e["kind"] == "Patch"
+    ]
     assert patches, "the Fixer ran on the routed Critique"
-    assert "staged" in patches[0]  # the Fixer's input carried the Route's staged data, not just the event
+    assert (
+        "staged" in patches[0]
+    )  # the Fixer's input carried the Route's staged data, not just the event
 
 
 def test_clear_runs_prunes_session_runs_but_keeps_demos_and_fixtures(base: str) -> None:
     # the prune (sprint 012, item C2): POST /api/runs/clear deletes ONLY the hash-suffixed session
     # runs (launch_/build_/resume_); bundled demos + the named demo_* fixtures are KEPT. An EXPLICIT
     # user action, not a silent clobber — so the #35 durability ruling (no SILENT deletion) holds.
-    demos_before = {r["name"] for r in get(base, "/api/records") if r["source"] == "demo"}
+    demos_before = {
+        r["name"] for r in get(base, "/api/records") if r["source"] == "demo"
+    }
     launched = post(base, "/api/launch?topology=game_of_life")["name"]
     assert launched.startswith("launch_")  # a hash-suffixed session run
     res = post(base, "/api/runs/clear")
@@ -460,5 +624,9 @@ def test_clear_runs_prunes_session_runs_but_keeps_demos_and_fixtures(base: str) 
     names_after = {r["name"] for r in get(base, "/api/records")}
     assert launched not in names_after  # the session run was pruned
     assert demos_before <= names_after  # every demo + fixture kept
-    assert "demo_failed" in names_after and "game_of_life" in names_after  # fixture + bundled, explicitly
-    assert post(base, "/api/launch?topology=game_of_life")["status"] == "finalised"  # launch still works
+    assert (
+        "demo_failed" in names_after and "game_of_life" in names_after
+    )  # fixture + bundled, explicitly
+    assert (
+        post(base, "/api/launch?topology=game_of_life")["status"] == "finalised"
+    )  # launch still works

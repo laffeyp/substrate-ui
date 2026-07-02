@@ -24,6 +24,7 @@ from __future__ import annotations
 import asyncio
 import os
 import re
+import subprocess
 import threading
 import time
 import traceback
@@ -53,6 +54,7 @@ def _responder_for(spec: dict[str, object]) -> object:
         return OllamaResponder(model=str(spec.get("model_name") or "llama3.2"))
     return DeterministicResponder(seed=int(spec.get("seed", 0)))  # type: ignore[arg-type]
 
+
 # paused demo record -> (topology to re-resolve, the external resume event). Resume reattaches to
 # the record and injects the event so the resume Trigger fires the continuation (review #37: resume
 # self-records like launch, on the same seq sequence; we resume a COPY so the template stays paused).
@@ -67,7 +69,9 @@ class LiveTick(Struct, frozen=True):
 def _slow_topology() -> Any:
     async def ticker(_inp: Any) -> Any:
         for i in range(1, 7):
-            await asyncio.sleep(0.5)  # ~3s total, so the console can follow it being written
+            await asyncio.sleep(
+                0.5
+            )  # ~3s total, so the console can follow it being written
             yield LiveTick(n=i)
 
     def topo(b: Any) -> None:
@@ -78,12 +82,16 @@ def _slow_topology() -> Any:
     return topo
 
 
-_EXTRA_TOPOS = {"live_demo": _slow_topology}  # launchable, alongside the bundled topologies
+_EXTRA_TOPOS = {
+    "live_demo": _slow_topology
+}  # launchable, alongside the bundled topologies
 # run_name -> the launch thread. The server SPAWNED the run, so it alone knows if it's still alive:
 # a launch whose thread is dead with no terminal RunFinalised has TORN — the authoritative signal
 # that distinguishes "incomplete = live (still writing)" from "incomplete = torn (dead)" (review #36).
 _LAUNCHES: dict[str, "threading.Thread"] = {}
-MAX_LIVE_RUNS = 8  # concurrency cap: a POST flood can't spawn unbounded run threads (security-3)
+MAX_LIVE_RUNS = (
+    8  # concurrency cap: a POST flood can't spawn unbounded run threads (security-3)
+)
 
 
 def _is_live(name: str) -> bool:
@@ -92,7 +100,9 @@ def _is_live(name: str) -> bool:
         return False
     if th.is_alive():
         return True
-    _LAUNCHES.pop(name, None)  # evict the dead thread (no unbounded growth on a long-lived server)
+    _LAUNCHES.pop(
+        name, None
+    )  # evict the dead thread (no unbounded growth on a long-lived server)
     return False
 
 
@@ -106,26 +116,79 @@ def _agent_models() -> dict[str, object]:
     try:
         with _u.urlopen("http://localhost:11434/api/tags", timeout=2) as r:  # noqa: S310 - localhost
             tags = msgspec.json.decode(r.read())
-        ollama = sorted(str(m.get("name", "")) for m in tags.get("models", []) if m.get("name"))
+        ollama = sorted(
+            str(m.get("name", "")) for m in tags.get("models", []) if m.get("name")
+        )
     except Exception:  # noqa: BLE001 — no ollama / daemon down: still offer claude/gemini/deterministic
         ollama = []
     # Default to a VERIFIED AGENTIC model, not the biggest coder. The agency assay (RESEARCH R-16/R-17)
     # found the top coder qwen3-coder:480b WRITE-SPINS — it is the worst agent — so shipping it as the
     # default is a bug. Prefer thinking+tools models that self-verify (write->run->check), scored
     # agency 100: kimi/glm/nemotron/deepseek-v4-pro. Fall back to any local model, else deterministic.
-    prefer = ["kimi-k2.6:cloud", "glm-5.1:cloud", "nemotron-3-super:cloud", "deepseek-v4-pro:cloud"]
-    default = next((m for m in prefer if m in ollama), ollama[0] if ollama else "deterministic")
-    return {"models": [*ollama, "claude", "gemini", "deterministic"], "cli": ["claude", "gemini"], "default": default}
+    prefer = [
+        "kimi-k2.6:cloud",
+        "glm-5.1:cloud",
+        "nemotron-3-super:cloud",
+        "deepseek-v4-pro:cloud",
+    ]
+    default = next(
+        (m for m in prefer if m in ollama), ollama[0] if ollama else "deterministic"
+    )
+    return {
+        "models": [*ollama, "claude", "gemini", "deterministic"],
+        "cli": ["claude", "gemini"],
+        "default": default,
+    }
 
-HOST, PORT = os.environ.get("SUBSTRATE_UI_HOST", "127.0.0.1"), int(os.environ.get("SUBSTRATE_UI_PORT", "8765"))
+
+HOST, PORT = (
+    os.environ.get("SUBSTRATE_UI_HOST", "127.0.0.1"),
+    int(os.environ.get("SUBSTRATE_UI_PORT", "8765")),
+)
 WEB = Path(__file__).resolve().parent / "web"  # the static frontend
-RUNS = Path(__file__).resolve().parent / "runs"  # generated/live records (failed/paused/broken demos)
+RUNS = (
+    Path(__file__).resolve().parent / "runs"
+)  # generated/live records (failed/paused/broken demos)
 # per-conversation agent workspaces — a DEDICATED session dir, never the server cwd (a scribble-in-the-
 # repo footgun the cockpit hit live). A bare `?workspace=<name>` resolves under here; an absolute path
 # is a project the user picked. Git-worktree-per-session isolation is the next step (Galley/Sculptor).
 _SESSIONS_BASE = Path.home() / ".substrate" / "sessions"
-_SESSION_PREFIXES = ("launch_", "build_", "resume_")  # hash-suffixed session runs (prunable; vs the stable demo_* fixtures)
-_CT = {".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".json": "application/json"}
+
+
+def _session_worktree(repo: Path, session_id: str) -> tuple[Path, str]:
+    """Git-worktree-per-session isolation (Galley/Sculptor pattern, from the research): a session
+    driven against a REPO operates in its own worktree — a checkout on a fresh branch
+    `substrate/<session>` at `~/.substrate/sessions/wt/<repo>-<session>` — so the agent works ADJACENT
+    to your repo, on a diffable branch, without touching your working tree, and parallel sessions do
+    not collide. Idempotent (reuse the worktree if it exists). Raises if `repo` is not a git repo."""
+    repo = repo.expanduser().resolve()
+    if not (repo / ".git").exists():
+        raise ValueError(f"{repo} is not a git repository")
+    wt = _SESSIONS_BASE / "wt" / f"{repo.name}-{session_id}"
+    branch = f"substrate/{session_id}"
+    if wt.exists():
+        return wt, branch
+    wt.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run(  # -B reuses/creates the branch; worktree off HEAD
+        ["git", "-C", str(repo), "worktree", "add", "-B", branch, str(wt), "HEAD"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return wt, branch
+
+
+_SESSION_PREFIXES = (
+    "launch_",
+    "build_",
+    "resume_",
+)  # hash-suffixed session runs (prunable; vs the stable demo_* fixtures)
+_CT = {
+    ".html": "text/html",
+    ".js": "text/javascript",
+    ".css": "text/css",
+    ".json": "application/json",
+}
 
 
 _SAFE_RECORD_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
@@ -169,7 +232,11 @@ def _records_index() -> list[dict[str, object]]:
         s = api.narration_summary(events)
         g = api.run_graph(events)
         run_id = next(
-            (str((e.get("payload") or {}).get("run_id")) for e in events if e.get("kind") == "substrate.RunStarted"),
+            (
+                str((e.get("payload") or {}).get("run_id"))
+                for e in events
+                if e.get("kind") == "substrate.RunStarted"
+            ),
             "",
         )
         out.append(
@@ -179,7 +246,8 @@ def _records_index() -> list[dict[str, object]]:
                 "status": g.status,  # incomplete | paused | finalised | failed (the real run-level outcome)
                 "final_reason": g.final_reason,
                 "paused_on": g.paused_on,
-                "resumable": name in _RESUMABLE,  # a paused run the UI can feed + continue
+                "resumable": name
+                in _RESUMABLE,  # a paused run the UI can feed + continue
                 "total_events": s.total_events,
                 "producers_failed": s.producers_failed
                 + s.input_build_failures
@@ -200,9 +268,12 @@ def _io(events: list[dict[str, object]]) -> dict[str, object]:
     OUTPUTS = the application events as artifacts (each citing its seq); finalisation = the
     RunFinalised payload if any."""
     init = next(
-        (e for e in events
-         if e.get("kind") == "substrate.TriggerFired"
-         and (e.get("payload") or {}).get("trigger_id") == "__initial__"),
+        (
+            e
+            for e in events
+            if e.get("kind") == "substrate.TriggerFired"
+            and (e.get("payload") or {}).get("trigger_id") == "__initial__"
+        ),
         None,
     )
     seed = (init.get("payload") or {}).get("resolved_input") if init else None
@@ -232,7 +303,9 @@ _PROJECTIONS = {
     "topology_graph": lambda ev: _builtins(api.topology_graph(ev)),
     "summary": lambda ev: _builtins(api.narration_summary(ev)),
     "narrate": lambda ev: [_builtins(line) for line in api.narrate(ev)],
-    "narrate_full": lambda ev: [_builtins(line) for line in api.narrate(ev, lifecycle=True)],
+    "narrate_full": lambda ev: [
+        _builtins(line) for line in api.narrate(ev, lifecycle=True)
+    ],
     "io": _io,
 }
 
@@ -240,7 +313,15 @@ _PROJECTIONS = {
 # ── the assay seam: a results file (arms x cases x trials) read as ONE arm comparison ──────────
 # Read-only projections, like the record ones, but at the ABOVE-a-run altitude: many records compared.
 BENCH_RESULTS = Path(
-    os.environ.get("BENCH_RESULTS", str(Path(__file__).resolve().parent.parent / "substrate" / "process" / "bench_results"))
+    os.environ.get(
+        "BENCH_RESULTS",
+        str(
+            Path(__file__).resolve().parent.parent
+            / "substrate"
+            / "process"
+            / "bench_results"
+        ),
+    )
 )
 
 
@@ -256,16 +337,18 @@ def _assays_index() -> list[dict[str, object]]:
             meta, rows = read_meta(cells), read_rows(cells)
         except Exception:  # noqa: BLE001 — a malformed/partial file shows empty, never crashes the rail
             meta, rows = {}, []
-        out.append({
-            "name": cells.stem,
-            "fingerprint": meta.get("config_fp"),
-            "strong_model": meta.get("strong_model"),
-            "weak_models": meta.get("weak_models"),
-            "margin": meta.get("margin"),
-            "trials": meta.get("trials"),
-            "n_cells": len(rows),
-            "arms": sorted({str(r.get("arm")) for r in rows}),
-        })
+        out.append(
+            {
+                "name": cells.stem,
+                "fingerprint": meta.get("config_fp"),
+                "strong_model": meta.get("strong_model"),
+                "weak_models": meta.get("weak_models"),
+                "margin": meta.get("margin"),
+                "trials": meta.get("trials"),
+                "n_cells": len(rows),
+                "arms": sorted({str(r.get("arm")) for r in rows}),
+            }
+        )
     return out
 
 
@@ -287,7 +370,11 @@ def _assay_report(name: str) -> dict[str, object]:
     if cached and cached[0] == mtime:
         return cached[1]
     report, meta = report_from_cells(cells)
-    result: dict[str, object] = {"name": name, "meta": meta, "report": _builtins(report)}
+    result: dict[str, object] = {
+        "name": name,
+        "meta": meta,
+        "report": _builtins(report),
+    }
     _ASSAY_CACHE[name] = (mtime, result)
     return result
 
@@ -325,7 +412,9 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:  # noqa: N802 — the thin control layer (launch + resume only, per ruling C1)
         path = unquote(urlparse(self.path).path)
         if not self._origin_ok():
-            self._error(403, "cross-origin request rejected (Origin does not match Host)")
+            self._error(
+                403, "cross-origin request rejected (Origin does not match Host)"
+            )
             return
         try:
             if path == "/api/launch":
@@ -389,13 +478,20 @@ class Handler(BaseHTTPRequestHandler):
         # would block the request for its whole duration (review #35 finding 3).
         run_name = f"launch_{name}_{uuid.uuid4().hex[:12]}"
         root = RUNS / f"{run_name}.record"
-        th = threading.Thread(target=lambda: asyncio.run(api.Runtime(root).run(factory())), daemon=True)
-        _LAUNCHES[run_name] = th  # track liveness — a dead thread w/o a terminal = torn (review #36)
+        th = threading.Thread(
+            target=lambda: asyncio.run(api.Runtime(root).run(factory())), daemon=True
+        )
+        _LAUNCHES[run_name] = (
+            th  # track liveness — a dead thread w/o a terminal = torn (review #36)
+        )
         th.start()
         # wait only until RunStarted is on the record, so the console can immediately read + follow it.
         for _ in range(80):
             try:
-                if root.exists() and any(e.get("kind") == "substrate.RunStarted" for e in api.read_record(root)):
+                if root.exists() and any(
+                    e.get("kind") == "substrate.RunStarted"
+                    for e in api.read_record(root)
+                ):
                     break
             except Exception:  # noqa: BLE001 - record mid-write; keep waiting
                 pass
@@ -423,11 +519,27 @@ class Handler(BaseHTTPRequestHandler):
         # a bare name is a named session dir under ~/.substrate/sessions/ (the client passes the
         # conversation id so its turns share one dir); absent -> a fresh adhoc session dir. Created.
         ws_arg = q.get("workspace", [""])[0]
-        if ws_arg:
+        wt_arg = q.get("worktree", [""])[
+            0
+        ]  # a repo path -> isolate this session in its own worktree
+        session = (
+            re.sub(r"[^A-Za-z0-9._-]", "-", ws_arg)[:40]
+            or f"adhoc-{uuid.uuid4().hex[:8]}"
+        )
+        branch = ""
+        if (
+            wt_arg
+        ):  # git-worktree-per-session: operate on a branch adjacent to the repo (B)
+            try:
+                workspace, branch = _session_worktree(Path(wt_arg), session)
+            except Exception as exc:  # noqa: BLE001 — not a repo / git failed: fall back, surfaced
+                workspace = _SESSIONS_BASE / session
+                branch = f"(worktree failed: {type(exc).__name__})"
+        elif ws_arg:
             p = Path(ws_arg).expanduser()
-            workspace = p if p.is_absolute() else (_SESSIONS_BASE / p)
+            workspace = p if p.is_absolute() else (_SESSIONS_BASE / session)
         else:
-            workspace = _SESSIONS_BASE / f"adhoc-{uuid.uuid4().hex[:8]}"
+            workspace = _SESSIONS_BASE / session
         workspace.mkdir(parents=True, exist_ok=True)
         suite = full_suite(workspace)
         if model == "ollama":
@@ -450,7 +562,10 @@ class Handler(BaseHTTPRequestHandler):
             preset = {"claude": ["claude", "-p"], "gemini": ["gemini", "-p"]}
             cmd = preset.get(model) or q.get("command", [""])[0].split()
             if not cmd:
-                self._error(400, "cli agent needs a command (model=claude|gemini, or ?command=...)")
+                self._error(
+                    400,
+                    "cli agent needs a command (model=claude|gemini, or ?command=...)",
+                )
                 return
             topo = tool_loop_topology(
                 model=CliResponder(cmd, name=model),
@@ -462,17 +577,24 @@ class Handler(BaseHTTPRequestHandler):
             )
             label = "agent_" + model
         else:
-            topo = tool_loop_topology()  # deterministic calculator loop — CI-safe, no network
+            topo = (
+                tool_loop_topology()
+            )  # deterministic calculator loop — CI-safe, no network
             label = "agent_calc"
         run_name = f"launch_{label}_{uuid.uuid4().hex[:12]}"  # launch_ prefix => prunable session run
         root = RUNS / f"{run_name}.record"
-        th = threading.Thread(target=lambda: asyncio.run(api.Runtime(root).run(topo)), daemon=True)
+        th = threading.Thread(
+            target=lambda: asyncio.run(api.Runtime(root).run(topo)), daemon=True
+        )
         _LAUNCHES[run_name] = th
         th.start()
-        for _ in range(80):  # wait only until RunStarted lands, so the console can follow immediately
+        for _ in range(
+            80
+        ):  # wait only until RunStarted lands, so the console can follow immediately
             try:
                 if root.exists() and any(
-                    e.get("kind") == "substrate.RunStarted" for e in api.read_record(root)
+                    e.get("kind") == "substrate.RunStarted"
+                    for e in api.read_record(root)
                 ):
                     break
             except Exception:  # noqa: BLE001 - record mid-write; keep waiting
@@ -480,7 +602,13 @@ class Handler(BaseHTTPRequestHandler):
             time.sleep(0.05)
         status = api.run_graph(root).status if root.exists() else "incomplete"
         self._json(
-            {"name": run_name, "status": status, "agent": model, "workspace": str(workspace)}
+            {
+                "name": run_name,
+                "status": status,
+                "agent": model,
+                "workspace": str(workspace),
+                "branch": branch,
+            }
         )
 
     def _resume(self, q: dict[str, list[str]]) -> None:
@@ -511,7 +639,9 @@ class Handler(BaseHTTPRequestHandler):
             lock.unlink()
         th = threading.Thread(
             target=lambda: asyncio.run(
-                api.Runtime(root, persistent=True).resume(topo, resume_event=ev_factory())
+                api.Runtime(root, persistent=True).resume(
+                    topo, resume_event=ev_factory()
+                )
             ),
             daemon=True,
         )
@@ -524,7 +654,9 @@ class Handler(BaseHTTPRequestHandler):
             except Exception:  # noqa: BLE001 - mid-write
                 pass
             time.sleep(0.05)
-        self._json({"name": resume_name, "status": api.run_graph(root).status, "resumed": name})
+        self._json(
+            {"name": resume_name, "status": api.run_graph(root).status, "resumed": name}
+        )
 
     def _body(self) -> dict[str, object]:
         length = int(self.headers.get("Content-Length", 0))
@@ -568,7 +700,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         run_name = f"build_{name}_{uuid.uuid4().hex[:12]}"
         root = RUNS / f"{run_name}.record"
-        th = threading.Thread(target=lambda: asyncio.run(api.Runtime(root).run(topo)), daemon=True)
+        th = threading.Thread(
+            target=lambda: asyncio.run(api.Runtime(root).run(topo)), daemon=True
+        )
         _LAUNCHES[run_name] = th
         th.start()
         # authored stub topologies are deterministic + fast — wait briefly for a TERMINAL so the
@@ -583,7 +717,11 @@ class Handler(BaseHTTPRequestHandler):
             except Exception:  # noqa: BLE001 - record not yet readable (pre-RunStarted)
                 pass
             time.sleep(0.05)
-        out: dict[str, object] = {"name": run_name, "status": g.status if g else "incomplete", "built": name}
+        out: dict[str, object] = {
+            "name": run_name,
+            "status": g.status if g else "incomplete",
+            "built": name,
+        }
         # "never matured" is only true against a TERMINAL graph. If the wait timed out and the run is
         # still incomplete, a trigger is "unfired" merely because the run hasn't reached it yet -- a
         # spurious signal on the slow (Ollama) path (ui-backend-5). Only report it for a settled run.
@@ -592,7 +730,9 @@ class Handler(BaseHTTPRequestHandler):
             fired = {i.trigger_id for i in g.instances if i.trigger_id}
             unfired = [t for t in authored if t not in fired]
             if unfired:
-                out["unfired_triggers"] = unfired  # authored Triggers whose Predicate never matured
+                out["unfired_triggers"] = (
+                    unfired  # authored Triggers whose Predicate never matured
+                )
         self._json(out)
 
     def do_GET(self) -> None:  # noqa: N802
@@ -612,7 +752,9 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(res, 404 if "error" in res else 200)
                 return
             if path == "/api/topologies":
-                self._json(bundled.names() + list(_EXTRA_TOPOS))  # the launchable topologies
+                self._json(
+                    bundled.names() + list(_EXTRA_TOPOS)
+                )  # the launchable topologies
                 return
             if path == "/api/diff":
                 self._diff(parse_qs(urlparse(self.path).query))
@@ -635,13 +777,26 @@ class Handler(BaseHTTPRequestHandler):
             self._error(404, f"no record {name!r}")
             return
         events = list(api.read_record(record))
-        if len(parts) == 1:  # the whole run: events + the manifest + the run-level status
+        if (
+            len(parts) == 1
+        ):  # the whole run: events + the manifest + the run-level status
             manifest = next(
-                ((e.get("payload") or {}).get("topology") for e in events if e.get("kind") == "substrate.RunStarted"),
+                (
+                    (e.get("payload") or {}).get("topology")
+                    for e in events
+                    if e.get("kind") == "substrate.RunStarted"
+                ),
                 None,
             )
             g = api.run_graph(events)
-            self._json({"name": name, "status": g.status, "events": events, "manifest": manifest})
+            self._json(
+                {
+                    "name": name,
+                    "status": g.status,
+                    "events": events,
+                    "manifest": manifest,
+                }
+            )
             return
         sub = parts[1]
         if sub == "explain" and len(parts) >= 3:
@@ -653,7 +808,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         out = proj(events)
         if sub == "run_graph" and isinstance(out, dict):
-            out["live"] = _is_live(name)  # server-authoritative liveness: is the launch still writing?
+            out["live"] = _is_live(
+                name
+            )  # server-authoritative liveness: is the launch still writing?
         self._json(out)
 
     def _diff(self, q: dict[str, list[str]]) -> None:
@@ -667,16 +824,22 @@ class Handler(BaseHTTPRequestHandler):
         if div is None:
             self._json({"a": a, "b": b, "equivalent": True})
         else:
-            self._json({"a": a, "b": b, "equivalent": False, "divergence": _builtins(div)})
+            self._json(
+                {"a": a, "b": b, "equivalent": False, "divergence": _builtins(div)}
+            )
 
-    def _explain(self, name: str, events: list[dict[str, object]], producer: str) -> None:
+    def _explain(
+        self, name: str, events: list[dict[str, object]], producer: str
+    ) -> None:
         try:
             exp = api.explain_producer(events, producer)
             chain = api.trace_ancestry(events, producer)
         except (api.ProducerNotFound, api.SequenceOutOfRange) as exc:
             self._error(404, str(exc))
             return
-        self._json({"explanation": _builtins(exp), "ancestry": [_builtins(e) for e in chain]})
+        self._json(
+            {"explanation": _builtins(exp), "ancestry": [_builtins(e) for e in chain]}
+        )
 
     def _static(self, path: str) -> None:
         rel = "index.html" if path in ("", "/") else path.lstrip("/")
@@ -691,13 +854,17 @@ class Handler(BaseHTTPRequestHandler):
         if not target.is_file():
             self._error(404, f"not found: {path}")
             return
-        self._send(200, target.read_bytes(), _CT.get(target.suffix, "application/octet-stream"))
+        self._send(
+            200, target.read_bytes(), _CT.get(target.suffix, "application/octet-stream")
+        )
 
 
 def main() -> None:
     WEB.mkdir(exist_ok=True)
     srv = ThreadingHTTPServer((HOST, PORT), Handler)
-    print(f"substrate-ui read-API server on http://{HOST}:{PORT}  (records: {', '.join(bundled.names())})")
+    print(
+        f"substrate-ui read-API server on http://{HOST}:{PORT}  (records: {', '.join(bundled.names())})"
+    )
     try:
         srv.serve_forever()
     except KeyboardInterrupt:

@@ -290,19 +290,26 @@ async function sendChatMessage(text) {
   // with a real project. The server resolves the bare name and echoes back the absolute path.
   if (!STATE.term.workspace) STATE.term.workspace = "sess-" + Math.random().toString(36).slice(2, 10);
   const ws = `&workspace=${encodeURIComponent(STATE.term.workspace)}`;
+  // worktree mode (`worktree <repo>`): the session runs in its own git worktree on a branch, adjacent
+  // to the repo. `workspace` stays the stable SESSION ID (do NOT adopt the resolved path, or the next
+  // turn spawns a new worktree); the server echoes the worktree path + branch, shown once.
+  const wt = STATE.term.worktree ? `&worktree=${encodeURIComponent(STATE.term.worktree)}` : "";
   const qs =
     (model === "deterministic"
       ? "model=deterministic"
       : cli.has(model)
         ? `model=${model}&task=${encodeURIComponent(transcript)}`
-        : `model=ollama&name=${encodeURIComponent(model)}&task=${encodeURIComponent(transcript)}`) + ws;
+        : `model=ollama&name=${encodeURIComponent(model)}&task=${encodeURIComponent(transcript)}`) + ws + wt;
   termPush([{ cls: "dim", text: `· ${model} is working…` }]);
   const res = await fetch(`/api/agent?${qs}`, { method: "POST" }).then((r) => r.json()).catch(() => null);
   if (!res || res.error || !res.name) { termPush([{ cls: "err", text: "agent: launch failed" }]); return; }
-  // remember + show the workspace the tools operate in the first time it's reported (the cwd answer).
-  if (res.workspace && STATE.term.workspace !== res.workspace) {
-    STATE.term.workspace = res.workspace;
-    termPush([{ cls: "dim", text: `· workspace: ${res.workspace}` }]);
+  // show the resolved workspace (+ branch, in worktree mode) once. Only adopt the resolved path as the
+  // session key when NOT in worktree mode — worktree needs the stable session id across turns.
+  if (res.workspace && STATE.term.workspacePath !== res.workspace) {
+    STATE.term.workspacePath = res.workspace;
+    const br = res.branch ? `  (branch ${res.branch})` : "";
+    termPush([{ cls: "dim", text: `· workspace: ${res.workspace}${br}` }]);
+    if (!STATE.term.worktree) STATE.term.workspace = res.workspace;
   }
   STATE.term.agent = res.name; STATE.term.agentSeq = -1;
   await selectRecord(res.name);
@@ -775,7 +782,8 @@ async function runTerm(line) {
     [["chat", "start/reconnect a conversation — then just TYPE to talk (watch it run in the graph)"],
      ["/exit", "while chatting: leave (the conversation is kept; `chat` reconnects). /cmd runs a command"],
      ["model <name>", "pick the driver (or use the picker): an Ollama model, claude, gemini, deterministic"],
-     ["cwd [<path>]", "the working directory the agent operates in (unset = server launch dir)"],
+     ["cwd [<path>]", "the working directory the agent operates in (unset = a dedicated session dir)"],
+     ["worktree <repo>", "isolate this session in its own git worktree of a repo (a branch, adjacent)"],
      ["tail [--kind K] [--producer P] [--all]", "events up to the cursor (seq + t)"],
      ["cat <seq>", "the full payload of the event at <seq> — the content"],
      ["ls", "the application output events + their seqs"],
@@ -797,8 +805,19 @@ async function runTerm(line) {
     // the working directory the agent's tools operate in (relative paths + bash resolve there). Set it
     // BEFORE you talk to pick where the agent works; unset = the server's launch dir. Like `cd`-ing
     // into a repo before starting Claude Code. Absolute paths the model names still go where named.
-    if (parts[1]) { STATE.term.workspace = parts.slice(1).join(" "); say("workspace = " + STATE.term.workspace, "dim"); }
-    else say("workspace = " + (STATE.term.workspace || "(server launch dir — set with `cwd <path>`)"), "dim");
+    if (parts[1]) { STATE.term.workspace = parts.slice(1).join(" "); STATE.term.worktree = null; say("workspace = " + STATE.term.workspace, "dim"); }
+    else say("workspace = " + (STATE.term.workspace || "(a dedicated per-session dir)"), "dim");
+    return out;
+  }
+  if (cmd === "worktree" || cmd === "wt") {
+    // git-worktree-per-session: run this session in its OWN worktree of a repo — a branch adjacent to
+    // it, so the agent works isolated from your working tree and its changes are a diffable branch.
+    if (parts[1]) {
+      STATE.term.worktree = parts.slice(1).join(" ");
+      STATE.term.workspacePath = null;  // force the new worktree path/branch to be shown next turn
+      if (!STATE.term.workspace || STATE.term.workspace.startsWith("/")) STATE.term.workspace = "sess-" + Math.random().toString(36).slice(2, 10);
+      say("worktree of " + STATE.term.worktree + " — this session runs on branch substrate/" + STATE.term.workspace, "dim");
+    } else say("worktree = " + (STATE.term.worktree || "(none — `worktree <repo>` to isolate on a branch)"), "dim");
     return out;
   }
   if (cmd === "chat" || cmd === "agent") {
