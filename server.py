@@ -109,13 +109,21 @@ def _agent_models() -> dict[str, object]:
         ollama = sorted(str(m.get("name", "")) for m in tags.get("models", []) if m.get("name"))
     except Exception:  # noqa: BLE001 — no ollama / daemon down: still offer claude/gemini/deterministic
         ollama = []
-    prefer = "qwen3-coder:480b-cloud"  # the biggest OSS model on this box; default to it if present
-    default = prefer if prefer in ollama else (ollama[0] if ollama else "deterministic")
+    # Default to a VERIFIED AGENTIC model, not the biggest coder. The agency assay (RESEARCH R-16/R-17)
+    # found the top coder qwen3-coder:480b WRITE-SPINS — it is the worst agent — so shipping it as the
+    # default is a bug. Prefer thinking+tools models that self-verify (write->run->check), scored
+    # agency 100: kimi/glm/nemotron/deepseek-v4-pro. Fall back to any local model, else deterministic.
+    prefer = ["kimi-k2.6:cloud", "glm-5.1:cloud", "nemotron-3-super:cloud", "deepseek-v4-pro:cloud"]
+    default = next((m for m in prefer if m in ollama), ollama[0] if ollama else "deterministic")
     return {"models": [*ollama, "claude", "gemini", "deterministic"], "cli": ["claude", "gemini"], "default": default}
 
 HOST, PORT = os.environ.get("SUBSTRATE_UI_HOST", "127.0.0.1"), int(os.environ.get("SUBSTRATE_UI_PORT", "8765"))
 WEB = Path(__file__).resolve().parent / "web"  # the static frontend
 RUNS = Path(__file__).resolve().parent / "runs"  # generated/live records (failed/paused/broken demos)
+# per-conversation agent workspaces — a DEDICATED session dir, never the server cwd (a scribble-in-the-
+# repo footgun the cockpit hit live). A bare `?workspace=<name>` resolves under here; an absolute path
+# is a project the user picked. Git-worktree-per-session isolation is the next step (Galley/Sculptor).
+_SESSIONS_BASE = Path.home() / ".substrate" / "sessions"
 _SESSION_PREFIXES = ("launch_", "build_", "resume_")  # hash-suffixed session runs (prunable; vs the stable demo_* fixtures)
 _CT = {".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".json": "application/json"}
 
@@ -411,8 +419,16 @@ class Handler(BaseHTTPRequestHandler):
         # + bash resolve there, absolute paths still go where named). Default = the server's launch
         # cwd, the Claude-Code posture ("operate in the project you started me in"); `?workspace=`
         # overrides per conversation. This is ergonomics, not a jail — the autonomy is unchanged.
-        ws_arg = q.get("workspace", [""])[0]  # `?workspace=` (empty) is unset, not Path(".")
-        workspace = Path(ws_arg).expanduser() if ws_arg else Path.cwd()
+        # per-session workspace, NEVER the server cwd: an absolute path is a project the user picked;
+        # a bare name is a named session dir under ~/.substrate/sessions/ (the client passes the
+        # conversation id so its turns share one dir); absent -> a fresh adhoc session dir. Created.
+        ws_arg = q.get("workspace", [""])[0]
+        if ws_arg:
+            p = Path(ws_arg).expanduser()
+            workspace = p if p.is_absolute() else (_SESSIONS_BASE / p)
+        else:
+            workspace = _SESSIONS_BASE / f"adhoc-{uuid.uuid4().hex[:8]}"
+        workspace.mkdir(parents=True, exist_ok=True)
         suite = full_suite(workspace)
         if model == "ollama":
             model_name = q.get("name", ["llama3.2:1b"])[0]

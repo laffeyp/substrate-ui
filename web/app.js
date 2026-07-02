@@ -285,7 +285,11 @@ async function sendChatMessage(text) {
   const model = STATE.term.model || "deterministic";
   const transcript = renderConvo(STATE.term.chat.convo);
   const cli = new Set(["claude", "gemini"]);
-  const ws = STATE.term.workspace ? `&workspace=${encodeURIComponent(STATE.term.workspace)}` : "";
+  // default to a DEDICATED per-conversation workspace (a session name -> ~/.substrate/sessions/<id>),
+  // never the repo the server launched in. Set once, then every turn shares it. `cwd <path>` overrides
+  // with a real project. The server resolves the bare name and echoes back the absolute path.
+  if (!STATE.term.workspace) STATE.term.workspace = "sess-" + Math.random().toString(36).slice(2, 10);
+  const ws = `&workspace=${encodeURIComponent(STATE.term.workspace)}`;
   const qs =
     (model === "deterministic"
       ? "model=deterministic"
