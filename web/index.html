@@ -243,14 +243,15 @@ button{font-family:inherit;color:inherit;cursor:pointer;background:none;border:n
     <button class="btn term-reopen" id="termOpen" title="open the terminal (Ctrl+`)">▌ terminal</button>
     <div class="term-dock" id="termdock" style="display:none">
       <div class="term-head">
-        <span class="term-title">▌ substrate — read interface</span>
-        <span class="term-hint">type <b>help</b></span>
+        <span class="term-title">▌ substrate — agent terminal</span>
+        <label class="term-hint">driver <select id="agentmodel" class="term-model" title="the model that drives the agent"></select></label>
+        <span class="term-hint" id="termhint"><b>chat</b> to talk · <b>help</b></span>
         <button class="btn" id="termClose" title="close the terminal">close ⌄</button>
       </div>
       <div class="term-body" id="termbody"></div>
       <div class="term-input-row">
         <span class="term-prompt" id="termprompt">substrate$</span>
-        <input class="term-input" id="terminput" spellcheck="false" autocomplete="off" placeholder="type a command — help" />
+        <input class="term-input" id="terminput" spellcheck="false" autocomplete="off" placeholder="type 'chat' to talk to the model — or a command (help)" />
       </div>
     </div>
   </div>
