@@ -820,6 +820,18 @@ async function runTerm(line) {
     } else say("worktree = " + (STATE.term.worktree || "(none — `worktree <repo>` to isolate on a branch)"), "dim");
     return out;
   }
+  if (cmd === "diff") {
+    // show what the agent changed in this session's worktree (the "show me what it did" half of B).
+    const p = STATE.term.workspacePath || STATE.term.workspace;
+    if (!p || !p.startsWith("/")) { say("no worktree yet — `worktree <repo>`, then talk to the agent", "dim"); return out; }
+    const d = await api(`/api/worktree_diff?path=${encodeURIComponent(p)}`).catch(() => null);
+    if (!d || d.error) { say("diff: " + ((d && d.error) || "unavailable — not a git worktree?"), "err"); return out; }
+    if (!d.files.length) { say("no changes in this session's worktree yet", "dim"); return out; }
+    say(d.files.length + " file(s) changed on branch substrate/" + STATE.term.workspace + ":", "dim");
+    d.files.forEach((f) => say("  " + f));
+    say((d.diff.slice(0, 2000) + (d.diff.length > 2000 ? "\n… (truncated — see the branch)" : "")));
+    return out;
+  }
   if (cmd === "chat" || cmd === "agent") {
     // enter (or RECONNECT to) the conversation — like opening a terminal session. The conversation
     // persists across /exit, so `chat` picks up where you left off; then you just TYPE to talk.
