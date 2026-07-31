@@ -379,6 +379,18 @@ def test_session_worktree_isolates_a_session_on_a_branch(tmp_path, monkeypatch) 
         server._session_worktree(tmp_path / "notarepo", "s")
 
 
+def test_agent_params_parse_and_echo(base: str) -> None:
+    # sprint 015: the call parameters are explicit — parsed by _agent_params (unit) and echoed back
+    # by /api/agent (contract), so the terminal shows what the server actually applied.
+    assert server._agent_params({}) == (False, 0, 300.0)
+    assert server._agent_params(
+        {"think": ["true"], "max_tokens": ["4096"], "timeout": ["240"]}
+    ) == (True, 4096, 240.0)
+    assert server._agent_params({"think": ["on"]}) == (True, 0, 300.0)
+    res = post(base, "/api/agent?model=deterministic&think=true&max_tokens=123&timeout=240")
+    assert res["params"] == {"think": True, "max_tokens": 123, "timeout": 240.0}
+
+
 def test_models_endpoint_lists_drivers_with_a_default(base: str) -> None:
     # the terminal's model picker: the drivers you can pick — Ollama models (live) + the CLI presets
     # (claude / gemini) + the CI stand-in — with a default (the biggest OSS model if present, else CI).

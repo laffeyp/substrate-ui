@@ -272,6 +272,16 @@ const check = (cond, msg) => { if (!cond) fails.push(msg); else console.log("  o
   check(picker.opts >= 1 && !!picker.value, `model picker is populated + has a default ("${picker.value}", ${picker.opts} options)`);
   await p.fill("#terminput", "model deterministic"); await p.press("#terminput", "Enter"); // CI: no Ollama
   await p.waitForTimeout(100);
+  // sprint 015: the call parameters are visible in the head and settable in place.
+  const params0 = await p.$eval("#termparams", (e) => e.textContent);
+  check(/think off/.test(params0) && /tokens ∞/.test(params0) && /timeout 300s/.test(params0),
+    `params strip shows the defaults ("${params0}")`);
+  await p.fill("#terminput", "tokens 4096"); await p.press("#terminput", "Enter");
+  await p.waitForTimeout(80);
+  const params1 = await p.$eval("#termparams", (e) => e.textContent);
+  check(/tokens 4096/.test(params1), `tokens 4096 updates the strip ("${params1}")`);
+  await p.fill("#terminput", "tokens 0"); await p.press("#terminput", "Enter"); // back to uncapped
+  await p.waitForTimeout(80);
   await p.fill("#terminput", "chat"); await p.press("#terminput", "Enter"); // enter conversation mode (once)
   await p.waitForTimeout(100);
   const chatPrompt = await p.$eval("#termprompt", (e) => e.textContent);

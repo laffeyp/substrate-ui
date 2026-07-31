@@ -106,6 +106,14 @@ def _is_live(name: str) -> bool:
     return False
 
 
+def _agent_params(q: dict[str, list[str]]) -> tuple[bool, int, float]:
+    """(think, max_tokens, timeout) from the request; max_tokens 0 = uncapped."""
+    think = q.get("think", ["false"])[0].lower() in ("1", "true", "on")
+    max_tokens = int(q.get("max_tokens", ["0"])[0] or 0)
+    timeout = float(q.get("timeout", ["300"])[0] or 300)
+    return think, max_tokens, timeout
+
+
 def _agent_models() -> dict[str, object]:
     """The drivers the terminal can pick: local Ollama models (read live) + the CLI presets
     (claude/gemini) + the CI stand-in. Ollama tags are best-effort (empty if the daemon is down — the
@@ -560,11 +568,14 @@ class Handler(BaseHTTPRequestHandler):
             workspace = _SESSIONS_BASE / session
         workspace.mkdir(parents=True, exist_ok=True)
         suite = full_suite(workspace)
+        think, max_tokens, timeout = _agent_params(q)
         if model == "ollama":
             model_name = q.get("name", ["llama3.2:1b"])[0]
             task = q.get("task", [""])[0] or "Use the available tools to help."
             topo = tool_loop_topology(
-                model=OllamaResponder(model=model_name, timeout=300.0),
+                model=OllamaResponder(
+                    model=model_name, think=think, max_tokens=max_tokens, timeout=timeout
+                ),
                 walkthrough=True,
                 deterministic=False,
                 tools=suite,
@@ -586,7 +597,7 @@ class Handler(BaseHTTPRequestHandler):
                 )
                 return
             topo = tool_loop_topology(
-                model=CliResponder(cmd, name=model),
+                model=CliResponder(cmd, name=model, timeout=max(timeout, 600.0)),
                 walkthrough=True,
                 deterministic=False,
                 tools=suite,
@@ -626,6 +637,7 @@ class Handler(BaseHTTPRequestHandler):
                 "agent": model,
                 "workspace": str(workspace),
                 "branch": branch,
+                "params": {"think": think, "max_tokens": max_tokens, "timeout": timeout},
             }
         )
 

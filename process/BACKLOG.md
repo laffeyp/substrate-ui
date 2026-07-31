@@ -28,6 +28,10 @@ card when picked up. Append-only-ish; mark items done/promoted rather than delet
   coloured `started->ended` (ran) segment, with the dot at the boundary (the run START). Verified
   both ways: 53/53 lanes correlate render↔log (`dot==run-start`); viewed. Gated in e2e_console.js §2.
 
+- **[2026-07-30] [promoted -> sprint 015] The selected call options must be OBVIOUS in the agent terminal.** After the token-cap fix, the Architect ruled: the parameters a turn runs with (driver, thinking on/off, token cap, timeout) must be visible in the dock head and settable in place — not implicit constructor state you discover by reading a record.
+
+- **[2026-07-30] A parameters pane.** Beyond the head strip: a pane that shows every parameter the call is made with, per instantiation, per gateway (Ollama and a CLI driver have different knob sets). Design direction; ties to the thinking-capture decision (THINKING-CAPTURE-RESEARCH-2026-07-30) — `think on` changes behavior today and should capture the monologue once the engine records it.
+
 ## Research directions (park; revisit when the interactive-agent terminal lands)
 
 - **[2026-06-22] substrate-ui -> an agent-IDE / code editor.** Beyond reading: *control your LLMs from
