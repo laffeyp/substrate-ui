@@ -51,7 +51,7 @@ def _responder_for(spec: dict[str, object]) -> object:
     seeded — the default; no network, replay-stable) or 'ollama' (a real local LLM; loud failure if
     Ollama is not running — never a silent stub)."""
     if str(spec.get("responder") or "deterministic").lower() == "ollama":
-        return OllamaResponder(model=str(spec.get("model_name") or "llama3.2"))
+        return OllamaResponder(model=str(spec.get("model_name") or "llama3.2"), timeout=300.0)
     return DeterministicResponder(seed=int(spec.get("seed", 0)))  # type: ignore[arg-type]
 
 
@@ -564,12 +564,12 @@ class Handler(BaseHTTPRequestHandler):
             model_name = q.get("name", ["llama3.2:1b"])[0]
             task = q.get("task", [""])[0] or "Use the available tools to help."
             topo = tool_loop_topology(
-                model=OllamaResponder(model=model_name),
+                model=OllamaResponder(model=model_name, timeout=300.0),
                 walkthrough=True,
                 deterministic=False,
                 tools=suite,
                 task=task,
-                max_steps=8,
+                max_steps=24,
             )
             label = "agent_" + re.sub(r"[^A-Za-z0-9]+", "-", model_name.split(":")[0])
         elif model in ("claude", "gemini", "cli"):
@@ -591,7 +591,7 @@ class Handler(BaseHTTPRequestHandler):
                 deterministic=False,
                 tools=suite,
                 task=task,
-                max_steps=8,
+                max_steps=24,
             )
             label = "agent_" + model
         else:
