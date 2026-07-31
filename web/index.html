@@ -154,16 +154,13 @@ button{font-family:inherit;color:inherit;cursor:pointer;background:none;border:n
 .term-row{ border-top:1px solid var(--line2); }
 .term-reopen{ margin:6px 14px; color:var(--tx-dim); }
 .term-dock{ display:flex; flex-direction:column; height:236px; background:var(--bg2); }
-.term-head{ display:flex; align-items:center; gap:12px; padding:6px 14px; border-bottom:1px solid var(--line); flex-wrap:nowrap; min-width:0; overflow:hidden; }
-.term-title{ color:var(--green); font-size:12px; white-space:nowrap; flex-shrink:0; }
+.term-head{ display:flex; align-items:center; gap:12px; padding:6px 14px; border-bottom:1px solid var(--line); flex-wrap:nowrap; overflow:hidden; }
+.term-head > *{ flex-shrink:0; white-space:nowrap; }
+.term-title{ color:var(--green); font-size:12px; }
 .term-head .term-hint{ margin-left:auto; }
-.term-hint{ color:var(--tx-faint); font-size:11px; white-space:nowrap; }
-.term-head label.term-hint{ display:flex; align-items:center; gap:6px; min-width:0; flex-shrink:1; }
-#termparams{ overflow:hidden; text-overflow:ellipsis; min-width:0; flex-shrink:2; }
-#termhint{ flex-shrink:0; }
-@media (max-width: 1100px){ #termhint{ display:none; } }
-@media (max-width: 860px){ #termparams{ display:none; } }
-.term-model{ appearance:none; -webkit-appearance:none; background:var(--panel2) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='6' viewBox='0 0 8 6'%3E%3Cpath d='M1 1l3 3 3-3' stroke='%23566273' fill='none' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat right 8px center; border:1px solid var(--line); border-radius:5px; color:var(--tx); font-family:var(--mono); font-size:11px; padding:3px 24px 3px 8px; max-width:240px; min-width:90px; flex:0 1 auto; text-overflow:ellipsis; cursor:pointer; }
+.term-hint{ color:var(--tx-faint); font-size:11px; }
+.term-head label.term-hint{ display:flex; align-items:center; gap:6px; }
+.term-model{ appearance:none; -webkit-appearance:none; background:var(--panel2) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='6' viewBox='0 0 8 6'%3E%3Cpath d='M1 1l3 3 3-3' stroke='%23566273' fill='none' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat right 8px center; border:1px solid var(--line); border-radius:5px; color:var(--tx); font-family:var(--mono); font-size:11px; padding:3px 24px 3px 8px; max-width:240px; text-overflow:ellipsis; cursor:pointer; }
 .term-model:hover{ border-color:var(--tx-faint); }
 .term-model:focus{ outline:none; border-color:var(--green); }
 .term-model option{ background:var(--panel2); color:var(--tx); }
