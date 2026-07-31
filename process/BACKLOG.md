@@ -32,6 +32,8 @@ card when picked up. Append-only-ish; mark items done/promoted rather than delet
 
 - **[2026-07-30] A parameters pane.** Beyond the head strip: a pane that shows every parameter the call is made with, per instantiation, per gateway (Ollama and a CLI driver have different knob sets). Design direction; ties to the thinking-capture decision (THINKING-CAPTURE-RESEARCH-2026-07-30) — `think on` changes behavior today and should capture the monologue once the engine records it.
 
+- **[2026-07-31] Workflow parity — ship the patterns as applications.** The agent-CLI products' workflow features (subagent fan-out, pipelines, verify panels, background notify, standing multi-agent mode) map onto existing substrate primitives almost 1:1 — the capability table is in `../COCKPIT-DIRECTION-round2-2026-07-30.md` item 11. The build items it resolves to: the `delegate` tool, the MCP servers, the application manifest, and a workflow-shaped application library (fan-out review, best-of-N + adversarial verify, research sweep) registered and launchable. Substrate's edge over all of them: every step is on a replayable record.
+
 ## Research directions (park; revisit when the interactive-agent terminal lands)
 
 - **[2026-06-22] substrate-ui -> an agent-IDE / code editor.** Beyond reading: *control your LLMs from
