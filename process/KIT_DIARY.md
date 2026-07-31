@@ -129,6 +129,16 @@
 
 | H8 | Skipping the sprint card on "small" drift items doesn't save time — it removes the step where edge cases (fixture vs session-run; the decode race) get named before the code obscures them; the gates then catch them later, at higher cost. | tentative-confirmed | This session: two drift items built code-first, two real bugs (source mis-tag, harness race) surfaced only by the gates afterward, not named up front; the card written for C2/A named the distinction cleanly. |
 
+### 2026-07-30 — the chat seam starved its models (finding 16)
+
+**What happened.** A month-later live session made the agent chat look broken: a top-assayed model announced work and never did it. The record showed the truth (answers cut at a colon where the tool call would begin); an A/B on the runtime's own script flipped the verdict from model problem to orchestration problem; the fix landed as substrate's uncapped default plus this seam's timeout and step budget.
+
+**What worked.** Reading the record instead of judging the model — the diagnosis was mechanical, not impressionistic. And the Architect's escalating verification demands ("prove it's hardcoded"; "fully research it") corrected three over-claims before they could ossify into the docs.
+
+**What this says for the kit.**
+
+16. **Config parity between the assay and the product surface is a contract.** The seam ran models at 512 tokens; the assay that ranked those same models ran them at 8192. Every impression of model quality formed through the seam was formed through a configuration the assay never validated. When an assay blesses a capability, the surface must run the blessed configuration — or the blessing is void and the product quietly slanders its own models.
+
 ---
 
 *KIT_DIARY.md for substrate-ui. Eight entries. Eight hypotheses, five confirmed (missing ledger cost an untested seam; un-scoped tooling makes the contract skippable; the perceptual track catches what DOM can't; running the full discipline removes the need for Architect catches) + three tentative-confirmed (the shape-driven scene panel extends the lens without coupling; decoding rendered pixels beats eyeballing for recoverable state; skipping the card on "small" items just defers the edge-case discovery to the gates). The diary starts where formal discipline starts — the review-#39 retrofit — not at the project's true beginning, by ruling.*
