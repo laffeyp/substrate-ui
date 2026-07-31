@@ -37,7 +37,7 @@ function gist(ev) {
   return "";
 }
 
-let STATE = { name: null, events: [], graph: null, summary: null, manifest: null, topology: null, scene: null, cursor: 0, playing: false, speed: 30, term: { open: false, lines: [], history: [], hi: -1 }, sel: null, mode: "read", graphView: "run", live: null, resumable: new Set(), assay: null, assays: [], assayReport: null };
+let STATE = { name: null, events: [], graph: null, summary: null, manifest: null, topology: null, scene: null, cursor: 0, playing: false, speed: 30, term: { open: false, lines: [], history: [], hi: -1, params: { think: false, tokens: 0, timeout: 300 } }, sel: null, mode: "read", graphView: "run", live: null, resumable: new Set(), assay: null, assays: [], assayReport: null };
 
 // the time dimension alongside the order: seq is the order (no time), t the time (no order). Show
 // t RELATIVE to the run's start (events[0] = RunStarted) — ~0 on the deterministic CI demos (they
@@ -294,12 +294,14 @@ async function sendChatMessage(text) {
   // to the repo. `workspace` stays the stable SESSION ID (do NOT adopt the resolved path, or the next
   // turn spawns a new worktree); the server echoes the worktree path + branch, shown once.
   const wt = STATE.term.worktree ? `&worktree=${encodeURIComponent(STATE.term.worktree)}` : "";
+  const pp = STATE.term.params;
+  const pq = `&think=${pp.think}&max_tokens=${pp.tokens}&timeout=${pp.timeout}`;
   const qs =
     (model === "deterministic"
       ? "model=deterministic"
       : cli.has(model)
-        ? `model=${model}&task=${encodeURIComponent(transcript)}`
-        : `model=ollama&name=${encodeURIComponent(model)}&task=${encodeURIComponent(transcript)}`) + ws + wt;
+        ? `model=${model}&task=${encodeURIComponent(transcript)}${pq}`
+        : `model=ollama&name=${encodeURIComponent(model)}&task=${encodeURIComponent(transcript)}${pq}`) + ws + wt;
   termPush([{ cls: "dim", text: `· ${model} is working…` }]);
   const res = await fetch(`/api/agent?${qs}`, { method: "POST" }).then((r) => r.json()).catch(() => null);
   if (!res || res.error || !res.name) { termPush([{ cls: "err", text: "agent: launch failed" }]); return; }
@@ -749,6 +751,8 @@ function renderTerm() {
   // the header hint + placeholder tell you the mode: how to talk (idle) vs how to leave (chatting).
   const hint = $("termhint");
   if (hint) hint.innerHTML = chatting ? "just type to talk · <b>/exit</b> to leave" : "<b>chat</b> to talk · <b>help</b>";
+  const pv = $("termparams"), pp = STATE.term.params;
+  if (pv) pv.textContent = `think ${pp.think ? "on" : "off"} · tokens ${pp.tokens > 0 ? pp.tokens : "∞"} · timeout ${pp.timeout}s`;
   const inp = $("terminput");
   if (inp) inp.placeholder = chatting
     ? "type your message to the model — /exit to leave"
@@ -780,6 +784,7 @@ async function runTerm(line) {
   if (cmd === "help" || cmd === "?") {
     say("substrate — read interface (the same record the GUI shows, typeable)", "dim");
     [["chat", "start/reconnect a conversation — then just TYPE to talk (watch it run in the graph)"],
+     ["think on|off · tokens N · timeout N", "call parameters for the driver (shown in the head; 0 tokens = uncapped)"],
      ["/exit", "while chatting: leave (the conversation is kept; `chat` reconnects). /cmd runs a command"],
      ["model <name>", "pick the driver (or use the picker): an Ollama model, claude, gemini, deterministic"],
      ["cwd [<path>]", "the working directory the agent operates in (unset = a dedicated session dir)"],
@@ -831,6 +836,29 @@ async function runTerm(line) {
     d.files.forEach((f) => say("  " + f));
     say((d.diff.slice(0, 2000) + (d.diff.length > 2000 ? "\n… (truncated — see the branch)" : "")));
     return out;
+  }
+  if (cmd === "think") {
+    const v = (parts[1] || "").toLowerCase();
+    if (v === "on" || v === "off") { STATE.term.params.think = v === "on"; say(`think = ${v}`, "dim"); }
+    else say("usage: think on|off", "dim");
+    renderTerm(); return;
+  }
+  if (cmd === "tokens") {
+    const n = parseInt(parts[1], 10);
+    if (Number.isFinite(n) && n >= 0) { STATE.term.params.tokens = n; say(`tokens = ${n > 0 ? n : "uncapped"}`, "dim"); }
+    else say("usage: tokens N   (0 = uncapped)", "dim");
+    renderTerm(); return;
+  }
+  if (cmd === "timeout") {
+    const n = parseFloat(parts[1]);
+    if (Number.isFinite(n) && n > 0) { STATE.term.params.timeout = n; say(`timeout = ${n}s`, "dim"); }
+    else say("usage: timeout SECONDS", "dim");
+    renderTerm(); return;
+  }
+  if (cmd === "params") {
+    const pp = STATE.term.params;
+    say(`think ${pp.think ? "on" : "off"} · tokens ${pp.tokens > 0 ? pp.tokens : "uncapped"} · timeout ${pp.timeout}s`, "dim");
+    return;
   }
   if (cmd === "chat" || cmd === "agent") {
     // enter (or RECONNECT to) the conversation — like opening a terminal session. The conversation
