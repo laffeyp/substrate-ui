@@ -47,7 +47,7 @@ The UI EMITS no signals of its own — it is a reader/projector of substrate's l
 | Studio DOM scaffold + styles | `web/studio.html` | Served at `/studio.html` by the static handler. |
 | Shared demo topologies (`resumable_topology`, `approval_event`) | `demo_topologies.py` | Mirrors the runtime's pause/resume reference. |
 | Demo fixture generation (the `demo_*` records) | `gen_demo_records.py` | Reproducible; regenerate the fixture set. |
-| Server tests (real server, real api over HTTP) | `test_server.py` | The artifact contract for backend changes. |
+| Server tests (real server, real api over HTTP) | `tests/test_server.py` | The artifact contract for backend changes. (Moved from repo root into `tests/` in the folder reorg, d824aed; registry path corrected 2026-07-31, review F-29.) |
 | Live structural E2E — console / Studio (real Chrome) | `e2e_console.js` / `e2e_studio.js` | Track 1 of the observation contract (DOM assertions). |
 | Perceptual capture harness — console / dynamic states / Studio | `capture_console.js` / `capture_states.js` / `capture_studio.js` | Track 2 of the observation contract (screenshots the agent VIEWS). |
 
@@ -88,8 +88,8 @@ grep -rEn 'agent|workflow|orchestrat|\bactor\b|\bspeaker\b' server.py builder.py
 
 *The Architect runs these; the Agent reports exit codes, does not silently retry.*
 
-- **Backend tests:** `cd ../substrate && uv run pytest ../substrate-ui/test_server.py -q` — expected exit 0 (spins a real server on an ephemeral port; exercises the real `substrate.api` over HTTP).
-- **Live E2E (the observation contract — REQUIRED for any front-end / behavior-touching change):** `npm install` once in `substrate-ui/` (repo-local Playwright devDependency, pinned by `package-lock.json`; drives the system Chrome via `channel:'chrome'`, no browser download), start the real backend (`cd ../substrate && uv run python ../substrate-ui/server.py &`), then `cd substrate-ui && npm run e2e` — expected exit 0 (real Chrome; §7 asserted in the DOM). Do NOT skip this with a "backend-only" rationalization for a behavior-touching change — running it is the contract.
+- **Backend tests:** `cd ../substrate && uv run pytest ../substrate-ui/tests/test_server.py -q` — expected exit 0 (spins a real server on an ephemeral port; exercises the real `substrate.api` over HTTP). (Path corrected 2026-07-31, review F-29: the file lives in `tests/`, not the repo root — the old command could not run.)
+- **Live E2E (the observation contract — REQUIRED for any front-end / behavior-touching change):** `npm install` once in `substrate-ui/` (repo-local Playwright devDependency, pinned by `package-lock.json`; drives the system Chrome via `channel:'chrome'`, no browser download), start the real backend (`cd ../substrate && uv run python ../substrate-ui/server.py &`), then `cd substrate-ui && npm run e2e` — expected exit 0 (real Chrome; §7 asserted in the DOM). The full structural gate is THREE commands, all run in CI: `npm run e2e` (console), `npm run e2e:studio` (Studio), `npm run e2e:assay` (the assay matrix — both currencies, the metric-splice guard; wired into the gate 2026-07-31, review F-28). Do NOT skip these with a "backend-only" rationalization for a behavior-touching change — running them is the contract.
 - **Perceptual capture (the second observation-contract track — REQUIRED for front-end changes):** start the real backend, then `cd substrate-ui && npm run capture` — writes key-frame screenshots to `screenshots/`; the agent then Reads each PNG and grades it. Looking is the contract, not optional.
 - **Regenerate demo fixtures:** `cd ../substrate && uv run python ../substrate-ui/gen_demo_records.py` (rebuilds the `demo_*` records the tests + E2E read).
 - **Lint:** `cd ../substrate && uv run ruff check ../substrate-ui/server.py ../substrate-ui/builder.py` — expected exit 0.
