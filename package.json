@@ -6,6 +6,7 @@
   "scripts": {
     "e2e": "node harness/e2e_console.js",
     "e2e:studio": "node harness/e2e_studio.js",
+    "e2e:assay": "node harness/e2e_assay.js",
     "capture": "node harness/capture_console.js",
     "capture:states": "node harness/capture_states.js",
     "capture:studio": "node harness/capture_studio.js",

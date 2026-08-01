@@ -16,3 +16,6 @@ screenshots/
 
 # OS
 .DS_Store
+
+# archived run records (runtime artifacts, not source)
+runs/.archive-*/

@@ -100,3 +100,4 @@ jobs:
           cd ../substrate-ui
           npm run e2e
           npm run e2e:studio
+          npm run e2e:assay
