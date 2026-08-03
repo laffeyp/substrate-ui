@@ -82,14 +82,15 @@ Behavior-touching changes are graded on **both** tracks (this is mandatory — s
 
 ```bash
 # Track 0 — server (real server on an ephemeral port, real substrate.api over HTTP)
-cd substrate && uv run python -m pytest ../substrate-ui/tests/test_server.py -q   # 23 tests
+cd substrate && uv run python -m pytest ../substrate-ui/tests/test_server.py -q   # 30 tests
 
 # Playwright is a repo-local devDependency (run once)
 cd substrate-ui && npm install
 
-# Track 1 — STRUCTURAL (DOM assertions in real Chrome)
+# Track 1 — STRUCTURAL (DOM assertions in real Chrome) — three harnesses, all gated in CI
 cd substrate-ui && npm run e2e            # the observe+control console
 cd substrate-ui && npm run e2e:studio     # the Studio author -> validate -> build -> view
+cd substrate-ui && npm run e2e:assay      # the assay matrix (both currencies; the metric-splice guard)
 
 # Track 2 — PERCEPTUAL (screenshots a vision-model judge then VIEWS)
 cd substrate-ui && npm run capture         # console key frames -> screenshots/

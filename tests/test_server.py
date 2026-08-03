@@ -188,10 +188,16 @@ def test_io_endpoint_derives_input_and_outputs(base: str) -> None:
     assert (
         cr["input"] is None
     )  # no runtime seed (parameterized at build), honestly null
+    # substrate review C-7 (2026-08-03): code_review now METERS each model call, so a ModelUsage precedes
+    # each reviewer's critique and the judge's verdict on the record — the I/O outputs interleave them.
     assert [o["kind"] for o in cr["outputs"]] == [
+        "ModelUsage",
         "CritiquePosted",
+        "ModelUsage",
         "CritiquePosted",
+        "ModelUsage",
         "CritiquePosted",
+        "ModelUsage",
         "VerdictRendered",
     ]
     assert all(
@@ -555,13 +561,24 @@ def test_ui_imports_only_sanctioned_substrate_surfaces() -> None:
     # review #43: protect the UI->substrate boundary MECHANICALLY. substrate enforces its own kernel/app
     # boundary with a CI gate (import-linter + an AST test); the UI's was convention + a grep. The UI may
     # import ONLY substrate's PUBLIC surfaces — substrate.api, the public reference Responders, the
-    # bundled topologies — never a kernel internal (runtime/sequencer/record/encoding/attach/...).
+    # bundled topologies, and the assay PROJECTION readers — never a kernel internal
+    # (runtime/sequencer/record/encoding/attach/...).
+    #
+    # C-3 (2026-08-03): this test used to scan `Path(__file__).parent` == tests/, which holds only this
+    # file — so it opened NOTHING it was meant to check and stayed green over an empty scan (Addendum B4:
+    # verify the verifier). It now scans the actual UI source at the REPO ROOT. That immediately surfaced
+    # server.py's real dependency on `substrate.assay.cells`; `substrate.assay` is added to the sanctioned
+    # set as a decision, not a workaround — its `cells` module is a READ-ONLY projection over committed
+    # assay result files (read_meta / read_rows / report_from_cells), the same kind of public read surface
+    # as records, and the assay VIEW (sprint 013/014) legitimately consumes it. Kernel internals stay out.
     import ast
 
-    sanctioned = {"substrate.api", "substrate.reference", "substrate.topologies"}
-    ui_dir = Path(__file__).resolve().parent
+    sanctioned = {"substrate.api", "substrate.reference", "substrate.topologies", "substrate.assay"}
+    ui_root = Path(__file__).resolve().parent.parent  # the repo root, where the UI source lives
+    sources = [p for p in sorted(ui_root.glob("*.py")) if not p.name.startswith("test_")]
+    assert sources, "no UI source files found to scan — the boundary test would be vacuous"
     offenders = []
-    for py in sorted(ui_dir.glob("*.py")):
+    for py in sources:
         tree = ast.parse(py.read_text(), filename=str(py))
         for node in ast.walk(tree):
             mods: list[str] = []
