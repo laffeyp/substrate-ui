@@ -538,12 +538,11 @@ class Handler(BaseHTTPRequestHandler):
             self._error(429, "too many concurrent runs; wait for some to finish")
             return
         # the per-conversation WORKSPACE: the directory the agent's tools operate in (relative paths
-        # + bash resolve there, absolute paths still go where named). Default = the server's launch
-        # cwd, the Claude-Code posture ("operate in the project you started me in"); `?workspace=`
-        # overrides per conversation. This is ergonomics, not a jail — the autonomy is unchanged.
-        # per-session workspace, NEVER the server cwd: an absolute path is a project the user picked;
-        # a bare name is a named session dir under ~/.substrate/sessions/ (the client passes the
-        # conversation id so its turns share one dir); absent -> a fresh adhoc session dir. Created.
+        # + bash resolve there, absolute paths still go where named). This is ergonomics, not a jail.
+        # Per-session workspace, NEVER the server cwd (review C-16 corrected a stale "launch dir" note):
+        # an absolute `?workspace=` is a project the user picked; a bare name is a named session dir
+        # under ~/.substrate/sessions/ (the client passes the conversation id so its turns share one
+        # dir); absent -> a fresh adhoc session dir. Created if missing.
         ws_arg = q.get("workspace", [""])[0]
         wt_arg = q.get("worktree", [""])[
             0
