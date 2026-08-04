@@ -156,20 +156,27 @@ async def main() -> None:
     seg.write_text("\n".join(lines) + "\n")
     print(f"  demo_torn      -> truncated to {len(lines)} frames (no terminal)")
 
-    # W2.2: a delegate PARENT record + its CHILD, for the delegated-child-branch UI stitch (sprint 017).
-    # The child is a real calculator tool_loop run; the parent runs a scripted `delegate` tool whose
-    # ToolResult carries the child's ABSOLUTE record path as `child_root` — exactly the shape a real
-    # delegate emits. Because the child record lives under runs/ (served), the server's _resolve_child_name
-    # matches child_root -> "demo_delegate_child", so the UI renders it as a NAVIGABLE branch.
-    child = RUNS / "demo_delegate_child.record"
-    if child.exists():
-        shutil.rmtree(child)
-    await Runtime(child).run(tool_loop_topology(max_steps=4))  # the calculator child ((2+3)*4 = 20)
-    for lock in child.rglob(".lock"):
-        lock.unlink()
+    # W2.2: a delegate PARENT that splits its task across TWO children (the plan's scenario), each a real
+    # calculator tool_loop run. The scripted `delegate` tool's ToolResult carries each child's ABSOLUTE
+    # record path as `child_root` — the shape a real delegate emits. Both children live under runs/ (served),
+    # so the server's _resolve_child_name matches each child_root -> a name and the UI renders TWO navigable
+    # child branches, one per delegation.
+    children = []
+    for cn in ("demo_delegate_child", "demo_delegate_child2"):
+        c = RUNS / f"{cn}.record"
+        if c.exists():
+            shutil.rmtree(c)
+        await Runtime(c).run(tool_loop_topology(max_steps=4))  # a calculator child ((2+3)*4 = 20)
+        for lock in c.rglob(".lock"):
+            lock.unlink()
+        children.append(c)
+
+    calls = {"n": 0}
 
     def _demo_delegate(_args: list[Any]) -> dict[str, Any]:
-        return {"answer": "20", "child_root": str(child.resolve()), "steps": 2}
+        i = min(calls["n"], len(children) - 1)
+        calls["n"] += 1
+        return {"answer": "20", "child_root": str(children[i].resolve()), "steps": 2}
 
     delegate_tool = Tool(
         "delegate",
@@ -183,14 +190,14 @@ async def main() -> None:
         shutil.rmtree(parent)
     await Runtime(parent).run(
         tool_loop_topology(
-            script=[("delegate", ["compute (2+3)*4"])],
+            script=[("delegate", ["compute (2+3)*4"]), ("delegate", ["compute (4+1)*4"])],
             tools={"delegate": delegate_tool},
-            max_steps=3,
+            max_steps=4,
         )
     )
     for lock in parent.rglob(".lock"):
         lock.unlink()
-    print("  demo_delegate  -> parent + demo_delegate_child (navigable delegated-child branch)")
+    print("  demo_delegate  -> parent splits across TWO children (two navigable delegated-child branches)")
 
 
 if __name__ == "__main__":
