@@ -808,8 +808,8 @@ async function runTerm(line) {
   }
   if (cmd === "cwd" || cmd === "workspace") {
     // the working directory the agent's tools operate in (relative paths + bash resolve there). Set it
-    // BEFORE you talk to pick where the agent works; unset = the server's launch dir. Like `cd`-ing
-    // into a repo before starting Claude Code. Absolute paths the model names still go where named.
+    // BEFORE you talk to pick where the agent works; unset = a dedicated session dir under
+    // ~/.substrate/sessions/ (review C-16: NOT the server's launch dir). Absolute paths still go where named.
     if (parts[1]) { STATE.term.workspace = parts.slice(1).join(" "); STATE.term.worktree = null; say("workspace = " + STATE.term.workspace, "dim"); }
     else say("workspace = " + (STATE.term.workspace || "(a dedicated per-session dir)"), "dim");
     return out;
