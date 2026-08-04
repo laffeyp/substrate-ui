@@ -60,7 +60,7 @@ async function loadRecords() {
       : broken ? `${r.producers_failed} failures · finalised` : `${r.status} · ${r.total_events} events`;
     div.innerHTML = `<span class="dot" style="background:${color}"></span>
       <div class="nm">${escapeHtml(r.name)}</div><div class="meta ${broken ? "broken" : ""}">${escapeHtml(r.run_id.slice(0, 8))}… · ${escapeHtml(meta)}</div>`;
-    div.onclick = () => selectRecord(r.name);
+    div.onclick = () => { STATE.delegateParent = null; selectRecord(r.name); };  // rail pick clears the delegate crumb
     return div;
   };
   const groupHdr = (label) => { const h = document.createElement("div"); h.className = "rail-group"; h.textContent = label; $("rail").appendChild(h); };
@@ -466,6 +466,17 @@ function gistPayload(p) {
   return Object.entries(p).filter(([k]) => k !== "raw_payload").slice(0, 4)
     .map(([k, v]) => `${k}=${String(v).slice(0, 26)}`).join(", ");
 }
+// W2.2: a delegate ToolResult carries {answer, child_root, steps} — the child ran as its OWN record.
+// Return that child_root (an absolute .record path) if this output is a delegated result, else null.
+function _delegateChildRoot(o) {
+  const out = o && o.payload && o.payload.output;
+  return out && typeof out === "object" && out.child_root ? String(out.child_root) : null;
+}
+// navigate INTO a delegated child record, remembering the parent so a breadcrumb returns.
+async function openDelegateChild(childName, parentName) {
+  STATE.delegateParent = parentName;
+  await selectRecord(childName);
+}
 async function renderIO() {
   const io = await api(`/api/records/${STATE.name}/io`);
   const cur = STATE.cursor;
@@ -478,15 +489,35 @@ async function renderIO() {
   const input = seedDoc + baselineDoc;
   // outputs materialize as the cursor reaches the seq that produced them; each cites that seq.
   const outs = io.outputs.filter((o) => o.seq <= cur);
-  const arts = outs.length
-    ? outs.map((o) => `<div class="art" data-seq="${o.seq}" title="inspect this artifact"><span class="sq">seq ${String(o.seq).padStart(3, "0")}</span><span class="kd">${escapeHtml(o.kind)}</span><span class="pl">${escapeHtml(gistPayload(o.payload))}</span></div>`).join("")
-    : `<div class="io-empty">No application output yet at seq ${cur}.</div>`;
+  // W2.2: resolve any delegated-child branches (a ToolResult carrying child_root) to a served record
+  // name — servable -> a navigable link; not servable (a real session-workspace child) -> display-only.
+  const branch = {};
+  for (const o of outs) {
+    const cr = _delegateChildRoot(o);
+    if (cr) { const r = await api(`/api/resolve_child?path=${encodeURIComponent(cr)}`); branch[o.seq] = { path: cr, name: r && r.name }; }
+  }
+  const artOf = (o) => {
+    let h = `<div class="art" data-seq="${o.seq}" title="inspect this artifact"><span class="sq">seq ${String(o.seq).padStart(3, "0")}</span><span class="kd">${escapeHtml(o.kind)}</span><span class="pl">${escapeHtml(gistPayload(o.payload))}</span></div>`;
+    const b = branch[o.seq];
+    if (b) h += b.name
+      ? `<div class="branch" data-child="${escapeHtml(b.name)}" title="open the delegated child record">↳ delegated child: <span class="lk">${escapeHtml(b.name)}</span></div>`
+      : `<div class="branch off" title="the child ran in a session workspace not served here">↳ delegated child recorded at ${escapeHtml(b.path)}</div>`;
+    return h;
+  };
+  const arts = outs.length ? outs.map(artOf).join("") : `<div class="io-empty">No application output yet at seq ${cur}.</div>`;
   const fin = io.finalisation && Object.keys(io.finalisation).length
     ? `<div class="io-doc"><div class="t">finalisation_payload</div><pre>${escapeHtml(JSON.stringify(io.finalisation, null, 1))}</pre></div>` : "";
-  $("iopane").innerHTML = `<div class="io-h">input · fed to the run</div>${input}
+  // a breadcrumb back to the delegating parent, when we navigated in via a child branch.
+  const crumb = STATE.delegateParent
+    ? `<div class="crumb" data-parent="${escapeHtml(STATE.delegateParent)}" title="back to the delegating parent">◂ parent: <span class="lk">${escapeHtml(STATE.delegateParent)}</span></div>` : "";
+  $("iopane").innerHTML = `${crumb}<div class="io-h">input · fed to the run</div>${input}
     <div class="io-h">output · artifacts <span class="r">${outs.length}/${io.outputs.length} produced</span></div>${arts}${fin}`;
   // an output artifact is an application event — clicking it inspects its full content (BACKLOG).
   $("iopane").querySelectorAll(".art[data-seq]").forEach((el) => (el.onclick = () => inspectEvent(+el.dataset.seq)));
+  // W2.2: a delegated-child branch navigates INTO the child record; the crumb returns to the parent.
+  $("iopane").querySelectorAll(".branch[data-child]").forEach((el) => (el.onclick = () => openDelegateChild(el.dataset.child, STATE.name)));
+  const cb = $("iopane").querySelector(".crumb[data-parent]");
+  if (cb) cb.onclick = () => { const p = cb.dataset.parent; STATE.delegateParent = null; selectRecord(p); };
 }
 
 // ---------- run-as-graph: firing-anchored lifespans + spawn cohorts (§7.3) ----------

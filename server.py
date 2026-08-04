@@ -241,6 +241,25 @@ def _record_names() -> list[str]:
     return local + bundled.names()
 
 
+def _resolve_child_name(path_str: str) -> str | None:
+    """Given a delegate ToolResult's `child_root` (an absolute path to a `.record` dir), return the
+    SERVED record name if that path is one of the records this server serves, else None. It MATCHES the
+    path against the served set — it never READS the arbitrary path — so the record-navigation stays
+    `runs/`-only and the traversal-safety posture holds. A real cockpit child in a session workspace is
+    not served, so it resolves to None (the UI shows it display-only rather than as a dead link)."""
+    if not path_str:
+        return None
+    try:
+        target = Path(path_str).resolve()
+    except (OSError, ValueError):
+        return None
+    for name in _record_names():
+        p = _record_path(name)
+        if p is not None and p.resolve() == target:
+            return name
+    return None
+
+
 def _builtins(obj: object) -> object:
     """msgspec Struct (frozen projection result) -> JSON-able builtins."""
     return msgspec.to_builtins(obj)
@@ -794,6 +813,10 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if path == "/api/diff":
                 self._diff(parse_qs(urlparse(self.path).query))
+                return
+            if path == "/api/resolve_child":  # W2.2: a delegate ToolResult's child_root -> served name
+                cp = parse_qs(urlparse(self.path).query).get("path", [""])[0]
+                self._json({"name": _resolve_child_name(cp)})
                 return
             if path.startswith("/api/records/"):
                 self._api_record(path[len("/api/records/") :])

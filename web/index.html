@@ -140,6 +140,14 @@ button{font-family:inherit;color:inherit;cursor:pointer;background:none;border:n
 .art:hover{ background:var(--panel); }
 .art .sq{ color:var(--tx-faint); flex:0 0 58px; } .art .kd{ flex:0 0 160px; color:var(--green); }
 .art .pl{ color:var(--tx-faint); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+/* W2.2: a delegated-child branch off a ToolResult, and the breadcrumb back to the parent. */
+.branch{ padding:5px 16px 7px 34px; font-size:11.5px; color:var(--tx-dim); border-bottom:1px solid rgba(31,39,49,.5); cursor:pointer; }
+.branch .lk{ color:var(--cyan); text-decoration:underline; }
+.branch:hover{ background:var(--panel); }
+.branch.off{ color:var(--tx-faint); cursor:default; }
+.branch.off:hover{ background:none; }
+.crumb{ padding:7px 16px; font-size:11.5px; color:var(--tx-dim); cursor:pointer; border-bottom:1px solid var(--line); }
+.crumb .lk{ color:var(--cyan); text-decoration:underline; } .crumb:hover{ background:var(--panel); }
 
 /* health bar */
 .health{ display:flex; align-items:center; gap:20px; padding:12px 18px; border-top:1px solid var(--line2); }

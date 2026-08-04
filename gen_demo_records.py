@@ -30,6 +30,8 @@ from substrate.api import (
     quiescence_with_watchdog,
     threshold_count,
 )
+from substrate.topologies.tool_loop import tool_loop_topology
+from substrate.topologies.tool_loop.tools import Tool
 
 from demo_topologies import resumable_topology
 
@@ -153,6 +155,42 @@ async def main() -> None:
         lines.pop()  # drop the terminal -> a record with no RunFinalised = torn/incomplete
     seg.write_text("\n".join(lines) + "\n")
     print(f"  demo_torn      -> truncated to {len(lines)} frames (no terminal)")
+
+    # W2.2: a delegate PARENT record + its CHILD, for the delegated-child-branch UI stitch (sprint 017).
+    # The child is a real calculator tool_loop run; the parent runs a scripted `delegate` tool whose
+    # ToolResult carries the child's ABSOLUTE record path as `child_root` — exactly the shape a real
+    # delegate emits. Because the child record lives under runs/ (served), the server's _resolve_child_name
+    # matches child_root -> "demo_delegate_child", so the UI renders it as a NAVIGABLE branch.
+    child = RUNS / "demo_delegate_child.record"
+    if child.exists():
+        shutil.rmtree(child)
+    await Runtime(child).run(tool_loop_topology(max_steps=4))  # the calculator child ((2+3)*4 = 20)
+    for lock in child.rglob(".lock"):
+        lock.unlink()
+
+    def _demo_delegate(_args: list[Any]) -> dict[str, Any]:
+        return {"answer": "20", "child_root": str(child.resolve()), "steps": 2}
+
+    delegate_tool = Tool(
+        "delegate",
+        "delegate(task) -> {answer, child_root, steps}: hand a subtask to a child agent (SIDE EFFECT)",
+        False,
+        _demo_delegate,
+        {"type": "object", "properties": {"task": {"type": "string"}}, "required": ["task"]},
+    )
+    parent = RUNS / "demo_delegate.record"
+    if parent.exists():
+        shutil.rmtree(parent)
+    await Runtime(parent).run(
+        tool_loop_topology(
+            script=[("delegate", ["compute (2+3)*4"])],
+            tools={"delegate": delegate_tool},
+            max_steps=3,
+        )
+    )
+    for lock in parent.rglob(".lock"):
+        lock.unlink()
+    print("  demo_delegate  -> parent + demo_delegate_child (navigable delegated-child branch)")
 
 
 if __name__ == "__main__":
