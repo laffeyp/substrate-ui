@@ -101,3 +101,4 @@ jobs:
           npm run e2e
           npm run e2e:studio
           npm run e2e:assay
+          npm run e2e:delegate
