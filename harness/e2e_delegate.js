@@ -35,16 +35,18 @@ async function toIO(p) {
   await p.goto(BASE, { waitUntil: "networkidle" });
   await p.waitForTimeout(700);
 
-  // 1. the demo pair is served
+  // 1. the parent + both children are served (the parent splits across TWO children — the plan's scenario)
   const names = await p.$$eval(".rec .nm", (a) => a.map((x) => x.textContent.trim()));
-  assert(names.includes("demo_delegate") && names.includes("demo_delegate_child"),
-    `demo_delegate pair missing from rail: ${names}`);
+  for (const n of ["demo_delegate", "demo_delegate_child", "demo_delegate_child2"])
+    assert(names.includes(n), `${n} missing from rail: ${names}`);
 
-  // 2. the parent's delegate ToolResult renders a NAVIGABLE child branch naming the child record
+  // 2. the parent's TWO delegate ToolResults each render a NAVIGABLE child branch naming its child record
   await selectRecord(p, "demo_delegate");
   await toIO(p);
+  const childNames = await p.$$eval(".branch[data-child]", (bs) => bs.map((b) => b.getAttribute("data-child")).sort());
+  assert.deepStrictEqual(childNames, ["demo_delegate_child", "demo_delegate_child2"],
+    `expected two navigable child branches, got: ${childNames}`);
   const branch = await p.$(".branch[data-child='demo_delegate_child']");
-  assert(branch, "the delegate ToolResult did not render a navigable child branch");
   const branchText = await branch.innerText();
   assert(/delegated child/i.test(branchText), `branch copy off: ${branchText}`);
 

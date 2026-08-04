@@ -39,6 +39,7 @@ from msgspec import Struct
 from substrate import api
 from substrate.topologies import bundled
 from substrate.topologies.tool_loop import tool_loop_topology
+from substrate.topologies.tool_loop.delegate import make_delegate
 from substrate.topologies.tool_loop.tools import full_suite
 
 from builder import SpecError, build_from_spec
@@ -586,17 +587,35 @@ class Handler(BaseHTTPRequestHandler):
             workspace = _SESSIONS_BASE / session
         workspace.mkdir(parents=True, exist_ok=True)
         suite = full_suite(workspace)
+        # W2.2 follow-on: give the cockpit agent a `delegate` tool. Its child RECORDS land as flat SERVED
+        # runs/ records (child_record_root -> RUNS/<base>_cN.record) so the UI's delegated-child branch can
+        # navigate to them; the child's tool WORKSPACE stays under the session workspace. Real-model
+        # branches only (the deterministic calculator has no responder to hand a child).
+        child_base = "delegate_child_" + uuid.uuid4().hex[:8]
+
+        def _with_delegate(responder: object) -> dict[str, object]:
+            return {
+                **suite,
+                "delegate": make_delegate(
+                    responder=responder,  # type: ignore[arg-type]
+                    root=workspace,
+                    child_suite_factory=full_suite,
+                    child_record_root=lambda n: RUNS / f"{child_base}_c{n}.record",
+                ),
+            }
+
         think, max_tokens, timeout = _agent_params(q)
         if model == "ollama":
             model_name = q.get("name", ["llama3.2:1b"])[0]
             task = q.get("task", [""])[0] or "Use the available tools to help."
+            responder = OllamaResponder(
+                model=model_name, think=think, max_tokens=max_tokens, timeout=timeout
+            )
             topo = tool_loop_topology(
-                model=OllamaResponder(
-                    model=model_name, think=think, max_tokens=max_tokens, timeout=timeout
-                ),
+                model=responder,
                 walkthrough=True,
                 deterministic=False,
-                tools=suite,
+                tools=_with_delegate(responder),
                 task=task,
                 max_steps=24,
             )
@@ -614,11 +633,12 @@ class Handler(BaseHTTPRequestHandler):
                     "cli agent needs a command (model=claude|gemini, or ?command=...)",
                 )
                 return
+            responder = CliResponder(cmd, name=model, timeout=max(timeout, 600.0))
             topo = tool_loop_topology(
-                model=CliResponder(cmd, name=model, timeout=max(timeout, 600.0)),
+                model=responder,
                 walkthrough=True,
                 deterministic=False,
-                tools=suite,
+                tools=_with_delegate(responder),
                 task=task,
                 max_steps=24,
             )
