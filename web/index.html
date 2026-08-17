@@ -224,6 +224,7 @@ button{font-family:inherit;color:inherit;cursor:pointer;background:none;border:n
     <span id="runname" class="runname"></span><span id="runid" class="runid"></span>
     <button class="btn" id="modeToggle" title="toggle Inputs &amp; Outputs">I/O</button>
     <button class="btn" id="termToggle" title="toggle the terminal (Ctrl+`)">terminal</button>
+    <a class="btn" id="studiolink" href="/studio.html" target="_blank" rel="noopener" title="open the studio — author a Topology (new tab)">studio</a>
     <select id="diffsel" class="btn" title="diff this record against another (first divergence by seq, D-8)"><option value="">⇄ diff vs…</option></select>
     <span id="verdict" class="verdict"></span>
     <button class="btn" id="resumebtn" title="feed the awaited input and resume this paused run" style="display:none">▶ resume</button>
@@ -272,6 +273,6 @@ button{font-family:inherit;color:inherit;cursor:pointer;background:none;border:n
   </div>
   <div class="health" id="health"></div>
 </div>
-<script src="app.js"></script>
+<script type="module" src="./app.ts"></script>
 </body>
 </html>

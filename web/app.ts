@@ -4,8 +4,36 @@
    the spawn structure — fired_seq + spawn cohorts — not span overlap (§7.3). The eight words only. */
 "use strict";
 
+import { emit, VOCAB_VERSION } from "./instrumentation/sdd";
+
+emit("SESSION_INIT", { vocab_version: VOCAB_VERSION, url: window.location.href });
+window.addEventListener("beforeunload", () => { emit("SESSION_ENDED", {}); });
+
+// Monotonic paint counter that feeds view_payload_universal.frame on every pane-render emit
+// (vocab § view stratum: signals a pane redraw regardless of what changed). One shared counter,
+// not per-pane, so the trace preserves the paint ORDER across panes within a render() pass.
+let _paintFrame = 0;
+const _paneCtx = (pane_id: string, extra: Record<string, unknown> = {}) => ({
+  frame: ++_paintFrame,
+  visible: true,  // pane-render tags fire only when render() dispatched to the active pane
+  pane_id,
+  subject_record: STATE.name,
+  ...extra,
+});
+
 const $ = (id) => document.getElementById(id);
-const api = (p) => fetch(p).then((r) => r.json());
+// api() is the single seam every read fetches through. Non-2xx responses AND thrown network errors
+// both emit FETCH_FAILED{endpoint, status_or_error} — one incident tag, one seam. Callers still
+// receive the parsed body (or a rejected promise on network error), so no consumer needs to change.
+const api = (p) => fetch(p).then(async (r) => {
+  if (!r.ok) {
+    emit("FETCH_FAILED", { endpoint: p, status_or_error: String(r.status) });
+  }
+  return r.json();
+}).catch((e) => {
+  emit("FETCH_FAILED", { endpoint: p, status_or_error: String((e && e.message) || e) });
+  throw e;
+});
 
 const FAILURE = new Set([
   "substrate.ProducerFailed", "substrate.InputBuildFailed",
@@ -47,6 +75,11 @@ function relT(t) { const t0 = STATE.events.length ? STATE.events[0].t : (t || 0)
 // ---------- record rail ----------
 async function loadRecords() {
   const recs = await api("/api/records");
+  emit("RECORDS_LOADED", {
+    count: recs.length,
+    run_count: recs.filter((r) => r.source === "run").length,
+    demo_count: recs.filter((r) => r.source !== "run").length,
+  });
   $("rail").innerHTML = "";
   const mkRec = (r) => {
     const div = document.createElement("div");
@@ -60,7 +93,7 @@ async function loadRecords() {
       : broken ? `${r.producers_failed} failures · finalised` : `${r.status} · ${r.total_events} events`;
     div.innerHTML = `<span class="dot" style="background:${color}"></span>
       <div class="nm">${escapeHtml(r.name)}</div><div class="meta ${broken ? "broken" : ""}">${escapeHtml(r.run_id.slice(0, 8))}… · ${escapeHtml(meta)}</div>`;
-    div.onclick = () => { STATE.delegateParent = null; selectRecord(r.name); };  // rail pick clears the delegate crumb
+    div.onclick = () => { STATE.delegateParent = null; selectRecord(r.name); };  // rail pick clears the delegate crumb; RECORD_SELECTED fires from selectRecord (covers deep-link + delegate paths too)
     return div;
   };
   const groupHdr = (label) => { const h = document.createElement("div"); h.className = "rail-group"; h.textContent = label; $("rail").appendChild(h); };
@@ -75,7 +108,9 @@ async function loadRecords() {
     h.querySelector(".rail-clear").onclick = async (ev) => {
       ev.stopPropagation();
       if (!window.confirm(`Delete all ${runs.length} session runs? (the demos are kept)`)) return;
+      const cleared_count = runs.length;
       await fetch("/api/runs/clear", { method: "POST" }).then((x) => x.json());
+      emit("RECORDS_PRUNED", { cleared_count });
       STATE.name = null;  // the selected run may be gone -> re-land on a demo
       await loadRecords();
     };
@@ -89,7 +124,7 @@ async function loadRecords() {
   const sel = $("diffsel");
   sel.innerHTML = '<option value="">⇄ diff vs…</option>' +
     recs.map((r) => `<option value="${escapeHtml(r.name)}">${escapeHtml(r.name)}</option>`).join("");
-  sel.onchange = () => { if (sel.value) renderDiff(sel.value); };
+  sel.onchange = () => { if (sel.value) { emit("DIFF_REQUESTED", { a: STATE.name, b: sel.value }); renderDiff(sel.value); } };
   // auto-select only on FIRST load (else a refresh after launch/resume yanks selection to the top
   // record with a dangling fetch — the race behind the verdict flicker. review #38, obs b).
   if (STATE.name === null) {
@@ -109,6 +144,7 @@ async function loadRecords() {
 async function loadAssays() {
   const assays = await api("/api/assays").catch(() => []);
   STATE.assays = assays;
+  emit("ASSAYS_LOADED", { count: assays.length });
   if (!assays.length) return;
   const rail = $("rail");
   const grp = document.createElement("div");
@@ -128,6 +164,8 @@ async function loadAssays() {
 }
 
 async function selectAssay(name) {
+  const prior_name = STATE.assay;
+  emit("ASSAY_SELECTED", { name, prior_name });
   stopPlay();
   STATE.live = null; STATE.name = null; STATE.mode = "assay"; STATE.assay = name; STATE.assayReport = null;
   document.querySelectorAll(".rec").forEach((e) => e.classList.remove("sel"));
@@ -138,6 +176,10 @@ async function selectAssay(name) {
   const d = await api(`/api/assay/${encodeURIComponent(name)}`).catch(() => ({ error: "fetch failed" }));
   if (STATE.assay !== name) return;  // switched while the fetch was in flight (mirrors selectRecord's guard)
   STATE.assayReport = d;
+  const arms = (d && d.arms) || [];
+  const cases = (d && d.cases) || [];
+  const verdict = d && d.overall_verdict;
+  emit("ASSAY_REPORT_LOADED", { name, arm_count: arms.length, case_count: cases.length, ...(verdict ? { verdict } : {}) });
   render();
 }
 
@@ -220,8 +262,11 @@ async function loadTopologies() {
 $("launchbtn").onclick = async () => {
   const t = $("launchsel").value;
   if (!t) return;
+  emit("TOPOLOGY_LAUNCH_REQUESTED", { topology_name: t });
   $("launchmsg").textContent = `launching ${t}…`;
   const res = await fetch(`/api/launch?topology=${encodeURIComponent(t)}`, { method: "POST" }).then((r) => r.json());
+  if (res && res.error) { emit("LAUNCH_REJECTED", { kind: "topology", reason: String(res.error) }); $("launchmsg").textContent = `rejected: ${res.error}`; return; }
+  if (res && res.name) emit("TOPOLOGY_LAUNCHED", { topology_name: t, run_name: res.name });
   await loadRecords();
   await selectRecord(res.name);
   if (res.status === "incomplete") { $("launchmsg").textContent = `● live: ${res.name}`; followLive(res.name); }
@@ -231,13 +276,21 @@ $("launchbtn").onclick = async () => {
 // ---------- thin control: resume a paused run (feed the awaited input, continue; §7.7) ----------
 $("resumebtn").onclick = async () => {
   const target = STATE.name;
+  emit("RESUME_REQUESTED", { record_name: target });
   $("launchmsg").textContent = `resuming ${target}…`;
   const res = await fetch(`/api/resume?record=${encodeURIComponent(target)}`, { method: "POST" }).then((r) => r.json());
+  if (res && res.error) { emit("LAUNCH_REJECTED", { kind: "resume", reason: String(res.error) }); $("launchmsg").textContent = `resume rejected: ${res.error}`; return; }
+  if (res && res.name) emit("RESUMED", { record_name: res.name });
   await loadRecords();
   await selectRecord(res.name);
   if (res.status === "incomplete") { $("launchmsg").textContent = `● live: ${res.name}`; followLive(res.name); }
   else $("launchmsg").textContent = `resumed ${res.resumed} → ${res.name} · ${res.status}`;
 };
+
+// STUDIO_OPENED fires from the header link. The anchor uses target="_blank" so the current page
+// (and its signals buffer) survives; the emit lands in the buffer, the studio opens in a new tab.
+const _studioLink = $("studiolink");
+if (_studioLink) _studioLink.addEventListener("click", () => { emit("STUDIO_OPENED", { via: "header_link" }); });
 
 // ---------- interactive agent: stream the tool-loop conversation into the terminal as it runs ----------
 // The terminal drives a live agent (POST /api/agent) and followLive polls the record; each poll, the
@@ -259,12 +312,14 @@ function streamAgentTurns() {
   if (!fresh.length) return;
   STATE.term.agentSeq = fresh[fresh.length - 1].seq;
   termPush(fresh.map(_agentLine).filter(Boolean));
+  if (STATE.term.agent) emit("AGENT_TURN_STREAMED", { run_name: STATE.term.agent, new_events: fresh.length, up_to_seq: STATE.term.agentSeq });
   // record the model's final reply into the CONVERSATION so the next turn carries it (multi-turn).
   const fa = fresh.filter((e) => e.kind === "FinalAnswer").pop();
   if (fa && STATE.term.chat && STATE.term.chat.active) {
     STATE.term.chat.convo.push({ role: "assistant", content: fa.payload.text });
     termPush([{ cls: "dim", text: "· your turn — type to continue, `exit` to leave" }]);
   }
+  if (fa && STATE.term.agent) emit("FINAL_ANSWER_RENDERED", { run_name: STATE.term.agent, answer_length: String((fa.payload && fa.payload.text) || "").length });
 }
 
 // A conversation is a transcript carried across turns: each message you send re-runs the agent seeded
@@ -284,6 +339,8 @@ async function sendChatMessage(text) {
   STATE.term.chat.convo.push({ role: "user", content: text });
   const model = STATE.term.model || "deterministic";
   const transcript = renderConvo(STATE.term.chat.convo);
+  const turn_index = Math.floor(STATE.term.chat.convo.length / 2);
+  emit("TURN_SUBMITTED", { model, task_length: transcript.length, turn_index });
   const cli = new Set(["claude", "gemini"]);
   // default to a DEDICATED per-conversation workspace (a session name -> ~/.substrate/sessions/<id>),
   // never the repo the server launched in. Set once, then every turn shares it. `cwd <path>` overrides
@@ -303,8 +360,14 @@ async function sendChatMessage(text) {
         ? `model=${model}&task=${encodeURIComponent(transcript)}${pq}`
         : `model=ollama&name=${encodeURIComponent(model)}&task=${encodeURIComponent(transcript)}${pq}`) + ws + wt;
   termPush([{ cls: "dim", text: `· ${model} is working…` }]);
+  const pparams = STATE.term.params;
+  emit("AGENT_LAUNCH_REQUESTED", { model, params: { think: pparams.think, tokens: pparams.tokens, timeout: pparams.timeout } });
   const res = await fetch(`/api/agent?${qs}`, { method: "POST" }).then((r) => r.json()).catch(() => null);
-  if (!res || res.error || !res.name) { termPush([{ cls: "err", text: "agent: launch failed" }]); return; }
+  if (!res || res.error || !res.name) {
+    emit("LAUNCH_REJECTED", { kind: "agent", reason: String((res && res.error) || "launch failed") });
+    termPush([{ cls: "err", text: "agent: launch failed" }]); return;
+  }
+  emit("AGENT_LAUNCHED", { run_name: res.name, model, workspace: res.workspace || STATE.term.workspace || "", ...(res.branch ? { branch: res.branch } : {}) });
   // show the resolved workspace (+ branch, in worktree mode) once. Only adopt the resolved path as the
   // session key when NOT in worktree mode — worktree needs the stable session id across turns.
   if (res.workspace && STATE.term.workspacePath !== res.workspace) {
@@ -324,7 +387,7 @@ async function loadModels() {
   el.innerHTML = (d.models || ["deterministic"]).map((m) => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join("");
   el.value = d.default || "deterministic";
   STATE.term.model = el.value; // default to the biggest OSS model the server picked
-  el.onchange = () => { STATE.term.model = el.value; };
+  el.onchange = () => { _selectModel(el.value); };
 }
 
 // ---------- live-attach: follow a launched run AS it is written (attach/F-PERS-4, read-only) ----------
@@ -332,6 +395,12 @@ async function followLive(name) {
   STATE.live = name;
   renderVerdict();
   let lastSeq = -1, stalls = 0;
+  // POLL_TIMEOUT ceiling: if we've polled for more than the timeout without reaching a terminal or
+  // seeing a FINAL_ANSWER_RENDERED, emit the incident once and stop the poll. Ceiling reads from
+  // STATE.term.params.timeout in seconds (default 300 for the CLI, mirrored here); safely bounded
+  // by a hard 10 min so a mis-set timeout can't hang the browser indefinitely.
+  const pollStart = performance.now();
+  const ceilingMs = Math.min(600000, Math.max(30000, (STATE.term.params.timeout || 300) * 1000));
   while (STATE.live === name && STATE.name === name) {
     await new Promise((r) => setTimeout(r, 400));
     if (STATE.name !== name || STATE.live !== name) return;  // navigated away / stopped
@@ -354,6 +423,12 @@ async function followLive(name) {
     // dead run can't read "● LIVE forever" (§7.2, #36) AND a slow-but-alive LLM run is never
     // abandoned (#37: live=true + no-growth is NORMAL for a long generation; server-liveness, not
     // no-growth, is the authoritative stop; a wedged model call self-ends at the adapter timeout).
+    const elapsed_ms = performance.now() - pollStart;
+    if (elapsed_ms > ceilingMs) {
+      emit("POLL_TIMEOUT", { run_name: name, elapsed_ms: Math.round(elapsed_ms) });
+      STATE.live = null; $("launchmsg").textContent = `${name} · poll timeout at ${(elapsed_ms/1000).toFixed(0)}s`;
+      return;
+    }
     if (g.status !== "incomplete") {
       STATE.live = null; $("launchmsg").textContent = `${name} · ${g.status}`;  // reached a terminal
     } else if (!g.live) {
@@ -376,17 +451,22 @@ async function renderDiff(other) {
     $("insp").innerHTML = `<div class="row"><span class="l">diff</span><span><b>${escapeHtml(d.a)}</b> vs <b>${escapeHtml(d.b)}</b></span></div>
       <div class="row"><span class="l">result</span><span class="diff-eq">● equivalent under D-8 (no divergence)</span></div>
       <div class="row"><span class="l">means</span><span class="dim">same kinds + decision identities + payload hashes in seq order (modulo run_id / instance / t).</span></div>`;
+    emit("DIFF_RENDERED", _paneCtx("diff", { first_divergence_seq: -1 }));
   } else {
     const x = d.divergence;
     $("insp").innerHTML = `<div class="row"><span class="l">diff</span><span><b>${escapeHtml(d.a)}</b> vs <b>${escapeHtml(d.b)}</b></span></div>
       <div class="row"><span class="l">diverge</span><span class="diff-hi">● first divergence at <b>seq ${x.seq}</b> (index ${x.index})</span></div>
       <div class="row"><span class="l">${escapeHtml(d.a)}</span><span>${escapeHtml(x.kind_a)} <span class="dim">${escapeHtml((x.hash_a || "").slice(0, 24))}…</span></span></div>
       <div class="row"><span class="l">${escapeHtml(d.b)}</span><span>${escapeHtml(x.kind_b)} <span class="dim">${escapeHtml((x.hash_b || "").slice(0, 24))}…</span></span></div>`;
+    emit("DIFF_RENDERED", _paneCtx("diff", { first_divergence_seq: x.seq }));
   }
 }
 
 // ---------- select + fetch a record's projections ----------
 async function selectRecord(name) {
+  const prior_name = STATE.name;
+  emit("RECORD_SELECTED", { name, prior_name });
+  emit("RECORD_LOAD_BEGIN", { name });
   stopPlay();  // switching records stops any in-flight replay (no loop leaking across records)
   if (STATE.live && STATE.live !== name) STATE.live = null;  // navigating away stops the follow
   STATE.name = name; STATE.sel = null;
@@ -406,6 +486,13 @@ async function selectRecord(name) {
   // verdict flickers a false "NOT CLEAN" (review #38, obs b; mirrors followLive's guard).
   if (STATE.name !== name) return;
   STATE.events = full.events; STATE.manifest = full.manifest; STATE.graph = graph; STATE.summary = summary; STATE.topology = topology;
+  emit("RECORD_LOADED", {
+    name,
+    event_count: STATE.events.length,
+    status: (summary && summary.status) || (graph && graph.status) || "unknown",
+    producers_failed: (summary && summary.producers_failed) || 0,
+    final_reason: (summary && summary.final_reason) || "",
+  });
   updateScene();
   const maxSeq = STATE.events.length ? STATE.events[STATE.events.length - 1].seq : 0;
   STATE.cursor = maxSeq;
@@ -518,6 +605,10 @@ async function renderIO() {
   $("iopane").querySelectorAll(".branch[data-child]").forEach((el) => (el.onclick = () => openDelegateChild(el.dataset.child, STATE.name)));
   const cb = $("iopane").querySelector(".crumb[data-parent]");
   if (cb) cb.onclick = () => { const p = cb.dataset.parent; STATE.delegateParent = null; selectRecord(p); };
+  emit("IO_RENDERED", _paneCtx("io", {
+    input_kind: io.input == null ? "none" : "seed",
+    artifact_count: outs.length,
+  }));
 }
 
 // ---------- run-as-graph: firing-anchored lifespans + spawn cohorts (§7.3) ----------
@@ -570,6 +661,11 @@ function renderGraph() {
   html += `</div>`;
   $("graph").innerHTML = html;
   $("graph").querySelectorAll(".lane").forEach((l) => (l.onclick = () => inspectProducer(l.dataset.inst)));
+  emit("GRAPH_RENDERED", _paneCtx("graph_run", {
+    instance_count: insts.length,
+    cohort_count: cohorts.length,
+    cancelled_count: insts.filter((i) => i.status === "cancelled").length,
+  }));
 }
 
 // ---------- static topology-structure view: the topology AS AUTHORED (design §6) ----------
@@ -598,6 +694,10 @@ function renderTopology() {
     <div class="grp">views</div>${views}
     <div class="grp">routes</div>${routes}
     <div class="grp">termination policy</div>${term}</div>`;
+  emit("TOPOLOGY_RENDERED", _paneCtx("topology", {
+    producer_count: t.producers.length,
+    trigger_count: t.triggers.length,
+  }));
 }
 
 // ---------- scene: a domain-visual view of a renderable payload shape (§7.1, read-only) ----------
@@ -635,11 +735,11 @@ function updateScene() {
 
 function renderScene() {
   const sc = STATE.scene;
-  if (!sc) { $("graph").innerHTML = `<div class="scene-cap dim">No renderable shape in this record.</div>`; return; }
+  if (!sc) { $("graph").innerHTML = `<div class="scene-cap dim">No renderable shape in this record.</div>`; emit("SCENE_RENDERED", _paneCtx("scene", { generation_seq: -1 })); return; }
   const cur = STATE.cursor;
   const shown = sc.frames.filter((f) => f.seq <= cur);
   const frame = shown.length ? shown[shown.length - 1] : null;
-  if (!frame) { $("graph").innerHTML = `<div class="scene-cap dim">No <b>${escapeHtml(sc.kind)}</b> yet at seq ${cur} — scrub forward.</div>`; return; }
+  if (!frame) { $("graph").innerHTML = `<div class="scene-cap dim">No <b>${escapeHtml(sc.kind)}</b> yet at seq ${cur} — scrub forward.</div>`; emit("SCENE_RENDERED", _paneCtx("scene", { generation_seq: -1 })); return; }
   const rows = frame.grid.length, cols = frame.grid[0].length;
   const cells = frame.grid.map((row) => row.map((c) => `<div class="cell ${c ? "on" : ""}"></div>`).join("")).join("");
   const scalars = frame.scalars.map(([k, v]) => `<span class="sv">${escapeHtml(k)}=<b>${escapeHtml(v)}</b></span>`).join("");
@@ -648,6 +748,7 @@ function renderScene() {
       <span class="dim">seq ${frame.seq} · ${rows}×${cols} · frame ${sc.frames.indexOf(frame) + 1}/${sc.frames.length}</span> ${scalars}</div>
     <div class="scene-grid" style="grid-template-columns:repeat(${cols},1fr)">${cells}</div>
     <div class="scene-hint dim">the shared world-state at this seq — scrub the cursor to move through the run</div>`;
+  emit("SCENE_RENDERED", _paneCtx("scene", { generation_seq: frame.seq }));
 }
 
 // ---------- event stream: seq-cited, colored, cursor-truncated ----------
@@ -663,6 +764,7 @@ function renderStream() {
       <span class="pl">${escapeHtml(prod)} · ${escapeHtml(gist(e))}</span></div>`;
   }).join("");
   $("stream").querySelectorAll(".ev").forEach((el) => (el.onclick = () => inspectEvent(+el.dataset.seq)));
+  emit("STREAM_RENDERED", _paneCtx("stream", { line_count: STATE.events.length }));
 }
 
 // ---------- health: verdict keyed on the run-level STATUS (§7.2) ----------
@@ -686,12 +788,21 @@ function renderHealth() {
     ${stat(s.producers_failed, "FAILED", fails ? "red" : "")}${stat(s.invalid_emissions, "INVALID", "")}
     ${stat(s.producers_cancelled, "CANCELLED", "")}
     <span class="msg">${msg}</span><span class="work">${work}</span>`;
+  // vocab verdict enum: FINALISED | FAILED | PAUSED | INCOMPLETE | LIVE. LIVE is derived in
+  // renderVerdict from STATE.live + graph.live; renderHealth is called AFTER renderVerdict inside
+  // render() so the top badge's live-follow state is reflected here as the same categorical outcome.
+  const verdictEnum = st === "failed" ? "FAILED"
+    : st === "paused" ? "PAUSED"
+    : st === "incomplete" ? (STATE.live === STATE.name && STATE.graph.live ? "LIVE" : "INCOMPLETE")
+    : "FINALISED";
+  emit("HEALTH_RENDERED", _paneCtx("health", { verdict: verdictEnum }));
 }
 
 // ---------- inspector: raw event (§7.1) / producer provenance ----------
 function inspectEvent(seq) {
   STATE.sel = seq; renderStream();
   const e = STATE.events.find((x) => x.seq === seq); if (!e) return;
+  emit("EVENT_INSPECTED", { seq, kind: e.kind, subject_record: STATE.name });
   const cat = category(e.kind);
   // CONTENT blocks: string payload fields that are code / prose / model output — rendered readable
   // (real newlines, monospace), not buried in escaped JSON. The "see the code" view in the GUI.
@@ -709,6 +820,16 @@ function inspectEvent(seq) {
 
 async function inspectProducer(instance) {
   const name = STATE.name;  // capture for the same staleness guard as renderDiff (ui-frontend-3)
+  const laneInst = (STATE.graph && STATE.graph.instances || []).find((i) => i.instance === instance);
+  // Sprint 030: PRODUCER_INSPECTED.kind is typed as substrate_producer_kind — do not lie with
+  // "unknown". Sprint 033 (v0.5): when the click races the graph mutation, emit
+  // PRODUCER_INSPECTION_RACED so the race stays visible on the record instead of dropping into
+  // silence. The inspector still opens the /explain/<instance> chain either way.
+  if (laneInst && laneInst.kind) {
+    emit("PRODUCER_INSPECTED", { instance, kind: laneInst.kind, subject_record: name });
+  } else {
+    emit("PRODUCER_INSPECTION_RACED", { instance, subject_record: name });
+  }
   const data = await api(`/api/records/${name}/explain/${instance}`).catch(() => null);
   if (STATE.name !== name) return;  // switched records mid-fetch — don't overwrite the new inspector
   if (!data || data.error) { $("insp").innerHTML = `<span class="dim">No provenance for ${escapeHtml(instance)}.</span>`; return; }
@@ -727,22 +848,61 @@ const escapeHtml = (s) =>
   String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
 // ---------- cursor wiring ----------
-$("modeToggle").onclick = () => { STATE.mode = STATE.mode === "io" ? "read" : "io"; render(); };
-$("gvRun").onclick = () => { if (STATE.graphView !== "run") { STATE.graphView = "run"; render(); } };
-$("gvTopo").onclick = () => { if (STATE.graphView !== "topo") { STATE.graphView = "topo"; render(); } };
-$("gvScene").onclick = () => { if (STATE.graphView !== "scene") { STATE.graphView = "scene"; render(); } };
-$("seq").oninput = (e) => { STATE.cursor = +e.target.value; $("seqnow").textContent = STATE.cursor; render(); };
-$("toStart").onclick = () => { $("seq").value = 0; $("seq").oninput({ target: $("seq") }); };
-$("toEnd").onclick = () => { $("seq").value = $("seq").max; $("seq").oninput({ target: $("seq") }); };
+// The five view slots the vocab names: run (graph_run), topology, scene, io, read.
+// PANE_SWITCHED fires only on an actual slot change (idempotent clicks are silent by design).
+// Renamed from v0.1 VIEW_SWITCHED to free the word 'View' for substrate's runtime primitive.
+const _currentPane = () => STATE.mode === "io" ? "io" : STATE.graphView === "topo" ? "topology" : STATE.graphView;
+function _switchView(to_pane) {
+  const prior_pane = _currentPane();
+  if (prior_pane === to_pane) return false;
+  emit("PANE_SWITCHED", { to_pane, prior_pane, subject_record: STATE.name });
+  return true;
+}
+$("modeToggle").onclick = () => {
+  // Leaving io does NOT re-select "run" — it returns to whatever graphView the user last picked
+  // (run | topology | scene). Emitting to_view: run when graphView is scene would lie in the trace.
+  const goingToIo = STATE.mode !== "io";
+  const to = goingToIo ? "io" : (STATE.graphView === "topo" ? "topology" : STATE.graphView);
+  if (_switchView(to)) { STATE.mode = goingToIo ? "io" : "read"; render(); }
+};
+$("gvRun").onclick = () => { if (_switchView("run")) { STATE.graphView = "run"; render(); } };
+$("gvTopo").onclick = () => { if (_switchView("topology")) { STATE.graphView = "topo"; render(); } };
+$("gvScene").onclick = () => { if (_switchView("scene")) { STATE.graphView = "scene"; render(); } };
+// _cursorSource lets the cursor emitter tag which surface moved the cursor (drag | button | play_frame).
+// Default drag; the button + play helpers override right before calling _setSeq / oninput.
+let _cursorSource = "drag";
+$("seq").oninput = (e) => {
+  const prior_seq = STATE.cursor;
+  STATE.cursor = +e.target.value;
+  if (STATE.cursor !== prior_seq) {
+    emit("CURSOR_MOVED", { seq: STATE.cursor, prior_seq, subject_record: STATE.name, source: _cursorSource });
+  }
+  _cursorSource = "drag";  // reset — the next input is drag unless a helper re-tags first
+  $("seqnow").textContent = STATE.cursor; render();
+};
+$("toStart").onclick = () => { _cursorSource = "button"; $("seq").value = 0; $("seq").oninput({ target: $("seq") }); };
+$("toEnd").onclick = () => { _cursorSource = "button"; $("seq").value = $("seq").max; $("seq").oninput({ target: $("seq") }); };
 
 // ---------- replay Transport: play/pause/speed advance the ONE seq-cursor over time ----------
 // No new time axis — the play loop just steps the same cursor the graph/stream/scene read in
 // lock-step, so replay animates every surface at once. Fixed-rate (seq/sec); original-timing via
 // the events' `t` is a later add (near-instant on the deterministic CI records).
 let _raf = null, _playLast = 0, _playAccum = 0;
-function _setSeq(v) { $("seq").value = v; $("seq").oninput({ target: $("seq") }); }
+function _setSeq(v) { _cursorSource = "play_frame"; $("seq").value = v; $("seq").oninput({ target: $("seq") }); }
 function _updatePlayBtn() { $("play").textContent = STATE.playing ? "⏸" : "▶"; $("play").classList.toggle("playing", STATE.playing); }
-function stopPlay() { if (_raf) { cancelAnimationFrame(_raf); _raf = null; } if (STATE.playing) { STATE.playing = false; _updatePlayBtn(); } }
+// stopReason lets startPlay's end-reached path and the seq-drag interrupt handler pass distinct
+// reasons through the same stopPlay entrypoint. Default user_pause when a user click flips it off.
+let _stopReason = "user_pause";
+function stopPlay() {
+  if (_raf) { cancelAnimationFrame(_raf); _raf = null; }
+  if (STATE.playing) {
+    const at_seq = STATE.cursor;
+    STATE.playing = false;
+    _updatePlayBtn();
+    emit("PLAY_STOPPED", { at_seq, reason: _stopReason, subject_record: STATE.name });
+    _stopReason = "user_pause";
+  }
+}
 // rAF loop: each frame advance the cursor by (elapsed * speed) seqs and render ONCE, so the replay
 // RATE (seq/sec) is decoupled from the render rate (~60 fps). High speeds advance several seqs per
 // frame instead of forcing a full render per seq — no longer render-bound (Drift watchlist fold).
@@ -757,19 +917,25 @@ function _frame(ts) {
     _playAccum -= step;
     const next = Math.min(max, STATE.cursor + step);
     _setSeq(next);                                          // one render per frame, any step size
-    if (next >= max) { stopPlay(); return; }                // reached the end -> stop here
+    if (next >= max) { _stopReason = "end_reached"; stopPlay(); return; }                // reached the end -> stop here
   }
   _raf = requestAnimationFrame(_frame);
 }
 function startPlay() {
   if (STATE.cursor >= +$("seq").max) _setSeq(0);   // at the end -> replay from the start (rewind)
+  const from_seq = STATE.cursor;
   STATE.playing = true; _updatePlayBtn();
   _playLast = 0; _playAccum = 0;
+  emit("PLAY_STARTED", { from_seq, speed: STATE.speed, subject_record: STATE.name });
   _raf = requestAnimationFrame(_frame);
 }
 $("play").onclick = () => (STATE.playing ? stopPlay() : startPlay());
-$("speedsel").onchange = () => { STATE.speed = +$("speedsel").value; };  // the rAF reads STATE.speed each frame
-$("seq").addEventListener("pointerdown", stopPlay);  // grabbing the slider pauses (don't fight the user)
+$("speedsel").onchange = () => {
+  const prior_speed = STATE.speed;
+  STATE.speed = +$("speedsel").value;
+  if (STATE.speed !== prior_speed) emit("SPEED_CHANGED", { speed: STATE.speed, prior_speed });
+};
+$("seq").addEventListener("pointerdown", () => { _stopReason = "scrub_interrupt"; stopPlay(); });  // grabbing the slider pauses (don't fight the user)
 
 // ---------- integrated terminal: a read interface over the same record the GUI shows ----------
 function _narrateLine(e) { const g = gist(e); return shortKind(e.kind) + (g ? " — " + g : ""); }
@@ -790,7 +956,8 @@ function renderTerm() {
     : "type 'chat' to talk to the model — or a command (help)";
 }
 function termPush(lines) { STATE.term.lines.push(...lines); renderTerm(); }
-function termSetOpen(v) {
+function termSetOpen(v, trigger) {
+  const wasOpen = STATE.term.open;
   STATE.term.open = v;
   $("termdock").style.display = v ? "" : "none";
   $("termOpen").style.display = v ? "none" : "";
@@ -799,6 +966,27 @@ function termSetOpen(v) {
     if (!STATE.term.lines.length) STATE.term.lines.push({ cls: "dim", text: "substrate read interface · reads the same record the GUI shows · type `help`" });
     renderTerm(); $("terminput").focus();
   }
+  if (v && !wasOpen) emit("TERMINAL_OPENED", trigger ? { trigger } : {});
+  else if (!v && wasOpen) emit("TERMINAL_CLOSED", {});
+}
+// One helper so the model picker and the `model` command both funnel through a single MODEL_SELECTED
+// emit with prior_model correctly threaded. Returns the effective model (unchanged if next was equal).
+function _selectModel(next) {
+  const prior_model = STATE.term.model || "deterministic";
+  if (next === prior_model) return prior_model;
+  STATE.term.model = next;
+  const el = $("agentmodel"); if (el && el.value !== next) el.value = next;
+  emit("MODEL_SELECTED", { model: next, prior_model });
+  return next;
+}
+// One helper for the three `think`/`tokens`/`timeout` params so PARAMS_CHANGED fires exactly once
+// per real change with prior_value + value + field enum.
+function _setParam(field, value) {
+  const pp = STATE.term.params;
+  const prior_value = pp[field];
+  if (prior_value === value) return;
+  pp[field] = value;
+  emit("PARAMS_CHANGED", { field, value, prior_value });
 }
 async function runTerm(line) {
   const out = []; const say = (text, cls) => out.push({ text, cls: cls || "out" });
@@ -831,8 +1019,7 @@ async function runTerm(line) {
   }
   if (cmd === "model") {
     if (parts[1]) {
-      STATE.term.model = parts[1];
-      const el = $("agentmodel"); if (el) el.value = parts[1];  // keep the picker in sync
+      _selectModel(parts[1]);
       say("driver model = " + parts[1], "dim");
     } else say("driver model = " + (STATE.term.model || "deterministic") + "   (or use the picker)", "dim");
     return out;
@@ -870,19 +1057,19 @@ async function runTerm(line) {
   }
   if (cmd === "think") {
     const v = (parts[1] || "").toLowerCase();
-    if (v === "on" || v === "off") { STATE.term.params.think = v === "on"; say(`think = ${v}`, "dim"); }
+    if (v === "on" || v === "off") { _setParam("think", v === "on"); say(`think = ${v}`, "dim"); }
     else say("usage: think on|off", "dim");
     renderTerm(); return;
   }
   if (cmd === "tokens") {
     const n = parseInt(parts[1], 10);
-    if (Number.isFinite(n) && n >= 0) { STATE.term.params.tokens = n; say(`tokens = ${n > 0 ? n : "uncapped"}`, "dim"); }
+    if (Number.isFinite(n) && n >= 0) { _setParam("tokens", n); say(`tokens = ${n > 0 ? n : "uncapped"}`, "dim"); }
     else say("usage: tokens N   (0 = uncapped)", "dim");
     renderTerm(); return;
   }
   if (cmd === "timeout") {
     const n = parseFloat(parts[1]);
-    if (Number.isFinite(n) && n > 0) { STATE.term.params.timeout = n; say(`timeout = ${n}s`, "dim"); }
+    if (Number.isFinite(n) && n > 0) { _setParam("timeout", n); say(`timeout = ${n}s`, "dim"); }
     else say("usage: timeout SECONDS", "dim");
     renderTerm(); return;
   }
@@ -896,7 +1083,9 @@ async function runTerm(line) {
     // persists across /exit, so `chat` picks up where you left off; then you just TYPE to talk.
     if (!STATE.term.chat) STATE.term.chat = { active: false, convo: [] };
     const turns = STATE.term.chat.convo.length;
+    const wasActive = STATE.term.chat.active;
     STATE.term.chat.active = true;
+    if (!wasActive) emit("CHAT_ENTERED", turns > 0 ? { reconnect: true } : {});
     const model = STATE.term.model || "deterministic";
     say(
       turns
@@ -908,7 +1097,9 @@ async function runTerm(line) {
   }
   if (cmd === "exit") {
     if (STATE.term.chat && STATE.term.chat.active) {
+      const turns_in_conversation = STATE.term.chat.convo.length;
       STATE.term.chat.active = false;
+      emit("CHAT_EXITED", { turns_in_conversation });
       say("left chat — your conversation is kept; type `chat` to reconnect", "dim");
     } else say("(not in a conversation — type `chat` to start one)", "dim");
     return out;
@@ -987,11 +1178,24 @@ $("terminput").addEventListener("keydown", (e) => {
   else if (e.key === "ArrowUp") { e.preventDefault(); const n = Math.min(STATE.term.history.length - 1, STATE.term.hi + 1); if (n >= 0) { STATE.term.hi = n; $("terminput").value = STATE.term.history[n]; } }
   else if (e.key === "ArrowDown") { e.preventDefault(); const n = STATE.term.hi - 1; if (n < 0) { STATE.term.hi = -1; $("terminput").value = ""; } else { STATE.term.hi = n; $("terminput").value = STATE.term.history[n]; } }
 });
-$("termOpen").onclick = () => termSetOpen(true);
+$("termOpen").onclick = () => termSetOpen(true, "toggle_button");
 $("termClose").onclick = () => termSetOpen(false);
-$("termToggle").onclick = () => termSetOpen(!STATE.term.open);
-window.addEventListener("keydown", (e) => { if (e.ctrlKey && (e.key === "`" || e.key === "Dead")) { e.preventDefault(); termSetOpen(!STATE.term.open); } });
+$("termToggle").onclick = () => termSetOpen(!STATE.term.open, "toggle_button");
+window.addEventListener("keydown", (e) => { if (e.ctrlKey && (e.key === "`" || e.key === "Dead")) { e.preventDefault(); termSetOpen(!STATE.term.open, "ctrl_backtick"); } });
 
 loadTopologies();
 loadModels();  // populate the terminal's model picker (defaults to the biggest OSS model)
 loadRecords().then(() => loadAssays());  // assays prepend to the rail AFTER the records fill it
+
+// Harness compatibility shim (Sprint 008 — TypeScript conversion, behavior-preserving).
+// Vite compiles this file as an ES module; top-level `let STATE`, `function loadRecords`, etc.
+// become module-scoped. The parent Playwright harness (`harness/*.js`) predates the module
+// boundary and calls these as if they were globals via `page.evaluate(() => loadRecords())`
+// and `page.evaluate(() => STATE.events)`. Rebind on window so the harness keeps working
+// unchanged; a future sprint can migrate the harness to explicit imports.
+(window as any).STATE = STATE;
+(window as any).loadRecords = loadRecords;
+(window as any).selectRecord = selectRecord;
+(window as any).loadAssays = loadAssays;
+(window as any).loadModels = loadModels;
+(window as any).api = api;  // Sprint 028: harness routes through the wrapped seam to trigger FETCH_FAILED

@@ -1,7 +1,13 @@
 /* substrate studio — author a Topology from structured form input, validate + build it through the
    REAL seam (/api/validate static TopologyBuilder.build(); /api/build runs a real api.Runtime). The
-   spec shape mirrors builder.py EXACTLY. Reads substrate.api only (over HTTP). The eight words only. */
+   spec shape mirrors builder.py EXACTLY. Reads substrate.api only (over HTTP). The eight words only.
+   Sprint 032: instrumented against v0.3 signal vocabulary — same emitter as web/app.ts. */
 "use strict";
+import { emit, VOCAB_VERSION } from "./instrumentation/sdd";
+
+emit("SESSION_INIT", { vocab_version: VOCAB_VERSION, url: window.location.href });
+window.addEventListener("beforeunload", () => { emit("SESSION_ENDED", {}); });
+
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
@@ -139,22 +145,40 @@ async function postJSON(path, body) {
 const out = (html) => { $("out").innerHTML = `<span class="l">output</span>${html}`; };
 
 async function doValidate() {
-  const r = await postJSON("/api/validate", buildSpec());
+  const spec = buildSpec();
+  emit("SPEC_VALIDATE_REQUESTED", spec.name ? { topology_name: spec.name } : {});
+  const r = await postJSON("/api/validate", spec);
+  emit("SPEC_VALIDATED", r.valid ? { valid: true } : { valid: false, error: String(r.error || "") });
   if (r.valid) out(`<span class="ok">● valid</span> <span class="dim">— builds through the real TopologyBuilder.</span>`);
   else out(`<span class="err">● invalid</span> <span class="dim">${esc(r.error || "")}</span>`);
 }
 
 async function doBuild() {
   const spec = buildSpec();
+  emit("SPEC_BUILD_REQUESTED", spec.name ? { topology_name: spec.name } : {});
   const v = await postJSON("/api/validate", spec);
-  if (!v.valid) { out(`<span class="err">● invalid — fix before building</span> <span class="dim">${esc(v.error || "")}</span>`); return; }
+  if (!v.valid) {
+    emit("SPEC_BUILD_REJECTED", { reason: String(v.error || "invalid spec") });
+    out(`<span class="err">● invalid — fix before building</span> <span class="dim">${esc(v.error || "")}</span>`); return;
+  }
   out(`<span class="dim">building &amp; launching…</span>`);
   const r = await postJSON("/api/build", spec);
-  if (r.error) { out(`<span class="err">● build rejected</span> <span class="dim">${esc(r.error)}</span>`); return; }
-  const unfired = r.unfired_triggers && r.unfired_triggers.length
+  if (r.error) {
+    emit("SPEC_BUILD_REJECTED", { reason: String(r.error) });
+    out(`<span class="err">● build rejected</span> <span class="dim">${esc(r.error)}</span>`); return;
+  }
+  const unfiredCount = (r.unfired_triggers && r.unfired_triggers.length) || 0;
+  emit("SPEC_BUILT", {
+    run_name: String(r.name || ""),
+    status: String(r.status || "unknown"),
+    ...(unfiredCount ? { unfired_triggers_count: unfiredCount } : {}),
+  });
+  const unfired = unfiredCount
     ? `<div class="warn">⚠ Trigger(s) that never fired (Predicate unreachable with the deterministic stub): ${esc(r.unfired_triggers.join(", "))}</div>` : "";
   out(`<div><span class="ok">● built · ${esc(r.status)}</span> <span class="l">record</span>${esc(r.name)}</div>${unfired}
-    <div style="margin-top:8px"><a class="consolelink" href="/?record=${encodeURIComponent(r.name)}">view the run in the console →</a></div>`);
+    <div style="margin-top:8px"><a class="consolelink" href="/?record=${encodeURIComponent(r.name)}" target="_blank" rel="noopener" data-run="${esc(r.name)}">view the run in the console →</a></div>`);
+  const link = document.querySelector(".consolelink") as HTMLAnchorElement | null;
+  if (link) link.addEventListener("click", () => emit("CONSOLE_LINK_FOLLOWED", { run_name: String(r.name || "") }));
 }
 
 // ---------- drag-canvas: a node-graph VIEW of the authored spec (buildSpec) ----------
@@ -214,6 +238,9 @@ function startDrag(e, kind) {
 }
 
 function setView(v) {
+  const wasForm = $("formView").style.display !== "none";
+  const nowForm = v === "form";
+  if (wasForm !== nowForm) emit("CANVAS_TOGGLED", { to: v });
   $("vForm").classList.toggle("active", v === "form");
   $("vCanvas").classList.toggle("active", v === "canvas");
   $("formView").style.display = v === "form" ? "" : "none";
@@ -221,13 +248,26 @@ function setView(v) {
   if (v === "canvas") renderCanvas();
 }
 
+// Map the container ID to the studio's SPEC_ROW_ADDED/REMOVED kind enum.
+const _rowKind = (containerId: string): string => ({
+  producers: "producer", views: "view", triggers: "trigger", routes: "route", termMembers: "member",
+} as Record<string, string>)[containerId] || containerId;
+
 // ---------- wire ----------
-$("addProducer").onclick = () => addRow("producers", PRODUCER_ROW);
-$("addView").onclick = () => addRow("views", VIEW_ROW);
-$("addTrigger").onclick = () => addRow("triggers", TRIGGER_ROW);
-$("addRoute").onclick = () => addRow("routes", ROUTE_ROW);
-document.body.addEventListener("click", (e) => { if (e.target.classList.contains("rm")) e.target.closest(".row").remove(); });
-document.body.addEventListener("change", (e) => { if (e.target.classList.contains("mkind")) renderMemberParams(e.target.closest(".row")); });
+$("addProducer").onclick = () => { emit("SPEC_ROW_ADDED", { kind: "producer" }); addRow("producers", PRODUCER_ROW); };
+$("addView").onclick = () => { emit("SPEC_ROW_ADDED", { kind: "view" }); addRow("views", VIEW_ROW); };
+$("addTrigger").onclick = () => { emit("SPEC_ROW_ADDED", { kind: "trigger" }); addRow("triggers", TRIGGER_ROW); };
+$("addRoute").onclick = () => { emit("SPEC_ROW_ADDED", { kind: "route" }); addRow("routes", ROUTE_ROW); };
+document.body.addEventListener("click", (e) => {
+  const t = e.target as HTMLElement;
+  if (t.classList.contains("rm")) {
+    const row = t.closest(".row") as HTMLElement | null;
+    const container = row && row.parentElement;
+    if (container && container.id) emit("SPEC_ROW_REMOVED", { kind: _rowKind(container.id) });
+    if (row) row.remove();
+  }
+});
+document.body.addEventListener("change", (e) => { const t = e.target as HTMLElement; if (t.classList.contains("mkind")) renderMemberParams(t.closest(".row")); });
 $("termKind").onchange = renderTermParams;
 $("validateBtn").onclick = doValidate;
 $("buildBtn").onclick = doBuild;

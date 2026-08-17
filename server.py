@@ -154,7 +154,13 @@ HOST, PORT = (
     os.environ.get("SUBSTRATE_UI_HOST", "127.0.0.1"),
     int(os.environ.get("SUBSTRATE_UI_PORT", "8765")),
 )
-WEB = Path(__file__).resolve().parent / "web"  # the static frontend
+# Static frontend: Vite builds web/*.ts + web/*.html to web/dist/. If dist/ exists, serve from
+# there (production shape); otherwise fall back to web/ (transitional — the source-level index.html
+# won't load its <script type="module" src="./app.ts"> without the Vite runtime).
+_WEB_SRC = Path(__file__).resolve().parent / "web"
+_WEB_DIST = _WEB_SRC / "dist"
+WEB = _WEB_DIST if _WEB_DIST.is_dir() else _WEB_SRC
+TERMINAL_V1 = Path(__file__).resolve().parent / "terminal-v1" / "web"  # sub-project (A10) — currently empty; round-1 archived to _deprecated/terminal-v1-round1/
 RUNS = (
     Path(__file__).resolve().parent / "runs"
 )  # generated/live records (failed/paused/broken demos)
@@ -841,6 +847,9 @@ class Handler(BaseHTTPRequestHandler):
             if path.startswith("/api/records/"):
                 self._api_record(path[len("/api/records/") :])
                 return
+            if path.startswith("/terminal-v1/") or path == "/terminal-v1":
+                self._static_root(TERMINAL_V1, path[len("/terminal-v1") :] or "/")
+                return
             self._static(path)
         except Exception as exc:  # noqa: BLE001 - surface any read error as JSON, never a crash
             # do NOT leak a full traceback (absolute paths, internals) in the response body; the
@@ -921,12 +930,15 @@ class Handler(BaseHTTPRequestHandler):
         )
 
     def _static(self, path: str) -> None:
+        self._static_root(WEB, path)
+
+    def _static_root(self, root: Path, path: str) -> None:
         rel = "index.html" if path in ("", "/") else path.lstrip("/")
-        target = (WEB / rel).resolve()
-        # contain to WEB/ via relative_to, not startswith — startswith("…/web") also passes a sibling
-        # like "…/web-evil/secret", a prefix-traversal. relative_to raises when target escapes WEB.
+        target = (root / rel).resolve()
+        # contain to root via relative_to, not startswith — startswith(root) also passes a sibling
+        # like "…/web-evil/secret", a prefix-traversal. relative_to raises when target escapes root.
         try:
-            target.relative_to(WEB.resolve())
+            target.relative_to(root.resolve())
         except ValueError:
             self._error(404, f"not found: {path}")
             return

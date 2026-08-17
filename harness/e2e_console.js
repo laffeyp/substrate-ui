@@ -10,6 +10,7 @@
 */
 "use strict";
 const { chromium } = require("playwright");
+const { maybeCaptureTail } = require("./lib/capture-tail");
 const BASE = process.env.UI_BASE || "http://127.0.0.1:8765";
 const fails = [];
 const check = (cond, msg) => { if (!cond) fails.push(msg); else console.log("  ok  " + msg); };
@@ -336,6 +337,7 @@ const check = (cond, msg) => { if (!cond) fails.push(msg); else console.log("  o
   check(/seq \d/.test(insp2) && !/Select an event or a Producer/.test(insp2), "clicking an output artifact inspects it (BACKLOG: inspector works on artifacts)");
   await p.evaluate(() => document.getElementById("modeToggle").click());  // back to read
 
+  await maybeCaptureTail(p, "console");
   await b.close();
   if (fails.length) { console.error("\nFAILED:\n  - " + fails.join("\n  - ")); process.exit(1); }
   console.log("\nE2E PASS — the live console renders the real backend, §7 honored.");

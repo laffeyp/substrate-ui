@@ -10,7 +10,7 @@
 
 - **Project name:** substrate-ui
 - **Project type:** read/control console over the Substrate runtime — a small Python HTTP backend + a vanilla-JS frontend
-- **Primary language(s):** Python 3.12+ (stdlib `http.server`), JavaScript (browser, no build step)
+- **Primary language(s):** Python 3.12+ (stdlib `http.server`); TypeScript 5 (browser, built by Vite 5 into `web/dist/` — Sprint 018 landed the conversion on 2026-08-14).
 - **Relationship to substrate:** substrate-ui is a SEPARATE CONSUMER of substrate, depending on it only as an installed library through the public `substrate.api` read seam (product F-API-6). It is its own git repo for exactly this reason: the boundary is honest, and substrate's published v1.0 history stays clean. The UI imports `from substrate import api` (+ `substrate.topologies.bundled` and the reference topologies for demo enumeration) and NOTHING from the kernel internals.
 - **Adopted SDD kit version:** `sdd-kit-2` (read-only canon at `../sdd-kit-2/`)
 
@@ -22,7 +22,7 @@
 - Web: component-tree-aligned view vocabulary (the console's panels mirror the runtime's read projections); browser-as-runtime requires out-of-process verification (→ the live Playwright E2E).
 - Backend: the read seam is the contract; behavior-touching changes carry an observation contract (a real record driven through a real server, asserted in the DOM).
 
-The UI EMITS no signals of its own — it is a reader/projector of substrate's locked v0.2 vocabulary. So there is **no `signals/*.json` here** (a second vocabulary would be ceremony). The vocabulary discipline that DOES bind is the eight-word tone canon below.
+*Revised 2026-08-17.* Substrate-ui emits its own locked vocabulary at `signals/versions/current.json` — a symlink pinned to the current version (v0.3 as of Sprint 032, 53 tags across 12 categories including `studio`). Both `web/app.ts` (console) and `web/studio.ts` (studio authoring surface) are instrumented under the same vocabulary. Every `emit()` call site validates at the speaker's mouth via `web/instrumentation/sdd.ts`; unknown tags throw; missing required payload fields throw; foreign-key fields typed against `substrate_kind` enforce namespace-split closed-set membership (Sprint 030). The parity gate `tools/check-vocabulary-parity.ts` is the standing CI check — greps every `emit("TAG", ...)` call and confirms it exists in the lock, exit 1 on drift. Previous framing ("reader/projector, no signals/*.json here") was written before the SDD instrumentation arc (Sprints 018–032). The eight-word tone canon below still binds — it governs user-facing strings; the vocabulary above governs typed events.
 
 ---
 
@@ -50,6 +50,8 @@ The UI EMITS no signals of its own — it is a reader/projector of substrate's l
 | Server tests (real server, real api over HTTP) | `tests/test_server.py` | The artifact contract for backend changes. (Moved from repo root into `tests/` in the folder reorg, d824aed; registry path corrected 2026-07-31, review F-29.) |
 | Live structural E2E — console / Studio (real Chrome) | `e2e_console.js` / `e2e_studio.js` | Track 1 of the observation contract (DOM assertions). |
 | Perceptual capture harness — console / dynamic states / Studio | `capture_console.js` / `capture_states.js` / `capture_studio.js` | Track 2 of the observation contract (screenshots the agent VIEWS). |
+| Substrate-ui's own locked signal vocabulary | `signals/versions/0.1.json` (44 tags, 11 categories) + `signals/versions/0.1-rationale.md` | The contract every `emit(...)` call site in `web/`+`harness/` validates against. Sprint 019 landing; ratification pending per BLACKBOARD ## Surfaced for review 2026-08-15. |
+| Substrate runtime's vocabulary — the external SDK bridge substrate-ui reads at runtime | `../substrate/process/signals/0.2.json` (substrate's v0.2 kinds: RunStarted, TriggerFired, ProducerStarted, ProducerCompleted, ProducerFailed, ProducerCancelled, RunFinalised, TerminationMatched, InputBuildFailed, PredicateQuarantined, ProducerEmittedInvalidEvent, + application-domain kinds authored by bundled topologies) | Bridge mapping per TECHNIQUES.md #46. Consumed at read time via `substrate.api` — the `kind` strings surface in `EVENT_INSPECTED.kind`, in the run-graph, in the stream. Substrate-ui does NOT redeclare substrate's kinds; it references them by string identity. Any Wave-2 typed-kind proposal (ENTITY_MERGE_PROPOSED or a closed-set import) resolves against this file, not a copy. (Retrofit for review `REVIEW-2026-08-15-vocab-mapping-to-substrate.md § F4`.) |
 
 ---
 
@@ -58,7 +60,7 @@ The UI EMITS no signals of its own — it is a reader/projector of substrate's l
 *No additions without surfacing per AGENTS.md.*
 
 - **Backend:** Python standard library (`http.server`, `asyncio`, `threading`, `json`, `uuid`, `traceback`) + `msgspec` + `substrate` (installed library, via `substrate.api`, `substrate.topologies.bundled`, and the reference topologies). NO web framework, NO ASGI server, NO ORM.
-- **Frontend:** vanilla JavaScript. NO build step, NO bundler, NO npm runtime deps, NO CDN `<script>`s. (Playwright is a dev-only test dependency, not shipped.)
+- **Frontend:** TypeScript compiled by Vite. Dev dependencies pinned in `package.json`: typescript@^5, vite@^5, @types/node@^22, tsx@^4, playwright@^1.49. NO runtime CDN `<script>`s; no framework (no React/Vue/Svelte); no bundled runtime library at import — `web/dist/*.js` is the only shipped JavaScript. Sprint 018 replaced the earlier "no build step, vanilla JS" posture on 2026-08-14 (`sprints/sprint-018-typescript-conversion.md`).
 
 ---
 
@@ -93,6 +95,7 @@ grep -rEn 'agent|workflow|orchestrat|\bactor\b|\bspeaker\b' server.py builder.py
 - **Perceptual capture (the second observation-contract track — REQUIRED for front-end changes):** start the real backend, then `cd substrate-ui && npm run capture` — writes key-frame screenshots to `screenshots/`; the agent then Reads each PNG and grades it. Looking is the contract, not optional.
 - **Regenerate demo fixtures:** `cd ../substrate && uv run python ../substrate-ui/gen_demo_records.py` (rebuilds the `demo_*` records the tests + E2E read).
 - **Lint:** `cd ../substrate && uv run ruff check ../substrate-ui/server.py ../substrate-ui/builder.py` — expected exit 0.
+- **Signal-contract gate:** `cd substrate-ui && npm run signals` — expected exit 0. Runs the vocabulary-parity check (every `emit(...)` call site in `web/` + `harness/` is a locked tag; every locked tag's payload contract is enforced at the speaker's mouth), captures `window.__signals` through `harness/capture_signals.js`, and grades the fixture at `captures/sprint-021/console.jsonl` against every invariant in `signals/versions/0.1.json` (contains-in-order, pairing exactly-one + matching-key, staleness-drop, chat-window turn count, payload-content). Standing gate from Wave-1 close (2026-08-15, Sprint 029). Vocabulary changes require an Architect-ratified version bump (see `signals/versions/0.1-rationale.md § Open proposals for v0.2`); the arc never edits `signals/versions/0.1.json` unilaterally.
 
 ---
 
@@ -120,4 +123,4 @@ The Substrate project's CT-1..CT-5 (parallel teams, originals-over-summaries, wo
 
 ---
 
-*WORKING_AGREEMENT.md for substrate-ui. A separate consumer of substrate through `substrate.api` only. No own vocabulary (it reads substrate's v0.2); the eight-word tone canon binds instead. Web + backend class. Reviewed via the duplex-pipe reviewer. Instantiated as the review-#39 retrofit.*
+*WORKING_AGREEMENT.md for substrate-ui. A separate consumer of substrate through `substrate.api` only. Own locked vocabulary at `signals/versions/current.json` (v0.3 as of Sprint 032, 53 tags including the studio category); substrate's runtime vocabulary is referenced as a foreign-key bridge (see § Canonical home registry) not redeclared. The eight-word tone canon binds user-facing strings; the vocabulary binds typed events. Web + backend class. Reviewed via the duplex-pipe reviewer. Instantiated as the review-#39 retrofit; SDD-instrumented through Sprints 018–032.*

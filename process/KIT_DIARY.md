@@ -9,7 +9,7 @@
 | # | Hypothesis | Verdict | Evidence |
 |---|---|---|---|
 | H1 | A reader/projector UI built with tests + live E2E + independent review, but WITHOUT the kit's git+artifact ledger, will accumulate a real defect the ledger would have caught. | **confirmed** | Review #39: the Studio seam shipped live with zero tests because no sprint card forced its artifact contract. The substance was otherwise sound; the missing discipline cost exactly one untested live seam. |
-| H2 | A UI that only READS a locked vocabulary needs no vocabulary of its own; the tone canon is the binding contract instead. | tentative-confirmed | Review #39 ruled a second `signals/*.json` would be ceremony; the eight-word grep was already clean across #30–#38. One project, one data point. |
+| H2 | A UI that only READS a locked vocabulary needs no vocabulary of its own; the tone canon is the binding contract instead. | **falsified 2026-08-17** | H2 held for reader-only UIs but substrate-ui was reader-AND-controller from the start (POST /api/launch, /api/resume, /api/agent). REVIEW-2026-08-15-vocab-mapping-to-substrate.md § F6 named the boundary. Sprints 018–032 wired an own vocabulary (v0.5, 54 tags across console + studio); v0.4's `notes[0]` rewrote the framing honestly. The Addendum A9 carve-out applies to pure readers only. |
 
 ---
 
@@ -143,4 +143,30 @@
 
 ---
 
-*KIT_DIARY.md for substrate-ui. Eight entries. Eight hypotheses, five confirmed (missing ledger cost an untested seam; un-scoped tooling makes the contract skippable; the perceptual track catches what DOM can't; running the full discipline removes the need for Architect catches) + three tentative-confirmed — the last of which, "skipping the card on 'small' items just defers the discovery to the gates," was CONFIRMED by recurrence in the 2026-07-31 application-parity review (finding 17: three uncarded terminal commits + a committed-but-ungated assay E2E). The diary starts where formal discipline starts — the review-#39 retrofit — not at the project's true beginning, by ruling.*
+### 2026-08-14 through 2026-08-17 — the SDD instrumentation arc (Sprints 018–032)
+
+**What happened.** The Architect's 2026-08-14 directive "initiate the sddification of substrate-ui" started a three-day arc that took the project from H2's tentative-confirmed "no own vocabulary" to a locked 54-tag signal vocabulary covering both console and studio surfaces. Fifteen sprints landed in three waves: Wave-1 (018 TS + Vite conversion, 019 vocab lock v0.1, 020 emitter + parity gate + grader, 021–028 per-subsystem wiring, 029 wave close); Wave-2 (030 substrate_kind foreign-key enforcement, 031 optional signal-capture tail on the standing e2e harnesses); Wave-3 (032 studio surface instrumentation, closing a scope gap the Architect surfaced when the arc plan had scoped only web/app.ts). Five review passes filed dated files under `process/`; every finding on record with a fix or a discard reason. Vocabulary bumped five times (v0.1 → v0.5) as merited review findings folded in.
+
+**What worked.**
+- **The vocabulary lock caught what DOM and pixel-decode gates could not.** Sprint 022's initial grader mis-modeled the paint-cycle invariant (71 SCENE_RENDERED matches piled up under play-frame paints); Sprint 028's initial topology-launch check double-counted a later LAUNCH_REJECTED against an earlier successful launch. Both surfaced at rubber-duck close, before shipping. The same pattern (window-bounded-at-next-request) fixed both.
+- **The 2026-08-16 comprehensive review turned invisible-drift into fixable-drift.** Fifteen findings, ten fixed at v0.4 (five discarded with reason on the record). Two categories the review named — grader stricter than lock (M2), invariants declared in prose but never enforced (M3) — got lifted into the vocabulary itself, and `checkSessionBookends` in the grader enforces the promoted invariants against the whole capture.
+- **`signals/versions/current.json` symlink centralizes the version pointer.** Before v0.4, a bump touched the version literal in three files across two directories; after, `ln -sf` is the one edit. Sprint 032 rubber-duck named the class of foot-gun; v0.4 closed it.
+- **Namespace-split foreign-key enforcement (Sprint 030).** `substrate_kind` values in the `substrate.*` namespace must be in the substrate mirror's closed set; application-namespace values (CodeChunk, ToolCall, Critique) need only be non-empty strings. A monolithic closed-set check broke the CodeChunk inspection e2e at first landing; the split was two lines and fixed the class.
+
+**What this says for the kit.**
+
+18. **Reader-AND-controller UIs do not get the pure-reader carve-out.** Addendum A9's "no own vocabulary" clause held for what it named; it did not stretch to UIs that call `/api/launch`, `/api/resume`, `/api/agent`. The bright line: if the UI CAUSES substrate events, it has behavior that is not just observed but authored, and its actions need typed grading. Fold this into A9 as a distinction, not an exception.
+
+19. **The Architect's ratification of a locked vocabulary must land in `## Decisions`, not in the vocab file's own `locked_by` prose.** Sprints 019–029 dispatched against a lock whose `locked_by` was agent-authored language ("Architect ratified on read-through"). `REVIEW-2026-08-16 § F5 / § S1` named the discipline breach. The v0.4 `entity_merges_ratification` block is a retroactive audit trail; the pattern going forward is Architect-writes-Decisions, then vocab file cites the Decision by date.
+
+20. **A surfaced halt is only a halt if the next sprint reads it.** Sprint 032 dispatched two days after a "no implementation sprint dispatches until ratified" halt; the halt existed, the ratification did not, the sprint ran anyway. `REVIEW-2026-08-16 § S2` named it. The fix is not a stronger halt file — it is the session-start ritual actually reading `## Surfaced for review` and treating open halts as blocking.
+
+21. **"Small" / "cheap" sprints inherit the arc's scope discipline.** Sprint 033 was reverted the same day it landed: the Agent read "continue" after a one-tag fix as authorization to jump work streams (UI-NEXT item 1). The revert cost nine prose edits and three e2e assertion updates. Cost of the mis-scoped sprint: one turn. Cost if it had shipped without notice: harder to unwind. The reflex to keep spinning under "continue" is a Sprint-033-class bug in the human-in-the-loop.
+
+| H9 | An agent-authored locked_by string in a vocabulary file does not substitute for an Architect entry in `## Decisions`; rule 12's Sprint-0 gate is discharged by the Decision, not the file's own prose. | **confirmed** | REVIEW-2026-08-16 § F5 caught v0.1's `locked_by: "Architect ratified on read-through"` as agent language. `## Decisions` carried no matching entry. Sprints 020–029 dispatched against the file, not the Decision. v0.4's `entity_merges_ratification` block is the retroactive audit trail. |
+
+| H10 | Reader-AND-controller UIs need their own vocabulary; the pure-reader carve-out (Addendum A9) does not apply. | **confirmed** | Substrate-ui makes POSTs (launch/resume/agent) that CAUSE substrate events. REVIEW-2026-08-15 mapping § F6 named the boundary. Sprints 018–032 wired 54 tags across console + studio. The alternative — Addendum A9 kept, no vocabulary — was on the table (Option E in the mapping review's candidate shapes) and rejected. |
+
+---
+
+*KIT_DIARY.md for substrate-ui. Nine entries. Ten hypotheses: five confirmed (H1, H4, H6 by prior entries; H9, H10 by the SDD arc); four tentative-confirmed (H3, H5, H7, H8); one falsified (H2 — the pure-reader carve-out did not apply to substrate-ui once it was reader-AND-controller). The SDD arc (Sprints 018–032, three days, five vocab bumps, five review passes) instrumented both surfaces of the app under one vocabulary and closed every review finding with an outcome. The diary starts where formal discipline starts — the review-#39 retrofit — not at the project's true beginning, by ruling.*
