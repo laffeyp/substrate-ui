@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>terminal-v1</title>
+  <link rel="icon" href="data:,">
+  <script src="app.js" defer></script>
+  <style>
+    :root { color-scheme: dark light; --bg: #0c0f14; --bg2: #14181f; --fg: #cfd3d8; --muted: #6b7480; --active: #3fb950; --rule: #1e2430; }
+    html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg); font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; height: 100%; }
+    body { display: flex; flex-direction: column; }
+    .tabbar { display: flex; align-items: stretch; border-bottom: 1px solid var(--rule); background: var(--bg2); flex: 0 0 auto; }
+    .tab { background: transparent; color: var(--muted); border: none; border-bottom: 2px solid transparent; padding: 10px 14px; font: inherit; text-transform: lowercase; letter-spacing: .02em; cursor: pointer; }
+    .tab[aria-selected="true"] { color: var(--fg); border-bottom-color: var(--active); }
+    .tab:hover { color: var(--fg); }
+    .pane-region { flex: 1 1 auto; position: relative; overflow: hidden; }
+    .pane { position: absolute; inset: 0; padding: 24px; overflow: auto; display: none; }
+    .pane.pane-active { display: block; }
+    .placeholder { color: var(--muted); font-size: 13px; }
+    /* agent terminal — extracted from ../web/index.html §.term-* (parent lines 161–181) */
+    .term { display: flex; flex-direction: column; height: 100%; margin: -24px; }
+    .term-head { display: flex; align-items: center; gap: 12px; padding: 6px 14px; border-bottom: 1px solid var(--rule); background: var(--bg2); flex-wrap: nowrap; overflow: hidden; }
+    .term-head > * { flex-shrink: 0; white-space: nowrap; }
+    .term-model { appearance: none; -webkit-appearance: none; background: var(--bg) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='6' viewBox='0 0 8 6'%3E%3Cpath d='M1 1l3 3 3-3' stroke='%236b7480' fill='none' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat right 8px center; border: 1px solid var(--rule); border-radius: 5px; color: var(--fg); font-family: inherit; font-size: 11px; padding: 3px 24px 3px 8px; max-width: 240px; text-overflow: ellipsis; cursor: pointer; }
+    .term-model:hover { border-color: var(--muted); }
+    .term-model:focus { outline: none; border-color: var(--active); }
+    .term-model option { background: var(--bg); color: var(--fg); }
+    .term-head .term-hint { color: var(--muted); font-size: 11px; margin-left: auto; }
+    .term-body { flex: 1; overflow: auto; padding: 12px 14px; font-size: 12px; line-height: 1.5; }
+    .term-line { white-space: pre-wrap; word-break: break-word; }
+    .tl-in { color: var(--fg); } .tl-out { color: var(--muted); } .tl-dim { color: var(--muted); }
+    .tl-err { color: #e5484d; } .tl-accent { color: var(--active); }
+    .term-input-row { display: flex; align-items: center; gap: 8px; padding: 6px 14px; border-top: 1px solid var(--rule); background: var(--bg2); }
+    .term-prompt { color: var(--active); font-size: 12px; white-space: nowrap; }
+    .term-input { flex: 1; background: none; border: none; outline: none; color: var(--fg); font-family: inherit; font-size: 12px; }
+    /* records rail — extracted from ../web/index.html (parent .rec / .rail-group / .dot / .nm / .meta) */
+    .records-layout { display: flex; flex-direction: column; height: 100%; margin: -24px; }
+    .records-top, .records-bottom { padding: 8px 14px; background: var(--bg2); font-size: 11px; color: var(--muted); border-color: var(--rule); }
+    .records-top { border-bottom: 1px solid var(--rule); }
+    .records-bottom { border-top: 1px solid var(--rule); }
+    .records-rail { flex: 1; overflow: auto; }
+    .rail-group { padding: 8px 14px; font-size: 10px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); border-bottom: 1px solid var(--rule); background: var(--bg2); }
+    .rec { padding: 8px 14px; border-bottom: 1px solid var(--rule); cursor: pointer; display: grid; grid-template-columns: 10px 1fr; gap: 8px; align-items: start; }
+    .rec:hover { background: var(--bg2); }
+    .rec.sel { background: var(--bg2); box-shadow: inset 2px 0 var(--active); }
+    .rec .dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; }
+    .rec .nm { font-size: 12px; color: var(--fg); word-break: break-all; }
+    .rec .meta { font-size: 10px; color: var(--muted); margin-top: 2px; }
+    .rec .meta.broken { color: #e5484d; }
+    /* event stream + inspector — extracted from ../web/app.js renderStream/inspectEvent */
+    .es-layout { display: flex; flex-direction: column; height: 100%; margin: -24px; }
+    .es-transport { padding: 8px 14px; background: var(--bg2); border-bottom: 1px solid var(--rule); font-size: 11px; color: var(--muted); }
+    .es-body { flex: 1; display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
+    .es-stream { border-right: 1px solid var(--rule); overflow: auto; padding: 8px 0; }
+    .stream-line { padding: 4px 14px; font-size: 11px; font-family: inherit; cursor: pointer; white-space: pre; overflow: hidden; text-overflow: ellipsis; color: var(--fg); }
+    .stream-line:hover { background: var(--bg2); }
+    .stream-line.sel { background: var(--bg2); box-shadow: inset 2px 0 var(--active); }
+    .stream-line .seq { color: var(--muted); }
+    .stream-line .kind { color: var(--active); }
+    .inspector { overflow: auto; padding: 14px; }
+    .inspector .empty { color: var(--muted); font-size: 12px; }
+    .inspector pre { margin: 0; font-size: 11px; line-height: 1.4; white-space: pre-wrap; word-break: break-word; color: var(--fg); }
+    /* I/O tab (Sprint 011) */
+    .io-layout { padding: 4px 0; }
+    .io-section { margin-bottom: 24px; }
+    .io-label { padding: 6px 14px; font-size: 10px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); border-bottom: 1px solid var(--rule); }
+    .io-artifact { padding: 8px 14px; border-bottom: 1px solid var(--rule); font-size: 12px; }
+    .io-artifact .kind { color: var(--active); font-family: inherit; }
+    .io-artifact .seq { color: var(--muted); font-size: 10px; margin-left: 6px; }
+    .io-artifact .gist { color: var(--fg); font-size: 11px; margin-top: 3px; word-break: break-word; }
+    .empty { padding: 14px; color: var(--muted); font-size: 12px; }
+    #io-input pre { margin: 0; padding: 8px 14px; font-size: 11px; line-height: 1.4; white-space: pre-wrap; word-break: break-word; color: var(--fg); }
+    /* Topology structure (Sprint 012) */
+    .topo { padding: 14px; font-size: 12px; line-height: 1.6; }
+    .topo .grp { margin: 14px 0 6px; font-size: 10px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
+    .topo .pr, .topo .tg, .topo .vw, .topo .rt, .topo .tm { padding: 4px 0; border-bottom: 1px solid var(--rule); }
+    .topo .k, .topo .id { color: var(--fg); font-weight: 500; }
+    .topo .em, .topo .ar, .topo .st, .topo .on, .topo .sl { color: var(--muted); font-size: 11px; margin-left: 6px; }
+    .topo .ini { color: var(--active); font-size: 10px; }
+    .topo .n { color: var(--fg); }
+    .topo .dim { color: var(--muted); font-size: 11px; }
+    /* Run-as-graph text summary (Sprint 013) */
+    .graph { padding: 14px; font-size: 12px; }
+    .graph .row { display: grid; grid-template-columns: 30px 1fr 90px 120px; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--rule); align-items: center; }
+    .graph .row .idx { color: var(--muted); font-size: 10px; }
+    .graph .row .k { color: var(--fg); }
+    .graph .row .rng { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+    .graph .row .st { font-size: 10px; text-transform: uppercase; letter-spacing: .07em; }
+    .graph .row .st.ran { color: var(--active); }
+    .graph .row .st.cancelled { color: #e6a23c; }
+    .graph .row .st.failed { color: #e5484d; }
+    .graph .row .st.queued { color: var(--muted); }
+    /* Assays (Sprint 014) */
+    .assays-layout { display: grid; grid-template-columns: 240px 1fr; height: 100%; margin: -24px; }
+    .assays-picker { border-right: 1px solid var(--rule); overflow: auto; background: var(--bg2); }
+    .assays-picker .assay-item { padding: 8px 14px; border-bottom: 1px solid var(--rule); cursor: pointer; font-size: 12px; }
+    .assays-picker .assay-item:hover { background: var(--bg); }
+    .assays-picker .assay-item.sel { background: var(--bg); box-shadow: inset 2px 0 var(--active); }
+    .assays-picker .assay-item .meta { font-size: 10px; color: var(--muted); margin-top: 2px; }
+    .assays-body { overflow: auto; padding: 14px; }
+    .assays-body .field { display: grid; grid-template-columns: 140px 1fr; gap: 8px; padding: 4px 0; font-size: 12px; }
+    .assays-body .field .lbl { color: var(--muted); font-size: 11px; }
+    .assays-body .field .val { color: var(--fg); word-break: break-word; }
+    /* deterministic anchor strip (A2): eight 4x4 anchors, one per tab, top-left corner. */
+    .anchor-strip { position: fixed; top: 0; left: 0; display: flex; gap: 0; z-index: 100; pointer-events: none; }
+    .anchor { width: 4px; height: 4px; background: var(--bg); }
+    .anchor.active { background: var(--active); }
+    .root-marker { display: none; }
+  </style>
+</head>
+<body>
+  <div class="anchor-strip" data-testid="anchor-strip">
+    <div class="anchor active" data-anchor="tab-agent-terminal"></div>
+    <div class="anchor" data-anchor="tab-records"></div>
+    <div class="anchor" data-anchor="tab-assays"></div>
+    <div class="anchor" data-anchor="tab-run-as-graph"></div>
+    <div class="anchor" data-anchor="tab-topology-structure"></div>
+    <div class="anchor" data-anchor="tab-event-stream-inspector"></div>
+    <div class="anchor" data-anchor="tab-io"></div>
+    <div class="anchor" data-anchor="tab-studio"></div>
+  </div>
+  <nav class="tabbar" role="tablist" aria-label="terminal-v1 tabs">
+    <button class="tab" role="tab" data-testid="tab-agent-terminal"        aria-selected="true"  data-tab="agent-terminal">agent terminal</button>
+    <button class="tab" role="tab" data-testid="tab-records"               aria-selected="false" data-tab="records">records</button>
+    <button class="tab" role="tab" data-testid="tab-assays"                aria-selected="false" data-tab="assays">assays</button>
+    <button class="tab" role="tab" data-testid="tab-run-as-graph"          aria-selected="false" data-tab="run-as-graph">run-as-graph</button>
+    <button class="tab" role="tab" data-testid="tab-topology-structure"    aria-selected="false" data-tab="topology-structure">topology structure</button>
+    <button class="tab" role="tab" data-testid="tab-event-stream-inspector" aria-selected="false" data-tab="event-stream-inspector">event stream</button>
+    <button class="tab" role="tab" data-testid="tab-io"                    aria-selected="false" data-tab="io">i/o</button>
+    <button class="tab" role="tab" data-testid="tab-studio"                aria-selected="false" data-tab="studio">studio</button>
+  </nav>
+  <main class="pane-region" data-testid="pane-region">
+    <section class="pane pane-active" data-pane-for="tab-agent-terminal" role="tabpanel">
+      <div class="root-marker" data-testid="terminal-v1-root">terminal-v1</div>
+      <div class="term">
+        <div class="term-head">
+          <label class="term-hint" for="modelpicker">model:</label>
+          <select class="term-model" id="modelpicker" data-testid="modelpicker" aria-label="model picker">
+            <option value="" disabled selected>loading…</option>
+          </select>
+          <span class="term-hint" data-testid="modelhint">pick a model to begin</span>
+        </div>
+        <div class="term-body" id="termbody" data-testid="termbody"></div>
+        <div class="term-input-row">
+          <span class="term-prompt" id="termprompt" data-testid="termprompt">substrate$</span>
+          <input class="term-input" id="terminput" data-testid="terminput" type="text" autocomplete="off" spellcheck="false" aria-label="terminal input" disabled placeholder="pick a model above">
+        </div>
+      </div>
+    </section>
+    <section class="pane" data-pane-for="tab-records" role="tabpanel">
+      <div class="records-layout">
+        <div class="records-top" id="recordstopbar" data-testid="recordstopbar">no record selected</div>
+        <div class="records-rail" id="recordsrail" data-testid="recordsrail"></div>
+        <div class="records-bottom" id="recordsbottombar" data-testid="recordsbottombar"></div>
+      </div>
+    </section>
+    <section class="pane" data-pane-for="tab-assays" role="tabpanel">
+      <div class="assays-layout">
+        <div class="assays-picker" id="assayspicker" data-testid="assayspicker"><div class="empty">loading…</div></div>
+        <div class="assays-body" id="assaysbody" data-testid="assaysbody"><div class="empty">pick an assay on the left</div></div>
+      </div>
+    </section>
+    <section class="pane" data-pane-for="tab-run-as-graph" role="tabpanel">
+      <div id="graphpane" data-testid="graphpane" class="graph"><div class="empty">no record selected</div></div>
+    </section>
+    <section class="pane" data-pane-for="tab-topology-structure" role="tabpanel">
+      <div id="topopane" data-testid="topopane" class="topo"><div class="empty">no record selected</div></div>
+    </section>
+    <section class="pane" data-pane-for="tab-event-stream-inspector" role="tabpanel">
+      <div class="es-layout">
+        <div class="es-transport" id="eventtransport" data-testid="eventtransport">no record selected — pick one in Records</div>
+        <div class="es-body">
+          <div class="es-stream" id="eventstream" data-testid="eventstream"></div>
+          <div class="inspector" id="inspector" data-testid="inspector"><div class="empty">click an event on the left</div></div>
+        </div>
+      </div>
+    </section>
+    <section class="pane" data-pane-for="tab-io" role="tabpanel">
+      <div id="iopane" class="io-layout">
+        <div class="io-section">
+          <div class="io-label">input</div>
+          <div id="io-input" data-testid="io-input"><div class="empty">no record selected</div></div>
+        </div>
+        <div class="io-section">
+          <div class="io-label">output artifacts</div>
+          <div id="io-artifacts" data-testid="io-artifacts"><div class="empty">no record selected</div></div>
+        </div>
+      </div>
+    </section>
+    <section class="pane" data-pane-for="tab-studio" role="tabpanel">
+      <div id="studiopane" data-testid="studiopane" class="placeholder">studio — port pending</div>
+    </section>
+  </main>
+</body>
+</html>
