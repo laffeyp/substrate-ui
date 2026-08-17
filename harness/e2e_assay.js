@@ -7,6 +7,7 @@
    Run (server up on :8765):  cd substrate-ui && node harness/e2e_assay.js  */
 "use strict";
 const { chromium } = require("playwright");
+const { maybeCaptureTail } = require("./lib/capture-tail");
 const assert = require("assert");
 const BASE = process.env.UI_BASE || "http://127.0.0.1:8765";
 const ASSAY = process.env.ASSAY || "coding_cells";
@@ -41,5 +42,6 @@ const ASSAY = process.env.ASSAY || "coding_cells";
   assert((html.match(/%/g) || []).length >= 8, "both currencies must render per arm (too few % values)");
 
   console.log(`e2e_assay PASS — ASSAYS group + 4 arms + both currencies + compute + plain verdicts + explainer (assay '${ASSAY}')`);
+  await maybeCaptureTail(p, "assay");
   await b.close();
 })();

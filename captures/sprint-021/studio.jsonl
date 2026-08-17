@@ -1,0 +1,11 @@
+{"ts":0.1,"name":"SESSION_INIT","category":"session","stratum":"event","payload":{"vocab_version":"0.5","url":"http://127.0.0.1:8765/studio.html"}}
+{"ts":519.1,"name":"CANVAS_TOGGLED","category":"studio","stratum":"event","payload":{"to":"canvas"}}
+{"ts":523.6,"name":"CANVAS_TOGGLED","category":"studio","stratum":"event","payload":{"to":"form"}}
+{"ts":524.1,"name":"SPEC_ROW_ADDED","category":"studio","stratum":"event","payload":{"kind":"producer"}}
+{"ts":526.3,"name":"SPEC_ROW_REMOVED","category":"studio","stratum":"event","payload":{"kind":"producer"}}
+{"ts":527.8,"name":"SPEC_VALIDATE_REQUESTED","category":"studio","stratum":"event","payload":{"topology_name":"authored_demo"}}
+{"ts":529.6,"name":"SPEC_VALIDATED","category":"studio","stratum":"summary","payload":{"valid":true}}
+{"ts":533.1,"name":"SPEC_BUILD_REQUESTED","category":"studio","stratum":"event","payload":{"topology_name":"authored_demo"}}
+{"ts":589.9,"name":"SPEC_BUILT","category":"studio","stratum":"summary","payload":{"run_name":"build_authored_demo_1757a40030ed","status":"finalised"}}
+{"ts":597.6,"name":"CONSOLE_LINK_FOLLOWED","category":"studio","stratum":"event","payload":{"run_name":"build_authored_demo_1757a40030ed"}}
+{"ts":599.2,"name":"SESSION_ENDED","category":"session","stratum":"event","payload":{}}

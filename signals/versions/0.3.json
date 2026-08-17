@@ -1,0 +1,742 @@
+{
+  "vocabulary_version": "0.3",
+  "locked": true,
+  "locked_at": "2026-08-16",
+  "locked_by": "Architect (Peter) authorized 2026-08-16 same-turn ('Studio must be instrumented'); agent-drafted by Claude Opus 4.7. Adds studio surface instrumentation (Sprint 032). See signals/versions/0.3-rationale.md for the per-change ledger.",
+  "supersedes": "0.2",
+  "tag_count": 53,
+  "categories": [
+    "session",
+    "records",
+    "record",
+    "assay",
+    "pane",
+    "stream",
+    "terminal",
+    "agent",
+    "topology",
+    "diff",
+    "studio",
+    "incident"
+  ],
+  "strata": [
+    "event",
+    "ambient",
+    "summary",
+    "incident"
+  ],
+  "pane_payload_universal": {
+    "frame": {
+      "x": "number",
+      "y": "number",
+      "w": "number",
+      "h": "number"
+    },
+    "visible": "boolean",
+    "pane_id": "string",
+    "subject_record": "string | null"
+  },
+  "entity_merges": [
+    {
+      "ui_name": "Record",
+      "substrate_name": "Run",
+      "note": "Substrate-ui's Record IS substrate's Run (its persisted RunRecord, exposed via /api/records/<name>). UI keeps 'Record' for user-facing prose; typed identifiers cite the substrate Run identity by string."
+    },
+    {
+      "ui_name": "Topology",
+      "substrate_name": "Topology",
+      "note": "Same primitive, same namespace, same substrate.topologies.bundled registry. The name matches by design."
+    },
+    {
+      "ui_name": "AgentRun",
+      "substrate_name": "Run",
+      "note": "An AgentRun is a substrate Run whose Topology is the tool-loop shape. Referenced by run_name in agent-category payloads."
+    },
+    {
+      "ui_name": "Event",
+      "substrate_name": "Envelope",
+      "note": "The 'event' the user inspects (EVENT_INSPECTED payload) IS the substrate Envelope with fields seq, kind, payload, producer."
+    },
+    {
+      "ui_name": "Spec",
+      "substrate_name": "authored_topology",
+      "note": "Substrate-ui's Spec (the studio's buildSpec() dict) is the untyped author's-intent form of substrate's authored Topology. /api/validate lands it as a msgspec Struct; /api/build instantiates it via builder.py. Filed 2026-08-16 with Sprint 032."
+    }
+  ],
+  "external_vocabulary_ref": {
+    "path": "../substrate/process/signals/0.2.json",
+    "purpose": "substrate's runtime vocabulary. UI payload fields typed as `substrate_kind` reference the tags[].name closed set in this file. Bridge mapping per TECHNIQUES.md #46.",
+    "consumers": [
+      "EVENT_INSPECTED.kind",
+      "PRODUCER_INSPECTED.kind"
+    ]
+  },
+  "runtime_operators": [
+    {
+      "name": "SubstrateReader",
+      "layer": 6,
+      "note": "The 500ms poll loop over /api/records/<name> in followLive(). Surfaces AGENT_TURN_STREAMED per cycle with new events; classifies POLL_TIMEOUT when the ceiling is exceeded."
+    },
+    {
+      "name": "SubstrateController",
+      "layer": 6,
+      "note": "The POST callers to /api/agent, /api/launch, /api/resume. Surfaces AGENT_LAUNCH_REQUESTED, TOPOLOGY_LAUNCH_REQUESTED, RESUME_REQUESTED and their resolutions."
+    },
+    {
+      "name": "ReplayEngine",
+      "layer": 6,
+      "note": "The rAF loop in startPlay/_frame at STATE.speed frames/sec. Surfaces PLAY_STARTED, PLAY_STOPPED, SPEED_CHANGED, and CURSOR_MOVED{source: play_frame}."
+    },
+    {
+      "name": "AgentTurnAccumulator",
+      "layer": 6,
+      "note": "streamAgentTurns() consumes fresh ToolCall/ToolResult/FinalAnswer events per poll cycle and emits AGENT_TURN_STREAMED + FINAL_ANSWER_RENDERED."
+    }
+  ],
+  "notes": [
+    "Substrate-ui is a browser reader AND controller UI over the substrate runtime's records \u2014 it reads records via /api/records and CAUSES substrate events via /api/launch, /api/resume, /api/agent. This vocabulary covers user-driven interaction (clicks, tab switches, chat turns), per-pane render events, and the browser-side runtime operators (Layer 6). The vocabulary references substrate's runtime ontology by foreign key (external_vocabulary_ref) \u2014 it does not redeclare substrate's tags.",
+    "Every pane-category tag inherits pane_payload_universal fields (frame, visible, pane_id, subject_record). subject_record is the record name the pane is rendering, or null for panes that don't read from a record (rail, assay picker, terminal chrome).",
+    "The subject invariant: exactly one record is the active subject at a time (STATE.name in current app.ts). RECORD_SELECTED sets it; every pane render tag after that carries the same subject_record until the next RECORD_SELECTED.",
+    "Poll cadence: the SubstrateReader operator polls /api/records/<name> at ~500 ms while a run is in flight. AGENT_TURN_STREAMED fires per poll cycle that observes new agent events; POLL_TIMEOUT is the incident-stratum companion if the poll ceiling is exceeded.",
+    "The four pane-toggle values (run, topology, scene, io) are the current app.ts's underlying view + mode toggle. Sprint 018 (TS conversion, 2026-08-14) has 'topology' as the tag; a future 'structure' pane would join here."
+  ],
+  "tags": [
+    {
+      "name": "SESSION_INIT",
+      "category": "session",
+      "stratum": "event",
+      "payload": [
+        "vocab_version",
+        "url"
+      ],
+      "optional_payload": [
+        "referrer"
+      ],
+      "note": "First signal on every page load. Anchors every subsequent signal's relative t."
+    },
+    {
+      "name": "SESSION_ENDED",
+      "category": "session",
+      "stratum": "event",
+      "payload": [],
+      "optional_payload": [
+        "reason"
+      ],
+      "note": "Page unload (browser close, navigate away). Best-effort \u2014 beforeunload isn't guaranteed to fire."
+    },
+    {
+      "name": "RECORDS_LOADED",
+      "category": "records",
+      "stratum": "summary",
+      "payload": [
+        "count",
+        "run_count",
+        "demo_count"
+      ],
+      "optional_payload": [],
+      "note": "Rail fetch from /api/records completed. count is total; run_count + demo_count decompose it per the rail's grouping."
+    },
+    {
+      "name": "RECORD_SELECTED",
+      "category": "records",
+      "stratum": "event",
+      "payload": [
+        "name",
+        "prior_name"
+      ],
+      "optional_payload": [],
+      "note": "User clicked a record in the rail (or a deep-link resolved). Sets STATE.name; every subsequent pane render carries this as subject_record. prior_name is the previously-selected record or null. Foreign key: name identifies a substrate Run."
+    },
+    {
+      "name": "RECORDS_PRUNED",
+      "category": "records",
+      "stratum": "event",
+      "payload": [
+        "cleared_count"
+      ],
+      "optional_payload": [],
+      "note": "User clicked the your-runs 'clear' affordance to delete session runs. Demos are preserved server-side."
+    },
+    {
+      "name": "RECORD_LOAD_BEGIN",
+      "category": "record",
+      "stratum": "event",
+      "payload": [
+        "name"
+      ],
+      "optional_payload": [],
+      "note": "selectRecord kicked off the per-record fetch chain (/api/records/<name>, /run_graph, /summary, /topology_graph)."
+    },
+    {
+      "name": "RECORD_LOADED",
+      "category": "record",
+      "stratum": "summary",
+      "payload": [
+        "name",
+        "event_count",
+        "status"
+      ],
+      "optional_payload": [
+        "producers_failed",
+        "final_reason"
+      ],
+      "note": "All four projections landed. status is finalised | paused | incomplete | failed. Paired staleness guard: if a newer RECORD_LOAD_BEGIN fires first, this one is dropped."
+    },
+    {
+      "name": "ASSAYS_LOADED",
+      "category": "assay",
+      "stratum": "summary",
+      "payload": [
+        "count"
+      ],
+      "optional_payload": [],
+      "note": "Assay list fetched from /api/assays."
+    },
+    {
+      "name": "ASSAY_SELECTED",
+      "category": "assay",
+      "stratum": "event",
+      "payload": [
+        "name",
+        "prior_name"
+      ],
+      "optional_payload": [],
+      "note": "User clicked an assay in the rail."
+    },
+    {
+      "name": "ASSAY_REPORT_LOADED",
+      "category": "assay",
+      "stratum": "summary",
+      "payload": [
+        "name",
+        "arm_count",
+        "case_count"
+      ],
+      "optional_payload": [
+        "verdict"
+      ],
+      "note": "Assay report fetched from /api/assay/<name> and rendered. verdict is the overall margin verdict when earned."
+    },
+    {
+      "name": "PANE_SWITCHED",
+      "category": "pane",
+      "stratum": "event",
+      "payload": [
+        "to_pane",
+        "prior_pane",
+        "subject_record"
+      ],
+      "optional_payload": [],
+      "note": "User toggled between run, topology, scene, or io. Renamed from v0.1 VIEW_SWITCHED to free the word 'View' for substrate's runtime primitive (F2 mapping review)."
+    },
+    {
+      "name": "CURSOR_MOVED",
+      "category": "pane",
+      "stratum": "event",
+      "payload": [
+        "seq",
+        "prior_seq",
+        "subject_record"
+      ],
+      "optional_payload": [
+        "source"
+      ],
+      "note": "Replay cursor changed. source is drag | button | play_frame | keyboard."
+    },
+    {
+      "name": "PLAY_STARTED",
+      "category": "pane",
+      "stratum": "event",
+      "payload": [
+        "from_seq",
+        "speed",
+        "subject_record"
+      ],
+      "optional_payload": [],
+      "note": "Transport play began. Emitted by the ReplayEngine operator."
+    },
+    {
+      "name": "PLAY_STOPPED",
+      "category": "pane",
+      "stratum": "event",
+      "payload": [
+        "at_seq",
+        "reason",
+        "subject_record"
+      ],
+      "optional_payload": [],
+      "note": "Transport paused. reason is user_pause | end_reached | scrub_interrupt."
+    },
+    {
+      "name": "SPEED_CHANGED",
+      "category": "pane",
+      "stratum": "event",
+      "payload": [
+        "speed",
+        "prior_speed"
+      ],
+      "optional_payload": [],
+      "note": "Replay speed (frames/sec) changed."
+    },
+    {
+      "name": "GRAPH_RENDERED",
+      "category": "pane",
+      "stratum": "event",
+      "payload": [
+        "frame",
+        "visible",
+        "pane_id",
+        "subject_record",
+        "instance_count"
+      ],
+      "optional_payload": [
+        "cohort_count",
+        "cancelled_count"
+      ],
+      "note": "Run-as-graph pane repainted. instance_count is the number of producer-instance lanes drawn at the current cursor."
+    },
+    {
+      "name": "TOPOLOGY_RENDERED",
+      "category": "pane",
+      "stratum": "event",
+      "payload": [
+        "frame",
+        "visible",
+        "pane_id",
+        "subject_record",
+        "producer_count",
+        "trigger_count"
+      ],
+      "optional_payload": [],
+      "note": "Static topology-structure pane repainted."
+    },
+    {
+      "name": "SCENE_RENDERED",
+      "category": "pane",
+      "stratum": "event",
+      "payload": [
+        "frame",
+        "visible",
+        "pane_id",
+        "subject_record",
+        "generation_seq"
+      ],
+      "optional_payload": [],
+      "note": "Scene pane repainted (a domain-visual grid inferred from payload shape, e.g. game_of_life)."
+    },
+    {
+      "name": "IO_RENDERED",
+      "category": "pane",
+      "stratum": "event",
+      "payload": [
+        "frame",
+        "visible",
+        "pane_id",
+        "subject_record",
+        "input_kind",
+        "artifact_count"
+      ],
+      "optional_payload": [],
+      "note": "I/O pane repainted. Shows seed/baseline as input and terminal-artifact events as outputs."
+    },
+    {
+      "name": "HEALTH_RENDERED",
+      "category": "pane",
+      "stratum": "event",
+      "payload": [
+        "frame",
+        "visible",
+        "pane_id",
+        "subject_record",
+        "verdict"
+      ],
+      "optional_payload": [],
+      "note": "Health verdict repainted. verdict is FINALISED | FAILED | PAUSED | INCOMPLETE | LIVE."
+    },
+    {
+      "name": "STREAM_RENDERED",
+      "category": "stream",
+      "stratum": "event",
+      "payload": [
+        "frame",
+        "visible",
+        "pane_id",
+        "subject_record",
+        "line_count"
+      ],
+      "optional_payload": [],
+      "note": "Event-stream pane repainted at the current cursor. line_count is rows visible."
+    },
+    {
+      "name": "EVENT_INSPECTED",
+      "category": "stream",
+      "stratum": "event",
+      "payload": [
+        "seq",
+        "kind",
+        "subject_record"
+      ],
+      "optional_payload": [],
+      "payload_types": {
+        "kind": "substrate_kind"
+      },
+      "note": "User clicked an event in the stream; inspector shows its payload. kind is a foreign key to substrate v0.2 tags[].name (see external_vocabulary_ref)."
+    },
+    {
+      "name": "PRODUCER_INSPECTED",
+      "category": "stream",
+      "stratum": "event",
+      "payload": [
+        "instance",
+        "kind",
+        "subject_record"
+      ],
+      "optional_payload": [],
+      "payload_types": {
+        "kind": "substrate_producer_kind"
+      },
+      "note": "User clicked a producer lane in the graph; inspector shows the /explain/<instance> chain. kind is the substrate Producer kind (foreign key to substrate's Producer registry)."
+    },
+    {
+      "name": "TERMINAL_OPENED",
+      "category": "terminal",
+      "stratum": "event",
+      "payload": [],
+      "optional_payload": [
+        "trigger"
+      ],
+      "note": "Terminal dock opened. trigger is toggle_button | ctrl_backtick | first_command."
+    },
+    {
+      "name": "TERMINAL_CLOSED",
+      "category": "terminal",
+      "stratum": "event",
+      "payload": [],
+      "optional_payload": [],
+      "note": "Dock collapsed."
+    },
+    {
+      "name": "CHAT_ENTERED",
+      "category": "terminal",
+      "stratum": "event",
+      "payload": [],
+      "optional_payload": [
+        "reconnect"
+      ],
+      "note": "User typed 'chat' to enter conversation mode. reconnect=true when picking up an existing conversation."
+    },
+    {
+      "name": "CHAT_EXITED",
+      "category": "terminal",
+      "stratum": "event",
+      "payload": [
+        "turns_in_conversation"
+      ],
+      "optional_payload": [],
+      "note": "User typed /exit. Conversation state is retained for reconnect."
+    },
+    {
+      "name": "MODEL_SELECTED",
+      "category": "terminal",
+      "stratum": "event",
+      "payload": [
+        "model",
+        "prior_model"
+      ],
+      "optional_payload": [],
+      "note": "Model picker changed. model is an Ollama tag, a CLI preset name, or 'deterministic'."
+    },
+    {
+      "name": "PARAMS_CHANGED",
+      "category": "terminal",
+      "stratum": "event",
+      "payload": [
+        "field",
+        "value",
+        "prior_value"
+      ],
+      "optional_payload": [],
+      "note": "User changed think | tokens | timeout. field is one of those three."
+    },
+    {
+      "name": "TURN_SUBMITTED",
+      "category": "agent",
+      "stratum": "event",
+      "payload": [
+        "model",
+        "task_length"
+      ],
+      "optional_payload": [
+        "turn_index"
+      ],
+      "note": "User Enter with a chat message. task_length is the character count of the transcript-augmented task string."
+    },
+    {
+      "name": "AGENT_LAUNCH_REQUESTED",
+      "category": "agent",
+      "stratum": "event",
+      "payload": [
+        "model",
+        "params"
+      ],
+      "optional_payload": [],
+      "note": "POST /api/agent begun. params is {think, tokens, timeout}. Emitted by the SubstrateController operator."
+    },
+    {
+      "name": "AGENT_LAUNCHED",
+      "category": "agent",
+      "stratum": "event",
+      "payload": [
+        "run_name",
+        "model",
+        "workspace"
+      ],
+      "optional_payload": [
+        "branch"
+      ],
+      "note": "POST /api/agent returned a run name; polling begins. run_name is a substrate Run identity."
+    },
+    {
+      "name": "AGENT_TURN_STREAMED",
+      "category": "agent",
+      "stratum": "event",
+      "payload": [
+        "run_name",
+        "new_events",
+        "up_to_seq"
+      ],
+      "optional_payload": [],
+      "note": "A poll cycle observed new ToolCall/ToolResult/FinalAnswer events. new_events is the count added this cycle. Emitted by the AgentTurnAccumulator operator."
+    },
+    {
+      "name": "FINAL_ANSWER_RENDERED",
+      "category": "agent",
+      "stratum": "summary",
+      "payload": [
+        "run_name",
+        "answer_length"
+      ],
+      "optional_payload": [],
+      "note": "FinalAnswer landed in termbody and (in chat mode) into STATE.term.chat.convo. Terminal turn is done."
+    },
+    {
+      "name": "TOPOLOGY_LAUNCH_REQUESTED",
+      "category": "topology",
+      "stratum": "event",
+      "payload": [
+        "topology_name"
+      ],
+      "optional_payload": [],
+      "note": "User clicked launch on a bundled topology name."
+    },
+    {
+      "name": "TOPOLOGY_LAUNCHED",
+      "category": "topology",
+      "stratum": "event",
+      "payload": [
+        "topology_name",
+        "run_name"
+      ],
+      "optional_payload": [],
+      "note": "POST /api/launch returned a run name; the new record is selected. run_name is a substrate Run identity."
+    },
+    {
+      "name": "RESUME_REQUESTED",
+      "category": "topology",
+      "stratum": "event",
+      "payload": [
+        "record_name"
+      ],
+      "optional_payload": [],
+      "note": "User clicked resume on a paused run."
+    },
+    {
+      "name": "RESUMED",
+      "category": "topology",
+      "stratum": "event",
+      "payload": [
+        "record_name"
+      ],
+      "optional_payload": [],
+      "note": "POST /api/resume returned; the record's state advances."
+    },
+    {
+      "name": "STUDIO_OPENED",
+      "category": "topology",
+      "stratum": "event",
+      "payload": [],
+      "optional_payload": [
+        "via"
+      ],
+      "note": "User navigated to /studio.html. via is header_link | direct_url."
+    },
+    {
+      "name": "DIFF_REQUESTED",
+      "category": "diff",
+      "stratum": "event",
+      "payload": [
+        "a",
+        "b"
+      ],
+      "optional_payload": [],
+      "note": "User picked a diff target in the diff selector."
+    },
+    {
+      "name": "DIFF_RENDERED",
+      "category": "pane",
+      "stratum": "event",
+      "payload": [
+        "frame",
+        "visible",
+        "pane_id",
+        "subject_record",
+        "first_divergence_seq"
+      ],
+      "optional_payload": [],
+      "note": "Diff pane repainted with the first-divergence output from /api/diff. Category promoted to 'pane' in v0.2 \u2014 the diff surface renders a pane like the other visual tags (not a bare event)."
+    },
+    {
+      "name": "FETCH_FAILED",
+      "category": "incident",
+      "stratum": "incident",
+      "payload": [
+        "endpoint",
+        "status_or_error"
+      ],
+      "optional_payload": [
+        "retry_after"
+      ],
+      "note": "An /api/* fetch failed. status_or_error is the HTTP status number or the caught exception message."
+    },
+    {
+      "name": "LAUNCH_REJECTED",
+      "category": "incident",
+      "stratum": "incident",
+      "payload": [
+        "kind",
+        "reason"
+      ],
+      "optional_payload": [],
+      "note": "A launch or resume POST returned an error field. kind is agent | topology | resume."
+    },
+    {
+      "name": "POLL_TIMEOUT",
+      "category": "incident",
+      "stratum": "incident",
+      "payload": [
+        "run_name",
+        "elapsed_ms"
+      ],
+      "optional_payload": [],
+      "note": "Agent-record poll exceeded its ceiling without a FinalAnswer or RunFinalised landing."
+    },
+    {
+      "name": "SPEC_ROW_ADDED",
+      "category": "studio",
+      "stratum": "event",
+      "payload": [
+        "kind"
+      ],
+      "optional_payload": [],
+      "note": "User added a row on the studio authoring form. kind is one of producer | view | trigger | route | member."
+    },
+    {
+      "name": "SPEC_ROW_REMOVED",
+      "category": "studio",
+      "stratum": "event",
+      "payload": [
+        "kind"
+      ],
+      "optional_payload": [],
+      "note": "User removed a row via its .rm affordance. kind matches SPEC_ROW_ADDED's enum."
+    },
+    {
+      "name": "CANVAS_TOGGLED",
+      "category": "studio",
+      "stratum": "event",
+      "payload": [
+        "to"
+      ],
+      "optional_payload": [],
+      "note": "User toggled the studio's form-vs-canvas view. to is form | canvas."
+    },
+    {
+      "name": "SPEC_VALIDATE_REQUESTED",
+      "category": "studio",
+      "stratum": "event",
+      "payload": [],
+      "optional_payload": [
+        "topology_name"
+      ],
+      "note": "User clicked validate; the current authored spec POSTs to /api/validate."
+    },
+    {
+      "name": "SPEC_VALIDATED",
+      "category": "studio",
+      "stratum": "summary",
+      "payload": [
+        "valid"
+      ],
+      "optional_payload": [
+        "error"
+      ],
+      "note": "Response landed. valid boolean; on false, error carries the SpecError message."
+    },
+    {
+      "name": "SPEC_BUILD_REQUESTED",
+      "category": "studio",
+      "stratum": "event",
+      "payload": [],
+      "optional_payload": [
+        "topology_name"
+      ],
+      "note": "User clicked build; the studio POSTs to /api/build after a re-validate."
+    },
+    {
+      "name": "SPEC_BUILT",
+      "category": "studio",
+      "stratum": "summary",
+      "payload": [
+        "run_name",
+        "status"
+      ],
+      "optional_payload": [
+        "unfired_triggers_count"
+      ],
+      "note": "Build succeeded; a real record now exists. status is finalised | incomplete | paused | failed. run_name is a substrate Run identity."
+    },
+    {
+      "name": "SPEC_BUILD_REJECTED",
+      "category": "studio",
+      "stratum": "incident",
+      "payload": [
+        "reason"
+      ],
+      "optional_payload": [],
+      "note": "Build failed at validation or execution; reason is non-empty."
+    },
+    {
+      "name": "CONSOLE_LINK_FOLLOWED",
+      "category": "studio",
+      "stratum": "event",
+      "payload": [
+        "run_name"
+      ],
+      "optional_payload": [],
+      "note": "User clicked the 'view the run in the console' link after a successful build. run_name is the built record."
+    }
+  ],
+  "invariants": [
+    "SESSION_INIT is the first signal in any capture.",
+    "SESSION_ENDED, when it fires, is the last signal.",
+    "RECORDS_LOADED fires before the first RECORD_SELECTED.",
+    "Every RECORD_SELECTED is followed within 5s by exactly one RECORD_LOADED with matching name (staleness guard drops earlier in-flight loads).",
+    "AGENT_LAUNCH_REQUESTED is followed within 1s by either AGENT_LAUNCHED or LAUNCH_REJECTED with kind=agent.",
+    "Every AGENT_LAUNCHED is followed by 1..N AGENT_TURN_STREAMED events and terminated by exactly one FINAL_ANSWER_RENDERED or POLL_TIMEOUT with the same run_name.",
+    "TURN_SUBMITTED only fires while CHAT_ENTERED is the current chat state (no CHAT_EXITED since).",
+    "Pane-category tags carry subject_record; if subject_record is non-null, it equals the STATE.name active at emit time.",
+    "SPEC_VALIDATE_REQUESTED is followed within 5s by exactly one SPEC_VALIDATED.",
+    "SPEC_BUILD_REQUESTED is followed within 30s by exactly one SPEC_BUILT or SPEC_BUILD_REJECTED."
+  ],
+  "rationale": "53 tags across 12 categories. v0.3 adds the studio surface's nine tags to close the F1-like scope gap the Architect surfaced 2026-08-16 ('Studio must be instrumented; it is one thing, not two'). Category 'studio' groups them. Two invariants (validate + build pairings) mirror the shape used by RECORD_SELECTED \u2192 RECORD_LOADED and AGENT_LAUNCH_REQUESTED \u2192 AGENT_LAUNCHED. Spec entity added to entity_merges to name the merge with substrate's authored Topology. Every prior tag carries over unchanged."
+}

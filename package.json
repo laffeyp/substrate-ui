@@ -4,6 +4,9 @@
   "private": true,
   "description": "Live end-to-end test harness for the substrate-ui console — drives the real console in real Chrome (Playwright channel:'chrome') against the real server. The observation contract's tooling, scoped to this repo and pinned by package-lock.json so it is reproducible, not an ad-hoc /tmp install.",
   "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit",
     "e2e": "node harness/e2e_console.js",
     "e2e:studio": "node harness/e2e_studio.js",
     "e2e:assay": "node harness/e2e_assay.js",
@@ -12,9 +15,22 @@
     "capture": "node harness/capture_console.js",
     "capture:states": "node harness/capture_states.js",
     "capture:studio": "node harness/capture_studio.js",
-    "capture:scene": "node harness/capture_scene.js"
+    "capture:scene": "node harness/capture_scene.js",
+    "capture:signals": "node harness/capture_signals.js 021",
+    "capture:studio-signals": "node harness/capture_studio_signals.js",
+    "grade:signals": "npx tsx tools/capture-grade.ts captures/sprint-021/console.jsonl",
+    "grade:studio-signals": "npx tsx tools/capture-grade.ts captures/sprint-021/studio.jsonl --kind studio",
+    "check:vocab-parity": "npx tsx tools/check-vocabulary-parity.ts",
+    "signals": "npm run check:vocab-parity && npm run capture:signals && npm run grade:signals && npm run capture:studio-signals && npm run grade:studio-signals",
+    "sync:substrate-vocab": "npx tsx tools/sync-substrate-vocab.ts",
+    "e2e:terminal-v1": "node _deprecated/terminal-v1-round1/harness/e2e_terminal_v1.js",
+    "capture:terminal-v1": "node _deprecated/terminal-v1-round1/harness/capture_terminal_v1.js"
   },
   "devDependencies": {
-    "playwright": "^1.49.0"
+    "@types/node": "^22",
+    "playwright": "^1.49.0",
+    "tsx": "^4.23.12",
+    "typescript": "^5",
+    "vite": "^5"
   }
 }

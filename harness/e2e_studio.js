@@ -5,6 +5,7 @@
    Run: cd substrate && uv run python ../substrate-ui/server.py & ; cd substrate-ui && npm run e2e:studio */
 "use strict";
 const { chromium } = require("playwright");
+const { maybeCaptureTail } = require("./lib/capture-tail");
 const BASE = process.env.UI_BASE || "http://127.0.0.1:8765";
 const fails = [];
 const check = (c, m) => { if (!c) fails.push(m); else console.log("  ok  " + m); };
@@ -104,6 +105,7 @@ const check = (c, m) => { if (!c) fails.push(m); else console.log("  ok  " + m);
   check(verdict && /^stub\[/.test(verdict.payload.note) && verdict.payload.note !== "judge",
     `model judge emitted the Responder's output, not note=kind ("${verdict && verdict.payload.note}")`);
 
+  await maybeCaptureTail(p, "studio");
   await b.close();
   if (fails.length) { console.error("\nFAILED:\n  - " + fails.join("\n  - ")); process.exit(1); }
   console.log("\nSTUDIO E2E PASS — author (form + canvas, Routes + composition + model Producers) -> validate -> build -> view, all live.");

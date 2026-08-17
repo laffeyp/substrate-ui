@@ -9,6 +9,7 @@
    Run (server up on :8765):  cd substrate-ui && node harness/e2e_delegate.js  */
 "use strict";
 const { chromium } = require("playwright");
+const { maybeCaptureTail } = require("./lib/capture-tail");
 const assert = require("assert");
 const BASE = process.env.UI_BASE || "http://127.0.0.1:8765";
 
@@ -63,5 +64,6 @@ async function toIO(p) {
   await p.waitForFunction(() => document.getElementById("runname").textContent.trim() === "demo_delegate", { timeout: 15000 });
 
   console.log("e2e_delegate PASS — parent delegate ToolResult -> navigable child branch -> child record -> breadcrumb back");
+  await maybeCaptureTail(p, "delegate");
   await b.close();
 })().catch((e) => { console.error("e2e_delegate FAIL:", e.message); process.exit(1); });

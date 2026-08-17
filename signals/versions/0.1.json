@@ -1,0 +1,102 @@
+{
+  "vocabulary_version": "0.1",
+  "locked": true,
+  "locked_at": "2026-08-14",
+  "locked_by": "Architect (Peter) ratified 2026-08-14; agent-drafted by Claude Opus 4.7 same day.",
+  "tag_count": 44,
+  "categories": [
+    "session",
+    "records",
+    "record",
+    "assay",
+    "view",
+    "stream",
+    "terminal",
+    "agent",
+    "topology",
+    "diff",
+    "incident"
+  ],
+  "strata": ["event", "ambient", "summary", "incident"],
+  "view_payload_universal": {
+    "frame": { "x": "number", "y": "number", "w": "number", "h": "number" },
+    "visible": "boolean",
+    "pane_id": "string",
+    "subject_record": "string | null"
+  },
+  "notes": [
+    "Substrate-ui is a browser reader UI over the substrate runtime's records. It also hosts an agent terminal that POSTs /api/agent and polls the resulting record. This vocabulary covers user-driven interaction (clicks, tab switches, chat turns) and per-pane render events. It does NOT try to model the substrate runtime itself — that runtime has its own record + vocabulary; substrate-ui reads them.",
+    "Every view-category tag inherits view_payload_universal fields (frame, visible, pane_id, subject_record). subject_record is the record name the pane is rendering, or null for panes that don't read from a record (rail, assay picker, terminal chrome).",
+    "The subject invariant: exactly one record is the active subject at a time (STATE.name in current app.ts). RECORD_SELECTED sets it; every view render tag after that carries the same subject_record until the next RECORD_SELECTED.",
+    "Poll cadence: the agent terminal polls /api/records/<name> at ~500 ms while a run is in flight. AGENT_TURN_STREAMED fires per poll cycle that observes new agent events; POLL_TIMEOUT is the incident-stratum companion if the poll fails.",
+    "The four view-toggle values (run, topo, structure, scene) are the current app.ts's graphView + a distinct 'structure' when the static topology view lands. Sprint 018 (TS conversion, 2026-08-14) has 'topology' as the tag; the run-as-graph vs structure split is per Architect's earlier terminal-v1 ruling and will resurface if terminal-v1 dispatches later."
+  ],
+  "tags": [
+    { "name": "SESSION_INIT", "category": "session", "stratum": "event", "payload": ["vocab_version", "url"], "optional_payload": ["referrer"], "note": "First signal on every page load. Anchors every subsequent signal's relative t." },
+    { "name": "SESSION_ENDED", "category": "session", "stratum": "event", "payload": [], "optional_payload": ["reason"], "note": "Page unload (browser close, navigate away). Best-effort — beforeunload isn't guaranteed to fire." },
+
+    { "name": "RECORDS_LOADED", "category": "records", "stratum": "summary", "payload": ["count", "run_count", "demo_count"], "optional_payload": [], "note": "Rail fetch from /api/records completed. count is total; run_count + demo_count decompose it per the rail's grouping." },
+    { "name": "RECORD_SELECTED", "category": "records", "stratum": "event", "payload": ["name", "prior_name"], "optional_payload": [], "note": "User clicked a record in the rail (or a deep-link resolved). Sets STATE.name; every subsequent view render carries this as subject_record. prior_name is the previously-selected record or null." },
+    { "name": "RECORDS_PRUNED", "category": "records", "stratum": "event", "payload": ["cleared_count"], "optional_payload": [], "note": "User clicked the your-runs 'clear' affordance to delete session runs. Demos are preserved server-side." },
+
+    { "name": "RECORD_LOAD_BEGIN", "category": "record", "stratum": "event", "payload": ["name"], "optional_payload": [], "note": "selectRecord kicked off the per-record fetch chain (/api/records/<name>, /run_graph, /summary, /topology_graph)." },
+    { "name": "RECORD_LOADED", "category": "record", "stratum": "summary", "payload": ["name", "event_count", "status"], "optional_payload": ["producers_failed", "final_reason"], "note": "All four projections landed. status is finalised | paused | incomplete | failed. Paired staleness guard: if a newer RECORD_LOAD_BEGIN fires first, this one is dropped." },
+
+    { "name": "ASSAYS_LOADED", "category": "assay", "stratum": "summary", "payload": ["count"], "optional_payload": [], "note": "Assay list fetched from /api/assays." },
+    { "name": "ASSAY_SELECTED", "category": "assay", "stratum": "event", "payload": ["name", "prior_name"], "optional_payload": [], "note": "User clicked an assay in the rail." },
+    { "name": "ASSAY_REPORT_LOADED", "category": "assay", "stratum": "summary", "payload": ["name", "arm_count", "case_count"], "optional_payload": ["verdict"], "note": "Assay report fetched from /api/assay/<name> and rendered. verdict is the overall margin verdict when earned." },
+
+    { "name": "VIEW_SWITCHED", "category": "view", "stratum": "event", "payload": ["to_view", "prior_view", "subject_record"], "optional_payload": [], "note": "User toggled between run-as-graph, topology, structure, scene, or io. Payload subject_record is the current STATE.name." },
+    { "name": "CURSOR_MOVED", "category": "view", "stratum": "event", "payload": ["seq", "prior_seq", "subject_record"], "optional_payload": ["source"], "note": "Replay cursor changed. source is drag | button | play_frame | keyboard." },
+    { "name": "PLAY_STARTED", "category": "view", "stratum": "event", "payload": ["from_seq", "speed", "subject_record"], "optional_payload": [], "note": "Transport play began." },
+    { "name": "PLAY_STOPPED", "category": "view", "stratum": "event", "payload": ["at_seq", "reason", "subject_record"], "optional_payload": [], "note": "Transport paused. reason is user_pause | end_reached | scrub_interrupt." },
+    { "name": "SPEED_CHANGED", "category": "view", "stratum": "event", "payload": ["speed", "prior_speed"], "optional_payload": [], "note": "Replay speed (frames/sec) changed." },
+
+    { "name": "GRAPH_RENDERED", "category": "view", "stratum": "event", "payload": ["frame", "visible", "pane_id", "subject_record", "instance_count"], "optional_payload": ["cohort_count", "cancelled_count"], "note": "Run-as-graph pane repainted. instance_count is the number of producer-instance lanes drawn at the current cursor." },
+    { "name": "TOPOLOGY_RENDERED", "category": "view", "stratum": "event", "payload": ["frame", "visible", "pane_id", "subject_record", "producer_count", "trigger_count"], "optional_payload": [], "note": "Static topology-structure pane repainted." },
+    { "name": "SCENE_RENDERED", "category": "view", "stratum": "event", "payload": ["frame", "visible", "pane_id", "subject_record", "generation_seq"], "optional_payload": [], "note": "Scene pane repainted (a domain-visual grid inferred from payload shape, e.g. game_of_life)." },
+    { "name": "IO_RENDERED", "category": "view", "stratum": "event", "payload": ["frame", "visible", "pane_id", "subject_record", "input_kind", "artifact_count"], "optional_payload": [], "note": "I/O pane repainted. Shows seed/baseline as input and terminal-artifact events as outputs." },
+    { "name": "HEALTH_RENDERED", "category": "view", "stratum": "event", "payload": ["frame", "visible", "pane_id", "subject_record", "verdict"], "optional_payload": [], "note": "Health verdict repainted. verdict is FINALISED | FAILED | PAUSED | INCOMPLETE | LIVE." },
+
+    { "name": "STREAM_RENDERED", "category": "stream", "stratum": "event", "payload": ["frame", "visible", "pane_id", "subject_record", "line_count"], "optional_payload": [], "note": "Event-stream pane repainted at the current cursor. line_count is rows visible." },
+    { "name": "EVENT_INSPECTED", "category": "stream", "stratum": "event", "payload": ["seq", "kind", "subject_record"], "optional_payload": [], "note": "User clicked an event in the stream; inspector shows its payload." },
+    { "name": "PRODUCER_INSPECTED", "category": "stream", "stratum": "event", "payload": ["instance", "kind", "subject_record"], "optional_payload": [], "note": "User clicked a producer lane in the graph; inspector shows the /explain/<instance> chain." },
+
+    { "name": "TERMINAL_OPENED", "category": "terminal", "stratum": "event", "payload": [], "optional_payload": ["trigger"], "note": "Terminal dock opened. trigger is toggle_button | ctrl_backtick | first_command." },
+    { "name": "TERMINAL_CLOSED", "category": "terminal", "stratum": "event", "payload": [], "optional_payload": [], "note": "Dock collapsed." },
+    { "name": "CHAT_ENTERED", "category": "terminal", "stratum": "event", "payload": [], "optional_payload": ["reconnect"], "note": "User typed 'chat' to enter conversation mode. reconnect=true when picking up an existing conversation." },
+    { "name": "CHAT_EXITED", "category": "terminal", "stratum": "event", "payload": ["turns_in_conversation"], "optional_payload": [], "note": "User typed /exit. Conversation state is retained for reconnect." },
+    { "name": "MODEL_SELECTED", "category": "terminal", "stratum": "event", "payload": ["model", "prior_model"], "optional_payload": [], "note": "Model picker changed. model is an Ollama tag, a CLI preset name, or 'deterministic'." },
+    { "name": "PARAMS_CHANGED", "category": "terminal", "stratum": "event", "payload": ["field", "value", "prior_value"], "optional_payload": [], "note": "User changed think | tokens | timeout. field is one of those three." },
+
+    { "name": "TURN_SUBMITTED", "category": "agent", "stratum": "event", "payload": ["model", "task_length"], "optional_payload": ["turn_index"], "note": "User Enter with a chat message. task_length is the character count of the transcript-augmented task string." },
+    { "name": "AGENT_LAUNCH_REQUESTED", "category": "agent", "stratum": "event", "payload": ["model", "params"], "optional_payload": [], "note": "POST /api/agent begun. params is {think, tokens, timeout}." },
+    { "name": "AGENT_LAUNCHED", "category": "agent", "stratum": "event", "payload": ["run_name", "model", "workspace"], "optional_payload": ["branch"], "note": "POST /api/agent returned a run name; polling begins." },
+    { "name": "AGENT_TURN_STREAMED", "category": "agent", "stratum": "event", "payload": ["run_name", "new_events", "up_to_seq"], "optional_payload": [], "note": "A poll cycle observed new ToolCall/ToolResult/FinalAnswer events. new_events is the count added this cycle." },
+    { "name": "FINAL_ANSWER_RENDERED", "category": "agent", "stratum": "summary", "payload": ["run_name", "answer_length"], "optional_payload": [], "note": "FinalAnswer landed in termbody and (in chat mode) into STATE.term.chat.convo. Terminal turn is done." },
+
+    { "name": "TOPOLOGY_LAUNCH_REQUESTED", "category": "topology", "stratum": "event", "payload": ["topology_name"], "optional_payload": [], "note": "User clicked launch on a bundled topology name." },
+    { "name": "TOPOLOGY_LAUNCHED", "category": "topology", "stratum": "event", "payload": ["topology_name", "run_name"], "optional_payload": [], "note": "POST /api/launch returned a run name; the new record is selected." },
+    { "name": "RESUME_REQUESTED", "category": "topology", "stratum": "event", "payload": ["record_name"], "optional_payload": [], "note": "User clicked resume on a paused run." },
+    { "name": "RESUMED", "category": "topology", "stratum": "event", "payload": ["record_name"], "optional_payload": [], "note": "POST /api/resume returned; the record's state advances." },
+    { "name": "STUDIO_OPENED", "category": "topology", "stratum": "event", "payload": [], "optional_payload": ["via"], "note": "User navigated to /studio.html. via is header_link | direct_url." },
+
+    { "name": "DIFF_REQUESTED", "category": "diff", "stratum": "event", "payload": ["a", "b"], "optional_payload": [], "note": "User picked a diff target in the diff selector." },
+    { "name": "DIFF_RENDERED", "category": "diff", "stratum": "event", "payload": ["frame", "visible", "pane_id", "subject_record", "first_divergence_seq"], "optional_payload": [], "note": "Diff pane repainted with the first-divergence output from /api/diff." },
+
+    { "name": "FETCH_FAILED", "category": "incident", "stratum": "incident", "payload": ["endpoint", "status_or_error"], "optional_payload": ["retry_after"], "note": "An /api/* fetch failed. status_or_error is the HTTP status number or the caught exception message." },
+    { "name": "LAUNCH_REJECTED", "category": "incident", "stratum": "incident", "payload": ["kind", "reason"], "optional_payload": [], "note": "A launch or resume POST returned an error field. kind is agent | topology | resume." },
+    { "name": "POLL_TIMEOUT", "category": "incident", "stratum": "incident", "payload": ["run_name", "elapsed_ms"], "optional_payload": [], "note": "Agent-record poll exceeded its ceiling without a FinalAnswer or RunFinalised landing." }
+  ],
+  "invariants": [
+    "SESSION_INIT is the first signal in any capture.",
+    "SESSION_ENDED, when it fires, is the last signal.",
+    "RECORDS_LOADED fires before the first RECORD_SELECTED.",
+    "Every RECORD_SELECTED is followed within 5s by exactly one RECORD_LOADED with matching name (staleness guard drops earlier in-flight loads).",
+    "AGENT_LAUNCH_REQUESTED is followed within 1s by either AGENT_LAUNCHED or LAUNCH_REJECTED with kind=agent.",
+    "Every AGENT_LAUNCHED is followed by 1..N AGENT_TURN_STREAMED events and terminated by exactly one FINAL_ANSWER_RENDERED or POLL_TIMEOUT with the same run_name.",
+    "TURN_SUBMITTED only fires while CHAT_ENTERED is the current chat state (no CHAT_EXITED since).",
+    "View-category tags carry subject_record; if subject_record is non-null, it equals the STATE.name active at emit time."
+  ],
+  "rationale": "42 tags across 11 categories, stratified per grammar/PRINCIPLES.md commitment 5. Categories align with substrate-ui's actual subsystem boundaries as observed in web/app.ts (records rail, per-record fetch, assay board, view toggles, event stream, terminal dock, agent chat, topology launch, diff, incidents). view_payload_universal deviates from Katybird's frame/visible/scene_id/layer to frame/visible/pane_id/subject_record — 'scene_id' doesn't fit a reader UI's rendering model, and 'subject_record' is the load-bearing invariant carrier for the subject rule. Notes[] carries the four load-bearing conventions (subject invariant, poll cadence, view-toggle values, staleness guard). Invariants[] carries eight assertions the capture-grade harness enforces per sprint. This is v0.1; every gap identified during instrumentation surfaces as a supervised-grammar-evolution proposal (NEW_TAG_PROPOSED, PAYLOAD_FIELD_PROPOSED, etc.) and bumps to v0.2. Not yet locked — awaiting Architect ratification."
+}
