@@ -121,6 +121,151 @@ async def test_delegate_routes_into_standing_session(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_delegated_turn_index_comes_from_reviewer_not_parent(tmp_path: Path) -> None:
+    """Post-review 2026-08-26 finding 1 fix. `UserMessage.turn_index` on the
+    reviewer's record must count from the reviewer's OWN state, not the
+    parent's record seq. Before: a delegate injected `turn_index=parent_seq`
+    which could jump from 0 to 46 in one step. After: the delegate reads the
+    reviewer's tail UserMessage turn_index and passes `tail + 1`.
+    """
+    base = tmp_path / "sessions"
+    base.mkdir()
+    registry = SessionRegistry(base=base, session_topology_factory=_reviewer_factory)
+    registry.create(
+        session_id="s_reviewer",
+        name="reviewer",
+        driver="deterministic",
+        workspace="/tmp/reviewer",
+        workspace_shape="flat",
+        bundle=None,
+        seed="x",
+    )
+    reviewer_record = base / "s_reviewer" / "record"
+    await _open_reviewer(reviewer_record)  # reviewer sees turn_index=0
+
+    # The delegate parent has a rich record (many envelopes on its OWN root),
+    # simulating parent_seq_at_call = 46. Sprint 213a's constructor kwarg accepts
+    # a parent_record_root but the reviewer's turn_index must NOT copy from that.
+    parent_record = tmp_path / "parent-record"
+
+    from collections.abc import AsyncIterator
+    from msgspec import Struct
+
+    class Tick(Struct, frozen=True):
+        n: int
+
+    async def _emit(inp: object) -> AsyncIterator[Tick]:
+        del inp
+        for i in range(46):
+            yield Tick(n=i)
+
+    def parent_topology(b: api.TopologyBuilder) -> None:
+        b.producer_kind(
+            "emitter",
+            schemas=[Tick],
+            schema_version=1,
+            factory=lambda: _emit,
+            deterministic=True,
+        )
+        b.initial("emitter", input={})
+        b.termination(api.threshold_count("Tick", 46))
+
+    await api.Runtime(parent_record).run(parent_topology)
+
+    d = make_delegate(
+        responder=DeterministicResponder(seed=0),
+        root=tmp_path / "parent",
+        session_registry=registry,
+        parent_session_id="s_parent",
+        parent_record_root=parent_record,
+    )
+    import asyncio
+
+    loop = asyncio.get_running_loop()
+    result = await loop.run_in_executor(
+        None,
+        lambda: d.run([{"task": "hi via delegate", "child_session_name": "reviewer"}]),
+    )
+    assert result["via"] == "standing_session:reviewer"
+    user_msgs = [e for e in api.read_record(reviewer_record) if e["kind"] == "UserMessage"]
+    # The reviewer saw one UserMessage at open (turn_index=0), then the delegate's.
+    # The delegated turn_index must be 1 — reviewer's tail turn_index (0) + 1 —
+    # NOT 45 (the parent record's tail seq).
+    assert user_msgs[-1]["payload"]["text"] == "hi via delegate"
+    assert user_msgs[-1]["payload"]["turn_index"] == 1
+
+
+@pytest.mark.asyncio
+async def test_delegate_reads_only_this_turns_final_answer(tmp_path: Path) -> None:
+    """Post-review 2026-08-26 finding 2 fix. The reviewer's record accumulates
+    a FinalAnswer per turn. The delegate must return the ONE this turn produced,
+    not `finals[-1]` scoped across the whole record. This test primes the
+    reviewer with two prior turns (each answering something distinct), then
+    fires a delegated turn — the delegate's answer text must come from the
+    delegated turn's FinalAnswer, at a seq strictly greater than the seq the
+    reviewer's record held before turn_sync ran.
+    """
+    base = tmp_path / "sessions"
+    base.mkdir()
+    registry = SessionRegistry(base=base, session_topology_factory=_reviewer_factory)
+    registry.create(
+        session_id="s_reviewer",
+        name="reviewer",
+        driver="deterministic",
+        workspace="/tmp/reviewer",
+        workspace_shape="flat",
+        bundle=None,
+        seed="x",
+    )
+    reviewer_record = base / "s_reviewer" / "record"
+    # Two priming turns so the reviewer's record carries prior FinalAnswers.
+    await _open_reviewer(reviewer_record)
+    from substrate.topologies.session import UserMessage as SessionUserMessage
+
+    await api.Runtime(reviewer_record, persistent=True).resume(
+        _reviewer_factory(None),
+        resume_event=SessionUserMessage(
+            text="prior turn one",
+            turn_index=1,
+            assembled_prompt="prior turn one",
+            slash_source="chat",
+        ),
+    )
+    prior_finals = [
+        e for e in api.read_record(reviewer_record) if e["kind"] == "FinalAnswer"
+    ]
+    prior_last_final_seq = prior_finals[-1]["seq"]
+    prior_last_final_text = prior_finals[-1]["payload"]["text"]
+
+    d = make_delegate(
+        responder=DeterministicResponder(seed=0),
+        root=tmp_path / "parent",
+        session_registry=registry,
+    )
+    import asyncio
+
+    loop = asyncio.get_running_loop()
+    result = await loop.run_in_executor(
+        None,
+        lambda: d.run(
+            [{"task": "the delegated question", "child_session_name": "reviewer"}]
+        ),
+    )
+    # The delegated turn's FinalAnswer sits at a seq > prior_last_final_seq.
+    all_finals = [
+        e for e in api.read_record(reviewer_record) if e["kind"] == "FinalAnswer"
+    ]
+    delegated_finals = [
+        e for e in all_finals if int(e["seq"]) > int(prior_last_final_seq)
+    ]
+    assert len(delegated_finals) == 1
+    # The parent's ToolResult reads exactly that seq's answer, not the earlier one.
+    assert result["answer"] == delegated_finals[-1]["payload"]["text"]
+    # And crucially, the answer is NOT a prior turn's text.
+    assert result["answer"] != prior_last_final_text
+
+
+@pytest.mark.asyncio
 async def test_two_parents_delegating_to_same_reviewer_serialize(tmp_path: Path) -> None:
     """Two parent threads fire delegate calls into `reviewer` at the same time.
     SessionRegistry's per-session `threading.Lock` in turn_sync serializes them:

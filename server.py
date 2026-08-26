@@ -959,9 +959,9 @@ def main() -> None:
     from session_registry import SessionRegistry
 
     registry = SessionRegistry()
-    registry.boot_scan()
+    skipped = registry.boot_scan()
     manifests = registry.list_all()
-    print(
+    summary = (
         f"substrate-ui read-API server on http://{HOST}:{PORT}  "
         f"(records: {', '.join(bundled.names())}; "
         f"sessions: {len(manifests)} — "
@@ -969,6 +969,11 @@ def main() -> None:
         f"{sum(1 for m in manifests if m.status == 'interrupted')} interrupted, "
         f"{sum(1 for m in manifests if m.status == 'ended')} ended)"
     )
+    if skipped:
+        summary += f"; SKIPPED {len(skipped)} unparseable manifest(s): {', '.join(skipped[:5])}"
+        if len(skipped) > 5:
+            summary += f" ... (+{len(skipped) - 5} more)"
+    print(summary)
     srv = ThreadingHTTPServer((HOST, PORT), Handler)
     try:
         srv.serve_forever()

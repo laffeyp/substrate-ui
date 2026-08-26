@@ -40,11 +40,14 @@ import threading
 import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from msgspec import Struct
 
 from substrate import api
+
+if TYPE_CHECKING:
+    from substrate.api import TopologyBuilder
 
 SessionStatus = Literal["running", "parked", "interrupted", "ended"]
 
@@ -95,7 +98,7 @@ class SessionEndedMidTurn(Exception):
     """
 
 
-SessionTopologyFactory = Callable[["SessionManifest"], Callable[[Any], None]]
+SessionTopologyFactory = Callable[["SessionManifest"], Callable[["TopologyBuilder"], None]]
 
 
 def _atomic_write_json(path: Path, data: Any) -> None:
@@ -158,18 +161,21 @@ class SessionRegistry:
 
     # ── boot scan ──────────────────────────────────────────────────────────
 
-    def boot_scan(self) -> None:
+    def boot_scan(self) -> list[str]:
         """Rebuild the in-memory registry from disk. Called once at daemon start.
 
         Reads `by-name.json` under a shared flock (concurrent readers OK). Walks
         every `<session_id>/` under `base` and, for each manifest present,
-        checks the record's true status: `api.recover_open_segment` returning
-        non-None means the hot segment was torn (the daemon died mid-turn) →
-        `interrupted`; `substrate.RunFinalised` present in the record →
-        `ended`; otherwise the record is quiescent → `parked`.
+        classifies status against the record's last envelope: `substrate.RunFinalised`
+        → `ended`; `substrate.TerminationMatched(decision="pause-await-input")` →
+        `parked`; anything else → `interrupted`.
 
         Rewrites each manifest whose on-disk status disagrees with reality.
+        Returns the list of session directories whose manifests were skipped
+        because they could not be parsed — the daemon reports the count on
+        stderr so a corrupt manifest does not vanish silently (review finding 12).
         """
+        skipped: list[str] = []
         self._by_name = self._read_by_name_index()
         for session_dir in sorted(self._base.iterdir()):
             if not session_dir.is_dir():
@@ -182,7 +188,8 @@ class SessionRegistry:
             try:
                 raw = json.loads(manifest_path.read_text(encoding="utf-8"))
                 manifest = _manifest_from_dict(raw)
-            except (OSError, json.JSONDecodeError, KeyError, TypeError):
+            except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError):
+                skipped.append(session_dir.name)
                 continue
             true_status = _scan_record_status(Path(manifest.record_root))
             if true_status != manifest.status:
@@ -194,6 +201,7 @@ class SessionRegistry:
             name: sid for name, sid in self._by_name.items() if sid in self._manifests
         }
         self._write_by_name_index()
+        return skipped
 
     # ── create / rename ────────────────────────────────────────────────────
 
@@ -296,11 +304,19 @@ class SessionRegistry:
         topology via the injected `session_topology_factory` and drives one
         `Runtime.resume` call in a fresh event loop.
 
+        Status transition: a resume that returns `RunResult(status="finalised")`
+        writes the manifest to `"ended"` and returns cleanly — the caller
+        (delegate) reads the tail FinalAnswer off the record and folds the
+        answer back. `/exit` mid-turn is a legitimate finalisation and no
+        exception is raised for it.
+
         Raises `KeyError` on unknown session_id; `SessionEndedMidTurn` when the
-        session's status is `ended` at call time OR when the run finalises
-        during this turn (the reviewer session's `/exit` fired between the
-        caller's resolve and this call). Raises `RuntimeError` if no
-        `session_topology_factory` was injected at construction.
+        session's status is already `"ended"` at call time (or has transitioned
+        to `"ended"` by the time the per-session lock is acquired). Raises
+        `RuntimeError` if no `session_topology_factory` was injected at
+        construction. Post-review 2026-08-26 finding 5: an earlier docstring
+        promised a mid-turn `SessionEndedMidTurn` raise; the code never
+        delivered one and the promise is trimmed.
         """
         if self._session_topology_factory is None:
             raise RuntimeError(
@@ -371,7 +387,7 @@ class SessionRegistry:
 
 
 def _run_resume_sync(
-    factory: Callable[[Any], None],
+    factory: Callable[["TopologyBuilder"], None],
     record_root: Path,
     resume_event: Any,
     *,
@@ -405,7 +421,7 @@ def _run_resume_sync(
             box["result"] = loop.run_until_complete(task)
         except asyncio.CancelledError:
             box["cancelled"] = True
-        except BaseException as exc:
+        except Exception as exc:  # noqa: BLE001 — carried to caller thread; NOT BaseException so KeyboardInterrupt / SystemExit propagate to main
             box["error"] = exc
         finally:
             loop.close()
@@ -536,7 +552,16 @@ def _manifest_to_dict(m: SessionManifest) -> dict[str, Any]:
     }
 
 
+_VALID_STATUS: frozenset[str] = frozenset(("running", "parked", "interrupted", "ended"))
+
+
 def _manifest_from_dict(d: dict[str, Any]) -> SessionManifest:
+    status_raw = str(d["status"])
+    if status_raw not in _VALID_STATUS:
+        raise ValueError(
+            f"manifest status={status_raw!r} not in {sorted(_VALID_STATUS)}; "
+            "manifest is corrupt"
+        )
     return SessionManifest(
         session_id=str(d["session_id"]),
         name=d.get("name") if d.get("name") is not None else None,
@@ -545,7 +570,7 @@ def _manifest_from_dict(d: dict[str, Any]) -> SessionManifest:
         workspace=str(d["workspace"]),
         workspace_shape=str(d["workspace_shape"]),
         record_root=str(d["record_root"]),
-        status=str(d["status"]),  # type: ignore[arg-type]
+        status=status_raw,  # type: ignore[arg-type]
         bundle=d.get("bundle") if d.get("bundle") is not None else None,
         seed=str(d["seed"]),
     )
