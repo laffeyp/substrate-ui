@@ -952,10 +952,24 @@ class Handler(BaseHTTPRequestHandler):
 
 def main() -> None:
     WEB.mkdir(exist_ok=True)
-    srv = ThreadingHTTPServer((HOST, PORT), Handler)
+    # Sprint 211: boot-scan the on-disk session catalog. Rebuilds the in-memory
+    # SessionRegistry from ~/.substrate/sessions/*/manifest.json, checking every
+    # record's true status (hot segment → interrupted; RunFinalised → ended;
+    # otherwise → parked) and rewriting manifests whose stored status disagrees.
+    from session_registry import SessionRegistry
+
+    registry = SessionRegistry()
+    registry.boot_scan()
+    manifests = registry.list_all()
     print(
-        f"substrate-ui read-API server on http://{HOST}:{PORT}  (records: {', '.join(bundled.names())})"
+        f"substrate-ui read-API server on http://{HOST}:{PORT}  "
+        f"(records: {', '.join(bundled.names())}; "
+        f"sessions: {len(manifests)} — "
+        f"{sum(1 for m in manifests if m.status == 'parked')} parked, "
+        f"{sum(1 for m in manifests if m.status == 'interrupted')} interrupted, "
+        f"{sum(1 for m in manifests if m.status == 'ended')} ended)"
     )
+    srv = ThreadingHTTPServer((HOST, PORT), Handler)
     try:
         srv.serve_forever()
     except KeyboardInterrupt:
