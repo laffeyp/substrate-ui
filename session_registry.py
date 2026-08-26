@@ -36,7 +36,9 @@ import fcntl
 import json
 import os
 import tempfile
+import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Literal
 
@@ -86,6 +88,16 @@ class NameCollision(Exception):
         self.existing_session_id = existing_session_id
 
 
+class SessionEndedMidTurn(Exception):
+    """Raised by `turn_sync` when the target session has already ended (or ended
+    between the caller's resolve and the .resume() call). The delegate seam
+    (sprint 213b) surfaces this as `ToolResult(ok=False, error="session_ended_mid_delegate")`.
+    """
+
+
+SessionTopologyFactory = Callable[["SessionManifest"], Callable[[Any], None]]
+
+
 def _atomic_write_json(path: Path, data: Any) -> None:
     """Write `data` to `path` atomically: write to a temp file in the same dir,
     fsync it, then rename. Rename-in-same-fs is atomic on POSIX; a crash mid-write
@@ -120,11 +132,28 @@ class SessionRegistry:
     stray script or a second daemon that snuck past the pidfile guard.
     """
 
-    def __init__(self, base: Path | None = None) -> None:
+    def __init__(
+        self,
+        base: Path | None = None,
+        *,
+        session_topology_factory: SessionTopologyFactory | None = None,
+    ) -> None:
         self._base = Path(base) if base is not None else _SESSIONS_BASE_DEFAULT
         self._by_name: dict[str, str] = {}
         self._manifests: dict[str, SessionManifest] = {}
+        # `_locks` maps session_id → asyncio.Lock for the daemon's asyncio-side
+        # per-session serialization (POST /api/session/<id>/turn under sprint 214).
+        # `_turn_threading_locks` maps session_id → threading.Lock for the
+        # delegate seam's sync-thread path (sprint 213b): `turn_sync` runs in a
+        # tool_loop worker thread, not the daemon event loop, so an
+        # asyncio.Lock is the wrong primitive there.
         self._locks: dict[str, asyncio.Lock] = {}
+        self._turn_threading_locks: dict[str, threading.Lock] = {}
+        # Sprint 213b: the callable the daemon injects at construction time to
+        # rebuild a `session_topology` factory for a given manifest. `turn_sync`
+        # invokes it once per call. When None (default), `turn_sync` raises so
+        # the registry can be constructed in tests that never exercise the seam.
+        self._session_topology_factory: SessionTopologyFactory | None = session_topology_factory
         self._base.mkdir(parents=True, exist_ok=True)
 
     # ── boot scan ──────────────────────────────────────────────────────────
@@ -248,6 +277,62 @@ class SessionRegistry:
             self._locks[session_id] = lock
         return lock
 
+    # ── standing-session turn (delegate path 1) ────────────────────────────
+
+    def turn_sync(
+        self,
+        session_id: str,
+        resume_event: Any,
+        *,
+        timeout_seconds: float = 600.0,
+    ) -> tuple[SessionManifest, Path]:
+        """Run one turn against a standing session synchronously. Called from
+        the delegate seam (sprint 213b) inside tool_loop's worker thread — NOT
+        from the daemon's asyncio loop. Returns `(final_manifest, record_root)`.
+
+        Serializes on the per-session `threading.Lock`, so two concurrent parents
+        delegating to the same standing session FIFO-queue on this call rather
+        than racing the same record's Runtime lock. Rebuilds the session's
+        topology via the injected `session_topology_factory` and drives one
+        `Runtime.resume` call in a fresh event loop.
+
+        Raises `KeyError` on unknown session_id; `SessionEndedMidTurn` when the
+        session's status is `ended` at call time OR when the run finalises
+        during this turn (the reviewer session's `/exit` fired between the
+        caller's resolve and this call). Raises `RuntimeError` if no
+        `session_topology_factory` was injected at construction.
+        """
+        if self._session_topology_factory is None:
+            raise RuntimeError(
+                "SessionRegistry.turn_sync: no session_topology_factory was injected at "
+                "construction. Daemon (substrate-ui/server.py) supplies one at boot; "
+                "tests must pass one to SessionRegistry(...) explicitly."
+            )
+        manifest = self._manifests.get(session_id)
+        if manifest is None:
+            raise KeyError(f"unknown session_id {session_id!r}")
+        if manifest.status == "ended":
+            raise SessionEndedMidTurn(
+                f"session {session_id!r} has ended (status='ended'); cannot resume"
+            )
+        threading_lock = self._turn_threading_locks.setdefault(session_id, threading.Lock())
+        with threading_lock:
+            # Re-check manifest under the lock — an intervening turn may have ended it.
+            live_manifest = self._manifests.get(session_id)
+            if live_manifest is None or live_manifest.status == "ended":
+                raise SessionEndedMidTurn(
+                    f"session {session_id!r} ended before the turn started"
+                )
+            factory = self._session_topology_factory(live_manifest)
+            record_root = Path(live_manifest.record_root)
+            result = _run_resume_sync(
+                factory, record_root, resume_event, timeout_seconds=timeout_seconds
+            )
+            status_str = getattr(result, "status", "paused")
+            new_status: SessionStatus = "ended" if status_str == "finalised" else "parked"
+            updated = self.update_status(session_id, new_status)
+            return updated, record_root
+
     # ── status transitions ────────────────────────────────────────────────
 
     def update_status(self, session_id: str, status: SessionStatus) -> SessionManifest:
@@ -283,6 +368,65 @@ class SessionRegistry:
 
 
 # ── helpers ─────────────────────────────────────────────────────────────────
+
+
+def _run_resume_sync(
+    factory: Callable[[Any], None],
+    record_root: Path,
+    resume_event: Any,
+    *,
+    timeout_seconds: float,
+) -> Any:
+    """Run `Runtime(record_root, persistent=True).resume(factory, resume_event)`
+    to completion in a worker thread with its own event loop. Mirrors the shape
+    at `substrate/topologies/tool_loop/delegate.py::_run_child_to_answer`: the
+    call blocks like `bash` inside the delegate seam, no async contract added.
+
+    Returns the `RunResult` (has `.status` in `{"paused", "finalised", "failed"}`).
+    Raises `TimeoutError` on wall-clock overrun; re-raises the child's exception
+    on kernel failure.
+    """
+    box: dict[str, Any] = {}
+    ready = threading.Event()
+    done = threading.Event()
+    handle: dict[str, Any] = {}
+
+    def worker() -> None:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            task = loop.create_task(
+                api.Runtime(record_root, persistent=True).resume(
+                    factory, resume_event=resume_event
+                )
+            )
+            handle["loop"], handle["task"] = loop, task
+            ready.set()
+            box["result"] = loop.run_until_complete(task)
+        except asyncio.CancelledError:
+            box["cancelled"] = True
+        except BaseException as exc:
+            box["error"] = exc
+        finally:
+            loop.close()
+            done.set()
+
+    threading.Thread(target=worker, daemon=True).start()
+    if not done.wait(timeout_seconds):
+        ready.wait(1.0)
+        loop, task = handle.get("loop"), handle.get("task")
+        if loop is not None and task is not None:
+            loop.call_soon_threadsafe(task.cancel)
+            done.wait(10.0)
+        raise TimeoutError(
+            f"SessionRegistry.turn_sync: resume against {record_root} exceeded "
+            f"{timeout_seconds}s and was cancelled"
+        )
+    if box.get("cancelled"):
+        raise TimeoutError(f"resume against {record_root} was cancelled")
+    if "error" in box:
+        raise box["error"]
+    return box["result"]
 
 
 class _FlockedIndex:
@@ -416,7 +560,9 @@ def _replace(m: SessionManifest, **kwargs: Any) -> SessionManifest:
 
 __all__ = [
     "NameCollision",
+    "SessionEndedMidTurn",
     "SessionManifest",
     "SessionRegistry",
     "SessionStatus",
+    "SessionTopologyFactory",
 ]
