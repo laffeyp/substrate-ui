@@ -42,6 +42,10 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
+# `asyncio` is still imported: `_run_resume_sync` runs Runtime.resume on a fresh
+# per-call event loop inside a worker thread. The per-session lock itself is a
+# threading.Lock (see the __init__ note), not an asyncio.Lock.
+
 from msgspec import Struct
 
 from substrate import api
@@ -144,13 +148,17 @@ class SessionRegistry:
         self._base = Path(base) if base is not None else _SESSIONS_BASE_DEFAULT
         self._by_name: dict[str, str] = {}
         self._manifests: dict[str, SessionManifest] = {}
-        # `_locks` maps session_id → asyncio.Lock for the daemon's asyncio-side
-        # per-session serialization (POST /api/session/<id>/turn under sprint 214).
-        # `_turn_threading_locks` maps session_id → threading.Lock for the
-        # delegate seam's sync-thread path (sprint 213b): `turn_sync` runs in a
-        # tool_loop worker thread, not the daemon event loop, so an
-        # asyncio.Lock is the wrong primitive there.
-        self._locks: dict[str, asyncio.Lock] = {}
+        # Per-session `threading.Lock` map. Every caller of turn_sync — the delegate
+        # seam (sprint 213b, tool_loop worker thread) AND the daemon's POST
+        # /api/session/<id>/turn handler (sprint 214a, ThreadingHTTPServer worker
+        # thread) — acquires the same lock; no two Runtime.resume calls race the
+        # same record's writer.
+        #
+        # Sprint 214a folded the piece-C review's finding 3: an earlier draft held
+        # a second `asyncio.Lock` map for a hypothetical async POST /turn handler.
+        # ThreadingHTTPServer dispatches every request on its own thread, so an
+        # asyncio.Lock in that path was wrong-primitive dead weight. One lock, one
+        # primitive, one invariant.
         self._turn_threading_locks: dict[str, threading.Lock] = {}
         # Sprint 213b: the callable the daemon injects at construction time to
         # rebuild a `session_topology` factory for a given manifest. `turn_sync`
@@ -278,21 +286,15 @@ class SessionRegistry:
     def list_all(self) -> list[SessionManifest]:
         return list(self._manifests.values())
 
-    def lock_for(self, session_id: str) -> asyncio.Lock:
-        lock = self._locks.get(session_id)
-        if lock is None:
-            lock = asyncio.Lock()
-            self._locks[session_id] = lock
-        return lock
-
-    # ── standing-session turn (delegate path 1) ────────────────────────────
+    # ── standing-session turn (delegate path 1 + POST /api/session/<id>/turn) ─
 
     def turn_sync(
         self,
         session_id: str,
-        resume_event: Any,
+        resume_event: Any = None,
         *,
         timeout_seconds: float = 600.0,
+        resume_event_builder: Callable[[SessionManifest, Path], Any] | None = None,
     ) -> tuple[SessionManifest, Path]:
         """Run one turn against a standing session synchronously. Called from
         the delegate seam (sprint 213b) inside tool_loop's worker thread — NOT
@@ -341,8 +343,24 @@ class SessionRegistry:
                 )
             factory = self._session_topology_factory(live_manifest)
             record_root = Path(live_manifest.record_root)
+            # Sprint 214a: `resume_event_builder` runs UNDER the lock so record-derived
+            # state (like next turn_index computed from the reviewer's tail) is atomic
+            # with the write. Two concurrent callers thus see two different next-turn
+            # values, not the same pre-lock snapshot. When only `resume_event` is
+            # given (delegate's existing shape), it is used verbatim — backwards compat.
+            if resume_event_builder is not None:
+                effective_resume_event = resume_event_builder(live_manifest, record_root)
+            else:
+                if resume_event is None:
+                    raise ValueError(
+                        "turn_sync: pass either resume_event or resume_event_builder"
+                    )
+                effective_resume_event = resume_event
             result = _run_resume_sync(
-                factory, record_root, resume_event, timeout_seconds=timeout_seconds
+                factory,
+                record_root,
+                effective_resume_event,
+                timeout_seconds=timeout_seconds,
             )
             status_str = getattr(result, "status", "paused")
             new_status: SessionStatus = "ended" if status_str == "finalised" else "parked"
