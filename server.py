@@ -46,6 +46,53 @@ from builder import SpecError, build_from_spec
 from demo_topologies import approval_event, resumable_topology
 from substrate.reference import CliResponder, DeterministicResponder, OllamaResponder
 
+# Sprint 214a: daemon-side session API. SessionRegistry is a MODULE-scope singleton
+# so every handler sees the same catalog + per-session lock. Initialized in main()
+# with a session_topology_factory closure that resolves a manifest's driver string
+# to a Responder and rebuilds the session_topology per turn.
+_SESSION_REGISTRY: Any = None
+
+
+def _daemon_driver_resolver(name: str) -> Any:
+    """Daemon-side resolver: `deterministic` → seeded stub; `claude` / `gemini` →
+    CliResponder; anything else → OllamaResponder (a real local or `:cloud` tag).
+    Sprint 213a's `_default_model_resolver` in substrate ships a smaller default
+    without CLI knowledge; the daemon knows more, so it wraps.
+    """
+    if name == "deterministic":
+        return DeterministicResponder(seed=0)
+    if name == "claude":
+        return CliResponder(["claude", "-p"], name="claude")
+    if name == "gemini":
+        return CliResponder(["gemini", "-p"], name="gemini")
+    return OllamaResponder(model=name, timeout=300.0)
+
+
+def _build_session_topology_from_manifest(manifest: Any) -> Any:
+    """The `session_topology_factory` closure the SessionRegistry calls per turn.
+    Reconstructs the session_topology from a manifest's persistent fields —
+    driver string, workspace, seed, session_id. The daemon binds this at boot.
+    """
+    from substrate.topologies.session import session_topology
+    from substrate.topologies.session.transcript import resolve_driver_context_tokens
+    from substrate.topologies.tool_loop.tools import full_suite
+
+    responder = _daemon_driver_resolver(manifest.driver)
+    return session_topology(
+        driver=responder,
+        driver_name=manifest.driver,
+        driver_context_tokens=resolve_driver_context_tokens(manifest.driver, responder),
+        seed=manifest.seed,
+        tools=full_suite(Path(manifest.workspace)),
+        per_turn="",
+        max_turns=200,
+        turn_max_steps=24,
+        session_id=manifest.session_id,
+        workspace_path=manifest.workspace,
+        record_root=Path(manifest.record_root),
+        script=None,
+    )
+
 
 def _responder_for(spec: dict[str, object]) -> object:
     """The Responder a model-backed authored topology runs against: 'deterministic' (CI mode, pure +
@@ -469,6 +516,13 @@ class Handler(BaseHTTPRequestHandler):
             )
             return
         try:
+            if path == "/api/session":
+                self._session_create()
+                return
+            if path.startswith("/api/session/") and path.endswith("/turn"):
+                session_id = path[len("/api/session/") : -len("/turn")]
+                self._session_turn(session_id)
+                return
             if path == "/api/launch":
                 self._launch(parse_qs(urlparse(self.path).query))
                 return
@@ -510,6 +564,144 @@ class Handler(BaseHTTPRequestHandler):
                 except OSError:
                     kept += 1
         self._json({"removed": removed, "kept": kept})
+
+    def _read_json_body(self) -> dict[str, Any]:
+        length = int(self.headers.get("Content-Length", "0") or "0")
+        if length <= 0:
+            return {}
+        raw = self.rfile.read(length)
+        try:
+            data = msgspec.json.decode(raw)
+        except Exception as exc:  # noqa: BLE001
+            raise ValueError(f"POST body is not JSON: {type(exc).__name__}: {exc}") from exc
+        return data if isinstance(data, dict) else {}
+
+    def _session_create(self) -> None:
+        """Sprint 214a: POST /api/session. Body:
+            {"driver": "deterministic", "name": "reviewer"?, "workspace": "/path"?,
+             "workspace_shape": "flat"?, "seed": "…"?, "bundle": null?}
+        Registers the session via SessionRegistry.create, returns
+            {"session_id", "name", "record", "workspace_shape"}.
+        409 on colliding name.
+        """
+        if _SESSION_REGISTRY is None:
+            self._error(503, "session registry not initialized (boot ordering)")
+            return
+        try:
+            body = self._read_json_body()
+        except ValueError as exc:
+            self._error(400, str(exc))
+            return
+        driver = str(body.get("driver") or "deterministic")
+        name = body.get("name")
+        workspace = str(body.get("workspace") or str(_SESSIONS_BASE / "default"))
+        workspace_shape = str(body.get("workspace_shape") or "flat")
+        seed = str(body.get("seed") or "")
+        bundle = body.get("bundle")
+        session_id = f"s_{uuid.uuid4().hex[:24]}"
+        try:
+            manifest = _SESSION_REGISTRY.create(
+                session_id=session_id,
+                name=str(name) if name is not None else None,
+                driver=driver,
+                workspace=workspace,
+                workspace_shape=workspace_shape,
+                bundle=str(bundle) if bundle is not None else None,
+                seed=seed,
+            )
+        except Exception as exc:
+            # NameCollision carries existing_session_id per sprint 211.
+            if type(exc).__name__ == "NameCollision":
+                self._json(
+                    {
+                        "error": "name already taken",
+                        "existing_session_id": getattr(exc, "existing_session_id", None),
+                    },
+                    409,
+                )
+                return
+            self._error(500, f"{type(exc).__name__}: {exc}")
+            return
+        self._json(
+            {
+                "session_id": manifest.session_id,
+                "name": manifest.name,
+                "record": manifest.record_root,
+                "workspace_shape": manifest.workspace_shape,
+            }
+        )
+
+    def _session_turn(self, session_id: str) -> None:
+        """Sprint 214a: POST /api/session/<id>/turn. Body:
+            {"text": "hello"}
+        Runs one turn via SessionRegistry.turn_sync (the same seam the delegate
+        wire uses, per piece-C review finding 3's fix). Per-session threading.Lock
+        serializes concurrent callers. Returns {status, final_seq?, error?}.
+        """
+        if _SESSION_REGISTRY is None:
+            self._error(503, "session registry not initialized (boot ordering)")
+            return
+        manifest = _SESSION_REGISTRY.get(session_id)
+        if manifest is None:
+            self._error(404, f"unknown session_id {session_id!r}")
+            return
+        try:
+            body = self._read_json_body()
+        except ValueError as exc:
+            self._error(400, str(exc))
+            return
+        text = str(body.get("text") or "")
+        if not text:
+            self._error(400, "POST /api/session/<id>/turn requires body {'text': '...'}")
+            return
+        # Sprint 214a: compute next turn_index INSIDE the per-session lock via
+        # `resume_event_builder`, so two concurrent POST /turn calls see two
+        # distinct tail states rather than the same pre-lock snapshot.
+        from substrate.topologies.session import UserMessage as SessionUserMessage
+
+        def _build(_manifest: Any, record_root_locked: Path) -> Any:
+            next_turn_index = 0
+            if record_root_locked.exists():
+                try:
+                    for env in api.read_record(record_root_locked):
+                        if env.get("kind") == "UserMessage":
+                            payload = env.get("payload") or {}
+                            if isinstance(payload, dict) and "turn_index" in payload:
+                                next_turn_index = int(payload["turn_index"]) + 1
+                except Exception:  # noqa: BLE001
+                    next_turn_index = 0
+            return SessionUserMessage(
+                text=text,
+                turn_index=next_turn_index,
+                assembled_prompt=text,
+                slash_source="daemon",
+            )
+
+        try:
+            updated_manifest, root_after = _SESSION_REGISTRY.turn_sync(
+                session_id,
+                resume_event_builder=_build,
+                timeout_seconds=600.0,
+            )
+        except Exception as exc:
+            if type(exc).__name__ == "SessionEndedMidTurn":
+                self._json(
+                    {"status": "ended", "error": "session_ended_mid_delegate"}, 410
+                )
+                return
+            self._error(500, f"{type(exc).__name__}: {exc}")
+            return
+        # Return the record's tail seq so the caller can page /events from there.
+        final_seq = -1
+        for env in api.read_record(root_after):
+            final_seq = max(final_seq, int(env.get("seq", -1)))
+        self._json(
+            {
+                "status": updated_manifest.status,
+                "final_seq": final_seq,
+                "record": str(root_after),
+            }
+        )
 
     def _launch(self, q: dict[str, list[str]]) -> None:
         """Launch a bundled topology to a fresh record. The launch IS the recorded control action —
@@ -958,7 +1150,9 @@ def main() -> None:
     # otherwise → parked) and rewriting manifests whose stored status disagrees.
     from session_registry import SessionRegistry
 
-    registry = SessionRegistry()
+    global _SESSION_REGISTRY
+    registry = SessionRegistry(session_topology_factory=_build_session_topology_from_manifest)
+    _SESSION_REGISTRY = registry
     skipped = registry.boot_scan()
     manifests = registry.list_all()
     summary = (

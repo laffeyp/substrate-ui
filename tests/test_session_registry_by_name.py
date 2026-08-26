@@ -68,7 +68,15 @@ def test_by_name_survives_boot_scan(tmp_path: Path) -> None:
     assert anonymous.name is None
 
 
-def test_lock_for_returns_same_lock_on_repeat_call(tmp_path: Path) -> None:
+def test_per_session_threading_lock_is_stable_across_turn_sync_calls(tmp_path: Path) -> None:
+    """Sprint 214a folded piece-C review finding 3: the earlier `lock_for(session_id)`
+    returning an `asyncio.Lock` was dead-primitive weight. Every caller of turn_sync
+    (delegate + POST /api/session/<id>/turn) acquires the same per-session
+    threading.Lock via `_turn_threading_locks`. This test locks the identity of that
+    lock across two `turn_sync`-adjacent lookups — a repeat access returns the same
+    lock object; a different session gets a different lock; no leak of asyncio.Lock
+    remains in the registry surface.
+    """
     r = SessionRegistry(base=tmp_path)
     r.create(
         session_id="s_epsilon",
@@ -79,11 +87,18 @@ def test_lock_for_returns_same_lock_on_repeat_call(tmp_path: Path) -> None:
         bundle=None,
         seed="hi",
     )
-    lock_a = r.lock_for("s_epsilon")
-    lock_b = r.lock_for("s_epsilon")
+    # The lock is created lazily when turn_sync fires. Simulate that by touching
+    # `_turn_threading_locks` directly (the same setdefault pattern turn_sync uses).
+    import threading
+
+    lock_a = r._turn_threading_locks.setdefault("s_epsilon", threading.Lock())  # noqa: SLF001
+    lock_b = r._turn_threading_locks.setdefault("s_epsilon", threading.Lock())  # noqa: SLF001
     assert lock_a is lock_b
-    other = r.lock_for("s_someone_else")
+    other = r._turn_threading_locks.setdefault("s_someone_else", threading.Lock())  # noqa: SLF001
     assert other is not lock_a
+    # No stray asyncio.Lock map on the registry.
+    assert not hasattr(r, "_locks")
+    assert not hasattr(r, "lock_for")
 
 
 def test_set_name_renames_index_atomically(tmp_path: Path) -> None:
