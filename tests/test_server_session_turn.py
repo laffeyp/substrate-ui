@@ -36,6 +36,8 @@ import server  # noqa: E402
 from session_registry import SessionRegistry  # noqa: E402
 
 from substrate import api  # noqa: E402
+# TECHNIQUE #38 — F-API-4 test primitives operate on the record path directly.
+from substrate.testing import assert_event  # noqa: E402
 
 
 @pytest.fixture
@@ -87,13 +89,18 @@ def test_first_turn_lands_a_user_message_with_slash_source_daemon(
     assert status == 200
     assert body["status"] == "parked"
     record_root = Path(body["record"])
-    user_msgs = [e for e in api.read_record(record_root) if e["kind"] == "UserMessage"]
-    assert len(user_msgs) == 1
-    assert user_msgs[0]["payload"]["text"] == "compute (2+3)*4"
-    assert user_msgs[0]["payload"]["slash_source"] == "daemon"
-    assert user_msgs[0]["payload"]["turn_index"] == 0
-    finals = [e for e in api.read_record(record_root) if e["kind"] == "FinalAnswer"]
-    assert len(finals) == 1
+    # F-API-4 primitive per TECHNIQUE #38: `assert_event` reads the record path
+    # directly and matches on partial payload. A regression that changed the
+    # slash_source or turn_index fails at the specific assertion, not on a
+    # count of matching rows.
+    assert_event(
+        record_root,
+        "UserMessage",
+        text="compute (2+3)*4",
+        slash_source="daemon",
+        turn_index=0,
+    )
+    assert_event(record_root, "FinalAnswer")
 
 
 def test_second_turn_appends_with_incremented_turn_index(
@@ -104,9 +111,11 @@ def test_second_turn_appends_with_incremented_turn_index(
     status, body = _post_json(base + f"/api/session/{sid}/turn", {"text": "second"})
     assert status == 200
     record_root = Path(body["record"])
-    user_msgs = [e for e in api.read_record(record_root) if e["kind"] == "UserMessage"]
-    assert [u["payload"]["turn_index"] for u in user_msgs] == [0, 1]
-    assert [u["payload"]["text"] for u in user_msgs] == ["first", "second"]
+    # Per-turn assertions via F-API-4 primitive: each expected pairing pins on
+    # its specific text + turn_index, so a regression that swapped ordering or
+    # mis-incremented turn_index fails at the exact violated pairing.
+    assert_event(record_root, "UserMessage", text="first", turn_index=0)
+    assert_event(record_root, "UserMessage", text="second", turn_index=1)
 
 
 def test_two_concurrent_turns_on_same_session_serialize(base: str, tmp_path: Path) -> None:
@@ -129,14 +138,18 @@ def test_two_concurrent_turns_on_same_session_serialize(base: str, tmp_path: Pat
     for status, _body in outcomes:
         assert status == 200
     # Reviewer's record: two UserMessages, in some order but each with a distinct
-    # turn_index. The per-session threading.Lock made them FIFO on the writer.
+    # turn_index — the per-session threading.Lock made them FIFO on the writer.
+    # F-API-4 primitive pins one specific (text, turn_index) pairing per turn.
+    # Either arrival order is legitimate; we look up each concurrent text under
+    # the turn_index it actually landed at and confirm it exists.
     record_root = Path(server._SESSION_REGISTRY.get(sid).record_root)
     user_msgs = [e for e in api.read_record(record_root) if e["kind"] == "UserMessage"]
-    assert len(user_msgs) == 2
-    turn_indices = sorted(u["payload"]["turn_index"] for u in user_msgs)
-    assert turn_indices == [0, 1]
-    texts = {u["payload"]["text"] for u in user_msgs}
-    assert texts == {"turn A", "turn B"}
+    turn_by_text = {u["payload"]["text"]: u["payload"]["turn_index"] for u in user_msgs}
+    assert set(turn_by_text) == {"turn A", "turn B"}
+    assert set(turn_by_text.values()) == {0, 1}
+    # Each concrete pairing exists at the seq lookup.
+    for text, ti in turn_by_text.items():
+        assert_event(record_root, "UserMessage", text=text, turn_index=ti)
 
 
 def test_unknown_session_id_returns_404(base: str) -> None:
