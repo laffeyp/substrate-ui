@@ -703,6 +703,70 @@ class Handler(BaseHTTPRequestHandler):
             }
         )
 
+    def _session_list(self) -> None:
+        """Sprint 214b: GET /api/session. Returns `{"live": [...], "parked": [...],
+        "ended": [...], "interrupted": [...]}` — every manifest bucketed by status.
+        The daemon's boot scan already reclassified each manifest against the
+        record's own tail (sprint 211 + review finding 5 fold); this handler just
+        reads the in-memory catalog.
+        """
+        if _SESSION_REGISTRY is None:
+            self._error(503, "session registry not initialized (boot ordering)")
+            return
+        buckets: dict[str, list[dict[str, Any]]] = {
+            "live": [],
+            "parked": [],
+            "ended": [],
+            "interrupted": [],
+        }
+        for manifest in _SESSION_REGISTRY.list_all():
+            payload = {
+                "session_id": manifest.session_id,
+                "name": manifest.name,
+                "driver": manifest.driver,
+                "workspace": manifest.workspace,
+                "workspace_shape": manifest.workspace_shape,
+                "record": manifest.record_root,
+                "created_at": manifest.created_at,
+                "bundle": manifest.bundle,
+            }
+            key = "live" if manifest.status == "running" else manifest.status
+            if key in buckets:
+                buckets[key].append(payload)
+        self._json(buckets)
+
+    def _session_by_name(self, name: str) -> None:
+        """Sprint 214b: GET /api/session/by-name/<name>. Returns `{"session_id":
+        "..."}` or 404 with `{"error": "unknown name"}`. Names are case-sensitive.
+        """
+        if _SESSION_REGISTRY is None:
+            self._error(503, "session registry not initialized (boot ordering)")
+            return
+        session_id = _SESSION_REGISTRY.by_name(name)
+        if session_id is None:
+            self._error(404, f"unknown session name: {name!r}")
+            return
+        self._json({"session_id": session_id, "name": name})
+
+    def _session_delete(self, session_id: str) -> None:
+        """Sprint 214b: DELETE /api/session/<id>. Removes the manifest + by-name
+        entry + per-session lock. **The record directory stays** — SDD hard rule
+        12 says the audit trail is the work, and the record is the durable
+        evidence of what the session did. Returns 204 on success; 404 on unknown
+        session_id. A subsequent POST /turn on that id returns 404 (the manifest
+        is gone) — piece B's contract for a deleted session.
+        """
+        if _SESSION_REGISTRY is None:
+            self._error(503, "session registry not initialized (boot ordering)")
+            return
+        try:
+            _SESSION_REGISTRY.delete(session_id)
+        except KeyError:
+            self._error(404, f"unknown session_id {session_id!r}")
+            return
+        self.send_response(204)
+        self.end_headers()
+
     def _launch(self, q: dict[str, list[str]]) -> None:
         """Launch a bundled topology to a fresh record. The launch IS the recorded control action —
         the run opens with substrate.RunStarted at seq 0 (§7.7: control is a thin layer, and every
@@ -1001,9 +1065,32 @@ class Handler(BaseHTTPRequestHandler):
                 )
         self._json(out)
 
+    def do_DELETE(self) -> None:  # noqa: N802 — sprint 214b: DELETE /api/session/<id>
+        path = unquote(urlparse(self.path).path)
+        if not self._origin_ok():
+            self._error(403, "cross-origin request rejected (Origin does not match Host)")
+            return
+        try:
+            if path.startswith("/api/session/"):
+                session_id = path[len("/api/session/") :]
+                self._session_delete(session_id)
+                return
+            self._error(404, f"no delete endpoint {path!r}")
+        except Exception as exc:  # noqa: BLE001
+            self._error(500, f"{type(exc).__name__}: {exc}")
+
     def do_GET(self) -> None:  # noqa: N802
         path = unquote(urlparse(self.path).path)
         try:
+            # Sprint 214b: session list + by-name lookup routed BEFORE the generic
+            # /api/records paths so `/api/session/by-name/<name>` does not fall
+            # through to `_static`.
+            if path == "/api/session":
+                self._session_list()
+                return
+            if path.startswith("/api/session/by-name/"):
+                self._session_by_name(unquote(path[len("/api/session/by-name/") :]))
+                return
             if path == "/api/records":
                 self._json(_records_index())
                 return

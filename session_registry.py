@@ -380,6 +380,36 @@ class SessionRegistry:
         self._manifests[session_id] = updated
         return updated
 
+    def delete(self, session_id: str) -> SessionManifest:
+        """Remove a session from the registry: manifest file, by-name entry, per-
+        session lock. **The record directory stays** — SDD hard rule 12 says the
+        audit trail is the work, and the record is the durable evidence of what
+        the session did. A user who wants the record dir gone deletes it by hand
+        under `~/.substrate/sessions/<session_id>/record/`. Returns the manifest
+        that was removed; raises `KeyError` on unknown session_id.
+        """
+        manifest = self._manifests.get(session_id)
+        if manifest is None:
+            raise KeyError(f"unknown session_id {session_id!r}")
+        # Remove the by-name entry under the flock so a concurrent `set_name` or
+        # `create` sees the removal atomically.
+        if manifest.name is not None:
+            with _flocked(self._base / _BY_NAME_FILENAME) as index:
+                if index.get(manifest.name) == session_id:
+                    del index[manifest.name]
+                self._by_name = dict(index)
+        # Remove the manifest file. Leave the record dir alone.
+        manifest_path = self._base / session_id / _MANIFEST_FILENAME
+        try:
+            manifest_path.unlink()
+        except FileNotFoundError:
+            pass  # already gone; idempotent
+        # Drop the in-memory catalog + lock. Any subsequent `turn_sync` will
+        # raise KeyError; the daemon's DELETE handler shapes the 404 for that.
+        self._manifests.pop(session_id, None)
+        self._turn_threading_locks.pop(session_id, None)
+        return manifest
+
     # ── private ────────────────────────────────────────────────────────────
 
     def _read_by_name_index(self) -> dict[str, str]:
