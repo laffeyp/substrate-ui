@@ -767,6 +767,62 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(204)
         self.end_headers()
 
+    def _session_events(self, session_id: str, since_seq: int) -> None:
+        """Sprint 214c: GET /api/session/<id>/events?since_seq=N. Server-Sent
+        Events stream of the session's record. Each envelope arrives as
+        `data: <json>\\n\\n`. The stream stays open across turn pauses — the
+        session record keeps growing as `Runtime.resume` fires — and closes
+        when `substrate.RunFinalised` lands OR the client disconnects.
+
+        Filtering by `since_seq` lets a reconnecting client resume from a known
+        cursor without re-reading the whole record. Default `since_seq=-1`
+        means "from the start."
+
+        Runs in the thread the ThreadingHTTPServer dispatched for this GET;
+        blocking `api.attach(record_root).read_new()` polls the record filesystem
+        directly. Broken pipe (`OSError` on `self.wfile.write`) terminates the
+        loop cleanly — the SSE contract lets either side hang up.
+        """
+        if _SESSION_REGISTRY is None:
+            self._error(503, "session registry not initialized (boot ordering)")
+            return
+        manifest = _SESSION_REGISTRY.get(session_id)
+        if manifest is None:
+            self._error(404, f"unknown session_id {session_id!r}")
+            return
+        record_root = Path(manifest.record_root)
+        # SSE headers per the WHATWG spec: text/event-stream, no cache, keep-alive.
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("X-Accel-Buffering", "no")  # nginx/proxy hint if fronted
+        self.end_headers()
+        try:
+            follower = api.attach(record_root)
+            # Emit backlog first (frames already on the record past since_seq),
+            # then poll for new growth. The follower keeps its own segment
+            # cursors so we never re-emit frames as we cross segment rolls.
+            finalised = False
+            while not finalised:
+                for env in follower.read_new():
+                    seq = int(env.get("seq", -1))
+                    if seq <= since_seq:
+                        continue
+                    frame = ("data: " + msgspec.json.encode(env).decode() + "\n\n").encode()
+                    self.wfile.write(frame)
+                    self.wfile.flush()
+                    if env.get("kind") == "substrate.RunFinalised":
+                        finalised = True
+                        break
+                if finalised:
+                    break
+                # Poll cadence: match LiveRecord's own 500ms default rather than
+                # busy-waiting. A finalised or ended session breaks the loop above.
+                time.sleep(0.2)
+        except (BrokenPipeError, ConnectionResetError, OSError):
+            # Client hung up mid-stream. Every SSE server has to tolerate this.
+            return
+
     def _launch(self, q: dict[str, list[str]]) -> None:
         """Launch a bundled topology to a fresh record. The launch IS the recorded control action —
         the run opens with substrate.RunStarted at seq 0 (§7.7: control is a thin layer, and every
@@ -1090,6 +1146,13 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if path.startswith("/api/session/by-name/"):
                 self._session_by_name(unquote(path[len("/api/session/by-name/") :]))
+                return
+            if path.startswith("/api/session/") and path.endswith("/events"):
+                session_id = path[len("/api/session/") : -len("/events")]
+                since_seq = int(
+                    parse_qs(urlparse(self.path).query).get("since_seq", ["-1"])[0]
+                )
+                self._session_events(session_id, since_seq)
                 return
             if path == "/api/records":
                 self._json(_records_index())
