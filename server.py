@@ -1230,6 +1230,101 @@ class Handler(BaseHTTPRequestHandler):
                 )
         self._json(out)
 
+    def _session_patch(self, session_id: str) -> None:
+        """Sprint 215c: PATCH /api/session/<id>. Body:
+            {"driver"?: "kimi-k2.6:cloud", "name"?: "renamed"}
+        Every absent key leaves that field alone. Returns the updated
+        manifest shape.
+
+        `tools` and `per_turn` are NOT PATCH-able yet — both need
+        `SessionManifest` schema growth. A body carrying them returns 400
+        naming which fields are deferred; this keeps the failure explicit
+        rather than silently ignoring the ask.
+        """
+        if _SESSION_REGISTRY is None:
+            self._error(503, "session registry not initialized (boot ordering)")
+            return
+        manifest = _SESSION_REGISTRY.get(session_id)
+        if manifest is None:
+            self._error(404, f"unknown session_id {session_id!r}")
+            return
+        try:
+            body = self._read_json_body()
+        except ValueError as exc:
+            self._error(400, str(exc))
+            return
+        _PATCHABLE = {"driver", "name"}
+        _NOT_YET = {"tools", "per_turn", "workspace", "workspace_shape", "bundle", "seed"}
+        keys = set(body.keys())
+        deferred = keys & _NOT_YET
+        if deferred:
+            self._error(
+                400,
+                f"fields {sorted(deferred)} are not PATCH-able yet; "
+                "SessionManifest schema growth needed (piece-B follow-up)",
+            )
+            return
+        unknown = keys - _PATCHABLE - _NOT_YET
+        if unknown:
+            self._error(400, f"unknown PATCH fields: {sorted(unknown)}")
+            return
+        if not (keys & _PATCHABLE):
+            self._error(400, "PATCH body has no mutable fields")
+            return
+        updated = manifest
+        if "driver" in body:
+            driver = body["driver"]
+            if not isinstance(driver, str) or not driver:
+                self._error(400, "driver must be a non-empty string")
+                return
+            updated = _SESSION_REGISTRY.set_driver(session_id, driver)
+        if "name" in body:
+            new_name = body["name"]
+            if not isinstance(new_name, str) or not new_name:
+                self._error(400, "name must be a non-empty string")
+                return
+            try:
+                updated = _SESSION_REGISTRY.set_name(session_id, new_name)
+            except Exception as exc:
+                if type(exc).__name__ == "NameCollision":
+                    self._json(
+                        {
+                            "error": "name already taken",
+                            "existing_session_id": getattr(exc, "existing_session_id", None),
+                        },
+                        409,
+                    )
+                    return
+                raise
+        self._json(
+            {
+                "session_id": updated.session_id,
+                "name": updated.name,
+                "driver": updated.driver,
+                "workspace": updated.workspace,
+                "workspace_shape": updated.workspace_shape,
+                "record": updated.record_root,
+                "status": updated.status,
+            }
+        )
+
+    def do_PATCH(self) -> None:  # noqa: N802 — sprint 215c: PATCH /api/session/<id>
+        path = unquote(urlparse(self.path).path)
+        if not self._origin_ok():
+            self._error(403, "cross-origin request rejected (Origin does not match Host)")
+            return
+        try:
+            if path.startswith("/api/session/"):
+                session_id = path[len("/api/session/") :]
+                if not session_id or "/" in session_id:
+                    self._error(404, f"no patch endpoint {path!r}")
+                    return
+                self._session_patch(session_id)
+                return
+            self._error(404, f"no patch endpoint {path!r}")
+        except Exception as exc:  # noqa: BLE001
+            self._error(500, f"{type(exc).__name__}: {exc}")
+
     def do_DELETE(self) -> None:  # noqa: N802 — sprint 214b: DELETE /api/session/<id>
         path = unquote(urlparse(self.path).path)
         if not self._origin_ok():
