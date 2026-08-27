@@ -5,8 +5,12 @@ daily-driver's identity: `substrate chat --name reviewer` opens a persistent
 record under `~/.substrate/sessions/<session_id>/`, and every later resume
 finds it by the same name. The registry:
 
-  - **In-memory** name → session_id + per-session `asyncio.Lock` map + the
-    manifest for every session on disk.
+  - **In-memory** name → session_id + per-session `threading.Lock` map + the
+    manifest for every session on disk. (The earlier draft carried an
+    `asyncio.Lock` map alongside the threading one; piece-C review finding 3
+    collapsed the two — every caller of `turn_sync`, delegate wire and daemon
+    POST /turn handler alike, dispatches on a thread, so one primitive covers
+    the invariant.)
   - **Persistent** name index at `~/.substrate/sessions/by-name.json`. Atomic
     writes under `fcntl.flock` on the file itself so a second creator with a
     colliding name gets a 409 shape, never a corrupted index.
@@ -130,8 +134,13 @@ class SessionRegistry:
     Owns three pieces of state:
       - `_by_name`: dict[str, str] mirroring `~/.substrate/sessions/by-name.json`.
       - `_manifests`: dict[str, SessionManifest] keyed by session_id.
-      - `_locks`: dict[str, asyncio.Lock] — one lock per session for turn
-        serialization (per product spec §6 "one turn at a time per session_id").
+      - `_turn_threading_locks`: dict[str, threading.Lock] — one lock per
+        session for turn serialization (per product spec §6 "one turn at a
+        time per session_id"). Every caller of `turn_sync` — delegate seam
+        (tool_loop worker thread) and daemon POST /turn handler
+        (ThreadingHTTPServer worker thread) — takes the same lock. The
+        earlier `_locks: dict[str, asyncio.Lock]` map is gone (piece-C
+        review finding 3).
 
     Not thread-safe in the general sense; the daemon runs one event loop, and
     the process-level lock lives at `~/.substrate/daemon.pid`. `fcntl.flock`
@@ -387,27 +396,47 @@ class SessionRegistry:
         the session did. A user who wants the record dir gone deletes it by hand
         under `~/.substrate/sessions/<session_id>/record/`. Returns the manifest
         that was removed; raises `KeyError` on unknown session_id.
+
+        Piece-B review finding 4: a delete during an in-flight `turn_sync`
+        used to race — the turn's tail `update_status` call would find the
+        manifest already gone and raise `KeyError` from inside the running
+        turn, surfacing to the caller as a generic 500. The fix is to hold
+        the per-session `threading.Lock` for the delete, so an in-flight
+        turn completes cleanly first (up to 600 s per `turn_sync`'s
+        timeout). Subsequent turn_sync callers waiting on the same lock
+        find the manifest gone under the lock and get `SessionEndedMidTurn`
+        by the existing under-lock re-check — the shape the caller already
+        handles.
         """
         manifest = self._manifests.get(session_id)
         if manifest is None:
             raise KeyError(f"unknown session_id {session_id!r}")
-        # Remove the by-name entry under the flock so a concurrent `set_name` or
-        # `create` sees the removal atomically.
-        if manifest.name is not None:
-            with _flocked(self._base / _BY_NAME_FILENAME) as index:
-                if index.get(manifest.name) == session_id:
-                    del index[manifest.name]
-                self._by_name = dict(index)
-        # Remove the manifest file. Leave the record dir alone.
-        manifest_path = self._base / session_id / _MANIFEST_FILENAME
-        try:
-            manifest_path.unlink()
-        except FileNotFoundError:
-            pass  # already gone; idempotent
-        # Drop the in-memory catalog + lock. Any subsequent `turn_sync` will
-        # raise KeyError; the daemon's DELETE handler shapes the 404 for that.
-        self._manifests.pop(session_id, None)
-        self._turn_threading_locks.pop(session_id, None)
+        threading_lock = self._turn_threading_locks.setdefault(session_id, threading.Lock())
+        with threading_lock:
+            # Re-check under the lock: a concurrent second delete may have
+            # already removed the manifest by the time we acquire.
+            manifest = self._manifests.get(session_id)
+            if manifest is None:
+                raise KeyError(f"unknown session_id {session_id!r}")
+            # Remove the by-name entry under the flock so a concurrent
+            # `set_name` or `create` sees the removal atomically.
+            if manifest.name is not None:
+                with _flocked(self._base / _BY_NAME_FILENAME) as index:
+                    if index.get(manifest.name) == session_id:
+                        del index[manifest.name]
+                    self._by_name = dict(index)
+            # Remove the manifest file. Leave the record dir alone.
+            manifest_path = self._base / session_id / _MANIFEST_FILENAME
+            try:
+                manifest_path.unlink()
+            except FileNotFoundError:
+                pass  # already gone; idempotent
+            # Drop the in-memory catalog + lock. A turn_sync caller still
+            # waiting on the lock finds `_manifests.get(...)` returning None
+            # under the lock and raises SessionEndedMidTurn — the caller's
+            # existing 410 branch handles it.
+            self._manifests.pop(session_id, None)
+            self._turn_threading_locks.pop(session_id, None)
         return manifest
 
     # ── private ────────────────────────────────────────────────────────────

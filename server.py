@@ -596,7 +596,10 @@ class Handler(BaseHTTPRequestHandler):
         name = body.get("name")
         workspace = str(body.get("workspace") or str(_SESSIONS_BASE / "default"))
         workspace_shape = str(body.get("workspace_shape") or "flat")
-        seed = str(body.get("seed") or "")
+        # Piece-B review finding 6: TECH-SPEC §4 names this field `seed_text`;
+        # the earlier draft read `seed` only, so a client following the spec
+        # silently sent nothing. Both names accepted; the spec wins on writes.
+        seed = str(body.get("seed_text") or body.get("seed") or "")
         bundle = body.get("bundle")
         session_id = f"s_{uuid.uuid4().hex[:24]}"
         try:
@@ -654,6 +657,19 @@ class Handler(BaseHTTPRequestHandler):
         if not text:
             self._error(400, "POST /api/session/<id>/turn requires body {'text': '...'}")
             return
+        # Piece-B review finding 7: TECH-SPEC §4 names `seq` in the response
+        # as the record's tail cursor at turn start. Read before the turn fires
+        # so a client that lost the previous response can resume from a known
+        # boundary. The value is the caller's view; two concurrent callers may
+        # see the same seq — that is fine, the lock serializes what follows.
+        record_root_pre = Path(manifest.record_root)
+        seq_at_start = -1
+        if record_root_pre.exists():
+            try:
+                for env in api.read_record(record_root_pre):
+                    seq_at_start = max(seq_at_start, int(env.get("seq", -1)))
+            except Exception:  # noqa: BLE001 — mid-write; a pre-turn snapshot may skew
+                seq_at_start = -1
         # Sprint 214a: compute next turn_index INSIDE the per-session lock via
         # `resume_event_builder`, so two concurrent POST /turn calls see two
         # distinct tail states rather than the same pre-lock snapshot.
@@ -697,6 +713,7 @@ class Handler(BaseHTTPRequestHandler):
             final_seq = max(final_seq, int(env.get("seq", -1)))
         self._json(
             {
+                "seq": seq_at_start,
                 "status": updated_manifest.status,
                 "final_seq": final_seq,
                 "record": str(root_after),
@@ -764,7 +781,11 @@ class Handler(BaseHTTPRequestHandler):
         except KeyError:
             self._error(404, f"unknown session_id {session_id!r}")
             return
+        # Piece-B review finding 16: HTTP 204 must not carry a body; a missing
+        # Content-Length on a keep-alive HTTP/1.1 connection leaves some clients
+        # reading until close and stalling the pipelined session. Explicit zero.
         self.send_response(204)
+        self.send_header("Content-Length", "0")
         self.end_headers()
 
     def _session_events(self, session_id: str, since_seq: int) -> None:
@@ -806,13 +827,24 @@ class Handler(BaseHTTPRequestHandler):
             while not finalised:
                 for env in follower.read_new():
                     seq = int(env.get("seq", -1))
-                    if seq <= since_seq:
+                    # Piece-B review finding 2: check the finalisation kind
+                    # BEFORE the seq filter, else a client reconnecting with
+                    # `since_seq >= runfinalised_seq` sees every envelope
+                    # discarded, `finalised` never flips, and the loop polls
+                    # forever. `LiveRecord.follow(until_finalised=True)` gets
+                    # this ordering right; the manual reimplementation had not.
+                    is_final = env.get("kind") == "substrate.RunFinalised"
+                    if is_final:
+                        finalised = True
+                    if seq <= since_seq and not is_final:
                         continue
-                    frame = ("data: " + msgspec.json.encode(env).decode() + "\n\n").encode()
+                    # Piece-B review finding 15: msgspec.json.encode returns
+                    # bytes; the earlier .decode()+concat+.encode() shape was
+                    # three needless round trips per envelope.
+                    frame = b"data: " + msgspec.json.encode(env) + b"\n\n"
                     self.wfile.write(frame)
                     self.wfile.flush()
-                    if env.get("kind") == "substrate.RunFinalised":
-                        finalised = True
+                    if is_final:
                         break
                 if finalised:
                     break
@@ -1129,6 +1161,14 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if path.startswith("/api/session/"):
                 session_id = path[len("/api/session/") :]
+                # Piece-B review finding 3: reject sub-resource paths like
+                # `/api/session/<id>/turn` — the `<id>` slot is flat, never a
+                # nested path. Without this, a DELETE against a sub-resource
+                # reached `SessionRegistry.delete("<id>/turn")` and returned 404
+                # pretending the mangled id was the session name.
+                if not session_id or "/" in session_id:
+                    self._error(404, f"no delete endpoint {path!r}")
+                    return
                 self._session_delete(session_id)
                 return
             self._error(404, f"no delete endpoint {path!r}")
@@ -1149,9 +1189,15 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if path.startswith("/api/session/") and path.endswith("/events"):
                 session_id = path[len("/api/session/") : -len("/events")]
-                since_seq = int(
-                    parse_qs(urlparse(self.path).query).get("since_seq", ["-1"])[0]
-                )
+                # Piece-B review finding 17: a malformed query parameter is a
+                # 400 (Bad Request), not a 500. `int("abc")` used to raise
+                # ValueError and fall through to do_GET's generic 500 branch.
+                raw_since = parse_qs(urlparse(self.path).query).get("since_seq", ["-1"])[0]
+                try:
+                    since_seq = int(raw_since)
+                except ValueError:
+                    self._error(400, f"since_seq must be an integer, got {raw_since!r}")
+                    return
                 self._session_events(session_id, since_seq)
                 return
             if path == "/api/records":
