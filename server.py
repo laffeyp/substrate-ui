@@ -523,6 +523,10 @@ class Handler(BaseHTTPRequestHandler):
                 session_id = path[len("/api/session/") : -len("/turn")]
                 self._session_turn(session_id)
                 return
+            if path.startswith("/api/session/") and path.endswith("/end"):
+                session_id = path[len("/api/session/") : -len("/end")]
+                self._session_end(session_id)
+                return
             if path == "/api/launch":
                 self._launch(parse_qs(urlparse(self.path).query))
                 return
@@ -708,6 +712,79 @@ class Handler(BaseHTTPRequestHandler):
             self._error(500, f"{type(exc).__name__}: {exc}")
             return
         # Return the record's tail seq so the caller can page /events from there.
+        final_seq = -1
+        for env in api.read_record(root_after):
+            final_seq = max(final_seq, int(env.get("seq", -1)))
+        self._json(
+            {
+                "seq": seq_at_start,
+                "status": updated_manifest.status,
+                "final_seq": final_seq,
+                "record": str(root_after),
+            }
+        )
+
+    def _session_end(self, session_id: str) -> None:
+        """Sprint 215a: POST /api/session/<id>/end. Body optional:
+            {"source": "user_end"?}
+        Injects `SessionEndRequested(session_id, source)` as the resume event
+        via `SessionRegistry.turn_sync`. The session topology's
+        `end-on-user-end` trigger (`session/__init__.py:499-509`) fires on any
+        `SessionEndRequested` and routes through the `session_end` producer to
+        emit `SessionEnded{reason: "user_end", total_turns: N}`;
+        `threshold_count("SessionEnded", 1)` matches; the run finalises;
+        `turn_sync` transitions the manifest to `"ended"`.
+
+        Response: `{seq, status: "ended", final_seq, record}`. 404 on unknown
+        session_id; 410 on a session already ended (the `SessionEndedMidTurn`
+        shape).
+        """
+        if _SESSION_REGISTRY is None:
+            self._error(503, "session registry not initialized (boot ordering)")
+            return
+        manifest = _SESSION_REGISTRY.get(session_id)
+        if manifest is None:
+            self._error(404, f"unknown session_id {session_id!r}")
+            return
+        # Body is optional; a client that wants to name the source can pass
+        # `{"source": "..."}` and the string lands on the SessionEndRequested
+        # payload for the record's audit trail.
+        source = "user_end"
+        try:
+            body = self._read_json_body()
+            if isinstance(body.get("source"), str) and body["source"]:
+                source = str(body["source"])
+        except ValueError as exc:
+            self._error(400, str(exc))
+            return
+
+        from substrate.topologies.session import SessionEndRequested
+
+        # Pre-request tail seq (piece-B review finding 7 shape).
+        record_root_pre = Path(manifest.record_root)
+        seq_at_start = -1
+        if record_root_pre.exists():
+            try:
+                for env in api.read_record(record_root_pre):
+                    seq_at_start = max(seq_at_start, int(env.get("seq", -1)))
+            except Exception:  # noqa: BLE001 — mid-write; snapshot may skew
+                seq_at_start = -1
+
+        resume_event = SessionEndRequested(session_id=session_id, source=source)
+        try:
+            updated_manifest, root_after = _SESSION_REGISTRY.turn_sync(
+                session_id,
+                resume_event=resume_event,
+                timeout_seconds=60.0,
+            )
+        except Exception as exc:
+            if type(exc).__name__ == "SessionEndedMidTurn":
+                self._json(
+                    {"status": "ended", "error": "session_ended_mid_delegate"}, 410
+                )
+                return
+            self._error(500, f"{type(exc).__name__}: {exc}")
+            return
         final_seq = -1
         for env in api.read_record(root_after):
             final_seq = max(final_seq, int(env.get("seq", -1)))
