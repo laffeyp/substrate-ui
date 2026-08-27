@@ -32,6 +32,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import server  # noqa: E402
 from session_registry import SessionRegistry  # noqa: E402
 
+from substrate import api  # noqa: E402
+
 
 @pytest.fixture
 def base(tmp_path: Path) -> str:
@@ -95,24 +97,29 @@ def test_delete_leaves_the_record_directory_intact(base: str, tmp_path: Path) ->
     """SDD hard rule 12: the audit trail is the work. A deleted session removes
     the manifest hint but keeps the record — every envelope the session wrote
     stays on disk for later inspection.
+
+    Piece-B review finding 8: the earlier shape guarded on `events-000001.jsonl`
+    which never exists on a real record (segments are named `events-NNNNNN.open`
+    while hot, `.sealed` after seal); the guard was silently false and the
+    content-preservation check never ran. `api.read_record` is the canonical
+    reader shape and matches whatever segments the record carries.
     """
     sid = _create(base, tmp_path / "wsp", name="audited")
     # Fire one turn so the record has real envelopes.
     _post_json(base + f"/api/session/{sid}/turn", {"text": "hi"})
     record_root = tmp_path / sid / "record"
     assert record_root.exists()
-    envs_before = list((record_root / "events-000001.jsonl").read_bytes()) if (
-        record_root / "events-000001.jsonl"
-    ).exists() else None
+    envs_before = list(api.read_record(record_root))
+    assert envs_before, "expected the turn to have written at least one envelope"
 
     _status, _ = _delete(base + f"/api/session/{sid}")
 
-    # Manifest gone; record dir untouched.
+    # Manifest gone; record dir untouched; every envelope still readable and
+    # byte-identical to the pre-delete read (seq + kind + payload preserved).
     assert not (tmp_path / sid / "manifest.json").exists()
     assert record_root.exists()
-    if envs_before is not None:
-        envs_after = list((record_root / "events-000001.jsonl").read_bytes())
-        assert envs_before == envs_after
+    envs_after = list(api.read_record(record_root))
+    assert envs_after == envs_before
 
 
 def test_delete_on_unknown_session_returns_404(base: str) -> None:
