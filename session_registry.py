@@ -284,6 +284,32 @@ class SessionRegistry:
         self._manifests[session_id] = updated
         return updated
 
+    def set_driver(self, session_id: str, driver: str) -> SessionManifest:
+        """Change the driver for a session. In-memory catalog and manifest.json
+        both update atomically. The next `Runtime.resume` builds
+        `session_topology` with the new driver — mid-turn swaps are not
+        attempted (the in-flight turn, if any, completes on its prior
+        driver; the next turn resolves the new driver via
+        `_daemon_driver_resolver`).
+
+        Sprint 215c: driver STRING validation is deferred to
+        `_daemon_driver_resolver` at next-turn build time. A caller passing
+        a string that resolves to `OllamaResponder(model=<bad tag>)` sees
+        the failure on the next /turn, not at PATCH time. The daemon-side
+        Ollama-tag round-trip is a piece-B follow-up if needed.
+
+        Raises `KeyError` on unknown session_id.
+        """
+        if session_id not in self._manifests:
+            raise KeyError(f"unknown session_id {session_id!r}")
+        manifest = self._manifests[session_id]
+        updated = _replace(manifest, driver=driver)
+        _atomic_write_json(
+            self._base / session_id / _MANIFEST_FILENAME, _manifest_to_dict(updated)
+        )
+        self._manifests[session_id] = updated
+        return updated
+
     # ── lookups ────────────────────────────────────────────────────────────
 
     def by_name(self, name: str) -> str | None:
