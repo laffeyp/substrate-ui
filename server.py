@@ -24,7 +24,9 @@ from __future__ import annotations
 import asyncio
 import os
 import re
+import signal
 import subprocess
+import sys
 import threading
 import time
 import traceback
@@ -52,6 +54,10 @@ from substrate.reference import CliResponder, DeterministicResponder, OllamaResp
 # to a Responder and rebuilds the session_topology per turn.
 _SESSION_REGISTRY: Any = None
 
+# Sprint 215d: SIGTERM guard so a second signal during shutdown is a no-op
+# instead of re-entering `_shutdown_all_sessions` on a half-torn catalog.
+_SHUTDOWN_STARTED = threading.Event()
+
 
 def _daemon_driver_resolver(name: str) -> Any:
     """Daemon-side resolver: `deterministic` → seeded stub; `claude` / `gemini` →
@@ -66,6 +72,45 @@ def _daemon_driver_resolver(name: str) -> Any:
     if name == "gemini":
         return CliResponder(["gemini", "-p"], name="gemini")
     return OllamaResponder(model=name, timeout=300.0)
+
+
+def _shutdown_all_sessions(*, per_session_timeout: float = 10.0) -> dict[str, int]:
+    """Sprint 215d: end every running/parked session cleanly on daemon
+    shutdown. For each manifest whose status is not `ended` or
+    `interrupted`, inject `SessionEndRequested(session_id, source=
+    "daemon_shutdown")` via `SessionRegistry.turn_sync`. The session
+    topology's `end-on-user-end` trigger reads the source and yields
+    `SessionEnded{reason: "daemon_shutdown"}`; `RunFinalised` follows;
+    `turn_sync` transitions the manifest to `"ended"`.
+
+    Sequential — waits up to `per_session_timeout` seconds per session,
+    matching the parent card's "wait up to 10s per session for graceful
+    pause, then exit" wording. Best-effort per session: an exception on
+    one session does not stop the loop. Returns `{"ended": N, "skipped":
+    M, "failed": K}` for the SIGTERM handler's exit log.
+    """
+    result = {"ended": 0, "skipped": 0, "failed": 0}
+    if _SESSION_REGISTRY is None:
+        return result
+    from substrate.topologies.session import SessionEndRequested
+
+    for manifest in list(_SESSION_REGISTRY.list_all()):
+        if manifest.status in ("ended", "interrupted"):
+            result["skipped"] += 1
+            continue
+        try:
+            _SESSION_REGISTRY.turn_sync(
+                manifest.session_id,
+                resume_event=SessionEndRequested(
+                    session_id=manifest.session_id, source="daemon_shutdown"
+                ),
+                timeout_seconds=per_session_timeout,
+            )
+            result["ended"] += 1
+        except Exception as exc:  # noqa: BLE001 — best-effort; log and move on
+            traceback.print_exception(exc)
+            result["failed"] += 1
+    return result
 
 
 def _build_session_topology_from_manifest(manifest: Any) -> Any:
@@ -1537,6 +1582,23 @@ def main() -> None:
             summary += f" ... (+{len(skipped) - 5} more)"
     print(summary)
     srv = ThreadingHTTPServer((HOST, PORT), Handler)
+
+    def _sigterm_handler(_signum: int, _frame: Any) -> None:
+        # Sprint 215d: a second SIGTERM during shutdown is a no-op.
+        if _SHUTDOWN_STARTED.is_set():
+            return
+        _SHUTDOWN_STARTED.set()
+        print("SIGTERM received; ending sessions cleanly...", flush=True)
+        outcome = _shutdown_all_sessions(per_session_timeout=10.0)
+        print(
+            f"shutdown: ended={outcome['ended']} skipped={outcome['skipped']} "
+            f"failed={outcome['failed']}",
+            flush=True,
+        )
+        srv.shutdown()
+        sys.exit(0)
+
+    signal.signal(signal.SIGTERM, _sigterm_handler)
     try:
         srv.serve_forever()
     except KeyboardInterrupt:
