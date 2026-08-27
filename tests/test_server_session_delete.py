@@ -129,12 +129,17 @@ def test_delete_on_unknown_session_returns_404(base: str) -> None:
     assert "unknown session_id" in payload["error"]
 
 
-def test_post_turn_on_deleted_session_returns_404(base: str, tmp_path: Path) -> None:
+def test_post_turn_on_deleted_session_returns_410(base: str, tmp_path: Path) -> None:
+    """Sprint 216 tightened this from 404 to 410: DELETE preserves the
+    record dir per SDD rule 12, so the was-live-and-is-now-gone shape
+    is 410 Gone, not 404 Not Found. A never-existed session id (no
+    record dir) still returns 404.
+    """
     sid = _create(base, tmp_path / "wsp")
     _delete(base + f"/api/session/{sid}")
     status, body = _post_json(base + f"/api/session/{sid}/turn", {"text": "hi"})
-    assert status == 404
-    assert "unknown session_id" in body["error"]
+    assert status == 410
+    assert body["error"] == "session_ended_mid_delegate"
 
 
 def test_deleted_name_can_be_reused_by_a_new_session(base: str, tmp_path: Path) -> None:

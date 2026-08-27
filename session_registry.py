@@ -153,10 +153,19 @@ class SessionRegistry:
         base: Path | None = None,
         *,
         session_topology_factory: SessionTopologyFactory | None = None,
+        turn_queue_cap: int = 4,
     ) -> None:
         self._base = Path(base) if base is not None else _SESSIONS_BASE_DEFAULT
         self._by_name: dict[str, str] = {}
         self._manifests: dict[str, SessionManifest] = {}
+        # Sprint 216: per-session queued-turn counter for the /turn queue cap.
+        # `try_enqueue_turn` increments under `_queue_depth_lock`; `dequeue_turn`
+        # decrements after the handler finishes. Depth includes the currently
+        # running turn plus every caller waiting on the per-session
+        # threading.Lock — a fifth caller against `cap=4` is refused.
+        self._turn_queue_cap = int(turn_queue_cap)
+        self._queue_depths: dict[str, int] = {}
+        self._queue_depth_lock = threading.Lock()
         # Per-session `threading.Lock` map. Every caller of turn_sync — the delegate
         # seam (sprint 213b, tool_loop worker thread) AND the daemon's POST
         # /api/session/<id>/turn handler (sprint 214a, ThreadingHTTPServer worker
@@ -401,6 +410,43 @@ class SessionRegistry:
             new_status: SessionStatus = "ended" if status_str == "finalised" else "parked"
             updated = self.update_status(session_id, new_status)
             return updated, record_root
+
+    # ── queue cap ──────────────────────────────────────────────────────────
+
+    def try_enqueue_turn(self, session_id: str) -> tuple[bool, int]:
+        """Increment the session's queued-turn depth if it is below the cap.
+        Returns `(admitted, depth)`. If `admitted` is False, `depth` equals
+        the cap (the caller's would-be position). The caller MUST pair a
+        successful admission with `dequeue_turn(session_id)` in a `finally`
+        block, or the counter leaks.
+        """
+        with self._queue_depth_lock:
+            depth = self._queue_depths.get(session_id, 0)
+            if depth >= self._turn_queue_cap:
+                return False, self._turn_queue_cap
+            self._queue_depths[session_id] = depth + 1
+            return True, depth + 1
+
+    def dequeue_turn(self, session_id: str) -> None:
+        with self._queue_depth_lock:
+            new_depth = self._queue_depths.get(session_id, 0) - 1
+            if new_depth > 0:
+                self._queue_depths[session_id] = new_depth
+            else:
+                self._queue_depths.pop(session_id, None)
+
+    def turn_queue_cap(self) -> int:
+        return self._turn_queue_cap
+
+    def has_session_dir(self, session_id: str) -> bool:
+        """True iff `<base>/<sid>/` exists on disk. Used to tell a
+        deleted-but-once-alive session (session dir present, manifest
+        gone — return 410) from a never-existed one (no dir — return
+        404). A never-run session's session_dir carries manifest.json
+        but no record/ subdir; after DELETE the manifest.json is
+        unlinked but the session_dir stays.
+        """
+        return (self._base / session_id).exists()
 
     # ── status transitions ────────────────────────────────────────────────
 

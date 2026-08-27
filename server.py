@@ -74,6 +74,30 @@ def _daemon_driver_resolver(name: str) -> Any:
     return OllamaResponder(model=name, timeout=300.0)
 
 
+def _load_daemon_config(config_path: Path | None = None) -> dict[str, Any]:
+    """Sprint 216: read `~/.substrate/config.toml` for daemon knobs. Returns
+    `{"turn_queue_cap": int}` with defaults filled. Missing file or missing
+    keys use defaults; a malformed file logs a warning and uses defaults.
+    """
+    import tomllib
+
+    path = config_path if config_path is not None else Path.home() / ".substrate" / "config.toml"
+    defaults: dict[str, Any] = {"turn_queue_cap": 4}
+    if not path.exists():
+        return defaults
+    try:
+        with path.open("rb") as fp:
+            data = tomllib.load(fp)
+    except (OSError, tomllib.TOMLDecodeError) as exc:
+        print(f"daemon config at {path}: {type(exc).__name__}: {exc}; using defaults", flush=True)
+        return defaults
+    session_section = data.get("session") if isinstance(data.get("session"), dict) else {}
+    cap = session_section.get("turn_queue_cap", defaults["turn_queue_cap"])
+    if isinstance(cap, int) and cap >= 1:
+        defaults["turn_queue_cap"] = cap
+    return defaults
+
+
 def _shutdown_all_sessions(*, per_session_timeout: float = 10.0) -> dict[str, int]:
     """Sprint 215d: end every running/parked session cleanly on daemon
     shutdown. For each manifest whose status is not `ended` or
@@ -693,9 +717,26 @@ class Handler(BaseHTTPRequestHandler):
         if _SESSION_REGISTRY is None:
             self._error(503, "session registry not initialized (boot ordering)")
             return
+        # Sprint 216: 410 for a session that was live and is now gone. A
+        # deleted session's record directory stays (SDD rule 12); its
+        # manifest is popped. A caller that resolved the session name
+        # earlier and hits /turn after the DELETE gets 410, not 404. A
+        # never-existed session still returns 404.
         manifest = _SESSION_REGISTRY.get(session_id)
         if manifest is None:
+            if _SESSION_REGISTRY.has_session_dir(session_id):
+                self._json(
+                    {"ok": False, "status": "ended", "error": "session_ended_mid_delegate"},
+                    410,
+                )
+                return
             self._error(404, f"unknown session_id {session_id!r}")
+            return
+        if manifest.status == "ended":
+            self._json(
+                {"ok": False, "status": "ended", "error": "session_ended_mid_delegate"},
+                410,
+            )
             return
         try:
             body = self._read_json_body()
@@ -705,6 +746,23 @@ class Handler(BaseHTTPRequestHandler):
         text = str(body.get("text") or "")
         if not text:
             self._error(400, "POST /api/session/<id>/turn requires body {'text': '...'}")
+            return
+        # Sprint 216: per-session queue cap. Increment the counter under the
+        # registry's fast lock; refuse the (cap+1)th caller with 429
+        # immediately (no block). Every admission MUST pair with
+        # dequeue_turn in a `finally`, or the counter leaks.
+        admitted, position = _SESSION_REGISTRY.try_enqueue_turn(session_id)
+        if not admitted:
+            cap = _SESSION_REGISTRY.turn_queue_cap()
+            self._json(
+                {
+                    "ok": False,
+                    "error": "session queue full",
+                    "queue_position": position,
+                    "queue_cap": cap,
+                },
+                429,
+            )
             return
         # Piece-B review finding 7: TECH-SPEC §4 names `seq` in the response
         # as the record's tail cursor at turn start. Read before the turn fires
@@ -743,31 +801,35 @@ class Handler(BaseHTTPRequestHandler):
             )
 
         try:
-            updated_manifest, root_after = _SESSION_REGISTRY.turn_sync(
-                session_id,
-                resume_event_builder=_build,
-                timeout_seconds=600.0,
-            )
-        except Exception as exc:
-            if type(exc).__name__ == "SessionEndedMidTurn":
-                self._json(
-                    {"status": "ended", "error": "session_ended_mid_delegate"}, 410
+            try:
+                updated_manifest, root_after = _SESSION_REGISTRY.turn_sync(
+                    session_id,
+                    resume_event_builder=_build,
+                    timeout_seconds=600.0,
                 )
+            except Exception as exc:
+                if type(exc).__name__ == "SessionEndedMidTurn":
+                    self._json(
+                        {"ok": False, "status": "ended", "error": "session_ended_mid_delegate"},
+                        410,
+                    )
+                    return
+                self._error(500, f"{type(exc).__name__}: {exc}")
                 return
-            self._error(500, f"{type(exc).__name__}: {exc}")
-            return
-        # Return the record's tail seq so the caller can page /events from there.
-        final_seq = -1
-        for env in api.read_record(root_after):
-            final_seq = max(final_seq, int(env.get("seq", -1)))
-        self._json(
-            {
-                "seq": seq_at_start,
-                "status": updated_manifest.status,
-                "final_seq": final_seq,
-                "record": str(root_after),
-            }
-        )
+            # Return the record's tail seq so the caller can page /events from there.
+            final_seq = -1
+            for env in api.read_record(root_after):
+                final_seq = max(final_seq, int(env.get("seq", -1)))
+            self._json(
+                {
+                    "seq": seq_at_start,
+                    "status": updated_manifest.status,
+                    "final_seq": final_seq,
+                    "record": str(root_after),
+                }
+            )
+        finally:
+            _SESSION_REGISTRY.dequeue_turn(session_id)
 
     def _session_end(self, session_id: str) -> None:
         """Sprint 215a: POST /api/session/<id>/end. Body optional:
@@ -1564,7 +1626,11 @@ def main() -> None:
     from session_registry import SessionRegistry
 
     global _SESSION_REGISTRY
-    registry = SessionRegistry(session_topology_factory=_build_session_topology_from_manifest)
+    cfg = _load_daemon_config()
+    registry = SessionRegistry(
+        session_topology_factory=_build_session_topology_from_manifest,
+        turn_queue_cap=int(cfg["turn_queue_cap"]),
+    )
     _SESSION_REGISTRY = registry
     skipped = registry.boot_scan()
     manifests = registry.list_all()

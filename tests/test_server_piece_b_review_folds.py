@@ -181,12 +181,15 @@ def test_delete_during_in_flight_turn_waits_for_the_turn_to_finish(
     assert turn_result["body"]["status"] in ("parked", "ended")
     # The delete returned 204 once the lock was free.
     assert delete_status == 204
-    # And the session is genuinely gone — a subsequent turn returns 404.
+    # And the session is genuinely gone — a subsequent turn returns 410
+    # (sprint 216 tightened this from 404 to 410: DELETE preserves the
+    # record dir per SDD rule 12, so the was-live-and-is-now-gone shape
+    # is 410 Gone, not 404 Not Found).
     after_status, after_body = _post_json(
-        base + f"/api/session/{sid}/turn", {"text": "should 404"}
+        base + f"/api/session/{sid}/turn", {"text": "should 410"}
     )
-    assert after_status == 404
-    assert "unknown session_id" in after_body["error"]
+    assert after_status == 410
+    assert after_body["error"] == "session_ended_mid_delegate"
 
 
 # ── Finding 2 — SSE past a finalised record does not hang ────────────
