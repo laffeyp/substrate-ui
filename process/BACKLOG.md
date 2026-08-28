@@ -34,6 +34,10 @@ card when picked up. Append-only-ish; mark items done/promoted rather than delet
 
 - **[2026-07-31] Workflow parity — ship the patterns as applications.** The agent-CLI products' workflow features (subagent fan-out, pipelines, verify panels, background notify, standing multi-agent mode) map onto existing substrate primitives almost 1:1 — the capability table is in `../../docs/cockpit/COCKPIT-DIRECTION-round2-2026-07-30.md` item 11. The build items it resolves to: the `delegate` tool, the MCP servers, the application manifest, and a workflow-shaped application library (fan-out review, best-of-N + adversarial verify, research sweep) registered and launchable. Substrate's edge over all of them: every step is on a replayable record.
 
+## Long-shot / aesthetic
+
+- **[2026-08-27] Winamp-visualizer tab.** Once the daily-driver arc is far enough along that a session runs mostly hands-off, add a visualizer surface — a tab that renders shapes driven by whatever the LLM is doing right now (token cadence, tool-call rhythm, producer fan-out, cancel/retry pulses, whatever's in the record's live tail). Not a debugging surface; an ambient one. The Winamp reference is the whole spec — feed the log stream through a visualizer the way Winamp fed audio through Milkdrop. Far out; capture now, revisit when everything upstream of it is boring enough to watch.
+
 ## Research directions (park; revisit when the interactive-agent terminal lands)
 
 - **[2026-06-22] substrate-ui -> an agent-IDE / code editor.** Beyond reading: *control your LLMs from
