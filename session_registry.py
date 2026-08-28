@@ -1119,7 +1119,7 @@ def _next_turn_index_from_record(record_root: Path) -> int:
                 payload = env.get("payload") or {}
                 if isinstance(payload, dict) and "turn_index" in payload:
                     highest = max(highest, int(payload["turn_index"]))
-    except Exception:  # noqa: BLE001
+    except Exception:  # noqa: BLE001 — mid-write record or torn tail: an unreadable envelope reads as "no known turn_index"; boot_scan sees the state one step later.
         pass
     return highest + 1 if highest >= 0 else 0
 

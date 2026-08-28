@@ -75,6 +75,31 @@ def test_tools_absent_stores_none(base: tuple[str, Path]) -> None:
     assert manifest.tools is None
 
 
+def test_tool_filter_binds_only_the_named_tools(base: tuple[str, Path]) -> None:
+    """Observation half of the dual contract: a session whose manifest.tools
+    names two tools binds ONLY those two tools on the built topology. A
+    third tool that is NOT in the allow-list has nothing to bind to and
+    is absent from the session's tool dict.
+
+    Sprint 224c: adds the observation the 223b card was missing. The
+    manifest-side assertion (223b's first test) proves the wire accepted
+    the field; this test proves the topology honors it.
+    """
+    url, _ = base
+    status, body = _post(
+        url + "/api/session",
+        {"driver": "deterministic", "tools": ["read_file", "grep"]},
+    )
+    assert status == 200, body
+    manifest = server._SESSION_REGISTRY.get(body["session_id"])
+    session_tools = server._tools_for_manifest(manifest)
+    assert set(session_tools) == {"read_file", "grep"}
+    # A tool that was NOT in the allow-list is absent — the model has
+    # nothing to call and tool_loop's `parse_tool_call` returns unknown.
+    assert "write_file" not in session_tools
+    assert "bash" not in session_tools
+
+
 def test_tools_invalid_element_returns_400(base: tuple[str, Path]) -> None:
     url, _ = base
     status, body = _post(
