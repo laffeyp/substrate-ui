@@ -85,6 +85,11 @@ class SessionManifest(Struct, frozen=True):
     status: SessionStatus
     bundle: str | None
     seed: str
+    # Sprint 217e: tool allow-list. `None` means "no restriction — use full_suite".
+    # An empty tuple `()` also means unrestricted; a non-empty tuple filters
+    # `full_suite(workspace_path)` down to the named tools before the topology
+    # is built. Persists across parks (mutable via PATCH /api/session/<id>).
+    tools: tuple[str, ...] | None = None
 
 
 class NameCollision(Exception):
@@ -340,6 +345,32 @@ class SessionRegistry:
                 index[name] = session_id
                 self._by_name = dict(index)
             updated = _replace(manifest, name=name)
+            _atomic_write_json(
+                self._base / session_id / _MANIFEST_FILENAME, _manifest_to_dict(updated)
+            )
+            self._manifests[session_id] = updated
+        return updated
+
+    def set_tools(self, session_id: str, tools: tuple[str, ...] | None) -> SessionManifest:
+        """Sprint 217e: change the session's tool allow-list. `None` and `()`
+        both mean unrestricted; a non-empty tuple filters `full_suite(workspace)`
+        down to those names before the topology is built. The next
+        `Runtime.resume` reads the new list via `_build_session_topology_from_manifest`;
+        the in-flight turn (if any) completes on its prior tool set.
+
+        Holds the per-session lock so a concurrent `update_status` from
+        `turn_sync` cannot clobber this write (same pattern as `set_driver`).
+
+        Raises `KeyError` on unknown session_id.
+        """
+        if session_id not in self._manifests:
+            raise KeyError(f"unknown session_id {session_id!r}")
+        threading_lock = self._turn_threading_locks.setdefault(session_id, threading.Lock())
+        with threading_lock:
+            manifest = self._manifests.get(session_id)
+            if manifest is None:
+                raise KeyError(f"unknown session_id {session_id!r}")
+            updated = _replace(manifest, tools=tools)
             _atomic_write_json(
                 self._base / session_id / _MANIFEST_FILENAME, _manifest_to_dict(updated)
             )
@@ -985,6 +1016,8 @@ def _manifest_to_dict(m: SessionManifest) -> dict[str, Any]:
         "status": m.status,
         "bundle": m.bundle,
         "seed": m.seed,
+        # Sprint 217e: tool allow-list serialized as a JSON list; None → absent.
+        "tools": list(m.tools) if m.tools is not None else None,
     }
 
 
@@ -998,6 +1031,17 @@ def _manifest_from_dict(d: dict[str, Any]) -> SessionManifest:
             f"manifest status={status_raw!r} not in {sorted(_VALID_STATUS)}; "
             "manifest is corrupt"
         )
+    tools_raw = d.get("tools")
+    tools: tuple[str, ...] | None
+    if tools_raw is None:
+        tools = None
+    elif isinstance(tools_raw, (list, tuple)):
+        # JSON round-trip lands a list; in-memory `_replace` passes a tuple.
+        tools = tuple(str(t) for t in tools_raw)
+    else:
+        raise ValueError(
+            f"manifest tools={tools_raw!r} must be a list of strings or absent"
+        )
     return SessionManifest(
         session_id=str(d["session_id"]),
         name=d.get("name") if d.get("name") is not None else None,
@@ -1009,6 +1053,7 @@ def _manifest_from_dict(d: dict[str, Any]) -> SessionManifest:
         status=status_raw,  # type: ignore[arg-type]
         bundle=d.get("bundle") if d.get("bundle") is not None else None,
         seed=str(d["seed"]),
+        tools=tools,
     )
 
 
