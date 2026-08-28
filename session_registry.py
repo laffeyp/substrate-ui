@@ -106,6 +106,19 @@ class SessionEndedMidTurn(Exception):
     """
 
 
+class TurnHandle:
+    """The running turn's event loop, task, and Runtime — populated by
+    `_run_resume_sync`, read by `interrupt` to reach the worker thread's
+    event loop without holding the per-session lock."""
+
+    __slots__ = ("loop", "task", "runtime")
+
+    def __init__(self) -> None:
+        self.loop: asyncio.AbstractEventLoop | None = None
+        self.task: asyncio.Task[Any] | None = None
+        self.runtime: api.Runtime | None = None
+
+
 SessionTopologyFactory = Callable[["SessionManifest"], Callable[["TopologyBuilder"], None]]
 
 
@@ -166,6 +179,18 @@ class SessionRegistry:
         self._turn_queue_cap = int(turn_queue_cap)
         self._queue_depths: dict[str, int] = {}
         self._queue_depth_lock = threading.Lock()
+        # Sprint 215b: per-session handle to the running turn's event loop +
+        # Runtime, so POST /interrupt can reach cancel_producers across the
+        # thread boundary. Populated by turn_sync under the per-session lock;
+        # read by interrupt() WITHOUT the lock (intentionally — the interrupt
+        # must not block on a turn that holds the lock while running).
+        self._running_handles: dict[str, TurnHandle] = {}
+        # F14: per-session next turn_index counter, eliminating the O(n)
+        # whole-record scan in _session_turn's _build closure. Populated at
+        # boot_scan from the record tail; incremented by turn_sync on
+        # completion. The counter lives here, not on SessionManifest, to
+        # avoid schema growth for a runtime-only optimization.
+        self._next_turn_index: dict[str, int] = {}
         # Per-session `threading.Lock` map. Every caller of turn_sync — the delegate
         # seam (sprint 213b, tool_loop worker thread) AND the daemon's POST
         # /api/session/<id>/turn handler (sprint 214a, ThreadingHTTPServer worker
@@ -222,6 +247,11 @@ class SessionRegistry:
                 manifest = _replace(manifest, status=true_status)
                 _atomic_write_json(manifest_path, _manifest_to_dict(manifest))
             self._manifests[manifest.session_id] = manifest
+            # F14: derive the next turn_index from the record so _session_turn
+            # does not need to scan the whole record on every POST /turn.
+            self._next_turn_index[manifest.session_id] = _next_turn_index_from_record(
+                Path(manifest.record_root)
+            )
         # Prune stale by-name entries whose manifests dropped off disk.
         self._by_name = {
             name: sid for name, sid in self._by_name.items() if sid in self._manifests
@@ -275,22 +305,31 @@ class SessionRegistry:
     def set_name(self, session_id: str, name: str) -> SessionManifest:
         """Rename a session. Atomic against by-name.json. Raises `NameCollision`
         if the name is already in use by a different session.
+
+        Red-team finding 4 (2026-08-26): the read-modify-write on
+        ``_manifests[session_id]`` must hold the per-session lock so a
+        concurrent ``update_status`` (called by ``turn_sync`` on turn
+        completion) does not clobber this write or vice-versa.
         """
         if session_id not in self._manifests:
             raise KeyError(f"unknown session_id {session_id!r}")
-        with _flocked(self._base / _BY_NAME_FILENAME) as index:
-            if name in index and index[name] != session_id:
-                raise NameCollision(name=name, existing_session_id=index[name])
-            manifest = self._manifests[session_id]
-            if manifest.name is not None and manifest.name in index:
-                del index[manifest.name]
-            index[name] = session_id
-            self._by_name = dict(index)
-        updated = _replace(manifest, name=name)
-        _atomic_write_json(
-            self._base / session_id / _MANIFEST_FILENAME, _manifest_to_dict(updated)
-        )
-        self._manifests[session_id] = updated
+        threading_lock = self._turn_threading_locks.setdefault(session_id, threading.Lock())
+        with threading_lock:
+            manifest = self._manifests.get(session_id)
+            if manifest is None:
+                raise KeyError(f"unknown session_id {session_id!r}")
+            with _flocked(self._base / _BY_NAME_FILENAME) as index:
+                if name in index and index[name] != session_id:
+                    raise NameCollision(name=name, existing_session_id=index[name])
+                if manifest.name is not None and manifest.name in index:
+                    del index[manifest.name]
+                index[name] = session_id
+                self._by_name = dict(index)
+            updated = _replace(manifest, name=name)
+            _atomic_write_json(
+                self._base / session_id / _MANIFEST_FILENAME, _manifest_to_dict(updated)
+            )
+            self._manifests[session_id] = updated
         return updated
 
     def set_driver(self, session_id: str, driver: str) -> SessionManifest:
@@ -307,16 +346,24 @@ class SessionRegistry:
         the failure on the next /turn, not at PATCH time. The daemon-side
         Ollama-tag round-trip is a piece-B follow-up if needed.
 
+        Red-team finding 4 (2026-08-26): holds the per-session lock so a
+        concurrent ``update_status`` from ``turn_sync`` does not clobber
+        this write or vice-versa.
+
         Raises `KeyError` on unknown session_id.
         """
         if session_id not in self._manifests:
             raise KeyError(f"unknown session_id {session_id!r}")
-        manifest = self._manifests[session_id]
-        updated = _replace(manifest, driver=driver)
-        _atomic_write_json(
-            self._base / session_id / _MANIFEST_FILENAME, _manifest_to_dict(updated)
-        )
-        self._manifests[session_id] = updated
+        threading_lock = self._turn_threading_locks.setdefault(session_id, threading.Lock())
+        with threading_lock:
+            manifest = self._manifests.get(session_id)
+            if manifest is None:
+                raise KeyError(f"unknown session_id {session_id!r}")
+            updated = _replace(manifest, driver=driver)
+            _atomic_write_json(
+                self._base / session_id / _MANIFEST_FILENAME, _manifest_to_dict(updated)
+            )
+            self._manifests[session_id] = updated
         return updated
 
     # ── lookups ────────────────────────────────────────────────────────────
@@ -400,15 +447,27 @@ class SessionRegistry:
                         "turn_sync: pass either resume_event or resume_event_builder"
                     )
                 effective_resume_event = resume_event
-            result = _run_resume_sync(
-                factory,
-                record_root,
-                effective_resume_event,
-                timeout_seconds=timeout_seconds,
-            )
+            turn_handle = TurnHandle()
+            self._running_handles[session_id] = turn_handle
+            try:
+                result = _run_resume_sync(
+                    factory,
+                    record_root,
+                    effective_resume_event,
+                    timeout_seconds=timeout_seconds,
+                    handle_out=turn_handle,
+                )
+            finally:
+                self._running_handles.pop(session_id, None)
             status_str = getattr(result, "status", "paused")
-            new_status: SessionStatus = "ended" if status_str == "finalised" else "parked"
+            if status_str == "finalised":
+                new_status: SessionStatus = "ended"
+            elif status_str == "failed":
+                new_status = "interrupted"
+            else:
+                new_status = "parked"
             updated = self.update_status(session_id, new_status)
+            self.advance_turn_index(session_id)
             return updated, record_root
 
     # ── queue cap ──────────────────────────────────────────────────────────
@@ -437,6 +496,41 @@ class SessionRegistry:
 
     def turn_queue_cap(self) -> int:
         return self._turn_queue_cap
+
+    def next_turn_index(self, session_id: str) -> int:
+        """F14: the next turn_index for this session, derived from the
+        in-memory counter (no record scan). Returns 0 for unknown sessions."""
+        return self._next_turn_index.get(session_id, 0)
+
+    def advance_turn_index(self, session_id: str) -> None:
+        """F14: increment the turn counter after a successful turn."""
+        self._next_turn_index[session_id] = self._next_turn_index.get(session_id, 0) + 1
+
+    def interrupt(self, session_id: str) -> bool:
+        """Sprint 215b: cancel the model producer in a running turn so the
+        session parks on interrupt. Reaches the running turn's event loop and
+        Runtime via `_running_handles` (populated by turn_sync, read here
+        WITHOUT the per-session lock — intentionally, so the interrupt does
+        not block on the turn that holds it).
+
+        Returns True if a cancel was dispatched, False if no turn is running
+        for this session (parked / no handle / loop not yet live). The cancel
+        is asynchronous — `call_soon_threadsafe` schedules `cancel_producers`
+        on the worker's event loop; the producer's CancelledError handler
+        enqueues ProducerCancelled; the park-on-interrupt trigger fires.
+        """
+        handle = self._running_handles.get(session_id)
+        if handle is None:
+            return False
+        loop = handle.loop
+        runtime = handle.runtime
+        if loop is None or runtime is None:
+            return False
+        try:
+            loop.call_soon_threadsafe(runtime.cancel_producers, "model")
+        except RuntimeError:
+            return False
+        return True
 
     def has_session_dir(self, session_id: str) -> bool:
         """True iff `<base>/<sid>/` exists on disk. Used to tell a
@@ -474,17 +568,26 @@ class SessionRegistry:
         manifest already gone and raise `KeyError` from inside the running
         turn, surfacing to the caller as a generic 500. The fix is to hold
         the per-session `threading.Lock` for the delete, so an in-flight
-        turn completes cleanly first (up to 600 s per `turn_sync`'s
-        timeout). Subsequent turn_sync callers waiting on the same lock
-        find the manifest gone under the lock and get `SessionEndedMidTurn`
-        by the existing under-lock re-check — the shape the caller already
-        handles.
+        turn completes cleanly first. Subsequent turn_sync callers waiting
+        on the same lock find the manifest gone under the lock and get
+        ``SessionEndedMidTurn`` by the existing under-lock re-check.
+
+        Red-team finding 1 (2026-08-26): the lock acquire is bounded at
+        30s. If an in-flight turn is still holding the lock after 30s,
+        ``TimeoutError`` propagates to the caller (the server returns 500).
+        This prevents an adversary from pinning ThreadingHTTPServer worker
+        threads for 600s per DELETE by targeting busy sessions.
         """
         manifest = self._manifests.get(session_id)
         if manifest is None:
             raise KeyError(f"unknown session_id {session_id!r}")
         threading_lock = self._turn_threading_locks.setdefault(session_id, threading.Lock())
-        with threading_lock:
+        if not threading_lock.acquire(timeout=30.0):
+            raise TimeoutError(
+                f"delete({session_id!r}): per-session lock not acquired within "
+                f"30s (an in-flight turn is still running)"
+            )
+        try:
             # Re-check under the lock: a concurrent second delete may have
             # already removed the manifest by the time we acquire.
             manifest = self._manifests.get(session_id)
@@ -509,6 +612,8 @@ class SessionRegistry:
             # existing 410 branch handles it.
             self._manifests.pop(session_id, None)
             self._turn_threading_locks.pop(session_id, None)
+        finally:
+            threading_lock.release()
         return manifest
 
     # ── private ────────────────────────────────────────────────────────────
@@ -541,31 +646,35 @@ def _run_resume_sync(
     resume_event: Any,
     *,
     timeout_seconds: float,
+    handle_out: TurnHandle | None = None,
 ) -> Any:
     """Run `Runtime(record_root, persistent=True).resume(factory, resume_event)`
-    to completion in a worker thread with its own event loop. Mirrors the shape
-    at `substrate/topologies/tool_loop/delegate.py::_run_child_to_answer`: the
-    call blocks like `bash` inside the delegate seam, no async contract added.
+    to completion in a worker thread with its own event loop.
 
     Returns the `RunResult` (has `.status` in `{"paused", "finalised", "failed"}`).
     Raises `TimeoutError` on wall-clock overrun; re-raises the child's exception
     on kernel failure.
+
+    `handle_out`, when provided, is populated with loop/task/runtime once the
+    worker's event loop is live — the caller can reach `runtime.cancel_producers`
+    via `loop.call_soon_threadsafe` from another thread (sprint 215b interrupt).
     """
     box: dict[str, Any] = {}
     ready = threading.Event()
     done = threading.Event()
-    handle: dict[str, Any] = {}
 
     def worker() -> None:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
+            runtime = api.Runtime(record_root, persistent=True)
             task = loop.create_task(
-                api.Runtime(record_root, persistent=True).resume(
-                    factory, resume_event=resume_event
-                )
+                runtime.resume(factory, resume_event=resume_event)
             )
-            handle["loop"], handle["task"] = loop, task
+            if handle_out is not None:
+                handle_out.loop = loop
+                handle_out.task = task
+                handle_out.runtime = runtime
             ready.set()
             box["result"] = loop.run_until_complete(task)
         except asyncio.CancelledError:
@@ -579,7 +688,10 @@ def _run_resume_sync(
     threading.Thread(target=worker, daemon=True).start()
     if not done.wait(timeout_seconds):
         ready.wait(1.0)
-        loop, task = handle.get("loop"), handle.get("task")
+        if handle_out is not None:
+            loop, task = handle_out.loop, handle_out.task
+        else:
+            loop, task = None, None
         if loop is not None and task is not None:
             loop.call_soon_threadsafe(task.cancel)
             done.wait(10.0)
@@ -677,13 +789,30 @@ def _scan_record_status(record_root: Path) -> SessionStatus:
         return "interrupted"
     last = envelopes[-1]
     kind = last.get("kind", "")
-    if kind == "substrate.RunFinalised":
+    if kind == api.RUN_FINALISED:
         return "ended"
-    if kind == "substrate.TerminationMatched":
+    if kind == api.TERMINATION_MATCHED:
         payload = last.get("payload") or {}
-        if isinstance(payload, dict) and payload.get("decision") == "pause-await-input":
+        if isinstance(payload, dict) and payload.get("decision") == api.Decision.PAUSE_AWAIT_INPUT.value:
             return "parked"
     return "interrupted"
+
+
+def _next_turn_index_from_record(record_root: Path) -> int:
+    """Scan the record for the highest UserMessage.turn_index + 1. Used once at
+    boot_scan; afterward the in-memory counter is incremented per turn."""
+    if not record_root.exists():
+        return 0
+    highest = -1
+    try:
+        for env in api.read_record(record_root):
+            if env.get("kind") == "UserMessage":
+                payload = env.get("payload") or {}
+                if isinstance(payload, dict) and "turn_index" in payload:
+                    highest = max(highest, int(payload["turn_index"]))
+    except Exception:  # noqa: BLE001
+        pass
+    return highest + 1 if highest >= 0 else 0
 
 
 def _manifest_to_dict(m: SessionManifest) -> dict[str, Any]:

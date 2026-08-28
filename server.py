@@ -46,6 +46,7 @@ from substrate.topologies.tool_loop.tools import full_suite
 
 from builder import SpecError, build_from_spec
 from demo_topologies import approval_event, resumable_topology
+from session_registry import NameCollision, SessionEndedMidTurn
 from substrate.reference import CliResponder, DeterministicResponder, OllamaResponder
 
 # Sprint 214a: daemon-side session API. SessionRegistry is a MODULE-scope singleton
@@ -59,19 +60,31 @@ _SESSION_REGISTRY: Any = None
 _SHUTDOWN_STARTED = threading.Event()
 
 
+_RESPONDER_CACHE: dict[str, Any] = {}
+
+
 def _daemon_driver_resolver(name: str) -> Any:
     """Daemon-side resolver: `deterministic` → seeded stub; `claude` / `gemini` →
     CliResponder; anything else → OllamaResponder (a real local or `:cloud` tag).
     Sprint 213a's `_default_model_resolver` in substrate ships a smaller default
     without CLI knowledge; the daemon knows more, so it wraps.
+
+    F13: cached by driver string so the HTTP client + connection pool survive
+    across turns. DeterministicResponder is excluded (stateful seed).
     """
+    cached = _RESPONDER_CACHE.get(name)
+    if cached is not None:
+        return cached
     if name == "deterministic":
         return DeterministicResponder(seed=0)
     if name == "claude":
-        return CliResponder(["claude", "-p"], name="claude")
-    if name == "gemini":
-        return CliResponder(["gemini", "-p"], name="gemini")
-    return OllamaResponder(model=name, timeout=300.0)
+        r = CliResponder(["claude", "-p"], name="claude")
+    elif name == "gemini":
+        r = CliResponder(["gemini", "-p"], name="gemini")
+    else:
+        r = OllamaResponder(model=name, timeout=300.0)
+    _RESPONDER_CACHE[name] = r
+    return r
 
 
 def _load_daemon_config(config_path: Path | None = None) -> dict[str, Any]:
@@ -403,7 +416,7 @@ def _records_index() -> list[dict[str, object]]:
             (
                 str((e.get("payload") or {}).get("run_id"))
                 for e in events
-                if e.get("kind") == "substrate.RunStarted"
+                if e.get("kind") == api.RUN_STARTED
             ),
             "",
         )
@@ -439,7 +452,7 @@ def _io(events: list[dict[str, object]]) -> dict[str, object]:
         (
             e
             for e in events
-            if e.get("kind") == "substrate.TriggerFired"
+            if e.get("kind") == api.TRIGGER_FIRED
             and (e.get("payload") or {}).get("trigger_id") == "__initial__"
         ),
         None,
@@ -448,14 +461,14 @@ def _io(events: list[dict[str, object]]) -> dict[str, object]:
     # the substrate's OTHER designated input channel: b.baseline() -> RunStarted.payload.baseline
     # ("fixtures, seeds, environment identifiers, so every record is interpretable from a known
     # baseline"). io must surface it, else a baseline-seeded run shows null input (review #34).
-    started = next((e for e in events if e.get("kind") == "substrate.RunStarted"), None)
+    started = next((e for e in events if e.get("kind") == api.RUN_STARTED), None)
     baseline = (started.get("payload") or {}).get("baseline") if started else None
     outputs = [
         {"seq": e["seq"], "kind": e["kind"], "payload": e.get("payload")}
         for e in events
         if not str(e.get("kind", "")).startswith("substrate.")
     ]
-    fin = next((e for e in events if e.get("kind") == "substrate.RunFinalised"), None)
+    fin = next((e for e in events if e.get("kind") == api.RUN_FINALISED), None)
     return {
         "input": seed,
         "baseline": baseline or None,
@@ -596,6 +609,10 @@ class Handler(BaseHTTPRequestHandler):
                 session_id = path[len("/api/session/") : -len("/end")]
                 self._session_end(session_id)
                 return
+            if path.startswith("/api/session/") and path.endswith("/interrupt"):
+                session_id = path[len("/api/session/") : -len("/interrupt")]
+                self._session_interrupt(session_id)
+                return
             if path == "/api/launch":
                 self._launch(parse_qs(urlparse(self.path).query))
                 return
@@ -687,7 +704,7 @@ class Handler(BaseHTTPRequestHandler):
             )
         except Exception as exc:
             # NameCollision carries existing_session_id per sprint 211.
-            if type(exc).__name__ == "NameCollision":
+            if isinstance(exc, NameCollision):
                 self._json(
                     {
                         "error": "name already taken",
@@ -783,16 +800,9 @@ class Handler(BaseHTTPRequestHandler):
         from substrate.topologies.session import UserMessage as SessionUserMessage
 
         def _build(_manifest: Any, record_root_locked: Path) -> Any:
-            next_turn_index = 0
-            if record_root_locked.exists():
-                try:
-                    for env in api.read_record(record_root_locked):
-                        if env.get("kind") == "UserMessage":
-                            payload = env.get("payload") or {}
-                            if isinstance(payload, dict) and "turn_index" in payload:
-                                next_turn_index = int(payload["turn_index"]) + 1
-                except Exception:  # noqa: BLE001
-                    next_turn_index = 0
+            # F14: use the registry's in-memory counter instead of scanning
+            # the entire record for the tail UserMessage.turn_index.
+            next_turn_index = _SESSION_REGISTRY.next_turn_index(session_id)
             return SessionUserMessage(
                 text=text,
                 turn_index=next_turn_index,
@@ -808,7 +818,7 @@ class Handler(BaseHTTPRequestHandler):
                     timeout_seconds=600.0,
                 )
             except Exception as exc:
-                if type(exc).__name__ == "SessionEndedMidTurn":
+                if isinstance(exc, SessionEndedMidTurn):
                     self._json(
                         {"ok": False, "status": "ended", "error": "session_ended_mid_delegate"},
                         410,
@@ -885,7 +895,7 @@ class Handler(BaseHTTPRequestHandler):
                 timeout_seconds=60.0,
             )
         except Exception as exc:
-            if type(exc).__name__ == "SessionEndedMidTurn":
+            if isinstance(exc, SessionEndedMidTurn):
                 self._json(
                     {"status": "ended", "error": "session_ended_mid_delegate"}, 410
                 )
@@ -903,6 +913,28 @@ class Handler(BaseHTTPRequestHandler):
                 "record": str(root_after),
             }
         )
+
+    def _session_interrupt(self, session_id: str) -> None:
+        """Sprint 215b: POST /api/session/<id>/interrupt. Cancels the model
+        producer in the running turn so the session parks on interrupt. The
+        cancel is asynchronous — the running turn's park-on-interrupt trigger
+        fires when ProducerCancelled drains through the writer loop, and the
+        turn_sync call returns with status="parked".
+
+        Returns 200 `{"interrupted": true}` if a cancel was dispatched, 200
+        `{"interrupted": false}` if no turn is running (the session is parked
+        or ended — interrupting while idle is a no-op, not an error). 404 on
+        unknown session_id.
+        """
+        if _SESSION_REGISTRY is None:
+            self._error(503, "session registry not initialized (boot ordering)")
+            return
+        manifest = _SESSION_REGISTRY.get(session_id)
+        if manifest is None:
+            self._error(404, f"unknown session_id {session_id!r}")
+            return
+        dispatched = _SESSION_REGISTRY.interrupt(session_id)
+        self._json({"interrupted": dispatched, "session_id": session_id})
 
     def _session_list(self) -> None:
         """Sprint 214b: GET /api/session. Returns `{"live": [...], "parked": [...],
@@ -1008,6 +1040,7 @@ class Handler(BaseHTTPRequestHandler):
             # then poll for new growth. The follower keeps its own segment
             # cursors so we never re-emit frames as we cross segment rolls.
             finalised = False
+            last_write = time.monotonic()
             while not finalised:
                 for env in follower.read_new():
                     seq = int(env.get("seq", -1))
@@ -1017,7 +1050,7 @@ class Handler(BaseHTTPRequestHandler):
                     # discarded, `finalised` never flips, and the loop polls
                     # forever. `LiveRecord.follow(until_finalised=True)` gets
                     # this ordering right; the manual reimplementation had not.
-                    is_final = env.get("kind") == "substrate.RunFinalised"
+                    is_final = env.get("kind") == api.RUN_FINALISED
                     if is_final:
                         finalised = True
                     if seq <= since_seq and not is_final:
@@ -1028,12 +1061,19 @@ class Handler(BaseHTTPRequestHandler):
                     frame = b"data: " + msgspec.json.encode(env) + b"\n\n"
                     self.wfile.write(frame)
                     self.wfile.flush()
+                    last_write = time.monotonic()
                     if is_final:
                         break
                 if finalised:
                     break
-                # Poll cadence: match LiveRecord's own 500ms default rather than
-                # busy-waiting. A finalised or ended session breaks the loop above.
+                # F11: SSE keep-alive comment every 15s during idle so a
+                # reverse proxy with an idle timeout does not kill the
+                # connection. An SSE comment (`: ...\n\n`) is invisible
+                # to EventSource clients per the WHATWG spec.
+                if time.monotonic() - last_write >= 15.0:
+                    self.wfile.write(b": ping\n\n")
+                    self.wfile.flush()
+                    last_write = time.monotonic()
                 time.sleep(0.2)
         except (BrokenPipeError, ConnectionResetError, OSError):
             # Client hung up mid-stream. Every SSE server has to tolerate this.
@@ -1069,7 +1109,7 @@ class Handler(BaseHTTPRequestHandler):
         for _ in range(80):
             try:
                 if root.exists() and any(
-                    e.get("kind") == "substrate.RunStarted"
+                    e.get("kind") == api.RUN_STARTED
                     for e in api.read_record(root)
                 ):
                     break
@@ -1194,7 +1234,7 @@ class Handler(BaseHTTPRequestHandler):
         ):  # wait only until RunStarted lands, so the console can follow immediately
             try:
                 if root.exists() and any(
-                    e.get("kind") == "substrate.RunStarted"
+                    e.get("kind") == api.RUN_STARTED
                     for e in api.read_record(root)
                 ):
                     break
@@ -1393,7 +1433,7 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 updated = _SESSION_REGISTRY.set_name(session_id, new_name)
             except Exception as exc:
-                if type(exc).__name__ == "NameCollision":
+                if isinstance(exc, NameCollision):
                     self._json(
                         {
                             "error": "name already taken",
@@ -1539,7 +1579,7 @@ class Handler(BaseHTTPRequestHandler):
                 (
                     (e.get("payload") or {}).get("topology")
                     for e in events
-                    if e.get("kind") == "substrate.RunStarted"
+                    if e.get("kind") == api.RUN_STARTED
                 ),
                 None,
             )

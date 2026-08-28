@@ -11,7 +11,7 @@ concurrency:
 # The console consumes substrate as a LIBRARY, through its public surfaces only. CI mirrors the
 # documented local run model: check out both repos side by side, install substrate editable into a
 # venv, and run the console's tests against it (cd substrate && uv run python ../substrate-ui/...).
-# The substrate checkout uses the default token (fine for a public repo); if laffeyp/Substrate is
+# The substrate checkout uses the default token (fine for a public repo); if laffeyp/substrate is
 # private, set a repo secret CROSS_REPO_TOKEN to a PAT with read access and it is used instead.
 
 jobs:
@@ -37,7 +37,7 @@ jobs:
       - name: Check out substrate (the library the console consumes)
         uses: actions/checkout@v5
         with:
-          repository: laffeyp/Substrate
+          repository: laffeyp/substrate
           path: substrate
           token: ${{ secrets.CROSS_REPO_TOKEN || github.token }}
       - name: Install uv
@@ -65,7 +65,7 @@ jobs:
       - name: Check out substrate
         uses: actions/checkout@v5
         with:
-          repository: laffeyp/Substrate
+          repository: laffeyp/substrate
           path: substrate
           token: ${{ secrets.CROSS_REPO_TOKEN || github.token }}
       - name: Install uv
