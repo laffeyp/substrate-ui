@@ -309,6 +309,33 @@ _APP_BUILDERS: dict[str, Callable[[dict[str, Any]], Callable[..., Any]]] = {
 }
 
 
+def _build_pair_coding_composite(
+    session_registry: Any, inputs: dict[str, Any]
+) -> tuple[Any, Any]:
+    """Sprint 225c — register the pair_coding builder + reviewer pair.
+    Returns `(builder_manifest, reviewer_manifest)` — the reviewer's
+    `composite_of` points at the builder's session_id so sprint 225b's
+    cascade end/rm ties both together."""
+    from substrate.topologies.applications.pair_coding_composite import (
+        pair_coding_application,
+    )
+
+    return pair_coding_application(
+        session_registry=session_registry,
+        builder_driver_model=str(inputs["builder_driver_model"]),
+        reviewer_driver_model=str(inputs["reviewer_driver_model"]),
+        workspace=str(inputs["workspace"]),
+    )
+
+
+# Dispatch table for `runs = "session_composite"` apps. Each entry takes
+# the SessionRegistry + resolved inputs and returns two session manifests
+# (parent + one child today; a fan-composite extension would return N+1).
+_COMPOSITE_APP_BUILDERS: dict[str, Callable[[Any, dict[str, Any]], tuple[Any, Any]]] = {
+    "pair_coding": _build_pair_coding_composite,
+}
+
+
 def _validate_topology_inputs(spec: Any, inputs: dict[str, Any]) -> str | None:
     """Return an error message if required fields are missing; None if OK."""
     for field_name, field_spec in spec.inputs_schema.items():
@@ -1527,11 +1554,7 @@ class Handler(BaseHTTPRequestHandler):
             )
             return
         if spec.runs == "session_composite":
-            self._error(
-                400,
-                f"application {application_name!r} has runs='session_composite'; "
-                "sprint 225c ships the composite dispatch endpoint",
-            )
+            self._topology_run_composite(application_name, spec)
             return
         try:
             body = self._read_json_body()
@@ -1616,6 +1639,114 @@ class Handler(BaseHTTPRequestHandler):
                 "record_root": str(record_root),
                 "status": "running",
                 "application": application_name,
+            }
+        )
+
+    def _topology_status(self, application_name: str, run_id: str) -> None:
+        """Sprint 225d: GET /api/topology/<name>/status?run_id=<id>.
+
+        Response shape per TECH-SPEC §8 line 1057: `{run_id, status,
+        record_root, elapsed_seconds, output?, application}`. Status
+        derives from the record's tail using the same rules
+        `_scan_record_status` uses on session boot: RunFinalised → finalised,
+        torn → failed, empty → running (or `unknown` if the record dir
+        never came into existence), anything else with a tail → running.
+
+        Unknown run_id → 404. Application name in the URL is a UX signal
+        for the caller; the actual lookup is by run_id.
+        """
+        handle = _TOPOLOGY_RUNS.get(run_id)
+        if handle is None:
+            self._error(
+                404,
+                f"unknown run_id {run_id!r} (started via await_completion=false?)",
+            )
+            return
+        record_root = Path(handle["record_root"])
+        elapsed_seconds = time.time() - float(handle["started_at"])
+        status = "running"
+        output: Any = None
+        if record_root.exists():
+            try:
+                envelopes = list(api.read_record(record_root))
+            except Exception:  # noqa: BLE001 — torn record while the background run is mid-write; treat as running until stable.
+                envelopes = []
+                status = "failed"
+            else:
+                if envelopes and envelopes[-1].get("kind") == api.RUN_FINALISED:
+                    status = "finalised"
+                    # Extract the application terminal envelope's payload as `output`
+                    # (Solved / Verdict / Synthesis). One tail scan; nothing exotic.
+                    for env in reversed(envelopes):
+                        kind = str(env.get("kind", ""))
+                        if kind.startswith("substrate."):
+                            continue
+                        output = env.get("payload")
+                        break
+        self._json(
+            {
+                "run_id": run_id,
+                "status": status,
+                "record_root": str(record_root),
+                "elapsed_seconds": elapsed_seconds,
+                "application": application_name,
+                **({"output": output} if output is not None else {}),
+            }
+        )
+
+    def _topology_run_composite(self, application_name: str, spec: Any) -> None:
+        """Sprint 225c: dispatch a `runs = "session_composite"` app.
+
+        Reads the manifest inputs the same way `_topology_run` does,
+        then hands them to the composite factory keyed on the app name.
+        Returns the pair of registered session_ids + record roots. The
+        caller drives turns via the ordinary POST /api/session/<id>/turn
+        endpoint on either session; sprint 225b's cascade takes care of
+        end/rm.
+
+        Only `pair_coding` today; new composites register one entry in
+        `_COMPOSITE_APP_BUILDERS`.
+        """
+        try:
+            body = self._read_json_body()
+        except ValueError as exc:
+            self._error(400, str(exc))
+            return
+        inputs = body.get("inputs", {})
+        if not isinstance(inputs, dict):
+            self._error(400, "`inputs` must be an object")
+            return
+        missing = _validate_topology_inputs(spec, inputs)
+        if missing:
+            self._error(400, missing)
+            return
+        resolved: dict[str, Any] = {}
+        for field_name, field_spec in spec.inputs_schema.items():
+            if field_name in inputs:
+                resolved[field_name] = inputs[field_name]
+            elif isinstance(field_spec, dict) and "default" in field_spec:
+                resolved[field_name] = field_spec["default"]
+
+        builder = _COMPOSITE_APP_BUILDERS.get(application_name)
+        if builder is None:
+            self._error(
+                501,
+                f"composite application {application_name!r} has no builder in "
+                "_COMPOSITE_APP_BUILDERS",
+            )
+            return
+        try:
+            builder_manifest, reviewer_manifest = builder(_SESSION_REGISTRY, resolved)
+        except Exception as exc:  # noqa: BLE001 — composite builder can raise anything a topology constructor does; malformed inputs → 400 naming the class.
+            self._error(400, f"{type(exc).__name__}: {exc}")
+            return
+        self._json(
+            {
+                "application": application_name,
+                "builder_session_id": builder_manifest.session_id,
+                "reviewer_session_id": reviewer_manifest.session_id,
+                "builder_record": builder_manifest.record_root,
+                "reviewer_record": reviewer_manifest.record_root,
             }
         )
 
@@ -2187,6 +2318,18 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(
                     [_application_spec_to_wire(spec) for spec in _APPLICATIONS.values()]
                 )
+                return
+            if path.startswith("/api/topology/") and path.endswith("/status"):
+                # Sprint 225d — GET /api/topology/<name>/status?run_id=<id>.
+                # Piggybacks on _TOPOLOGY_RUNS (populated by 225a's
+                # await_completion=false path); returns status derived
+                # from the record's tail.
+                topology_name = path[len("/api/topology/") : -len("/status")]
+                run_id = parse_qs(urlparse(self.path).query).get("run_id", [""])[0]
+                if not run_id:
+                    self._error(400, "missing required query param `run_id`")
+                    return
+                self._topology_status(topology_name, run_id)
                 return
             if path.startswith("/api/session/by-name/"):
                 self._session_by_name(unquote(path[len("/api/session/by-name/") :]))
