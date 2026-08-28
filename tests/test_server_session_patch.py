@@ -15,7 +15,10 @@ Behaviors under test:
   3. PATCH with a colliding name returns 409 with existing_session_id.
   4. PATCH on unknown session_id returns 404.
   5. Empty body returns 400 (no mutable fields).
-  6. Body with `tools` returns 400 naming that as deferred.
+  6. Body with `per_turn` (or any of the piece-H fields) returns 400 naming
+     that as deferred. `tools` moved from `_NOT_YET` to `_PATCHABLE` in sprint
+     217e; the deferred set is now {per_turn, workspace, workspace_shape,
+     bundle, seed}.
 
 Run from the substrate venv:
     cd substrate && uv run python -m pytest ../substrate-ui/tests/test_server_session_patch.py -q
@@ -167,9 +170,11 @@ def test_patch_empty_body_returns_400(base: tuple[str, Path]) -> None:
 def test_patch_deferred_field_returns_400_naming_the_field(base: tuple[str, Path]) -> None:
     url, tmp_path = base
     sid = _create(url, tmp_path / "wsp", name="wanting-tools")
-    status, body = _patch_json(url + f"/api/session/{sid}", {"tools": ["read_file"]})
+    # Sprint 217e: `tools` moved from _NOT_YET to _PATCHABLE. Use `per_turn`,
+    # still deferred to piece H.
+    status, body = _patch_json(url + f"/api/session/{sid}", {"per_turn": "hello"})
     assert status == 400
-    assert "tools" in body["error"]
+    assert "per_turn" in body["error"]
     assert "not PATCH-able yet" in body["error"]
 
 

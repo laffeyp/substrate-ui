@@ -31,6 +31,7 @@ import threading
 import time
 import traceback
 import uuid
+import socketserver
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -48,6 +49,22 @@ from builder import SpecError, build_from_spec
 from demo_topologies import approval_event, resumable_topology
 from session_registry import NameCollision, SessionEndedMidTurn
 from substrate.reference import CliResponder, DeterministicResponder, OllamaResponder
+
+
+class _UnixHTTPServer(socketserver.ThreadingUnixStreamServer):
+    """Sprint 217e: UDS variant of ThreadingHTTPServer. `BaseHTTPRequestHandler`
+    reads `self.server.server_name` and `server_port` in `date_time_string`;
+    `ThreadingUnixStreamServer` does not set them (no host/port for a Unix
+    socket). Synthesized here so the handler runs unchanged over UDS.
+    Threads are daemon so a graceful shutdown does not have to wait on them.
+    """
+
+    daemon_threads = True
+
+    def __init__(self, socket_path: str, handler_cls: type) -> None:
+        super().__init__(socket_path, handler_cls)
+        self.server_name = "localhost"
+        self.server_port = 0
 
 # Sprint 214a: daemon-side session API. SessionRegistry is a MODULE-scope singleton
 # so every handler sees the same catalog + per-session lock. Initialized in main()
@@ -191,12 +208,21 @@ def _build_session_topology_from_manifest(
     from substrate.topologies.tool_loop.tools import full_suite
 
     responder = _daemon_driver_resolver(manifest.driver)
+    all_tools = full_suite(Path(manifest.workspace))
+    # Sprint 217e: manifest.tools filters the suite. None or empty → unrestricted;
+    # a non-empty allow-list keeps only the named tools. An allow-list entry that
+    # names a tool absent from full_suite is dropped silently (the daemon's tool
+    # registry is the source of truth; unknown names have nothing to bind to).
+    if manifest.tools:
+        session_tools = {name: all_tools[name] for name in manifest.tools if name in all_tools}
+    else:
+        session_tools = all_tools
     return session_topology(
         driver=responder,
         driver_name=manifest.driver,
         driver_context_tokens=resolve_driver_context_tokens(manifest.driver, responder),
         seed=manifest.seed,
-        tools=full_suite(Path(manifest.workspace)),
+        tools=session_tools,
         per_turn="",
         max_turns=200,
         turn_max_steps=24,
@@ -796,6 +822,39 @@ class Handler(BaseHTTPRequestHandler):
         if not text:
             self._error(400, "POST /api/session/<id>/turn requires body {'text': '...'}")
             return
+        # Sprint 217e: optional `context` block per TECH-SPEC §4. Shape:
+        #   {"parent_seq_range": [int, int], "kinds": [str, ...]}
+        # The daemon reads a slice of this session's own record over the given
+        # seq range, filtered by kinds, capped at 8 KiB (delegate's rule), and
+        # prefixes it to UserMessage.assembled_prompt. UserMessage.text stays
+        # as the raw user text.
+        context_raw = body.get("context")
+        context_slice: dict[str, Any] | None = None
+        if context_raw is not None:
+            if not isinstance(context_raw, dict):
+                self._error(400, "context must be an object or absent")
+                return
+            seq_range = context_raw.get("parent_seq_range")
+            if not (
+                isinstance(seq_range, list)
+                and len(seq_range) == 2
+                and all(isinstance(x, int) for x in seq_range)
+            ):
+                self._error(
+                    400,
+                    "context.parent_seq_range must be [lo, hi] with two integers",
+                )
+                return
+            kinds = context_raw.get("kinds", [])
+            if not (
+                isinstance(kinds, list) and all(isinstance(k, str) for k in kinds)
+            ):
+                self._error(400, "context.kinds must be a list of strings")
+                return
+            context_slice = {
+                "parent_seq_range": tuple(seq_range),
+                "kinds": tuple(kinds),
+            }
         # Sprint 216: per-session queue cap. Increment the counter under the
         # registry's fast lock; refuse the (cap+1)th caller with 429
         # immediately (no block). Every admission MUST pair with
@@ -835,10 +894,23 @@ class Handler(BaseHTTPRequestHandler):
             # F14: use the registry's in-memory counter instead of scanning
             # the entire record for the tail UserMessage.turn_index.
             next_turn_index = _SESSION_REGISTRY.next_turn_index(session_id)
+            # Sprint 217e: prefix a context slice to assembled_prompt when the
+            # caller passed `context` in the body. The extractor is delegate's
+            # existing helper; it reads the parent (== this session's) record
+            # over the given seq range + kinds, caps at 8 KiB with event-
+            # boundary drops, and returns the formatted text. Empty slice ->
+            # unchanged assembled_prompt.
+            assembled_prompt = text
+            if context_slice is not None and record_root_locked.exists():
+                from substrate.topologies.tool_loop.delegate import _prefix_context_slice
+
+                assembled_prompt = _prefix_context_slice(
+                    record_root_locked, text, context_slice
+                )
             return SessionUserMessage(
                 text=text,
                 turn_index=next_turn_index,
-                assembled_prompt=text,
+                assembled_prompt=assembled_prompt,
                 slash_source="daemon",
             )
 
@@ -1486,8 +1558,8 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError as exc:
             self._error(400, str(exc))
             return
-        _PATCHABLE = {"driver", "name"}
-        _NOT_YET = {"tools", "per_turn", "workspace", "workspace_shape", "bundle", "seed"}
+        _PATCHABLE = {"driver", "name", "tools"}
+        _NOT_YET = {"per_turn", "workspace", "workspace_shape", "bundle", "seed"}
         keys = set(body.keys())
         deferred = keys & _NOT_YET
         if deferred:
@@ -1529,6 +1601,16 @@ class Handler(BaseHTTPRequestHandler):
                     )
                     return
                 raise
+        if "tools" in body:
+            tools_raw = body["tools"]
+            if not isinstance(tools_raw, list) or not all(
+                isinstance(t, str) and t for t in tools_raw
+            ):
+                self._error(400, "tools must be a list of non-empty strings")
+                return
+            # Empty list is legitimate — treated as "no restriction" (None).
+            tools_value: tuple[str, ...] | None = tuple(tools_raw) if tools_raw else None
+            updated = _SESSION_REGISTRY.set_tools(session_id, tools_value)
         self._json(
             {
                 "session_id": updated.session_id,
@@ -1772,8 +1854,25 @@ def main() -> None:
         summary += f"; SKIPPED {len(skipped)} unparseable manifest(s): {', '.join(skipped[:5])}"
         if len(skipped) > 5:
             summary += f" ... (+{len(skipped) - 5} more)"
+    # Sprint 217e: bind a UDS listener alongside the TCP one. TECH-SPEC §6
+    # names `~/.substrate/daemon.sock` as the primary transport, with TCP as
+    # fallback. Both sockets share the same `Handler`; the CLI tries UDS first.
+    # The UDS path is fixed at `~/.substrate/daemon.sock` unless
+    # `SUBSTRATE_DAEMON_SOCK` overrides it (tests pass a tmp path).
+    uds_path = Path(
+        os.environ.get("SUBSTRATE_DAEMON_SOCK", str(Path.home() / ".substrate" / "daemon.sock"))
+    )
+    uds_path.parent.mkdir(parents=True, exist_ok=True)
+    # Stale socket file from a crashed prior daemon: unlink so bind can succeed.
+    try:
+        uds_path.unlink()
+    except FileNotFoundError:
+        pass
+    uds_srv = _UnixHTTPServer(str(uds_path), Handler)
+    summary += f"; UDS at {uds_path}"
     print(summary)
     srv = ThreadingHTTPServer((HOST, PORT), Handler)
+    threading.Thread(target=uds_srv.serve_forever, daemon=True).start()
 
     def _sigterm_handler(_signum: int, _frame: Any) -> None:
         # Sprint 215d: a second SIGTERM during shutdown is a no-op.
@@ -1790,6 +1889,11 @@ def main() -> None:
             flush=True,
         )
         srv.shutdown()
+        uds_srv.shutdown()
+        try:
+            uds_path.unlink()
+        except FileNotFoundError:
+            pass
         sys.exit(0)
 
     signal.signal(signal.SIGTERM, _sigterm_handler)
@@ -1797,6 +1901,11 @@ def main() -> None:
         srv.serve_forever()
     except KeyboardInterrupt:
         srv.shutdown()
+        uds_srv.shutdown()
+        try:
+            uds_path.unlink()
+        except FileNotFoundError:
+            pass
 
 
 if __name__ == "__main__":
