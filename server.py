@@ -1004,6 +1004,22 @@ class Handler(BaseHTTPRequestHandler):
                     {"status": "ended", "error": "session_ended_mid_delegate"}, 410
                 )
                 return
+            # Sprint 220 (piece-D dispatch): a fresh session that never opened
+            # its record cannot receive a SessionEndRequested (which is not a
+            # UserMessage). Transition the manifest to "ended" at the daemon
+            # layer without opening. Same shape as _shutdown_all_sessions.
+            if type(exc).__name__ == "FreshSessionRequiresUserMessage":
+                _SESSION_REGISTRY.update_status(session_id, "ended")
+                self._json(
+                    {
+                        "seq": seq_at_start,
+                        "status": "ended",
+                        "final_seq": seq_at_start,
+                        "record": manifest.record_root,
+                        "reason": "fresh_session_never_opened",
+                    }
+                )
+                return
             self._error(500, f"{type(exc).__name__}: {exc}")
             return
         final_seq = -1
