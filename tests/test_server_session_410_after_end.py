@@ -1,7 +1,7 @@
 """Sprint 216 — /turn returns 410 for a session that was live and is now gone.
 
 Three code paths converge on 410 with
-    {"ok": False, "status": "ended", "error": "session_ended_mid_delegate"}:
+    {"ok": False, "status": "ended", "error": SESSION_ENDED_MID_DELEGATE}:
 
   1. Pre-lock manifest missing but record dir on disk (DELETEd session).
   2. Pre-lock manifest present with status=="ended" (POST /end already ran).
@@ -29,6 +29,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import server  # noqa: E402
+from session_errors import SESSION_ENDED_MID_DELEGATE  # noqa: E402
 from session_registry import SessionRegistry  # noqa: E402
 
 
@@ -94,7 +95,7 @@ def test_turn_after_delete_returns_410_not_404(base: str, tmp_path: Path) -> Non
     assert body == {
         "ok": False,
         "status": "ended",
-        "error": "session_ended_mid_delegate",
+        "error": SESSION_ENDED_MID_DELEGATE,
     }
 
 
@@ -110,7 +111,7 @@ def test_turn_after_end_returns_410(base: str, tmp_path: Path) -> None:
     assert body == {
         "ok": False,
         "status": "ended",
-        "error": "session_ended_mid_delegate",
+        "error": SESSION_ENDED_MID_DELEGATE,
     }
 
 

@@ -22,6 +22,7 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from session_errors import SESSION_ENDED_MID_DELEGATE  # noqa: E402
 from session_registry import SessionEndedMidTurn, SessionRegistry  # noqa: E402
 
 from substrate import api  # noqa: E402
@@ -68,7 +69,7 @@ def test_ended_session_raises_typed_failure(tmp_path: Path) -> None:
         root=tmp_path / "parent",
         session_registry=registry,
     )
-    with pytest.raises(ValueError, match="session_ended_mid_delegate"):
+    with pytest.raises(ValueError, match=SESSION_ENDED_MID_DELEGATE):
         d.run([{"task": "hi", "child_session_name": "dead-reviewer"}])
 
 

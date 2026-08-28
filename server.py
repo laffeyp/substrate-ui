@@ -47,6 +47,11 @@ from substrate.topologies.tool_loop.tools import full_suite
 
 from builder import SpecError, build_from_spec
 from demo_topologies import approval_event, resumable_topology
+from session_errors import (
+    FRESH_SESSION_NEVER_OPENED,
+    RECORD_TORN,
+    SESSION_ENDED_MID_DELEGATE,
+)
 from session_registry import (
     FreshSessionRequiresUserMessage,
     NameCollision,
@@ -861,7 +866,7 @@ class Handler(BaseHTTPRequestHandler):
         if manifest is None:
             if _SESSION_REGISTRY.has_session_dir(session_id):
                 self._json(
-                    {"ok": False, "status": "ended", "error": "session_ended_mid_delegate"},
+                    {"ok": False, "status": "ended", "error": SESSION_ENDED_MID_DELEGATE},
                     410,
                 )
                 return
@@ -869,7 +874,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         if manifest.status == "ended":
             self._json(
-                {"ok": False, "status": "ended", "error": "session_ended_mid_delegate"},
+                {"ok": False, "status": "ended", "error": SESSION_ENDED_MID_DELEGATE},
                 410,
             )
             return
@@ -989,7 +994,7 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc:
                 if isinstance(exc, SessionEndedMidTurn):
                     self._json(
-                        {"ok": False, "status": "ended", "error": "session_ended_mid_delegate"},
+                        {"ok": False, "status": "ended", "error": SESSION_ENDED_MID_DELEGATE},
                         410,
                     )
                     return
@@ -998,7 +1003,7 @@ class Handler(BaseHTTPRequestHandler):
                         {
                             "ok": False,
                             "status": "interrupted",
-                            "error": "record_torn",
+                            "error": RECORD_TORN,
                             "detail": str(exc),
                         },
                         410,
@@ -1077,7 +1082,7 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as exc:
             if isinstance(exc, SessionEndedMidTurn):
                 self._json(
-                    {"status": "ended", "error": "session_ended_mid_delegate"}, 410
+                    {"status": "ended", "error": SESSION_ENDED_MID_DELEGATE}, 410
                 )
                 return
             # Sprint 220 (piece-D dispatch): a fresh session that never opened
@@ -1092,7 +1097,7 @@ class Handler(BaseHTTPRequestHandler):
                         "status": "ended",
                         "final_seq": seq_at_start,
                         "record": manifest.record_root,
-                        "reason": "fresh_session_never_opened",
+                        "reason": FRESH_SESSION_NEVER_OPENED,
                     }
                 )
                 return
@@ -1100,7 +1105,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(
                     {
                         "status": "interrupted",
-                        "error": "record_torn",
+                        "error": RECORD_TORN,
                         "detail": str(exc),
                     },
                     410,
@@ -1477,7 +1482,7 @@ class Handler(BaseHTTPRequestHandler):
             )
         except SessionEndedMidTurn:
             self._json(
-                {"ok": False, "status": "ended", "error": "session_ended_mid_delegate"}, 410
+                {"ok": False, "status": "ended", "error": SESSION_ENDED_MID_DELEGATE}, 410
             )
             return
         except Exception as exc:  # noqa: BLE001 — bridge surfaces the class + text

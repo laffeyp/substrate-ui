@@ -33,6 +33,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import server  # noqa: E402
+from session_errors import SESSION_ENDED_MID_DELEGATE  # noqa: E402
 from session_registry import SessionRegistry  # noqa: E402
 
 from substrate import api  # noqa: E402
@@ -114,7 +115,7 @@ def test_manifest_transitions_to_ended_and_next_turn_returns_410(
     status, body = _post_json(base + f"/api/session/{sid}/turn", {"text": "too late"})
     assert status == 410
     assert body["status"] == "ended"
-    assert body["error"] == "session_ended_mid_delegate"
+    assert body["error"] == SESSION_ENDED_MID_DELEGATE
 
 
 def test_end_on_unknown_session_returns_404(base: str) -> None:
