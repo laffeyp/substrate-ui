@@ -1185,6 +1185,27 @@ class Handler(BaseHTTPRequestHandler):
 
         from substrate.topologies.session import SessionEndRequested
 
+        # Sprint 225b: cascade to child sub-agents FIRST. A composite parent
+        # (a session that has children via composite_of) ends each child
+        # before ending itself. Per-child failure is best-effort — logged
+        # and continued — so a single stuck child does not block the parent's
+        # SessionEnded from landing on the record.
+        children = _SESSION_REGISTRY.list_children(session_id)
+        for child_manifest in children:
+            try:
+                child_end_event = SessionEndRequested(
+                    session_id=child_manifest.session_id, source="composite_parent_end"
+                )
+                _SESSION_REGISTRY.turn_sync(
+                    child_manifest.session_id,
+                    resume_event=child_end_event,
+                    timeout_seconds=30.0,
+                )
+            except FreshSessionRequiresUserMessage:
+                _SESSION_REGISTRY.update_status(child_manifest.session_id, STATUS_ENDED)
+            except Exception:  # noqa: BLE001 — child cascade is best-effort; one child's failure does not block the parent.
+                traceback.print_exc()
+
         # Pre-request tail seq (piece-B review finding 7 shape).
         record_root_pre = Path(manifest.record_root)
         seq_at_start = -1
@@ -1380,6 +1401,17 @@ class Handler(BaseHTTPRequestHandler):
         if _SESSION_REGISTRY is None:
             self._error(503, "session registry not initialized (boot ordering)")
             return
+        # Sprint 225b: cascade delete to child sub-agents first. Rule 12
+        # preserves every record dir on disk; only manifests + by-name
+        # entries drop. Per-child KeyError is a race (child dropped
+        # between list_children and delete); ignore per the best-effort
+        # contract.
+        children = _SESSION_REGISTRY.list_children(session_id)
+        for child_manifest in children:
+            try:
+                _SESSION_REGISTRY.delete(child_manifest.session_id)
+            except KeyError:
+                pass
         try:
             _SESSION_REGISTRY.delete(session_id)
         except KeyError:

@@ -110,6 +110,13 @@ class SessionManifest(Struct, frozen=True):
     # assembled_prompt (spec §7b). Empty string means no prefix.
     # Mutable via PATCH /api/session/<id> {per_turn}.
     per_turn: str = ""
+    # Sprint 225b: composite parent linkage. `None` for standalone
+    # sessions. For a child sub-agent in a session composite (e.g.
+    # sprint 225c's pair_coding reviewer), holds the parent's session_id.
+    # POST /end and DELETE on the parent cascade to every child via
+    # list_children(parent_id). The relationship is one level deep — a
+    # child of a child is not a supported shape.
+    composite_of: str | None = None
 
 
 class NameCollision(Exception):
@@ -346,6 +353,7 @@ class SessionRegistry:
         seed: str,
         role: str = "default",
         tools: tuple[str, ...] | None = None,
+        composite_of: str | None = None,
         created_at: float | None = None,
     ) -> SessionManifest:
         """Register a new session. Atomic against by-name.json under `fcntl.flock`.
@@ -366,6 +374,7 @@ class SessionRegistry:
             seed=seed,
             role=role,
             tools=tools,
+            composite_of=composite_of,
         )
         # Sprint 223e race fix: bridge finds a session by_name and dispatches
         # a turn immediately after create. Under flock, the by-name.json write
@@ -517,6 +526,13 @@ class SessionRegistry:
 
     def list_all(self) -> list[SessionManifest]:
         return list(self._manifests.values())
+
+    def list_children(self, parent_id: str) -> list[SessionManifest]:
+        """Sprint 225b: return every manifest whose composite_of == parent_id.
+        Used by the daemon's end/delete cascade. O(n) scan of the in-memory
+        catalog — a small n; the daemon holds sessions in the hundreds, not
+        millions."""
+        return [m for m in self._manifests.values() if m.composite_of == parent_id]
 
     # ── standing-session turn (delegate path 1 + POST /api/session/<id>/turn) ─
 
@@ -1152,6 +1168,8 @@ def _manifest_to_dict(m: SessionManifest) -> dict[str, Any]:
         "role": m.role,
         # Sprint 223d: per-turn text prefixed to every UserMessage.
         "per_turn": m.per_turn,
+        # Sprint 225b: composite parent id (None for standalone sessions).
+        "composite_of": m.composite_of,
     }
 
 
@@ -1192,6 +1210,7 @@ def _manifest_from_dict(d: dict[str, Any]) -> SessionManifest:
         tools=tools,
         role=str(d.get("role") or "default"),
         per_turn=str(d.get("per_turn") or ""),
+        composite_of=d.get("composite_of") if d.get("composite_of") is not None else None,
     )
 
 
