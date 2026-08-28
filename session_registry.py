@@ -106,6 +106,17 @@ class SessionEndedMidTurn(Exception):
     """
 
 
+class FreshSessionRequiresUserMessage(Exception):
+    """Sprint 217a: raised by `turn_sync` when the session's record is empty
+    (no envelopes on disk yet) and the resume event is not a `UserMessage`.
+    A fresh session opens via `Runtime.run(topology)` with a `session_open`
+    producer emitting the first `UserMessage`; other kinds cannot open a run
+    in that shape. `_shutdown_all_sessions` catches this and buckets the
+    session as `skipped_fresh`, transitioning the manifest to `"ended"`
+    without opening the record.
+    """
+
+
 class TurnHandle:
     """The running turn's event loop, task, and Runtime — populated by
     `_run_resume_sync`, read by `interrupt` to reach the worker thread's
@@ -119,7 +130,10 @@ class TurnHandle:
         self.runtime: api.Runtime | None = None
 
 
-SessionTopologyFactory = Callable[["SessionManifest"], Callable[["TopologyBuilder"], None]]
+SessionTopologyFactory = Callable[
+    ["SessionManifest", Any],  # (manifest, first_turn_user_message | None) → topology
+    Callable[["TopologyBuilder"], None],
+]
 
 
 def _atomic_write_json(path: Path, data: Any) -> None:
@@ -432,7 +446,6 @@ class SessionRegistry:
                 raise SessionEndedMidTurn(
                     f"session {session_id!r} ended before the turn started"
                 )
-            factory = self._session_topology_factory(live_manifest)
             record_root = Path(live_manifest.record_root)
             # Sprint 214a: `resume_event_builder` runs UNDER the lock so record-derived
             # state (like next turn_index computed from the reviewer's tail) is atomic
@@ -447,16 +460,49 @@ class SessionRegistry:
                         "turn_sync: pass either resume_event or resume_event_builder"
                     )
                 effective_resume_event = resume_event
+            # Sprint 217a: compose `Runtime.run` for the first turn on a fresh
+            # record and `Runtime.resume` for every turn after. An empty record
+            # was the source of finding 16: the previous shape called
+            # `Runtime.resume` on a fresh root and `_resume_bootstrap` saw
+            # `max_seq == -1`, injected the resume event as the first envelope,
+            # and skipped `substrate.RunStarted`. Now the daemon composes the
+            # two primitives: `.run()` on empty (with a `session_open` producer
+            # that emits the first UserMessage from an initial), `.resume()`
+            # otherwise. Neither `Runtime.run` nor `Runtime.resume` changes.
+            is_fresh_record = not _record_has_envelopes(record_root)
+            if is_fresh_record:
+                # Fresh session: the resume_event must be a UserMessage so the
+                # `session_open` producer can emit it as the first envelope.
+                # SIGTERM shutdown (or any other non-UserMessage first-turn caller)
+                # gets a typed refusal; `_shutdown_all_sessions` catches it and
+                # buckets under `skipped_fresh`.
+                if type(effective_resume_event).__name__ != "UserMessage":
+                    raise FreshSessionRequiresUserMessage(
+                        f"session {session_id!r} has no record yet; the first-turn "
+                        f"resume event must be a UserMessage (got "
+                        f"{type(effective_resume_event).__name__!r})"
+                    )
+                factory = self._session_topology_factory(live_manifest, effective_resume_event)
+            else:
+                factory = self._session_topology_factory(live_manifest, None)
             turn_handle = TurnHandle()
             self._running_handles[session_id] = turn_handle
             try:
-                result = _run_resume_sync(
-                    factory,
-                    record_root,
-                    effective_resume_event,
-                    timeout_seconds=timeout_seconds,
-                    handle_out=turn_handle,
-                )
+                if is_fresh_record:
+                    result = _run_run_sync(
+                        factory,
+                        record_root,
+                        timeout_seconds=timeout_seconds,
+                        handle_out=turn_handle,
+                    )
+                else:
+                    result = _run_resume_sync(
+                        factory,
+                        record_root,
+                        effective_resume_event,
+                        timeout_seconds=timeout_seconds,
+                        handle_out=turn_handle,
+                    )
             finally:
                 self._running_handles.pop(session_id, None)
             status_str = getattr(result, "status", "paused")
@@ -506,31 +552,65 @@ class SessionRegistry:
         """F14: increment the turn counter after a successful turn."""
         self._next_turn_index[session_id] = self._next_turn_index.get(session_id, 0) + 1
 
-    def interrupt(self, session_id: str) -> bool:
-        """Sprint 215b: cancel the model producer in a running turn so the
-        session parks on interrupt. Reaches the running turn's event loop and
-        Runtime via `_running_handles` (populated by turn_sync, read here
-        WITHOUT the per-session lock — intentionally, so the interrupt does
-        not block on the turn that holds it).
+    def interrupt(self, session_id: str) -> dict[str, Any] | None:
+        """Sprint 217d: cancel the running turn's model producer via the v0.3
+        `Runtime.cancel_producer(instance, cause="external", caller=...)`
+        substrate primitive. Reaches the worker thread's event loop through
+        `_running_handles.loop` and schedules a lookup+cancel closure via
+        `call_soon_threadsafe` so the primitive runs on the loop it belongs to
+        (the primitive's own thread-safety contract).
 
-        Returns True if a cancel was dispatched, False if no turn is running
-        for this session (parked / no handle / loop not yet live). The cancel
-        is asynchronous — `call_soon_threadsafe` schedules `cancel_producers`
-        on the worker's event loop; the producer's CancelledError handler
-        enqueues ProducerCancelled; the park-on-interrupt trigger fires.
+        Returns the cancelled producer's `ProducerRef` dict `{kind, instance,
+        parent}` when a cancel was dispatched. Returns `None` when no turn is
+        running for this session (parked, no handle, runtime not yet live) or
+        when the model producer has already completed / never started.
+
+        The dispatch is synchronous from the caller's view up to a 1-second
+        wait for the loop-side closure to complete; the resulting
+        `ProducerCancelled` envelope lands on the record asynchronously
+        (the CancelledError handler in `_producer_task` writes it). The
+        endpoint layer polls the record if it needs to observe the landing.
         """
+        import concurrent.futures
+
         handle = self._running_handles.get(session_id)
         if handle is None:
-            return False
+            return None
         loop = handle.loop
         runtime = handle.runtime
         if loop is None or runtime is None:
-            return False
+            return None
+
+        fut: concurrent.futures.Future[dict[str, Any] | None] = concurrent.futures.Future()
+
+        def _do_cancel() -> None:
+            try:
+                st = getattr(runtime, "_st", None)
+                if st is None:
+                    fut.set_result(None)
+                    return
+                # Find the live model instance under the loop's own view of
+                # kind_by_instance; the read is consistent because we run on
+                # the loop that mutates it.
+                for inst, kind in list(st.kind_by_instance.items()):
+                    if kind == "model":
+                        ref = runtime.cancel_producer(
+                            inst, cause="external", caller="daemon:interrupt"
+                        )
+                        fut.set_result(ref)
+                        return
+                fut.set_result(None)
+            except Exception as exc:  # noqa: BLE001 — carry to the caller thread
+                fut.set_exception(exc)
+
         try:
-            loop.call_soon_threadsafe(runtime.cancel_producers, "model")
+            loop.call_soon_threadsafe(_do_cancel)
         except RuntimeError:
-            return False
-        return True
+            return None
+        try:
+            return fut.result(timeout=1.0)
+        except concurrent.futures.TimeoutError:
+            return None
 
     def has_session_dir(self, session_id: str) -> bool:
         """True iff `<base>/<sid>/` exists on disk. Used to tell a
@@ -638,6 +718,84 @@ class SessionRegistry:
 
 
 # ── helpers ─────────────────────────────────────────────────────────────────
+
+
+def _record_has_envelopes(record_root: Path) -> bool:
+    """Sprint 217a: True iff the record directory exists AND contains at least
+    one complete envelope. The daemon's `turn_sync` composes `Runtime.run` on
+    an empty (or absent) record and `Runtime.resume` on a populated one — the
+    substrate primitives stay each what their docstring says.
+    """
+    if not record_root.exists():
+        return False
+    try:
+        for _ in api.read_record(record_root):
+            return True
+    except Exception:  # noqa: BLE001 — torn tail / mid-write reads as "no envelopes"
+        return False
+    return False
+
+
+def _run_run_sync(
+    factory: Callable[["TopologyBuilder"], None],
+    record_root: Path,
+    *,
+    timeout_seconds: float,
+    handle_out: TurnHandle | None = None,
+) -> Any:
+    """Sprint 217a: run `Runtime(record_root, persistent=True).run(factory)` on
+    a fresh record in a worker thread with its own event loop. The `session_open`
+    producer inside the factory emits the first-turn UserMessage; the topology
+    fires through to `Park` and pauses on `pause_await_input`. The primitive
+    itself is unchanged; the daemon composes it here for turn 1.
+
+    Same shape as `_run_resume_sync` — TurnHandle populated for interrupt,
+    timeout raises TimeoutError, kernel exception re-raised — so the interrupt
+    seam works on the first turn as it does on every subsequent turn.
+    """
+    box: dict[str, Any] = {}
+    ready = threading.Event()
+    done = threading.Event()
+
+    def worker() -> None:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            runtime = api.Runtime(record_root, persistent=True)
+            task = loop.create_task(runtime.run(factory))
+            if handle_out is not None:
+                handle_out.loop = loop
+                handle_out.task = task
+                handle_out.runtime = runtime
+            ready.set()
+            box["result"] = loop.run_until_complete(task)
+        except asyncio.CancelledError:
+            box["cancelled"] = True
+        except Exception as exc:  # noqa: BLE001 — carried to caller thread
+            box["error"] = exc
+        finally:
+            loop.close()
+            done.set()
+
+    threading.Thread(target=worker, daemon=True).start()
+    if not done.wait(timeout_seconds):
+        ready.wait(1.0)
+        if handle_out is not None:
+            loop, task = handle_out.loop, handle_out.task
+        else:
+            loop, task = None, None
+        if loop is not None and task is not None:
+            loop.call_soon_threadsafe(task.cancel)
+            done.wait(10.0)
+        raise TimeoutError(
+            f"SessionRegistry.turn_sync: run against {record_root} exceeded "
+            f"{timeout_seconds}s and was cancelled"
+        )
+    if box.get("cancelled"):
+        raise TimeoutError(f"run against {record_root} was cancelled")
+    if "error" in box:
+        raise box["error"]
+    return box["result"]
 
 
 def _run_resume_sync(
@@ -862,6 +1020,7 @@ def _replace(m: SessionManifest, **kwargs: Any) -> SessionManifest:
 
 
 __all__ = [
+    "FreshSessionRequiresUserMessage",
     "NameCollision",
     "SessionEndedMidTurn",
     "SessionManifest",
