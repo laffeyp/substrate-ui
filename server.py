@@ -192,12 +192,30 @@ def _shutdown_all_sessions(*, per_session_timeout: float = 10.0) -> dict[str, in
                 try:
                     _SESSION_REGISTRY.update_status(manifest.session_id, "ended")
                     result["skipped_fresh"] += 1
-                except Exception:  # noqa: BLE001
+                except Exception:  # noqa: BLE001 — shutdown sweep must not raise; unknown per-session failure buckets as `failed` and the loop continues.
                     result["failed"] += 1
                 continue
             traceback.print_exception(exc)
             result["failed"] += 1
     return result
+
+
+def _tools_for_manifest(manifest: Any) -> dict[str, Any]:
+    """Pure function: given a session manifest, return the tool dict the
+    session topology will bind. Extracted so tests can observe the filter
+    without wiring an in-process daemon.
+
+    manifest.tools == None or () → the full suite (unrestricted).
+    manifest.tools == ("read_file", "grep") → those two tools only.
+    An allow-list entry that names a tool absent from full_suite is
+    dropped silently (unknown name → nothing to bind to).
+    """
+    from substrate.topologies.tool_loop.tools import full_suite
+
+    all_tools = full_suite(Path(manifest.workspace))
+    if manifest.tools:
+        return {name: all_tools[name] for name in manifest.tools if name in all_tools}
+    return all_tools
 
 
 def _build_session_topology_from_manifest(
@@ -218,15 +236,7 @@ def _build_session_topology_from_manifest(
     from substrate.topologies.tool_loop.tools import full_suite
 
     responder = _daemon_driver_resolver(manifest.driver)
-    all_tools = full_suite(Path(manifest.workspace))
-    # Sprint 217e: manifest.tools filters the suite. None or empty → unrestricted;
-    # a non-empty allow-list keeps only the named tools. An allow-list entry that
-    # names a tool absent from full_suite is dropped silently (the daemon's tool
-    # registry is the source of truth; unknown names have nothing to bind to).
-    if manifest.tools:
-        session_tools = {name: all_tools[name] for name in manifest.tools if name in all_tools}
-    else:
-        session_tools = all_tools
+    session_tools = _tools_for_manifest(manifest)
     return session_topology(
         driver=responder,
         driver_name=manifest.driver,
@@ -700,7 +710,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._clear_runs()
                 return
             self._error(404, f"no control endpoint {path!r}")
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001 — top-level do_POST boundary: a runaway inside any endpoint must become a JSON 500, not kill the daemon thread.
             self._error(500, f"{type(exc).__name__}: {exc}")
 
     def _clear_runs(self) -> None:
@@ -730,8 +740,8 @@ class Handler(BaseHTTPRequestHandler):
         raw = self.rfile.read(length)
         try:
             data = msgspec.json.decode(raw)
-        except Exception as exc:  # noqa: BLE001
-            raise ValueError(f"POST body is not JSON: {type(exc).__name__}: {exc}") from exc
+        except msgspec.DecodeError as exc:
+            raise ValueError(f"POST body is not JSON: {exc}") from exc
         return data if isinstance(data, dict) else {}
 
     def _session_create(self) -> None:
@@ -1410,12 +1420,13 @@ class Handler(BaseHTTPRequestHandler):
         if (q.get("legacy", [""])[0] or "").lower() == "true":
             self._agent_legacy(q)
             return
-        # Compat surface: pre-bridge tests wire the server without a session
-        # registry. Fall back to the legacy path rather than 503 — the spec's
-        # "one release" clock runs on real callers, not on test fixtures that
-        # never touched sessions.
         if _SESSION_REGISTRY is None:
-            self._agent_legacy(q)
+            # No silent legacy fallback. The bridge is the default; the
+            # legacy shape ships one release with explicit `legacy=true`
+            # opt-in per TECH-SPEC §7 line 690. A caller reaching here
+            # without a registry is a real 503 — the daemon boots the
+            # registry at main() and every serve_forever call sees it.
+            self._error(503, "session registry not initialized (boot ordering)")
             return
 
         session_name = q.get("session", [""])[0] or ""
@@ -1712,7 +1723,7 @@ class Handler(BaseHTTPRequestHandler):
         except (SpecError, api.RegistrationError) as exc:
             self._error(400, str(exc))
             return
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001 — TopologyBuilder.build() can raise anything a Producer's constructor does; malformed authoring spec → 400 naming the class.
             self._error(400, f"{type(exc).__name__}: {exc}")
             return
         name = str(spec.get("name") or "authored")
@@ -1868,7 +1879,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._session_patch(session_id)
                 return
             self._error(404, f"no patch endpoint {path!r}")
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001 — top-level do_PATCH boundary: same shape as do_POST — never let a per-endpoint exception kill the daemon thread.
             self._error(500, f"{type(exc).__name__}: {exc}")
 
     def do_DELETE(self) -> None:  # noqa: N802 — sprint 214b: DELETE /api/session/<id>
@@ -1890,7 +1901,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._session_delete(session_id)
                 return
             self._error(404, f"no delete endpoint {path!r}")
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001 — top-level do_DELETE boundary: same shape as do_POST / do_PATCH.
             self._error(500, f"{type(exc).__name__}: {exc}")
 
     def do_GET(self) -> None:  # noqa: N802

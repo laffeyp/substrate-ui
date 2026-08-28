@@ -84,6 +84,44 @@ def test_isolate_missing_defaults_to_false(base: tuple[str, Path]) -> None:
     assert body["workspace_shape"] == "flat"
 
 
+def test_isolate_write_lands_in_isolated_dir_not_caller_path(
+    base: tuple[str, Path], tmp_path: Path
+) -> None:
+    """Observation half of the dual contract for §9c Mode 3: fire a real
+    write_file tool call on the built session tool suite and verify the
+    file lands under the isolated workspace, not the caller-supplied
+    workspace. The 223c cards asserted only workspace_shape='isolate' —
+    a manifest-level claim. This test proves the runtime honors it.
+
+    Sprint 224c: adds the observation the 223c card was missing.
+    """
+    url, base_path = base
+    caller_ws = tmp_path / "caller"
+    caller_ws.mkdir()
+    status, body = _post(
+        url + "/api/session",
+        {"driver": "deterministic", "isolate": True, "workspace": str(caller_ws)},
+    )
+    assert status == 200, body
+    sid = body["session_id"]
+    manifest = server._SESSION_REGISTRY.get(sid)
+    isolated_ws = Path(manifest.workspace)
+    assert isolated_ws != caller_ws
+    # The tool suite the session would bind — same shape the session
+    # topology builds. write_file's `run` takes positional args
+    # `[path, text]` and returns a status string on success; a failure
+    # raises. See Tool.run signature at
+    # substrate/src/substrate/topologies/tool_loop/tools.py:58.
+    session_tools = server._tools_for_manifest(manifest)
+    session_tools["write_file"].run(["foo.txt", "hi"])
+    # The file is under the isolated workspace, NOT the caller's.
+    assert (isolated_ws / "foo.txt").is_file()
+    assert (isolated_ws / "foo.txt").read_text() == "hi"
+    assert not (caller_ws / "foo.txt").exists(), (
+        f"isolation breach: file leaked to caller workspace {caller_ws}"
+    )
+
+
 def test_isolate_plus_worktree_returns_400(base: tuple[str, Path]) -> None:
     url, _ = base
     status, body = _post(

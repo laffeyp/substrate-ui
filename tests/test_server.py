@@ -299,7 +299,7 @@ def test_agent_endpoint_launches_a_live_tool_using_loop(base: str) -> None:
     # LOG). The ollama path is the SAME seam with a real Responder (walkthrough), exercised live, not
     # in CI. Observation contract for the interactive-agent sprint: the agent run is a real recorded
     # tool loop the console can follow; the terminal-driving half is the two-track E2E (Addendum A).
-    res = post(base, "/api/agent?model=deterministic")
+    res = post(base, "/api/agent?model=deterministic&legacy=true")
     assert res["agent"] == "deterministic"
     name = res["name"]
     assert name.startswith("launch_agent")  # a prunable session run (launch_ prefix)
@@ -323,16 +323,16 @@ def test_agent_endpoint_reports_the_per_conversation_workspace(
     # NEVER the server's cwd (the scribble-in-the-repo footgun the cockpit hit live). Echoed back so
     # the terminal can show it.
     ws = str(tmp_path)
-    res = post(base, f"/api/agent?model=deterministic&workspace={ws}")
+    res = post(base, f"/api/agent?model=deterministic&legacy=true&workspace={ws}")
     assert res["workspace"] == ws  # absolute path used as-is
     assert Path(ws).is_dir()  # and created if missing
     # a bare name resolves under the sessions base, not treated as a relative cwd path.
-    named = post(base, "/api/agent?model=deterministic&workspace=mysession")[
+    named = post(base, "/api/agent?model=deterministic&legacy=true&workspace=mysession")[
         "workspace"
     ]
     assert named.endswith("/.substrate/sessions/mysession") and Path(named).is_dir()
     # unset -> a dedicated session dir, NOT the server's cwd (the footgun).
-    default_ws = post(base, "/api/agent?model=deterministic")["workspace"]
+    default_ws = post(base, "/api/agent?model=deterministic&legacy=true")["workspace"]
     assert "/.substrate/sessions/" in default_ws and default_ws != os.getcwd()
 
 
@@ -393,7 +393,7 @@ def test_agent_params_parse_and_echo(base: str) -> None:
         {"think": ["true"], "max_tokens": ["4096"], "timeout": ["240"]}
     ) == (True, 4096, 240.0)
     assert server._agent_params({"think": ["on"]}) == (True, 0, 300.0)
-    res = post(base, "/api/agent?model=deterministic&think=true&max_tokens=123&timeout=240")
+    res = post(base, "/api/agent?model=deterministic&legacy=true&think=true&max_tokens=123&timeout=240")
     assert res["params"] == {"think": True, "max_tokens": 123, "timeout": 240.0}
 
 
