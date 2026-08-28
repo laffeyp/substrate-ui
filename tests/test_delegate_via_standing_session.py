@@ -41,7 +41,10 @@ from substrate.topologies.session import (  # noqa: E402
 from substrate.topologies.tool_loop.delegate import make_delegate  # noqa: E402
 
 
-def _reviewer_factory(manifest: object) -> Callable[[api.TopologyBuilder], None]:
+def _reviewer_factory(
+    manifest: object, first_turn_user_message: object = None
+) -> Callable[[api.TopologyBuilder], None]:
+    del first_turn_user_message  # delegate path never opens a fresh record via .run()
     """Rebuild the reviewer's session_topology from its manifest. The daemon
     (substrate-ui/server.py, sprint 214) will do this with the driver registry
     + role prompts; here we use DeterministicResponder + no tools so the CI

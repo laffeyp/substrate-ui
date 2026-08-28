@@ -30,7 +30,10 @@ from substrate.topologies.session import session_topology  # noqa: E402
 from substrate.topologies.tool_loop.delegate import make_delegate  # noqa: E402
 
 
-def _factory(manifest: object) -> Callable[[api.TopologyBuilder], None]:
+def _factory(
+    manifest: object, first_turn_user_message: object = None
+) -> Callable[[api.TopologyBuilder], None]:
+    del first_turn_user_message  # delegate path uses .resume(); no first-turn opener needed
     del manifest
     return session_topology(
         driver=DeterministicResponder(seed=7),

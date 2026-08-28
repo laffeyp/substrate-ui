@@ -88,7 +88,10 @@ def test_shutdown_ends_every_parked_session_with_reason_daemon_shutdown(
     _park(url, sid_b)
 
     outcome = server._shutdown_all_sessions(per_session_timeout=10.0)
-    assert outcome == {"ended": 2, "skipped": 0, "failed": 0}
+    # Sprint 217a: bucket set split from `skipped` into `skipped_fresh` and
+    # `skipped_ended` so an operator reading the SIGTERM exit log can tell
+    # a fresh session (no record on disk) from one that ended before the sweep.
+    assert outcome == {"ended": 2, "skipped_fresh": 0, "skipped_ended": 0, "failed": 0}
 
     for sid in (sid_a, sid_b):
         record_root = Path(server._SESSION_REGISTRY.get(sid).record_root)
@@ -135,7 +138,8 @@ def test_shutdown_skips_already_ended_sessions(base: tuple[str, Path]) -> None:
 
     outcome = server._shutdown_all_sessions(per_session_timeout=10.0)
     # `done` was skipped (already ended); `live` was ended.
-    assert outcome == {"ended": 1, "skipped": 1, "failed": 0}
+    # Sprint 217a: the pre-ended session buckets under `skipped_ended`.
+    assert outcome == {"ended": 1, "skipped_fresh": 0, "skipped_ended": 1, "failed": 0}
     # The already-ended session's record still shows the earlier reason,
     # not the shutdown one.
     done_root = Path(server._SESSION_REGISTRY.get(sid_done).record_root)
@@ -168,7 +172,7 @@ def test_shutdown_continues_when_one_session_fails(
     monkeypatch.setattr(server._SESSION_REGISTRY, "turn_sync", _flaky_turn_sync)
 
     outcome = server._shutdown_all_sessions(per_session_timeout=10.0)
-    assert outcome == {"ended": 1, "skipped": 0, "failed": 1}
+    assert outcome == {"ended": 1, "skipped_fresh": 0, "skipped_ended": 0, "failed": 1}
     # The good session ended cleanly.
     good_root = Path(server._SESSION_REGISTRY.get(sid_good).record_root)
     assert_event(good_root, "SessionEnded", reason="daemon_shutdown")

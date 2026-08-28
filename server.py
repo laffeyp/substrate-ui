@@ -112,28 +112,40 @@ def _load_daemon_config(config_path: Path | None = None) -> dict[str, Any]:
 
 
 def _shutdown_all_sessions(*, per_session_timeout: float = 10.0) -> dict[str, int]:
-    """Sprint 215d: end every running/parked session cleanly on daemon
-    shutdown. For each manifest whose status is not `ended` or
-    `interrupted`, inject `SessionEndRequested(session_id, source=
-    "daemon_shutdown")` via `SessionRegistry.turn_sync`. The session
-    topology's `end-on-user-end` trigger reads the source and yields
-    `SessionEnded{reason: "daemon_shutdown"}`; `RunFinalised` follows;
-    `turn_sync` transitions the manifest to `"ended"`.
+    """Sprint 215d + 217a: end every running/parked session cleanly on daemon
+    shutdown. For each manifest whose status is not `ended` or `interrupted`,
+    inject `SessionEndRequested(session_id, source="daemon_shutdown")` via
+    `SessionRegistry.turn_sync`. The session topology's `end-on-user-end`
+    trigger reads the source and yields `SessionEnded{reason: "daemon_shutdown"}`;
+    `RunFinalised` follows; `turn_sync` transitions the manifest to `"ended"`.
+
+    Sprint 217a: `FreshSessionRequiresUserMessage` catches the fresh-session
+    edge — a manifest whose record was never opened (created via POST /session
+    but no /turn ever fired). SIGTERM's SessionEndRequested cannot open a
+    fresh record via the `session_open` path; the manifest transitions to
+    `"ended"` at the daemon layer without opening the record on disk.
 
     Sequential — waits up to `per_session_timeout` seconds per session,
     matching the parent card's "wait up to 10s per session for graceful
     pause, then exit" wording. Best-effort per session: an exception on
-    one session does not stop the loop. Returns `{"ended": N, "skipped":
-    M, "failed": K}` for the SIGTERM handler's exit log.
+    one session does not stop the loop.
+
+    Returns `{"ended": N, "skipped_fresh": F, "skipped_ended": M, "failed": K}`:
+      - ended:         SessionEndRequested drove a clean SessionEnded on the record
+      - skipped_fresh: manifest had no record on disk; transitioned to "ended"
+                       at the daemon layer without opening
+      - skipped_ended: manifest already had status "ended" or "interrupted"
+                       before the sweep — nothing to do
+      - failed:        an unexpected exception on one session; the sweep continued
     """
-    result = {"ended": 0, "skipped": 0, "failed": 0}
+    result = {"ended": 0, "skipped_fresh": 0, "skipped_ended": 0, "failed": 0}
     if _SESSION_REGISTRY is None:
         return result
     from substrate.topologies.session import SessionEndRequested
 
     for manifest in list(_SESSION_REGISTRY.list_all()):
         if manifest.status in ("ended", "interrupted"):
-            result["skipped"] += 1
+            result["skipped_ended"] += 1
             continue
         try:
             _SESSION_REGISTRY.turn_sync(
@@ -145,15 +157,34 @@ def _shutdown_all_sessions(*, per_session_timeout: float = 10.0) -> dict[str, in
             )
             result["ended"] += 1
         except Exception as exc:  # noqa: BLE001 — best-effort; log and move on
+            if type(exc).__name__ == "FreshSessionRequiresUserMessage":
+                # Fresh session: no record on disk to end. Transition the
+                # manifest to "ended" at the daemon layer without opening
+                # the run. Rule 12 preserves nothing (no record existed);
+                # the manifest hint just gets a terminal status.
+                try:
+                    _SESSION_REGISTRY.update_status(manifest.session_id, "ended")
+                    result["skipped_fresh"] += 1
+                except Exception:  # noqa: BLE001
+                    result["failed"] += 1
+                continue
             traceback.print_exception(exc)
             result["failed"] += 1
     return result
 
 
-def _build_session_topology_from_manifest(manifest: Any) -> Any:
+def _build_session_topology_from_manifest(
+    manifest: Any, first_turn_user_message: Any = None
+) -> Any:
     """The `session_topology_factory` closure the SessionRegistry calls per turn.
     Reconstructs the session_topology from a manifest's persistent fields —
     driver string, workspace, seed, session_id. The daemon binds this at boot.
+
+    Sprint 217a: `first_turn_user_message` threads the first-turn UserMessage
+    into the topology's `session_open` producer when `turn_sync` detects an
+    empty record and composes `Runtime.run(...)`. On subsequent turns the
+    argument is None; the topology fires without a `session_open` initial
+    and `Runtime.resume(topology, resume_event=UserMessage)` continues the run.
     """
     from substrate.topologies.session import session_topology
     from substrate.topologies.session.transcript import resolve_driver_context_tokens
@@ -173,6 +204,7 @@ def _build_session_topology_from_manifest(manifest: Any) -> Any:
         workspace_path=manifest.workspace,
         record_root=Path(manifest.record_root),
         script=None,
+        first_turn_user_message=first_turn_user_message,
     )
 
 
@@ -915,16 +947,28 @@ class Handler(BaseHTTPRequestHandler):
         )
 
     def _session_interrupt(self, session_id: str) -> None:
-        """Sprint 215b: POST /api/session/<id>/interrupt. Cancels the model
-        producer in the running turn so the session parks on interrupt. The
-        cancel is asynchronous — the running turn's park-on-interrupt trigger
-        fires when ProducerCancelled drains through the writer loop, and the
-        turn_sync call returns with status="parked".
+        """Sprint 217d: POST /api/session/<id>/interrupt. Cancels the running
+        turn's model producer through the v0.3 `Runtime.cancel_producer`
+        primitive. The cancel is dispatched synchronously (up to a 1-second
+        wait for the loop-side closure); the resulting `substrate.ProducerCancelled`
+        envelope lands on the record asynchronously. This handler waits up to
+        `max_wait_ms` (default 3000; capped at 30000) for the envelope to land
+        before returning, so a client that reads the response knows whether the
+        interrupt actually landed rather than just dispatched.
 
-        Returns 200 `{"interrupted": true}` if a cancel was dispatched, 200
-        `{"interrupted": false}` if no turn is running (the session is parked
-        or ended — interrupting while idle is a no-op, not an error). 404 on
-        unknown session_id.
+        Response body:
+          `{"interrupted": true, "landed": true, "producer": <ref>, "session_id": ...}`
+            — cancel dispatched and ProducerCancelled observed on the record.
+          `{"interrupted": true, "landed": false, "producer": <ref>, "session_id": ...}`
+            — cancel dispatched; envelope not yet on the record within the wait.
+             The client watches `/events` for the landing.
+          `{"interrupted": false, "landed": false, "session_id": ...}`
+            — no live producer to interrupt (idle session; not an error).
+
+        Query string: `?max_wait_ms=3000` (default), `?max_wait_ms=0` skips the
+        poll and returns the dispatch outcome immediately.
+
+        404 on unknown session_id.
         """
         if _SESSION_REGISTRY is None:
             self._error(503, "session registry not initialized (boot ordering)")
@@ -933,8 +977,50 @@ class Handler(BaseHTTPRequestHandler):
         if manifest is None:
             self._error(404, f"unknown session_id {session_id!r}")
             return
-        dispatched = _SESSION_REGISTRY.interrupt(session_id)
-        self._json({"interrupted": dispatched, "session_id": session_id})
+        # Parse wait cap. Malformed → 400.
+        try:
+            raw = parse_qs(urlparse(self.path).query).get("max_wait_ms", ["3000"])[0]
+            max_wait_ms = max(0, min(30000, int(raw)))
+        except ValueError:
+            self._error(400, f"max_wait_ms must be an integer, got {raw!r}")
+            return
+        ref = _SESSION_REGISTRY.interrupt(session_id)
+        if ref is None:
+            self._json(
+                {"interrupted": False, "landed": False, "session_id": session_id}
+            )
+            return
+        # Poll the record for a matching ProducerCancelled envelope. Poll interval
+        # 50 ms; cap at max_wait_ms. Match on the (kind, instance) pair the
+        # dispatch returned; a caller who reads landed=true knows the envelope
+        # naming this specific instance is on disk.
+        landed = False
+        if max_wait_ms > 0:
+            deadline = time.monotonic() + (max_wait_ms / 1000.0)
+            target_instance = str(ref.get("instance", ""))
+            record_root = Path(manifest.record_root)
+            while time.monotonic() < deadline:
+                try:
+                    for env in api.read_record(record_root):
+                        if env.get("kind") != api.PRODUCER_CANCELLED:
+                            continue
+                        producer = (env.get("payload") or {}).get("producer") or {}
+                        if isinstance(producer, dict) and producer.get("instance") == target_instance:
+                            landed = True
+                            break
+                except Exception:  # noqa: BLE001 — mid-write; poll again
+                    pass
+                if landed:
+                    break
+                time.sleep(0.05)
+        self._json(
+            {
+                "interrupted": True,
+                "landed": landed,
+                "producer": ref,
+                "session_id": session_id,
+            }
+        )
 
     def _session_list(self) -> None:
         """Sprint 214b: GET /api/session. Returns `{"live": [...], "parked": [...],
@@ -1697,7 +1783,9 @@ def main() -> None:
         print("SIGTERM received; ending sessions cleanly...", flush=True)
         outcome = _shutdown_all_sessions(per_session_timeout=10.0)
         print(
-            f"shutdown: ended={outcome['ended']} skipped={outcome['skipped']} "
+            f"shutdown: ended={outcome['ended']} "
+            f"skipped_fresh={outcome['skipped_fresh']} "
+            f"skipped_ended={outcome['skipped_ended']} "
             f"failed={outcome['failed']}",
             flush=True,
         )
