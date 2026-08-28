@@ -85,6 +85,18 @@ class _UnixHTTPServer(socketserver.ThreadingUnixStreamServer):
 # with a session_topology_factory closure that resolves a manifest's driver string
 # to a Responder and rebuilds the session_topology per turn.
 _SESSION_REGISTRY: Any = None
+# Sprint 223 — application catalog. Populated at main() via
+# `applications.registry.load_manifests()`; served by `GET /api/applications`.
+# Empty at import time so a fresh daemon (or a test that spins the server
+# without wiring the registry) responds with `[]` rather than 500.
+_APPLICATIONS: dict[str, Any] = {}
+
+
+def _application_spec_to_wire(spec: Any) -> dict[str, Any]:
+    """Local wire adapter re-export so the handler stays import-side-effect free."""
+    from substrate.topologies.applications.registry import spec_to_wire
+
+    return spec_to_wire(spec)
 
 # Sprint 215d: SIGTERM guard so a second signal during shutdown is a no-op
 # instead of re-entering `_shutdown_all_sessions` on a half-torn catalog.
@@ -1917,6 +1929,16 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/session":
                 self._session_list()
                 return
+            if path == "/api/applications":
+                # Sprint 223 — piece E's flat manifest catalog. Response
+                # shape is a JSON list of parsed specs per TECH-SPEC §7.6
+                # line 1044: `{name, description, inputs_schema,
+                # output_kind, runs}`. Read from the boot-loaded
+                # `_APPLICATIONS` dict; the load fires at main().
+                self._json(
+                    [_application_spec_to_wire(spec) for spec in _APPLICATIONS.values()]
+                )
+                return
             if path.startswith("/api/session/by-name/"):
                 self._session_by_name(unquote(path[len("/api/session/by-name/") :]))
                 return
@@ -2086,6 +2108,15 @@ def main() -> None:
         turn_queue_cap=int(cfg["turn_queue_cap"]),
     )
     _SESSION_REGISTRY = registry
+    # Sprint 223 — application catalog boot-scan. Scans
+    # `substrate/topologies/applications/*.manifest.toml` and loads what
+    # parses. `on_error="skip"` per §7.6: a fresh install has zero
+    # manifests; a malformed one is logged and skipped so one bad file
+    # does not kill the daemon. Served by `GET /api/applications`.
+    global _APPLICATIONS
+    from substrate.topologies.applications.registry import load_manifests
+
+    _APPLICATIONS = load_manifests(on_error="skip")
     skipped = registry.boot_scan()
     manifests = registry.list_all()
     summary = (
