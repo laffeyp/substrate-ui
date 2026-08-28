@@ -90,6 +90,11 @@ _SESSION_REGISTRY: Any = None
 # Empty at import time so a fresh daemon (or a test that spins the server
 # without wiring the registry) responds with `[]` rather than 500.
 _APPLICATIONS: dict[str, Any] = {}
+# Sprint 225a: async runs launched via POST /api/topology/<name>/run
+# with await_completion=false. run_id -> {"record_root", "thread",
+# "started_at", "application", "await_completion"}. Sprint 225d's
+# GET /api/topology/<name>/status?run_id=<id> reads from here.
+_TOPOLOGY_RUNS: dict[str, dict[str, Any]] = {}
 
 
 def _application_spec_to_wire(spec: Any) -> dict[str, Any]:
@@ -232,6 +237,90 @@ def _tools_for_manifest(manifest: Any) -> dict[str, Any]:
     if manifest.tools:
         return {name: all_tools[name] for name in manifest.tools if name in all_tools}
     return all_tools
+
+
+# ── sprint 225a: application dispatch — one-shot topology launcher ──────
+
+
+def _build_code_review_from_inputs(inputs: dict[str, Any]) -> Callable[..., Any]:
+    """`fanout_review_topology` — inputs.<role>_model per DEFAULT_ROLES
+    resolve into the `responders` dict; `judge_model` into `judge`."""
+    from substrate.topologies.applications.fanout_review import fanout_review_topology
+    from substrate.topologies.code_review import DEFAULT_ROLES
+
+    responders = {
+        role: _daemon_driver_resolver(str(inputs[f"{role}_model"])) for role in DEFAULT_ROLES
+    }
+    judge = _daemon_driver_resolver(str(inputs["judge_model"]))
+    return fanout_review_topology(
+        repo=str(inputs["repo"]),
+        ref=str(inputs.get("ref", "HEAD~1")),
+        responders=responders,
+        judge=judge,
+        quorum=int(inputs.get("quorum", 3)),
+    )
+
+
+def _build_best_of_n_verified_from_inputs(inputs: dict[str, Any]) -> Callable[..., Any]:
+    """`best_of_n_verified_topology` — drafter_model + verify_model both
+    resolve into Responders. The verify=Check | Responder union collapses
+    to Responder here; a deterministic-check variant is a future card."""
+    from substrate.topologies.applications.best_of_n_verified import best_of_n_verified_topology
+
+    return best_of_n_verified_topology(
+        task=str(inputs["task"]),
+        drafter=_daemon_driver_resolver(str(inputs["drafter_model"])),
+        verify=_daemon_driver_resolver(str(inputs["verify_model"])),
+        n=int(inputs.get("n", 3)),
+        max_rounds=int(inputs.get("max_rounds", 2)),
+        watchdog_seconds=float(inputs.get("watchdog_seconds", 30.0)),
+    )
+
+
+def _build_research_sweep_from_inputs(inputs: dict[str, Any]) -> Callable[..., Any]:
+    """`research_sweep_topology` — three role-model kwargs; documents is a
+    list of {label, text} dicts on the wire, translated here to the
+    [(label, text), ...] tuple shape the topology expects."""
+    from substrate.topologies.applications.research_sweep import research_sweep_topology
+
+    docs_raw = inputs.get("documents") or []
+    if not isinstance(docs_raw, list):
+        raise ValueError(f"documents must be a list; got {type(docs_raw).__name__}")
+    documents = [(str(d["label"]), str(d["text"])) for d in docs_raw]
+    return research_sweep_topology(
+        question=str(inputs["question"]),
+        documents=documents,
+        reader=_daemon_driver_resolver(str(inputs["reader_model"])),
+        critic=_daemon_driver_resolver(str(inputs["critic_model"])),
+        synthesizer=_daemon_driver_resolver(str(inputs["synthesizer_model"])),
+        watchdog_seconds=float(inputs.get("watchdog_seconds", 30.0)),
+    )
+
+
+# Dispatch table: manifest.name -> callable that builds the topology from
+# the wire inputs. New applications wire in one entry per name. The
+# manifest's [inputs] schema still gates required fields at the endpoint
+# layer; this table only knows how to translate resolved values into
+# topology kwargs (including the role-to-Responder mapping).
+_APP_BUILDERS: dict[str, Callable[[dict[str, Any]], Callable[..., Any]]] = {
+    "code_review": _build_code_review_from_inputs,
+    "best_of_n_verified": _build_best_of_n_verified_from_inputs,
+    "research_sweep": _build_research_sweep_from_inputs,
+}
+
+
+def _validate_topology_inputs(spec: Any, inputs: dict[str, Any]) -> str | None:
+    """Return an error message if required fields are missing; None if OK."""
+    for field_name, field_spec in spec.inputs_schema.items():
+        if not isinstance(field_spec, dict):
+            continue
+        # A field with no `default` and not marked optional is required. The
+        # manifest schema uses TOML inline-table shape {type=..., default=...}.
+        if "default" in field_spec:
+            continue
+        if field_name not in inputs:
+            return f"missing required input {field_name!r}"
+    return None
 
 
 def _build_session_topology_from_manifest(
@@ -706,6 +795,14 @@ class Handler(BaseHTTPRequestHandler):
             if path.startswith("/api/session/") and path.endswith("/interrupt"):
                 session_id = path[len("/api/session/") : -len("/interrupt")]
                 self._session_interrupt(session_id)
+                return
+            if path.startswith("/api/topology/") and path.endswith("/run"):
+                # Sprint 225a: POST /api/topology/<name>/run — piece-E
+                # application dispatch endpoint per TECH-SPEC §7.6 line
+                # 1043. One-shot only (session-shape apps route through
+                # POST /api/session or /api/session/composite instead).
+                topology_name = path[len("/api/topology/") : -len("/run")]
+                self._topology_run(topology_name)
                 return
             if path == "/api/launch":
                 self._launch(parse_qs(urlparse(self.path).query))
@@ -1369,6 +1466,126 @@ class Handler(BaseHTTPRequestHandler):
         except (BrokenPipeError, ConnectionResetError, OSError):
             # Client hung up mid-stream. Every SSE server has to tolerate this.
             return
+
+    def _topology_run(self, application_name: str) -> None:
+        """Sprint 225a: POST /api/topology/<name>/run.
+
+        Body: `{inputs: {...}, await_completion?: bool, ...}`.
+        Reads the manifest from `_APPLICATIONS`; resolves `<role>_model`
+        strings via `_daemon_driver_resolver`; hands the resolved inputs
+        to the `_APP_BUILDERS` dispatch. `runs = "session"` and
+        `runs = "session_composite"` return 400 with a pointer at the
+        right endpoint (this launcher is one-shot only per §7.6).
+
+        `await_completion=true` (default): blocks; response is
+        `{run_id, record_root, status: "finalised", final_seq}`.
+        `await_completion=false`: spawns a worker thread; response is
+        `{run_id, record_root, status: "running"}` and sprint 225d's
+        status endpoint polls the record to observe transitions.
+        """
+        spec = _APPLICATIONS.get(application_name)
+        if spec is None:
+            self._error(404, f"unknown application {application_name!r}")
+            return
+        if spec.runs == "session":
+            self._error(
+                400,
+                f"application {application_name!r} has runs='session'; open it via "
+                "POST /api/session (session-shape apps do not dispatch through /run)",
+            )
+            return
+        if spec.runs == "session_composite":
+            self._error(
+                400,
+                f"application {application_name!r} has runs='session_composite'; "
+                "sprint 225c ships the composite dispatch endpoint",
+            )
+            return
+        try:
+            body = self._read_json_body()
+        except ValueError as exc:
+            self._error(400, str(exc))
+            return
+        inputs = body.get("inputs", {})
+        if not isinstance(inputs, dict):
+            self._error(400, "`inputs` must be an object")
+            return
+        missing = _validate_topology_inputs(spec, inputs)
+        if missing:
+            self._error(400, missing)
+            return
+        # Fold defaults from the manifest schema into the resolved inputs
+        # so builders can rely on every field being present.
+        resolved: dict[str, Any] = {}
+        for field_name, field_spec in spec.inputs_schema.items():
+            if field_name in inputs:
+                resolved[field_name] = inputs[field_name]
+            elif isinstance(field_spec, dict) and "default" in field_spec:
+                resolved[field_name] = field_spec["default"]
+
+        builder = _APP_BUILDERS.get(application_name)
+        if builder is None:
+            self._error(
+                501,
+                f"application {application_name!r} has no dispatch builder in "
+                "_APP_BUILDERS; the manifest parses but no runner is wired",
+            )
+            return
+        try:
+            topology_factory = builder(resolved)
+        except Exception as exc:  # noqa: BLE001 — application builder can raise anything a topology constructor does; malformed inputs → 400 naming the class.
+            self._error(400, f"{type(exc).__name__}: {exc}")
+            return
+
+        run_id = f"s_topo_{uuid.uuid4().hex[:20]}"
+        record_root = _SESSIONS_BASE.parent / "runs" / run_id
+        record_root.mkdir(parents=True, exist_ok=True)
+        await_completion = body.get("await_completion", True)
+        started_at = time.time()
+
+        if await_completion:
+            try:
+                asyncio.run(api.Runtime(record_root).run(topology_factory))
+            except Exception as exc:  # noqa: BLE001 — topology run boundary: any Producer/View failure surfaces as HTTP 500 with the class name.
+                self._error(500, f"{type(exc).__name__}: {exc}")
+                return
+            final_seq = -1
+            for envelope in api.read_record(record_root):
+                final_seq = max(final_seq, int(envelope.get("seq", -1)))
+            self._json(
+                {
+                    "run_id": run_id,
+                    "record_root": str(record_root),
+                    "status": "finalised",
+                    "final_seq": final_seq,
+                    "application": application_name,
+                }
+            )
+            return
+
+        # Background thread — sprint 225d polls the record.
+        def _run_background() -> None:
+            try:
+                asyncio.run(api.Runtime(record_root).run(topology_factory))
+            except Exception:  # noqa: BLE001 — background worker; failure surfaces via the record's tail on next status poll.
+                traceback.print_exc()
+
+        thread = threading.Thread(target=_run_background, daemon=True)
+        _TOPOLOGY_RUNS[run_id] = {
+            "record_root": record_root,
+            "thread": thread,
+            "started_at": started_at,
+            "application": application_name,
+        }
+        thread.start()
+        self._json(
+            {
+                "run_id": run_id,
+                "record_root": str(record_root),
+                "status": "running",
+                "application": application_name,
+            }
+        )
 
     def _launch(self, q: dict[str, list[str]]) -> None:
         """Launch a bundled topology to a fresh record. The launch IS the recorded control action —
