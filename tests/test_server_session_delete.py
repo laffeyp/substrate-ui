@@ -30,6 +30,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import server  # noqa: E402
+from session_errors import SESSION_ENDED_MID_DELEGATE  # noqa: E402
 from session_registry import SessionRegistry  # noqa: E402
 
 from substrate import api  # noqa: E402
@@ -139,7 +140,7 @@ def test_post_turn_on_deleted_session_returns_410(base: str, tmp_path: Path) -> 
     _delete(base + f"/api/session/{sid}")
     status, body = _post_json(base + f"/api/session/{sid}/turn", {"text": "hi"})
     assert status == 410
-    assert body["error"] == "session_ended_mid_delegate"
+    assert body["error"] == SESSION_ENDED_MID_DELEGATE
 
 
 def test_deleted_name_can_be_reused_by_a_new_session(base: str, tmp_path: Path) -> None:

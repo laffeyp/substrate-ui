@@ -25,6 +25,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import server  # noqa: E402
+from session_errors import SESSION_ENDED_MID_DELEGATE  # noqa: E402
 from session_registry import SessionRegistry  # noqa: E402
 
 
@@ -189,7 +190,7 @@ def test_delete_during_in_flight_turn_waits_for_the_turn_to_finish(
         base + f"/api/session/{sid}/turn", {"text": "should 410"}
     )
     assert after_status == 410
-    assert after_body["error"] == "session_ended_mid_delegate"
+    assert after_body["error"] == SESSION_ENDED_MID_DELEGATE
 
 
 # ── Finding 2 — SSE past a finalised record does not hang ────────────
