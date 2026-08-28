@@ -53,6 +53,10 @@ from session_errors import (
     SESSION_ENDED_MID_DELEGATE,
 )
 from session_registry import (
+    STATUS_ENDED,
+    STATUS_INTERRUPTED,
+    STATUS_PARKED,
+    STATUS_RUNNING,
     FreshSessionRequiresUserMessage,
     NameCollision,
     SessionEndedMidTurn,
@@ -105,13 +109,13 @@ def _daemon_driver_resolver(name: str) -> Any:
     if name == "deterministic":
         return DeterministicResponder(seed=0)
     if name == "claude":
-        r = CliResponder(["claude", "-p"], name="claude")
+        responder = CliResponder(["claude", "-p"], name="claude")
     elif name == "gemini":
-        r = CliResponder(["gemini", "-p"], name="gemini")
+        responder = CliResponder(["gemini", "-p"], name="gemini")
     else:
-        r = OllamaResponder(model=name, timeout=300.0)
-    _RESPONDER_CACHE[name] = r
-    return r
+        responder = OllamaResponder(model=name, timeout=300.0)
+    _RESPONDER_CACHE[name] = responder
+    return responder
 
 
 def _load_daemon_config(config_path: Path | None = None) -> dict[str, Any]:
@@ -171,7 +175,7 @@ def _shutdown_all_sessions(*, per_session_timeout: float = 10.0) -> dict[str, in
     from substrate.topologies.session import SessionEndRequested
 
     for manifest in list(_SESSION_REGISTRY.list_all()):
-        if manifest.status in ("ended", "interrupted"):
+        if manifest.status in (STATUS_ENDED, STATUS_INTERRUPTED):
             result["skipped_ended"] += 1
             continue
         try:
@@ -190,7 +194,7 @@ def _shutdown_all_sessions(*, per_session_timeout: float = 10.0) -> dict[str, in
                 # the run. Rule 12 preserves nothing (no record existed);
                 # the manifest hint just gets a terminal status.
                 try:
-                    _SESSION_REGISTRY.update_status(manifest.session_id, "ended")
+                    _SESSION_REGISTRY.update_status(manifest.session_id, STATUS_ENDED)
                     result["skipped_fresh"] += 1
                 except Exception:  # noqa: BLE001 — shutdown sweep must not raise; unknown per-session failure buckets as `failed` and the loop continues.
                     result["failed"] += 1
@@ -876,15 +880,15 @@ class Handler(BaseHTTPRequestHandler):
         if manifest is None:
             if _SESSION_REGISTRY.has_session_dir(session_id):
                 self._json(
-                    {"ok": False, "status": "ended", "error": SESSION_ENDED_MID_DELEGATE},
+                    {"ok": False, "status": STATUS_ENDED, "error": SESSION_ENDED_MID_DELEGATE},
                     410,
                 )
                 return
             self._error(404, f"unknown session_id {session_id!r}")
             return
-        if manifest.status == "ended":
+        if manifest.status == STATUS_ENDED:
             self._json(
-                {"ok": False, "status": "ended", "error": SESSION_ENDED_MID_DELEGATE},
+                {"ok": False, "status": STATUS_ENDED, "error": SESSION_ENDED_MID_DELEGATE},
                 410,
             )
             return
@@ -1004,7 +1008,7 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc:
                 if isinstance(exc, SessionEndedMidTurn):
                     self._json(
-                        {"ok": False, "status": "ended", "error": SESSION_ENDED_MID_DELEGATE},
+                        {"ok": False, "status": STATUS_ENDED, "error": SESSION_ENDED_MID_DELEGATE},
                         410,
                     )
                     return
@@ -1012,7 +1016,7 @@ class Handler(BaseHTTPRequestHandler):
                     self._json(
                         {
                             "ok": False,
-                            "status": "interrupted",
+                            "status": STATUS_INTERRUPTED,
                             "error": RECORD_TORN,
                             "detail": str(exc),
                         },
@@ -1092,7 +1096,7 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as exc:
             if isinstance(exc, SessionEndedMidTurn):
                 self._json(
-                    {"status": "ended", "error": SESSION_ENDED_MID_DELEGATE}, 410
+                    {"status": STATUS_ENDED, "error": SESSION_ENDED_MID_DELEGATE}, 410
                 )
                 return
             # Sprint 220 (piece-D dispatch): a fresh session that never opened
@@ -1100,11 +1104,11 @@ class Handler(BaseHTTPRequestHandler):
             # UserMessage). Transition the manifest to "ended" at the daemon
             # layer without opening. Same shape as _shutdown_all_sessions.
             if isinstance(exc, FreshSessionRequiresUserMessage):
-                _SESSION_REGISTRY.update_status(session_id, "ended")
+                _SESSION_REGISTRY.update_status(session_id, STATUS_ENDED)
                 self._json(
                     {
                         "seq": seq_at_start,
-                        "status": "ended",
+                        "status": STATUS_ENDED,
                         "final_seq": seq_at_start,
                         "record": manifest.record_root,
                         "reason": FRESH_SESSION_NEVER_OPENED,
@@ -1114,7 +1118,7 @@ class Handler(BaseHTTPRequestHandler):
             if isinstance(exc, TornRecordOnResume):
                 self._json(
                     {
-                        "status": "interrupted",
+                        "status": STATUS_INTERRUPTED,
                         "error": RECORD_TORN,
                         "detail": str(exc),
                     },
@@ -1238,7 +1242,7 @@ class Handler(BaseHTTPRequestHandler):
                 "created_at": manifest.created_at,
                 "bundle": manifest.bundle,
             }
-            key = "live" if manifest.status == "running" else manifest.status
+            key = "live" if manifest.status == STATUS_RUNNING else manifest.status
             if key in buckets:
                 buckets[key].append(payload)
         self._json(buckets)
@@ -1493,7 +1497,7 @@ class Handler(BaseHTTPRequestHandler):
             )
         except SessionEndedMidTurn:
             self._json(
-                {"ok": False, "status": "ended", "error": SESSION_ENDED_MID_DELEGATE}, 410
+                {"ok": False, "status": STATUS_ENDED, "error": SESSION_ENDED_MID_DELEGATE}, 410
             )
             return
         except Exception as exc:  # noqa: BLE001 — bridge surfaces the class + text
@@ -1699,9 +1703,9 @@ class Handler(BaseHTTPRequestHandler):
         'allowable ways' = exactly what the runtime would accept; rejects bad wiring before a run)."""
         try:
             topo = build_from_spec(self._body())
-            b = api.TopologyBuilder()
-            topo(b)
-            b.build()
+            builder = api.TopologyBuilder()
+            topo(builder)
+            builder.build()
         except (SpecError, api.RegistrationError) as exc:
             self._json({"valid": False, "error": str(exc)})
             return
@@ -1717,9 +1721,9 @@ class Handler(BaseHTTPRequestHandler):
         try:
             spec = self._body()
             topo = build_from_spec(spec, _responder_for(spec))
-            b = api.TopologyBuilder()
-            topo(b)
-            b.build()  # validate the wiring before running
+            builder = api.TopologyBuilder()
+            topo(builder)
+            builder.build()  # validate the wiring before running
         except (SpecError, api.RegistrationError) as exc:
             self._error(400, str(exc))
             return
