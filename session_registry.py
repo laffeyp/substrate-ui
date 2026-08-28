@@ -59,6 +59,16 @@ if TYPE_CHECKING:
 
 SessionStatus = Literal["running", "parked", "interrupted", "ended"]
 
+# Sprint 224g: the four SessionStatus values as named constants. Every
+# comparison, write, and echo through the daemon should reference one of
+# these. A typo now fails at import (NameError) rather than silently at
+# runtime (the string comparison quietly returns False). SessionStatus
+# stays a Literal alias for static-checker purposes.
+STATUS_RUNNING: SessionStatus = "running"
+STATUS_PARKED: SessionStatus = "parked"
+STATUS_INTERRUPTED: SessionStatus = "interrupted"
+STATUS_ENDED: SessionStatus = "ended"
+
 _SESSIONS_BASE_DEFAULT = Path.home() / ".substrate" / "sessions"
 _BY_NAME_FILENAME = "by-name.json"
 _BY_NAME_LOCK_FILENAME = ".by-name.lock"
@@ -302,8 +312,8 @@ class SessionRegistry:
             # a fresh-session shutdown that had no record to write to. This was
             # the shape sprint 217a's shutdown path exposed — surfaced by the
             # `test_fresh_session_transitions_to_ended_and_survives_reboot` test.
-            if manifest.status == "ended":
-                true_status = "ended"
+            if manifest.status == STATUS_ENDED:
+                true_status = STATUS_ENDED
             else:
                 true_status = _scan_record_status(Path(manifest.record_root))
             if true_status != manifest.status:
@@ -351,7 +361,7 @@ class SessionRegistry:
             workspace=workspace,
             workspace_shape=workspace_shape,
             record_root=str(self._base / session_id / "record"),
-            status="running",
+            status=STATUS_RUNNING,
             bundle=bundle,
             seed=seed,
             role=role,
@@ -551,7 +561,7 @@ class SessionRegistry:
         manifest = self._manifests.get(session_id)
         if manifest is None:
             raise KeyError(f"unknown session_id {session_id!r}")
-        if manifest.status == "ended":
+        if manifest.status == STATUS_ENDED:
             raise SessionEndedMidTurn(
                 f"session {session_id!r} has ended (status='ended'); cannot resume"
             )
@@ -559,7 +569,7 @@ class SessionRegistry:
         with threading_lock:
             # Re-check manifest under the lock — an intervening turn may have ended it.
             live_manifest = self._manifests.get(session_id)
-            if live_manifest is None or live_manifest.status == "ended":
+            if live_manifest is None or live_manifest.status == STATUS_ENDED:
                 raise SessionEndedMidTurn(
                     f"session {session_id!r} ended before the turn started"
                 )
@@ -594,7 +604,7 @@ class SessionRegistry:
                 # Halt in place: flip the manifest to "interrupted" so
                 # subsequent turns short-circuit instead of retrying the
                 # same dispatch and re-crashing on the same torn tail.
-                self.update_status(session_id, "interrupted")
+                self.update_status(session_id, STATUS_INTERRUPTED)
                 raise TornRecordOnResume(session_id, record_root, torn_cause)
             is_fresh_record = record_state == "empty"
             if is_fresh_record:
@@ -634,11 +644,11 @@ class SessionRegistry:
                 self._running_handles.pop(session_id, None)
             status_str = getattr(result, "status", "paused")
             if status_str == "finalised":
-                new_status: SessionStatus = "ended"
+                new_status: SessionStatus = STATUS_ENDED
             elif status_str == "failed":
-                new_status = "interrupted"
+                new_status = STATUS_INTERRUPTED
             else:
-                new_status = "parked"
+                new_status = STATUS_PARKED
             updated = self.update_status(session_id, new_status)
             self.advance_turn_index(session_id)
             return updated, record_root
@@ -1089,22 +1099,22 @@ def _scan_record_status(record_root: Path) -> SessionStatus:
     torn tail, which is a write operation the boot scan must not perform.
     """
     if not record_root.exists():
-        return "parked"
+        return STATUS_PARKED
     try:
         envelopes = list(api.read_record(record_root))
     except Exception:  # noqa: BLE001 — a corrupt record is a real state, not a crash
-        return "interrupted"
+        return STATUS_INTERRUPTED
     if not envelopes:
-        return "interrupted"
+        return STATUS_INTERRUPTED
     last = envelopes[-1]
     kind = last.get("kind", "")
     if kind == api.RUN_FINALISED:
-        return "ended"
+        return STATUS_ENDED
     if kind == api.TERMINATION_MATCHED:
         payload = last.get("payload") or {}
         if isinstance(payload, dict) and payload.get("decision") == api.Decision.PAUSE_AWAIT_INPUT.value:
-            return "parked"
-    return "interrupted"
+            return STATUS_PARKED
+    return STATUS_INTERRUPTED
 
 
 def _next_turn_index_from_record(record_root: Path) -> int:
@@ -1145,7 +1155,9 @@ def _manifest_to_dict(m: SessionManifest) -> dict[str, Any]:
     }
 
 
-_VALID_STATUS: frozenset[str] = frozenset(("running", "parked", "interrupted", "ended"))
+_VALID_STATUS: frozenset[str] = frozenset(
+    (STATUS_RUNNING, STATUS_PARKED, STATUS_INTERRUPTED, STATUS_ENDED)
+)
 
 
 def _manifest_from_dict(d: dict[str, Any]) -> SessionManifest:
