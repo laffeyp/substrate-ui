@@ -228,7 +228,7 @@ def _build_session_topology_from_manifest(
         driver_context_tokens=resolve_driver_context_tokens(manifest.driver, responder),
         seed=manifest.seed,
         tools=session_tools,
-        per_turn="",
+        per_turn=manifest.per_turn,
         max_turns=200,
         turn_max_steps=24,
         session_id=manifest.session_id,
@@ -749,12 +749,64 @@ class Handler(BaseHTTPRequestHandler):
         name = body.get("name")
         workspace = str(body.get("workspace") or str(_SESSIONS_BASE / "default"))
         workspace_shape = str(body.get("workspace_shape") or "flat")
+        # Sprint 223c: `isolate` (§9c Mode 3). When true, the session's tool
+        # writes stay in a per-session directory under ~/.substrate/sessions/
+        # regardless of the caller's `workspace`. Mutual exclusion with
+        # `workspace_shape: "worktree"` — the two shape a session two
+        # different ways; picking one silently would hide the operator's
+        # intent. Enforce explicit halt.
+        isolate = bool(body.get("isolate"))
+        if isolate and workspace_shape == "worktree":
+            self._error(
+                400,
+                "isolate=true and workspace_shape='worktree' are mutually exclusive; "
+                "pick one",
+            )
+            return
+        if isolate:
+            workspace_shape = "isolate"
+            # The session_id is not yet known at this point; use a fresh uuid
+            # so the isolated workspace path can be created before create()
+            # returns. session_id below matches this same uuid.
+            _iso_uuid = uuid.uuid4().hex[:24]
+            _iso_ws = _SESSIONS_BASE / f"s_{_iso_uuid}" / "workspace"
+            _iso_ws.mkdir(parents=True, exist_ok=True)
+            workspace = str(_iso_ws)
+            _forced_session_id = f"s_{_iso_uuid}"
+        else:
+            _forced_session_id = None
         # Piece-B review finding 6: TECH-SPEC §4 names this field `seed_text`;
         # the earlier draft read `seed` only, so a client following the spec
         # silently sent nothing. Both names accepted; the spec wins on writes.
         seed = str(body.get("seed_text") or body.get("seed") or "")
         bundle = body.get("bundle")
-        session_id = f"s_{uuid.uuid4().hex[:24]}"
+        # Sprint 223a: `role` per TECH-SPEC §1.6.5. Resolve at create time so
+        # a nonexistent role name fails 400 immediately rather than at first
+        # `/turn`. The resolver's `RegistrationError` carries the four-layer
+        # search trail; forward the message verbatim.
+        role = str(body.get("role") or "default")
+        try:
+            from substrate.topologies.session.roles import resolve_role_prompt
+
+            resolve_role_prompt(role, repo_root=Path.cwd())
+        except Exception as exc:  # noqa: BLE001 — RegistrationError forwarded as 400
+            self._error(400, f"role {role!r}: {exc}")
+            return
+        # Sprint 223b: `tools` on POST per TECH-SPEC §7 line 674. Same shape as
+        # the PATCH branch (217e): list of non-empty strings. Empty list → None
+        # (unrestricted). Missing → None. Any other type → 400.
+        tools_raw = body.get("tools")
+        tools: tuple[str, ...] | None = None
+        if tools_raw is not None:
+            if not isinstance(tools_raw, list):
+                self._error(400, f"tools must be a list of strings; got {type(tools_raw).__name__}")
+                return
+            for t in tools_raw:
+                if not isinstance(t, str) or not t:
+                    self._error(400, f"tools must be non-empty strings; offending element: {t!r}")
+                    return
+            tools = tuple(tools_raw) if tools_raw else None
+        session_id = _forced_session_id or f"s_{uuid.uuid4().hex[:24]}"
         try:
             manifest = _SESSION_REGISTRY.create(
                 session_id=session_id,
@@ -764,6 +816,8 @@ class Handler(BaseHTTPRequestHandler):
                 workspace_shape=workspace_shape,
                 bundle=str(bundle) if bundle is not None else None,
                 seed=seed,
+                role=role,
+                tools=tools,
             )
         except Exception as exc:
             # NameCollision carries existing_session_id per sprint 211.
@@ -784,6 +838,7 @@ class Handler(BaseHTTPRequestHandler):
                 "name": manifest.name,
                 "record": manifest.record_root,
                 "workspace_shape": manifest.workspace_shape,
+                "role": manifest.role,
             }
         )
 
@@ -912,6 +967,11 @@ class Handler(BaseHTTPRequestHandler):
                 assembled_prompt = _prefix_context_slice(
                     record_root_locked, text, context_slice
                 )
+            # Sprint 223d: per_turn (spec §7b) prefixes every UserMessage's
+            # assembled_prompt. Empty string is the no-op default.
+            live_pt = _manifest.per_turn
+            if live_pt:
+                assembled_prompt = f"{live_pt}\n\n{assembled_prompt}"
             return SessionUserMessage(
                 text=text,
                 turn_index=next_turn_index,
@@ -1320,13 +1380,126 @@ class Handler(BaseHTTPRequestHandler):
         self._json({"name": run_name, "status": status, "launched": name})
 
     def _agent(self, q: dict[str, list[str]]) -> None:
-        """Launch a LIVE tool-using agent run — this is what the interactive terminal drives. With
-        `model=ollama` (+ `name`, `task`) a real local LLM drives the FULL_SUITE tool loop toward the
-        task; the default `model=deterministic` runs the pure calculator loop (fast, no network) so
-        the console and CI can drive an agent with no Ollama. Backgrounded exactly like /api/launch —
-        the console followLive's the record: the terminal streams the model turns + tool results as
-        they land, and the graph/stream/scene animate. The agent run is itself a recorded run (the
-        model->tool->model loop is on the log), replayable and inspectable like any other."""
+        """`/api/agent` compat bridge (TECH-SPEC §7 line 690).
+
+        Per the spec: `/api/agent` stays for one release; internally creates a
+        session on first request and routes subsequent requests to
+        `/api/session/<id>/turn`. Same-`session`-param calls reuse the session
+        (find-by-name); different `session` values create separate sessions.
+        Concurrent calls on the same session serialize on the registry's
+        per-session threading.Lock.
+
+        Query params:
+          - session: session name (find-or-create key). Missing → adhoc.
+          - task: the user message text for this turn.
+          - model: `deterministic` (default), `ollama`, or a driver string.
+          - name: driver model name when model=ollama (e.g. `llama3.2:1b`).
+          - workspace: caller-supplied path (like the old shape).
+          - legacy: `true` → run the pre-bridge behavior for one release.
+                    The bridge default routes through SessionRegistry.
+
+        Response: `{record, session_id, ok: true, deprecated: true?}`. The
+        `deprecated: true` field lands on legacy=true responses so a caller
+        can see the shape is on its way out.
+        """
+        if (q.get("legacy", [""])[0] or "").lower() == "true":
+            self._agent_legacy(q)
+            return
+        # Compat surface: pre-bridge tests wire the server without a session
+        # registry. Fall back to the legacy path rather than 503 — the spec's
+        # "one release" clock runs on real callers, not on test fixtures that
+        # never touched sessions.
+        if _SESSION_REGISTRY is None:
+            self._agent_legacy(q)
+            return
+
+        session_name = q.get("session", [""])[0] or ""
+        task = q.get("task", [""])[0] or "Use the available tools to help."
+        model = (q.get("model", ["deterministic"])[0] or "deterministic").lower()
+        ws_arg = q.get("workspace", [""])[0]
+        # Driver string per the create/PATCH shape. `model=ollama` + `name=X`
+        # → driver=X so /api/session's PATCH-driver stays useful downstream.
+        if model == "ollama":
+            driver = q.get("name", ["llama3.2:1b"])[0]
+        elif model in ("claude", "gemini", "cli"):
+            driver = model
+        else:
+            driver = "deterministic"
+
+        # Find-or-create by name. A collision-free session name means create;
+        # a hit means resume.
+        session_id: str | None = None
+        if session_name:
+            session_id = _SESSION_REGISTRY.by_name(session_name)
+
+        if session_id is None:
+            session_id = f"s_{uuid.uuid4().hex[:24]}"
+            workspace = (
+                str(Path(ws_arg).expanduser().resolve())
+                if ws_arg and Path(ws_arg).expanduser().is_absolute()
+                else str(_SESSIONS_BASE / (session_name or f"adhoc-{uuid.uuid4().hex[:8]}"))
+            )
+            Path(workspace).mkdir(parents=True, exist_ok=True)
+            try:
+                _SESSION_REGISTRY.create(
+                    session_id=session_id,
+                    name=session_name or None,
+                    driver=driver,
+                    workspace=workspace,
+                    workspace_shape="flat",
+                    bundle=None,
+                    seed="",
+                )
+            except NameCollision as exc:
+                # Race: another caller with the same name won. Reuse theirs.
+                session_id = exc.existing_session_id
+
+        # Route the task as a UserMessage through turn_sync — same seam
+        # /api/session/<id>/turn uses. Per-session threading.Lock serializes.
+        from substrate.topologies.session import UserMessage as SessionUserMessage
+
+        def _build(_manifest: Any, _record_root: Path) -> Any:
+            next_turn_index = _SESSION_REGISTRY.next_turn_index(session_id)
+            assembled = task
+            live_pt = _manifest.per_turn
+            if live_pt:
+                assembled = f"{live_pt}\n\n{assembled}"
+            return SessionUserMessage(
+                text=task,
+                turn_index=next_turn_index,
+                assembled_prompt=assembled,
+                slash_source="daemon",
+            )
+
+        try:
+            updated_manifest, root_after = _SESSION_REGISTRY.turn_sync(
+                session_id, resume_event_builder=_build, timeout_seconds=600.0
+            )
+        except SessionEndedMidTurn:
+            self._json(
+                {"ok": False, "status": "ended", "error": "session_ended_mid_delegate"}, 410
+            )
+            return
+        except Exception as exc:  # noqa: BLE001 — bridge surfaces the class + text
+            self._error(500, f"{type(exc).__name__}: {exc}")
+            return
+
+        self._json(
+            {
+                "ok": True,
+                "session_id": updated_manifest.session_id,
+                "record": str(root_after),
+                "status": updated_manifest.status,
+            }
+        )
+
+    def _agent_legacy(self, q: dict[str, list[str]]) -> None:
+        """The pre-bridge behavior. Stays one release per TECH-SPEC §7 line 690.
+
+        Callers that pass `?legacy=true` get the old launch-thread shape;
+        every other caller goes through the session-routed bridge above.
+        Response gains `deprecated: true` so the shape is visible.
+        """
         model = (q.get("model", ["deterministic"])[0] or "deterministic").lower()
         if self._at_run_capacity():
             self._error(429, "too many concurrent runs; wait for some to finish")
@@ -1450,6 +1623,7 @@ class Handler(BaseHTTPRequestHandler):
                 "workspace": str(workspace),
                 "branch": branch,
                 "params": {"think": think, "max_tokens": max_tokens, "timeout": timeout},
+                "deprecated": True,
             }
         )
 
@@ -1600,8 +1774,8 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError as exc:
             self._error(400, str(exc))
             return
-        _PATCHABLE = {"driver", "name", "tools"}
-        _NOT_YET = {"per_turn", "workspace", "workspace_shape", "bundle", "seed"}
+        _PATCHABLE = {"driver", "name", "tools", "per_turn"}
+        _NOT_YET = {"workspace", "workspace_shape", "bundle", "seed"}
         keys = set(body.keys())
         deferred = keys & _NOT_YET
         if deferred:
@@ -1653,6 +1827,16 @@ class Handler(BaseHTTPRequestHandler):
             # Empty list is legitimate — treated as "no restriction" (None).
             tools_value: tuple[str, ...] | None = tuple(tools_raw) if tools_raw else None
             updated = _SESSION_REGISTRY.set_tools(session_id, tools_value)
+        if "per_turn" in body:
+            per_turn_raw = body["per_turn"]
+            if per_turn_raw is None:
+                per_turn_value = ""
+            elif isinstance(per_turn_raw, str):
+                per_turn_value = per_turn_raw
+            else:
+                self._error(400, f"per_turn must be a string or null; got {type(per_turn_raw).__name__}")
+                return
+            updated = _SESSION_REGISTRY.set_per_turn(session_id, per_turn_value)
         self._json(
             {
                 "session_id": updated.session_id,

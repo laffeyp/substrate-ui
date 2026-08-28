@@ -170,11 +170,11 @@ def test_patch_empty_body_returns_400(base: tuple[str, Path]) -> None:
 def test_patch_deferred_field_returns_400_naming_the_field(base: tuple[str, Path]) -> None:
     url, tmp_path = base
     sid = _create(url, tmp_path / "wsp", name="wanting-tools")
-    # Sprint 217e: `tools` moved from _NOT_YET to _PATCHABLE. Use `per_turn`,
-    # still deferred to piece H.
-    status, body = _patch_json(url + f"/api/session/{sid}", {"per_turn": "hello"})
+    # Sprint 223d: `per_turn` moved from _NOT_YET to _PATCHABLE. Use `bundle`,
+    # still in _NOT_YET (belongs to piece H).
+    status, body = _patch_json(url + f"/api/session/{sid}", {"bundle": "some-bundle"})
     assert status == 400
-    assert "per_turn" in body["error"]
+    assert "bundle" in body["error"]
     assert "not PATCH-able yet" in body["error"]
 
 

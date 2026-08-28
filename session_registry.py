@@ -90,6 +90,16 @@ class SessionManifest(Struct, frozen=True):
     # `full_suite(workspace_path)` down to the named tools before the topology
     # is built. Persists across parks (mutable via PATCH /api/session/<id>).
     tools: tuple[str, ...] | None = None
+    # Sprint 223a: role name resolved via the four-layer fallback at
+    # `substrate.topologies.session.roles.resolve_role_prompt`. The manifest
+    # stores the NAME, not the resolved text — a rename of the on-disk
+    # prompt file at layer 1 propagates on the next resume without touching
+    # the manifest. Default "default" resolves to the shipped prompt.
+    role: str = "default"
+    # Sprint 223d: per-turn text prefixed to every UserMessage's
+    # assembled_prompt (spec §7b). Empty string means no prefix.
+    # Mutable via PATCH /api/session/<id> {per_turn}.
+    per_turn: str = ""
 
 
 class NameCollision(Exception):
@@ -324,6 +334,8 @@ class SessionRegistry:
         workspace_shape: str,
         bundle: str | None,
         seed: str,
+        role: str = "default",
+        tools: tuple[str, ...] | None = None,
         created_at: float | None = None,
     ) -> SessionManifest:
         """Register a new session. Atomic against by-name.json under `fcntl.flock`.
@@ -342,17 +354,35 @@ class SessionRegistry:
             status="running",
             bundle=bundle,
             seed=seed,
+            role=role,
+            tools=tools,
         )
+        # Sprint 223e race fix: bridge finds a session by_name and dispatches
+        # a turn immediately after create. Under flock, the by-name.json write
+        # is safe, but if `_manifests[session_id] = manifest` lands AFTER the
+        # flock releases, a concurrent bridge caller sees the name in the
+        # index and calls `turn_sync`, which reads `_manifests.get(session_id)`
+        # and raises KeyError before this thread finishes. Do the mkdir +
+        # manifest.json + _manifests write INSIDE the flock so the whole
+        # create commits atomically from a concurrent reader's perspective.
+        session_dir = self._base / session_id
         if name is not None:
             with _flocked(self._base / _BY_NAME_FILENAME) as index:
                 if name in index and index[name] != session_id:
                     raise NameCollision(name=name, existing_session_id=index[name])
                 index[name] = session_id
                 self._by_name = dict(index)
-        session_dir = self._base / session_id
-        session_dir.mkdir(parents=True, exist_ok=True)
-        _atomic_write_json(session_dir / _MANIFEST_FILENAME, _manifest_to_dict(manifest))
-        self._manifests[session_id] = manifest
+                session_dir.mkdir(parents=True, exist_ok=True)
+                _atomic_write_json(
+                    session_dir / _MANIFEST_FILENAME, _manifest_to_dict(manifest)
+                )
+                self._manifests[session_id] = manifest
+        else:
+            session_dir.mkdir(parents=True, exist_ok=True)
+            _atomic_write_json(
+                session_dir / _MANIFEST_FILENAME, _manifest_to_dict(manifest)
+            )
+            self._manifests[session_id] = manifest
         return manifest
 
     def set_name(self, session_id: str, name: str) -> SessionManifest:
@@ -405,6 +435,28 @@ class SessionRegistry:
             if manifest is None:
                 raise KeyError(f"unknown session_id {session_id!r}")
             updated = _replace(manifest, tools=tools)
+            _atomic_write_json(
+                self._base / session_id / _MANIFEST_FILENAME, _manifest_to_dict(updated)
+            )
+            self._manifests[session_id] = updated
+        return updated
+
+    def set_per_turn(self, session_id: str, per_turn: str) -> SessionManifest:
+        """Sprint 223d: change the session's per-turn prefix (spec §7b).
+        Same lock/write shape as `set_tools`. Empty string clears the prefix.
+        The next `Runtime.resume` reads the new value via
+        `_build_session_topology_from_manifest`.
+
+        Raises `KeyError` on unknown session_id.
+        """
+        if session_id not in self._manifests:
+            raise KeyError(f"unknown session_id {session_id!r}")
+        threading_lock = self._turn_threading_locks.setdefault(session_id, threading.Lock())
+        with threading_lock:
+            manifest = self._manifests.get(session_id)
+            if manifest is None:
+                raise KeyError(f"unknown session_id {session_id!r}")
+            updated = _replace(manifest, per_turn=per_turn)
             _atomic_write_json(
                 self._base / session_id / _MANIFEST_FILENAME, _manifest_to_dict(updated)
             )
@@ -1086,6 +1138,10 @@ def _manifest_to_dict(m: SessionManifest) -> dict[str, Any]:
         "seed": m.seed,
         # Sprint 217e: tool allow-list serialized as a JSON list; None → absent.
         "tools": list(m.tools) if m.tools is not None else None,
+        # Sprint 223a: role name (four-layer resolver reads the prompt fresh).
+        "role": m.role,
+        # Sprint 223d: per-turn text prefixed to every UserMessage.
+        "per_turn": m.per_turn,
     }
 
 
@@ -1122,6 +1178,8 @@ def _manifest_from_dict(d: dict[str, Any]) -> SessionManifest:
         bundle=d.get("bundle") if d.get("bundle") is not None else None,
         seed=str(d["seed"]),
         tools=tools,
+        role=str(d.get("role") or "default"),
+        per_turn=str(d.get("per_turn") or ""),
     )
 
 
