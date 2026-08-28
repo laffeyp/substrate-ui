@@ -369,6 +369,33 @@ def _build_session_topology_from_manifest(
 
     responder = _daemon_driver_resolver(manifest.driver)
     session_tools = _tools_for_manifest(manifest)
+    # Sprint 228: fold the substrate toolkit (piece F sprints 226-228)
+    # into every session's tool suite alongside full_suite. The tools
+    # accept an injected daemon client + registries — substrate._daemon
+    # is the shipped wire client; the daemon binds its own registries
+    # here so every session sees the CURRENT applications catalog,
+    # session list, and record dir.
+    from substrate import _daemon as _substrate_daemon
+    from substrate.topologies.tool_loop.substrate_tools import (
+        make_inspect_record,
+        make_list_applications,
+        make_list_records,
+        make_list_sessions,
+        make_list_topologies,
+        make_run_topology,
+        make_run_topology_poll,
+    )
+
+    session_tools = {
+        **session_tools,
+        "run_topology": make_run_topology(_substrate_daemon),
+        "run_topology_poll": make_run_topology_poll(_substrate_daemon),
+        "inspect_record": make_inspect_record(),
+        "list_records": make_list_records(_SESSIONS_BASE),
+        "list_topologies": make_list_topologies(),
+        "list_applications": make_list_applications(_APPLICATIONS),
+        "list_sessions": make_list_sessions(_SESSION_REGISTRY),
+    }
     return session_topology(
         driver=responder,
         driver_name=manifest.driver,
