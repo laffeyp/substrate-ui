@@ -226,13 +226,24 @@ def test_sse_reconnect_past_runfinalised_returns_cleanly(
     if not segments:
         pytest.skip("no open segment on record; segment naming has drifted")
     finalised_seq = tail_seq + 1
-    envelope = {
-        "seq": finalised_seq,
-        "kind": "substrate.RunFinalised",
-        "payload": {"reason": "test-injected"},
-    }
-    with segments[-1].open("a", encoding="utf-8") as fp:
-        fp.write(json.dumps(envelope) + "\n")
+    # Frame the envelope through the real framer so `framing.recover` accepts
+    # it. A hand-written `json.dumps(env) + "\n"` has no CRC — recover treats
+    # it as the torn cut point, discards the line, and the SSE reader never
+    # sees the RunFinalised. That was the pre-fix flake: the test timeout
+    # (5s) was racing against the reader's poll interval, masking a bad
+    # fixture. `framing.frame` gives every downstream reader the same bytes
+    # a real writer would.
+    from substrate.record import framing
+
+    frame_bytes = framing.frame(
+        {
+            "seq": finalised_seq,
+            "kind": "substrate.RunFinalised",
+            "payload": {"reason": "test-injected"},
+        }
+    )
+    with segments[-1].open("ab") as fp:
+        fp.write(frame_bytes)
 
     # Reader opens with since_seq at or past the finalised seq. The old shape
     # spun forever; the fold breaks out cleanly and returns whatever it read.

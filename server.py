@@ -47,7 +47,12 @@ from substrate.topologies.tool_loop.tools import full_suite
 
 from builder import SpecError, build_from_spec
 from demo_topologies import approval_event, resumable_topology
-from session_registry import NameCollision, SessionEndedMidTurn
+from session_registry import (
+    FreshSessionRequiresUserMessage,
+    NameCollision,
+    SessionEndedMidTurn,
+    TornRecordOnResume,
+)
 from substrate.reference import CliResponder, DeterministicResponder, OllamaResponder
 
 
@@ -174,7 +179,7 @@ def _shutdown_all_sessions(*, per_session_timeout: float = 10.0) -> dict[str, in
             )
             result["ended"] += 1
         except Exception as exc:  # noqa: BLE001 — best-effort; log and move on
-            if type(exc).__name__ == "FreshSessionRequiresUserMessage":
+            if isinstance(exc, FreshSessionRequiresUserMessage):
                 # Fresh session: no record on disk to end. Transition the
                 # manifest to "ended" at the daemon layer without opening
                 # the run. Rule 12 preserves nothing (no record existed);
@@ -928,6 +933,17 @@ class Handler(BaseHTTPRequestHandler):
                         410,
                     )
                     return
+                if isinstance(exc, TornRecordOnResume):
+                    self._json(
+                        {
+                            "ok": False,
+                            "status": "interrupted",
+                            "error": "record_torn",
+                            "detail": str(exc),
+                        },
+                        410,
+                    )
+                    return
                 self._error(500, f"{type(exc).__name__}: {exc}")
                 return
             # Return the record's tail seq so the caller can page /events from there.
@@ -1008,7 +1024,7 @@ class Handler(BaseHTTPRequestHandler):
             # its record cannot receive a SessionEndRequested (which is not a
             # UserMessage). Transition the manifest to "ended" at the daemon
             # layer without opening. Same shape as _shutdown_all_sessions.
-            if type(exc).__name__ == "FreshSessionRequiresUserMessage":
+            if isinstance(exc, FreshSessionRequiresUserMessage):
                 _SESSION_REGISTRY.update_status(session_id, "ended")
                 self._json(
                     {
@@ -1018,6 +1034,16 @@ class Handler(BaseHTTPRequestHandler):
                         "record": manifest.record_root,
                         "reason": "fresh_session_never_opened",
                     }
+                )
+                return
+            if isinstance(exc, TornRecordOnResume):
+                self._json(
+                    {
+                        "status": "interrupted",
+                        "error": "record_torn",
+                        "detail": str(exc),
+                    },
+                    410,
                 )
                 return
             self._error(500, f"{type(exc).__name__}: {exc}")

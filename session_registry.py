@@ -122,6 +122,31 @@ class FreshSessionRequiresUserMessage(Exception):
     """
 
 
+class TornRecordOnResume(Exception):
+    """Sprint 220b: raised by `turn_sync` when a session's record directory
+    exists but `api.read_record` raises (RecordGapError, TornFrameError,
+    CRCMismatchError, FsyncError, or any IO error). The daemon refuses to
+    dispatch either primitive: `Runtime.run` on a directory with existing
+    sealed segments would double-head the record; `Runtime.resume` would
+    inherit the torn tail. The session is halted in-place — status flips
+    to `interrupted`, the SSE stream stays readable, and the manifest
+    carries the surfaced error text for the operator. Prior behavior
+    (session_registry `_record_has_envelopes` swallowed every exception
+    and returned False) silently dispatched `Runtime.run` on a corrupted
+    record — reproduced by any process crash mid-turn.
+    """
+
+    def __init__(self, session_id: str, record_root: Path, cause: BaseException) -> None:
+        super().__init__(
+            f"session {session_id!r}: record at {record_root} is torn ({type(cause).__name__}: "
+            f"{cause}); refusing to dispatch Runtime.run (would double-head) or Runtime.resume "
+            f"(would inherit the torn tail). Fix: quarantine the record and open a new session."
+        )
+        self.session_id = session_id
+        self.record_root = record_root
+        self.cause = cause
+
+
 class TurnHandle:
     """The running turn's event loop, task, and Runtime — populated by
     `_run_resume_sync`, read by `interrupt` to reach the worker thread's
@@ -261,7 +286,16 @@ class SessionRegistry:
             except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError):
                 skipped.append(session_dir.name)
                 continue
-            true_status = _scan_record_status(Path(manifest.record_root))
+            # `"ended"` is terminal (SessionEnded fired or the daemon flipped
+            # a fresh session at shutdown). Never re-derive it: `_scan_record_status`
+            # returns `"parked"` for a missing record dir, which would overwrite
+            # a fresh-session shutdown that had no record to write to. This was
+            # the shape sprint 217a's shutdown path exposed — surfaced by the
+            # `test_fresh_session_transitions_to_ended_and_survives_reboot` test.
+            if manifest.status == "ended":
+                true_status = "ended"
+            else:
+                true_status = _scan_record_status(Path(manifest.record_root))
             if true_status != manifest.status:
                 manifest = _replace(manifest, status=true_status)
                 _atomic_write_json(manifest_path, _manifest_to_dict(manifest))
@@ -500,14 +534,24 @@ class SessionRegistry:
             # two primitives: `.run()` on empty (with a `session_open` producer
             # that emits the first UserMessage from an initial), `.resume()`
             # otherwise. Neither `Runtime.run` nor `Runtime.resume` changes.
-            is_fresh_record = not _record_has_envelopes(record_root)
+            from substrate.topologies.session import UserMessage
+
+            record_state, torn_cause = _record_state(record_root)
+            if record_state == "torn":
+                assert torn_cause is not None
+                # Halt in place: flip the manifest to "interrupted" so
+                # subsequent turns short-circuit instead of retrying the
+                # same dispatch and re-crashing on the same torn tail.
+                self.update_status(session_id, "interrupted")
+                raise TornRecordOnResume(session_id, record_root, torn_cause)
+            is_fresh_record = record_state == "empty"
             if is_fresh_record:
                 # Fresh session: the resume_event must be a UserMessage so the
                 # `session_open` producer can emit it as the first envelope.
                 # SIGTERM shutdown (or any other non-UserMessage first-turn caller)
                 # gets a typed refusal; `_shutdown_all_sessions` catches it and
                 # buckets under `skipped_fresh`.
-                if type(effective_resume_event).__name__ != "UserMessage":
+                if not isinstance(effective_resume_event, UserMessage):
                     raise FreshSessionRequiresUserMessage(
                         f"session {session_id!r} has no record yet; the first-turn "
                         f"resume event must be a UserMessage (got "
@@ -751,20 +795,44 @@ class SessionRegistry:
 # ── helpers ─────────────────────────────────────────────────────────────────
 
 
-def _record_has_envelopes(record_root: Path) -> bool:
-    """Sprint 217a: True iff the record directory exists AND contains at least
-    one complete envelope. The daemon's `turn_sync` composes `Runtime.run` on
-    an empty (or absent) record and `Runtime.resume` on a populated one — the
-    substrate primitives stay each what their docstring says.
+def _record_state(record_root: Path) -> tuple[str, BaseException | None]:
+    """Sprint 220b: classify a record directory into three states so the daemon
+    dispatches the right primitive (and refuses when neither is safe):
+
+      - `"empty"`   → no directory, or a directory with zero complete envelopes.
+                     `turn_sync` composes `Runtime.run(session_topology)` and
+                     the `session_open` producer emits the first `UserMessage`.
+      - `"has_envelopes"` → at least one complete envelope; `Runtime.resume`.
+      - `"torn"`    → `api.read_record` raised. The daemon must refuse both
+                     primitives: `.run` would write a fresh `RunStarted` at
+                     seq 0 alongside sealed segments (double-head or
+                     persistent-bus lock throw); `.resume` would try to read
+                     past the torn tail. Returns the exception so the caller
+                     surfaces it as `TornRecordOnResume`.
+
+    The previous single-signal `_record_has_envelopes` swallowed every read
+    exception into `False`, which routed a torn record into the `.run`
+    branch — the crash-mid-turn dispatch hole finding 1 named.
     """
     if not record_root.exists():
-        return False
+        return ("empty", None)
     try:
+        has_any = False
         for _ in api.read_record(record_root):
-            return True
-    except Exception:  # noqa: BLE001 — torn tail / mid-write reads as "no envelopes"
-        return False
-    return False
+            has_any = True
+            break
+    except Exception as exc:  # noqa: BLE001 — reclassify below as torn
+        return ("torn", exc)
+    return ("has_envelopes" if has_any else "empty", None)
+
+
+def _record_has_envelopes(record_root: Path) -> bool:
+    """Back-compat wrapper. `_record_state` is the authoritative call; this
+    exists only for older callers that predate the three-state split. New
+    call sites must switch to `_record_state` so torn records surface.
+    """
+    state, _ = _record_state(record_root)
+    return state == "has_envelopes"
 
 
 def _run_run_sync(
