@@ -117,6 +117,18 @@ class SessionManifest(Struct, frozen=True):
     # list_children(parent_id). The relationship is one level deep — a
     # child of a child is not a supported shape.
     composite_of: str | None = None
+    # Sprint 032c (piece-G mechanical translation): per-session driver
+    # params. `OllamaResponder.__init__` accepts think/max_tokens/timeout/
+    # num_ctx at construction (adapters/models.py:133-165); the daemon's
+    # `_daemon_driver_resolver(name, params)` threads this dict into the
+    # Responder build. None means "use responder defaults." Absent keys
+    # in the dict mean the same. Persisted across parks; mutable via
+    # PATCH /api/session/<id> {driver_params}.
+    #
+    # Recognized keys (validated at set-time): "think" (bool),
+    # "max_tokens" (int ≥0; 0 = uncapped), "timeout" (float >0, seconds),
+    # "num_ctx" (int ≥1). Unknown keys are 400 at PATCH.
+    driver_params: dict[str, Any] | None = None
 
 
 class NameCollision(Exception):
@@ -355,6 +367,7 @@ class SessionRegistry:
         tools: tuple[str, ...] | None = None,
         composite_of: str | None = None,
         created_at: float | None = None,
+        driver_params: dict[str, Any] | None = None,
     ) -> SessionManifest:
         """Register a new session. Atomic against by-name.json under `fcntl.flock`.
 
@@ -375,6 +388,7 @@ class SessionRegistry:
             role=role,
             tools=tools,
             composite_of=composite_of,
+            driver_params=driver_params,
         )
         # Sprint 223e race fix: bridge finds a session by_name and dispatches
         # a turn immediately after create. Under flock, the by-name.json write
@@ -476,6 +490,78 @@ class SessionRegistry:
             if manifest is None:
                 raise KeyError(f"unknown session_id {session_id!r}")
             updated = _replace(manifest, per_turn=per_turn)
+            _atomic_write_json(
+                self._base / session_id / _MANIFEST_FILENAME, _manifest_to_dict(updated)
+            )
+            self._manifests[session_id] = updated
+        return updated
+
+    def set_driver_params(
+        self, session_id: str, params: dict[str, Any] | None
+    ) -> SessionManifest:
+        """Change the per-session driver params mid-flight (piece G sprint 032c).
+
+        `params` shape (all optional; unset keys mean "use responder default"):
+          - "think"      (bool)             — Ollama thinking mode
+          - "max_tokens" (int ≥ 0)          — cap; 0 = uncapped
+          - "timeout"    (float > 0.0)      — request timeout, seconds
+          - "num_ctx"    (int ≥ 1)          — Ollama context window override
+
+        None clears every override — the resolver builds Responders with
+        pure defaults again. An unknown key or wrong type raises
+        ValueError (surfaced as 400 at the daemon boundary).
+
+        In-memory catalog and manifest.json update atomically. The next
+        `Runtime.resume` builds a fresh Responder via
+        `_daemon_driver_resolver(driver, params)` — the cache key changes,
+        so a new Responder instance lands. Existing turn-in-flight
+        completes on its prior Responder; the next turn sees the new one.
+
+        Same lock discipline as `set_driver` / `set_bundle` (red-team
+        finding 4, 2026-08-26).
+
+        Raises `KeyError` on unknown session_id;
+        `ValueError` on unknown params key or wrong type.
+        """
+        if session_id not in self._manifests:
+            raise KeyError(f"unknown session_id {session_id!r}")
+        if params is not None:
+            allowed: dict[str, type | tuple[type, ...]] = {
+                "think": bool,
+                "max_tokens": int,
+                "timeout": (int, float),
+                "num_ctx": int,
+            }
+            unknown = set(params.keys()) - set(allowed.keys())
+            if unknown:
+                raise ValueError(
+                    f"driver_params: unknown keys {sorted(unknown)}; "
+                    f"allowed: {sorted(allowed.keys())}"
+                )
+            for key, expected in allowed.items():
+                if key not in params:
+                    continue
+                value = params[key]
+                # bool is a subclass of int; guard bool-vs-int mixups first.
+                if key == "think" and not isinstance(value, bool):
+                    raise ValueError(f"driver_params.think must be a bool; got {type(value).__name__}")
+                if key != "think" and isinstance(value, bool):
+                    raise ValueError(f"driver_params.{key} must be numeric, not bool")
+                if not isinstance(value, expected):
+                    exp_name = expected.__name__ if isinstance(expected, type) else "|".join(t.__name__ for t in expected)
+                    raise ValueError(f"driver_params.{key} must be {exp_name}; got {type(value).__name__}")
+                if key == "max_tokens" and value < 0:
+                    raise ValueError(f"driver_params.max_tokens must be ≥ 0; got {value}")
+                if key == "num_ctx" and value < 1:
+                    raise ValueError(f"driver_params.num_ctx must be ≥ 1; got {value}")
+                if key == "timeout" and value <= 0:
+                    raise ValueError(f"driver_params.timeout must be > 0; got {value}")
+        threading_lock = self._turn_threading_locks.setdefault(session_id, threading.Lock())
+        with threading_lock:
+            manifest = self._manifests.get(session_id)
+            if manifest is None:
+                raise KeyError(f"unknown session_id {session_id!r}")
+            updated = _replace(manifest, driver_params=params)
             _atomic_write_json(
                 self._base / session_id / _MANIFEST_FILENAME, _manifest_to_dict(updated)
             )
@@ -1217,6 +1303,10 @@ def _manifest_to_dict(m: SessionManifest) -> dict[str, Any]:
         "per_turn": m.per_turn,
         # Sprint 225b: composite parent id (None for standalone sessions).
         "composite_of": m.composite_of,
+        # Sprint 032c: per-session driver params (think/max_tokens/timeout/
+        # num_ctx). None or an absent key → responder default. Dict of
+        # primitives only; JSON-safe by construction.
+        "driver_params": dict(m.driver_params) if m.driver_params is not None else None,
     }
 
 
@@ -1258,6 +1348,7 @@ def _manifest_from_dict(d: dict[str, Any]) -> SessionManifest:
         role=str(d.get("role") or "default"),
         per_turn=str(d.get("per_turn") or ""),
         composite_of=d.get("composite_of") if d.get("composite_of") is not None else None,
+        driver_params=(dict(d["driver_params"]) if d.get("driver_params") is not None else None),
     )
 
 
