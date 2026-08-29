@@ -8,8 +8,8 @@ import { emit, VOCAB_VERSION } from "./instrumentation/sdd";
 emit("SESSION_INIT", { vocab_version: VOCAB_VERSION, url: window.location.href });
 window.addEventListener("beforeunload", () => { emit("SESSION_ENDED", {}); });
 
-const $ = (id) => document.getElementById(id);
-const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const $ = (id: string): any => document.getElementById(id);
+const esc = (s: unknown): string => String(s).replace(/[&<>"]/g, (c: string): string => (({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" } as Record<string, string>)[c]));
 
 // ---------- row templates (class names are read back by buildSpec) ----------
 const PRODUCER_ROW = `<div class="row">
@@ -45,7 +45,7 @@ const MEMBER_ROW = `<div class="row member">
   <span class="mparams"></span>
   <span class="rm" title="remove">✕</span></div>`;
 
-function addRow(containerId, html, fill) {
+function addRow(containerId: string, html: string, fill?: (row: any) => void): any {
   const wrap = document.createElement("div");
   wrap.innerHTML = html.trim();
   const row = wrap.firstChild;
@@ -55,20 +55,20 @@ function addRow(containerId, html, fill) {
 }
 
 // ---------- assemble the authored spec (matches builder.py) ----------
-function buildSpec() {
-  const producers = [...$("producers").querySelectorAll(".row")].map((r) => ({
+function buildSpec(): any {
+  const producers = [...$("producers").querySelectorAll(".row")].map((r: any) => ({
     kind: r.querySelector(".pkind").value.trim(),
-    emits: r.querySelector(".pemits").value.split(",").map((s) => s.trim()).filter(Boolean),
+    emits: r.querySelector(".pemits").value.split(",").map((s: string) => s.trim()).filter(Boolean),
     initial: r.querySelector(".pinit").checked,
     model: r.querySelector(".pmodel").checked,
     prompt: r.querySelector(".pprompt").value.trim(),
-  })).filter((p) => p.kind);
-  const views = [...$("views").querySelectorAll(".row")].map((r) => ({
+  })).filter((p: any) => p.kind);
+  const views = [...$("views").querySelectorAll(".row")].map((r: any) => ({
     name: r.querySelector(".vname").value.trim(),
     kind: r.querySelector(".vkind").value,
     of: r.querySelector(".vof").value.trim(),
-  })).filter((v) => v.name && v.of);
-  const triggers = [...$("triggers").querySelectorAll(".row")].map((r) => {
+  })).filter((v: any) => v.name && v.of);
+  const triggers = [...$("triggers").querySelectorAll(".row")].map((r: any) => {
     const view = r.querySelector(".tview").value.trim();
     const predicate = view ? { view, op: r.querySelector(".top").value, n: Number(r.querySelector(".tn").value) || 0 } : null;
     return {
@@ -76,10 +76,10 @@ function buildSpec() {
       predicate, starts: r.querySelector(".tstarts").value.trim(), policy: r.querySelector(".tpolicy").value,
       reads: r.querySelector(".treads").value.trim(),  // a Route slot to feed the started Producer (opt)
     };
-  }).filter((t) => t.id && t.on && t.starts);
-  const routes = [...$("routes").querySelectorAll(".row")].map((r) => ({
+  }).filter((t: any) => t.id && t.on && t.starts);
+  const routes = [...$("routes").querySelectorAll(".row")].map((r: any) => ({
     id: r.querySelector(".rid").value.trim(), of: r.querySelector(".rof").value.trim(), slot: r.querySelector(".rslot").value.trim(),
-  })).filter((r) => r.id && r.of && r.slot);
+  })).filter((r: any) => r.id && r.of && r.slot);
   return {
     name: $("topoName").value.trim() || "authored", producers, views, triggers, routes,
     termination: buildTermination(), responder: ($("responderSel") || {}).value || "deterministic",
@@ -87,7 +87,7 @@ function buildSpec() {
   };
 }
 
-function buildMember(row) {
+function buildMember(row: any): any {
   const k = row.querySelector(".mkind").value;
   if (k === "quiescence_with_watchdog") return { kind: k, seconds: Number((row.querySelector(".mseconds") || {}).value) || 1 };
   if (k === "threshold_count") return { kind: k, of: (row.querySelector(".mof") || {}).value || "", n: Number((row.querySelector(".mn") || {}).value) || 1 };
@@ -106,13 +106,13 @@ function buildTermination() {
   return { kind: "quiescence_with_watchdog", seconds: Number(($("termSeconds") || {}).value) || 1 };
 }
 
-function renderMemberParams(row) {
+function renderMemberParams(row: any): void {
   const k = row.querySelector(".mkind").value, el = row.querySelector(".mparams");
   if (k === "quiescence_with_watchdog") el.innerHTML = `<span class="lbl">seconds</span><input class="sm mseconds" value="1" />`;
   else if (k === "threshold_count") el.innerHTML = `<span class="lbl">of</span><input class="med mof" placeholder="Kind" /><span class="lbl">n</span><input class="sm mn" value="1" />`;
   else el.innerHTML = "";
 }
-function addMember(kind) {
+function addMember(kind?: string): any {
   const row = addRow("termMembers", MEMBER_ROW);
   if (kind) row.querySelector(".mkind").value = kind;
   renderMemberParams(row);
@@ -134,7 +134,7 @@ function renderTermParams() {
 }
 
 // ---------- the real seam ----------
-async function postJSON(path, body) {
+async function postJSON(path: string, body: unknown): Promise<any> {
   const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   const text = await r.text();
   let data;
@@ -142,7 +142,7 @@ async function postJSON(path, body) {
   if (!r.ok && !data.error) data.error = text || ("HTTP " + r.status);
   return data;
 }
-const out = (html) => { $("out").innerHTML = `<span class="l">output</span>${html}`; };
+const out = (html: string): void => { $("out").innerHTML = `<span class="l">output</span>${html}`; };
 
 async function doValidate() {
   const spec = buildSpec();
@@ -183,12 +183,12 @@ async function doBuild() {
 
 // ---------- drag-canvas: a node-graph VIEW of the authored spec (buildSpec) ----------
 const CARD_W = 130, CARD_H = 48;
-let CANVAS_POS = {};  // kind -> {x,y}; persists across re-renders + drags
+const CANVAS_POS: Record<string, { x: number; y: number }> = {};  // kind -> {x,y}; persists across re-renders + drags
 const MARKER = `<defs><marker id="arrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" fill="#5e6573"/></marker></defs>`;
 
-function layoutCanvas(spec, W) {
-  const initials = spec.producers.filter((p) => p.initial), others = spec.producers.filter((p) => !p.initial);
-  const place = (list, y) => list.forEach((p, i) => {
+function layoutCanvas(spec: any, W: number): void {
+  const initials = spec.producers.filter((p: any) => p.initial), others = spec.producers.filter((p: any) => !p.initial);
+  const place = (list: any[], y: number) => list.forEach((p: any, i: number) => {
     if (!CANVAS_POS[p.kind]) {
       const gap = Math.min(195, Math.max(150, (W - 60) / Math.max(1, list.length)));
       CANVAS_POS[p.kind] = { x: 24 + i * gap, y };
@@ -197,47 +197,47 @@ function layoutCanvas(spec, W) {
   place(initials, 36); place(others, 250);
   // slot nodes for Routes — a Route stages INTO a named slot; we draw to the slot, never to a guessed
   // consumer (review #42: drawing routes to every triggered Producer over-stated connectivity).
-  const slots = [...new Set(spec.routes.map((r) => r.slot).filter(Boolean))];
-  slots.forEach((s, i) => { const key = "slot:" + s; if (!CANVAS_POS[key]) CANVAS_POS[key] = { x: 24 + i * 180, y: 408 }; });
-  const keep = new Set([...spec.producers.map((p) => p.kind), ...slots.map((s) => "slot:" + s)]);
-  Object.keys(CANVAS_POS).forEach((k) => { if (!keep.has(k)) delete CANVAS_POS[k]; });
+  const slots = [...new Set((spec.routes as any[]).map((r: any) => r.slot).filter(Boolean))];
+  slots.forEach((s: any, i: number) => { const key = "slot:" + s; if (!CANVAS_POS[key]) CANVAS_POS[key] = { x: 24 + i * 180, y: 408 }; });
+  const keep = new Set([...(spec.producers as any[]).map((p: any) => p.kind), ...slots.map((s: any) => "slot:" + s)]);
+  Object.keys(CANVAS_POS).forEach((k: string) => { if (!keep.has(k)) delete (CANVAS_POS as any)[k]; });
 }
 
 function renderCanvas() {
   const spec = buildSpec(), canvas = $("canvas"), W = canvas.clientWidth || 820;
   layoutCanvas(spec, W);
-  const bottom = (k) => ({ x: CANVAS_POS[k].x + CARD_W / 2, y: CANVAS_POS[k].y + CARD_H });
-  const top = (k) => ({ x: CANVAS_POS[k].x + CARD_W / 2, y: CANVAS_POS[k].y });
-  const emittersOf = (kind) => spec.producers.filter((p) => p.emits.includes(kind)).map((p) => p.kind);
-  const edge = (a, b, cls) => `<path class="edge ${cls}" d="M${a.x},${a.y} C${a.x},${(a.y + b.y) / 2} ${b.x},${(a.y + b.y) / 2} ${b.x},${b.y}" marker-end="url(#arrow)" />`;
-  const label = (a, b, t, cls) => `<text class="edge-lbl ${cls}" x="${(a.x + b.x) / 2}" y="${(a.y + b.y) / 2}" text-anchor="middle">${esc(t)}</text>`;
+  const bottom = (k: string) => ({ x: (CANVAS_POS as any)[k].x + CARD_W / 2, y: (CANVAS_POS as any)[k].y + CARD_H });
+  const top = (k: string) => ({ x: (CANVAS_POS as any)[k].x + CARD_W / 2, y: (CANVAS_POS as any)[k].y });
+  const emittersOf = (kind: string) => (spec.producers as any[]).filter((p: any) => p.emits.includes(kind)).map((p: any) => p.kind);
+  const edge = (a: any, b: any, cls: string) => `<path class="edge ${cls}" d="M${a.x},${a.y} C${a.x},${(a.y + b.y) / 2} ${b.x},${(a.y + b.y) / 2} ${b.x},${b.y}" marker-end="url(#arrow)" />`;
+  const label = (a: any, b: any, t: string, cls: string) => `<text class="edge-lbl ${cls}" x="${(a.x + b.x) / 2}" y="${(a.y + b.y) / 2}" text-anchor="middle">${esc(t)}</text>`;
   let edges = "";
-  spec.triggers.forEach((t) => { if (CANVAS_POS[t.starts]) emittersOf(t.on).forEach((src) => { if (CANVAS_POS[src] && src !== t.starts) { edges += edge(bottom(src), top(t.starts), "") + label(bottom(src), top(t.starts), t.id, ""); } }); });
+  (spec.triggers as any[]).forEach((t: any) => { if ((CANVAS_POS as any)[t.starts]) emittersOf(t.on).forEach((src: string) => { if ((CANVAS_POS as any)[src] && src !== t.starts) { edges += edge(bottom(src), top(t.starts), "") + label(bottom(src), top(t.starts), t.id, ""); } }); });
   // Routes: of-emitter -> the slot node it stages into (honest — the consuming Producer is the
   // author's intent, read via input_builder, not something the canvas can verify).
-  spec.routes.forEach((r) => { const sk = "slot:" + r.slot; if (!CANVAS_POS[sk]) return; emittersOf(r.of).forEach((src) => { if (!CANVAS_POS[src]) return; const a = bottom(src), b = { x: CANVAS_POS[sk].x + 52, y: CANVAS_POS[sk].y }; edges += edge(a, b, "route") + label(a, b, r.id, "route"); }); });
-  const cards = spec.producers.map((p) => {
-    const pp = CANVAS_POS[p.kind];
+  (spec.routes as any[]).forEach((r: any) => { const sk = "slot:" + r.slot; if (!(CANVAS_POS as any)[sk]) return; emittersOf(r.of).forEach((src: string) => { if (!(CANVAS_POS as any)[src]) return; const a = bottom(src), b = { x: (CANVAS_POS as any)[sk].x + 52, y: (CANVAS_POS as any)[sk].y }; edges += edge(a, b, "route") + label(a, b, r.id, "route"); }); });
+  const cards = (spec.producers as any[]).map((p: any) => {
+    const pp = (CANVAS_POS as any)[p.kind];
     return `<div class="card ${p.initial ? "initial" : ""}" data-kind="${esc(p.kind)}" style="left:${pp.x}px;top:${pp.y}px">
       <div class="ck">${esc(p.kind)}</div><div class="ce">emits ${p.emits.map(esc).join(", ") || "—"}</div>${p.initial ? '<div class="cb">▸ initial</div>' : ""}</div>`;
   }).join("");
-  const slotNodes = [...new Set(spec.routes.map((r) => r.slot).filter(Boolean))].map((s) => {
-    const pp = CANVAS_POS["slot:" + s];
+  const slotNodes = [...new Set((spec.routes as any[]).map((r: any) => r.slot).filter(Boolean))].map((s: any) => {
+    const pp = (CANVAS_POS as any)["slot:" + s];
     return `<div class="slotnode" style="left:${pp.x}px;top:${pp.y}px">slot · ${esc(s)}</div>`;
   }).join("");
   canvas.innerHTML = `<svg>${MARKER}${edges}</svg>${cards}${slotNodes}`;
-  canvas.querySelectorAll(".card").forEach((card) => { card.onmousedown = (e) => startDrag(e, card.dataset.kind); });
+  canvas.querySelectorAll(".card").forEach((card: any) => { card.onmousedown = (e: MouseEvent) => startDrag(e, card.dataset.kind); });
 }
 
-function startDrag(e, kind) {
+function startDrag(e: MouseEvent, kind: string): void {
   e.preventDefault();
   const sx = e.clientX, sy = e.clientY, orig = { ...CANVAS_POS[kind] };
-  const move = (ev) => { CANVAS_POS[kind] = { x: Math.max(0, orig.x + ev.clientX - sx), y: Math.max(0, orig.y + ev.clientY - sy) }; renderCanvas(); };
+  const move = (ev: MouseEvent) => { (CANVAS_POS as any)[kind] = { x: Math.max(0, orig.x + ev.clientX - sx), y: Math.max(0, orig.y + ev.clientY - sy) }; renderCanvas(); };
   const up = () => { document.removeEventListener("mousemove", move); document.removeEventListener("mouseup", up); };
   document.addEventListener("mousemove", move); document.addEventListener("mouseup", up);
 }
 
-function setView(v) {
+function setView(v: string): void {
   const wasForm = $("formView").style.display !== "none";
   const nowForm = v === "form";
   if (wasForm !== nowForm) emit("CANVAS_TOGGLED", { to: v });
@@ -276,11 +276,11 @@ $("vCanvas").onclick = () => setView("canvas");
 
 // ---------- pre-fill the known-good reviewer/judge example (immediately buildable) ----------
 renderTermParams();
-addRow("producers", PRODUCER_ROW, (r) => { r.querySelector(".pkind").value = "reviewer-a"; r.querySelector(".pemits").value = "Critique"; r.querySelector(".pinit").checked = true; });
+addRow("producers", PRODUCER_ROW, (r: any) => { r.querySelector(".pkind").value = "reviewer-a"; r.querySelector(".pemits").value = "Critique"; r.querySelector(".pinit").checked = true; });
 addRow("producers", PRODUCER_ROW, (r) => { r.querySelector(".pkind").value = "reviewer-b"; r.querySelector(".pemits").value = "Critique"; r.querySelector(".pinit").checked = true; });
 addRow("producers", PRODUCER_ROW, (r) => { r.querySelector(".pkind").value = "judge"; r.querySelector(".pemits").value = "Verdict"; });
-addRow("views", VIEW_ROW, (r) => { r.querySelector(".vname").value = "crits"; r.querySelector(".vkind").value = "KindCount"; r.querySelector(".vof").value = "Critique"; });
-addRow("triggers", TRIGGER_ROW, (r) => {
+addRow("views", VIEW_ROW, (r: any) => { r.querySelector(".vname").value = "crits"; r.querySelector(".vkind").value = "KindCount"; r.querySelector(".vof").value = "Critique"; });
+addRow("triggers", TRIGGER_ROW, (r: any) => {
   r.querySelector(".tid").value = "adjudicate"; r.querySelector(".ton").value = "Critique";
   r.querySelector(".tview").value = "crits"; r.querySelector(".top").value = ">="; r.querySelector(".tn").value = "2";
   r.querySelector(".tstarts").value = "judge"; r.querySelector(".tpolicy").value = "Once";
