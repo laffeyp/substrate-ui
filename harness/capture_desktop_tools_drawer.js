@@ -23,6 +23,11 @@ const WORKSPACE = `/tmp/036d-harness-${SUFFIX}`;
   page.on("pageerror", (e) => pageErrors.push(String(e.message)));
   await page.goto(BASE);
   await page.waitForSelector("#view-desktop.active", { timeout: 5000 });
+  // Sprint 041: session controls moved from the shared head to inside
+  // #view-terminal. Flip to terminal before addressing the mount points.
+  await page.dispatchEvent("#view-toggle", "mousedown");
+  await page.waitForFunction(() => (window).STATE?.view === "terminal", { timeout: 2000 });
+  await page.waitForSelector("#terminal-input", { timeout: 2000 });
 
   await page.waitForSelector("#tools-drawer-input", { timeout: 3000 });
   ok("tools drawer mounted in desktop header");

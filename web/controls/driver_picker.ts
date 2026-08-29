@@ -63,18 +63,22 @@ const _readCurrentSession = async (preferSid: string | null): Promise<{ session_
   const result = await fetchGet<SessionList>("/api/session");
   if (!result.ok) return null;
   const s = result.data;
-  const pool = [
-    ...(s.live || []),
-    ...(s.parked || []),
-    ...(s.interrupted || []),
-  ];
-  // Prefer a session_id the caller nominated (fired via
-  // substrate:session-changed.detail); else fall back to the first live/parked.
+  // Prefer the caller-nominated sid across every bucket. This is how
+  // `substrate:session-changed{detail.session_id}` routes the terminal's
+  // just-opened session into the picker even if it's parked already.
   if (preferSid) {
+    const pool = [
+      ...(s.live || []),
+      ...(s.parked || []),
+      ...(s.interrupted || []),
+    ];
     const match = pool.find((b) => b.session_id === preferSid);
     if (match) return { session_id: match.session_id, driver: match.driver };
   }
-  const first = pool[0];
+  // Without a nomination: bind to a LIVE session only. Parked sessions
+  // from prior daemon runs would otherwise steal the picker away from
+  // the user's about-to-open session (Sprint 041 fix).
+  const first = (s.live || [])[0];
   if (!first) return null;
   return { session_id: first.session_id, driver: first.driver };
 };
@@ -106,10 +110,13 @@ export function mountDriverPicker(root: HTMLElement, _deps: DriverPickerDeps = {
       if (!current) {
         sessionId = null;
         priorDriver = null;
-        select.disabled = true;
-        status.textContent = "· no live session";
+        // Sprint 041 pre-session hide: the picker mount collapses when
+        // there's no session. The `+ new session` button carries the
+        // start affordance.
+        root.style.display = "none";
         return;
       }
+      root.style.display = "";
       sessionId = current.session_id;
       priorDriver = current.driver;
       const options = Array.from(select.options).map((o) => o.value);

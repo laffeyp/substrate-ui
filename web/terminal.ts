@@ -47,7 +47,7 @@ function _mkChildren(root: HTMLElement): {
   input: HTMLInputElement;
   prompt: HTMLSpanElement;
   header: HTMLDivElement;
-  driverSelect: HTMLSelectElement;
+  driverSelect: HTMLSelectElement | null;
   paramsHint: HTMLSpanElement;
 } {
   root.innerHTML = "";
@@ -59,23 +59,31 @@ function _mkChildren(root: HTMLElement): {
   title.className = "term-title";
   title.textContent = "▌ substrate — daily-driver terminal";
   header.appendChild(title);
-  // Sprint 035t: driver picker in the terminal header. Populated from
-  // GET /api/models on mount. Change fires PATCH /api/session/<id>
-  // {driver} + DRIVER_PATCHED emit; same wire as the /model slash from
-  // sprint 035s. Two entry points, one wire.
-  const driverLabel = document.createElement("label");
-  driverLabel.className = "term-hint";
-  driverLabel.style.display = "flex";
-  driverLabel.style.alignItems = "center";
-  driverLabel.style.gap = "6px";
-  driverLabel.style.marginLeft = "16px";
-  driverLabel.textContent = "driver ";
-  const driverSelect = document.createElement("select");
-  driverSelect.id = "terminal-driver";
-  driverSelect.className = "term-model";
-  driverSelect.title = "the driver this session runs against; change fires PATCH /api/session/<id> {driver}";
-  driverLabel.appendChild(driverSelect);
-  header.appendChild(driverLabel);
+  // Sprint 041: the session-control chrome lives here now. Five mount
+  // points app.ts's mountX(root) calls populate: driver + bundle +
+  // workspace-shape badge + tools drawer + new-session button. The
+  // desktop view (record browser) no longer carries session controls —
+  // session controls belong with the session, and the session lives in
+  // the terminal (Architect ratification 2026-08-29). Sprint 035t's
+  // inline driver picker retired: 036a's mountDriverPicker on the same
+  // #driver-picker span replaces it.
+  const controls = document.createElement("span");
+  controls.className = "term-controls";
+  controls.style.marginLeft = "16px";
+  controls.style.display = "flex";
+  controls.style.alignItems = "center";
+  controls.style.gap = "10px";
+  controls.style.flexWrap = "wrap";
+  // Bundle picker deliberately omitted: the terminal session's bundle is
+  // `session` by contract (the daily-driver's own methodology + role +
+  // per_turn slots). Bundle SELECTION is a launcher concern (choosing an
+  // application to run), not a session concern.
+  for (const id of ["new-session-trigger", "driver-picker", "workspace-shape-badge-mount", "tools-drawer"]) {
+    const span = document.createElement("span");
+    span.id = id;
+    controls.appendChild(span);
+  }
+  header.appendChild(controls);
   // Sprint 035v: params hint. Renders `think off · tokens ∞ · timeout 300s`.
   // Updates on session-open (read from POST /api/session ACK's driver_params
   // echo) and on /set slash PATCH ACK.
@@ -115,7 +123,7 @@ function _mkChildren(root: HTMLElement): {
   inputRow.appendChild(input);
   root.appendChild(inputRow);
 
-  return { body, input, prompt, header, driverSelect, paramsHint };
+  return { body, input, prompt, header, driverSelect: null, paramsHint };
 }
 
 // _formatParamsHint moved to web/terminal/helpers.ts (sprint 035x).
@@ -165,7 +173,14 @@ async function _populateDriverPicker(select: HTMLSelectElement, h: TerminalHandl
 import { postJson as _postJson, fetchJson as _fetch, fetchGet as _fetchGet, type FetchResult } from "./lib/fetch";
 
 async function _openSession(h: TerminalHandle, body: HTMLDivElement): Promise<boolean> {
-  const createBody: Record<string, unknown> = { driver: h.driverName };
+  // Sprint 041: seed the create body's driver from the mounted
+  // #driver-picker-select (036a) if present; else fall back to
+  // h.driverName (opts.driverDefault). One picker owns the driver
+  // choice — the header's mount.
+  const pickerSelect = document.getElementById("driver-picker-select") as HTMLSelectElement | null;
+  const seededDriver = (pickerSelect?.value || h.driverName || "deterministic");
+  h.driverName = seededDriver;
+  const createBody: Record<string, unknown> = { driver: seededDriver };
   // Sprint 035v: if the user ran `/set` before opening a session, the
   // queued driver_params ride the create request. Cleared after — the
   // manifest carries them from here.
@@ -447,7 +462,7 @@ export interface MountTerminalOptions {
 }
 
 export function mountTerminal(root: HTMLElement, opts: MountTerminalOptions = {}): void {
-  const { body, input, prompt, driverSelect, paramsHint } = _mkChildren(root);
+  const { body, input, prompt, paramsHint } = _mkChildren(root);
   const h: TerminalHandle = {
     el: root,
     sessionId: null,
@@ -482,47 +497,25 @@ export function mountTerminal(root: HTMLElement, opts: MountTerminalOptions = {}
   // Expose the updater on the handle so _openSession / _closeStream can
   // trigger a refresh without threading the closure through every helper.
   h.updatePrompt = _updatePrompt;
-  // Sprint 035v: params hint stateful updater.
+  // Sprint 035v: params hint stateful updater. Sprint 041: hide when
+  // no session — the params only matter for the live one; pre-session
+  // the `+ new session` dialog owns the defaults.
   const _updateParamsHint = (): void => {
-    paramsHint.textContent = _formatParamsHint(h.driverParams);
+    if (h.sessionId) {
+      paramsHint.style.display = "";
+      paramsHint.textContent = _formatParamsHint(h.driverParams);
+    } else {
+      paramsHint.style.display = "none";
+    }
   };
   _updateParamsHint();
   h.updateParamsHint = _updateParamsHint;
-  // Sprint 035t: populate the driver picker + wire its change handler.
-  // Runs async; the picker shows "populating…"-shape (empty select) for a
-  // few ms while /api/models resolves. Change fires PATCH driver +
-  // DRIVER_PATCHED emit when a session is active; otherwise updates
-  // h.driverName so the next session-open uses the picked driver.
-  _populateDriverPicker(driverSelect, h).then(() => {
-    _updatePrompt();
-  }).catch((err) => {
-    _push(body, `driver picker: populate failed — ${err && err.message ? err.message : err}`, CLS.err);
-  });
-  driverSelect.addEventListener("change", () => {
-    const next = driverSelect.value;
-    if (!next) return;
-    const prior = h.driverName;
-    if (next === prior) return;
-    if (!h.sessionId) {
-      // No active session yet — update the pending default. The next
-      // _openSession call POSTs this driver.
-      h.driverName = next;
-      _push(body, `driver → ${next} (queued for next session)`, CLS.dim);
-      _updatePrompt();
-      return;
-    }
-    _fetch(`/api/session/${encodeURIComponent(h.sessionId)}`, "PATCH", { driver: next }).then((result) => {
-      if (!result.ok) {
-        _push(body, `driver-picker PATCH failed [${result.failure_class}] ${result.detail}`, CLS.err);
-        driverSelect.value = prior;  // revert the select on failure
-        return;
-      }
-      h.driverName = next;
-      emit("DRIVER_PATCHED", { session_id: h.sessionId ?? "", driver: next, prior_driver: prior });
-      _push(body, `driver → ${next} (next turn)`, CLS.accent);
-      _updatePrompt();
-    });
-  });
+  // Sprint 041: 035t's inline driver picker retired — the mount point
+  // #driver-picker now lives inside the terminal header (see _mkChildren)
+  // and app.ts's mountDriverPicker (036a) populates it. That picker
+  // fires DRIVER_PATCHED on change + updates the manifest via PATCH.
+  // Terminal.ts reads its select's value at _openSession-time to seed
+  // the POST body's `driver` field.
   // Sprint 035u — Ctrl+C interrupts the current turn (product spec §2).
   // Intercepts only when the terminal input has focus AND the input has
   // no selection, so a user who selected text in the input to copy still
