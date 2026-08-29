@@ -302,7 +302,10 @@ export interface WorkspaceShapeBadgeHandle {
 export function mountWorkspaceShapeBadge(root: HTMLElement): WorkspaceShapeBadgeHandle {
   root.innerHTML = "";
   root.id = "workspace-shape-badge";
-  root.className = "dim sm";
+  // Append (don't replace) — preserves any inherited classes from the
+  // container's index.html markup (e.g., `desktop-only`, which sprint
+  // 037b's perceptual capture caught being wiped by className replacement).
+  root.classList.add("dim", "sm");
   root.style.marginLeft = "8px";
   root.textContent = "· shape —";
 

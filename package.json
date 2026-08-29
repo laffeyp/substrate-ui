@@ -37,8 +37,11 @@
     "capture:desktop-tools-drawer": "node harness/capture_desktop_tools_drawer.js",
     "capture:desktop-isolate-toggle": "node harness/capture_desktop_isolate_toggle.js",
     "e2e:session": "node harness/e2e_session.js",
+    "capture:session": "node harness/capture_session.js",
+    "capture:session-signals": "node harness/capture_session_signals.js",
+    "grade:session-signals": "npx tsx tools/capture-grade.ts captures/sprint-037/session.jsonl --kind session",
     "check:ui-parity": "cd ../substrate && uv run python -m pytest ../substrate-ui/tests/test_ui_control_parity.py -q",
-    "signals": "npm run check:vocab-parity && npm run check:tsc-new && npm run check:ui-parity && npm run capture:signals && npm run grade:signals && npm run capture:studio-signals && npm run grade:studio-signals && npm run capture:view-toggle && npm run capture:terminal-session && npm run grade:terminal-session && npm run capture:terminal-slash-router && npm run capture:terminal-driver-picker && npm run capture:terminal-interrupt && npm run capture:terminal-params-drawer && npm run capture:terminal-create-controls && npm run capture:rail-four-buckets && npm run capture:desktop-driver-picker && npm run capture:desktop-bundle-picker && npm run capture:desktop-workspace-picker && npm run capture:desktop-tools-drawer && npm run capture:desktop-isolate-toggle && npm run e2e:session",
+    "signals": "npm run check:vocab-parity && npm run check:tsc-new && npm run check:ui-parity && npm run capture:signals && npm run grade:signals && npm run capture:studio-signals && npm run grade:studio-signals && npm run capture:view-toggle && npm run capture:terminal-session && npm run grade:terminal-session && npm run capture:terminal-slash-router && npm run capture:terminal-driver-picker && npm run capture:terminal-interrupt && npm run capture:terminal-params-drawer && npm run capture:terminal-create-controls && npm run capture:rail-four-buckets && npm run capture:desktop-driver-picker && npm run capture:desktop-bundle-picker && npm run capture:desktop-workspace-picker && npm run capture:desktop-tools-drawer && npm run capture:desktop-isolate-toggle && npm run e2e:session && npm run capture:session-signals && npm run grade:session-signals && npm run capture:session",
     "sync:substrate-vocab": "npx tsx tools/sync-substrate-vocab.ts",
     "e2e:terminal-v1": "node _deprecated/terminal-v1-round1/harness/e2e_terminal_v1.js",
     "capture:terminal-v1": "node _deprecated/terminal-v1-round1/harness/capture_terminal_v1.js"

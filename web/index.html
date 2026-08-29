@@ -28,8 +28,10 @@ button{font-family:inherit;color:inherit;cursor:pointer;background:none;border:n
 .view{ display:none; min-height:0; overflow:hidden; }
 .view.active#view-desktop{ display:grid; grid-template-rows:auto 1fr auto auto; min-height:0; }
 .view.active#view-terminal{ display:flex; flex-direction:column; min-height:0; }
-/* terminal column (sprint 035) */
-.terminal-column{ display:flex; flex-direction:column; height:100%; background:var(--bg2); }
+/* terminal column (sprint 035); .active gate added at 037b — without it,
+   the class's display:flex overrode `.view{display:none}` and the
+   terminal bled into the desktop view (caught by the perceptual capture). */
+.view.active .terminal-column{ display:flex; flex-direction:column; height:100%; background:var(--bg2); }
 .terminal-column .term-head{ display:flex; align-items:center; gap:12px; padding:8px 14px; border-bottom:1px solid var(--line); }
 .terminal-column .term-body{ flex:1; overflow:auto; padding:10px 14px; font-size:12px; line-height:1.5; }
 .terminal-column .term-line{ white-space:pre-wrap; word-break:break-word; padding:1px 0; }
@@ -39,6 +41,10 @@ button{font-family:inherit;color:inherit;cursor:pointer;background:none;border:n
 #view-toggle{ margin-left:auto; border:1px solid var(--line2); border-radius:6px; padding:3px 9px; font-size:12px; color:var(--tx-dim); cursor:pointer; }
 #view-toggle:hover{ border-color:var(--line3); color:var(--tx); }
 #view-toggle.on-terminal{ color:var(--green); border-color:var(--green); }
+/* Sprint 037b: PRODUCT-SPEC §13 View A ("just the agent terminal,
+   filling the window") — hide the desktop-only chrome in the shared
+   head when view is terminal. The screenshots caught the bleed. */
+.head:has(#view-toggle.on-terminal) .desktop-only{ display:none !important; }
 
 /* header */
 .head{ display:flex; align-items:center; gap:16px; padding:10px 16px; border-bottom:1px solid var(--line2); }
@@ -236,17 +242,17 @@ button{font-family:inherit;color:inherit;cursor:pointer;background:none;border:n
   <div class="head">
     <span class="brand"><span class="mk">▓▒░</span> substrate</span><span class="ttl">run console · live</span>
     <span class="spacer"></span>
-    <span id="runname" class="runname"></span><span id="runid" class="runid"></span>
-    <button class="btn" id="modeToggle" title="toggle Inputs &amp; Outputs">I/O</button>
-    <span id="new-session-trigger" class="new-session-trigger-mount"></span>
-    <span id="driver-picker" class="driver-picker-mount"></span>
-    <span id="bundle-picker" class="bundle-picker-mount"></span>
-    <span id="workspace-shape-badge-mount"></span>
-    <span id="tools-drawer" class="tools-drawer-mount"></span>
-    <a class="btn" id="studiolink" href="/studio.html" target="_blank" rel="noopener" title="open the studio — author a Topology (new tab)">studio</a>
-    <select id="diffsel" class="btn" title="diff this record against another (first divergence by seq, D-8)"><option value="">⇄ diff vs…</option></select>
-    <span id="verdict" class="verdict"></span>
-    <button class="btn" id="resumebtn" title="feed the awaited input and resume this paused run" style="display:none">▶ resume</button>
+    <span id="runname" class="runname desktop-only"></span><span id="runid" class="runid desktop-only"></span>
+    <button class="btn desktop-only" id="modeToggle" title="toggle Inputs &amp; Outputs">I/O</button>
+    <span id="new-session-trigger" class="new-session-trigger-mount desktop-only"></span>
+    <span id="driver-picker" class="driver-picker-mount desktop-only"></span>
+    <span id="bundle-picker" class="bundle-picker-mount desktop-only"></span>
+    <span id="workspace-shape-badge-mount" class="desktop-only"></span>
+    <span id="tools-drawer" class="tools-drawer-mount desktop-only"></span>
+    <a class="btn desktop-only" id="studiolink" href="/studio.html" target="_blank" rel="noopener" title="open the studio — author a Topology (new tab)">studio</a>
+    <select id="diffsel" class="btn desktop-only" title="diff this record against another (first divergence by seq, D-8)"><option value="">⇄ diff vs…</option></select>
+    <span id="verdict" class="verdict desktop-only"></span>
+    <button class="btn desktop-only" id="resumebtn" title="feed the awaited input and resume this paused run" style="display:none">▶ resume</button>
     <button id="view-toggle" title="flip between the terminal view and the desktop console (Ctrl+`)">⇄ view</button>
   </div>
   <div id="view-desktop" class="view active">
