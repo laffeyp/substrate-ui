@@ -69,22 +69,13 @@ and grades the VISIBLE surface. Two-track's perceptual half.
 | `tools/capture-grade.ts <path> [--kind console|studio]` | `npm run grade:signals` / `npm run grade:studio-signals` | Reads a JSONL trace, grades against invariants. |
 | — | `npm run signals` | Chains all four: parity + capture console + grade console + capture studio + grade studio |
 
-**Grader invariants** (`tools/capture-grade.ts`). Console kind runs eight checks:
-
-1. **`checkSessionBookends`** — `SESSION_INIT` must be first; `SESSION_ENDED`, when present, must be last.
-2. **`containsInOrder(EXPECTED_ORDER)`** — the console fixture must be a supersequence of ~40 named tags in order.
-3. **`checkRecordSelectedLoaded`** — every `RECORD_SELECTED` followed by exactly one matching-name `RECORD_LOADED` within 5s, staleness-drop enforced.
-4. **`checkViewSwitchedRender`** — every `PANE_SWITCHED{to_pane: V}` followed by the matching pane-render tag with matching `pane_id` and `subject_record` within 500ms.
-5. **`checkFrameMonotonic`** — `frame` counter never decreases across pane-render tags.
-6. **`checkInspectorPayloads`** — `EVENT_INSPECTED.seq` non-negative; `PRODUCER_INSPECTED.kind` non-empty.
-7. **`checkTurnInsideChatWindow`** — every `TURN_SUBMITTED` inside a `CHAT_ENTERED → CHAT_EXITED` window.
-8. **`checkAgentLaunchTerminate`** — `AGENT_LAUNCH_REQUESTED → AGENT_LAUNCHED | LAUNCH_REJECTED{kind:agent}` within 1s; `AGENT_LAUNCHED → exactly one FINAL_ANSWER_RENDERED | POLL_TIMEOUT` with matching `run_name`.
-9. **`checkTopologyLaunch`** — `TOPOLOGY_LAUNCH_REQUESTED → exactly one TOPOLOGY_LAUNCHED | LAUNCH_REJECTED` within 5s, matching `topology_name`.
-10. **`checkIncidentPayloads`** — every `FETCH_FAILED` / `LAUNCH_REJECTED` / `POLL_TIMEOUT` carries a non-empty required payload.
-11. **`checkChatTurnCount`** — `CHAT_EXITED.turns_in_conversation` equals `2 * TURN_SUBMITTED count` (normal) or `2 * count - 1` (in-flight).
-12. **`PAIRINGS`** — `DIFF_REQUESTED → DIFF_RENDERED` within 5s matching subject; `ASSAY_SELECTED → ASSAY_REPORT_LOADED` within 5s matching name.
-
-Studio kind runs its own EXPECTED_ORDER (10 tags) + `checkStudioPairings` (`SPEC_VALIDATE_REQUESTED → SPEC_VALIDATED` within 5s; `SPEC_BUILD_REQUESTED → SPEC_BUILT | SPEC_BUILD_REJECTED` within 30s).
+**Grader invariants (v0.7.3, refreshed at sprint 038 fold).** See the
+"Grader invariants — v0.7.3 shape" section below for the current list.
+Historical note: the pre-037c list ran twelve checks; three
+(checkTurnInsideChatWindow, checkAgentLaunchTerminate, checkChatTurnCount)
+retired with the dock at v0.7.3. Two (checkViewSwitched,
+checkDriverSessionBookends) landed at sprint 035 + 037a. Studio kind
+runs its own EXPECTED_ORDER (10 tags) + checkStudioPairings.
 
 ---
 
@@ -129,7 +120,7 @@ patterns:
 4. **Fail collection**: push to a `fails[]` array via a `check(cond, msg)` helper; exit 1 if `fails.length > 0`.
 5. **Signal-trace tail**: `const { maybeCaptureTail } = require("./lib/capture-tail")`; call at end. Runs iff `CAPTURE_SIGNALS=1`; no-op otherwise.
 6. **Perceptual pair**: `harness/capture_session.js` (or a new `capture:` script for piece G) screenshots the DOM states named in the sprint's observation contract. Agent reads each PNG.
-7. **Signal grader extension**: extend `tools/capture-grade.ts`'s `EXPECTED_ORDER` with piece-G tags (`DRIVER_SESSION_STARTED`, `USER_MESSAGE_INJECTED`, `PARK_LANDED`, `DRIVER_SESSION_ENDED`); update `VIEW_TO_PANE_ID` if piece G adds `terminal` / `desktop` values to `PANE_SWITCHED.to_pane`.
+7. **Signal grader extension**: extend `tools/capture-grade.ts`'s `EXPECTED_ORDER_SESSION` with any new session tags. The v0.7.1 TAG_SPLIT renamed view flips from `PANE_SWITCHED` to `VIEW_SWITCHED{to_view, prior_view}` with a closed set `{"desktop", "terminal"}`; `checkViewSwitched` (035) + `checkDriverSessionBookends` (035) enforce the pairing.
 8. **`package.json` script**: add `"e2e:session": "node harness/e2e_session.js"` and wire into `signals` if the fixture becomes part of the standing gate.
 
 ---
@@ -156,11 +147,144 @@ patterns:
 **Grader:** `npx tsx tools/capture-grade.ts captures/sprint-035/terminal-session.jsonl --kind session`.
 **Wired into `npm run signals`:** yes (via `capture:terminal-session` + `grade:terminal-session`).
 
-## What DOES NOT exist yet (piece-G territory)
+## Piece-G harnesses (sprints 034b, 035s-w, 036a-f, 037a-b)
 
-- `harness/e2e_session.js` — the session-shape harness the tech spec names.
-- `harness/capture_session.js` — perceptual pair (name pending).
-- `harness/capture_session_signals.js` — signal-trace capture for the session path.
-- `test_ui_control_parity.py` — Python-side assertion that every UI control produces the same session state as its CLI counterpart (tech spec §10).
+All four items the earlier "does not exist yet" section listed now
+ship — moved here by sprint 038's fold review.
 
-Piece G's sprint chain adds these; do not reinvent the wiring above them.
+### `harness/capture_rail_four_buckets.js` (sprint 034b)
+Fourteen assertions. Rail mounts; four bucket headings (live sessions,
+recent records, bundles, records) render in the fixed order; each
+bucket fires `RECORDS_LOADED{bucket, count}` once per refresh; bundles
+bucket ≥1; records bucket matches the `exclude_sessions=true` subset.
+Wired at `npm run capture:rail-four-buckets`.
+
+### `harness/capture_terminal_slash_router.js` (sprint 035s)
+Twenty assertions across the seventeen slashes. Drives each slash;
+asserts the paired emit and DOM effect. Zero sleeps (037c's CQ-2 fix).
+Wired at `npm run capture:terminal-slash-router`.
+
+### `harness/capture_terminal_driver_picker.js` (sprint 035t)
+Twelve assertions. Header dropdown queues before session, PATCHes and
+fires `DRIVER_PATCHED{driver, prior_driver}` mid-session.
+Wired at `npm run capture:terminal-driver-picker`.
+
+### `harness/capture_terminal_interrupt.js` (sprint 035u)
+Seven assertions. Ctrl+C with no session prints hint; on idle-parked
+session prints "no turn in flight"; with selection does NOT fire
+interrupt (proven via `page.waitForRequest(interrupt, {timeout: 500})`);
+without selection fires interrupt path.
+Wired at `npm run capture:terminal-interrupt`.
+
+### `harness/capture_terminal_params_drawer.js` (sprint 035v)
+Sixteen assertions. Params hint shape `think X · tokens Y · timeout Zs`
+(∞ when unset); `/set` slash queue-before-session; DRIVER_PARAMS_PATCHED
+on PATCH ACK with correct prior; per-key validation (bad values rejected
+in-place); hint resets on session close.
+Wired at `npm run capture:terminal-params-drawer`.
+
+### `harness/capture_terminal_create_controls.js` (sprint 035w)
+Fifteen assertions. Five create-time slashes (`/bundle`, `/tools`,
+`/workspace`, `/isolate`, `/name`) queue when no session; four v0.7
+tags fire on ACK when the fields were queued; `/workspace` mid-session
+prints "workspace is create-only"; manifest.name registered.
+Wired at `npm run capture:terminal-create-controls`.
+
+### `harness/capture_desktop_driver_picker.js` (sprint 036a)
+Nine assertions. Picker mounts in desktop head; 20 models populate;
+picker binds by sid to the newly-opened session; DRIVER_PATCHED
+payload correct on flip; manifest updates; picker de-binds after
+DRIVER_SESSION_ENDED.
+Wired at `npm run capture:desktop-driver-picker`.
+
+### `harness/capture_desktop_bundle_picker.js` (sprint 036b)
+Eleven assertions. Six options ((none) + five shipped); BUNDLE_ATTACHED
+on flip; NO TranscriptCompacted on swap (032b invariant); clear-to-(none)
+sends `{bundle: null}` and lands `manifest.bundle == null`.
+Wired at `npm run capture:desktop-bundle-picker`.
+
+### `harness/capture_desktop_workspace_picker.js` (sprint 036c)
+Nineteen assertions. Button-and-dialog surface (`+ new session` →
+modal). Client-side validation (relative path rejected inline); real
+POST /api/session; WORKSPACE_SELECTED lifted from daemon response;
+badge reflects `workspace_shape`; cancel doesn't emit; session cleaned
+up via POST /end.
+Wired at `npm run capture:desktop-workspace-picker`.
+
+### `harness/capture_desktop_tools_drawer.js` (sprint 036d)
+Thirteen assertions. Comma-separated input; sort invariant (input
+`write_file, bash, grep` → PATCH `{tools: [bash, grep, write_file]}`);
+empty clears to unrestricted (daemon stores `None`); create-time
+`toolsField()` registers on the 036c dialog.
+Wired at `npm run capture:desktop-tools-drawer`.
+
+### `harness/capture_desktop_isolate_toggle.js` (sprint 036e)
+Thirteen assertions across three cases: flat + checked (ISOLATE_TOGGLED
+fires, shape=isolate); flat + unchecked (no emit, shape=flat); worktree
+selected (checkbox has `disabled` attribute + aria-label; click inert;
+re-enable on flat; submit fires no ISOLATE_TOGGLED, shape=worktree).
+Wired at `npm run capture:desktop-isolate-toggle`.
+
+### `harness/e2e_session.js` (sprint 037a)
+Twenty assertions. E2E composition: page load → view flip → turn 1 →
+mid-session driver flip via desktop picker → driver reverted → turn 2 →
+`/exit`. Substrate-side check: manifest `status: ended`; record carries
+`SessionEnded{reason: "user_end", total_turns: 2}`. Bookend invariant
+asserted on the live trace. Negative: SESSION_ENDED (tab-unload) does
+NOT fire on `/exit`.
+Wired at `npm run e2e:session`.
+
+### `harness/capture_session_signals.js` (sprint 037b)
+Signal-trace capture. Writes 23-signal trace to
+`captures/sprint-037/session.jsonl`. Graded via `--kind session`:
+session bookends, contains-in-order (six-tag EXPECTED_ORDER_SESSION),
+VIEW_SWITCHED closed-set + desktop-render pairing (three checked),
+driver-session bookends (one session, two turns).
+Wired at `npm run capture:session-signals` + `npm run grade:session-signals`.
+
+### `harness/capture_session.js` (sprint 037b)
+Perceptual capture. Writes four screenshots to `screenshots/37-*.png`:
+`terminal-view-empty`, `terminal-view-mid-turn`,
+`desktop-view-mid-session`, `desktop-view-four-columns`. The
+perceptual pass caught three UX bugs (terminal-column CSS bleed,
+desktop chrome bleed into terminal, `className =` wipes) that fifteen
+prior JS harnesses missed.
+Wired at `npm run capture:session`.
+
+### `tests/test_ui_control_parity.py` (sprint 036f)
+Ten pytest cases. Proves the daemon's contract is deterministic per
+control: two sessions given the same PATCH/POST body land byte-identical
+manifest slices. Covers driver + bundle (with null clear) + tools
+(sort + empty-clears) + driver_params + workspace + isolate + the
+isolate-worktree mutex + a slash-router chain regression. `check:ui-parity`
+runs it at the head of the `signals` gate (~5s) so a divergence fails
+FAST before browser fixtures.
+
+## Grader invariants — v0.7.3 shape
+
+`tools/capture-grade.ts` after sprint 037c retirement + sprint 037a
+addition:
+
+1. **`checkSessionBookends`** — SESSION_INIT first; SESSION_ENDED, when present, last.
+2. **`containsInOrder(EXPECTED_ORDER)`** — supersequence check per fixture-kind.
+3. **`checkRecordSelectedLoaded`** — RECORD_SELECTED → RECORD_LOADED matching name within 5s (console kind only).
+4. **`checkViewSwitchedRender`** — every VIEW_SWITCHED{to_view:"desktop"} paired with one of {GRAPH_RENDERED, TOPOLOGY_RENDERED, SCENE_RENDERED, IO_RENDERED} with matching subject_record within 500ms.
+5. **`checkFrameMonotonic`** — frame counter never decreases across pane-render tags.
+6. **`checkInspectorPayloads`** — EVENT_INSPECTED.seq non-negative; PRODUCER_INSPECTED.kind non-empty.
+7. **`checkTopologyLaunch`** — TOPOLOGY_LAUNCH_REQUESTED → exactly one TOPOLOGY_LAUNCHED | LAUNCH_REJECTED matching topology_name within 5s.
+8. **`checkIncidentPayloads`** — every FETCH_FAILED / LAUNCH_REJECTED / POLL_TIMEOUT carries a non-empty required payload.
+9. **`checkViewSwitched`** — VIEW_SWITCHED payload closed-set check (to_view ∈ {desktop, terminal}, prior_view same set, to_view ≠ prior_view).
+10. **`checkDriverSessionBookends`** — every DRIVER_SESSION_STARTED matches one DRIVER_SESSION_ENDED with same session_id; every USER_MESSAGE_INJECTED matches one PARK_LANDED with {session_id, turn_index}.
+11. **`PAIRINGS`** — DIFF_REQUESTED → DIFF_RENDERED and ASSAY_SELECTED → ASSAY_REPORT_LOADED, each within 5s with matching field.
+
+Retired at 037c (previously #7/#8/#11): checkTurnInsideChatWindow,
+checkAgentLaunchTerminate, checkChatTurnCount — their premise tags
+are gone from v0.7.3.
+
+## Retired: dock harness content
+
+The console-fixture harness `capture_signals.js` and structural
+`e2e_console.js` still exist; sprint 037c trimmed their dock sections
+(38 + 73 lines each) while preserving every non-dock assertion
+(records, transport, graph, provenance, diff, incidents, launch,
+prune, cohorts, content views).
