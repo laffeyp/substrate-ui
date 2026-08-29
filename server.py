@@ -2257,8 +2257,8 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError as exc:
             self._error(400, str(exc))
             return
-        _PATCHABLE = {"driver", "name", "tools", "per_turn"}
-        _NOT_YET = {"workspace", "workspace_shape", "bundle", "seed"}
+        _PATCHABLE = {"driver", "name", "tools", "per_turn", "bundle"}
+        _NOT_YET = {"workspace", "workspace_shape", "seed"}
         keys = set(body.keys())
         deferred = keys & _NOT_YET
         if deferred:
@@ -2320,6 +2320,24 @@ class Handler(BaseHTTPRequestHandler):
                 self._error(400, f"per_turn must be a string or null; got {type(per_turn_raw).__name__}")
                 return
             updated = _SESSION_REGISTRY.set_per_turn(session_id, per_turn_value)
+        if "bundle" in body:
+            # Sprint 032b: mid-session bundle PATCH. null clears; a string is
+            # validated by `SessionRegistry.set_bundle` (loads via load_bundle
+            # to catch a typo before it lands in the manifest). Effect is
+            # seen at the next turn's UserMessage.assembled_prompt.
+            bundle_raw = body["bundle"]
+            if bundle_raw is not None and not isinstance(bundle_raw, str):
+                self._error(400, f"bundle must be a string or null; got {type(bundle_raw).__name__}")
+                return
+            bundle_value = str(bundle_raw) if bundle_raw else None
+            try:
+                updated = _SESSION_REGISTRY.set_bundle(session_id, bundle_value)
+            except Exception as exc:  # noqa: BLE001 — daemon boundary: an unknown bundle name is a 400, not a 500.
+                cls_name = type(exc).__name__
+                if cls_name == "BundleNotFoundError":
+                    self._error(400, f"unknown bundle {bundle_value!r}: {exc}")
+                    return
+                raise
         self._json(
             {
                 "session_id": updated.session_id,
@@ -2327,6 +2345,7 @@ class Handler(BaseHTTPRequestHandler):
                 "driver": updated.driver,
                 "workspace": updated.workspace,
                 "workspace_shape": updated.workspace_shape,
+                "bundle": updated.bundle,
                 "record": updated.record_root,
                 "status": updated.status,
             }
