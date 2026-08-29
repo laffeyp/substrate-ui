@@ -23,6 +23,14 @@ Two files. One concept.
 - 032a (v0.7 vocab lock — `BUNDLE_ATTACHED`).
 - 033 (two-view scaffold).
 - 034a (`GET /api/bundles` endpoint the picker reads).
+- **Substrate-side `sprint-215e-bundle-patch-and-list-bundles`** —
+  lifts `bundle` from `_NOT_YET` to `_PATCHABLE` in
+  `substrate-ui/server.py::_session_patch`, adds
+  `_SESSION_REGISTRY.set_bundle(session_id, bundle)` that re-assembles
+  the seed transcript and emits
+  `TranscriptCompacted{reason:"bundle_changed"}` on the record. Today's
+  `_session_patch` returns 400 on `bundle`; without 215e, the
+  mid-session PATCH path this card exercises fails at the daemon.
 
 ## context_files
 

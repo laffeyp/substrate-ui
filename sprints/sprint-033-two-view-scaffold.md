@@ -5,7 +5,7 @@
 id: 033
 status: pending
 phase: 5
-pass_kind: implementation
+pass_kind: functional
 ---
 ```
 
@@ -22,6 +22,13 @@ shortcut. Scroll position + cursor selection preserved across flips.
 The terminal dock moves to `#view-terminal` in sprint 035. This sprint
 lands the container structure + the toggle wiring so 034 (rail rewrite)
 and 035 (terminal promotion) have a home.
+
+**Rule-6 stretch acknowledged (per REVIEW-2026-08-28 G3):** three code
+files touched (`web/index.html`, `web/app.ts`, `tools/capture-grade.ts`).
+One concept — the two-view scaffold plus the grader map that observes it.
+The grader map is the observation contract's own surface; splitting it
+into a follow-on sprint would land trivially and add a review-cycle for
+no gain.
 
 ## context_files
 

@@ -12,8 +12,12 @@ pass_kind: functional
 ## scope
 
 One control: isolate toggle in the session-settings drawer.
-Create-time only. Grayed and non-interactive when
-`workspace_shape == "worktree"` (worktrees already provide isolation).
+Create-time only. Uses the HTML `disabled` attribute (not CSS gray-out
+alone) when `workspace_shape == "worktree"` — the disabled attribute
+skips keyboard focus and makes Space/Enter inert, closing the
+accessibility hazard a CSS-only gray-out leaves open (per
+REVIEW-2026-08-28 G5). The disabled reason ships as an `aria-label`:
+"isolation implicit in worktree workspace."
 
 Two files. One concept.
 
@@ -45,8 +49,11 @@ Two files. One concept.
 
 - **UI driving steps**. New-session dialog: pick a flat workspace;
   toggle isolate on; submit; assert manifest carries `isolate: true`.
-  Second run: pick a worktree workspace; assert toggle is grayed and
-  clicks are no-ops.
+  Second run: pick a worktree workspace; assert toggle has the
+  `disabled` attribute set; assert clicks are no-ops; tab-focus the
+  header and assert focus moves past the disabled toggle; press Space
+  while the toggle is the closest focusable ancestor and assert no
+  manifest change.
 - **Expected stderr log substrings**. `POST /api/session` once per
   submitted create.
 - **Expected grader signals**. `ISOLATE_TOGGLED` once (the worktree

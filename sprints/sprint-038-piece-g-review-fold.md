@@ -5,7 +5,7 @@
 id: 038
 status: pending
 phase: 5
-pass_kind: implementation
+pass_kind: observation
 ---
 ```
 
@@ -62,7 +62,10 @@ None (review sprint).
   card.
 - Full `npm run e2e && npm run e2e:studio && npm run e2e:assay &&
   npm run e2e:delegate && npm run e2e:session && npm run signals`
-  green.
+  green. **Expected wall-clock: 5-10 minutes** per iteration (six e2e
+  runs + grader sweep across all fixtures; per REVIEW-2026-08-28 G9).
+  Not a defect; a runtime cost worth naming so the fold pass does not
+  read as a hang.
 - `test_ui_control_parity.py` green.
 
 ## halt conditions

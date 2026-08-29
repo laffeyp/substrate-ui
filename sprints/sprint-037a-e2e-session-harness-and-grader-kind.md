@@ -50,10 +50,16 @@ No new emits; asserts against the trace prior sprints already emit.
 - `npm run grade:signals` green for the session fixture (the fixture
   is written by 037b; 037a's e2e run is enough to verify the
   harness + grader kind close their invariants against runtime state).
-- Full trace order verified:
+- Full trace order verified in the browser signal stream:
   `SESSION_INIT → PANE_SWITCHED × 2+ → DRIVER_SESSION_STARTED →
-   USER_MESSAGE_INJECTED × 2 → PARK_LANDED × 2 → DRIVER_SESSION_ENDED
-   → SESSION_ENDED`.
+   USER_MESSAGE_INJECTED × 2 → PARK_LANDED × 2 → DRIVER_SESSION_ENDED`.
+  The trace terminates at `DRIVER_SESSION_ENDED` (the driver-session
+  end) — not at a second `SESSION_ENDED` (browser tab-unload), which
+  the `/exit` slash does not trigger. The substrate wire-side
+  `SessionEnded` record envelope is verified separately via
+  `GET /api/session/<id>` after the flow completes (asserts
+  `status == "ended"` and the record carries a `SessionEnded{reason:"user_exit"}`
+  envelope), per REVIEW-2026-08-28 G4's disambiguation.
 
 ## halt conditions
 
