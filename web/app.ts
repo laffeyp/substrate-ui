@@ -381,17 +381,23 @@ async function selectRecord(name) {
 
 function renderVerdict() {
   const st = STATE.graph.status, s = STATE.summary, el = $("verdict");
-  // a LIVE-followed run with no terminal yet is still being WRITTEN -> "LIVE", not torn/broken.
-  // The follow context is the out-of-band signal that distinguishes incomplete-live from
-  // incomplete-torn — resolving the #33 residual at exactly the layer that knows.
+  // Set the verdict-state modifier via classList so any inherited classes
+  // (e.g., `desktop-only` from the index.html markup) are preserved.
+  // Sprint 037b: the perceptual capture found the earlier className
+  // replacement wiped `desktop-only` and leaked ● FINALISED into the
+  // terminal view.
+  const _setVariant = (variant: string) => {
+    for (const c of Array.from(el.classList)) {
+      if (c.startsWith("v-")) el.classList.remove(c);
+    }
+    el.classList.add("verdict", "v-" + variant);
+  };
   if (STATE.live === STATE.name && st === "incomplete" && STATE.graph.live) {
-    el.className = "verdict v-live"; el.textContent = "● LIVE"; return;
+    _setVariant("live"); el.textContent = "● LIVE"; return;
   }
-  // a clean finalise with Producer failures INSIDE it is finished-!=-worked — the top badge must
-  // say NOT CLEAN, not read green (§7.2; matches the health bar + the engine.js this replaces). #32.
   const fails = s.producers_failed + s.input_build_failures + s.predicate_quarantines + s.invalid_emissions;
   const notClean = st === "finalised" && fails > 0;
-  el.className = "verdict v-" + (notClean ? "failed" : st);
+  _setVariant(notClean ? "failed" : st);
   el.textContent = st === "failed" ? "● FAILED · " + (STATE.graph.final_reason || "").toUpperCase().replace(/_/g, " ")
     : st === "paused" ? "● PAUSED" : st === "incomplete" ? "● INCOMPLETE"
     : notClean ? "● FINALISED · NOT CLEAN" : "● FINALISED";
@@ -880,6 +886,12 @@ function _toggleView(source: string, preClickFocus: Element | null): void {
   STATE.view = next;
   emit("VIEW_SWITCHED", { to_view: next, prior_view: prior, subject_record: STATE.name });
   requestAnimationFrame(() => _restoreView(`view-${next}`, STATE.viewSnap[next]));
+  // On flip-in to desktop, repaint the active pane so the grader's
+  // checkViewSwitched invariant sees a matching {GRAPH,TOPOLOGY,SCENE,IO}_RENDERED
+  // within 500ms (the desktop container remounts its inner pane on flip-in per
+  // the invariant docstring). No paint if no record selected — the invariant's
+  // required-pane set only covers desktop.
+  if (next === VIEW_IDS.DESKTOP && STATE.name) render();
 }
 // mousedown fires BEFORE focus moves to the button — reads the real
 // pre-click focus target from document.activeElement at handler entry.

@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 037b
-status: pending
+status: closed-2026-08-29
 phase: 5
 pass_kind: functional
 ---
