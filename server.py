@@ -135,30 +135,59 @@ _SHUTDOWN_STARTED = threading.Event()
 # state across runs).
 # If a future Responder needs per-session isolation, add a `is_shareable`
 # probe and skip the cache for that class.
-_RESPONDER_CACHE: dict[str, Any] = {}
+# Sprint 032c: cache key extended from `driver name` to `(name, params key)`
+# so per-session driver_params yield distinct Responder instances.
+_RESPONDER_CACHE: dict[tuple[str, tuple[tuple[str, Any], ...]], Any] = {}
 
 
-def _daemon_driver_resolver(name: str) -> Any:
+def _params_cache_key(params: dict[str, Any] | None) -> tuple[tuple[str, Any], ...]:
+    """Turn a driver_params dict into a hashable, order-independent cache key.
+    Empty dict and None hash the same (both mean "responder defaults")."""
+    if not params:
+        return ()
+    return tuple(sorted(params.items()))
+
+
+def _daemon_driver_resolver(name: str, params: dict[str, Any] | None = None) -> Any:
     """Daemon-side resolver: `deterministic` → seeded stub; `claude` / `gemini` →
     CliResponder; anything else → OllamaResponder (a real local or `:cloud` tag).
     Sprint 213a's `_default_model_resolver` in substrate ships a smaller default
     without CLI knowledge; the daemon knows more, so it wraps.
 
-    F13: cached by driver string so the HTTP client + connection pool survive
-    across turns. DeterministicResponder is excluded (stateful seed).
+    F13: cached by `(driver name, params key)` so the HTTP client + connection
+    pool survive across turns for the same param combo. A param change lands a
+    fresh Responder instance (cache miss on the new key); the old one lingers in
+    the cache until the process exits — fine because Responders are lightweight
+    and the daemon's session count is bounded. DeterministicResponder is
+    excluded (stateful seed).
+
+    Sprint 032c (piece G mechanical translation): `params` names the per-session
+    driver knobs OllamaResponder accepts at construction — `think`, `max_tokens`,
+    `timeout`, `num_ctx`. None or empty means "responder defaults." Ignored for
+    the CLI-adapter and Deterministic branches (those adapters have no equivalent
+    knobs; documented as such).
     """
-    cached = _RESPONDER_CACHE.get(name)
+    key = (name, _params_cache_key(params))
+    cached = _RESPONDER_CACHE.get(key)
     if cached is not None:
         return cached
     if name == "deterministic":
+        # DeterministicResponder is stateful; skip cache entirely.
         return DeterministicResponder(seed=0)
     if name == "claude":
-        responder = CliResponder(["claude", "-p"], name="claude")
+        responder: Any = CliResponder(["claude", "-p"], name="claude")
     elif name == "gemini":
         responder = CliResponder(["gemini", "-p"], name="gemini")
     else:
-        responder = OllamaResponder(model=name, timeout=300.0)
-    _RESPONDER_CACHE[name] = responder
+        p = params or {}
+        responder = OllamaResponder(
+            model=name,
+            think=bool(p.get("think", False)),
+            max_tokens=int(p.get("max_tokens", 0)),
+            num_ctx=int(p.get("num_ctx", 32768)),
+            timeout=float(p.get("timeout", 300.0)),
+        )
+    _RESPONDER_CACHE[key] = responder
     return responder
 
 
@@ -394,7 +423,7 @@ def _build_session_topology_from_manifest(
     from substrate.topologies.session.transcript import resolve_driver_context_tokens
     from substrate.topologies.tool_loop.tools import full_suite
 
-    responder = _daemon_driver_resolver(manifest.driver)
+    responder = _daemon_driver_resolver(manifest.driver, manifest.driver_params)
     session_tools = _tools_for_manifest(manifest)
     # Sprint 228: fold the substrate toolkit (piece F sprints 226-228)
     # into every session's tool suite alongside full_suite. The tools
@@ -1037,6 +1066,24 @@ class Handler(BaseHTTPRequestHandler):
                     self._error(400, f"tools must be non-empty strings; offending element: {t!r}")
                     return
             tools = tuple(tools_raw) if tools_raw else None
+        # Sprint 032c: `driver_params` on POST. Same shape as PATCH; validated
+        # via SessionRegistry.set_driver_params-style rules but at create time
+        # we accept as-is and let the manifest carry it (the registry's
+        # `create` does not validate — it trusts the daemon boundary).
+        # Missing → None (responder defaults). Wrong shape → 400.
+        driver_params_raw = body.get("driver_params")
+        driver_params: dict[str, Any] | None = None
+        if driver_params_raw is not None:
+            if not isinstance(driver_params_raw, dict):
+                self._error(
+                    400,
+                    f"driver_params must be an object or absent; got {type(driver_params_raw).__name__}",
+                )
+                return
+            # Reuse the registry's validator by round-tripping through
+            # set_driver_params after create — cleaner than duplicating validation
+            # here. Store the raw dict on the manifest at create; validate below.
+            driver_params = dict(driver_params_raw)
         session_id = _forced_session_id or f"s_{uuid.uuid4().hex[:24]}"
         try:
             manifest = _SESSION_REGISTRY.create(
@@ -1049,7 +1096,18 @@ class Handler(BaseHTTPRequestHandler):
                 seed=seed,
                 role=role,
                 tools=tools,
+                driver_params=driver_params,
             )
+            # Validate driver_params at the same boundary as PATCH does. If
+            # the client sent bad shape/values, roll back the create so the
+            # session never lands corrupt.
+            if driver_params is not None:
+                try:
+                    _SESSION_REGISTRY.set_driver_params(session_id, driver_params)
+                except ValueError as exc:
+                    _SESSION_REGISTRY.delete(session_id)
+                    self._error(400, f"driver_params: {exc}")
+                    return
         except Exception as exc:
             # NameCollision carries existing_session_id per sprint 211.
             if isinstance(exc, NameCollision):
@@ -1063,6 +1121,10 @@ class Handler(BaseHTTPRequestHandler):
                 return
             self._error(500, f"{type(exc).__name__}: {exc}")
             return
+        # Sprint 032c: re-read the manifest post-validation (set_driver_params
+        # rolls it forward with the validated dict). driver_params on the
+        # response so the UI can echo it in the header without a GET.
+        current = _SESSION_REGISTRY.get(session_id) or manifest
         self._json(
             {
                 "session_id": manifest.session_id,
@@ -1070,6 +1132,7 @@ class Handler(BaseHTTPRequestHandler):
                 "record": manifest.record_root,
                 "workspace_shape": manifest.workspace_shape,
                 "role": manifest.role,
+                "driver_params": dict(current.driver_params) if current.driver_params is not None else None,
             }
         )
 
@@ -2262,7 +2325,7 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError as exc:
             self._error(400, str(exc))
             return
-        _PATCHABLE = {"driver", "name", "tools", "per_turn", "bundle"}
+        _PATCHABLE = {"driver", "name", "tools", "per_turn", "bundle", "driver_params"}
         _NOT_YET = {"workspace", "workspace_shape", "seed"}
         keys = set(body.keys())
         deferred = keys & _NOT_YET
@@ -2343,6 +2406,24 @@ class Handler(BaseHTTPRequestHandler):
                     self._error(400, f"unknown bundle {bundle_value!r}: {exc}")
                     return
                 raise
+        if "driver_params" in body:
+            # Sprint 032c (piece G mechanical translation): per-session
+            # driver params (think/max_tokens/timeout/num_ctx). null clears
+            # every override. Validated by SessionRegistry.set_driver_params
+            # (unknown key / wrong type → ValueError → 400).
+            params_raw = body["driver_params"]
+            if params_raw is not None and not isinstance(params_raw, dict):
+                self._error(
+                    400,
+                    f"driver_params must be an object or null; got {type(params_raw).__name__}",
+                )
+                return
+            params_value: dict[str, Any] | None = dict(params_raw) if params_raw else None
+            try:
+                updated = _SESSION_REGISTRY.set_driver_params(session_id, params_value)
+            except ValueError as exc:
+                self._error(400, f"driver_params: {exc}")
+                return
         self._json(
             {
                 "session_id": updated.session_id,
@@ -2351,6 +2432,7 @@ class Handler(BaseHTTPRequestHandler):
                 "workspace": updated.workspace,
                 "workspace_shape": updated.workspace_shape,
                 "bundle": updated.bundle,
+                "driver_params": dict(updated.driver_params) if updated.driver_params is not None else None,
                 "record": updated.record_root,
                 "status": updated.status,
             }
