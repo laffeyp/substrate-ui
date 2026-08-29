@@ -134,6 +134,16 @@ patterns:
 
 ---
 
+### capture_view_toggle.js (sprint 033)
+
+**Purpose:** exercises the two-view scaffold — desktop ⇄ terminal flip via the header toggle and Ctrl+`.
+**Kind:** structural + signal-trace + perceptual (two-frame). Twelve assertions.
+**Drives:** click `#view-toggle`, press Ctrl+`, restore focus after round-trip.
+**Asserts:** initial `#view-desktop.active`; `STATE.view` transitions; `PANE_SWITCHED{to_pane, prior_pane}` with `to_pane` ∈ `{"terminal","desktop"}`; focus preservation across a mouse-toggle cycle.
+**Emits used:** `PANE_SWITCHED` (v0.6, extended `to_pane` value set in sprint 033).
+**Writes:** `screenshots/33-desktop-view-console.png`, `screenshots/33-terminal-view-empty.png`.
+**Run:** `node harness/capture_view_toggle.js` (server on :8765).
+
 ## What DOES NOT exist yet (piece-G territory)
 
 - `harness/e2e_session.js` — the session-shape harness the tech spec names.

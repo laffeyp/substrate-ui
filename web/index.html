@@ -22,7 +22,15 @@ button{font-family:inherit;color:inherit;cursor:pointer;background:none;border:n
 ::-webkit-scrollbar{width:10px;height:10px;} ::-webkit-scrollbar-thumb{background:var(--line2);border-radius:6px;border:2px solid var(--bg);}
 .dim{color:var(--tx-faint);} .sm{font-size:11px;}
 
-.app{ height:100%; display:grid; grid-template-rows:auto auto 1fr auto auto; }
+.app{ height:100%; display:grid; grid-template-rows:auto 1fr; }
+
+/* two-view scaffold (sprint 033) — the daily-driver reshape */
+.view{ display:none; min-height:0; overflow:hidden; }
+.view.active#view-desktop{ display:grid; grid-template-rows:auto 1fr auto auto; min-height:0; }
+.view.active#view-terminal{ display:flex; flex-direction:column; min-height:0; align-items:center; justify-content:center; color:var(--tx-faint); font-size:12px; padding:40px; }
+#view-toggle{ margin-left:auto; border:1px solid var(--line2); border-radius:6px; padding:3px 9px; font-size:12px; color:var(--tx-dim); cursor:pointer; }
+#view-toggle:hover{ border-color:var(--line3); color:var(--tx); }
+#view-toggle.on-terminal{ color:var(--green); border-color:var(--green); }
 
 /* header */
 .head{ display:flex; align-items:center; gap:16px; padding:10px 16px; border-bottom:1px solid var(--line2); }
@@ -228,7 +236,9 @@ button{font-family:inherit;color:inherit;cursor:pointer;background:none;border:n
     <select id="diffsel" class="btn" title="diff this record against another (first divergence by seq, D-8)"><option value="">⇄ diff vs…</option></select>
     <span id="verdict" class="verdict"></span>
     <button class="btn" id="resumebtn" title="feed the awaited input and resume this paused run" style="display:none">▶ resume</button>
+    <button id="view-toggle" title="flip between the terminal view and the desktop console (Ctrl+`)">⇄ view</button>
   </div>
+  <div id="view-desktop" class="view active">
   <div class="cursor">
     <button class="btn" id="toStart" title="jump to the start">⏮</button>
     <button class="btn" id="play" title="replay the run (play / pause); at the end, replays from the start">▶</button>
@@ -272,6 +282,10 @@ button{font-family:inherit;color:inherit;cursor:pointer;background:none;border:n
     </div>
   </div>
   <div class="health" id="health"></div>
+  </div>
+  <div id="view-terminal" class="view">
+    <div>the terminal view lands here in sprint 035</div>
+  </div>
 </div>
 <script type="module" src="./app.ts"></script>
 </body>

@@ -65,7 +65,7 @@ function gist(ev) {
   return "";
 }
 
-let STATE = { name: null, events: [], graph: null, summary: null, manifest: null, topology: null, scene: null, cursor: 0, playing: false, speed: 30, term: { open: false, lines: [], history: [], hi: -1, params: { think: false, tokens: 0, timeout: 300 } }, sel: null, mode: "read", graphView: "run", live: null, resumable: new Set(), assay: null, assays: [], assayReport: null };
+let STATE = { name: null, events: [], graph: null, summary: null, manifest: null, topology: null, scene: null, cursor: 0, playing: false, speed: 30, term: { open: false, lines: [], history: [], hi: -1, params: { think: false, tokens: 0, timeout: 300 } }, sel: null, mode: "read", graphView: "run", live: null, resumable: new Set(), assay: null, assays: [], assayReport: null, view: "desktop", viewSnap: { desktop: null, terminal: null } };
 
 // the time dimension alongside the order: seq is the order (no time), t the time (no order). Show
 // t RELATIVE to the run's start (events[0] = RunStarted) — ~0 on the deterministic CI demos (they
@@ -1181,7 +1181,87 @@ $("terminput").addEventListener("keydown", (e) => {
 $("termOpen").onclick = () => termSetOpen(true, "toggle_button");
 $("termClose").onclick = () => termSetOpen(false);
 $("termToggle").onclick = () => termSetOpen(!STATE.term.open, "toggle_button");
-window.addEventListener("keydown", (e) => { if (e.ctrlKey && (e.key === "`" || e.key === "Dead")) { e.preventDefault(); termSetOpen(!STATE.term.open, "ctrl_backtick"); } });
+
+// ---------- two-view scaffold (sprint 033) ----------
+// The header toggle + Ctrl+` flip between #view-desktop and #view-terminal.
+// Snapshot: on flip-out we record the leaving view's scroll positions across
+// its scrollable children plus which element held focus + its selection range;
+// on flip-in we restore. PANE_SWITCHED carries the same shape the vocab already
+// has (to_pane, prior_pane, subject_record); the two new to_pane values are
+// "terminal" and "desktop".
+// Focus tracking: mouse-clicking the toggle steals focus, so activeElement at
+// handler entry names the button, not the field the user was in. Track the
+// last "real" focus via focusin — excluding the toggle button — so the snapshot
+// sees the pre-click focus target.
+let _lastRealFocus: { id: string; start: number | null; end: number | null } | null = null;
+document.addEventListener("focusin", (e: any) => {
+  const el = e.target;
+  if (!el || !el.id || el.id === "view-toggle") return;
+  _lastRealFocus = {
+    id: el.id,
+    start: typeof el.selectionStart === "number" ? el.selectionStart : null,
+    end: typeof el.selectionEnd === "number" ? el.selectionEnd : null,
+  };
+});
+function _snapshotView(viewId: string): any {
+  const root = document.getElementById(viewId);
+  if (!root) return null;
+  const scrolls: [string, number, number][] = [];
+  root.querySelectorAll("*").forEach((el: any, idx: number) => {
+    if (el.scrollTop || el.scrollLeft) scrolls.push([`${el.tagName}#${el.id || ''}.${idx}`, el.scrollTop, el.scrollLeft]);
+  });
+  // Prefer the tracked pre-click focus (see _lastRealFocus above); fall back
+  // to activeElement for the keyboard path where no focus theft happened.
+  let focus: any = null;
+  const tracked = _lastRealFocus;
+  if (tracked) {
+    const el = document.getElementById(tracked.id);
+    if (el && root.contains(el)) focus = tracked;
+  }
+  if (!focus) {
+    const active = document.activeElement as any;
+    if (active && root.contains(active) && active.id && active.id !== "view-toggle") {
+      focus = { id: active.id, start: active.selectionStart ?? null, end: active.selectionEnd ?? null };
+    }
+  }
+  return { scrolls, focus };
+}
+function _restoreView(viewId: string, snap: any) {
+  if (!snap) return;
+  const root = document.getElementById(viewId);
+  if (!root) return;
+  const nodes = Array.from(root.querySelectorAll("*"));
+  snap.scrolls.forEach(([key, top, left]: [string, number, number]) => {
+    const [tag, rest] = key.split("#");
+    const [_id, idxStr] = rest.split(".");
+    const idx = parseInt(idxStr, 10);
+    const el: any = nodes[idx];
+    if (el && el.tagName === tag) { el.scrollTop = top; el.scrollLeft = left; }
+  });
+  if (snap.focus) {
+    const el: any = document.getElementById(snap.focus.id);
+    if (el && root.contains(el)) {
+      el.focus();
+      if (snap.focus.start !== null && typeof el.setSelectionRange === "function") {
+        try { el.setSelectionRange(snap.focus.start, snap.focus.end); } catch (_) { /* non-text input */ }
+      }
+    }
+  }
+}
+function _toggleView(source: string = "toggle_button") {
+  const prior = STATE.view;
+  const next = prior === "desktop" ? "terminal" : "desktop";
+  STATE.viewSnap[prior] = _snapshotView(`view-${prior}`);
+  document.getElementById(`view-${prior}`)?.classList.remove("active");
+  document.getElementById(`view-${next}`)?.classList.add("active");
+  const toggle = document.getElementById("view-toggle");
+  if (toggle) toggle.classList.toggle("on-terminal", next === "terminal");
+  STATE.view = next;
+  emit("PANE_SWITCHED", { to_pane: next, prior_pane: prior, subject_record: STATE.name });
+  requestAnimationFrame(() => _restoreView(`view-${next}`, STATE.viewSnap[next]));
+}
+document.getElementById("view-toggle")?.addEventListener("click", () => _toggleView("toggle_button"));
+window.addEventListener("keydown", (e) => { if (e.ctrlKey && (e.key === "`" || e.key === "Dead")) { e.preventDefault(); _toggleView("ctrl_backtick"); } });
 
 loadTopologies();
 loadModels();  // populate the terminal's model picker (defaults to the biggest OSS model)
