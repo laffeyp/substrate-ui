@@ -907,7 +907,9 @@ import { installObservabilitySurface } from "./observability.js";
 import { mountTerminal } from "./terminal.js";
 import { mountDriverPicker } from "./controls/driver_picker.js";
 import { mountBundlePicker } from "./controls/bundle_picker.js";
-import { mountNewSessionDialog, workspacePickerField, mountWorkspaceShapeBadge } from "./controls/workspace_picker.js";
+import { mountNewSessionDialog, workspacePickerField, workspaceShapeField, mountWorkspaceShapeBadge } from "./controls/workspace_picker.js";
+import { mountToolsDrawer, toolsField } from "./controls/tools_drawer.js";
+import { isolateField } from "./controls/isolate_toggle.js";
 installObservabilitySurface({ STATE, loadRecords, selectRecord, loadAssays });
 const _viewTerminalRoot = document.getElementById("view-terminal");
 if (_viewTerminalRoot) mountTerminal(_viewTerminalRoot as HTMLElement, { driverDefault: "deterministic" });
@@ -928,10 +930,19 @@ const _newSessionDialog = document.getElementById("new-session-dialog");
 const _newSessionHandle = (_newSessionTrigger && _newSessionDialog)
   ? mountNewSessionDialog(_newSessionTrigger as HTMLElement, _newSessionDialog as HTMLElement)
   : null;
-if (_newSessionHandle) _newSessionHandle.registerField(workspacePickerField(""));
+if (_newSessionHandle) {
+  _newSessionHandle.registerField(workspacePickerField(""));
+  _newSessionHandle.registerField(workspaceShapeField());
+  _newSessionHandle.registerField(isolateField());
+  _newSessionHandle.registerField(toolsField());
+}
 const _workspaceBadgeRoot = document.getElementById("workspace-shape-badge-mount");
 const _workspaceBadgeHandle = _workspaceBadgeRoot
   ? mountWorkspaceShapeBadge(_workspaceBadgeRoot as HTMLElement)
+  : null;
+const _toolsDrawerRoot = document.getElementById("tools-drawer");
+const _toolsDrawerHandle = _toolsDrawerRoot
+  ? mountToolsDrawer(_toolsDrawerRoot as HTMLElement)
   : null;
 window.addEventListener("substrate:session-changed", (ev: Event) => {
   const detail = (ev as CustomEvent).detail as { session_id?: string } | undefined;
@@ -939,9 +950,11 @@ window.addEventListener("substrate:session-changed", (ev: Event) => {
   if (_driverPickerHandle) void _driverPickerHandle.refresh(sid);
   if (_bundlePickerHandle) void _bundlePickerHandle.refresh(sid);
   if (_workspaceBadgeHandle) void _workspaceBadgeHandle.refresh(sid);
+  if (_toolsDrawerHandle) void _toolsDrawerHandle.refresh(sid);
 });
 if (_driverPickerHandle) (window as any).driverPicker = _driverPickerHandle;
 if (_bundlePickerHandle) (window as any).bundlePicker = _bundlePickerHandle;
 if (_newSessionHandle) (window as any).newSessionDialog = _newSessionHandle;
 if (_workspaceBadgeHandle) (window as any).workspaceBadge = _workspaceBadgeHandle;
+if (_toolsDrawerHandle) (window as any).toolsDrawer = _toolsDrawerHandle;
 (window as any).api = api;  // Sprint 028: harness routes through the wrapped seam to trigger FETCH_FAILED

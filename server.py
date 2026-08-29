@@ -1608,6 +1608,7 @@ class Handler(BaseHTTPRequestHandler):
                 "status": manifest.status,
                 "role": manifest.role,
                 "driver_params": dict(manifest.driver_params) if manifest.driver_params is not None else None,
+                "tools": list(manifest.tools) if manifest.tools is not None else None,
             }
         )
 

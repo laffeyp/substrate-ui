@@ -35,11 +35,23 @@ const _hasForbiddenChars = (p: string): boolean => /[\0\r\n]/.test(p);
 // Dialog control shape. 036d/036e cards register additional fields whose
 // values ride the same POST body. The dialog owns the button, the modal,
 // and the submit wire; each registered control owns its own input DOM.
+export interface DialogFieldResponse {
+  session_id: string;
+  workspace?: string;
+  workspace_shape?: string;
+  bundle?: string | null;
+  driver_params?: unknown;
+}
+
 export interface DialogField {
   name: string;
   render: (into: HTMLElement) => void;
   value: () => unknown;
   reset?: () => void;
+  // Optional per-field emit hook. Called after a successful create POST
+  // with the daemon's response body. Fields that own a signal (isolate,
+  // tools) fire it here so the dialog stays field-agnostic.
+  postSubmit?: (response: DialogFieldResponse) => void;
 }
 
 export interface NewSessionDialogHandle {
@@ -158,6 +170,9 @@ export function mountNewSessionDialog(triggerRoot: HTMLElement, dialogRoot: HTML
         workspace_shape: res.workspace_shape,
       });
     }
+    // Per-field post-submit hooks (isolate, tools, ...) — dialog stays
+    // field-agnostic; each field owns its own emit semantics.
+    for (const f of fields) f.postSubmit?.(res as DialogFieldResponse);
     window.dispatchEvent(new CustomEvent("substrate:session-changed", { detail: { session_id: res.session_id } }));
     status.textContent = `session ${res.session_id.slice(0, 12)}… created`;
     handle.close();
@@ -224,6 +239,58 @@ export function workspacePickerField(defaultPath = ""): WorkspacePickerField {
     inputEl() { return input; },
   };
   return field;
+}
+
+// Workspace-shape select as a DialogField. Two user-selectable values —
+// `flat` (default) and `worktree`. The `isolate` case is set exclusively
+// by the isolate checkbox (036e); mutual exclusion with worktree is
+// enforced by disabling the isolate toggle when this select reads
+// worktree. daemon-side POST /api/session accepts `workspace_shape`
+// directly; value() returns undefined for "flat" so the create body
+// stays clean.
+export function workspaceShapeField(): DialogField {
+  let select!: HTMLSelectElement;
+  return {
+    name: "workspace_shape",
+    render(into: HTMLElement) {
+      const label = document.createElement("label");
+      label.textContent = "workspace shape";
+      label.style.fontSize = "12px";
+      label.style.color = "var(--tx-dim)";
+      label.style.display = "flex";
+      label.style.flexDirection = "column";
+      label.style.gap = "3px";
+      select = document.createElement("select");
+      select.id = "workspace-shape-select";
+      select.style.padding = "4px 6px";
+      select.style.background = "var(--panel-bg, #111)";
+      select.style.border = "1px solid var(--line2)";
+      select.style.borderRadius = "4px";
+      select.style.color = "var(--tx)";
+      for (const v of ["flat", "worktree"] as const) {
+        const opt = document.createElement("option");
+        opt.value = v;
+        opt.textContent = v;
+        select.appendChild(opt);
+      }
+      select.value = "flat";
+      // Dispatch a bubbling change event on the dialog root so the
+      // isolate field can listen without cross-import coupling.
+      select.addEventListener("change", () => {
+        into.dispatchEvent(new CustomEvent("workspace-shape-changed", {
+          bubbles: true,
+          detail: { shape: select.value },
+        }));
+      });
+      label.appendChild(select);
+      into.appendChild(label);
+    },
+    value() {
+      const v = select.value;
+      return v === "flat" ? undefined : v;
+    },
+    reset() { select.value = "flat"; },
+  };
 }
 
 // Session-header badge that shows the current session's workspace_shape.
