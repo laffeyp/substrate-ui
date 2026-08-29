@@ -90,6 +90,20 @@ _SESSION_REGISTRY: Any = None
 # Empty at import time so a fresh daemon (or a test that spins the server
 # without wiring the registry) responds with `[]` rather than 500.
 _APPLICATIONS: dict[str, Any] = {}
+# REVIEW-2026-08-28 Q6: the six "record mid-write; poll again" sites
+# used to catch bare Exception, which swallowed every bug inside
+# `api.read_record` + every bug in the filter predicate + every bug
+# in the payload access. The correct shape names the record-io classes.
+# `api.RecordGapError` covers a torn sealed tail; `api.FsyncError`
+# covers a durability write hole; `OSError` covers the file-not-yet-
+# created race a fresh session's poll hits. Everything else — a
+# KeyError from a shape drift, a TypeError from a broken filter —
+# propagates and surfaces on the caller's response.
+_RECORD_IO_ERRORS: tuple[type[BaseException], ...] = (
+    api.RecordGapError,
+    api.FsyncError,
+    OSError,
+)
 # Sprint 225a: async runs launched via POST /api/topology/<name>/run
 # with await_completion=false. run_id -> {"record_root", "thread",
 # "started_at", "application", "await_completion"}. Sprint 225d's
@@ -108,6 +122,19 @@ def _application_spec_to_wire(spec: Any) -> dict[str, Any]:
 _SHUTDOWN_STARTED = threading.Event()
 
 
+# REVIEW-2026-08-28 Q9 decision: this cache is intentional cross-session
+# sharing. A Responder that carries an httpx client + a connection pool
+# (OllamaResponder) is expensive to construct per-turn; a Responder that
+# carries a rate-limit semaphore (RateLimitedResponder) SHOULD share
+# across sessions so the per-provider rate limit is a process-wide bound,
+# not a per-session one — the /api/agent bridge + parallel session
+# `run_topology` calls would otherwise each get their own semaphore and
+# blow past the provider's limit.
+# DeterministicResponder is deliberately excluded from the cache (it
+# carries a stateful seed; sharing it across sessions would leak that
+# state across runs).
+# If a future Responder needs per-session isolation, add a `is_shareable`
+# probe and skip the cache for that class.
 _RESPONDER_CACHE: dict[str, Any] = {}
 
 
@@ -1125,7 +1152,7 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 for env in api.read_record(record_root_pre):
                     seq_at_start = max(seq_at_start, int(env.get("seq", -1)))
-            except Exception:  # noqa: BLE001 — mid-write; a pre-turn snapshot may skew
+            except _RECORD_IO_ERRORS:  # REVIEW-2026-08-28 Q6: narrow mid-write catch
                 seq_at_start = -1
         # Sprint 214a: compute next turn_index INSIDE the per-session lock via
         # `resume_event_builder`, so two concurrent POST /turn calls see two
@@ -1267,7 +1294,7 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 for env in api.read_record(record_root_pre):
                     seq_at_start = max(seq_at_start, int(env.get("seq", -1)))
-            except Exception:  # noqa: BLE001 — mid-write; snapshot may skew
+            except _RECORD_IO_ERRORS:  # REVIEW-2026-08-28 Q6: narrow mid-write catch
                 seq_at_start = -1
 
         resume_event = SessionEndRequested(session_id=session_id, source=source)
@@ -1385,7 +1412,7 @@ class Handler(BaseHTTPRequestHandler):
                         if isinstance(producer, dict) and producer.get("instance") == target_instance:
                             landed = True
                             break
-                except Exception:  # noqa: BLE001 — mid-write; poll again
+                except _RECORD_IO_ERRORS:  # REVIEW-2026-08-28 Q6: narrow mid-write catch
                     pass
                 if landed:
                     break
@@ -1811,7 +1838,7 @@ class Handler(BaseHTTPRequestHandler):
                     for e in api.read_record(root)
                 ):
                     break
-            except Exception:  # noqa: BLE001 - record mid-write; keep waiting
+            except _RECORD_IO_ERRORS:  # REVIEW-2026-08-28 Q6: narrow mid-write catch
                 pass
             time.sleep(0.05)
         status = api.run_graph(root).status if root.exists() else "incomplete"
@@ -2050,7 +2077,7 @@ class Handler(BaseHTTPRequestHandler):
                     for e in api.read_record(root)
                 ):
                     break
-            except Exception:  # noqa: BLE001 - record mid-write; keep waiting
+            except _RECORD_IO_ERRORS:  # REVIEW-2026-08-28 Q6: narrow mid-write catch
                 pass
             time.sleep(0.05)
         status = api.run_graph(root).status if root.exists() else "incomplete"
@@ -2106,7 +2133,7 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 if api.run_graph(root).status in ("finalised", "failed"):
                     break
-            except Exception:  # noqa: BLE001 - mid-write
+            except _RECORD_IO_ERRORS:  # REVIEW-2026-08-28 Q6: narrow mid-write catch
                 pass
             time.sleep(0.05)
         self._json(
