@@ -47,6 +47,15 @@ interface TerminalHandle {
   chatting: boolean;
   endedEmittedFor: string | null;  // session_id last emitted-ended-for; guards double-fire.
   updatePrompt: () => void;  // Set by mountTerminal; called on session-open/close (CQ-3).
+  updateParamsHint: () => void;  // Sprint 035v — refresh #terminal-params from driverParams.
+  // Sprint 035v: per-session driver params (think/max_tokens/timeout/num_ctx).
+  // Populated on session-open from the POST /api/session ACK's echo (piece B
+  // sprint 032c). Mutated by `/set` slash via PATCH /api/session/<id>
+  // {driver_params}. Fires DRIVER_PARAMS_PATCHED (v0.7.2) on PATCH ACK.
+  driverParams: Record<string, unknown> | null;
+  // Sprint 035v: queued driver_params for the next _openSession call —
+  // used when the user runs `/set` before opening a session.
+  pendingDriverParams: Record<string, unknown> | null;
   // Sprint 035s: /context <lo-hi> [--kind K] stashes here; the next _sendTurn
   // reads + clears + passes as the POST body's `context` field per piece B
   // sprint 217e. Mirrors the CLI's `pending_context` dict at cli.py:1114.
@@ -72,6 +81,7 @@ function _mkChildren(root: HTMLElement): {
   prompt: HTMLSpanElement;
   header: HTMLDivElement;
   driverSelect: HTMLSelectElement;
+  paramsHint: HTMLSpanElement;
 } {
   root.innerHTML = "";
   root.classList.add("terminal-column");
@@ -99,6 +109,16 @@ function _mkChildren(root: HTMLElement): {
   driverSelect.title = "the driver this session runs against; change fires PATCH /api/session/<id> {driver}";
   driverLabel.appendChild(driverSelect);
   header.appendChild(driverLabel);
+  // Sprint 035v: params hint. Renders `think off · tokens ∞ · timeout 300s`
+  // matching the dock's #termparams shape. Updates on session-open (read from
+  // POST /api/session ACK's driver_params echo) and on /set slash PATCH ACK.
+  const paramsHint = document.createElement("span");
+  paramsHint.id = "terminal-params";
+  paramsHint.className = "term-hint";
+  paramsHint.style.marginLeft = "12px";
+  paramsHint.title = "call parameters — set with /set think on|off · /set tokens N (0 = uncapped) · /set timeout N (seconds)";
+  paramsHint.textContent = "think off · tokens ∞ · timeout 300s";
+  header.appendChild(paramsHint);
   const hint = document.createElement("span");
   hint.id = "terminal-hint";
   hint.className = "term-hint";
@@ -128,7 +148,18 @@ function _mkChildren(root: HTMLElement): {
   inputRow.appendChild(input);
   root.appendChild(inputRow);
 
-  return { body, input, prompt, header, driverSelect };
+  return { body, input, prompt, header, driverSelect, paramsHint };
+}
+
+// Sprint 035v: format the params hint from a driver_params dict (or null).
+// Unset / undefined keys render as their responder defaults.
+function _formatParamsHint(params: Record<string, unknown> | null | undefined): string {
+  const think = params?.think === true;
+  const rawTokens = params?.max_tokens;
+  const tokens = typeof rawTokens === "number" && rawTokens > 0 ? String(rawTokens) : "∞";
+  const rawTimeout = params?.timeout;
+  const timeout = typeof rawTimeout === "number" && rawTimeout > 0 ? rawTimeout : 300;
+  return `think ${think ? "on" : "off"} · tokens ${tokens} · timeout ${timeout}s`;
 }
 
 async function _populateDriverPicker(select: HTMLSelectElement, h: TerminalHandle): Promise<void> {
@@ -210,7 +241,15 @@ async function _postJson<T = Record<string, unknown>>(url: string, body: unknown
 }
 
 async function _openSession(h: TerminalHandle, body: HTMLDivElement): Promise<boolean> {
-  const result = await _postJson<{ session_id: string; bundle?: string | null }>("/api/session", { driver: h.driverName });
+  const createBody: Record<string, unknown> = { driver: h.driverName };
+  // Sprint 035v: if the user ran `/set` before opening a session, the
+  // queued driver_params ride the create request. Cleared after — the
+  // manifest carries them from here.
+  if (h.pendingDriverParams) {
+    createBody.driver_params = h.pendingDriverParams;
+    h.pendingDriverParams = null;
+  }
+  const result = await _postJson<{ session_id: string; bundle?: string | null; driver_params?: Record<string, unknown> | null }>("/api/session", createBody);
   if (!result.ok) {
     _push(body, `session: open failed [${result.failure_class}] ${result.detail}`, CLS.err);
     return false;
@@ -221,6 +260,10 @@ async function _openSession(h: TerminalHandle, body: HTMLDivElement): Promise<bo
     return false;
   }
   h.sessionId = String(res.session_id);
+  // Sprint 035v: adopt the daemon's driver_params echo (POST /api/session
+  // returns the manifest slice; sprint 032c added `driver_params` to it).
+  h.driverParams = res.driver_params ?? null;
+  h.updateParamsHint();
   // Sprint 035s: remember the record basename so read-slashes (/inspect,
   // /narrate, /tail, /cat, /diff) default to "the current session's record"
   // when called without an arg. The daemon returns the record path;
@@ -363,7 +406,9 @@ function _closeStream(h: TerminalHandle): void {
   }
   h.sessionId = null;
   h.turnIndex = 0;
+  h.driverParams = null;
   h.updatePrompt();
+  h.updateParamsHint();
 }
 
 async function _sendTurn(h: TerminalHandle, body: HTMLDivElement, text: string): Promise<void> {
@@ -406,13 +451,16 @@ async function _endSession(h: TerminalHandle, body: HTMLDivElement, reason: stri
     emit("DRIVER_SESSION_ENDED", { session_id: sid, reason });
     h.endedEmittedFor = sid;
     _push(body, `session ended (${reason})`, CLS.dim);
+    // Sprint 035v: close the stream synchronously so the params hint,
+    // prompt, and other per-session UI reset immediately — not
+    // whenever SSE delivers SessionEnded moments later. The endedEmittedFor
+    // guard set above prevents the SSE handler from re-emitting.
+    _closeStream(h);
   } else if (result.ok) {
     _push(body, `end: unexpected status ${result.data.status}`, CLS.err);
   } else {
     _push(body, `end failed [${result.failure_class}] ${result.detail}`, CLS.err);
   }
-  // Keep sessionId set until the SSE stream drains and closes; the handler
-  // needs it to guard the double-fire. It clears in _closeStream.
 }
 
 // ── slash router (sprint 035s) ────────────────────────────────────────────
@@ -444,6 +492,7 @@ const _HELP_TEXT = [
   "  /list [records|topologies|sessions|applications|bundles]",
   "  /replay <record>                   assert byte-identical replay (needs daemon endpoint — hint only)",
   "  /run <application>                 launch a topology as a delegate child",
+  "  /set [think|tokens|timeout] [val]  read or change driver params (think on|off; tokens N (0=∞); timeout N)",
   "  /diff                              worktree diff for this session's workspace",
   "  /studio                            open the topology-authoring studio in a new tab",
   "  /interrupt                         cancel the current turn (Ctrl+C alt)",
@@ -640,6 +689,62 @@ async function _slashRoute(h: TerminalHandle, body: HTMLDivElement, line: string
     return true;
   }
 
+  if (slash === "/set") {
+    // Sprint 035v — /set think on|off · /set tokens N · /set timeout N.
+    // Reads current params, merges the change, PATCHes /api/session/<id>
+    // {driver_params: <merged>}, emits DRIVER_PARAMS_PATCHED (v0.7.2).
+    // With no args: print the current params. With no session: queue on
+    // pendingDriverParams for the next session-open.
+    if (args.length === 0) {
+      _push(body, `params — ${_formatParamsHint(h.driverParams)}`, CLS.dim);
+      return true;
+    }
+    const key = args[0];
+    const val = args[1];
+    if (!["think", "tokens", "timeout", "num_ctx"].includes(key)) {
+      _push(body, `/set: unknown key '${key}'; try think | tokens | timeout | num_ctx`, CLS.err);
+      return true;
+    }
+    if (val === undefined) {
+      _push(body, `/set ${key} <value>`, CLS.err);
+      return true;
+    }
+    // Map UI key → manifest key + parse value.
+    const mkey = key === "tokens" ? "max_tokens" : key;
+    let parsed: unknown;
+    if (mkey === "think") {
+      if (val !== "on" && val !== "off") { _push(body, "/set think on|off", CLS.err); return true; }
+      parsed = val === "on";
+    } else if (mkey === "max_tokens" || mkey === "num_ctx") {
+      const n = parseInt(val, 10);
+      if (!Number.isFinite(n) || n < 0 || (mkey === "num_ctx" && n < 1)) {
+        _push(body, `/set ${key}: must be a non-negative integer${mkey === "num_ctx" ? " ≥ 1" : ""}`, CLS.err);
+        return true;
+      }
+      parsed = n;
+    } else {
+      const f = parseFloat(val);
+      if (!Number.isFinite(f) || f <= 0) { _push(body, "/set timeout: must be > 0 (seconds)", CLS.err); return true; }
+      parsed = f;
+    }
+    const prior = h.driverParams ? { ...h.driverParams } : {};
+    const next: Record<string, unknown> = { ...prior, [mkey]: parsed };
+    if (!h.sessionId) {
+      h.pendingDriverParams = next;
+      h.driverParams = next;
+      h.updateParamsHint();
+      _push(body, `${key} → ${val} (queued for next session)`, CLS.dim);
+      return true;
+    }
+    const result = await _fetch<{ driver_params?: Record<string, unknown> | null }>(`/api/session/${encodeURIComponent(h.sessionId)}`, "PATCH", { driver_params: next });
+    if (!result.ok) { _push(body, `/set failed [${result.failure_class}] ${result.detail}`, CLS.err); return true; }
+    h.driverParams = result.data.driver_params ?? next;
+    emit("DRIVER_PARAMS_PATCHED", { session_id: h.sessionId, params: next, prior_params: prior });
+    h.updateParamsHint();
+    _push(body, `${key} → ${val} (next turn)`, CLS.accent);
+    return true;
+  }
+
   if (slash === "/interrupt") {
     if (!h.sessionId) { _push(body, "/interrupt needs an active session", CLS.err); return true; }
     const result = await _fetch(`/api/session/${encodeURIComponent(h.sessionId)}/interrupt`, "POST", {});
@@ -700,7 +805,7 @@ export interface MountTerminalOptions {
 }
 
 export function mountTerminal(root: HTMLElement, opts: MountTerminalOptions = {}): void {
-  const { body, input, prompt, driverSelect } = _mkChildren(root);
+  const { body, input, prompt, driverSelect, paramsHint } = _mkChildren(root);
   const h: TerminalHandle = {
     el: root,
     sessionId: null,
@@ -712,6 +817,9 @@ export function mountTerminal(root: HTMLElement, opts: MountTerminalOptions = {}
     chatting: true,
     endedEmittedFor: null,
     updatePrompt: () => undefined,  // real updater installed below by mountTerminal.
+    updateParamsHint: () => undefined,  // real updater installed below.
+    driverParams: null,
+    pendingDriverParams: null,
     pendingContext: null,
     currentRecord: null,
   };
@@ -726,6 +834,12 @@ export function mountTerminal(root: HTMLElement, opts: MountTerminalOptions = {}
   // Expose the updater on the handle so _openSession / _closeStream can
   // trigger a refresh without threading the closure through every helper.
   h.updatePrompt = _updatePrompt;
+  // Sprint 035v: params hint stateful updater.
+  const _updateParamsHint = (): void => {
+    paramsHint.textContent = _formatParamsHint(h.driverParams);
+  };
+  _updateParamsHint();
+  h.updateParamsHint = _updateParamsHint;
   // Sprint 035t: populate the driver picker + wire its change handler.
   // Runs async; the picker shows "populating…"-shape (empty select) for a
   // few ms while /api/models resolves. Change fires PATCH driver +
