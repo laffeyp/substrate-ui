@@ -65,7 +65,8 @@ function gist(ev) {
   return "";
 }
 
-let STATE = { name: null, events: [], graph: null, summary: null, manifest: null, topology: null, scene: null, cursor: 0, playing: false, speed: 30, term: { open: false, lines: [], history: [], hi: -1, params: { think: false, tokens: 0, timeout: 300 } }, sel: null, mode: "read", graphView: "run", live: null, resumable: new Set(), assay: null, assays: [], assayReport: null, view: "desktop", viewSnap: { desktop: null, terminal: null } };
+import { createAppState, type AppState } from "./state";
+const STATE: AppState = createAppState();
 
 // the time dimension alongside the order: seq is the order (no time), t the time (no order). Show
 // t RELATIVE to the run's start (events[0] = RunStarted) — ~0 on the deterministic CI demos (they
@@ -1198,8 +1199,9 @@ $("termToggle").onclick = () => termSetOpen(!STATE.term.open, "toggle_button");
 // the toggle button (AP3 fix: no global focusin listener, no module-level
 // mutable state, no fabricated fallback).
 import { VIEW_IDS, type ViewId } from "./view-ids.js";
-type ViewSnap = { scrolls: [string, number, number][]; focus: { id: string; start: number | null; end: number | null } | null };
-function _snapshotView(viewId: string, preClickFocus: Element | null): ViewSnap | null {
+interface FocusSnap { id: string; start: number | null; end: number | null }
+interface ViewSnapshot { scrolls: [string, number, number][]; focus: FocusSnap | null }
+function _snapshotView(viewId: string, preClickFocus: Element | null): ViewSnapshot | null {
   const root = document.getElementById(viewId);
   if (!root) return null;
   const scrolls: [string, number, number][] = [];
@@ -1208,7 +1210,7 @@ function _snapshotView(viewId: string, preClickFocus: Element | null): ViewSnap 
     if (!e.id) return;
     if (e.scrollTop || e.scrollLeft) scrolls.push([e.id, e.scrollTop, e.scrollLeft]);
   });
-  let focus: ViewSnap["focus"] = null;
+  let focus: FocusSnap | null = null;
   const target = preClickFocus as HTMLInputElement | null;
   if (target && target.id && target.id !== "view-toggle" && root.contains(target)) {
     focus = {
@@ -1219,7 +1221,7 @@ function _snapshotView(viewId: string, preClickFocus: Element | null): ViewSnap 
   }
   return { scrolls, focus };
 }
-function _restoreView(viewId: string, snap: ViewSnap | null): void {
+function _restoreView(viewId: string, snap: ViewSnapshot | null): void {
   if (!snap) return;
   const root = document.getElementById(viewId);
   if (!root) return;

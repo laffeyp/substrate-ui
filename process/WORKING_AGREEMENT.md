@@ -116,6 +116,25 @@ The Substrate project's CT-1..CT-5 (parallel teams, originals-over-summaries, wo
 
 ---
 
+## Post-close addenda (rule-12 shape for fold work)
+
+**When a fold-pass edit touches surfaces the closed card did not
+enumerate, it lands as `sprints/sprint-NNN-CLOSEOUT-ADDENDUM.md` —
+NOT as an edit to the closed card.** The closed card is the authored
+artifact of that sprint's close under rule 12 (audit trail is the
+work); the addendum is additive, cites the card by path, and
+enumerates the added surfaces.
+
+Applies when review-response work adds internal helpers, extracts
+new modules, or otherwise expands the implementation footprint the
+card did not name. Small in-card typo fixes and comment tweaks do
+not need an addendum. When in doubt, write one — an addendum is
+cheap; a rewritten closed card is discipline-thinning.
+
+Precedent: `sprints/sprint-033-CLOSEOUT-ADDENDUM.md` (2026-08-28)
+lists every helper the AP1–AP8 fold added to sprint 033's
+implementation.
+
 ## Sprint cadence policy
 
 - **From the Studio increment forward:** each increment gets a real sprint card under `sprints/` with a declared dual + observation contract BEFORE code (the fix review #39 ruled). Cadence is auto-within-phase (build → test → live E2E → pipe review → fold), surfacing to BLACKBOARD on a halt or a review finding.

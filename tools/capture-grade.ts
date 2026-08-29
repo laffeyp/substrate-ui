@@ -643,13 +643,15 @@ function checkStudioPairings(capture: SignalRecord[]): boolean {
   return ok;
 }
 
+type FixtureKind = "console" | "studio" | "session";
+
 function main(): void {
-  // Args: capture-grade.ts <path> [--kind console|studio]. Default console.
+  // Args: capture-grade.ts <path> [--kind console|studio|session]. Default console.
   const args = process.argv.slice(2);
   let path: string | null = null;
-  let kind: "console" | "studio" = "console";
+  let kind: FixtureKind = "console";
   for (let i = 0; i < args.length; i += 1) {
-    if (args[i] === "--kind" && args[i + 1]) { kind = args[i + 1] as "console" | "studio" | "session"; i += 1; }
+    if (args[i] === "--kind" && args[i + 1]) { kind = args[i + 1] as FixtureKind; i += 1; }
     else if (!path) path = args[i];
   }
   if (!path) { console.error("[grade] usage: capture-grade.ts <path-to-capture.jsonl> [--kind console|studio|session]"); process.exit(2); }

@@ -36,9 +36,12 @@ Two files. One concept.
 
 ## artifact contract → Files created/modified
 
+- `substrate-ui/web/controls/isolate_toggle.ts` — new. Exports
+  `mountIsolateToggle(root: HTMLElement, opts?)` (ARCH-5). The
+  `disabled`-attribute + `aria-label` + gray-out logic live here.
 - `substrate-ui/web/index.html` — `#isolate-toggle` inside the
   session-settings panel.
-- `substrate-ui/web/app.ts` — mount + wire + emit + gray-out logic.
+- `substrate-ui/web/app.ts` — import + `mountIsolateToggle(...)` only.
 
 ## signal contract → Emits
 

@@ -38,10 +38,12 @@ Two files. One concept.
 
 ## artifact contract → Files created/modified
 
+- `substrate-ui/web/controls/workspace_picker.ts` — new. Exports
+  `mountWorkspacePicker(root: HTMLElement, opts?)` (ARCH-5). The text-input
+  validation + POST wire live here.
 - `substrate-ui/web/index.html` — `#workspace-picker` in new-session
   dialog; `#workspace-shape-badge` in session-header.
-- `substrate-ui/web/app.ts` — mount + wire; badge reads
-  `session.workspace_shape` from `GET /api/session/<id>`.
+- `substrate-ui/web/app.ts` — import + `mountWorkspacePicker(...)` only.
 
 ## signal contract → Emits
 
