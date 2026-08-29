@@ -905,7 +905,22 @@ loadRecords().then(() => loadAssays());  // assays prepend to the rail AFTER the
 // unchanged; a future sprint can migrate the harness to explicit imports.
 import { installObservabilitySurface } from "./observability.js";
 import { mountTerminal } from "./terminal.js";
+import { mountDriverPicker } from "./controls/driver_picker.js";
 installObservabilitySurface({ STATE, loadRecords, selectRecord, loadAssays });
 const _viewTerminalRoot = document.getElementById("view-terminal");
 if (_viewTerminalRoot) mountTerminal(_viewTerminalRoot as HTMLElement, { driverDefault: "deterministic" });
+// Sprint 036a: desktop-view driver picker mounts in the head; refresh() runs
+// on every DRIVER_SESSION_STARTED / DRIVER_SESSION_ENDED so binding tracks
+// the terminal's session lifecycle without polling.
+const _driverPickerRoot = document.getElementById("driver-picker");
+const _driverPickerHandle = _driverPickerRoot
+  ? mountDriverPicker(_driverPickerRoot as HTMLElement)
+  : null;
+if (_driverPickerHandle) {
+  window.addEventListener("substrate:session-changed", (ev: Event) => {
+    const detail = (ev as CustomEvent).detail as { session_id?: string } | undefined;
+    void _driverPickerHandle.refresh(detail?.session_id ?? null);
+  });
+  (window as any).driverPicker = _driverPickerHandle;
+}
 (window as any).api = api;  // Sprint 028: harness routes through the wrapped seam to trigger FETCH_FAILED
