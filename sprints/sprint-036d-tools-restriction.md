@@ -27,6 +27,10 @@ Two files. One concept.
 - `substrate-ui/web/app.ts` — session-settings drawer.
 - `substrate-ui/server.py::_session_patch` — PATCH accepts `tools`.
 - Tech-spec §10 line 16.
+- **Shared wire (SPEC-3):** reuse the terminal-side `/tools` slash
+  helper from sprint 035s (mid-session PATCH `tools`) and 035w
+  (create-time queue). TOOLS_RESTRICTED payload validation (list of
+  non-empty strings, empty → unrestricted) is the same.
 
 ## artifact contract → Files created/modified
 

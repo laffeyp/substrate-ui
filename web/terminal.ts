@@ -319,21 +319,12 @@ async function _openSession(h: TerminalHandle, body: HTMLDivElement): Promise<bo
   // when called without an arg. The daemon returns the record path;
   // basename is the session_id (records live under sessions/<sid>/record).
   h.currentRecord = h.sessionId;
-  // Fire DRIVER_SESSION_STARTED on the daemon acknowledgment, not on the
-  // record's SessionStarted envelope: substrate's session topology does not
-  // emit a SessionStarted envelope on the record today (the SessionStarted
-  // class exists in topologies/session/__init__.py but no producer emits
-  // it). The daemon's POST response IS the observable "session started"
-  // event from the UI's vantage. driver_context_tokens defaults to 0 until
-  // the daemon returns it; bundle_slug comes from the create body (empty
-  // when no bundle attached).
-  // Sprint 240 + REVIEW-2026-08-28-piece-g-full SUB-1: DRIVER_SESSION_STARTED
-  // fires from the SSE handler when the `SessionStarted` envelope lands on
-  // the record — not here on the daemon-ack. The daemon ack tells us the
-  // session_id + record path; the record's own SessionStarted carries the
-  // canonical fields (driver_context_tokens, bundle, workspace_shape,
-  // parent_session_id) that only the substrate side knows. One vocabulary
-  // per event.
+  // DRIVER_SESSION_STARTED fires from the SSE handler on the `SessionStarted`
+  // envelope (substrate sprint 240 wires the RunStarted→SessionStarted
+  // instrument on the session topology). The daemon-ack here only tells the
+  // UI the session_id + record path; the record's own SessionStarted carries
+  // the canonical fields (driver_context_tokens, bundle, workspace_shape,
+  // parent_session_id).
   _push(body, `session ${h.sessionId} opening…`, CLS.dim);
   h.updatePrompt();
   _openStream(h, body);

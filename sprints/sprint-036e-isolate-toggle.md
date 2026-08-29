@@ -33,6 +33,10 @@ Two files. One concept.
 - `substrate-ui/web/app.ts` — session-settings drawer.
 - `substrate-ui/server.py::_session_create` — POST accepts `isolate`.
 - Tech-spec §10 line 18.
+- **Shared wire (SPEC-3):** reuse the terminal-side `/isolate` slash
+  helper from sprint 035w (create-only queue; `workspace_shape=isolate`
+  on ACK). ISOLATE_TOGGLED payload shape and the mutual-exclusion with
+  `workspace_shape=worktree` are the same wire.
 
 ## artifact contract → Files created/modified
 

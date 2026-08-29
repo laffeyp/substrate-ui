@@ -2,9 +2,9 @@
   "vocabulary_version": "0.7.3",
   "locked": true,
   "locked_at": "2026-08-28",
-  "locked_by": "Architect (Peter) ratified 2026-08-28 by directive 'why sit on blackboard, do something about it' \u2014 eleven legacy-dock tags retired as part of sprint 037c (dock retirement). Retired: TERMINAL_OPENED, TERMINAL_CLOSED, CHAT_ENTERED, CHAT_EXITED, MODEL_SELECTED, PARAMS_CHANGED, TURN_SUBMITTED, AGENT_LAUNCH_REQUESTED, AGENT_LAUNCHED, AGENT_TURN_STREAMED, FINAL_ANSWER_RENDERED. POLL_TIMEOUT retained (still emitted by followLive on launch/resume paths). Every retired tag had exactly one emit site, all inside the dock code deleted by 037c. Agent-drafted Claude Opus 4.7 same day.",
+  "locked_by": "Architect (Peter) ratified 2026-08-28 by directive 'why sit on blackboard, do something about it' \u2014 eleven legacy-dock tags retired as part of sprint 037c (dock retirement). Retired: TERMINAL_OPENED, TERMINAL_CLOSED, CHAT_ENTERED, CHAT_EXITED, MODEL_SELECTED, PARAMS_CHANGED, TURN_SUBMITTED, AGENT_LAUNCH_REQUESTED, AGENT_LAUNCHED, AGENT_TURN_STREAMED, FINAL_ANSWER_RENDERED. POLL_TIMEOUT retained (still emitted by followLive on launch/resume paths). Every retired tag had exactly one emit site, all inside the dock code deleted by 037c. Agent-drafted Claude Opus 4.7 same day. Restored 2026-08-28: the eleven retired tags kept in the schema with retired:true markers per grammar/PRINCIPLES.md commitment 1 + TECHNIQUE #45 (deprecation entries instead of removals); addresses SUB-5 of REVIEW-2026-08-28-piece-g-eod.md.",
   "supersedes": "0.7.2",
-  "tag_count": 58,
+  "tag_count": 69,
   "categories": [
     "session",
     "records",
@@ -806,6 +806,171 @@
       ],
       "optional_payload": [],
       "note": "Session driver params (think/max_tokens/timeout/num_ctx) changed via PATCH /api/session/<id> {driver_params}. Fires after daemon accepts the round-trip. params + prior_params are dicts of the four recognized keys (all optional; unset means responder default). Companion to DRIVER_PATCHED (driver-swap) \u2014 one tag one contract; do not fold into DRIVER_PATCHED under grammar/PRINCIPLES commitment 1 (avoids the tag polymorphism v0.7.1 TAG_SPLIT retired for PANE_SWITCHED). Prior_params reflects the manifest state at emit time; empty dict means no prior overrides."
+    },
+    {
+      "name": "TERMINAL_OPENED",
+      "category": "terminal",
+      "stratum": "event",
+      "payload": [],
+      "optional_payload": [
+        "trigger"
+      ],
+      "note": "Terminal dock opened. trigger is toggle_button | ctrl_backtick | first_command.",
+      "retired": true,
+      "retired_at": "2026-08-28",
+      "retired_in": "0.7.3",
+      "replaced_by": null
+    },
+    {
+      "name": "TERMINAL_CLOSED",
+      "category": "terminal",
+      "stratum": "event",
+      "payload": [],
+      "optional_payload": [],
+      "note": "Dock collapsed.",
+      "retired": true,
+      "retired_at": "2026-08-28",
+      "retired_in": "0.7.3",
+      "replaced_by": null
+    },
+    {
+      "name": "CHAT_ENTERED",
+      "category": "terminal",
+      "stratum": "event",
+      "payload": [],
+      "optional_payload": [
+        "reconnect"
+      ],
+      "note": "User typed 'chat' to enter conversation mode. reconnect=true when picking up an existing conversation.",
+      "retired": true,
+      "retired_at": "2026-08-28",
+      "retired_in": "0.7.3",
+      "replaced_by": "DRIVER_SESSION_STARTED"
+    },
+    {
+      "name": "CHAT_EXITED",
+      "category": "terminal",
+      "stratum": "event",
+      "payload": [
+        "turns_in_conversation"
+      ],
+      "optional_payload": [],
+      "note": "User typed /exit. Conversation state is retained for reconnect.",
+      "retired": true,
+      "retired_at": "2026-08-28",
+      "retired_in": "0.7.3",
+      "replaced_by": "DRIVER_SESSION_ENDED"
+    },
+    {
+      "name": "MODEL_SELECTED",
+      "category": "terminal",
+      "stratum": "event",
+      "payload": [
+        "model",
+        "prior_model"
+      ],
+      "optional_payload": [],
+      "note": "Model picker changed. model is an Ollama tag, a CLI preset name, or 'deterministic'.",
+      "retired": true,
+      "retired_at": "2026-08-28",
+      "retired_in": "0.7.3",
+      "replaced_by": "DRIVER_PATCHED"
+    },
+    {
+      "name": "PARAMS_CHANGED",
+      "category": "terminal",
+      "stratum": "event",
+      "payload": [
+        "field",
+        "value",
+        "prior_value"
+      ],
+      "optional_payload": [],
+      "note": "User changed think | tokens | timeout. field is one of those three.",
+      "retired": true,
+      "retired_at": "2026-08-28",
+      "retired_in": "0.7.3",
+      "replaced_by": "DRIVER_PARAMS_PATCHED"
+    },
+    {
+      "name": "TURN_SUBMITTED",
+      "category": "agent",
+      "stratum": "event",
+      "payload": [
+        "model",
+        "task_length",
+        "turn_index"
+      ],
+      "optional_payload": [],
+      "note": "User Enter with a chat message. task_length is the character count of the transcript-augmented task string. (v0.4: turn_index promoted from optional to required \u2014 every emit site sets it; the halt-proposal recommendation was on record 2026-08-15.)",
+      "retired": true,
+      "retired_at": "2026-08-28",
+      "retired_in": "0.7.3",
+      "replaced_by": "USER_MESSAGE_INJECTED"
+    },
+    {
+      "name": "AGENT_LAUNCH_REQUESTED",
+      "category": "agent",
+      "stratum": "event",
+      "payload": [
+        "model",
+        "params"
+      ],
+      "optional_payload": [],
+      "note": "POST /api/agent begun. params is {think, tokens, timeout}. Emitted by the SubstrateController operator.",
+      "retired": true,
+      "retired_at": "2026-08-28",
+      "retired_in": "0.7.3",
+      "replaced_by": null
+    },
+    {
+      "name": "AGENT_LAUNCHED",
+      "category": "agent",
+      "stratum": "event",
+      "payload": [
+        "run_name",
+        "model",
+        "workspace"
+      ],
+      "optional_payload": [
+        "branch"
+      ],
+      "note": "POST /api/agent returned a run name; polling begins. run_name is a substrate Run identity.",
+      "retired": true,
+      "retired_at": "2026-08-28",
+      "retired_in": "0.7.3",
+      "replaced_by": null
+    },
+    {
+      "name": "AGENT_TURN_STREAMED",
+      "category": "agent",
+      "stratum": "event",
+      "payload": [
+        "run_name",
+        "new_events",
+        "up_to_seq"
+      ],
+      "optional_payload": [],
+      "note": "A poll cycle observed new ToolCall/ToolResult/FinalAnswer events. new_events is the count added this cycle. Emitted by the AgentTurnAccumulator operator.",
+      "retired": true,
+      "retired_at": "2026-08-28",
+      "retired_in": "0.7.3",
+      "replaced_by": null
+    },
+    {
+      "name": "FINAL_ANSWER_RENDERED",
+      "category": "agent",
+      "stratum": "summary",
+      "payload": [
+        "run_name",
+        "answer_length"
+      ],
+      "optional_payload": [],
+      "note": "FinalAnswer landed in termbody and (in chat mode) into STATE.term.chat.convo. Terminal turn is done.",
+      "retired": true,
+      "retired_at": "2026-08-28",
+      "retired_in": "0.7.3",
+      "replaced_by": null
     }
   ],
   "invariants": [

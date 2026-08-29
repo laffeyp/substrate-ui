@@ -30,6 +30,10 @@ type Tag = {
   payload: string[];
   optional_payload: string[];
   note: string;
+  retired?: boolean;
+  retired_at?: string;
+  retired_in?: string;
+  replaced_by?: string | null;
 };
 
 type Lock = {
@@ -143,11 +147,17 @@ function main(): void {
   validateLockStructure(lock);
 
   const declared = new Set(lock.tags.map((t) => t.name));
+  const retired = new Set(lock.tags.filter((t) => t.retired === true).map((t) => t.name));
   const emitted = findEmittedTags();
 
   const drift: { tag: string; sites: string[] }[] = [];
+  const retiredEmits: { tag: string; sites: string[]; replaced_by: string | null | undefined }[] = [];
   for (const [tag, sites] of emitted) {
     if (!declared.has(tag)) drift.push({ tag, sites });
+    else if (retired.has(tag)) {
+      const t = lock.tags.find((x) => x.name === tag);
+      retiredEmits.push({ tag, sites, replaced_by: t?.replaced_by ?? null });
+    }
   }
 
   if (drift.length) {
@@ -160,9 +170,21 @@ function main(): void {
     process.exit(1);
   }
 
+  if (retiredEmits.length) {
+    console.error(`[vocab-parity] DRIFT: ${retiredEmits.length} tag(s) emitted in code but marked retired in lock ${lock.vocabulary_version}:`);
+    for (const r of retiredEmits) {
+      const replacement = r.replaced_by ? `; replaced_by: ${r.replaced_by}` : "";
+      console.error(`  ${r.tag} (retired${replacement})`);
+      for (const s of r.sites) console.error(`    at ${s}`);
+    }
+    console.error(`[vocab-parity] Remove the emit or move to the successor tag.`);
+    process.exit(1);
+  }
+
+  const liveCount = lock.tags.length - retired.size;
   console.log(
-    `[vocab-parity] OK — vocabulary ${lock.vocabulary_version} (${lock.tags.length} tags, locked=${lock.locked}); ` +
-      `code emits ${emitted.size} distinct tag(s), all locked.`
+    `[vocab-parity] OK — vocabulary ${lock.vocabulary_version} (${lock.tags.length} tags: ${liveCount} live + ${retired.size} retired, locked=${lock.locked}); ` +
+      `code emits ${emitted.size} distinct live tag(s), all locked.`
   );
 }
 

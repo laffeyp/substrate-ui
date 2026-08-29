@@ -11,12 +11,24 @@ pass_kind: observation
 
 ## scope
 
-Land the cross-cutting parity test that asserts every UI control
-(036a-e) produces the same manifest state as its CLI counterpart.
-Runs Playwright + subprocess CLI side-by-side against fresh sessions.
+Land the cross-cutting parity test that asserts every UI-side control
+produces the same manifest state as its CLI counterpart. Runs
+Playwright + subprocess CLI side-by-side against fresh sessions.
 
-One file. One concept: parity assertion for the five controls, run
-together after each lands its own parity smoke.
+Two surfaces, one gate:
+- **Five desktop-view controls (036a-e):** driver picker, bundle
+  picker, workspace picker, tools restriction, isolate toggle.
+- **Fourteen terminal-view slashes:** `/exit`, `/help`, `/model`,
+  `/tools`, `/set`, `/context`, `/inspect`, `/list`, `/replay`,
+  `/run`, `/diff`, `/studio`, `/bundle`, `/interrupt`. Each has a
+  substrate CLI counterpart at `substrate/src/substrate/cli.py`
+  (chain at line 1053). Amended per REVIEW-2026-08-28-piece-g-eod
+  SPEC-2 — silent bifurcation between `cli.py::route` and
+  `terminal.ts::_slashRoute` is exactly the class of divergence the
+  parity test exists to prevent.
+
+One file. One concept: manifest-state equality across the two
+implementations, per control and per slash.
 
 ## prerequisites
 
@@ -30,8 +42,10 @@ together after each lands its own parity smoke.
 
 ## artifact contract → Files created/modified
 
-- `substrate-ui/tests/test_ui_control_parity.py` — new. Five test
-  functions, one per control. Each: (a) drive UI via Playwright, (b)
+- `substrate-ui/tests/test_ui_control_parity.py` — new. Nineteen test
+  functions total: five for the desktop-view controls (036a-e) + one
+  per terminal-view slash (fourteen). Each: (a) drive UI via
+  Playwright (desktop control or terminal slash), (b)
   `GET /api/session/<id>` for post-state, (c) drive CLI counterpart
   against a fresh session, (d) `GET /api/session/<id>` for CLI
   post-state, (e) assert equality on the affected manifest slice.
