@@ -67,7 +67,14 @@ function gist(ev) {
 
 import { createAppState, type AppState } from "./state";
 import { mountRail, type RailHandle } from "./rail";
+import type { HealthHandle as _HealthHandle, HealthSummary as _HealthSummary } from "./console/health.js";
+import type { TransportHandle as _TransportHandle } from "./console/transport.js";
 const STATE: AppState = createAppState();
+// Sprint 040a/b: console handles bound at boot; declared here so
+// hoisted delegates (renderHealth, selectRecord, ...) can reference them.
+let _healthHandle: _HealthHandle | null = null;
+let _transportHandle: _TransportHandle | null = null;
+type HealthSummary = _HealthSummary;
 
 // the time dimension alongside the order: seq is the order (no time), t the time (no order). Show
 // t RELATIVE to the run's start (events[0] = RunStarted) — ~0 on the deterministic CI demos (they
@@ -140,7 +147,7 @@ async function loadAssays() {
 async function selectAssay(name) {
   const prior_name = STATE.assay;
   emit("ASSAY_SELECTED", { name, prior_name });
-  stopPlay();
+  _transportHandle?.stopPlay();
   STATE.live = null; STATE.name = null; STATE.mode = "assay"; STATE.assay = name; STATE.assayReport = null;
   document.querySelectorAll(".rec").forEach((e) => e.classList.remove("sel"));
   document.querySelectorAll(".assay").forEach((e) => e.classList.toggle("sel", e.dataset.name === name));
@@ -344,7 +351,7 @@ async function selectRecord(name) {
   const prior_name = STATE.name;
   emit("RECORD_SELECTED", { name, prior_name });
   emit("RECORD_LOAD_BEGIN", { name });
-  stopPlay();  // switching records stops any in-flight replay (no loop leaking across records)
+  _transportHandle?.stopPlay();  // switching records stops any in-flight replay (no loop leaking across records)
   if (STATE.live && STATE.live !== name) STATE.live = null;  // navigating away stops the follow
   STATE.name = name; STATE.sel = null;
   STATE.assay = null; if (STATE.mode === "assay") STATE.mode = "read";  // leaving the assay altitude
@@ -379,28 +386,38 @@ async function selectRecord(name) {
   renderVerdict(); render();
 }
 
+// Sprint 040a — health/verdict surface extracted to web/console/health.ts.
+// The bootstrap at the bottom of this file assigns _healthHandle;
+// renderVerdict() is a thin snapshot builder + delegate call.
 function renderVerdict() {
-  const st = STATE.graph.status, s = STATE.summary, el = $("verdict");
-  // Set the verdict-state modifier via classList so any inherited classes
-  // (e.g., `desktop-only` from the index.html markup) are preserved.
-  // Sprint 037b: the perceptual capture found the earlier className
-  // replacement wiped `desktop-only` and leaked ● FINALISED into the
-  // terminal view.
-  const _setVariant = (variant: string) => {
-    for (const c of Array.from(el.classList)) {
-      if (c.startsWith("v-")) el.classList.remove(c);
-    }
-    el.classList.add("verdict", "v-" + variant);
+  _healthHandle?.renderVerdict(_healthSnapshot());
+}
+function _healthSnapshot() {
+  const g = (STATE.graph ?? {}) as {
+    status?: string;
+    final_reason?: string | null;
+    paused_on?: string | null;
+    live?: boolean;
   };
-  if (STATE.live === STATE.name && st === "incomplete" && STATE.graph.live) {
-    _setVariant("live"); el.textContent = "● LIVE"; return;
-  }
-  const fails = s.producers_failed + s.input_build_failures + s.predicate_quarantines + s.invalid_emissions;
-  const notClean = st === "finalised" && fails > 0;
-  _setVariant(notClean ? "failed" : st);
-  el.textContent = st === "failed" ? "● FAILED · " + (STATE.graph.final_reason || "").toUpperCase().replace(/_/g, " ")
-    : st === "paused" ? "● PAUSED" : st === "incomplete" ? "● INCOMPLETE"
-    : notClean ? "● FINALISED · NOT CLEAN" : "● FINALISED";
+  const s = (STATE.summary ?? {}) as Partial<HealthSummary>;
+  return {
+    status: g.status ?? "",
+    final_reason: g.final_reason ?? null,
+    paused_on: g.paused_on ?? null,
+    graphLive: g.live === true,
+    live: STATE.live,
+    name: STATE.name,
+    summary: {
+      producers_started: s.producers_started ?? 0,
+      producers_completed: s.producers_completed ?? 0,
+      producers_failed: s.producers_failed ?? 0,
+      producers_cancelled: s.producers_cancelled ?? 0,
+      input_build_failures: s.input_build_failures ?? 0,
+      predicate_quarantines: s.predicate_quarantines ?? 0,
+      invalid_emissions: s.invalid_emissions ?? 0,
+      application_events: s.application_events ?? {},
+    },
+  };
 }
 
 // ---------- the one cursor drives everything ----------
@@ -650,35 +667,9 @@ function renderStream() {
   emit("STREAM_RENDERED", _paneCtx("stream", { line_count: STATE.events.length }));
 }
 
-// ---------- health: verdict keyed on the run-level STATUS (§7.2) ----------
+// Sprint 040a — full health render extracted; app.ts delegates.
 function renderHealth() {
-  const s = STATE.summary, st = STATE.graph.status;
-  const fails = s.producers_failed + s.input_build_failures + s.predicate_quarantines + s.invalid_emissions;
-  const broken = st === "failed" || fails > 0 || st === "incomplete";
-  const verdict = st === "failed" ? "● FAILED · " + escapeHtml((STATE.graph.final_reason || "").toUpperCase().replace(/_/g, " "))
-    : st === "paused" ? "● PAUSED" : st === "incomplete" ? "● INCOMPLETE (no terminal)"
-    : fails > 0 ? "● FINALISED · NOT CLEAN" : "● FINALISED · CLEAN";
-  const msg = st === "failed" ? "the run itself failed — finished is not worked."
-    : st === "incomplete" ? "no terminal RunFinalised — torn or still being written."
-    : st === "paused" ? `halted resumably — awaiting ${escapeHtml(STATE.graph.paused_on || "input")}`
-    : fails > 0 ? `reached RunFinalised — but ${fails} thing(s) inside failed. Finished is not worked.`
-    : "reached RunFinalised with no failures.";
-  const stat = (n, l, cls) => `<div class="stat ${cls}"><b>${n}</b><span class="l">${l}</span></div>`;
-  const work = Object.entries(s.application_events).map(([k, n]) => `<span class="chip">${n} ${escapeHtml(k)}</span>`).join("");
-  $("health").className = "health" + (broken ? " broken" : "");
-  $("health").innerHTML = `<span class="verdict ${broken ? "v-failed" : "v-finalised"}">${verdict}</span>
-    ${stat(s.producers_started, "STARTED", "")}${stat(s.producers_completed, "COMPLETED", "grn")}
-    ${stat(s.producers_failed, "FAILED", fails ? "red" : "")}${stat(s.invalid_emissions, "INVALID", "")}
-    ${stat(s.producers_cancelled, "CANCELLED", "")}
-    <span class="msg">${msg}</span><span class="work">${work}</span>`;
-  // vocab verdict enum: FINALISED | FAILED | PAUSED | INCOMPLETE | LIVE. LIVE is derived in
-  // renderVerdict from STATE.live + graph.live; renderHealth is called AFTER renderVerdict inside
-  // render() so the top badge's live-follow state is reflected here as the same categorical outcome.
-  const verdictEnum = st === "failed" ? "FAILED"
-    : st === "paused" ? "PAUSED"
-    : st === "incomplete" ? (STATE.live === STATE.name && STATE.graph.live ? "LIVE" : "INCOMPLETE")
-    : "FINALISED";
-  emit("HEALTH_RENDERED", _paneCtx("health", { verdict: verdictEnum }));
+  _healthHandle?.render(_healthSnapshot());
 }
 
 // ---------- inspector: raw event (§7.1) / producer provenance ----------
@@ -751,74 +742,6 @@ $("modeToggle").onclick = () => {
 $("gvRun").onclick = () => { if (_switchView("run")) { STATE.graphView = "run"; render(); } };
 $("gvTopo").onclick = () => { if (_switchView("topology")) { STATE.graphView = "topo"; render(); } };
 $("gvScene").onclick = () => { if (_switchView("scene")) { STATE.graphView = "scene"; render(); } };
-// _cursorSource lets the cursor emitter tag which surface moved the cursor (drag | button | play_frame).
-// Default drag; the button + play helpers override right before calling _setSeq / oninput.
-let _cursorSource = "drag";
-$("seq").oninput = (e) => {
-  const prior_seq = STATE.cursor;
-  STATE.cursor = +e.target.value;
-  if (STATE.cursor !== prior_seq) {
-    emit("CURSOR_MOVED", { seq: STATE.cursor, prior_seq, subject_record: STATE.name, source: _cursorSource });
-  }
-  _cursorSource = "drag";  // reset — the next input is drag unless a helper re-tags first
-  $("seqnow").textContent = STATE.cursor; render();
-};
-$("toStart").onclick = () => { _cursorSource = "button"; $("seq").value = 0; $("seq").oninput({ target: $("seq") }); };
-$("toEnd").onclick = () => { _cursorSource = "button"; $("seq").value = $("seq").max; $("seq").oninput({ target: $("seq") }); };
-
-// ---------- replay Transport: play/pause/speed advance the ONE seq-cursor over time ----------
-// No new time axis — the play loop just steps the same cursor the graph/stream/scene read in
-// lock-step, so replay animates every surface at once. Fixed-rate (seq/sec); original-timing via
-// the events' `t` is a later add (near-instant on the deterministic CI records).
-let _raf = null, _playLast = 0, _playAccum = 0;
-function _setSeq(v) { _cursorSource = "play_frame"; $("seq").value = v; $("seq").oninput({ target: $("seq") }); }
-function _updatePlayBtn() { $("play").textContent = STATE.playing ? "⏸" : "▶"; $("play").classList.toggle("playing", STATE.playing); }
-// stopReason lets startPlay's end-reached path and the seq-drag interrupt handler pass distinct
-// reasons through the same stopPlay entrypoint. Default user_pause when a user click flips it off.
-let _stopReason = "user_pause";
-function stopPlay() {
-  if (_raf) { cancelAnimationFrame(_raf); _raf = null; }
-  if (STATE.playing) {
-    const at_seq = STATE.cursor;
-    STATE.playing = false;
-    _updatePlayBtn();
-    emit("PLAY_STOPPED", { at_seq, reason: _stopReason, subject_record: STATE.name });
-    _stopReason = "user_pause";
-  }
-}
-// rAF loop: each frame advance the cursor by (elapsed * speed) seqs and render ONCE, so the replay
-// RATE (seq/sec) is decoupled from the render rate (~60 fps). High speeds advance several seqs per
-// frame instead of forcing a full render per seq — no longer render-bound (Drift watchlist fold).
-function _frame(ts) {
-  if (!STATE.playing) return;
-  const max = +$("seq").max;
-  if (!_playLast) _playLast = ts;
-  _playAccum += ((ts - _playLast) / 1000) * STATE.speed;  // seqs owed at the current rate
-  _playLast = ts;
-  if (_playAccum >= 1) {
-    const step = Math.floor(_playAccum);
-    _playAccum -= step;
-    const next = Math.min(max, STATE.cursor + step);
-    _setSeq(next);                                          // one render per frame, any step size
-    if (next >= max) { _stopReason = "end_reached"; stopPlay(); return; }                // reached the end -> stop here
-  }
-  _raf = requestAnimationFrame(_frame);
-}
-function startPlay() {
-  if (STATE.cursor >= +$("seq").max) _setSeq(0);   // at the end -> replay from the start (rewind)
-  const from_seq = STATE.cursor;
-  STATE.playing = true; _updatePlayBtn();
-  _playLast = 0; _playAccum = 0;
-  emit("PLAY_STARTED", { from_seq, speed: STATE.speed, subject_record: STATE.name });
-  _raf = requestAnimationFrame(_frame);
-}
-$("play").onclick = () => (STATE.playing ? stopPlay() : startPlay());
-$("speedsel").onchange = () => {
-  const prior_speed = STATE.speed;
-  STATE.speed = +$("speedsel").value;
-  if (STATE.speed !== prior_speed) emit("SPEED_CHANGED", { speed: STATE.speed, prior_speed });
-};
-$("seq").addEventListener("pointerdown", () => { _stopReason = "scrub_interrupt"; stopPlay(); });  // grabbing the slider pauses (don't fight the user)
 
 // ---------- two-view scaffold (sprint 033, v0.7.1 refactor) ----------
 // The header toggle + Ctrl+` flip between #view-desktop and #view-terminal.
@@ -918,6 +841,10 @@ loadRecords().then(() => loadAssays());  // assays prepend to the rail AFTER the
 import { installObservabilitySurface } from "./observability.js";
 import { mountTerminal } from "./terminal.js";
 import { mountDriverPicker } from "./controls/driver_picker.js";
+import { mountHealth } from "./console/health.js";
+import { mountTransport } from "./console/transport.js";
+_healthHandle = mountHealth({ paneCtx: _paneCtx });
+_transportHandle = mountTransport({ state: STATE as unknown as { cursor: number; playing: boolean; speed: number; name: string | null }, render });
 import { mountBundlePicker } from "./controls/bundle_picker.js";
 import { mountNewSessionDialog, workspacePickerField, workspaceShapeField, mountWorkspaceShapeBadge } from "./controls/workspace_picker.js";
 import { mountToolsDrawer, toolsField } from "./controls/tools_drawer.js";
