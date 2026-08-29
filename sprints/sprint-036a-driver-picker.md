@@ -31,9 +31,15 @@ Two files. One concept.
 
 ## artifact contract → Files created/modified
 
+- `substrate-ui/web/controls/driver_picker.ts` — new. Exports
+  `mountDriverPicker(root: HTMLElement, opts?)` following the shape
+  `terminal.ts::mountTerminal` set (ARCH-5 from
+  REVIEW-2026-08-28-piece-g-full). One export, root-element parameter,
+  internal helpers `_`-prefixed. The PATCH round-trip + emit live here.
 - `substrate-ui/web/index.html` — DOM container `#driver-picker` inside
   the session-header of `#view-desktop`.
-- `substrate-ui/web/app.ts` — mount + PATCH wire + emit.
+- `substrate-ui/web/app.ts` — import + `mountDriverPicker($("driver-picker"))`
+  only. No inline handler code.
 
 ## signal contract → Emits
 

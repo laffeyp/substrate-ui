@@ -42,9 +42,13 @@ Two files. One concept.
 
 ## artifact contract → Files created/modified
 
+- `substrate-ui/web/controls/bundle_picker.ts` — new. Exports
+  `mountBundlePicker(root: HTMLElement, opts?)` following the
+  `terminal.ts::mountTerminal` shape (ARCH-5).
 - `substrate-ui/web/index.html` — `#bundle-picker` in new-session
   dialog + `#bundle-attach` in session-header.
-- `substrate-ui/web/app.ts` — mounts + wire.
+- `substrate-ui/web/app.ts` — import + `mountBundlePicker($("bundle-picker"))`
+  only.
 
 ## signal contract → Emits
 

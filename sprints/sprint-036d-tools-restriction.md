@@ -30,9 +30,11 @@ Two files. One concept.
 
 ## artifact contract → Files created/modified
 
+- `substrate-ui/web/controls/tools_drawer.ts` — new. Exports
+  `mountToolsDrawer(root: HTMLElement, opts?)` (ARCH-5).
 - `substrate-ui/web/index.html` — `#tools-drawer` inside the
   session-settings panel.
-- `substrate-ui/web/app.ts` — mount + wire + emit.
+- `substrate-ui/web/app.ts` — import + `mountToolsDrawer(...)` only.
 
 ## signal contract → Emits
 

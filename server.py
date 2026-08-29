@@ -434,6 +434,11 @@ def _build_session_topology_from_manifest(
         turn_max_steps=24,
         session_id=manifest.session_id,
         workspace_path=manifest.workspace,
+        # Sprint 240 wires SessionStarted; thread the manifest fields
+        # required by that envelope's schema.
+        workspace_shape=manifest.workspace_shape,
+        bundle=manifest.bundle,
+        parent_session_id=manifest.composite_of,
         record_root=Path(manifest.record_root),
         script=None,
         first_turn_user_message=first_turn_user_message,
