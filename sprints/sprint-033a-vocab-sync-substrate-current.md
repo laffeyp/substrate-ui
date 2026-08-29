@@ -5,7 +5,7 @@
 id: 033a
 status: pending
 phase: 5
-pass_kind: implementation
+pass_kind: functional
 ---
 ```
 
@@ -25,6 +25,13 @@ substrate-ui does — `signals/versions/current.json → 0.6.json`).
 Either add the substrate-side `current.json` symlink and read it, or
 read the highest-versioned `*.json` in the directory. The former is
 cleaner.
+
+**Cross-repo shape acknowledged (per REVIEW-2026-08-28 G8):** this
+sprint writes one file into a sibling repo (`substrate/process/signals/current.json`).
+That file becomes a lookup surface; changing or removing it later is a
+contract change. The substrate-side landing gets its own sprint card
+under `substrate/process/sprints/` (name TBD by the substrate side).
+Do not merge the substrate change without that companion card on file.
 
 ## context_files
 

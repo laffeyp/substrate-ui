@@ -5,7 +5,7 @@
 id: 035
 status: pending
 phase: 5
-pass_kind: implementation
+pass_kind: functional
 ---
 ```
 
@@ -27,6 +27,12 @@ Two wiring changes:
   `GET /api/session/<id>/events?since_seq=<n>`.
 
 The four driver-session signal tags fire at real code paths.
+
+**Rule-6 stretch acknowledged (per REVIEW-2026-08-28 G3):** three code
+files touched (`web/terminal.ts` new, `web/app.ts` mount, `tools/capture-grade.ts`
+new `checkDriverSessionBookends` invariant). One concept — the terminal
+column plus its grader witness. The invariant lives with the grader by
+construction; splitting it into a follow-on sprint would land trivially.
 
 ## context_files
 

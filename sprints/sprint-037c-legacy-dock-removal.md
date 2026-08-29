@@ -49,8 +49,12 @@ No new emits. Loses no emit sites (035 already moved emission to
 
 ## observation contract
 
-- `grep -r '#termdock\|termOpen\|runTerm' substrate-ui/` returns no
-  hits under `web/` or `harness/`.
+- `grep -r '#termdock\|termOpen\|runTerm' substrate-ui/web substrate-ui/harness`
+  returns no hits (bounded per REVIEW-2026-08-28 G6).
+- `grep -r '#termdock\|termOpen\|runTerm' substrate-ui/tests` returns
+  no hits — any test that still asserts on the dock DOM is a
+  regression the deletion would break. If the grep hits, the test
+  needs update inside this sprint before the deletion lands.
 - `npm run e2e && npm run e2e:studio && npm run e2e:assay && npm run
   e2e:delegate && npm run e2e:session` green.
 - `npm run signals` green across all fixtures.

@@ -28,8 +28,13 @@ One file. The rail rewrite (034b) is the consumer.
 
 - `substrate-ui/server.py` — the daemon. Existing `_records` handler is
   the anchor for the query-param extension.
+- `substrate/src/substrate/bundles.py` — `list_bundles()` helper. This
+  function does not exist today (verified: `grep -n 'def list_bundles'`
+  returns no hits). Substrate-side prerequisite sprint
+  `sprint-215e-bundle-patch-and-list-bundles` adds it; 034a cannot
+  close until 215e lands.
 - `substrate/src/substrate/topologies/applications/registry.py` — bundle
-  catalog source.
+  catalog source (referenced by `list_bundles()` internally).
 - `../substrate/process/signals/current.json` — for reference.
 
 ## artifact contract → Files created/modified

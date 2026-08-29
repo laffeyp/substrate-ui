@@ -17,6 +17,12 @@ track for piece G.
 
 Two files. One concept: capture the artifacts the grader reads.
 
+**Rule-6 stretch acknowledged (per REVIEW-2026-08-28 G3):** two new
+code files plus a `package.json` script-registration edit. Config
+edits sit at the edge of the ≤2-files bound; the two captures are one
+concept (the perceptual + signal-trace pair the grader consumes
+together).
+
 ## prerequisites
 
 - 037a (driver + grader kind).

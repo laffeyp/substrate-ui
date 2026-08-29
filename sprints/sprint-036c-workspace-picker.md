@@ -11,9 +11,16 @@ pass_kind: functional
 
 ## scope
 
-One control: workspace picker + file-picker + `workspace_shape` badge.
-Create-time only (workspace is immutable per session). Badge shows
+One control: workspace picker + `workspace_shape` badge. Create-time
+only (workspace is immutable per session). Badge shows
 `flat | worktree | isolate` from the manifest.
+
+**Picker mechanism (per REVIEW-2026-08-28 G7):** a plain text input for
+the workspace path, with client-side validation (non-empty; absolute
+path; forbidden characters rejected). No native file-picker — browsers
+cannot return arbitrary host paths, and the CLI `--workspace` flag is
+already a string. The path text field matches the CLI's shape, which
+keeps the parity test (036f) trivial.
 
 Two files. One concept.
 
