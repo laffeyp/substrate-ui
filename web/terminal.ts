@@ -523,11 +523,12 @@ async function _slashRoute(h: TerminalHandle, body: HTMLDivElement, line: string
   const args = parts.slice(1);
 
   // /exit — special-cased to route through the existing session-end path
-  // (POST /api/session/<id>/end with source="user_exit"). The router
-  // handles it here rather than the CLI's "let the model see it" trick
-  // because in browser-world the daemon end IS the observable event.
+  // (POST /api/session/<id>/end with source="user_end"). "user_end" is
+  // the substrate canonical string (substrate._daemon.end_session default;
+  // SessionEnded envelope reason). The UI's DRIVER_SESSION_ENDED payload
+  // mirrors the substrate-wire reason — no two-vocabulary redundancy.
   if (slash === "/exit") {
-    await _endSession(h, body, "user_exit");
+    await _endSession(h, body, "user_end");
     return true;
   }
 
