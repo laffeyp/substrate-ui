@@ -313,23 +313,29 @@ export function mountWorkspaceShapeBadge(root: HTMLElement): WorkspaceShapeBadge
     const result = await fetchGet<SessionList>("/api/session");
     if (!result.ok) return null;
     const s = result.data;
-    const pool = [
-      ...(s.live || []),
-      ...(s.parked || []),
-      ...(s.interrupted || []),
-    ];
     if (preferSid) {
+      const pool = [
+        ...(s.live || []),
+        ...(s.parked || []),
+        ...(s.interrupted || []),
+      ];
       const match = pool.find((b) => b.session_id === preferSid);
       if (match) return match;
     }
-    return pool[0] ?? null;
+    // Live-only initial bind (Sprint 041).
+    return (s.live || [])[0] ?? null;
   };
 
   const handle: WorkspaceShapeBadgeHandle = {
     el: root,
     async refresh(preferSid: string | null = null) {
       const current = await readCurrent(preferSid);
-      if (!current) { root.textContent = "· shape —"; return; }
+      if (!current) {
+        // Sprint 041 pre-session hide.
+        root.style.display = "none";
+        return;
+      }
+      root.style.display = "";
       const shape = current.workspace_shape || "?";
       root.textContent = `· shape ${shape}`;
       root.title = `workspace: ${current.workspace || "?"}`;

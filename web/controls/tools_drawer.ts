@@ -41,16 +41,18 @@ const _readCurrentSessionId = async (preferSid: string | null): Promise<string |
   const result = await fetchGet<SessionList>("/api/session");
   if (!result.ok) return null;
   const s = result.data;
-  const pool = [
-    ...(s.live || []),
-    ...(s.parked || []),
-    ...(s.interrupted || []),
-  ];
   if (preferSid) {
+    const pool = [
+      ...(s.live || []),
+      ...(s.parked || []),
+      ...(s.interrupted || []),
+    ];
     const match = pool.find((b) => b.session_id === preferSid);
     if (match) return match.session_id;
   }
-  return pool[0]?.session_id ?? null;
+  // Live-only initial bind (Sprint 041): parked sessions from prior
+  // daemon runs would otherwise steal the drawer.
+  return (s.live || [])[0]?.session_id ?? null;
 };
 
 const _readManifestTools = async (sid: string): Promise<string[] | null> => {
@@ -86,7 +88,7 @@ export function mountToolsDrawer(root: HTMLElement): ToolsDrawerHandle {
   input.style.border = "1px solid var(--line2)";
   input.style.borderRadius = "4px";
   input.style.color = "var(--tx)";
-  input.style.width = "220px";
+  input.style.width = "140px";
   input.disabled = true;
   const apply = document.createElement("button");
   apply.type = "button";
@@ -119,17 +121,19 @@ export function mountToolsDrawer(root: HTMLElement): ToolsDrawerHandle {
         input.value = "";
         input.disabled = true;
         apply.disabled = true;
-        status.textContent = "· no live session";
+        // Sprint 041 pre-session hide.
+        root.style.display = "none";
         return;
       }
+      root.style.display = "";
       sessionId = sid;
       const tools = await _readManifestTools(sid);
       input.value = tools ? tools.join(", ") : "";
       input.disabled = false;
       apply.disabled = false;
       status.textContent = tools
-        ? `· ${tools.length} restricted (${sid.slice(0, 8)}…)`
-        : `· unrestricted (${sid.slice(0, 8)}…)`;
+        ? `· ${tools.length} restricted`
+        : `· unrestricted`;
     },
   };
 

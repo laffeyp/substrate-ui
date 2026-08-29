@@ -869,25 +869,23 @@ import { mountHealth } from "./console/health.js";
 import { mountTransport } from "./console/transport.js";
 _healthHandle = mountHealth({ paneCtx: _paneCtx });
 _transportHandle = mountTransport({ state: STATE as unknown as { cursor: number; playing: boolean; speed: number; name: string | null }, render });
-import { mountBundlePicker } from "./controls/bundle_picker.js";
 import { mountNewSessionDialog, workspacePickerField, workspaceShapeField, mountWorkspaceShapeBadge } from "./controls/workspace_picker.js";
 import { mountToolsDrawer, toolsField } from "./controls/tools_drawer.js";
 import { isolateField } from "./controls/isolate_toggle.js";
 installObservabilitySurface({ STATE, loadRecords, selectRecord: selectRecord as (...a: unknown[]) => unknown, loadAssays });
 const _viewTerminalRoot = document.getElementById("view-terminal");
 if (_viewTerminalRoot) mountTerminal(_viewTerminalRoot as HTMLElement, { driverDefault: "deterministic" });
-// Sprint 036a/b: desktop-view session-header pickers mount in the head; each
-// refreshes on every substrate:session-changed CustomEvent so their binding
-// tracks the terminal's session lifecycle without polling.
+// Sprint 041: session-control mounts are inside the terminal view now
+// (terminal.ts::_mkChildren renders the mount spans in its header).
+// Bundle picker is DELIBERATELY NOT MOUNTED: the terminal session's
+// bundle is `session` by contract — bundle selection is a launcher
+// concern (choosing an application to run), not a session concern.
 const _driverPickerRoot = document.getElementById("driver-picker");
 const _driverPickerHandle = _driverPickerRoot
   ? mountDriverPicker(_driverPickerRoot as HTMLElement)
   : null;
-const _bundlePickerRoot = document.getElementById("bundle-picker");
-const _bundlePickerHandle = _bundlePickerRoot
-  ? mountBundlePicker(_bundlePickerRoot as HTMLElement)
-  : null;
-// Sprint 036c: new-session dialog + workspace controls.
+// New-session dialog: trigger button lives inside the terminal header;
+// modal itself is a fixed-position overlay outside both views.
 const _newSessionTrigger = document.getElementById("new-session-trigger");
 const _newSessionDialog = document.getElementById("new-session-dialog");
 const _newSessionHandle = (_newSessionTrigger && _newSessionDialog)
@@ -911,12 +909,10 @@ window.addEventListener("substrate:session-changed", (ev: Event) => {
   const detail = (ev as CustomEvent).detail as { session_id?: string } | undefined;
   const sid = detail?.session_id ?? null;
   if (_driverPickerHandle) void _driverPickerHandle.refresh(sid);
-  if (_bundlePickerHandle) void _bundlePickerHandle.refresh(sid);
   if (_workspaceBadgeHandle) void _workspaceBadgeHandle.refresh(sid);
   if (_toolsDrawerHandle) void _toolsDrawerHandle.refresh(sid);
 });
 if (_driverPickerHandle) (window as any).driverPicker = _driverPickerHandle;
-if (_bundlePickerHandle) (window as any).bundlePicker = _bundlePickerHandle;
 if (_newSessionHandle) (window as any).newSessionDialog = _newSessionHandle;
 if (_workspaceBadgeHandle) (window as any).workspaceBadge = _workspaceBadgeHandle;
 if (_toolsDrawerHandle) (window as any).toolsDrawer = _toolsDrawerHandle;
