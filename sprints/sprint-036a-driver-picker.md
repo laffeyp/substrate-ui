@@ -28,6 +28,12 @@ Two files. One concept.
 - `substrate-ui/server.py::_session_patch` — existing PATCH endpoint.
 - `signals/versions/0.7.json` — `DRIVER_PATCHED` payload spec.
 - Tech-spec §10 line 12.
+- **Shared wire (REVIEW-2026-08-28-piece-g-eod SPEC-3):** reuse the
+  terminal-side helpers from sprint 035t (`_populateDriverPicker`,
+  `_fetch<T>`, the DRIVER_PATCHED emit-after-ack pattern).
+  `web/terminal.ts` around line 555 is the reference implementation;
+  the desktop-view picker sits on the same PATCH endpoint and should
+  share the same `_fetch<T>` wire helper rather than reimplement.
 
 ## artifact contract → Files created/modified
 

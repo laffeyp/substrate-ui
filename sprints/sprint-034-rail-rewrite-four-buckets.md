@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 034
-status: pending
+status: split-into-034a-and-034b
 phase: 5
 pass_kind: implementation
 ---

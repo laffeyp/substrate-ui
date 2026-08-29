@@ -39,6 +39,11 @@ Two files. One concept.
 - `substrate-ui/server.py::_session_patch` — PATCH accepts `bundle`
   and triggers seed re-assembly.
 - `signals/versions/0.7.json` — `BUNDLE_ATTACHED` payload.
+- **Shared wire (SPEC-3):** reuse the terminal-side `/bundle` slash
+  helpers from sprint 035w (create-time queue) and 035s (mid-session
+  PATCH). `web/terminal.ts::_slashRoute` case `/bundle` fires
+  BUNDLE_ATTACHED with `{bundle, prior_bundle}` on ACK; the desktop
+  picker shares the wire.
 
 ## artifact contract → Files created/modified
 

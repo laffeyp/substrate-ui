@@ -35,6 +35,10 @@ Two files. One concept.
 - `substrate-ui/server.py::_session_create` — POST accepts `workspace`
   + `workspace_shape`.
 - Tech-spec §10 line 14.
+- **Shared wire (SPEC-3):** reuse the terminal-side `/workspace` slash
+  helper from sprint 035w (create-only queue with `"workspace is
+  create-only"` mid-session rejection). WORKSPACE_SELECTED payload
+  shape and the workspace-immutable-per-session invariant match.
 
 ## artifact contract → Files created/modified
 

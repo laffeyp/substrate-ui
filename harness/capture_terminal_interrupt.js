@@ -69,8 +69,15 @@ const bodyText = (page) => page.evaluate(() => document.getElementById("terminal
     inp.setSelectionRange(0, inp.value.length);
   });
   const bodyBefore = await bodyText(page);
+  // Ctrl+C with a selection must NOT fire an interrupt POST. Race the request
+  // against a short timeout; a firing request is the failure, not the timeout.
+  const interruptFired = page
+    .waitForRequest((req) => /\/api\/session\/[^/]+\/interrupt$/.test(req.url()), { timeout: 500 })
+    .then(() => true)
+    .catch(() => false);
   await ctrlC(page);
-  await page.waitForTimeout(500);
+  const didFire = await interruptFired;
+  if (didFire) fail("Ctrl+C with selection issued a POST /interrupt (must not)");
   const bodyAfter = await bodyText(page);
   const beforeCount = (bodyBefore.match(/interrupt/g) || []).length;
   const afterCount = (bodyAfter.match(/interrupt/g) || []).length;

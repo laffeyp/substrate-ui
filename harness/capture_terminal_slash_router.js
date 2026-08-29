@@ -27,6 +27,13 @@ const bodyLines = (page) => page.evaluate(() => {
   const b = document.getElementById("terminal-body");
   return b ? Array.from(b.children).map((c) => (c.textContent || "").trim()) : [];
 });
+const bodyCount = (page) => page.evaluate(() => document.getElementById("terminal-body")?.children.length || 0);
+const waitBodyGrew = async (page, before, timeout = 3000) =>
+  page.waitForFunction(
+    (b) => (document.getElementById("terminal-body")?.children.length || 0) > b,
+    before,
+    { timeout },
+  );
 
 (async () => {
   const browser = await chromium.launch({ channel: "chrome", headless: true });
@@ -103,11 +110,15 @@ const bodyLines = (page) => page.evaluate(() => {
   );
   ok("/tail returned event list");
 
+  const preNarrate = await bodyCount(page);
   await typeAndEnter(page, "/narrate");
-  await page.waitForTimeout(1500);
+  await page.waitForFunction(
+    (b) => (document.getElementById("terminal-body")?.children.length || 0) > b + 5,
+    preNarrate,
+    { timeout: 5000 },
+  );
   const narrated = await bodyLines(page);
-  if (narrated.length > 5) ok(`/narrate produced ${narrated.length} body lines`);
-  else fail(`/narrate produced too few body lines: ${narrated.length}`);
+  ok(`/narrate produced ${narrated.length} body lines`);
 
   await typeAndEnter(page, "/cat 0");
   await page.waitForFunction(
@@ -123,16 +134,19 @@ const bodyLines = (page) => page.evaluate(() => {
   );
   ok("/list records printed record count");
 
+  let pre = await bodyCount(page);
   await typeAndEnter(page, "/list sessions");
-  await page.waitForTimeout(500);
+  await waitBodyGrew(page, pre);
   ok("/list sessions issued");
 
+  pre = await bodyCount(page);
   await typeAndEnter(page, "/list topologies");
-  await page.waitForTimeout(500);
+  await waitBodyGrew(page, pre);
   ok("/list topologies issued");
 
+  pre = await bodyCount(page);
   await typeAndEnter(page, "/list applications");
-  await page.waitForTimeout(500);
+  await waitBodyGrew(page, pre);
   ok("/list applications issued");
 
   await typeAndEnter(page, "/list bundles");
@@ -149,15 +163,14 @@ const bodyLines = (page) => page.evaluate(() => {
   );
   ok("/replay printed CLI-only hint");
 
-  let popupOpened = false;
-  ctx.on("page", () => { popupOpened = true; });
+  const popupPromise = ctx.waitForEvent("page", { timeout: 3000 }).then(() => true).catch(() => false);
   await typeAndEnter(page, "/studio");
-  await page.waitForTimeout(500);
-  if (popupOpened) ok("/studio opened a new tab");
+  if (await popupPromise) ok("/studio opened a new tab");
   else fail("/studio did not open a popup");
 
+  pre = await bodyCount(page);
   await typeAndEnter(page, "/interrupt");
-  await page.waitForTimeout(1000);
+  await waitBodyGrew(page, pre, 5000);
   ok("/interrupt issued");
 
   await typeAndEnter(page, "/nonexistent-slash");
