@@ -368,18 +368,13 @@ const VIEW_TO_PANE_ID: Record<string, string> = {
   topology: "topology",
   scene: "scene",
   io: "io",
-  // Sprint 033: view-scope switches between the two piece-G view containers.
-  // These are containers, not inspected panes — they carry no VIEW_TO_PANE_TAG
-  // entry because the flip itself is the observable event; the desktop view's
-  // downstream pane renders continue to fire from inside #view-desktop and
-  // grade under their existing entries.
-  terminal: "terminal",
-  desktop: "desktop",
 };
-// View-scope to_pane values whose PANE_SWITCHED does NOT require a downstream
-// pane-render pairing. The container flip is the observation; no separate paint
-// is contracted.
-const VIEW_SCOPE_TO_PANE = new Set(["terminal", "desktop"]);
+// Sprint 033 / v0.7.1 TAG_SPLIT: view-scope container flips fire VIEW_SWITCHED,
+// not PANE_SWITCHED. Their closed set — the two piece-G view containers.
+const VIEW_SWITCHED_VIEWS = new Set(["desktop", "terminal"]);
+// Desktop side re-mounts an inner pane on flip-in; the terminal side is
+// empty until sprint 035 lands `web/terminal.ts` and its own render tag.
+const VIEW_SWITCHED_PAIRING_REQUIRED = new Set(["desktop"]);
 
 function checkViewSwitchedRender(capture: SignalRecord[]): boolean {
   const paneTags = new Set(Object.values(VIEW_TO_PANE_TAG));
@@ -391,10 +386,6 @@ function checkViewSwitchedRender(capture: SignalRecord[]): boolean {
     checked += 1;
     const toPane = sw.payload.to_pane as string;
     const subject = sw.payload.subject_record as string;
-    // Sprint 033: view-scope switches (terminal/desktop) name a container flip;
-    // no downstream pane-render is contracted. The switch itself is the
-    // observation. Skip the pairing check for these, still count them checked.
-    if (VIEW_SCOPE_TO_PANE.has(toPane)) continue;
     const expectedTag = VIEW_TO_PANE_TAG[toPane];
     const expectedPaneId = VIEW_TO_PANE_ID[toPane];
     if (!expectedTag) {
@@ -427,6 +418,55 @@ function checkViewSwitchedRender(capture: SignalRecord[]): boolean {
     }
   }
   if (ok && checked > 0) console.log(`[grade] pairing (PANE_SWITCHED → next pane-render matches to_pane): PASS (${checked} checked).`);
+  return ok;
+}
+
+// v0.7.1 TAG_SPLIT: VIEW_SWITCHED{to_view, prior_view, subject_record} carries
+// view-scope container flips (desktop ⇄ terminal). Closed set enforced against
+// VIEW_SWITCHED_VIEWS. Desktop side re-mounts an inner pane on flip-in and the
+// existing pane-render pairing (checkViewSwitchedRender's family) must fire;
+// terminal side is empty until sprint 035 and pairs with nothing.
+function checkViewSwitched(capture: SignalRecord[]): boolean {
+  let ok = true;
+  let checked = 0;
+  const paneTags = new Set(Object.values(VIEW_TO_PANE_TAG));
+  for (let i = 0; i < capture.length; i += 1) {
+    const sw = capture[i];
+    if (sw.name !== "VIEW_SWITCHED") continue;
+    checked += 1;
+    const toView = sw.payload.to_view as string;
+    const priorView = sw.payload.prior_view as string;
+    if (!VIEW_SWITCHED_VIEWS.has(toView)) {
+      console.error(`[grade] VIEW_SWITCHED FAIL: to_view=${toView} at index ${i} — outside closed set {desktop, terminal}.`);
+      ok = false; continue;
+    }
+    if (!VIEW_SWITCHED_VIEWS.has(priorView)) {
+      console.error(`[grade] VIEW_SWITCHED FAIL: prior_view=${priorView} at index ${i} — outside closed set {desktop, terminal}.`);
+      ok = false; continue;
+    }
+    if (toView === priorView) {
+      console.error(`[grade] VIEW_SWITCHED FAIL: to_view === prior_view === ${toView} at index ${i} — a flip is a state change.`);
+      ok = false; continue;
+    }
+    if (!VIEW_SWITCHED_PAIRING_REQUIRED.has(toView)) continue;
+    // Desktop-side pairing: within 500ms, one of the four *_RENDERED tags must
+    // fire with matching subject_record (the desktop container remounts its
+    // inner pane on flip-in).
+    const subject = sw.payload.subject_record as string | null;
+    let matched = false;
+    for (let j = i + 1; j < capture.length; j += 1) {
+      const b = capture[j];
+      if (!paneTags.has(b.name)) continue;
+      if (b.payload.subject_record !== subject) continue;
+      if (b.ts - sw.ts > 500) break;
+      matched = true; break;
+    }
+    if (!matched) {
+      console.error(`[grade] VIEW_SWITCHED FAIL: to_view=desktop at index ${i} — no {${[...paneTags].join(",")}} with matching subject_record fired within 500ms.`);
+      ok = false;
+    }
+  }
+  if (ok) console.log(`[grade] VIEW_SWITCHED (closed set + desktop pairing): PASS (${checked} checked).`);
   return ok;
 }
 
@@ -578,6 +618,7 @@ function main(): void {
     ok = containsInOrder(capture, EXPECTED_ORDER) && ok;
     ok = checkRecordSelectedLoaded(capture) && ok;
     ok = checkViewSwitchedRender(capture) && ok;
+    ok = checkViewSwitched(capture) && ok;
     ok = checkFrameMonotonic(capture) && ok;
     ok = checkInspectorPayloads(capture) && ok;
     ok = checkTurnInsideChatWindow(capture) && ok;

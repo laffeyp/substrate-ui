@@ -4,7 +4,7 @@
 // One central version pointer: signals/versions/current.json is a symlink to the locked version.
 // A v0.4 bump retargets the symlink and drops a new versioned file; no code path changes.
 import vocab from "../../signals/versions/current.json";
-import substrateVocab from "../../signals/mirror/substrate-0.2.json";
+import substrateVocab from "../../signals/mirror/substrate-0.3.json";
 
 export type TagSpec = {
   category: string;
