@@ -1182,86 +1182,84 @@ $("termOpen").onclick = () => termSetOpen(true, "toggle_button");
 $("termClose").onclick = () => termSetOpen(false);
 $("termToggle").onclick = () => termSetOpen(!STATE.term.open, "toggle_button");
 
-// ---------- two-view scaffold (sprint 033) ----------
+// ---------- two-view scaffold (sprint 033, v0.7.1 refactor) ----------
 // The header toggle + Ctrl+` flip between #view-desktop and #view-terminal.
-// Snapshot: on flip-out we record the leaving view's scroll positions across
-// its scrollable children plus which element held focus + its selection range;
-// on flip-in we restore. PANE_SWITCHED carries the same shape the vocab already
-// has (to_pane, prior_pane, subject_record); the two new to_pane values are
-// "terminal" and "desktop".
-// Focus tracking: mouse-clicking the toggle steals focus, so activeElement at
-// handler entry names the button, not the field the user was in. Track the
-// last "real" focus via focusin — excluding the toggle button — so the snapshot
-// sees the pre-click focus target.
-let _lastRealFocus: { id: string; start: number | null; end: number | null } | null = null;
-document.addEventListener("focusin", (e: any) => {
-  const el = e.target;
-  if (!el || !el.id || el.id === "view-toggle") return;
-  _lastRealFocus = {
-    id: el.id,
-    start: typeof el.selectionStart === "number" ? el.selectionStart : null,
-    end: typeof el.selectionEnd === "number" ? el.selectionEnd : null,
-  };
-});
-function _snapshotView(viewId: string): any {
+// VIEW_SWITCHED{to_view, prior_view, subject_record} carries the flip
+// (v0.7.1 TAG_SPLIT — was PANE_SWITCHED under v0.7).
+//
+// Snapshot keys scrolls and focus by stable element id only (AP2 fix: no
+// DOM-index-keyed keys, which drifted under live stream inserts). Focus is
+// captured on the mousedown / keydown path BEFORE the browser moves it to
+// the toggle button (AP3 fix: no global focusin listener, no module-level
+// mutable state, no fabricated fallback).
+import { VIEW_IDS, type ViewId } from "./view-ids.js";
+type ViewSnap = { scrolls: [string, number, number][]; focus: { id: string; start: number | null; end: number | null } | null };
+function _snapshotView(viewId: string, preClickFocus: Element | null): ViewSnap | null {
   const root = document.getElementById(viewId);
   if (!root) return null;
   const scrolls: [string, number, number][] = [];
-  root.querySelectorAll("*").forEach((el: any, idx: number) => {
-    if (el.scrollTop || el.scrollLeft) scrolls.push([`${el.tagName}#${el.id || ''}.${idx}`, el.scrollTop, el.scrollLeft]);
+  root.querySelectorAll("[id]").forEach((el: Element) => {
+    const e = el as HTMLElement;
+    if (!e.id) return;
+    if (e.scrollTop || e.scrollLeft) scrolls.push([e.id, e.scrollTop, e.scrollLeft]);
   });
-  // Prefer the tracked pre-click focus (see _lastRealFocus above); fall back
-  // to activeElement for the keyboard path where no focus theft happened.
-  let focus: any = null;
-  const tracked = _lastRealFocus;
-  if (tracked) {
-    const el = document.getElementById(tracked.id);
-    if (el && root.contains(el)) focus = tracked;
-  }
-  if (!focus) {
-    const active = document.activeElement as any;
-    if (active && root.contains(active) && active.id && active.id !== "view-toggle") {
-      focus = { id: active.id, start: active.selectionStart ?? null, end: active.selectionEnd ?? null };
-    }
+  let focus: ViewSnap["focus"] = null;
+  const target = preClickFocus as HTMLInputElement | null;
+  if (target && target.id && target.id !== "view-toggle" && root.contains(target)) {
+    focus = {
+      id: target.id,
+      start: typeof target.selectionStart === "number" ? target.selectionStart : null,
+      end: typeof target.selectionEnd === "number" ? target.selectionEnd : null,
+    };
   }
   return { scrolls, focus };
 }
-function _restoreView(viewId: string, snap: any) {
+function _restoreView(viewId: string, snap: ViewSnap | null): void {
   if (!snap) return;
   const root = document.getElementById(viewId);
   if (!root) return;
-  const nodes = Array.from(root.querySelectorAll("*"));
-  snap.scrolls.forEach(([key, top, left]: [string, number, number]) => {
-    const [tag, rest] = key.split("#");
-    const [_id, idxStr] = rest.split(".");
-    const idx = parseInt(idxStr, 10);
-    const el: any = nodes[idx];
-    if (el && el.tagName === tag) { el.scrollTop = top; el.scrollLeft = left; }
-  });
+  for (const [id, top, left] of snap.scrolls) {
+    const el = document.getElementById(id);
+    if (el && root.contains(el)) { el.scrollTop = top; el.scrollLeft = left; }
+  }
   if (snap.focus) {
-    const el: any = document.getElementById(snap.focus.id);
+    const el = document.getElementById(snap.focus.id) as HTMLInputElement | null;
     if (el && root.contains(el)) {
-      el.focus();
+      // preventScroll: the snapshot/restore primitive owns scroll state
+      // exactly. Letting focus() call scrollIntoView on the ancestor would
+      // silently override the just-restored scroll positions above.
+      el.focus({ preventScroll: true });
       if (snap.focus.start !== null && typeof el.setSelectionRange === "function") {
-        try { el.setSelectionRange(snap.focus.start, snap.focus.end); } catch (_) { /* non-text input */ }
+        try { el.setSelectionRange(snap.focus.start, snap.focus.end); }
+        catch (err) { if (!(err instanceof DOMException)) console.warn("focus-restore selectionRange failed:", err); }
       }
     }
   }
 }
-function _toggleView(source: string = "toggle_button") {
-  const prior = STATE.view;
-  const next = prior === "desktop" ? "terminal" : "desktop";
-  STATE.viewSnap[prior] = _snapshotView(`view-${prior}`);
+function _toggleView(source: string, preClickFocus: Element | null): void {
+  const prior = STATE.view as ViewId;
+  const next: ViewId = prior === VIEW_IDS.DESKTOP ? VIEW_IDS.TERMINAL : VIEW_IDS.DESKTOP;
+  STATE.viewSnap[prior] = _snapshotView(`view-${prior}`, preClickFocus);
   document.getElementById(`view-${prior}`)?.classList.remove("active");
   document.getElementById(`view-${next}`)?.classList.add("active");
   const toggle = document.getElementById("view-toggle");
-  if (toggle) toggle.classList.toggle("on-terminal", next === "terminal");
+  if (toggle) toggle.classList.toggle("on-terminal", next === VIEW_IDS.TERMINAL);
   STATE.view = next;
-  emit("PANE_SWITCHED", { to_pane: next, prior_pane: prior, subject_record: STATE.name });
+  emit("VIEW_SWITCHED", { to_view: next, prior_view: prior, subject_record: STATE.name });
   requestAnimationFrame(() => _restoreView(`view-${next}`, STATE.viewSnap[next]));
 }
-document.getElementById("view-toggle")?.addEventListener("click", () => _toggleView("toggle_button"));
-window.addEventListener("keydown", (e) => { if (e.ctrlKey && (e.key === "`" || e.key === "Dead")) { e.preventDefault(); _toggleView("ctrl_backtick"); } });
+// mousedown fires BEFORE focus moves to the button — reads the real
+// pre-click focus target from document.activeElement at handler entry.
+document.getElementById("view-toggle")?.addEventListener("mousedown", (e) => {
+  e.preventDefault();  // keep the button from stealing focus at all
+  _toggleView("toggle_button", document.activeElement);
+});
+window.addEventListener("keydown", (e) => {
+  if (e.ctrlKey && (e.key === "`" || e.key === "Dead")) {
+    e.preventDefault();
+    _toggleView("ctrl_backtick", document.activeElement);
+  }
+});
 
 loadTopologies();
 loadModels();  // populate the terminal's model picker (defaults to the biggest OSS model)
@@ -1273,9 +1271,7 @@ loadRecords().then(() => loadAssays());  // assays prepend to the rail AFTER the
 // boundary and calls these as if they were globals via `page.evaluate(() => loadRecords())`
 // and `page.evaluate(() => STATE.events)`. Rebind on window so the harness keeps working
 // unchanged; a future sprint can migrate the harness to explicit imports.
-(window as any).STATE = STATE;
-(window as any).loadRecords = loadRecords;
-(window as any).selectRecord = selectRecord;
-(window as any).loadAssays = loadAssays;
+import { installObservabilitySurface } from "./observability.js";
+installObservabilitySurface({ STATE, loadRecords, selectRecord, loadAssays });
 (window as any).loadModels = loadModels;
 (window as any).api = api;  // Sprint 028: harness routes through the wrapped seam to trigger FETCH_FAILED
