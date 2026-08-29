@@ -31,6 +31,11 @@ interface RecordEnvelope {
   t?: number;
 }
 
+interface PendingContext {
+  parent_seq_range: [number, number];
+  kinds: string[];
+}
+
 interface TerminalHandle {
   el: HTMLElement;
   sessionId: string | null;
@@ -42,6 +47,15 @@ interface TerminalHandle {
   chatting: boolean;
   endedEmittedFor: string | null;  // session_id last emitted-ended-for; guards double-fire.
   updatePrompt: () => void;  // Set by mountTerminal; called on session-open/close (CQ-3).
+  // Sprint 035s: /context <lo-hi> [--kind K] stashes here; the next _sendTurn
+  // reads + clears + passes as the POST body's `context` field per piece B
+  // sprint 217e. Mirrors the CLI's `pending_context` dict at cli.py:1114.
+  pendingContext: PendingContext | null;
+  // Sprint 035s: current record name for read-slashes that need it (/inspect,
+  // /narrate, /tail, /cat, /diff). Updated when a session opens (record path
+  // basename) so slashes without an arg default to "the current session's
+  // record."
+  currentRecord: string | null;
 }
 
 const CLS = {
@@ -155,6 +169,11 @@ async function _openSession(h: TerminalHandle, body: HTMLDivElement): Promise<bo
     return false;
   }
   h.sessionId = String(res.session_id);
+  // Sprint 035s: remember the record basename so read-slashes (/inspect,
+  // /narrate, /tail, /cat, /diff) default to "the current session's record"
+  // when called without an arg. The daemon returns the record path;
+  // basename is the session_id (records live under sessions/<sid>/record).
+  h.currentRecord = h.sessionId;
   // Fire DRIVER_SESSION_STARTED on the daemon acknowledgment, not on the
   // record's SessionStarted envelope: substrate's session topology does not
   // emit a SessionStarted envelope on the record today (the SessionStarted
@@ -307,7 +326,15 @@ async function _sendTurn(h: TerminalHandle, body: HTMLDivElement, text: string):
     text_length: text.length,
   });
   h.turnIndex += 1;
-  const result = await _postJson(`/api/session/${encodeURIComponent(h.sessionId ?? "")}/turn`, { text });
+  // Sprint 035s: if a /context slash stashed a pending slice, thread it
+  // into the POST body's `context` field per piece B sprint 217e. Clear
+  // after — /context is single-use, matching the CLI's semantics.
+  const bodyForPost: Record<string, unknown> = { text };
+  if (h.pendingContext) {
+    bodyForPost.context = { parent_seq_range: h.pendingContext.parent_seq_range, kinds: h.pendingContext.kinds };
+    h.pendingContext = null;
+  }
+  const result = await _postJson(`/api/session/${encodeURIComponent(h.sessionId ?? "")}/turn`, bodyForPost);
   if (!result.ok) {
     _push(body, `turn failed [${result.failure_class}] ${result.detail}`, CLS.err);
   }
@@ -336,6 +363,286 @@ async function _endSession(h: TerminalHandle, body: HTMLDivElement, reason: stri
   // needs it to guard the double-fire. It clears in _closeStream.
 }
 
+// ── slash router (sprint 035s) ────────────────────────────────────────────
+// Ports substrate/src/substrate/cli.py::_slash_route (line 1053) into the
+// browser terminal. Every slash the CLI ships gets a JS handler that hits
+// the same daemon endpoint. Product spec §2a lists the nine required
+// slashes: /exit /model /tools /context /inspect /list /replay /run /help.
+// Feature-map adds /narrate /tail /cat /diff /studio /bundle /interrupt.
+//
+// Return value:
+//   true  → the line was a slash the router handled; caller skips /turn.
+//   false → the line was not a slash; caller treats it as user text.
+//
+// Every handler that mutates session state emits the paired v0.7 signal
+// on ACK (DRIVER_PATCHED / TOOLS_RESTRICTED / BUNDLE_ATTACHED). Read
+// slashes print result lines only.
+
+const _HELP_TEXT = [
+  "substrate daily-driver terminal — slash inventory:",
+  "  /exit                              end this session cleanly",
+  "  /model <name>                      swap driver mid-session",
+  "  /tools <a,b,c>                     restrict tool suite (empty for unrestricted)",
+  "  /bundle <name>                     attach a bundle mid-session",
+  "  /context <lo-hi> [--kind K]        inject a record slice into the next turn",
+  "  /inspect [<record>]                narrate the record's causal beats",
+  "  /narrate [<record>]                same as /inspect",
+  "  /tail [<record>]                   raw events for the record",
+  "  /cat <seq> [<record>]              one event's full payload",
+  "  /list [records|topologies|sessions|applications|bundles]",
+  "  /replay <record>                   assert byte-identical replay (needs daemon endpoint — hint only)",
+  "  /run <application>                 launch a topology as a delegate child",
+  "  /diff                              worktree diff for this session's workspace",
+  "  /studio                            open the topology-authoring studio in a new tab",
+  "  /interrupt                         cancel the current turn (Ctrl+C alt)",
+  "  /help                              this list",
+];
+
+async function _slashRoute(h: TerminalHandle, body: HTMLDivElement, line: string): Promise<boolean> {
+  const stripped = line.trim();
+  if (!stripped.startsWith("/")) return false;
+  const parts = stripped.split(/\s+/);
+  const slash = parts[0];
+  const args = parts.slice(1);
+
+  // /exit — special-cased to route through the existing session-end path
+  // (POST /api/session/<id>/end with source="user_exit"). The router
+  // handles it here rather than the CLI's "let the model see it" trick
+  // because in browser-world the daemon end IS the observable event.
+  if (slash === "/exit") {
+    await _endSession(h, body, "user_exit");
+    return true;
+  }
+
+  if (slash === "/help") {
+    for (const l of _HELP_TEXT) _push(body, l, CLS.dim);
+    return true;
+  }
+
+  if (slash === "/model") {
+    if (args.length !== 1) { _push(body, "/model requires exactly one driver name", CLS.err); return true; }
+    if (!h.sessionId) { _push(body, "/model needs an active session — send a message first", CLS.err); return true; }
+    const priorDriver = h.driverName;
+    const result = await _fetch(`/api/session/${encodeURIComponent(h.sessionId)}`, "PATCH", { driver: args[0] });
+    if (!result.ok) { _push(body, `/model failed [${result.failure_class}] ${result.detail}`, CLS.err); return true; }
+    h.driverName = args[0];
+    emit("DRIVER_PATCHED", { session_id: h.sessionId, driver: args[0], prior_driver: priorDriver });
+    _push(body, `driver → ${args[0]} (next turn)`, CLS.accent);
+    h.updatePrompt();
+    return true;
+  }
+
+  if (slash === "/tools") {
+    if (args.length === 0) { _push(body, "/tools <comma-list> — restrict tool suite (empty for unrestricted)", CLS.err); return true; }
+    if (!h.sessionId) { _push(body, "/tools needs an active session", CLS.err); return true; }
+    const toolList = args[0].split(",").map((t) => t.trim()).filter((t) => t.length > 0);
+    const result = await _fetch(`/api/session/${encodeURIComponent(h.sessionId)}`, "PATCH", { tools: toolList });
+    if (!result.ok) { _push(body, `/tools failed [${result.failure_class}] ${result.detail}`, CLS.err); return true; }
+    emit("TOOLS_RESTRICTED", { session_id: h.sessionId, tools: toolList });
+    _push(body, `tools → [${toolList.join(", ")}] (next turn)`, CLS.accent);
+    return true;
+  }
+
+  if (slash === "/bundle") {
+    if (args.length !== 1) { _push(body, "/bundle <name> — attach bundle mid-session", CLS.err); return true; }
+    if (!h.sessionId) { _push(body, "/bundle needs an active session", CLS.err); return true; }
+    const priorBundle = h.bundleSlug || null;
+    const result = await _fetch<{ bundle?: string | null }>(`/api/session/${encodeURIComponent(h.sessionId)}`, "PATCH", { bundle: args[0] });
+    if (!result.ok) { _push(body, `/bundle failed [${result.failure_class}] ${result.detail}`, CLS.err); return true; }
+    h.bundleSlug = args[0];
+    emit("BUNDLE_ATTACHED", { session_id: h.sessionId, bundle: args[0], prior_bundle: priorBundle });
+    _push(body, `bundle → ${args[0]} (next turn seed re-assembles)`, CLS.accent);
+    return true;
+  }
+
+  if (slash === "/context") {
+    if (args.length === 0) { _push(body, "/context <lo-hi> [--kind K]", CLS.err); return true; }
+    const range = args[0];
+    if (!range.includes("-")) { _push(body, "/context: range must be <lo>-<hi>", CLS.err); return true; }
+    const [loStr, hiStr] = range.split("-", 2);
+    const lo = parseInt(loStr, 10); const hi = parseInt(hiStr, 10);
+    if (Number.isNaN(lo) || Number.isNaN(hi)) { _push(body, "/context: <lo> and <hi> must be integers", CLS.err); return true; }
+    const kinds: string[] = [];
+    const kIdx = args.indexOf("--kind");
+    if (kIdx >= 0 && kIdx + 1 < args.length) kinds.push(args[kIdx + 1]);
+    h.pendingContext = { parent_seq_range: [lo, hi], kinds };
+    _push(body, `context pending: seq ${lo}..${hi}${kinds.length ? ` kinds=${kinds.join(",")}` : ""}`, CLS.dim);
+    return true;
+  }
+
+  if (slash === "/inspect" || slash === "/narrate") {
+    const recordName = args[0] || h.currentRecord;
+    if (!recordName) { _push(body, `${slash} needs a record name (or open a session first)`, CLS.err); return true; }
+    const result = await _fetchGet<unknown[]>(`/api/records/${encodeURIComponent(recordName)}/narrate`);
+    if (!result.ok) { _push(body, `${slash} failed [${result.failure_class}] ${result.detail}`, CLS.err); return true; }
+    for (const l of result.data) _push(body, String(l), CLS.out);
+    return true;
+  }
+
+  if (slash === "/tail") {
+    const recordName = args[0] || h.currentRecord;
+    if (!recordName) { _push(body, "/tail needs a record name (or open a session first)", CLS.err); return true; }
+    const result = await _fetchGet<Array<{ seq: number; kind: string; t?: number }>>(`/api/records/${encodeURIComponent(recordName)}/events`);
+    if (!result.ok) { _push(body, `/tail failed [${result.failure_class}] ${result.detail}`, CLS.err); return true; }
+    for (const ev of result.data) _push(body, `seq ${String(ev.seq).padStart(3, "0")}  ${ev.kind}`, CLS.out);
+    _push(body, `${result.data.length} event(s)`, CLS.dim);
+    return true;
+  }
+
+  if (slash === "/cat") {
+    if (args.length === 0) { _push(body, "/cat <seq> [<record>]", CLS.err); return true; }
+    const seq = parseInt(args[0], 10);
+    if (Number.isNaN(seq)) { _push(body, "/cat: <seq> must be an integer", CLS.err); return true; }
+    const recordName = args[1] || h.currentRecord;
+    if (!recordName) { _push(body, "/cat needs a record name (or open a session first)", CLS.err); return true; }
+    const result = await _fetchGet<Array<{ seq: number; kind: string; payload: unknown }>>(`/api/records/${encodeURIComponent(recordName)}/events`);
+    if (!result.ok) { _push(body, `/cat failed [${result.failure_class}] ${result.detail}`, CLS.err); return true; }
+    const ev = result.data.find((e) => e.seq === seq);
+    if (!ev) { _push(body, `/cat: no event at seq ${seq}`, CLS.err); return true; }
+    _push(body, `# seq ${ev.seq}  ${ev.kind}`, CLS.dim);
+    for (const l of JSON.stringify(ev.payload, null, 2).split("\n")) _push(body, l, CLS.out);
+    return true;
+  }
+
+  if (slash === "/list") {
+    const target = args[0] || "sessions";
+    if (target === "sessions") {
+      const result = await _fetchGet<{ live?: unknown[]; parked?: unknown[]; ended?: unknown[] }>(`/api/session`);
+      if (!result.ok) { _push(body, `/list sessions failed [${result.failure_class}] ${result.detail}`, CLS.err); return true; }
+      for (const [bucket, entries] of Object.entries(result.data)) {
+        if (!Array.isArray(entries)) continue;
+        for (const e of entries) {
+          const rec = e as { session_id?: string; name?: string | null; driver?: string };
+          _push(body, `[${bucket}] ${rec.name || rec.session_id} (${rec.driver ?? "?"})`, CLS.out);
+        }
+      }
+      return true;
+    }
+    if (target === "records") {
+      const result = await _fetchGet<Array<{ name: string; status?: string; started_at?: string }>>(`/api/records`);
+      if (!result.ok) { _push(body, `/list records failed [${result.failure_class}] ${result.detail}`, CLS.err); return true; }
+      for (const r of result.data) _push(body, `${r.name}${r.status ? `  (${r.status})` : ""}`, CLS.out);
+      _push(body, `${result.data.length} record(s)`, CLS.dim);
+      return true;
+    }
+    if (target === "topologies") {
+      const result = await _fetchGet<string[]>(`/api/topologies`);
+      if (!result.ok) { _push(body, `/list topologies failed [${result.failure_class}] ${result.detail}`, CLS.err); return true; }
+      for (const n of result.data) _push(body, n, CLS.out);
+      return true;
+    }
+    if (target === "applications") {
+      const result = await _fetchGet<Array<{ name: string; description?: string }>>(`/api/applications`);
+      if (!result.ok) { _push(body, `/list applications failed [${result.failure_class}] ${result.detail}`, CLS.err); return true; }
+      for (const a of result.data) _push(body, `${a.name}${a.description ? `  — ${a.description}` : ""}`, CLS.out);
+      return true;
+    }
+    if (target === "bundles") {
+      _push(body, "/list bundles — GET /api/bundles is sprint 034a; not yet shipped", CLS.err);
+      return true;
+    }
+    _push(body, `/list ${target}: unknown target (try records|topologies|sessions|applications|bundles)`, CLS.err);
+    return true;
+  }
+
+  if (slash === "/replay") {
+    _push(body, "/replay — replay-verification is not exposed via the daemon; run `substrate replay <record>` at the CLI", CLS.err);
+    return true;
+  }
+
+  if (slash === "/run") {
+    if (args.length === 0) { _push(body, "/run <application> [args...]", CLS.err); return true; }
+    const app = args[0];
+    // TECH-SPEC §7.6: POST /api/topology/<name>/run accepts {inputs: {...}, await_completion}.
+    // A bare /run with no args passes {} — apps whose manifests have slot
+    // defaults handle it; apps with required slots return 400 with the
+    // list of missing keys.
+    const result = await _fetch<{ run_id?: string; record_root?: string; status?: string; error?: string }>(`/api/topology/${encodeURIComponent(app)}/run`, "POST", { inputs: {}, await_completion: false });
+    if (!result.ok) { _push(body, `/run ${app} failed [${result.failure_class}] ${result.detail}`, CLS.err); return true; }
+    if (result.data.error) { _push(body, `/run ${app}: ${result.data.error}`, CLS.err); return true; }
+    _push(body, `${app} launched → ${result.data.run_id ?? "?"} (${result.data.status ?? "?"})`, CLS.accent);
+    return true;
+  }
+
+  if (slash === "/diff") {
+    if (!h.sessionId) { _push(body, "/diff needs an active session", CLS.err); return true; }
+    // Look up the session's workspace via GET /api/session/<id>.
+    const s = await _fetchGet<{ workspace?: string }>(`/api/session/${encodeURIComponent(h.sessionId)}`);
+    if (!s.ok || !s.data.workspace) { _push(body, "/diff: could not resolve session workspace", CLS.err); return true; }
+    const result = await _fetchGet<{ files?: string[]; diff?: string; error?: string }>(`/api/worktree_diff?path=${encodeURIComponent(s.data.workspace)}`);
+    if (!result.ok) { _push(body, `/diff failed [${result.failure_class}] ${result.detail}`, CLS.err); return true; }
+    if (result.data.error) { _push(body, `/diff: ${result.data.error}`, CLS.err); return true; }
+    const files = result.data.files ?? [];
+    if (!files.length) { _push(body, "no changes in this session's worktree yet", CLS.dim); return true; }
+    _push(body, `${files.length} file(s) changed:`, CLS.dim);
+    for (const f of files) _push(body, `  ${f}`, CLS.out);
+    const diff = result.data.diff ?? "";
+    for (const l of diff.slice(0, 2000).split("\n")) _push(body, l, CLS.out);
+    if (diff.length > 2000) _push(body, `… (truncated; ${diff.length - 2000} more bytes)`, CLS.dim);
+    return true;
+  }
+
+  if (slash === "/studio") {
+    window.open("/studio.html", "_blank");
+    _push(body, "studio opened in a new tab", CLS.dim);
+    return true;
+  }
+
+  if (slash === "/interrupt") {
+    if (!h.sessionId) { _push(body, "/interrupt needs an active session", CLS.err); return true; }
+    const result = await _fetch(`/api/session/${encodeURIComponent(h.sessionId)}/interrupt`, "POST", {});
+    if (!result.ok) { _push(body, `/interrupt failed [${result.failure_class}] ${result.detail}`, CLS.err); return true; }
+    _push(body, "interrupt sent — current turn canceling", CLS.dim);
+    return true;
+  }
+
+  _push(body, `unknown slash: ${slash}. Try /help`, CLS.err);
+  return true;
+}
+
+// Two typed HTTP helpers alongside `_postJson`. `_fetch` handles POST/PATCH/
+// PUT with a JSON body; `_fetchGet` handles GET. Both return the same
+// FetchResult<T> discriminated union so callers can name the failure class.
+async function _fetch<T = Record<string, unknown>>(url: string, method: string, body: unknown): Promise<FetchResult<T>> {
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  } catch (err) {
+    return { ok: false, failure_class: "network", detail: err instanceof Error ? err.message : String(err) };
+  }
+  const text = await response.text();
+  if (!response.ok) {
+    let detail = `HTTP ${response.status}`;
+    try {
+      const parsed = JSON.parse(text) as { error?: string };
+      if (parsed.error) detail = `HTTP ${response.status}: ${parsed.error}`;
+    } catch { /* body not JSON */ }
+    return { ok: false, failure_class: "http", detail };
+  }
+  if (!text) return { ok: true, data: {} as T };
+  try { return { ok: true, data: JSON.parse(text) as T }; }
+  catch (err) { return { ok: false, failure_class: "parse", detail: err instanceof Error ? err.message : String(err) }; }
+}
+
+async function _fetchGet<T>(url: string): Promise<FetchResult<T>> {
+  let response: Response;
+  try { response = await fetch(url); }
+  catch (err) { return { ok: false, failure_class: "network", detail: err instanceof Error ? err.message : String(err) }; }
+  const text = await response.text();
+  if (!response.ok) {
+    let detail = `HTTP ${response.status}`;
+    try { const parsed = JSON.parse(text) as { error?: string }; if (parsed.error) detail = `HTTP ${response.status}: ${parsed.error}`; }
+    catch { /* body not JSON */ }
+    return { ok: false, failure_class: "http", detail };
+  }
+  try { return { ok: true, data: JSON.parse(text) as T }; }
+  catch (err) { return { ok: false, failure_class: "parse", detail: err instanceof Error ? err.message : String(err) }; }
+}
+
 export interface MountTerminalOptions {
   driverDefault?: string;
 }
@@ -353,6 +660,8 @@ export function mountTerminal(root: HTMLElement, opts: MountTerminalOptions = {}
     chatting: true,
     endedEmittedFor: null,
     updatePrompt: () => undefined,  // real updater installed below by mountTerminal.
+    pendingContext: null,
+    currentRecord: null,
   };
   _push(body, "substrate daily-driver terminal · type to talk to the model · /exit to leave", CLS.dim);
   // Stateful prompt updater. Replaces the prior recursive rAF loop (60Hz
@@ -372,17 +681,18 @@ export function mountTerminal(root: HTMLElement, opts: MountTerminalOptions = {}
     input.value = "";
     const trimmed = line.trim();
     if (!trimmed) return;
-    if (trimmed.startsWith("/")) {
-      const cmd = trimmed.slice(1).trim();
-      if (cmd === "exit") {
-        _endSession(h, body, "user_exit").catch(() => undefined);
-        return;
-      }
-      _push(body, `unknown slash: /${cmd}`, CLS.err);
-      return;
-    }
-    _sendTurn(h, body, trimmed).catch((err) => {
-      _push(body, `send failed: ${err && err.message ? err.message : err}`, CLS.err);
+    // Sprint 035s: route through _slashRoute if the line starts with /.
+    // Handler returns true when it consumed the line; false when the
+    // line is not a slash. The router covers /exit, /help, /model,
+    // /tools, /bundle, /context, /inspect, /narrate, /tail, /cat,
+    // /list, /replay, /run, /diff, /studio, /interrupt.
+    _slashRoute(h, body, trimmed).then((handled) => {
+      if (handled) return;
+      _sendTurn(h, body, trimmed).catch((err) => {
+        _push(body, `send failed: ${err && err.message ? err.message : err}`, CLS.err);
+      });
+    }).catch((err) => {
+      _push(body, `slash handler failed: ${err && err.message ? err.message : err}`, CLS.err);
     });
   });
 }
