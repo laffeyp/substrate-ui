@@ -29,7 +29,8 @@
     "capture:terminal-driver-picker": "node harness/capture_terminal_driver_picker.js",
     "capture:terminal-interrupt": "node harness/capture_terminal_interrupt.js",
     "capture:terminal-params-drawer": "node harness/capture_terminal_params_drawer.js",
-    "signals": "npm run check:vocab-parity && npm run check:tsc-new && npm run capture:signals && npm run grade:signals && npm run capture:studio-signals && npm run grade:studio-signals && npm run capture:view-toggle && npm run capture:terminal-session && npm run grade:terminal-session && npm run capture:terminal-slash-router && npm run capture:terminal-driver-picker && npm run capture:terminal-interrupt && npm run capture:terminal-params-drawer",
+    "capture:terminal-create-controls": "node harness/capture_terminal_create_controls.js",
+    "signals": "npm run check:vocab-parity && npm run check:tsc-new && npm run capture:signals && npm run grade:signals && npm run capture:studio-signals && npm run grade:studio-signals && npm run capture:view-toggle && npm run capture:terminal-session && npm run grade:terminal-session && npm run capture:terminal-slash-router && npm run capture:terminal-driver-picker && npm run capture:terminal-interrupt && npm run capture:terminal-params-drawer && npm run capture:terminal-create-controls",
     "sync:substrate-vocab": "npx tsx tools/sync-substrate-vocab.ts",
     "e2e:terminal-v1": "node _deprecated/terminal-v1-round1/harness/e2e_terminal_v1.js",
     "capture:terminal-v1": "node _deprecated/terminal-v1-round1/harness/capture_terminal_v1.js"
