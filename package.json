@@ -5,7 +5,7 @@
   "description": "Live end-to-end test harness for the substrate-ui console — drives the real console in real Chrome (Playwright channel:'chrome') against the real server. The observation contract's tooling, scoped to this repo and pinned by package-lock.json so it is reproducible, not an ad-hoc /tmp install.",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
     "e2e": "node harness/e2e_console.js",
     "e2e:studio": "node harness/e2e_studio.js",
