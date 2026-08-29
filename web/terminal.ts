@@ -71,6 +71,7 @@ function _mkChildren(root: HTMLElement): {
   input: HTMLInputElement;
   prompt: HTMLSpanElement;
   header: HTMLDivElement;
+  driverSelect: HTMLSelectElement;
 } {
   root.innerHTML = "";
   root.classList.add("terminal-column");
@@ -81,11 +82,28 @@ function _mkChildren(root: HTMLElement): {
   title.className = "term-title";
   title.textContent = "▌ substrate — daily-driver terminal";
   header.appendChild(title);
+  // Sprint 035t: driver picker in the terminal header. Populated from
+  // GET /api/models on mount. Change fires PATCH /api/session/<id>
+  // {driver} + DRIVER_PATCHED emit; same wire as the /model slash from
+  // sprint 035s. Two entry points, one wire.
+  const driverLabel = document.createElement("label");
+  driverLabel.className = "term-hint";
+  driverLabel.style.display = "flex";
+  driverLabel.style.alignItems = "center";
+  driverLabel.style.gap = "6px";
+  driverLabel.style.marginLeft = "16px";
+  driverLabel.textContent = "driver ";
+  const driverSelect = document.createElement("select");
+  driverSelect.id = "terminal-driver";
+  driverSelect.className = "term-model";
+  driverSelect.title = "the driver this session runs against; change fires PATCH /api/session/<id> {driver}";
+  driverLabel.appendChild(driverSelect);
+  header.appendChild(driverLabel);
   const hint = document.createElement("span");
   hint.id = "terminal-hint";
   hint.className = "term-hint";
   hint.style.marginLeft = "auto";
-  hint.innerHTML = "type to talk · <b>/exit</b> to leave";
+  hint.innerHTML = "type to talk · <b>/exit</b> to leave · <b>/help</b>";
   header.appendChild(hint);
   root.appendChild(header);
 
@@ -110,7 +128,41 @@ function _mkChildren(root: HTMLElement): {
   inputRow.appendChild(input);
   root.appendChild(inputRow);
 
-  return { body, input, prompt, header };
+  return { body, input, prompt, header, driverSelect };
+}
+
+async function _populateDriverPicker(select: HTMLSelectElement, h: TerminalHandle): Promise<void> {
+  // Fetch the driver list once at mount. Populate the select; if
+  // `h.driverName` matches an option, mark it selected; else fall back
+  // to the API's `default` field. Sprint 035t.
+  const result = await _fetchGet<{ models?: string[]; cli?: string[]; default?: string }>("/api/models");
+  if (!result.ok) {
+    // Populate with the caller's default only — the picker still works
+    // for that one driver. Print a dim hint into the terminal body.
+    const opt = document.createElement("option");
+    opt.value = h.driverName; opt.textContent = h.driverName;
+    select.appendChild(opt);
+    return;
+  }
+  const models = result.data.models || [];
+  const cli = result.data.cli || [];
+  const all = [...models, ...cli, "deterministic"];
+  // De-duplicate while preserving order (deterministic always last so it's
+  // not the visual default for a live-model workflow).
+  const seen = new Set<string>();
+  const unique = all.filter((m) => (seen.has(m) ? false : (seen.add(m), true)));
+  for (const model of unique) {
+    const opt = document.createElement("option");
+    opt.value = model; opt.textContent = model;
+    select.appendChild(opt);
+  }
+  // Pick the initial value: caller's opts.driverDefault if it exists in
+  // the list; else the API default; else the first entry.
+  const apiDefault = result.data.default;
+  let initial = h.driverName;
+  if (!unique.includes(initial)) initial = apiDefault && unique.includes(apiDefault) ? apiDefault : unique[0];
+  select.value = initial;
+  h.driverName = initial;
 }
 
 function _push(body: HTMLDivElement, text: string, cls: string): void {
@@ -648,7 +700,7 @@ export interface MountTerminalOptions {
 }
 
 export function mountTerminal(root: HTMLElement, opts: MountTerminalOptions = {}): void {
-  const { body, input, prompt } = _mkChildren(root);
+  const { body, input, prompt, driverSelect } = _mkChildren(root);
   const h: TerminalHandle = {
     el: root,
     sessionId: null,
@@ -674,6 +726,41 @@ export function mountTerminal(root: HTMLElement, opts: MountTerminalOptions = {}
   // Expose the updater on the handle so _openSession / _closeStream can
   // trigger a refresh without threading the closure through every helper.
   h.updatePrompt = _updatePrompt;
+  // Sprint 035t: populate the driver picker + wire its change handler.
+  // Runs async; the picker shows "populating…"-shape (empty select) for a
+  // few ms while /api/models resolves. Change fires PATCH driver +
+  // DRIVER_PATCHED emit when a session is active; otherwise updates
+  // h.driverName so the next session-open uses the picked driver.
+  _populateDriverPicker(driverSelect, h).then(() => {
+    _updatePrompt();
+  }).catch((err) => {
+    _push(body, `driver picker: populate failed — ${err && err.message ? err.message : err}`, CLS.err);
+  });
+  driverSelect.addEventListener("change", () => {
+    const next = driverSelect.value;
+    if (!next) return;
+    const prior = h.driverName;
+    if (next === prior) return;
+    if (!h.sessionId) {
+      // No active session yet — update the pending default. The next
+      // _openSession call POSTs this driver.
+      h.driverName = next;
+      _push(body, `driver → ${next} (queued for next session)`, CLS.dim);
+      _updatePrompt();
+      return;
+    }
+    _fetch(`/api/session/${encodeURIComponent(h.sessionId)}`, "PATCH", { driver: next }).then((result) => {
+      if (!result.ok) {
+        _push(body, `driver-picker PATCH failed [${result.failure_class}] ${result.detail}`, CLS.err);
+        driverSelect.value = prior;  // revert the select on failure
+        return;
+      }
+      h.driverName = next;
+      emit("DRIVER_PATCHED", { session_id: h.sessionId ?? "", driver: next, prior_driver: prior });
+      _push(body, `driver → ${next} (next turn)`, CLS.accent);
+      _updatePrompt();
+    });
+  });
   input.addEventListener("keydown", (e) => {
     if (e.key !== "Enter") return;
     e.preventDefault();
