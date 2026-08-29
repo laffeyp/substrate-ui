@@ -22,12 +22,61 @@ export interface ViewSnapshotBag {
   terminal: unknown;
 }
 
+// Sprint 040 — narrow the wire-shape fields to what the UI actually READS.
+// Every field on RunEvent / RunSummary / RunGraph corresponds to a real
+// UI access site in web/app.ts or web/console/*. Fields the substrate
+// side ships that the UI does not use are absent by design — the
+// F-API-6 boundary means the UI mirrors its own reads, never
+// substrate's full schema. Extend by adding fields at the read site.
+export interface RunEvent {
+  seq: number;
+  kind: string;
+  payload: Record<string, unknown>;
+  t?: number;
+  schema?: string;
+  producer?: { kind?: string; instance?: string } | null;
+}
+
+export interface RunSummary {
+  producers_started: number;
+  producers_completed: number;
+  producers_failed: number;
+  producers_cancelled: number;
+  input_build_failures: number;
+  predicate_quarantines: number;
+  invalid_emissions: number;
+  application_events: Record<string, number>;
+}
+
+export interface RunGraphInstance {
+  instance: string;
+  kind: string;
+  // Firing-anchored lifespan fields substrate emits per Producer instance.
+  // The UI reads them in web/app.ts::renderGraph to draw the timeline bars.
+  fired_seq?: number;
+  started_seq?: number;
+  ended_seq?: number;
+  parent?: string | null;
+  // Substrate ships more; the UI reads only what it uses.
+  [k: string]: unknown;
+}
+
+export interface RunGraph {
+  status?: string;
+  final_reason?: string | null;
+  paused_on?: string | null;
+  live?: boolean;
+  instances?: RunGraphInstance[];
+  // Substrate ships more; the UI reads only what it uses.
+  [k: string]: unknown;
+}
+
 export interface AppState {
   // Current record identity + its loaded body.
   name: string | null;
-  events: unknown[];
-  graph: unknown;
-  summary: unknown;
+  events: RunEvent[];
+  graph: RunGraph;
+  summary: RunSummary;
   manifest: unknown;
   topology: unknown;
   scene: unknown;
@@ -36,7 +85,7 @@ export interface AppState {
   playing: boolean;
   speed: number;
   // Selection + view mode.
-  sel: unknown;
+  sel: number | string | null;
   mode: string;
   graphView: string;
   live: string | null;
@@ -48,14 +97,30 @@ export interface AppState {
   // Piece-G two-view scaffold (sprint 033).
   view: ViewId;
   viewSnap: ViewSnapshotBag;
+  // Delegate crumb — cleared on rail-pick, set on delegate follow. Untyped
+  // in the current app; typed here as the union of what the UI writes.
+  delegateParent?: string | null;
 }
+
+const _EMPTY_SUMMARY: RunSummary = {
+  producers_started: 0,
+  producers_completed: 0,
+  producers_failed: 0,
+  producers_cancelled: 0,
+  input_build_failures: 0,
+  predicate_quarantines: 0,
+  invalid_emissions: 0,
+  application_events: {},
+};
+
+const _EMPTY_GRAPH: RunGraph = {};
 
 export function createAppState(): AppState {
   return {
     name: null,
     events: [],
-    graph: null,
-    summary: null,
+    graph: { ..._EMPTY_GRAPH },
+    summary: { ..._EMPTY_SUMMARY, application_events: {} },
     manifest: null,
     topology: null,
     scene: null,
@@ -72,5 +137,6 @@ export function createAppState(): AppState {
     assayReport: null,
     view: "desktop",
     viewSnap: { desktop: null, terminal: null },
+    delegateParent: null,
   };
 }

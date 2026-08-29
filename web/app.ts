@@ -21,17 +21,26 @@ const _paneCtx = (pane_id: string, extra: Record<string, unknown> = {}) => ({
   ...extra,
 });
 
-const $ = (id) => document.getElementById(id);
+// Sprint 040 (typing pass) — asserting getElementById. Every id in
+// web/index.html the app touches is present in the DOM by the time the
+// module runs (mount order). A missing element is a bug; throwing here
+// is louder + typechecks each call site as non-null.
+const $ = <T extends HTMLElement = HTMLElement>(id: string): T => {
+  const el = document.getElementById(id);
+  if (!el) throw new Error(`#${id} missing from DOM`);
+  return el as T;
+};
 // api() is the single seam every read fetches through. Non-2xx responses AND thrown network errors
 // both emit FETCH_FAILED{endpoint, status_or_error} — one incident tag, one seam. Callers still
 // receive the parsed body (or a rejected promise on network error), so no consumer needs to change.
-const api = (p) => fetch(p).then(async (r) => {
+const api = (p: string): Promise<any> => fetch(p).then(async (r: Response) => {
   if (!r.ok) {
     emit("FETCH_FAILED", { endpoint: p, status_or_error: String(r.status) });
   }
   return r.json();
-}).catch((e) => {
-  emit("FETCH_FAILED", { endpoint: p, status_or_error: String((e && e.message) || e) });
+}).catch((e: unknown) => {
+  const msg = e instanceof Error ? e.message : String(e);
+  emit("FETCH_FAILED", { endpoint: p, status_or_error: msg });
   throw e;
 });
 
@@ -40,7 +49,7 @@ const FAILURE = new Set([
   "substrate.PredicateQuarantined", "substrate.ProducerEmittedInvalidEvent",
 ]);
 
-function category(kind) {
+function category(kind: string): string {
   if (FAILURE.has(kind)) return "failure";
   if (kind === "substrate.ProducerCancelled") return "cancelled";
   if (kind === "substrate.RunFinalised") return "finalise";
@@ -50,12 +59,15 @@ function category(kind) {
   if (kind.startsWith("substrate.")) return "lifecycle";
   return "application";
 }
-const shortKind = (k) => (k.startsWith("substrate.") ? k.slice(10) : k);
-function gist(ev) {
-  const p = ev.payload || {};
+const shortKind = (k: string): string => (k.startsWith("substrate.") ? k.slice(10) : k);
+function gist(ev: RunEvent): string {
+  const p = (ev.payload || {}) as Record<string, unknown>;
   if (ev.kind === "substrate.TriggerFired") return `${p.trigger_id} → ${p.factory}`;
-  if (ev.kind === "substrate.TerminationMatched") return p.decision || "";
-  if (ev.kind === "substrate.ProducerFailed") return (p.producer && p.producer.kind) + ": " + (p.error || "");
+  if (ev.kind === "substrate.TerminationMatched") return String(p.decision || "");
+  if (ev.kind === "substrate.ProducerFailed") {
+    const prod = p.producer as { kind?: string } | undefined;
+    return (prod?.kind ?? "") + ": " + (p.error || "");
+  }
   if (ev.producer && typeof ev.producer === "object") {
     const fields = Object.entries(p).filter(([k]) => !["producer", "raw_payload"].includes(k))
       .slice(0, 3).map(([k, v]) => `${k}=${String(v).slice(0, 22)}`).join(", ");
@@ -65,7 +77,7 @@ function gist(ev) {
   return "";
 }
 
-import { createAppState, type AppState } from "./state";
+import { createAppState, type AppState, type RunEvent, type RunGraphInstance } from "./state";
 import { mountRail, type RailHandle } from "./rail";
 import type { HealthHandle as _HealthHandle, HealthSummary as _HealthSummary } from "./console/health.js";
 import type { TransportHandle as _TransportHandle } from "./console/transport.js";
@@ -79,7 +91,11 @@ type HealthSummary = _HealthSummary;
 // the time dimension alongside the order: seq is the order (no time), t the time (no order). Show
 // t RELATIVE to the run's start (events[0] = RunStarted) — ~0 on the deterministic CI demos (they
 // ARE instant), and the real per-turn gaps on a real-model run.
-function relT(t) { const t0 = STATE.events.length ? STATE.events[0].t : (t || 0); const d = (t || 0) - t0; return "t+" + (d < 10 ? d.toFixed(3) : d.toFixed(1)) + "s"; }
+function relT(t: number | undefined): string {
+  const t0 = STATE.events.length ? (STATE.events[0].t ?? 0) : (t ?? 0);
+  const d = (t ?? 0) - t0;
+  return "t+" + (d < 10 ? d.toFixed(3) : d.toFixed(1)) + "s";
+}
 
 // ---------- record rail ----------
 // Sprint 034b: the rail extracted into `web/rail.ts` as a four-bucket module
@@ -90,7 +106,7 @@ function relT(t) { const t0 = STATE.events.length ? STATE.events[0].t : (t || 0)
 let _rail: RailHandle | null = null;
 const _railOnPopulated = (recs: any[]) => {
   STATE.resumable = new Set(recs.filter((r) => r.resumable).map((r) => r.name));
-  const sel = $("diffsel");
+  const sel = $<HTMLSelectElement>("diffsel");
   if (sel) {
     sel.innerHTML = '<option value="">⇄ diff vs…</option>' +
       recs.map((r) => `<option value="${escapeHtml(r.name)}">${escapeHtml(r.name)}</option>`).join("");
@@ -132,11 +148,11 @@ async function loadAssays() {
   grp.className = "rail-group";
   grp.textContent = `assays · ${assays.length}`;
   rail.insertBefore(grp, rail.firstChild);
-  assays.slice().reverse().forEach((a) => {  // newest visual position just under the group header
+  (assays as AssayIndexRow[]).slice().reverse().forEach((a) => {  // newest visual position just under the group header
     const div = document.createElement("div");
     div.className = "assay";
     div.dataset.name = a.name;
-    const models = a.strong_model ? `${a.strong_model} vs ${(a.weak_models || []).length} weak` : `${a.arms.length} arms`;
+    const models = a.strong_model ? `${a.strong_model} vs ${(a.weak_models || []).length} weak` : `${a.arms?.length ?? 0} arms`;
     div.innerHTML = `<span class="dot"></span><div class="nm">${escapeHtml(a.name)}</div>
       <div class="meta">${escapeHtml(models)} · ${a.n_cells} cells</div>`;
     div.onclick = () => selectAssay(a.name);
@@ -144,13 +160,22 @@ async function loadAssays() {
   });
 }
 
-async function selectAssay(name) {
+// Sprint 040 (typing pass) — shapes the assay-index endpoint returns.
+type AssayIndexRow = {
+  name: string;
+  strong_model?: string | null;
+  weak_models?: string[];
+  arms?: unknown[];
+  n_cells: number;
+};
+
+async function selectAssay(name: string) {
   const prior_name = STATE.assay;
   emit("ASSAY_SELECTED", { name, prior_name });
   _transportHandle?.stopPlay();
   STATE.live = null; STATE.name = null; STATE.mode = "assay"; STATE.assay = name; STATE.assayReport = null;
-  document.querySelectorAll(".rec").forEach((e) => e.classList.remove("sel"));
-  document.querySelectorAll(".assay").forEach((e) => e.classList.toggle("sel", e.dataset.name === name));
+  document.querySelectorAll<HTMLElement>(".rec").forEach((e) => e.classList.remove("sel"));
+  document.querySelectorAll<HTMLElement>(".assay").forEach((e) => e.classList.toggle("sel", e.dataset.name === name));
   $("runname").textContent = name; $("runid").textContent = "";
   $("assaypane").innerHTML = `<div class="col-h">assay · arm matrix — ${escapeHtml(name)}</div><div class="am dim">reading ${escapeHtml(name)}…</div>`;
   render();  // flips the chrome to assay mode immediately
@@ -164,12 +189,11 @@ async function selectAssay(name) {
   render();
 }
 
-const _fmtD = (v) => (v == null ? "—" : (v >= 0 ? "+" : "") + v.toFixed(3));
-const _pct = (v) => Math.round(v * 100) + "%";
-const _pctD = (v) => (v == null ? "—" : (v >= 0 ? "+" : "−") + Math.round(Math.abs(v) * 100) + " pts");
-const _kfmt = (n) => (!n ? "—" : n >= 1000 ? (n / 1000).toFixed(1) + "k" : String(n));
-// a plain word with the precise term tucked behind a hover/click definition (dotted underline = ask me).
-const _term = (word, def) => `<span class="term" data-def="${escapeHtml(def)}">${escapeHtml(word)}</span>`;
+const _fmtD = (v: number | null | undefined): string => (v == null ? "—" : (v >= 0 ? "+" : "") + v.toFixed(3));
+const _pct = (v: number): string => Math.round(v * 100) + "%";
+const _pctD = (v: number | null | undefined): string => (v == null ? "—" : (v >= 0 ? "+" : "−") + Math.round(Math.abs(v) * 100) + " pts");
+const _kfmt = (n: number | null | undefined): string => (!n ? "—" : n >= 1000 ? (n / 1000).toFixed(1) + "k" : String(n));
+const _term = (word: string, def: string): string => `<span class="term" data-def="${escapeHtml(def)}">${escapeHtml(word)}</span>`;
 // the four statistical verdicts, said in plain English (the stats name stays in the hover definition).
 const VERDICT = {
   inferior: ["worse", "We're confident this is behind the bar by a meaningful amount. (stats: 'inferior')"],
@@ -179,7 +203,7 @@ const VERDICT = {
   superior: ["better", "We're confident this is ahead of the bar. (stats: 'superior')"],
 };
 
-function renderAssayFrom(d) {
+function renderAssayFrom(d: any) {
   if (!d) return;
   if (d.error) { $("assaypane").innerHTML = `<div class="col-h">assay · arm matrix</div><div class="am"><span class="dim">${escapeHtml(d.error)}</span></div>`; return; }
   const r = d.report, m = d.meta || {}, e = escapeHtml;
@@ -194,12 +218,12 @@ function renderAssayFrom(d) {
     ${m.config_fp ? `<span>run <span class="fp">${e(m.config_fp)}</span></span>` : ""}
     <span>provenance: <b class="${m._provenance === "tampered" ? "k-failure" : m._provenance === "verified" ? "diff-eq" : "dim"}">${_term(m._provenance || "unverified", "verified = the recorded settings (margin, models) are cryptographically tied to this run, so nobody edited them afterward. tampered = the settings were changed after the run — do NOT trust the verdict. unverified = an older run with no fingerprint to check.")}</b></span>
     <span>every approach actually ran: <b class="${ran ? "diff-eq" : "k-failure"}">${ran ? "yes" : e(r.control_check.state)}</b></span></div>`;
-  const rows = r.arms.map((a) => {
+  const rows = (r.arms as any[]).map((a: any) => {
     const ctl = a.arm === r.control_arm;
     const incomplete = !ctl && a.complete === false;  // didn't grade every problem -> no verdict (the gate)
     const flake = a.pass_at_1 - a.pass_rate;
     let verdict = "—";
-    if (a.equivalence && VERDICT[a.equivalence]) { const [w, def] = VERDICT[a.equivalence]; verdict = `<span class="v-${e(a.equivalence)}">${_term(w, def)}</span>`; }
+    if (a.equivalence && (VERDICT as Record<string, string[]>)[a.equivalence]) { const [w, def] = (VERDICT as Record<string, string[]>)[a.equivalence]; verdict = `<span class="v-${e(a.equivalence)}">${_term(w, def)}</span>`; }
     const gapRel = a.delta_vs_control == null ? "—"
       : `${_pctD(a.delta_vs_control)}${a.p_value != null && a.p_value < 0.05 ? ` ${_term("real", `Unlikely to be luck — the gap is statistically significant (McNemar test, p=${a.p_value.toFixed(3)}).`)}` : a.p_value != null ? ` <span class="dim">(maybe luck)</span>` : ""}`;
     const gapAtt = a.delta_pass_k == null ? "—"
@@ -231,17 +255,17 @@ function renderAssayFrom(d) {
     <span class="ln">• <b>Flakiness</b> is the gap between those two — "−18 pts" means requiring it every time costs 18 points vs. just sometimes. Big = works, but not dependably.</span>
     <span class="ln">The <b>verdict</b> says whether an approach is <span class="v-inferior">worse</span>, <span class="v-equivalent">as good as</span>, or <span class="v-superior">better</span> than the bar. "As good as" is only claimed with <b>enough data to truly rule out a gap</b>; on a small or unfinished run you'll honestly see <span class="v-inconclusive">can't tell yet</span> — that's the truth, not a failure. Hover or click a <span class="term" data-def="Exactly — the dotted words have a plain definition on hover or click.">dotted word</span> for what it means.</span></div>`;
   $("assaypane").innerHTML = `<div class="col-h">assay · arm matrix — ${e(STATE.assay)}</div><div class="am">${prov}${table}${note}</div>`;
-  $("assaypane").querySelectorAll(".term").forEach((t) => (t.onclick = () => t.classList.toggle("pin")));
+  $("assaypane").querySelectorAll<HTMLElement>(".term").forEach((t) => (t.onclick = () => t.classList.toggle("pin")));
 }
 
 // ---------- thin control: launch a bundled topology (records RunStarted, §7.7) ----------
 async function loadTopologies() {
   const topos = await api("/api/topologies");
-  $("launchsel").innerHTML = '<option value="">+ launch a topology…</option>' +
-    topos.map((t) => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join("");
+  $<HTMLSelectElement>("launchsel").innerHTML = '<option value="">+ launch a topology…</option>' +
+    (topos as string[]).map((t: string) => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join("");
 }
 $("launchbtn").onclick = async () => {
-  const t = $("launchsel").value;
+  const t = $<HTMLSelectElement>("launchsel").value;
   if (!t) return;
   emit("TOPOLOGY_LAUNCH_REQUESTED", { topology_name: t });
   $("launchmsg").textContent = `launching ${t}…`;
@@ -259,7 +283,7 @@ $("resumebtn").onclick = async () => {
   const target = STATE.name;
   emit("RESUME_REQUESTED", { record_name: target });
   $("launchmsg").textContent = `resuming ${target}…`;
-  const res = await fetch(`/api/resume?record=${encodeURIComponent(target)}`, { method: "POST" }).then((r) => r.json());
+  const res = await fetch(`/api/resume?record=${encodeURIComponent(target ?? "")}`, { method: "POST" }).then((r) => r.json());
   if (res && res.error) { emit("LAUNCH_REJECTED", { kind: "resume", reason: String(res.error) }); $("launchmsg").textContent = `resume rejected: ${res.error}`; return; }
   if (res && res.name) emit("RESUMED", { record_name: res.name });
   await loadRecords();
@@ -275,7 +299,7 @@ if (_studioLink) _studioLink.addEventListener("click", () => { emit("STUDIO_OPEN
 
 
 // ---------- live-attach: follow a launched run AS it is written (attach/F-PERS-4, read-only) ----------
-async function followLive(name) {
+async function followLive(name: string) {
   STATE.live = name;
   renderVerdict();
   let lastSeq = -1, stalls = 0;
@@ -298,9 +322,9 @@ async function followLive(name) {
     // follow the tail ONLY if the user is already at it; if they scrubbed back to inspect an earlier
     // seq during a live run, don't yank the cursor forward under them every 400ms (ui-frontend-5).
     const tailing = STATE.cursor >= lastSeq;
-    $("seq").max = maxSeq; $("seqmax").textContent = maxSeq;
+    $<HTMLInputElement>("seq").max = String(maxSeq); $("seqmax").textContent = String(maxSeq);
     if (tailing) {
-      $("seq").value = maxSeq; $("seqnow").textContent = maxSeq;
+      $<HTMLInputElement>("seq").value = String(maxSeq); $("seqnow").textContent = String(maxSeq);
       STATE.cursor = maxSeq;  // live tail — the cursor rides the latest event
     }
     // STOP only on a terminal or on server-authoritative DEATH — never on no-growth alone, so a
@@ -327,9 +351,9 @@ async function followLive(name) {
 }
 
 // ---------- diff: first divergence by seq (D-8), §7.1 cited ----------
-async function renderDiff(other) {
+async function renderDiff(other: string) {
   const name = STATE.name;  // capture: a slow diff fetch must not land in a record the user switched to
-  const d = await api(`/api/diff?a=${encodeURIComponent(name)}&b=${encodeURIComponent(other)}`);
+  const d = await api(`/api/diff?a=${encodeURIComponent(name ?? "")}&b=${encodeURIComponent(other)}`);
   if (STATE.name !== name) return;  // switched records while the fetch was in flight (ui-frontend-3)
   if (d.equivalent) {
     $("insp").innerHTML = `<div class="row"><span class="l">diff</span><span><b>${escapeHtml(d.a)}</b> vs <b>${escapeHtml(d.b)}</b></span></div>
@@ -347,7 +371,7 @@ async function renderDiff(other) {
 }
 
 // ---------- select + fetch a record's projections ----------
-async function selectRecord(name) {
+async function selectRecord(name: string) {
   const prior_name = STATE.name;
   emit("RECORD_SELECTED", { name, prior_name });
   emit("RECORD_LOAD_BEGIN", { name });
@@ -355,12 +379,12 @@ async function selectRecord(name) {
   if (STATE.live && STATE.live !== name) STATE.live = null;  // navigating away stops the follow
   STATE.name = name; STATE.sel = null;
   STATE.assay = null; if (STATE.mode === "assay") STATE.mode = "read";  // leaving the assay altitude
-  document.querySelectorAll(".assay").forEach((el) => el.classList.remove("sel"));
+  document.querySelectorAll<HTMLElement>(".assay").forEach((el) => el.classList.remove("sel"));
   // clear the inspector + diff selection from the PRIOR record — else a stale provenance/diff from
   // a different record bleeds into this one (caught by the perceptual capture pass, not the DOM E2E).
   $("insp").innerHTML = `<span class="dim">Select an event or a Producer to trace its provenance.</span>`;
-  const ds = $("diffsel"); if (ds) ds.value = "";
-  document.querySelectorAll(".rec").forEach((e) => e.classList.toggle("sel", e.dataset.name === name));
+  const ds = $<HTMLSelectElement>("diffsel"); if (ds) ds.value = "";
+  document.querySelectorAll<HTMLElement>(".rec").forEach((e) => e.classList.toggle("sel", e.dataset.name === name));
   const [full, graph, summary, topology] = await Promise.all([
     api(`/api/records/${name}`), api(`/api/records/${name}/run_graph`), api(`/api/records/${name}/summary`),
     api(`/api/records/${name}/topology_graph`),
@@ -380,7 +404,7 @@ async function selectRecord(name) {
   updateScene();
   const maxSeq = STATE.events.length ? STATE.events[STATE.events.length - 1].seq : 0;
   STATE.cursor = maxSeq;
-  $("seq").max = maxSeq; $("seq").value = maxSeq; $("seqmax").textContent = maxSeq; $("seqnow").textContent = maxSeq;
+  $<HTMLInputElement>("seq").max = String(maxSeq); $<HTMLInputElement>("seq").value = String(maxSeq); $("seqmax").textContent = String(maxSeq); $("seqnow").textContent = String(maxSeq);
   $("runname").textContent = name;
   $("runid").textContent = (full.events[0]?.payload?.run_id || "").slice(0, 12);
   renderVerdict(); render();
@@ -426,14 +450,14 @@ function render() {
   // health-verdict) is meaningless here, so it's hidden — not repurposed (no second meaning per element).
   const assay = STATE.mode === "assay";
   $("assaypane").style.display = assay ? "" : "none";
-  document.querySelector(".cursor").style.display = assay ? "none" : "flex";
+  document.querySelector<HTMLElement>(".cursor")!.style.display = assay ? "none" : "flex";
   $("health").style.display = assay ? "none" : "flex";
   $("verdict").style.display = assay ? "none" : "";
   if (assay) { $("readpane").style.display = "none"; $("iopane").style.display = "none"; renderAssayFrom(STATE.assayReport); return; }
   $("readpane").style.display = STATE.mode === "io" ? "none" : "";
   $("iopane").style.display = STATE.mode === "io" ? "" : "none";
   $("modeToggle").textContent = STATE.mode === "io" ? "← graph" : "I/O";
-  $("resumebtn").style.display = (STATE.graph && STATE.graph.status === "paused" && STATE.resumable.has(STATE.name)) ? "" : "none";
+  $("resumebtn").style.display = (STATE.graph && STATE.graph.status === "paused" && STATE.resumable.has(STATE.name ?? "")) ? "" : "none";
   if (STATE.mode === "io") renderIO();
   else {
     $("gvRun").classList.toggle("active", STATE.graphView === "run");
@@ -448,19 +472,19 @@ function render() {
 }
 
 // ---------- I/O surface: the seed in, the artifacts out — derived, seq-cited (§7.1) ----------
-function gistPayload(p) {
+function gistPayload(p: any) {
   if (p == null || typeof p !== "object") return String(p ?? "");
   return Object.entries(p).filter(([k]) => k !== "raw_payload").slice(0, 4)
     .map(([k, v]) => `${k}=${String(v).slice(0, 26)}`).join(", ");
 }
 // W2.2: a delegate ToolResult carries {answer, child_root, steps} — the child ran as its OWN record.
 // Return that child_root (an absolute .record path) if this output is a delegated result, else null.
-function _delegateChildRoot(o) {
+function _delegateChildRoot(o: any) {
   const out = o && o.payload && o.payload.output;
   return out && typeof out === "object" && out.child_root ? String(out.child_root) : null;
 }
 // navigate INTO a delegated child record, remembering the parent so a breadcrumb returns.
-async function openDelegateChild(childName, parentName) {
+async function openDelegateChild(childName: string, parentName: string) {
   STATE.delegateParent = parentName;
   await selectRecord(childName);
 }
@@ -475,17 +499,17 @@ async function renderIO() {
     ? `<div class="io-doc"><div class="t">baseline <span class="seq">fixtures · seeds · env</span></div><pre>${escapeHtml(JSON.stringify(io.baseline, null, 1))}</pre></div>` : "";
   const input = seedDoc + baselineDoc;
   // outputs materialize as the cursor reaches the seq that produced them; each cites that seq.
-  const outs = io.outputs.filter((o) => o.seq <= cur);
+  const outs = (io.outputs as any[]).filter((o: any) => o.seq <= cur);
   // W2.2: resolve any delegated-child branches (a ToolResult carrying child_root) to a served record
   // name — servable -> a navigable link; not servable (a real session-workspace child) -> display-only.
   const branch = {};
   for (const o of outs) {
     const cr = _delegateChildRoot(o);
-    if (cr) { const r = await api(`/api/resolve_child?path=${encodeURIComponent(cr)}`); branch[o.seq] = { path: cr, name: r && r.name }; }
+    if (cr) { const r = await api(`/api/resolve_child?path=${encodeURIComponent(cr)}`); (branch as Record<number, {path: string; name?: string}>)[o.seq] = { path: cr, name: r && r.name }; }
   }
-  const artOf = (o) => {
+  const artOf = (o: any): string => {
     let h = `<div class="art" data-seq="${o.seq}" title="inspect this artifact"><span class="sq">seq ${String(o.seq).padStart(3, "0")}</span><span class="kd">${escapeHtml(o.kind)}</span><span class="pl">${escapeHtml(gistPayload(o.payload))}</span></div>`;
-    const b = branch[o.seq];
+    const b = (branch as Record<number, {path?: string; name?: string}>)[o.seq];
     if (b) h += b.name
       ? `<div class="branch" data-child="${escapeHtml(b.name)}" title="open the delegated child record">↳ delegated child: <span class="lk">${escapeHtml(b.name)}</span></div>`
       : `<div class="branch off" title="the child ran in a session workspace not served here">↳ delegated child recorded at ${escapeHtml(b.path)}</div>`;
@@ -500,11 +524,11 @@ async function renderIO() {
   $("iopane").innerHTML = `${crumb}<div class="io-h">input · fed to the run</div>${input}
     <div class="io-h">output · artifacts <span class="r">${outs.length}/${io.outputs.length} produced</span></div>${arts}${fin}`;
   // an output artifact is an application event — clicking it inspects its full content (BACKLOG).
-  $("iopane").querySelectorAll(".art[data-seq]").forEach((el) => (el.onclick = () => inspectEvent(+el.dataset.seq)));
+  $("iopane").querySelectorAll<HTMLElement>(".art[data-seq]").forEach((el) => (el.onclick = () => inspectEvent(+(el.dataset.seq ?? "0"))));
   // W2.2: a delegated-child branch navigates INTO the child record; the crumb returns to the parent.
-  $("iopane").querySelectorAll(".branch[data-child]").forEach((el) => (el.onclick = () => openDelegateChild(el.dataset.child, STATE.name)));
-  const cb = $("iopane").querySelector(".crumb[data-parent]");
-  if (cb) cb.onclick = () => { const p = cb.dataset.parent; STATE.delegateParent = null; selectRecord(p); };
+  $("iopane").querySelectorAll<HTMLElement>(".branch[data-child]").forEach((el) => (el.onclick = () => openDelegateChild(el.dataset.child ?? "", STATE.name ?? "")));
+  const cb = $("iopane").querySelector<HTMLElement>(".crumb[data-parent]");
+  if (cb) cb.onclick = () => { const p = cb.dataset.parent ?? ""; STATE.delegateParent = null; selectRecord(p); };
   emit("IO_RENDERED", _paneCtx("io", {
     input_kind: io.input == null ? "none" : "seed",
     artifact_count: outs.length,
@@ -513,9 +537,9 @@ async function renderIO() {
 
 // ---------- run-as-graph: firing-anchored lifespans + spawn cohorts (§7.3) ----------
 function renderGraph() {
-  const g = STATE.graph, maxSeq = Math.max(1, +$("seq").max), cur = STATE.cursor;
-  const insts = g.instances.filter((i) => i.fired_seq != null && i.fired_seq <= cur);
-  const x = (s) => (Math.min(s, maxSeq) / maxSeq) * 100;
+  const g = STATE.graph, maxSeq = Math.max(1, +$<HTMLInputElement>("seq").max), cur = STATE.cursor;
+  const insts = (g.instances ?? []).filter((i) => i.fired_seq != null && i.fired_seq <= cur);
+  const x = (s: number): number => (Math.min(s, maxSeq) / maxSeq) * 100;
   let html = `<div class="legend">
     <span><i class="leg-q"></i>scheduled (queued)</span><span><i style="background:var(--green)"></i>ran → completed</span>
     <span><i style="background:var(--blue)"></i>running</span><span><i style="background:var(--red)"></i>failed</span>
@@ -526,7 +550,7 @@ function renderGraph() {
   // common-ground/repair/grader/next-speaker share a parent but have 4 trigger_ids); NOT span-overlap
   // (serializes in fast runs). Parent + consecutive-fired_seq bands every shape; initials share parent
   // null (the run's opening cohort). (review #32 finding 1.)
-  const cohorts = []; let run = [];
+  const cohorts: RunGraphInstance[][] = []; let run: RunGraphInstance[] = [];
   insts.forEach((i, k) => {
     if (run.length && i.parent === run[0].parent) run.push(i);
     else { if (run.length > 1) cohorts.push([...run]); run = [i]; }
@@ -539,18 +563,18 @@ function renderGraph() {
     html += `<div class="cohort" style="left:170px;right:0;top:${top}px;height:${h}px"><span class="ct">∥ ${c.length} concurrent</span></div>`;
   });
   insts.forEach((i) => {
-    const left = x(i.fired_seq);
+    const left = x(i.fired_seq!);
     const startedShown = i.started_seq != null && i.started_seq <= cur;
     // QUEUED segment: fired_seq -> started_seq — the Producer is scheduled but WAITING (in the
     // single-writer admission queue) while other Producers' events land. Faint + hatched.
-    const qEnd = startedShown ? i.started_seq : cur;
-    const qbar = `<div class="qbar" style="left:${left}%;width:${Math.max(0.6, x(qEnd) - left)}%" title="${escapeHtml(i.kind)} scheduled (queued) ${i.fired_seq}→${startedShown ? i.started_seq : "…"}"></div>`;
+    const qEnd = startedShown ? i.started_seq! : cur;
+    const qbar = `<div class="qbar" style="left:${left}%;width:${Math.max(0.6, x(qEnd) - left)}%" title="${escapeHtml(i.kind)} scheduled (queued) ${i.fired_seq!}→${startedShown ? i.started_seq! : "…"}"></div>`;
     // RUNNING segment: started_seq -> ended_seq — the actual run, solid status colour. The dot marks
     // the START (the boundary between waiting and running), not "spawned at the end".
     let runbar = "", dot = "";
     if (startedShown) {
       const rEnd = i.ended_seq == null ? cur : Math.min(i.ended_seq, cur);
-      const rLeft = x(i.started_seq), rW = Math.max(1.2, x(rEnd) - rLeft);
+      const rLeft = x(i.started_seq!), rW = Math.max(1.2, x(rEnd) - rLeft);
       runbar = `<div class="bar ${i.status}" style="left:${rLeft}%;width:${rW}%" title="${escapeHtml(i.kind)} ran ${i.started_seq}→${i.ended_seq ?? "…"} ${i.status}"></div>`;
       dot = `<span class="spawn" style="left:${rLeft}%"></span>`;
     }
@@ -560,7 +584,7 @@ function renderGraph() {
   });
   html += `</div>`;
   $("graph").innerHTML = html;
-  $("graph").querySelectorAll(".lane").forEach((l) => (l.onclick = () => inspectProducer(l.dataset.inst)));
+  $("graph").querySelectorAll<HTMLElement>(".lane").forEach((l) => (l.onclick = () => inspectProducer(l.dataset.inst ?? "")));
   emit("GRAPH_RENDERED", _paneCtx("graph_run", {
     instance_count: insts.length,
     cohort_count: cohorts.length,
@@ -573,21 +597,21 @@ function renderGraph() {
 // the same at every cursor position; the run-as-graph is the dynamic counterpart. Reads the
 // /topology_graph projection cached on STATE.topology (fetched in selectRecord). The eight words only.
 function renderTopology() {
-  const t = STATE.topology;
+  const t = STATE.topology as any;
   if (!t) { $("graph").innerHTML = `<div class="topo dim">No topology manifest for this record.</div>`; return; }
   const e = escapeHtml;
-  const prod = t.producers.map((p) =>
+  const prod = (t.producers as any[]).map((p: any) =>
     `<div class="pr"><span class="k">${e(p.kind)}${p.is_initial ? ' <span class="ini">▸ initial</span>' : ""}</span>` +
     `<span class="em">emits ${p.emits.map(e).join(", ")}</span></div>`).join("");
-  const trig = t.triggers.length ? t.triggers.map((tr) =>
+  const trig = t.triggers.length ? (t.triggers as any[]).map((tr: any) =>
     `<div class="tg"><span class="id">${e(tr.id)}</span> <span class="ar">on</span> <span class="on">${tr.on.map(e).join(", ")}</span>` +
     ` <span class="ar">→ starts</span> <span class="st">${e(tr.starts)}</span> <span class="dim">(${e(tr.policy)})</span></div>`).join("")
     : `<div class="dim">none</div>`;
-  const views = t.views.length ? t.views.map((v) => `<div class="vw"><span class="n">${e(v)}</span></div>`).join("") : `<div class="dim">none</div>`;
-  const routes = t.routes.length ? t.routes.map((r) =>
+  const views = t.views.length ? (t.views as any[]).map((v: any) => `<div class="vw"><span class="n">${e(v)}</span></div>`).join("") : `<div class="dim">none</div>`;
+  const routes = t.routes.length ? (t.routes as any[]).map((r: any) =>
     `<div class="rt"><span class="id">${e(r.id)}</span> <span class="ar">→ slot</span> <span class="sl">${e(r.slot)}</span></div>`).join("")
     : `<div class="dim">none (no Routes authored)</div>`;
-  const term = (t.termination || []).length ? t.termination.map((s) => `<div class="tm">${e(s)}</div>`).join("") : `<div class="dim">none</div>`;
+  const term = (t.termination || []).length ? (t.termination as any[]).map((s: any) => `<div class="tm">${e(s)}</div>`).join("") : `<div class="dim">none</div>`;
   $("graph").innerHTML = `<div class="topo">
     <div class="grp">producers (${t.producers.length}) · ▸ initial = on the run's opening cohort</div>${prod}
     <div class="grp">triggers</div>${trig}
@@ -606,10 +630,10 @@ function renderTopology() {
 // before the cursor — so scrubbing animates the generations in lock-step. A lens, never run-state.
 // requires RECTANGULAR rows (every row the same length) so a ragged matrix can't slip in and
 // misrender, and a stricter shape lowers the chance an incidental 2-D numeric payload hijacks the tab.
-const isGrid = (v) => Array.isArray(v) && v.length > 0 && Array.isArray(v[0]) && v[0].length > 0 &&
+const isGrid = (v: unknown): boolean => Array.isArray(v) && v.length > 0 && Array.isArray((v as unknown[])[0]) && ((v as unknown[][])[0]).length > 0 &&
   v.every((r) => Array.isArray(r) && r.length === v[0].length && r.every((c) => typeof c === "number"));
 
-function findGrids(events) {
+function findGrids(events: RunEvent[]) {
   let field = null, kind = null;
   for (const e of events) {
     for (const [k, v] of Object.entries(e.payload || {})) { if (isGrid(v)) { field = k; kind = e.kind; break; } }
@@ -617,7 +641,7 @@ function findGrids(events) {
   }
   if (!field) return null;
   const frames = events.filter((e) => e.kind === kind && isGrid((e.payload || {})[field]))
-    .map((e) => ({
+    .map((e: RunEvent) => ({
       seq: e.seq, grid: e.payload[field],
       scalars: Object.entries(e.payload).filter(([k, v]) => k !== field &&
         (typeof v === "number" || typeof v === "string" || typeof v === "boolean")),
@@ -634,15 +658,15 @@ function updateScene() {
 }
 
 function renderScene() {
-  const sc = STATE.scene;
+  const sc = STATE.scene as any;
   if (!sc) { $("graph").innerHTML = `<div class="scene-cap dim">No renderable shape in this record.</div>`; emit("SCENE_RENDERED", _paneCtx("scene", { generation_seq: -1 })); return; }
   const cur = STATE.cursor;
-  const shown = sc.frames.filter((f) => f.seq <= cur);
+  const shown = (sc.frames as any[]).filter((f: any) => f.seq <= cur);
   const frame = shown.length ? shown[shown.length - 1] : null;
   if (!frame) { $("graph").innerHTML = `<div class="scene-cap dim">No <b>${escapeHtml(sc.kind)}</b> yet at seq ${cur} — scrub forward.</div>`; emit("SCENE_RENDERED", _paneCtx("scene", { generation_seq: -1 })); return; }
   const rows = frame.grid.length, cols = frame.grid[0].length;
-  const cells = frame.grid.map((row) => row.map((c) => `<div class="cell ${c ? "on" : ""}"></div>`).join("")).join("");
-  const scalars = frame.scalars.map(([k, v]) => `<span class="sv">${escapeHtml(k)}=<b>${escapeHtml(v)}</b></span>`).join("");
+  const cells = (frame.grid as unknown[][]).map((row: unknown[]) => row.map((c: unknown) => `<div class="cell ${c ? "on" : ""}"></div>`).join("")).join("");
+  const scalars = (frame.scalars as [string, unknown][]).map(([k, v]) => `<span class="sv">${escapeHtml(k)}=<b>${escapeHtml(v)}</b></span>`).join("");
   $("graph").innerHTML = `
     <div class="scene-cap">scene · <b>${escapeHtml(sc.kind)}.${escapeHtml(sc.field)}</b>
       <span class="dim">seq ${frame.seq} · ${rows}×${cols} · frame ${sc.frames.indexOf(frame) + 1}/${sc.frames.length}</span> ${scalars}</div>
@@ -663,7 +687,7 @@ function renderStream() {
       <span class="kd k-${cat}">${escapeHtml(shortKind(e.kind))}</span>
       <span class="pl">${escapeHtml(prod)} · ${escapeHtml(gist(e))}</span></div>`;
   }).join("");
-  $("stream").querySelectorAll(".ev").forEach((el) => (el.onclick = () => inspectEvent(+el.dataset.seq)));
+  $("stream").querySelectorAll<HTMLElement>(".ev").forEach((el) => (el.onclick = () => inspectEvent(+(el.dataset.seq ?? "0"))));
   emit("STREAM_RENDERED", _paneCtx("stream", { line_count: STATE.events.length }));
 }
 
@@ -673,7 +697,7 @@ function renderHealth() {
 }
 
 // ---------- inspector: raw event (§7.1) / producer provenance ----------
-function inspectEvent(seq) {
+function inspectEvent(seq: number) {
   STATE.sel = seq; renderStream();
   const e = STATE.events.find((x) => x.seq === seq); if (!e) return;
   emit("EVENT_INSPECTED", { seq, kind: e.kind, subject_record: STATE.name });
@@ -692,7 +716,7 @@ function inspectEvent(seq) {
     <div class="row"><span class="l">payload</span></div><pre>${escapeHtml(JSON.stringify(e.payload, null, 1))}</pre>`;
 }
 
-async function inspectProducer(instance) {
+async function inspectProducer(instance: string) {
   const name = STATE.name;  // capture for the same staleness guard as renderDiff (ui-frontend-3)
   const laneInst = (STATE.graph && STATE.graph.instances || []).find((i) => i.instance === instance);
   // Sprint 030: PRODUCER_INSPECTED.kind is typed as substrate_producer_kind — do not lie with
@@ -708,7 +732,7 @@ async function inspectProducer(instance) {
   if (STATE.name !== name) return;  // switched records mid-fetch — don't overwrite the new inspector
   if (!data || data.error) { $("insp").innerHTML = `<span class="dim">No provenance for ${escapeHtml(instance)}.</span>`; return; }
   const x = data.explanation;
-  const chain = data.ancestry.map((a) => `${escapeHtml(a.kind)}[${escapeHtml(a.instance.slice(-4))}]`).join(" → ");
+  const chain = (data.ancestry as any[]).map((a: any) => `${escapeHtml(a.kind)}[${escapeHtml(a.instance.slice(-4))}]`).join(" → ");
   $("insp").innerHTML = `<div class="row"><span class="l">producer</span><span><b>${escapeHtml(x.kind)}</b> <span class="dim">${escapeHtml(x.instance.slice(-6))}</span></span></div>
     <div class="row"><span class="l">cause</span><span>${escapeHtml(x.cause)}${x.trigger_id ? ` <span class="k-trigger">${escapeHtml(x.trigger_id)}</span>` : ""}</span></div>
     <div class="row"><span class="l">at seq</span><span>${x.at_seq}</span></div>
@@ -718,15 +742,15 @@ async function inspectProducer(instance) {
 
 // escape ALL of & < > " ' (quotes too — used in attribute contexts) and coerce to string, so any
 // record-derived identifier (topology / event / producer / trigger name, run id) is inert in the DOM.
-const escapeHtml = (s) =>
-  String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const escapeHtml = (s: unknown): string =>
+  String(s).replace(/[&<>"']/g, (c: string): string => (({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" } as Record<string, string>)[c]));
 
 // ---------- cursor wiring ----------
 // The five view slots the vocab names: run (graph_run), topology, scene, io, read.
 // PANE_SWITCHED fires only on an actual slot change (idempotent clicks are silent by design).
 // Renamed from v0.1 VIEW_SWITCHED to free the word 'View' for substrate's runtime primitive.
 const _currentPane = () => STATE.mode === "io" ? "io" : STATE.graphView === "topo" ? "topology" : STATE.graphView;
-function _switchView(to_pane) {
+function _switchView(to_pane: string) {
   const prior_pane = _currentPane();
   if (prior_pane === to_pane) return false;
   emit("PANE_SWITCHED", { to_pane, prior_pane, subject_record: STATE.name });
@@ -808,7 +832,7 @@ function _toggleView(source: string, preClickFocus: Element | null): void {
   if (toggle) toggle.classList.toggle("on-terminal", next === VIEW_IDS.TERMINAL);
   STATE.view = next;
   emit("VIEW_SWITCHED", { to_view: next, prior_view: prior, subject_record: STATE.name });
-  requestAnimationFrame(() => _restoreView(`view-${next}`, STATE.viewSnap[next]));
+  requestAnimationFrame(() => _restoreView(`view-${next}`, STATE.viewSnap[next] as any));
   // On flip-in to desktop, repaint the active pane so the grader's
   // checkViewSwitched invariant sees a matching {GRAPH,TOPOLOGY,SCENE,IO}_RENDERED
   // within 500ms (the desktop container remounts its inner pane on flip-in per
@@ -849,7 +873,7 @@ import { mountBundlePicker } from "./controls/bundle_picker.js";
 import { mountNewSessionDialog, workspacePickerField, workspaceShapeField, mountWorkspaceShapeBadge } from "./controls/workspace_picker.js";
 import { mountToolsDrawer, toolsField } from "./controls/tools_drawer.js";
 import { isolateField } from "./controls/isolate_toggle.js";
-installObservabilitySurface({ STATE, loadRecords, selectRecord, loadAssays });
+installObservabilitySurface({ STATE, loadRecords, selectRecord: selectRecord as (...a: unknown[]) => unknown, loadAssays });
 const _viewTerminalRoot = document.getElementById("view-terminal");
 if (_viewTerminalRoot) mountTerminal(_viewTerminalRoot as HTMLElement, { driverDefault: "deterministic" });
 // Sprint 036a/b: desktop-view session-header pickers mount in the head; each
