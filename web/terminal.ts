@@ -31,63 +31,16 @@ interface RecordEnvelope {
   t?: number;
 }
 
-interface PendingContext {
-  parent_seq_range: [number, number];
-  kinds: string[];
-}
-
-interface TerminalHandle {
-  el: HTMLElement;
-  sessionId: string | null;
-  driverName: string;
-  bundleSlug: string;
-  eventSource: EventSource | null;
-  turnIndex: number;
-  lastSeq: number;
-  chatting: boolean;
-  endedEmittedFor: string | null;  // session_id last emitted-ended-for; guards double-fire.
-  updatePrompt: () => void;  // Set by mountTerminal; called on session-open/close (CQ-3).
-  updateParamsHint: () => void;  // Sprint 035v — refresh #terminal-params from driverParams.
-  // Sprint 035v: per-session driver params (think/max_tokens/timeout/num_ctx).
-  // Populated on session-open from the POST /api/session ACK's echo (piece B
-  // sprint 032c). Mutated by `/set` slash via PATCH /api/session/<id>
-  // {driver_params}. Fires DRIVER_PARAMS_PATCHED (v0.7.2) on PATCH ACK.
-  driverParams: Record<string, unknown> | null;
-  // Sprint 035v: queued driver_params for the next _openSession call —
-  // used when the user runs `/set` before opening a session.
-  pendingDriverParams: Record<string, unknown> | null;
-  // Sprint 035w: create-time controls queued via /bundle, /tools,
-  // /workspace, /isolate, /name before a session opens. `_openSession`
-  // reads + clears + threads into the POST /api/session body. Workspace,
-  // workspace_shape, and isolate are create-only per product spec §9c
-  // ("SessionStarted.workspace_path frozen at seq 1"); mid-session PATCH
-  // is refused by the daemon. Name is create-only too.
-  pendingCreate: {
-    bundle?: string;
-    workspace?: string;
-    workspace_shape?: string;
-    isolate?: boolean;
-    tools?: string[];
-    name?: string;
-  };
-  // Sprint 035s: /context <lo-hi> [--kind K] stashes here; the next _sendTurn
-  // reads + clears + passes as the POST body's `context` field per piece B
-  // sprint 217e. Mirrors the CLI's `pending_context` dict at cli.py:1114.
-  pendingContext: PendingContext | null;
-  // Sprint 035s: current record name for read-slashes that need it (/inspect,
-  // /narrate, /tail, /cat, /diff). Updated when a session opens (record path
-  // basename) so slashes without an arg default to "the current session's
-  // record."
-  currentRecord: string | null;
-}
-
-const CLS = {
-  in: "tl-in",
-  out: "tl-out",
-  dim: "tl-dim",
-  err: "tl-err",
-  accent: "tl-accent",
-};
+// Sprint 035x — TerminalHandle, PendingContext, CLS, HELP_TEXT extracted
+// to web/terminal/types.ts so slash handlers under web/terminal/slash/
+// can depend on the shared interface without pulling in the whole
+// session machinery. push + formatParamsHint moved to helpers.ts.
+// The 306-line chain-of-`if` _slashRoute became a 3-line delegate to
+// route() (one class per slash under web/terminal/slash/{name}.ts).
+import type { TerminalHandle, PendingContext } from "./terminal/types";
+import { CLS } from "./terminal/types";
+import { push as _push, formatParamsHint as _formatParamsHint } from "./terminal/helpers";
+import { route as _slashRouteImpl } from "./terminal/slash";
 
 function _mkChildren(root: HTMLElement): {
   body: HTMLDivElement;
@@ -165,16 +118,10 @@ function _mkChildren(root: HTMLElement): {
   return { body, input, prompt, header, driverSelect, paramsHint };
 }
 
-// Sprint 035v: format the params hint from a driver_params dict (or null).
-// Unset / undefined keys render as their responder defaults.
-function _formatParamsHint(params: Record<string, unknown> | null | undefined): string {
-  const think = params?.think === true;
-  const rawTokens = params?.max_tokens;
-  const tokens = typeof rawTokens === "number" && rawTokens > 0 ? String(rawTokens) : "∞";
-  const rawTimeout = params?.timeout;
-  const timeout = typeof rawTimeout === "number" && rawTimeout > 0 ? rawTimeout : 300;
-  return `think ${think ? "on" : "off"} · tokens ${tokens} · timeout ${timeout}s`;
-}
+// _formatParamsHint moved to web/terminal/helpers.ts (sprint 035x).
+// The local `_formatParamsHint` name still resolves via the import at
+// the top of the file, so every call site (mountTerminal +
+// updateParamsHint) stays unchanged.
 
 async function _populateDriverPicker(select: HTMLSelectElement, h: TerminalHandle): Promise<void> {
   // Fetch the driver list once at mount. Populate the select; if
@@ -210,13 +157,7 @@ async function _populateDriverPicker(select: HTMLSelectElement, h: TerminalHandl
   h.driverName = initial;
 }
 
-function _push(body: HTMLDivElement, text: string, cls: string): void {
-  const line = document.createElement("div");
-  line.className = `term-line ${cls}`;
-  line.textContent = text;
-  body.appendChild(line);
-  body.scrollTop = body.scrollHeight;
-}
+// _push moved to web/terminal/helpers.ts (sprint 035x); imported at top.
 
 // Sprint 036a: FetchResult + the three helpers extracted to web/lib/fetch.ts
 // so the desktop-view controls share the wire (SPEC-3 from
@@ -491,335 +432,11 @@ async function _endSession(h: TerminalHandle, body: HTMLDivElement, reason: stri
 // on ACK (DRIVER_PATCHED / TOOLS_RESTRICTED / BUNDLE_ATTACHED). Read
 // slashes print result lines only.
 
-const _HELP_TEXT = [
-  "substrate daily-driver terminal — slash inventory:",
-  "  /exit                              end this session cleanly",
-  "  /model <name>                      swap driver mid-session",
-  "  /tools <a,b,c>                     restrict tool suite (empty for unrestricted)",
-  "  /bundle <name>                     attach a bundle (queues if no session; PATCH mid-session)",
-  "  /workspace <path>                  set workspace at create time (immutable per session)",
-  "  /isolate on|off                    Mode 3 nested-child dirs at create time",
-  "  /name <n>                          register the next session under a name",
-  "  /context <lo-hi> [--kind K]        inject a record slice into the next turn",
-  "  /inspect [<record>]                narrate the record's causal beats",
-  "  /narrate [<record>]                same as /inspect",
-  "  /tail [<record>]                   raw events for the record",
-  "  /cat <seq> [<record>]              one event's full payload",
-  "  /list [records|topologies|sessions|applications|bundles]",
-  "  /replay <record>                   assert byte-identical replay (needs daemon endpoint — hint only)",
-  "  /run <application>                 launch a topology as a delegate child",
-  "  /set [think|tokens|timeout] [val]  read or change driver params (think on|off; tokens N (0=∞); timeout N)",
-  "  /diff                              worktree diff for this session's workspace",
-  "  /studio                            open the topology-authoring studio in a new tab",
-  "  /interrupt                         cancel the current turn (Ctrl+C alt)",
-  "  /help                              this list",
-];
-
+// Sprint 035x — thin delegate to the extracted slash router. Every
+// slash's implementation lives under web/terminal/slash/{name}.ts as
+// its own SlashCommand; ./terminal/slash/index.ts assembles them.
 async function _slashRoute(h: TerminalHandle, body: HTMLDivElement, line: string): Promise<boolean> {
-  const stripped = line.trim();
-  if (!stripped.startsWith("/")) return false;
-  const parts = stripped.split(/\s+/);
-  const slash = parts[0];
-  const args = parts.slice(1);
-
-  // /exit — special-cased to route through the existing session-end path
-  // (POST /api/session/<id>/end with source="user_end"). "user_end" is
-  // the substrate canonical string (substrate._daemon.end_session default;
-  // SessionEnded envelope reason). The UI's DRIVER_SESSION_ENDED payload
-  // mirrors the substrate-wire reason — no two-vocabulary redundancy.
-  if (slash === "/exit") {
-    await _endSession(h, body, "user_end");
-    return true;
-  }
-
-  if (slash === "/help") {
-    for (const l of _HELP_TEXT) _push(body, l, CLS.dim);
-    return true;
-  }
-
-  if (slash === "/model") {
-    if (args.length !== 1) { _push(body, "/model requires exactly one driver name", CLS.err); return true; }
-    if (!h.sessionId) { _push(body, "/model needs an active session — send a message first", CLS.err); return true; }
-    const priorDriver = h.driverName;
-    const result = await _fetch(`/api/session/${encodeURIComponent(h.sessionId)}`, "PATCH", { driver: args[0] });
-    if (!result.ok) { _push(body, `/model failed [${result.failure_class}] ${result.detail}`, CLS.err); return true; }
-    h.driverName = args[0];
-    emit("DRIVER_PATCHED", { session_id: h.sessionId, driver: args[0], prior_driver: priorDriver });
-    _push(body, `driver → ${args[0]} (next turn)`, CLS.accent);
-    h.updatePrompt();
-    return true;
-  }
-
-  if (slash === "/tools") {
-    if (args.length === 0) { _push(body, "/tools <comma-list> — restrict tool suite (empty for unrestricted)", CLS.err); return true; }
-    const toolList = args[0].split(",").map((t) => t.trim()).filter((t) => t.length > 0);
-    if (!h.sessionId) {
-      // Sprint 035w: queue for next session-open.
-      h.pendingCreate.tools = toolList;
-      _push(body, `tools → [${toolList.join(", ")}] (queued for next session)`, CLS.dim);
-      return true;
-    }
-    const result = await _fetch(`/api/session/${encodeURIComponent(h.sessionId)}`, "PATCH", { tools: toolList });
-    if (!result.ok) { _push(body, `/tools failed [${result.failure_class}] ${result.detail}`, CLS.err); return true; }
-    emit("TOOLS_RESTRICTED", { session_id: h.sessionId, tools: toolList });
-    _push(body, `tools → [${toolList.join(", ")}] (next turn)`, CLS.accent);
-    return true;
-  }
-
-  if (slash === "/bundle") {
-    if (args.length !== 1) { _push(body, "/bundle <name> — attach bundle mid-session (or before)", CLS.err); return true; }
-    if (!h.sessionId) {
-      // Sprint 035w: queue for next session-open. The daemon validates
-      // the name via load_bundle at POST time; unknown names 400 then.
-      h.pendingCreate.bundle = args[0];
-      _push(body, `bundle → ${args[0]} (queued for next session)`, CLS.dim);
-      return true;
-    }
-    const priorBundle = h.bundleSlug || null;
-    const result = await _fetch<{ bundle?: string | null }>(`/api/session/${encodeURIComponent(h.sessionId)}`, "PATCH", { bundle: args[0] });
-    if (!result.ok) { _push(body, `/bundle failed [${result.failure_class}] ${result.detail}`, CLS.err); return true; }
-    h.bundleSlug = args[0];
-    emit("BUNDLE_ATTACHED", { session_id: h.sessionId, bundle: args[0], prior_bundle: priorBundle });
-    _push(body, `bundle → ${args[0]} (next turn seed re-assembles)`, CLS.accent);
-    return true;
-  }
-
-  if (slash === "/workspace") {
-    // Sprint 035w: queue-only. Product spec §9c: workspace_path frozen
-    // at SessionStarted seq 1; the daemon refuses mid-session PATCH.
-    if (args.length !== 1) { _push(body, "/workspace <path> — set workspace at create time (immutable per session)", CLS.err); return true; }
-    if (h.sessionId) { _push(body, "/workspace: workspace is create-only per spec §9c; end this session (/exit) first", CLS.err); return true; }
-    h.pendingCreate.workspace = args[0];
-    _push(body, `workspace → ${args[0]} (queued for next session)`, CLS.dim);
-    return true;
-  }
-
-  if (slash === "/isolate") {
-    // Sprint 035w: queue-only. Product spec §9c Mode 3 opt-in;
-    // create-time only. Grays out when workspace is a git repo per
-    // 036e; here at the terminal we accept the value without validating
-    // against workspace shape (daemon does that at POST time).
-    if (args.length !== 1 || (args[0] !== "on" && args[0] !== "off")) {
-      _push(body, "/isolate on|off — enable Mode 3 (nested-by-directory child dirs) at create time", CLS.err);
-      return true;
-    }
-    if (h.sessionId) { _push(body, "/isolate: isolate is create-only per spec §9c; end this session (/exit) first", CLS.err); return true; }
-    h.pendingCreate.isolate = args[0] === "on";
-    _push(body, `isolate → ${args[0]} (queued for next session)`, CLS.dim);
-    return true;
-  }
-
-  if (slash === "/name") {
-    // Sprint 035w: queue-only. Register the next session under a name
-    // per product spec §2 --name flag; addressable via delegate
-    // {child_session_name} per §5/§6. Daemon returns 409 on collision;
-    // the ACK path handles it.
-    if (args.length !== 1) { _push(body, "/name <name> — register the next session under a name", CLS.err); return true; }
-    if (h.sessionId) { _push(body, "/name: name registration is at create time; end this session (/exit) first", CLS.err); return true; }
-    h.pendingCreate.name = args[0];
-    _push(body, `name → ${args[0]} (queued for next session)`, CLS.dim);
-    return true;
-  }
-
-  if (slash === "/context") {
-    if (args.length === 0) { _push(body, "/context <lo-hi> [--kind K]", CLS.err); return true; }
-    const range = args[0];
-    if (!range.includes("-")) { _push(body, "/context: range must be <lo>-<hi>", CLS.err); return true; }
-    const [loStr, hiStr] = range.split("-", 2);
-    const lo = parseInt(loStr, 10); const hi = parseInt(hiStr, 10);
-    if (Number.isNaN(lo) || Number.isNaN(hi)) { _push(body, "/context: <lo> and <hi> must be integers", CLS.err); return true; }
-    const kinds: string[] = [];
-    const kIdx = args.indexOf("--kind");
-    if (kIdx >= 0 && kIdx + 1 < args.length) kinds.push(args[kIdx + 1]);
-    h.pendingContext = { parent_seq_range: [lo, hi], kinds };
-    _push(body, `context pending: seq ${lo}..${hi}${kinds.length ? ` kinds=${kinds.join(",")}` : ""}`, CLS.dim);
-    return true;
-  }
-
-  if (slash === "/inspect" || slash === "/narrate") {
-    const recordName = args[0] || h.currentRecord;
-    if (!recordName) { _push(body, `${slash} needs a record name (or open a session first)`, CLS.err); return true; }
-    const result = await _fetchGet<unknown[]>(`/api/records/${encodeURIComponent(recordName)}/narrate`);
-    if (!result.ok) { _push(body, `${slash} failed [${result.failure_class}] ${result.detail}`, CLS.err); return true; }
-    for (const l of result.data) _push(body, String(l), CLS.out);
-    return true;
-  }
-
-  if (slash === "/tail") {
-    const recordName = args[0] || h.currentRecord;
-    if (!recordName) { _push(body, "/tail needs a record name (or open a session first)", CLS.err); return true; }
-    const result = await _fetchGet<Array<{ seq: number; kind: string; t?: number }>>(`/api/records/${encodeURIComponent(recordName)}/events`);
-    if (!result.ok) { _push(body, `/tail failed [${result.failure_class}] ${result.detail}`, CLS.err); return true; }
-    for (const ev of result.data) _push(body, `seq ${String(ev.seq).padStart(3, "0")}  ${ev.kind}`, CLS.out);
-    _push(body, `${result.data.length} event(s)`, CLS.dim);
-    return true;
-  }
-
-  if (slash === "/cat") {
-    if (args.length === 0) { _push(body, "/cat <seq> [<record>]", CLS.err); return true; }
-    const seq = parseInt(args[0], 10);
-    if (Number.isNaN(seq)) { _push(body, "/cat: <seq> must be an integer", CLS.err); return true; }
-    const recordName = args[1] || h.currentRecord;
-    if (!recordName) { _push(body, "/cat needs a record name (or open a session first)", CLS.err); return true; }
-    const result = await _fetchGet<Array<{ seq: number; kind: string; payload: unknown }>>(`/api/records/${encodeURIComponent(recordName)}/events`);
-    if (!result.ok) { _push(body, `/cat failed [${result.failure_class}] ${result.detail}`, CLS.err); return true; }
-    const ev = result.data.find((e) => e.seq === seq);
-    if (!ev) { _push(body, `/cat: no event at seq ${seq}`, CLS.err); return true; }
-    _push(body, `# seq ${ev.seq}  ${ev.kind}`, CLS.dim);
-    for (const l of JSON.stringify(ev.payload, null, 2).split("\n")) _push(body, l, CLS.out);
-    return true;
-  }
-
-  if (slash === "/list") {
-    const target = args[0] || "sessions";
-    if (target === "sessions") {
-      const result = await _fetchGet<{ live?: unknown[]; parked?: unknown[]; ended?: unknown[] }>(`/api/session`);
-      if (!result.ok) { _push(body, `/list sessions failed [${result.failure_class}] ${result.detail}`, CLS.err); return true; }
-      for (const [bucket, entries] of Object.entries(result.data)) {
-        if (!Array.isArray(entries)) continue;
-        for (const e of entries) {
-          const rec = e as { session_id?: string; name?: string | null; driver?: string };
-          _push(body, `[${bucket}] ${rec.name || rec.session_id} (${rec.driver ?? "?"})`, CLS.out);
-        }
-      }
-      return true;
-    }
-    if (target === "records") {
-      const result = await _fetchGet<Array<{ name: string; status?: string; started_at?: string }>>(`/api/records`);
-      if (!result.ok) { _push(body, `/list records failed [${result.failure_class}] ${result.detail}`, CLS.err); return true; }
-      for (const r of result.data) _push(body, `${r.name}${r.status ? `  (${r.status})` : ""}`, CLS.out);
-      _push(body, `${result.data.length} record(s)`, CLS.dim);
-      return true;
-    }
-    if (target === "topologies") {
-      const result = await _fetchGet<string[]>(`/api/topologies`);
-      if (!result.ok) { _push(body, `/list topologies failed [${result.failure_class}] ${result.detail}`, CLS.err); return true; }
-      for (const n of result.data) _push(body, n, CLS.out);
-      return true;
-    }
-    if (target === "applications") {
-      const result = await _fetchGet<Array<{ name: string; description?: string }>>(`/api/applications`);
-      if (!result.ok) { _push(body, `/list applications failed [${result.failure_class}] ${result.detail}`, CLS.err); return true; }
-      for (const a of result.data) _push(body, `${a.name}${a.description ? `  — ${a.description}` : ""}`, CLS.out);
-      return true;
-    }
-    if (target === "bundles") {
-      _push(body, "/list bundles — GET /api/bundles is sprint 034a; not yet shipped", CLS.err);
-      return true;
-    }
-    _push(body, `/list ${target}: unknown target (try records|topologies|sessions|applications|bundles)`, CLS.err);
-    return true;
-  }
-
-  if (slash === "/replay") {
-    _push(body, "/replay — replay-verification is not exposed via the daemon; run `substrate replay <record>` at the CLI", CLS.err);
-    return true;
-  }
-
-  if (slash === "/run") {
-    if (args.length === 0) { _push(body, "/run <application> [args...]", CLS.err); return true; }
-    const app = args[0];
-    // TECH-SPEC §7.6: POST /api/topology/<name>/run accepts {inputs: {...}, await_completion}.
-    // A bare /run with no args passes {} — apps whose manifests have slot
-    // defaults handle it; apps with required slots return 400 with the
-    // list of missing keys.
-    const result = await _fetch<{ run_id?: string; record_root?: string; status?: string; error?: string }>(`/api/topology/${encodeURIComponent(app)}/run`, "POST", { inputs: {}, await_completion: false });
-    if (!result.ok) { _push(body, `/run ${app} failed [${result.failure_class}] ${result.detail}`, CLS.err); return true; }
-    if (result.data.error) { _push(body, `/run ${app}: ${result.data.error}`, CLS.err); return true; }
-    _push(body, `${app} launched → ${result.data.run_id ?? "?"} (${result.data.status ?? "?"})`, CLS.accent);
-    return true;
-  }
-
-  if (slash === "/diff") {
-    if (!h.sessionId) { _push(body, "/diff needs an active session", CLS.err); return true; }
-    // Look up the session's workspace via GET /api/session/<id>.
-    const s = await _fetchGet<{ workspace?: string }>(`/api/session/${encodeURIComponent(h.sessionId)}`);
-    if (!s.ok || !s.data.workspace) { _push(body, "/diff: could not resolve session workspace", CLS.err); return true; }
-    const result = await _fetchGet<{ files?: string[]; diff?: string; error?: string }>(`/api/worktree_diff?path=${encodeURIComponent(s.data.workspace)}`);
-    if (!result.ok) { _push(body, `/diff failed [${result.failure_class}] ${result.detail}`, CLS.err); return true; }
-    if (result.data.error) { _push(body, `/diff: ${result.data.error}`, CLS.err); return true; }
-    const files = result.data.files ?? [];
-    if (!files.length) { _push(body, "no changes in this session's worktree yet", CLS.dim); return true; }
-    _push(body, `${files.length} file(s) changed:`, CLS.dim);
-    for (const f of files) _push(body, `  ${f}`, CLS.out);
-    const diff = result.data.diff ?? "";
-    for (const l of diff.slice(0, 2000).split("\n")) _push(body, l, CLS.out);
-    if (diff.length > 2000) _push(body, `… (truncated; ${diff.length - 2000} more bytes)`, CLS.dim);
-    return true;
-  }
-
-  if (slash === "/studio") {
-    window.open("/studio.html", "_blank");
-    _push(body, "studio opened in a new tab", CLS.dim);
-    return true;
-  }
-
-  if (slash === "/set") {
-    // Sprint 035v — /set think on|off · /set tokens N · /set timeout N.
-    // Reads current params, merges the change, PATCHes /api/session/<id>
-    // {driver_params: <merged>}, emits DRIVER_PARAMS_PATCHED (v0.7.2).
-    // With no args: print the current params. With no session: queue on
-    // pendingDriverParams for the next session-open.
-    if (args.length === 0) {
-      _push(body, `params — ${_formatParamsHint(h.driverParams)}`, CLS.dim);
-      return true;
-    }
-    const key = args[0];
-    const val = args[1];
-    if (!["think", "tokens", "timeout", "num_ctx"].includes(key)) {
-      _push(body, `/set: unknown key '${key}'; try think | tokens | timeout | num_ctx`, CLS.err);
-      return true;
-    }
-    if (val === undefined) {
-      _push(body, `/set ${key} <value>`, CLS.err);
-      return true;
-    }
-    // Map UI key → manifest key + parse value.
-    const mkey = key === "tokens" ? "max_tokens" : key;
-    let parsed: unknown;
-    if (mkey === "think") {
-      if (val !== "on" && val !== "off") { _push(body, "/set think on|off", CLS.err); return true; }
-      parsed = val === "on";
-    } else if (mkey === "max_tokens" || mkey === "num_ctx") {
-      const n = parseInt(val, 10);
-      if (!Number.isFinite(n) || n < 0 || (mkey === "num_ctx" && n < 1)) {
-        _push(body, `/set ${key}: must be a non-negative integer${mkey === "num_ctx" ? " ≥ 1" : ""}`, CLS.err);
-        return true;
-      }
-      parsed = n;
-    } else {
-      const f = parseFloat(val);
-      if (!Number.isFinite(f) || f <= 0) { _push(body, "/set timeout: must be > 0 (seconds)", CLS.err); return true; }
-      parsed = f;
-    }
-    const prior = h.driverParams ? { ...h.driverParams } : {};
-    const next: Record<string, unknown> = { ...prior, [mkey]: parsed };
-    if (!h.sessionId) {
-      h.pendingDriverParams = next;
-      h.driverParams = next;
-      h.updateParamsHint();
-      _push(body, `${key} → ${val} (queued for next session)`, CLS.dim);
-      return true;
-    }
-    const result = await _fetch<{ driver_params?: Record<string, unknown> | null }>(`/api/session/${encodeURIComponent(h.sessionId)}`, "PATCH", { driver_params: next });
-    if (!result.ok) { _push(body, `/set failed [${result.failure_class}] ${result.detail}`, CLS.err); return true; }
-    h.driverParams = result.data.driver_params ?? next;
-    emit("DRIVER_PARAMS_PATCHED", { session_id: h.sessionId, params: next, prior_params: prior });
-    h.updateParamsHint();
-    _push(body, `${key} → ${val} (next turn)`, CLS.accent);
-    return true;
-  }
-
-  if (slash === "/interrupt") {
-    if (!h.sessionId) { _push(body, "/interrupt needs an active session", CLS.err); return true; }
-    const result = await _fetch(`/api/session/${encodeURIComponent(h.sessionId)}/interrupt`, "POST", {});
-    if (!result.ok) { _push(body, `/interrupt failed [${result.failure_class}] ${result.detail}`, CLS.err); return true; }
-    _push(body, "interrupt sent — current turn canceling", CLS.dim);
-    return true;
-  }
-
-  _push(body, `unknown slash: ${slash}. Try /help`, CLS.err);
-  return true;
+  return _slashRouteImpl(line, { h, body });
 }
 
 // _fetch + _fetchGet retired from terminal.ts (sprint 036a); the imports at
@@ -848,7 +465,12 @@ export function mountTerminal(root: HTMLElement, opts: MountTerminalOptions = {}
     pendingCreate: {},
     pendingContext: null,
     currentRecord: null,
+    // Sprint 035x: slash handlers (extracted to web/terminal/slash/)
+    // call h.endSession(reason). Bound below once mountTerminal has
+    // captured `body` in its closure.
+    endSession: async () => undefined,
   };
+  h.endSession = (reason: string) => _endSession(h, body, reason);
   _push(body, "substrate daily-driver terminal · type to talk to the model · /exit to leave", CLS.dim);
   // Stateful prompt updater. Replaces the prior recursive rAF loop (60Hz
   // DOM writes for two events per session lifetime) — CQ-3. Callers invoke
