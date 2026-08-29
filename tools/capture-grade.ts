@@ -77,17 +77,11 @@ const EXPECTED_ORDER: string[] = [
   "CURSOR_MOVED",
   "EVENT_INSPECTED",   // Sprint 023: harness clicks an event row
   "PRODUCER_INSPECTED", // Sprint 023: harness clicks a producer lane
-  "TERMINAL_OPENED",   // Sprint 024: harness opens terminal
-  "MODEL_SELECTED",    // Sprint 024: harness changes picker
-  "PARAMS_CHANGED",    // Sprint 024: think + tokens + timeout
-  "CHAT_ENTERED",      // Sprint 024: harness types `chat`
-  "TURN_SUBMITTED",    // Sprint 025: harness sends one message inside chat
-  "AGENT_LAUNCH_REQUESTED",  // Sprint 025
-  "AGENT_LAUNCHED",    // Sprint 025
-  "AGENT_TURN_STREAMED", // Sprint 025 (deterministic driver returns immediately)
-  "FINAL_ANSWER_RENDERED", // Sprint 025
-  "CHAT_EXITED",       // Sprint 024: harness types `/exit`
-  "TERMINAL_CLOSED",   // Sprint 024: harness closes terminal
+  // (Sprint 037c: eleven dock-tied tags dropped from the expected order —
+  // TERMINAL_OPENED, TERMINAL_CLOSED, MODEL_SELECTED, PARAMS_CHANGED,
+  // CHAT_ENTERED, CHAT_EXITED, TURN_SUBMITTED, AGENT_LAUNCH_REQUESTED,
+  // AGENT_LAUNCHED, AGENT_TURN_STREAMED, FINAL_ANSWER_RENDERED — as the
+  // dock DOM was deleted and the vocab moved to v0.7.3.)
   "TOPOLOGY_LAUNCH_REQUESTED", // Sprint 026
   "TOPOLOGY_LAUNCHED",  // Sprint 026
   "STUDIO_OPENED",      // Sprint 026
@@ -97,27 +91,6 @@ const EXPECTED_ORDER: string[] = [
   "SESSION_ENDED",
 ];
 
-// Vocab invariant #7 verbatim: TURN_SUBMITTED only fires inside a CHAT_ENTERED → CHAT_EXITED
-// window; any TURN_SUBMITTED outside any open window is a fail. Vacuous pass when the capture
-// carries no TURN_SUBMITTED events yet (Sprint 024 lands the check; Sprint 025 exercises it).
-function checkTurnInsideChatWindow(capture: SignalRecord[]): boolean {
-  let inChat = false;
-  let checked = 0;
-  let ok = true;
-  for (const s of capture) {
-    if (s.name === "CHAT_ENTERED") inChat = true;
-    else if (s.name === "CHAT_EXITED") inChat = false;
-    else if (s.name === "TURN_SUBMITTED") {
-      checked += 1;
-      if (!inChat) {
-        console.error(`[grade] TURN_SUBMITTED FAIL: fired outside a CHAT_ENTERED → CHAT_EXITED window at ts=${s.ts}.`);
-        ok = false;
-      }
-    }
-  }
-  console.log(`[grade] TURN_SUBMITTED inside CHAT_ENTERED→CHAT_EXITED: ${checked === 0 ? "VACUOUS PASS" : ok ? `PASS (${checked} checked)` : "FAIL"}.`);
-  return ok;
-}
 
 // Payload-content checks for inspector tags (vocab § invariant #9: inspector references match state).
 function checkInspectorPayloads(capture: SignalRecord[]): boolean {
@@ -152,85 +125,7 @@ type Pairing = {
   note: string;
 };
 
-// Vocab invariant #5: AGENT_LAUNCH_REQUESTED is followed within 1 s by AGENT_LAUNCHED OR
-// LAUNCH_REJECTED{kind: agent}. Sprint 025 wires launches; Sprint 028 wires rejections.
-// Vocab invariant #6: every AGENT_LAUNCHED terminated by EXACTLY ONE FINAL_ANSWER_RENDERED OR
-// POLL_TIMEOUT with matching run_name.
-function checkAgentLaunchTerminate(capture: SignalRecord[]): boolean {
-  let ok = true;
-  // #5: within 1 s of each AGENT_LAUNCH_REQUESTED, one of {AGENT_LAUNCHED, LAUNCH_REJECTED[agent]}.
-  let reqCount = 0;
-  for (let i = 0; i < capture.length; i += 1) {
-    const s = capture[i];
-    if (s.name !== "AGENT_LAUNCH_REQUESTED") continue;
-    reqCount += 1;
-    const limit = s.ts + 1000;
-    let hit = false;
-    for (let j = i + 1; j < capture.length; j += 1) {
-      const b = capture[j];
-      if (b.ts > limit) break;
-      if (b.name === "AGENT_LAUNCHED") { hit = true; break; }
-      if (b.name === "LAUNCH_REJECTED" && b.payload.kind === "agent") { hit = true; break; }
-    }
-    if (!hit) {
-      console.error(`[grade] AGENT_LAUNCH_REQUESTED FAIL: at ts=${s.ts}, no AGENT_LAUNCHED or LAUNCH_REJECTED{kind:agent} within 1000 ms.`);
-      ok = false;
-    }
-  }
-  if (ok && reqCount > 0) console.log(`[grade] pairing (AGENT_LAUNCH_REQUESTED → AGENT_LAUNCHED|LAUNCH_REJECTED): PASS (${reqCount} checked).`);
-  // #6: each AGENT_LAUNCHED terminated by exactly one FINAL_ANSWER_RENDERED or POLL_TIMEOUT with
-  // matching run_name; more than one termination is a fail.
-  let launchCount = 0;
-  for (let i = 0; i < capture.length; i += 1) {
-    const s = capture[i];
-    if (s.name !== "AGENT_LAUNCHED") continue;
-    launchCount += 1;
-    const runName = s.payload.run_name as string;
-    let terms = 0;
-    for (let j = i + 1; j < capture.length; j += 1) {
-      const b = capture[j];
-      if ((b.name === "FINAL_ANSWER_RENDERED" || b.name === "POLL_TIMEOUT") && b.payload.run_name === runName) terms += 1;
-    }
-    if (terms !== 1) {
-      console.error(`[grade] AGENT_LAUNCHED termination FAIL: run_name=${runName}, expected exactly one FINAL_ANSWER_RENDERED or POLL_TIMEOUT termination, saw ${terms}.`);
-      ok = false;
-    }
-  }
-  if (ok && launchCount > 0) console.log(`[grade] pairing (AGENT_LAUNCHED → exactly-one FINAL_ANSWER_RENDERED|POLL_TIMEOUT, matching run_name): PASS (${launchCount} checked).`);
-  return ok;
-}
 
-// Sprint 025 strengthens Sprint 024's chat-window check: CHAT_EXITED.turns_in_conversation must
-// equal the count of TURN_SUBMITTED events inside the CHAT_ENTERED → CHAT_EXITED window that
-// preceded it. Assistant replies double the convo length inside the app, so the app halves the
-// count in its turn_index math; the invariant reads TURN_SUBMITTED count directly.
-function checkChatTurnCount(capture: SignalRecord[]): boolean {
-  let ok = true;
-  let enteredIdx = -1;
-  let turnsInWindow = 0;
-  for (let i = 0; i < capture.length; i += 1) {
-    const s = capture[i];
-    if (s.name === "CHAT_ENTERED") { enteredIdx = i; turnsInWindow = 0; continue; }
-    if (s.name === "TURN_SUBMITTED" && enteredIdx >= 0) turnsInWindow += 1;
-    if (s.name === "CHAT_EXITED" && enteredIdx >= 0) {
-      const declared = s.payload.turns_in_conversation as number;
-      // convo carries {user, assistant, user, assistant, ...} per app.ts sendChatMessage.
-      // TURN_SUBMITTED fires per user turn; CHAT_EXITED.turns_in_conversation is convo.length.
-      // Normal case: user + assistant landed → declared = 2 * turnsInWindow.
-      // In-flight case: user just sent, assistant not landed → declared = 2 * turnsInWindow - 1.
-      // Any other value is drift.
-      const expectNormal = turnsInWindow * 2;
-      const expectInflight = Math.max(0, turnsInWindow * 2 - 1);
-      if (declared !== expectNormal && declared !== expectInflight) {
-        console.error(`[grade] CHAT_EXITED.turns_in_conversation FAIL: declared=${declared}, TURN_SUBMITTED count=${turnsInWindow} (expected ${expectNormal} normal or ${expectInflight} in-flight).`);
-        ok = false;
-      }
-      enteredIdx = -1;
-    }
-  }
-  console.log(`[grade] CHAT_EXITED.turns_in_conversation matches TURN_SUBMITTED count: ${ok ? "PASS" : "FAIL"}.`);
-  return ok;
-}
 
 // Vocab invariant #11 (payload-content, per Layer 7): every incident emits a well-formed payload.
 // FETCH_FAILED needs endpoint + status_or_error (both non-empty strings). LAUNCH_REJECTED needs
@@ -682,11 +577,14 @@ function main(): void {
     ok = checkDriverSessionBookends(capture) && ok;
     ok = checkFrameMonotonic(capture) && ok;
     ok = checkInspectorPayloads(capture) && ok;
-    ok = checkTurnInsideChatWindow(capture) && ok;
-    ok = checkAgentLaunchTerminate(capture) && ok;
+    // (Sprint 037c: checkTurnInsideChatWindow, checkAgentLaunchTerminate,
+    // and checkChatTurnCount all read retired v0.7.2 tags — TURN_SUBMITTED,
+    // CHAT_ENTERED/CHAT_EXITED, AGENT_LAUNCH_REQUESTED, AGENT_LAUNCHED,
+    // FINAL_ANSWER_RENDERED. The dock's chat surface is gone; the checks were
+    // dropped from the console grader. Session-flow bookends still hold via
+    // checkDriverSessionBookends above.)
     ok = checkTopologyLaunch(capture) && ok;
     ok = checkIncidentPayloads(capture) && ok;
-    ok = checkChatTurnCount(capture) && ok;
     for (const p of PAIRINGS) ok = checkPairing(capture, p) && ok;
   }
 

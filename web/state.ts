@@ -17,27 +17,6 @@
 
 import type { ViewId } from "./view-ids";
 
-export interface TerminalParams {
-  think: boolean;
-  tokens: number;
-  timeout: number;
-}
-
-export interface TerminalState {
-  open: boolean;
-  lines: Array<{ cls: string; text: string }>;
-  history: string[];
-  hi: number;
-  params: TerminalParams;
-  chat?: { active: boolean; convo: Array<{ role: string; content: string }> };
-  model?: string;
-  workspace?: string;
-  workspacePath?: string | null;
-  worktree?: string | null;
-  agent?: string | null;
-  agentSeq?: number;
-}
-
 export interface ViewSnapshotBag {
   desktop: unknown;
   terminal: unknown;
@@ -56,8 +35,6 @@ export interface AppState {
   cursor: number;
   playing: boolean;
   speed: number;
-  // Terminal (dock legacy + terminal.ts column both read from here transitionally).
-  term: TerminalState;
   // Selection + view mode.
   sel: unknown;
   mode: string;
@@ -85,7 +62,6 @@ export function createAppState(): AppState {
     cursor: 0,
     playing: false,
     speed: 30,
-    term: { open: false, lines: [], history: [], hi: -1, params: { think: false, tokens: 0, timeout: 300 } },
     sel: null,
     mode: "read",
     graphView: "run",

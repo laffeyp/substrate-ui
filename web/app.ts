@@ -266,108 +266,6 @@ $("resumebtn").onclick = async () => {
 const _studioLink = $("studiolink");
 if (_studioLink) _studioLink.addEventListener("click", () => { emit("STUDIO_OPENED", { via: "header_link" }); });
 
-// ---------- interactive agent: stream the tool-loop conversation into the terminal as it runs ----------
-// The terminal drives a live agent (POST /api/agent) and followLive polls the record; each poll, the
-// NEW conversation events (ToolCall / ToolResult / FinalAnswer) are appended to the terminal dock — so
-// you talk to a tool-using LLM in the terminal AND watch it run in the graph, the same record, two views.
-function _agentLine(e) {
-  const p = e.payload || {};
-  if (e.kind === "ToolCall") return { cls: "accent", text: `→ ${p.tool}(${JSON.stringify(p.args)})` };
-  if (e.kind === "ToolResult")
-    return { cls: p.ok ? "out" : "err", text: "  " + (p.ok ? String(p.output).slice(0, 120) : p.error) };
-  if (e.kind === "FinalAnswer") return { cls: "accent", text: `✓ ${p.text}` };
-  return null;
-}
-function streamAgentTurns() {
-  const fresh = STATE.events.filter(
-    (e) => e.seq > STATE.term.agentSeq &&
-      (e.kind === "ToolCall" || e.kind === "ToolResult" || e.kind === "FinalAnswer"),
-  );
-  if (!fresh.length) return;
-  STATE.term.agentSeq = fresh[fresh.length - 1].seq;
-  termPush(fresh.map(_agentLine).filter(Boolean));
-  if (STATE.term.agent) emit("AGENT_TURN_STREAMED", { run_name: STATE.term.agent, new_events: fresh.length, up_to_seq: STATE.term.agentSeq });
-  // record the model's final reply into the CONVERSATION so the next turn carries it (multi-turn).
-  const fa = fresh.filter((e) => e.kind === "FinalAnswer").pop();
-  if (fa && STATE.term.chat && STATE.term.chat.active) {
-    STATE.term.chat.convo.push({ role: "assistant", content: fa.payload.text });
-    termPush([{ cls: "dim", text: "· your turn — type to continue, `exit` to leave" }]);
-  }
-  if (fa && STATE.term.agent) emit("FINAL_ANSWER_RENDERED", { run_name: STATE.term.agent, answer_length: String((fa.payload && fa.payload.text) || "").length });
-}
-
-// A conversation is a transcript carried across turns: each message you send re-runs the agent seeded
-// with the whole conversation, so the model RESPONDS to you and you keep talking (like Claude Code),
-// while each turn animates in the graph. The driver is any model — an Ollama model, a CLI agent
-// (claude/gemini), or the CI stand-in — chosen in the model picker.
-function renderConvo(convo) {
-  const lines = convo.map((m) => (m.role === "user" ? "User: " : "Assistant: ") + m.content);
-  return (
-    "You are a helpful assistant with tools. Hold a conversation and respond to the LAST user message.\n\n" +
-    lines.join("\n")
-  );
-}
-async function sendChatMessage(text) {
-  if (!text) return;
-  if (!STATE.term.chat) STATE.term.chat = { active: true, convo: [] };
-  STATE.term.chat.convo.push({ role: "user", content: text });
-  const model = STATE.term.model || "deterministic";
-  const transcript = renderConvo(STATE.term.chat.convo);
-  const turn_index = Math.floor(STATE.term.chat.convo.length / 2);
-  emit("TURN_SUBMITTED", { model, task_length: transcript.length, turn_index });
-  const cli = new Set(["claude", "gemini"]);
-  // default to a DEDICATED per-conversation workspace (a session name -> ~/.substrate/sessions/<id>),
-  // never the repo the server launched in. Set once, then every turn shares it. `cwd <path>` overrides
-  // with a real project. The server resolves the bare name and echoes back the absolute path.
-  if (!STATE.term.workspace) STATE.term.workspace = "sess-" + Math.random().toString(36).slice(2, 10);
-  const ws = `&workspace=${encodeURIComponent(STATE.term.workspace)}`;
-  // worktree mode (`worktree <repo>`): the session runs in its own git worktree on a branch, adjacent
-  // to the repo. `workspace` stays the stable SESSION ID (do NOT adopt the resolved path, or the next
-  // turn spawns a new worktree); the server echoes the worktree path + branch, shown once.
-  const wt = STATE.term.worktree ? `&worktree=${encodeURIComponent(STATE.term.worktree)}` : "";
-  const pp = STATE.term.params;
-  const pq = `&think=${pp.think}&max_tokens=${pp.tokens}&timeout=${pp.timeout}`;
-  const qs =
-    (model === "deterministic"
-      ? "model=deterministic"
-      : cli.has(model)
-        ? `model=${model}&task=${encodeURIComponent(transcript)}${pq}`
-        : `model=ollama&name=${encodeURIComponent(model)}&task=${encodeURIComponent(transcript)}${pq}`) + ws + wt;
-  termPush([{ cls: "dim", text: `· ${model} is working…` }]);
-  const pparams = STATE.term.params;
-  emit("AGENT_LAUNCH_REQUESTED", { model, params: { think: pparams.think, tokens: pparams.tokens, timeout: pparams.timeout } });
-  const res = await fetch(`/api/agent?${qs}`, { method: "POST" }).then((r) => r.json()).catch(() => null);
-  // Piece B rewired /api/agent to return session-shaped responses
-  // {ok, session_id, record, status}; the legacy shape was {name, workspace, branch?}.
-  // Accept both — read the "run name" from res.name (legacy) or derive it from
-  // res.session_id (piece-B: the record path's basename is the run name).
-  const runName = res && (res.name || (typeof res.record === "string" ? res.record.split("/").filter(Boolean).slice(-2, -1)[0] || res.session_id : res.session_id));
-  if (!res || res.error || !runName) {
-    emit("LAUNCH_REJECTED", { kind: "agent", reason: String((res && res.error) || "launch failed") });
-    termPush([{ cls: "err", text: "agent: launch failed" }]); return;
-  }
-  emit("AGENT_LAUNCHED", { run_name: runName, model, workspace: res.workspace || STATE.term.workspace || "", ...(res.branch ? { branch: res.branch } : {}) });
-  // show the resolved workspace (+ branch, in worktree mode) once. Only adopt the resolved path as the
-  // session key when NOT in worktree mode — worktree needs the stable session id across turns.
-  if (res.workspace && STATE.term.workspacePath !== res.workspace) {
-    STATE.term.workspacePath = res.workspace;
-    const br = res.branch ? `  (branch ${res.branch})` : "";
-    termPush([{ cls: "dim", text: `· workspace: ${res.workspace}${br}` }]);
-    if (!STATE.term.worktree) STATE.term.workspace = res.workspace;
-  }
-  STATE.term.agent = runName; STATE.term.agentSeq = -1;
-  await selectRecord(runName);
-  followLive(runName); // streams the model's turns into the dock; streamAgentTurns records the reply
-}
-async function loadModels() {
-  const el = $("agentmodel");
-  if (!el) return;
-  const d = await api("/api/models").catch(() => ({ models: ["deterministic"], default: "deterministic" }));
-  el.innerHTML = (d.models || ["deterministic"]).map((m) => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join("");
-  el.value = d.default || "deterministic";
-  STATE.term.model = el.value; // default to the biggest OSS model the server picked
-  el.onchange = () => { _selectModel(el.value); };
-}
 
 // ---------- live-attach: follow a launched run AS it is written (attach/F-PERS-4, read-only) ----------
 async function followLive(name) {
@@ -376,10 +274,11 @@ async function followLive(name) {
   let lastSeq = -1, stalls = 0;
   // POLL_TIMEOUT ceiling: if we've polled for more than the timeout without reaching a terminal or
   // seeing a FINAL_ANSWER_RENDERED, emit the incident once and stop the poll. Ceiling reads from
-  // STATE.term.params.timeout in seconds (default 300 for the CLI, mirrored here); safely bounded
-  // by a hard 10 min so a mis-set timeout can't hang the browser indefinitely.
+  // Fixed 300s ceiling — the dock's per-user timeout knob is gone (sprint 037c),
+  // and the CLI default is 300s; a hard 10 min upper bound survives to keep a
+  // mis-set timeout from hanging the browser.
   const pollStart = performance.now();
-  const ceilingMs = Math.min(600000, Math.max(30000, (STATE.term.params.timeout || 300) * 1000));
+  const ceilingMs = 300000;
   while (STATE.live === name && STATE.name === name) {
     await new Promise((r) => setTimeout(r, 400));
     if (STATE.name !== name || STATE.live !== name) return;  // navigated away / stopped
@@ -388,7 +287,6 @@ async function followLive(name) {
     ]);
     if (STATE.name !== name) return;
     STATE.graph = g; STATE.events = full.events; STATE.summary = summary; updateScene();
-    if (STATE.term.agent === name) streamAgentTurns();  // stream the agent's turns into the terminal
     const maxSeq = STATE.events.length ? STATE.events[STATE.events.length - 1].seq : 0;
     // follow the tail ONLY if the user is already at it; if they scrubbed back to inspect an earlier
     // seq during a live run, don't yank the cursor forward under them every 400ms (ui-frontend-5).
@@ -916,251 +814,6 @@ $("speedsel").onchange = () => {
 };
 $("seq").addEventListener("pointerdown", () => { _stopReason = "scrub_interrupt"; stopPlay(); });  // grabbing the slider pauses (don't fight the user)
 
-// ---------- integrated terminal: a read interface over the same record the GUI shows ----------
-function _narrateLine(e) { const g = gist(e); return shortKind(e.kind) + (g ? " — " + g : ""); }
-function renderTerm() {
-  const body = $("termbody");
-  body.innerHTML = STATE.term.lines.map((l) => `<div class="term-line tl-${l.cls}">${escapeHtml(l.text)}</div>`).join("");
-  body.scrollTop = body.scrollHeight;
-  const chatting = STATE.term.chat && STATE.term.chat.active;
-  $("termprompt").textContent = chatting ? `${STATE.term.model || "deterministic"} ›` : (STATE.name || "substrate") + "$";
-  // the header hint + placeholder tell you the mode: how to talk (idle) vs how to leave (chatting).
-  const hint = $("termhint");
-  if (hint) hint.innerHTML = chatting ? "just type to talk · <b>/exit</b> to leave" : "<b>chat</b> to talk · <b>help</b>";
-  const pv = $("termparams"), pp = STATE.term.params;
-  if (pv) pv.textContent = `think ${pp.think ? "on" : "off"} · tokens ${pp.tokens > 0 ? pp.tokens : "∞"} · timeout ${pp.timeout}s`;
-  const inp = $("terminput");
-  if (inp) inp.placeholder = chatting
-    ? "type your message to the model — /exit to leave"
-    : "type 'chat' to talk to the model — or a command (help)";
-}
-function termPush(lines) { STATE.term.lines.push(...lines); renderTerm(); }
-function termSetOpen(v, trigger) {
-  const wasOpen = STATE.term.open;
-  STATE.term.open = v;
-  $("termdock").style.display = v ? "" : "none";
-  $("termOpen").style.display = v ? "none" : "";
-  $("termToggle").classList.toggle("on", v);
-  if (v) {
-    if (!STATE.term.lines.length) STATE.term.lines.push({ cls: "dim", text: "substrate read interface · reads the same record the GUI shows · type `help`" });
-    renderTerm(); $("terminput").focus();
-  }
-  if (v && !wasOpen) emit("TERMINAL_OPENED", trigger ? { trigger } : {});
-  else if (!v && wasOpen) emit("TERMINAL_CLOSED", {});
-}
-// One helper so the model picker and the `model` command both funnel through a single MODEL_SELECTED
-// emit with prior_model correctly threaded. Returns the effective model (unchanged if next was equal).
-function _selectModel(next) {
-  const prior_model = STATE.term.model || "deterministic";
-  if (next === prior_model) return prior_model;
-  STATE.term.model = next;
-  const el = $("agentmodel"); if (el && el.value !== next) el.value = next;
-  emit("MODEL_SELECTED", { model: next, prior_model });
-  return next;
-}
-// One helper for the three `think`/`tokens`/`timeout` params so PARAMS_CHANGED fires exactly once
-// per real change with prior_value + value + field enum.
-function _setParam(field, value) {
-  const pp = STATE.term.params;
-  const prior_value = pp[field];
-  if (prior_value === value) return;
-  pp[field] = value;
-  emit("PARAMS_CHANGED", { field, value, prior_value });
-}
-async function runTerm(line) {
-  const out = []; const say = (text, cls) => out.push({ text, cls: cls || "out" });
-  let l = line.trim();
-  // In a CONVERSATION, you just TYPE to talk (no `chat` prefix, like Claude Code): plain text is a
-  // message to the model; a /slash prefix runs a command (e.g. /exit, /tail). Outside chat, bare.
-  if (STATE.term.chat && STATE.term.chat.active) {
-    if (l.startsWith("/")) { l = l.slice(1).trim(); }
-    else { if (l) await sendChatMessage(l); return out; }
-  }
-  const parts = l.split(/\s+/), cmd = parts[0];
-  if (!cmd) return out;
-  if (cmd === "clear") { STATE.term.lines = []; return null; }
-  if (cmd === "help" || cmd === "?") {
-    say("substrate — read interface (the same record the GUI shows, typeable)", "dim");
-    [["chat", "start/reconnect a conversation — then just TYPE to talk (watch it run in the graph)"],
-     ["think on|off · tokens N · timeout N", "call parameters for the driver (shown in the head; 0 tokens = uncapped)"],
-     ["/exit", "while chatting: leave (the conversation is kept; `chat` reconnects). /cmd runs a command"],
-     ["model <name>", "pick the driver (or use the picker): an Ollama model, claude, gemini, deterministic"],
-     ["cwd [<path>]", "the working directory the agent operates in (unset = a dedicated session dir)"],
-     ["worktree <repo>", "isolate this session in its own git worktree of a repo (a branch, adjacent)"],
-     ["tail [--kind K] [--producer P] [--all]", "events up to the cursor (seq + t)"],
-     ["cat <seq>", "the full payload of the event at <seq> — the content"],
-     ["ls", "the application output events + their seqs"],
-     ["input", "the run's resolved seed"],
-     ["narrate", "the legible story (causal beats + work)"],
-     ["inspect <kind|instance>", "provenance: cause + ancestry"],
-     ["clear", "clear the terminal"]].forEach(([c, d]) => say("  " + c.padEnd(42) + d));
-    return out;
-  }
-  if (cmd === "model") {
-    if (parts[1]) {
-      _selectModel(parts[1]);
-      say("driver model = " + parts[1], "dim");
-    } else say("driver model = " + (STATE.term.model || "deterministic") + "   (or use the picker)", "dim");
-    return out;
-  }
-  if (cmd === "cwd" || cmd === "workspace") {
-    // the working directory the agent's tools operate in (relative paths + bash resolve there). Set it
-    // BEFORE you talk to pick where the agent works; unset = a dedicated session dir under
-    // ~/.substrate/sessions/ (review C-16: NOT the server's launch dir). Absolute paths still go where named.
-    if (parts[1]) { STATE.term.workspace = parts.slice(1).join(" "); STATE.term.worktree = null; say("workspace = " + STATE.term.workspace, "dim"); }
-    else say("workspace = " + (STATE.term.workspace || "(a dedicated per-session dir)"), "dim");
-    return out;
-  }
-  if (cmd === "worktree" || cmd === "wt") {
-    // git-worktree-per-session: run this session in its OWN worktree of a repo — a branch adjacent to
-    // it, so the agent works isolated from your working tree and its changes are a diffable branch.
-    if (parts[1]) {
-      STATE.term.worktree = parts.slice(1).join(" ");
-      STATE.term.workspacePath = null;  // force the new worktree path/branch to be shown next turn
-      if (!STATE.term.workspace || STATE.term.workspace.startsWith("/")) STATE.term.workspace = "sess-" + Math.random().toString(36).slice(2, 10);
-      say("worktree of " + STATE.term.worktree + " — this session runs on branch substrate/" + STATE.term.workspace, "dim");
-    } else say("worktree = " + (STATE.term.worktree || "(none — `worktree <repo>` to isolate on a branch)"), "dim");
-    return out;
-  }
-  if (cmd === "diff") {
-    // show what the agent changed in this session's worktree (the "show me what it did" half of B).
-    const p = STATE.term.workspacePath || STATE.term.workspace;
-    if (!p || !p.startsWith("/")) { say("no worktree yet — `worktree <repo>`, then talk to the agent", "dim"); return out; }
-    const d = await api(`/api/worktree_diff?path=${encodeURIComponent(p)}`).catch(() => null);
-    if (!d || d.error) { say("diff: " + ((d && d.error) || "unavailable — not a git worktree?"), "err"); return out; }
-    if (!d.files.length) { say("no changes in this session's worktree yet", "dim"); return out; }
-    say(d.files.length + " file(s) changed on branch substrate/" + STATE.term.workspace + ":", "dim");
-    d.files.forEach((f) => say("  " + f));
-    say((d.diff.slice(0, 2000) + (d.diff.length > 2000 ? "\n… (truncated — see the branch)" : "")));
-    return out;
-  }
-  if (cmd === "think") {
-    const v = (parts[1] || "").toLowerCase();
-    if (v === "on" || v === "off") { _setParam("think", v === "on"); say(`think = ${v}`, "dim"); }
-    else say("usage: think on|off", "dim");
-    renderTerm(); return;
-  }
-  if (cmd === "tokens") {
-    const n = parseInt(parts[1], 10);
-    if (Number.isFinite(n) && n >= 0) { _setParam("tokens", n); say(`tokens = ${n > 0 ? n : "uncapped"}`, "dim"); }
-    else say("usage: tokens N   (0 = uncapped)", "dim");
-    renderTerm(); return;
-  }
-  if (cmd === "timeout") {
-    const n = parseFloat(parts[1]);
-    if (Number.isFinite(n) && n > 0) { _setParam("timeout", n); say(`timeout = ${n}s`, "dim"); }
-    else say("usage: timeout SECONDS", "dim");
-    renderTerm(); return;
-  }
-  if (cmd === "params") {
-    const pp = STATE.term.params;
-    say(`think ${pp.think ? "on" : "off"} · tokens ${pp.tokens > 0 ? pp.tokens : "uncapped"} · timeout ${pp.timeout}s`, "dim");
-    return;
-  }
-  if (cmd === "chat" || cmd === "agent") {
-    // enter (or RECONNECT to) the conversation — like opening a terminal session. The conversation
-    // persists across /exit, so `chat` picks up where you left off; then you just TYPE to talk.
-    if (!STATE.term.chat) STATE.term.chat = { active: false, convo: [] };
-    const turns = STATE.term.chat.convo.length;
-    const wasActive = STATE.term.chat.active;
-    STATE.term.chat.active = true;
-    if (!wasActive) emit("CHAT_ENTERED", turns > 0 ? { reconnect: true } : {});
-    const model = STATE.term.model || "deterministic";
-    say(
-      turns
-        ? `reconnected to your conversation with ${model} (${turns} turns) — type to talk · /exit to leave`
-        : `chat with ${model} — just type to talk · /exit to leave · switch model with the picker`,
-      "dim",
-    );
-    return out;
-  }
-  if (cmd === "exit") {
-    if (STATE.term.chat && STATE.term.chat.active) {
-      const turns_in_conversation = STATE.term.chat.convo.length;
-      STATE.term.chat.active = false;
-      emit("CHAT_EXITED", { turns_in_conversation });
-      say("left chat — your conversation is kept; type `chat` to reconnect", "dim");
-    } else say("(not in a conversation — type `chat` to start one)", "dim");
-    return out;
-  }
-  if (!STATE.name) { say("no record selected", "err"); return out; }
-  if (cmd === "tail") {
-    const all = parts.includes("--all");
-    const ki = parts.indexOf("--kind"), pr = parts.indexOf("--producer");
-    const kf = ki >= 0 ? parts[ki + 1] : null, pf = pr >= 0 ? parts[pr + 1] : null;
-    let evs = STATE.events.filter((e) => all || e.seq <= STATE.cursor);
-    if (kf) evs = evs.filter((e) => e.kind === kf || shortKind(e.kind) === kf);
-    if (pf) evs = evs.filter((e) => e.producer && e.producer.kind === pf);
-    if (!evs.length) { say("(no matching events" + (all ? "" : " at or before seq " + STATE.cursor) + ")", "dim"); return out; }
-    evs.forEach((e) => { const cat = category(e.kind); say("seq " + String(e.seq).padStart(3, "0") + "  " + relT(e.t).padEnd(11) + "  " + shortKind(e.kind).padEnd(28) + " " + (e.producer && e.producer.kind ? e.producer.kind : "·"), cat === "failure" ? "err" : cat === "application" ? "accent" : "out"); });
-    say(evs.length + " event(s)" + (all ? "" : " · cursor seq " + STATE.cursor), "dim");
-    return out;
-  }
-  if (cmd === "cat") {
-    const seq = parseInt(parts[1], 10);
-    if (isNaN(seq)) { say("usage: cat <seq>   (see `tail` / `ls`)", "err"); return out; }
-    const e = STATE.events.find((x) => x.seq === seq);
-    if (!e) { say("cat: no event at seq " + seq, "err"); return out; }
-    say("# seq " + e.seq + "  " + relT(e.t) + "  " + shortKind(e.kind) + (e.producer && e.producer.kind ? "  (" + e.producer.kind + ")" : ""), "dim");
-    JSON.stringify(e.payload, null, 2).split("\n").forEach((l) => say(l, category(e.kind) === "failure" ? "err" : "out"));
-    return out;
-  }
-  if (cmd === "ls") {
-    const io = await api(`/api/records/${STATE.name}/io`);
-    const outs = io.outputs || [];
-    if (!outs.length) { say("(no application outputs)", "dim"); return out; }
-    outs.forEach((o) => say("  seq " + String(o.seq).padStart(3, "0") + "  " + o.kind, o.seq <= STATE.cursor ? "out" : "dim"));
-    return out;
-  }
-  if (cmd === "input") {
-    const io = await api(`/api/records/${STATE.name}/io`);
-    if (io.input == null) { say("(no declared seed — this topology is parameterized at build time)", "dim"); return out; }
-    JSON.stringify(io.input, null, 2).split("\n").forEach((l) => say(l, "out"));
-    return out;
-  }
-  if (cmd === "narrate") {
-    const KEEP = new Set(["substrate.RunStarted", "substrate.TriggerFired", "substrate.TerminationMatched", "substrate.RunFinalised"]);
-    const beats = STATE.events.filter((e) => e.seq <= STATE.cursor && (category(e.kind) === "application" || category(e.kind) === "failure" || KEEP.has(e.kind)));
-    if (!beats.length) { say("(nothing at or before seq " + STATE.cursor + ")", "dim"); return out; }
-    beats.forEach((e) => { const cat = category(e.kind); say("seq " + String(e.seq).padStart(3, "0") + "  " + relT(e.t).padEnd(11) + "  " + _narrateLine(e), cat === "failure" ? "err" : cat === "application" ? "accent" : "out"); });
-    return out;
-  }
-  if (cmd === "inspect") {
-    const ref = parts[1];
-    if (!ref) { say("usage: inspect <producer-kind|instance>", "err"); return out; }
-    let instance = ref;
-    const inst = (STATE.graph.instances || []).find((i) => i.instance === ref || i.instance.endsWith(ref) || i.kind === ref);
-    if (inst) instance = inst.instance;
-    const data = await api(`/api/records/${STATE.name}/explain/${instance}`).catch(() => null);
-    if (!data || data.error) { say("inspect: no provenance for '" + ref + "'", "err"); return out; }
-    const x = data.explanation;
-    say(x.kind + "  (" + x.instance + ")", "accent");
-    say("  cause: " + x.cause + (x.trigger_id ? " [" + x.trigger_id + "]" : ""));
-    say("  at seq: " + x.at_seq);
-    say("  ancestry: " + (data.ancestry || []).map((a) => a.kind).join(" → "));
-    return out;
-  }
-  say(cmd + ": command not found — try `help`", "err");
-  return out;
-}
-async function termSubmit() {
-  const line = $("terminput").value;
-  termPush([{ cls: "in", text: $("termprompt").textContent + " " + line }]);
-  if (line.trim()) STATE.term.history.unshift(line);
-  STATE.term.hi = -1; $("terminput").value = "";
-  const res = await runTerm(line);
-  if (res === null) { renderTerm(); return; }
-  if (res && res.length) termPush(res);
-}
-$("terminput").addEventListener("keydown", (e) => {
-  if (e.key === "Enter") { e.preventDefault(); termSubmit(); }
-  else if (e.key === "ArrowUp") { e.preventDefault(); const n = Math.min(STATE.term.history.length - 1, STATE.term.hi + 1); if (n >= 0) { STATE.term.hi = n; $("terminput").value = STATE.term.history[n]; } }
-  else if (e.key === "ArrowDown") { e.preventDefault(); const n = STATE.term.hi - 1; if (n < 0) { STATE.term.hi = -1; $("terminput").value = ""; } else { STATE.term.hi = n; $("terminput").value = STATE.term.history[n]; } }
-});
-$("termOpen").onclick = () => termSetOpen(true, "toggle_button");
-$("termClose").onclick = () => termSetOpen(false);
-$("termToggle").onclick = () => termSetOpen(!STATE.term.open, "toggle_button");
-
 // ---------- two-view scaffold (sprint 033, v0.7.1 refactor) ----------
 // The header toggle + Ctrl+` flip between #view-desktop and #view-terminal.
 // VIEW_SWITCHED{to_view, prior_view, subject_record} carries the flip
@@ -1242,7 +895,6 @@ window.addEventListener("keydown", (e) => {
 });
 
 loadTopologies();
-loadModels();  // populate the terminal's model picker (defaults to the biggest OSS model)
 loadRecords().then(() => loadAssays());  // assays prepend to the rail AFTER the records fill it
 
 // Harness compatibility shim (Sprint 008 — TypeScript conversion, behavior-preserving).
@@ -1256,5 +908,4 @@ import { mountTerminal } from "./terminal.js";
 installObservabilitySurface({ STATE, loadRecords, selectRecord, loadAssays });
 const _viewTerminalRoot = document.getElementById("view-terminal");
 if (_viewTerminalRoot) mountTerminal(_viewTerminalRoot as HTMLElement, { driverDefault: "deterministic" });
-(window as any).loadModels = loadModels;
 (window as any).api = api;  // Sprint 028: harness routes through the wrapped seam to trigger FETCH_FAILED
