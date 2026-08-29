@@ -98,9 +98,28 @@ Eight sprints × ~1 hour each once the discipline is in gear. One
 work-day end-to-end if serial; less with parallel dispatch after the
 first split proves the shape.
 
-## Landing decision
+## Landing decision (superseded)
 
-Dispatch after sprint 038 (piece-G review fold) closes. Extract the
-plan as sprint cards under `sprints/sprint-04Xa..h-web-app-ts-split-*.md`
-once the piece-G fold pass names any additional surfaces the split
-should account for.
+Original plan: dispatch after sprint 038 closes. Superseded 2026-08-29.
+
+## Status 2026-08-29 (fold pass)
+
+Three splits landed AS piece-G work rather than after it:
+
+- **rail** — 034b (`web/rail.ts`, 173 lines).
+- **health** — 040a (`web/console/health.ts`, 129 lines).
+- **transport** — 040b (`web/console/transport.ts`, 136 lines).
+
+Five splits stayed on the plan (graph, stream, inspector, launch, diff)
+and 040c OBSOLETED them as tsc-motivated work: `web/app.ts` typed
+in-place plus the `web/state.ts` widen took the whole-repo tsc count
+from 472 to 0. The Architect ratified the zero-tsc baseline 2026-08-29
+and it now lives at the pre-commit hook + `npm run build` layers.
+
+The five residual splits are pure hygiene: per-module boundaries,
+per-file testability, smaller diffs on future edits. Landing them stays
+worthwhile but is no longer necessary. Cost stays roughly one hour each;
+value drops accordingly. Dispatch when the next surface change against
+one of the five (graph render regression, stream pane rebuild,
+inspector protocol growth, launch bar redesign, diff surface addition)
+makes the extraction pay for itself.
