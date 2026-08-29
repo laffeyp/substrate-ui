@@ -26,7 +26,8 @@
     "grade:terminal-session": "npx tsx tools/capture-grade.ts captures/sprint-035/terminal-session.jsonl --kind session",
     "check:tsc-new": "npx tsc --noEmit 2>&1 | grep -E '(view-ids|observability|state|terminal|capture-grade|check-vocabulary-parity|sync-substrate-vocab)\\.ts' && exit 1 || exit 0",
     "capture:terminal-slash-router": "node harness/capture_terminal_slash_router.js",
-    "signals": "npm run check:vocab-parity && npm run check:tsc-new && npm run capture:signals && npm run grade:signals && npm run capture:studio-signals && npm run grade:studio-signals && npm run capture:view-toggle && npm run capture:terminal-session && npm run grade:terminal-session && npm run capture:terminal-slash-router",
+    "capture:terminal-driver-picker": "node harness/capture_terminal_driver_picker.js",
+    "signals": "npm run check:vocab-parity && npm run check:tsc-new && npm run capture:signals && npm run grade:signals && npm run capture:studio-signals && npm run grade:studio-signals && npm run capture:view-toggle && npm run capture:terminal-session && npm run grade:terminal-session && npm run capture:terminal-slash-router && npm run capture:terminal-driver-picker",
     "sync:substrate-vocab": "npx tsx tools/sync-substrate-vocab.ts",
     "e2e:terminal-v1": "node _deprecated/terminal-v1-round1/harness/e2e_terminal_v1.js",
     "capture:terminal-v1": "node _deprecated/terminal-v1-round1/harness/capture_terminal_v1.js"
