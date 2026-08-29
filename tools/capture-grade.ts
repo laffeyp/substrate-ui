@@ -368,7 +368,18 @@ const VIEW_TO_PANE_ID: Record<string, string> = {
   topology: "topology",
   scene: "scene",
   io: "io",
+  // Sprint 033: view-scope switches between the two piece-G view containers.
+  // These are containers, not inspected panes — they carry no VIEW_TO_PANE_TAG
+  // entry because the flip itself is the observable event; the desktop view's
+  // downstream pane renders continue to fire from inside #view-desktop and
+  // grade under their existing entries.
+  terminal: "terminal",
+  desktop: "desktop",
 };
+// View-scope to_pane values whose PANE_SWITCHED does NOT require a downstream
+// pane-render pairing. The container flip is the observation; no separate paint
+// is contracted.
+const VIEW_SCOPE_TO_PANE = new Set(["terminal", "desktop"]);
 
 function checkViewSwitchedRender(capture: SignalRecord[]): boolean {
   const paneTags = new Set(Object.values(VIEW_TO_PANE_TAG));
@@ -380,6 +391,10 @@ function checkViewSwitchedRender(capture: SignalRecord[]): boolean {
     checked += 1;
     const toPane = sw.payload.to_pane as string;
     const subject = sw.payload.subject_record as string;
+    // Sprint 033: view-scope switches (terminal/desktop) name a container flip;
+    // no downstream pane-render is contracted. The switch itself is the
+    // observation. Skip the pairing check for these, still count them checked.
+    if (VIEW_SCOPE_TO_PANE.has(toPane)) continue;
     const expectedTag = VIEW_TO_PANE_TAG[toPane];
     const expectedPaneId = VIEW_TO_PANE_ID[toPane];
     if (!expectedTag) {
