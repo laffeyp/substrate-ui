@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 032a
-status: pending
+status: closed
 phase: 5
 pass_kind: architecture
 ---
