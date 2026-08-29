@@ -906,21 +906,27 @@ loadRecords().then(() => loadAssays());  // assays prepend to the rail AFTER the
 import { installObservabilitySurface } from "./observability.js";
 import { mountTerminal } from "./terminal.js";
 import { mountDriverPicker } from "./controls/driver_picker.js";
+import { mountBundlePicker } from "./controls/bundle_picker.js";
 installObservabilitySurface({ STATE, loadRecords, selectRecord, loadAssays });
 const _viewTerminalRoot = document.getElementById("view-terminal");
 if (_viewTerminalRoot) mountTerminal(_viewTerminalRoot as HTMLElement, { driverDefault: "deterministic" });
-// Sprint 036a: desktop-view driver picker mounts in the head; refresh() runs
-// on every DRIVER_SESSION_STARTED / DRIVER_SESSION_ENDED so binding tracks
-// the terminal's session lifecycle without polling.
+// Sprint 036a/b: desktop-view session-header pickers mount in the head; each
+// refreshes on every substrate:session-changed CustomEvent so their binding
+// tracks the terminal's session lifecycle without polling.
 const _driverPickerRoot = document.getElementById("driver-picker");
 const _driverPickerHandle = _driverPickerRoot
   ? mountDriverPicker(_driverPickerRoot as HTMLElement)
   : null;
-if (_driverPickerHandle) {
-  window.addEventListener("substrate:session-changed", (ev: Event) => {
-    const detail = (ev as CustomEvent).detail as { session_id?: string } | undefined;
-    void _driverPickerHandle.refresh(detail?.session_id ?? null);
-  });
-  (window as any).driverPicker = _driverPickerHandle;
-}
+const _bundlePickerRoot = document.getElementById("bundle-picker");
+const _bundlePickerHandle = _bundlePickerRoot
+  ? mountBundlePicker(_bundlePickerRoot as HTMLElement)
+  : null;
+window.addEventListener("substrate:session-changed", (ev: Event) => {
+  const detail = (ev as CustomEvent).detail as { session_id?: string } | undefined;
+  const sid = detail?.session_id ?? null;
+  if (_driverPickerHandle) void _driverPickerHandle.refresh(sid);
+  if (_bundlePickerHandle) void _bundlePickerHandle.refresh(sid);
+});
+if (_driverPickerHandle) (window as any).driverPicker = _driverPickerHandle;
+if (_bundlePickerHandle) (window as any).bundlePicker = _bundlePickerHandle;
 (window as any).api = api;  // Sprint 028: harness routes through the wrapped seam to trigger FETCH_FAILED
