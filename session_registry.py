@@ -482,6 +482,53 @@ class SessionRegistry:
             self._manifests[session_id] = updated
         return updated
 
+    def set_bundle(self, session_id: str, bundle: str | None) -> SessionManifest:
+        """Change the bundle attached to a session mid-flight. In-memory
+        catalog and manifest.json both update atomically. The next
+        `Runtime.resume` builds `session_topology` with the new bundle's
+        assembled seed — mid-turn swaps are not attempted (the in-flight
+        turn, if any, completes on its prior seed; the next turn's
+        UserMessage.assembled_prompt carries the new seed prefix).
+
+        Sprint 032b (piece-G prereq for sprint 036b's mid-session bundle
+        picker): lifts `bundle` from `_NOT_YET` to `_PATCHABLE` in
+        `substrate-ui/server.py::_session_patch`. Bundle name is validated
+        by attempting `load_bundle(name)`; an unknown bundle raises
+        `BundleNotFoundError` (surfaced as 400 at the daemon boundary).
+        `None` clears any attached bundle (reverts to the shipped default
+        the next turn assembles).
+
+        No `TranscriptCompacted` envelope is written to the record — no
+        compaction happens; only the seed shape changes at the next turn.
+        Emitting a compaction signal for a non-compaction event would be
+        false instrumentation. The UI's `BUNDLE_ATTACHED{session_id,
+        bundle, prior_bundle}` (vocab v0.7) is the observable event; the
+        record shows the effect at next turn via `UserMessage.assembled_prompt`.
+
+        Same lock discipline as `set_driver` (red-team finding 4, 2026-08-26).
+
+        Raises `KeyError` on unknown session_id;
+        `substrate.bundles.BundleNotFoundError` on unknown bundle name.
+        """
+        if session_id not in self._manifests:
+            raise KeyError(f"unknown session_id {session_id!r}")
+        if bundle is not None:
+            # Validate against the substrate bundle catalog. An unknown name
+            # fails here, not silently at next-turn seed assembly.
+            from substrate.bundles import load_bundle
+            load_bundle(bundle)
+        threading_lock = self._turn_threading_locks.setdefault(session_id, threading.Lock())
+        with threading_lock:
+            manifest = self._manifests.get(session_id)
+            if manifest is None:
+                raise KeyError(f"unknown session_id {session_id!r}")
+            updated = _replace(manifest, bundle=bundle)
+            _atomic_write_json(
+                self._base / session_id / _MANIFEST_FILENAME, _manifest_to_dict(updated)
+            )
+            self._manifests[session_id] = updated
+        return updated
+
     def set_driver(self, session_id: str, driver: str) -> SessionManifest:
         """Change the driver for a session. In-memory catalog and manifest.json
         both update atomically. The next `Runtime.resume` builds
