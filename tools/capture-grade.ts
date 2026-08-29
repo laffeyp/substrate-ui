@@ -30,6 +30,18 @@ type SignalRecord = {
 
 // Sprint 032: EXPECTED_ORDER is now per-fixture-kind. --kind console (default) grades the console
 // fixture; --kind studio grades the studio fixture written by capture_studio_signals.js.
+// Sprint 035: session fixture — a narrow session-flow capture written by
+// harness/capture_terminal_session.js. The four driver_session tags in the
+// order they must fire, plus the two view-scope framers.
+const EXPECTED_ORDER_SESSION: string[] = [
+  "SESSION_INIT",
+  "VIEW_SWITCHED",
+  "DRIVER_SESSION_STARTED",
+  "USER_MESSAGE_INJECTED",
+  "PARK_LANDED",
+  "DRIVER_SESSION_ENDED",
+];
+
 const EXPECTED_ORDER_STUDIO: string[] = [
   "SESSION_INIT",
   "CANVAS_TOGGLED",
@@ -421,6 +433,43 @@ function checkViewSwitchedRender(capture: SignalRecord[]): boolean {
   return ok;
 }
 
+// Sprint 035: driver-session bookend pairing. Every DRIVER_SESSION_STARTED
+// with session_id S is followed by exactly one DRIVER_SESSION_ENDED with the
+// same session_id within the capture; every USER_MESSAGE_INJECTED{session_id
+// S, turn_index N} is followed by exactly one PARK_LANDED with the same
+// {S, N}. If DRIVER_SESSION_STARTED never fires, the check is vacuously PASS
+// (a small fixture may not open a session).
+function checkDriverSessionBookends(capture: SignalRecord[]): boolean {
+  let ok = true;
+  const starts = capture.filter((s) => s.name === "DRIVER_SESSION_STARTED");
+  for (const start of starts) {
+    const sid = start.payload.session_id as string;
+    const ended = capture.find((s) => s.name === "DRIVER_SESSION_ENDED" && s.payload.session_id === sid && s.ts >= start.ts);
+    if (!ended) {
+      console.error(`[grade] DRIVER_SESSION_BOOKEND FAIL: DRIVER_SESSION_STARTED{session_id=${sid}} has no matching DRIVER_SESSION_ENDED in the capture.`);
+      ok = false;
+    }
+  }
+  const injects = capture.filter((s) => s.name === "USER_MESSAGE_INJECTED");
+  for (const inj of injects) {
+    const sid = inj.payload.session_id as string;
+    const turnIdx = inj.payload.turn_index as number;
+    const parked = capture.find((s) => s.name === "PARK_LANDED"
+      && s.payload.session_id === sid
+      && s.payload.turn_index === turnIdx
+      && s.ts >= inj.ts);
+    if (!parked) {
+      console.error(`[grade] DRIVER_SESSION_BOOKEND FAIL: USER_MESSAGE_INJECTED{session_id=${sid}, turn_index=${turnIdx}} has no matching PARK_LANDED.`);
+      ok = false;
+    }
+  }
+  if (ok) {
+    const label = starts.length ? `${starts.length} session(s), ${injects.length} turn(s)` : "no sessions in fixture (vacuous)";
+    console.log(`[grade] driver-session bookends: PASS (${label}).`);
+  }
+  return ok;
+}
+
 // v0.7.1 TAG_SPLIT: VIEW_SWITCHED{to_view, prior_view, subject_record} carries
 // view-scope container flips (desktop ⇄ terminal). Closed set enforced against
 // VIEW_SWITCHED_VIEWS. Desktop side re-mounts an inner pane on flip-in and the
@@ -600,10 +649,10 @@ function main(): void {
   let path: string | null = null;
   let kind: "console" | "studio" = "console";
   for (let i = 0; i < args.length; i += 1) {
-    if (args[i] === "--kind" && args[i + 1]) { kind = args[i + 1] as "console" | "studio"; i += 1; }
+    if (args[i] === "--kind" && args[i + 1]) { kind = args[i + 1] as "console" | "studio" | "session"; i += 1; }
     else if (!path) path = args[i];
   }
-  if (!path) { console.error("[grade] usage: capture-grade.ts <path-to-capture.jsonl> [--kind console|studio]"); process.exit(2); }
+  if (!path) { console.error("[grade] usage: capture-grade.ts <path-to-capture.jsonl> [--kind console|studio|session]"); process.exit(2); }
 
   const capture = loadJsonl(path);
   console.log(`[grade] loaded ${capture.length} signals from ${path} (kind=${kind})`);
@@ -614,11 +663,21 @@ function main(): void {
   if (kind === "studio") {
     ok = containsInOrder(capture, EXPECTED_ORDER_STUDIO) && ok;
     ok = checkStudioPairings(capture) && ok;
+  } else if (kind === "session") {
+    // Sprint 035: session fixture is a narrow driver-session flow. Grade the
+    // bookend pairing, the closed-set + view-scope invariants that framed
+    // the flow, and the driver-session expected order. Skip the console-flow
+    // checks (record-select round-trip, agent-launch, inspector) — a
+    // session fixture never exercises them.
+    ok = containsInOrder(capture, EXPECTED_ORDER_SESSION) && ok;
+    ok = checkViewSwitched(capture) && ok;
+    ok = checkDriverSessionBookends(capture) && ok;
   } else {
     ok = containsInOrder(capture, EXPECTED_ORDER) && ok;
     ok = checkRecordSelectedLoaded(capture) && ok;
     ok = checkViewSwitchedRender(capture) && ok;
     ok = checkViewSwitched(capture) && ok;
+    ok = checkDriverSessionBookends(capture) && ok;
     ok = checkFrameMonotonic(capture) && ok;
     ok = checkInspectorPayloads(capture) && ok;
     ok = checkTurnInsideChatWindow(capture) && ok;

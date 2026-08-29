@@ -363,11 +363,16 @@ async function sendChatMessage(text) {
   const pparams = STATE.term.params;
   emit("AGENT_LAUNCH_REQUESTED", { model, params: { think: pparams.think, tokens: pparams.tokens, timeout: pparams.timeout } });
   const res = await fetch(`/api/agent?${qs}`, { method: "POST" }).then((r) => r.json()).catch(() => null);
-  if (!res || res.error || !res.name) {
+  // Piece B rewired /api/agent to return session-shaped responses
+  // {ok, session_id, record, status}; the legacy shape was {name, workspace, branch?}.
+  // Accept both — read the "run name" from res.name (legacy) or derive it from
+  // res.session_id (piece-B: the record path's basename is the run name).
+  const runName = res && (res.name || (typeof res.record === "string" ? res.record.split("/").filter(Boolean).slice(-2, -1)[0] || res.session_id : res.session_id));
+  if (!res || res.error || !runName) {
     emit("LAUNCH_REJECTED", { kind: "agent", reason: String((res && res.error) || "launch failed") });
     termPush([{ cls: "err", text: "agent: launch failed" }]); return;
   }
-  emit("AGENT_LAUNCHED", { run_name: res.name, model, workspace: res.workspace || STATE.term.workspace || "", ...(res.branch ? { branch: res.branch } : {}) });
+  emit("AGENT_LAUNCHED", { run_name: runName, model, workspace: res.workspace || STATE.term.workspace || "", ...(res.branch ? { branch: res.branch } : {}) });
   // show the resolved workspace (+ branch, in worktree mode) once. Only adopt the resolved path as the
   // session key when NOT in worktree mode — worktree needs the stable session id across turns.
   if (res.workspace && STATE.term.workspacePath !== res.workspace) {
@@ -376,9 +381,9 @@ async function sendChatMessage(text) {
     termPush([{ cls: "dim", text: `· workspace: ${res.workspace}${br}` }]);
     if (!STATE.term.worktree) STATE.term.workspace = res.workspace;
   }
-  STATE.term.agent = res.name; STATE.term.agentSeq = -1;
-  await selectRecord(res.name);
-  followLive(res.name); // streams the model's turns into the dock; streamAgentTurns records the reply
+  STATE.term.agent = runName; STATE.term.agentSeq = -1;
+  await selectRecord(runName);
+  followLive(runName); // streams the model's turns into the dock; streamAgentTurns records the reply
 }
 async function loadModels() {
   const el = $("agentmodel");
@@ -1272,6 +1277,9 @@ loadRecords().then(() => loadAssays());  // assays prepend to the rail AFTER the
 // and `page.evaluate(() => STATE.events)`. Rebind on window so the harness keeps working
 // unchanged; a future sprint can migrate the harness to explicit imports.
 import { installObservabilitySurface } from "./observability.js";
+import { mountTerminal } from "./terminal.js";
 installObservabilitySurface({ STATE, loadRecords, selectRecord, loadAssays });
+const _viewTerminalRoot = document.getElementById("view-terminal");
+if (_viewTerminalRoot) mountTerminal(_viewTerminalRoot as HTMLElement, { driverDefault: "deterministic" });
 (window as any).loadModels = loadModels;
 (window as any).api = api;  // Sprint 028: harness routes through the wrapped seam to trigger FETCH_FAILED

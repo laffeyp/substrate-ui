@@ -620,18 +620,35 @@ _CT = {
 _SAFE_RECORD_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 
 
+_SESSION_ID_RE = re.compile(r"^s_[0-9a-f]{8,32}$")
+
+
 def _record_path(name: str) -> Path | None:
     """Resolve a record name to a path: a generated/live record under runs/ first, else a bundled
-    demo record. The production seam points runs/ at a live records directory. A record name is a
-    flat identifier — reject anything with a path separator or `..` so a request cannot read outside
-    runs/ (a traversal like `../../etc/x`)."""
+    demo record, else a session record under `_SESSIONS_BASE/<session_id>/record`. The production
+    seam points runs/ at a live records directory. A record name is a flat identifier — reject
+    anything with a path separator or `..` so a request cannot read outside its resolved root
+    (a traversal like `../../etc/x`).
+
+    Piece-G sprint 035 adds the session-records branch: `/api/agent` and `/api/session` land
+    records under `~/.substrate/sessions/<session_id>/record`, and legacy readers (the dock's
+    `followLive` polling loop) expect to reach them by name through `/api/records/<name>`. The
+    session-id shape (`s_[0-9a-f]{8,32}`) is checked against `_SESSION_ID_RE`; only names matching
+    that shape can resolve to the sessions tree, so runs/ and bundled records still win first.
+    """
     if not _SAFE_RECORD_NAME.match(name) or ".." in name:
         return None
     local = RUNS / f"{name}.record"
     if local.exists():
         return local
     path = bundled.record_path(name)
-    return path if path.exists() else None
+    if path.exists():
+        return path
+    if _SESSION_ID_RE.match(name):
+        session_record = _SESSIONS_BASE / name / "record"
+        if session_record.exists():
+            return session_record
+    return None
 
 
 def _record_names() -> list[str]:
