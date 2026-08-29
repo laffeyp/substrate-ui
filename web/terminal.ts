@@ -761,6 +761,42 @@ export function mountTerminal(root: HTMLElement, opts: MountTerminalOptions = {}
       _updatePrompt();
     });
   });
+  // Sprint 035u — Ctrl+C interrupts the current turn (product spec §2).
+  // Intercepts only when the terminal input has focus AND the input has
+  // no selection, so a user who selected text in the input to copy still
+  // gets browser-native copy behavior. Ctrl+C over the terminal body
+  // (selecting transcript text) is not intercepted here; the browser's
+  // default copy fires.
+  input.addEventListener("keydown", (e) => {
+    if (e.key !== "c" || !(e.ctrlKey || e.metaKey)) return;
+    const inp = input;
+    const hasSelection = typeof inp.selectionStart === "number"
+      && typeof inp.selectionEnd === "number"
+      && inp.selectionStart !== inp.selectionEnd;
+    if (hasSelection) return;  // let the browser copy the selection
+    e.preventDefault();
+    if (!h.sessionId) {
+      _push(body, "(no session in flight; type /exit to close or open one with a message)", CLS.dim);
+      return;
+    }
+    const sid = h.sessionId;
+    _fetch<{ interrupted?: boolean; landed?: boolean }>(`/api/session/${encodeURIComponent(sid)}/interrupt`, "POST", {}).then((result) => {
+      if (!result.ok) {
+        _push(body, `interrupt failed [${result.failure_class}] ${result.detail}`, CLS.err);
+        return;
+      }
+      // Per piece B sprint 217d: an interrupt on an idle session returns
+      // {interrupted: false, landed: false}; on a live turn returns
+      // {interrupted: true, landed: bool} where `landed` reflects whether
+      // the ProducerCancelled envelope reached the record in time.
+      if (result.data.interrupted) {
+        const lands = result.data.landed ? "landed" : "dispatched — envelope arriving on /events";
+        _push(body, `^C interrupt (${lands})`, CLS.dim);
+      } else {
+        _push(body, "^C — no turn in flight; type /exit to end session", CLS.dim);
+      }
+    });
+  });
   input.addEventListener("keydown", (e) => {
     if (e.key !== "Enter") return;
     e.preventDefault();
