@@ -241,81 +241,14 @@ const check = (cond, msg) => { if (!cond) fails.push(msg); else console.log("  o
   check(sReplay > 0 && sReplay < Math.floor(sMax / 2), `replay from the end rewinds to ~0 and advances (seq ${sReplay})`);
   await p.evaluate(() => document.getElementById("play").click());   // stop
 
-  // 15) terminal (sprint 010): a read interface over the same record. Open it; cat an application
-  // event -> the dock shows its full payload (the content); narrate -> the legible beats with seq + t.
-  // Read the DOCK TEXT as the signal. Also: the event stream now carries a relative timestamp (t+).
-  await selectRec("pair_coding");
-  await p.waitForTimeout(300);
-  await p.evaluate(() => document.getElementById("termOpen").click());
-  await p.waitForTimeout(150);
-  const appseq = await p.evaluate(() => (STATE.events.find((e) => !e.kind.startsWith("substrate.")) || {}).seq);
-  await p.fill("#terminput", "cat " + appseq); await p.press("#terminput", "Enter");
-  await p.waitForTimeout(250);
-  let dock = await p.$eval("#termbody", (e) => e.innerText);
-  check(/"text"/.test(dock) && /solution\.py/.test(dock), `terminal cat <seq> prints the application event's full payload (the content)`);
-  await p.fill("#terminput", "narrate"); await p.press("#terminput", "Enter");
-  await p.waitForTimeout(250);
-  dock = await p.$eval("#termbody", (e) => e.innerText);
-  check(/RunFinalised/.test(dock) && /t\+/.test(dock), "terminal narrate prints the legible beats with seq + t");
-  await p.evaluate(() => document.getElementById("termClose").click());
+  // (Sprint 037c retirement: the legacy dock — #termdock, #termOpen, #agentmodel,
+  // #termparams, #termprompt, #terminput — was deleted; the CONVERSATIONAL surface
+  // moved to `web/terminal.ts` (View A) and its dedicated harnesses live at
+  // harness/capture_terminal_*.js. The pre-retirement §15/§15b assertions
+  // (dock text of `cat`/`narrate`, model picker, params strip, in-terminal chat
+  // multi-turn, workspace echo, agent-in-graph) all have terminal-view homes now.)
   const streamHasT = await p.$$eval(".ev .tt", (els) => els.length > 0 && /t\+/.test(els[0].textContent));
   check(streamHasT, "the event stream shows a relative timestamp (t+) alongside seq");
-
-  // 15b) INTERACTIVE AGENT — a CONVERSATION with a tool-using LLM. You talk, it responds, you keep
-  // talking (multi-turn, like Claude Code), and each turn animates in the graph (talk in the terminal,
-  // watch in substrate; one record). There's a model PICKER (default: the biggest OSS model). CI
-  // drives the DETERMINISTIC driver — no Ollama; a real model / a CLI agent (claude/gemini) is the
-  // SAME seam, exercised live. Two-track: DOM assertions here + a screenshot (viewed) per Addendum A.
-  await p.evaluate(() => document.getElementById("termOpen").click());
-  await p.waitForTimeout(150);
-  // the model picker exists and defaults to a real driver (the biggest OSS model the server chose).
-  const picker = await p.$eval("#agentmodel", (e) => ({ opts: e.options.length, value: e.value }));
-  check(picker.opts >= 1 && !!picker.value, `model picker is populated + has a default ("${picker.value}", ${picker.opts} options)`);
-  await p.fill("#terminput", "model deterministic"); await p.press("#terminput", "Enter"); // CI: no Ollama
-  await p.waitForTimeout(100);
-  // sprint 015: the call parameters are visible in the head and settable in place.
-  const params0 = await p.$eval("#termparams", (e) => e.textContent);
-  check(/think off/.test(params0) && /tokens ∞/.test(params0) && /timeout 300s/.test(params0),
-    `params strip shows the defaults ("${params0}")`);
-  await p.fill("#terminput", "tokens 4096"); await p.press("#terminput", "Enter");
-  await p.waitForTimeout(80);
-  const params1 = await p.$eval("#termparams", (e) => e.textContent);
-  check(/tokens 4096/.test(params1), `tokens 4096 updates the strip ("${params1}")`);
-  await p.fill("#terminput", "tokens 0"); await p.press("#terminput", "Enter"); // back to uncapped
-  await p.waitForTimeout(80);
-  await p.fill("#terminput", "chat"); await p.press("#terminput", "Enter"); // enter conversation mode (once)
-  await p.waitForTimeout(100);
-  const chatPrompt = await p.$eval("#termprompt", (e) => e.textContent);
-  check(/›/.test(chatPrompt), `chat mode shows a conversation prompt ("${chatPrompt}") — you just type, no 'chat' prefix`);
-  // workspace (the cwd answer): `cwd <path>` sets the working dir the agent operates in; the terminal
-  // shows it and passes it to /api/agent (the server echoes it back). Ergonomics, not a jail.
-  await p.fill("#terminput", "/cwd /tmp/agent-e2e"); await p.press("#terminput", "Enter"); // in chat, commands take a / prefix (like /exit)
-  await p.waitForTimeout(80);
-  const wsSet = await p.evaluate(() => STATE.term.workspace);
-  check(wsSet === "/tmp/agent-e2e", `cwd sets the per-conversation workspace ("${wsSet}")`);
-  dock = await p.$eval("#termbody", (e) => e.innerText);
-  check(/workspace = \/tmp\/agent-e2e/.test(dock), "cwd echoes the workspace into the terminal");
-  await p.locator("#termdock").screenshot({ path: "screenshots/agent-cwd.png" }).catch(() => {}); // perceptual track for /cwd
-  await p.fill("#terminput", "hello, do some math"); await p.press("#terminput", "Enter"); // TURN 1 — bare text, NO prefix
-  await p.waitForTimeout(1500); // POST + a followLive poll streams the turns + reply
-  dock = await p.$eval("#termbody", (e) => e.innerText);
-  check(/→ add\(/.test(dock) && /✓ /.test(dock), "chat turn 1: the model's tool calls + reply stream into the terminal");
-  const convo1 = await p.evaluate(() => (STATE.term.chat.convo || []).length);
-  check(convo1 >= 2, `chat turn 1: a user + assistant turn recorded in the conversation (${convo1})`);
-  await p.fill("#terminput", "again please"); await p.press("#terminput", "Enter"); // TURN 2 (bare line = message)
-  await p.waitForTimeout(1500);
-  const convo2 = await p.evaluate(() => (STATE.term.chat.convo || []).length);
-  check(convo2 >= 4, `chat turn 2: the conversation CARRIED and the model responded again — multi-turn (${convo2} turns)`);
-  const agentInGraph = await p.evaluate(
-    () => (STATE.name || "").startsWith("launch_agent") && (STATE.graph.instances || []).length >= 1,
-  );
-  check(agentInGraph, "chat: the agent run renders in the graph (talk in terminal, watch in substrate)");
-  await p.locator("#termdock").screenshot({ path: "screenshots/agent-terminal.png" }).catch(() => {});
-  await p.fill("#terminput", "/exit"); await p.press("#terminput", "Enter"); // /slash leaves chat
-  await p.waitForTimeout(100);
-  const leftChat = await p.evaluate(() => !(STATE.term.chat && STATE.term.chat.active));
-  check(leftChat, "/exit leaves chat mode (the conversation is kept for reconnect)");
-  await p.evaluate(() => document.getElementById("termClose").click());
 
   // 16) content views (sprint 011): the inspector renders application CONTENT readable, and output
   // artifacts are clickable. On pair_coding: a CodeChunk event -> a content block with the real code;

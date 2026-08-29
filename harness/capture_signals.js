@@ -111,44 +111,11 @@ const countSig = (p, name) =>
   await p.evaluate(() => { const l = document.querySelector("#graph .lane[data-inst]"); if (l) l.click(); });
   await waitSig(p, "PRODUCER_INSPECTED");
 
-  // terminal subsystem: open dock, change model, three params, enter chat, exit, close
-  await p.evaluate(() => document.getElementById("termOpen").click());
-  await waitSig(p, "TERMINAL_OPENED");
-  // pick a different model than the default
-  await p.evaluate(() => {
-    const sel = document.getElementById("agentmodel");
-    const alt = [...sel.options].map((o) => o.value).find((v) => v !== sel.value);
-    if (alt) { sel.value = alt; sel.onchange(); }
-  });
-  await waitSig(p, "MODEL_SELECTED");
-  const runCmd = async (line) => {
-    await p.evaluate((l) => {
-      const inp = document.getElementById("terminput");
-      inp.value = l;
-      inp.focus();
-    }, line);
-    await p.keyboard.press("Enter");
-    await p.waitForTimeout(150);
-  };
-  await runCmd("think on");
-  await runCmd("tokens 512");
-  await runCmd("timeout 60");
-  await waitSig(p, "PARAMS_CHANGED");
-  // Force the deterministic driver so the chat turn resolves without an external LLM.
-  await p.evaluate(() => {
-    const sel = document.getElementById("agentmodel");
-    if ([...sel.options].some((o) => o.value === "deterministic")) { sel.value = "deterministic"; sel.onchange(); }
-  });
-  await runCmd("chat");
-  await waitSig(p, "CHAT_ENTERED");
-  await runCmd("what is 2+2?");
-  await waitSig(p, "TURN_SUBMITTED");
-  await waitSig(p, "AGENT_LAUNCHED", 10000);
-  await waitSig(p, "FINAL_ANSWER_RENDERED", 15000);
-  await runCmd("/exit");
-  await waitSig(p, "CHAT_EXITED");
-  await p.evaluate(() => document.getElementById("termClose").click());
-  await waitSig(p, "TERMINAL_CLOSED");
+  // (Sprint 037c: the legacy terminal dock subsystem was retired; its eleven tags —
+  // TERMINAL_OPENED, TERMINAL_CLOSED, MODEL_SELECTED, PARAMS_CHANGED, CHAT_ENTERED,
+  // CHAT_EXITED, TURN_SUBMITTED, AGENT_LAUNCH_REQUESTED, AGENT_LAUNCHED,
+  // AGENT_TURN_STREAMED, FINAL_ANSWER_RENDERED — dropped from v0.7.3. Terminal-view
+  // coverage lives in capture_terminal_*.js.)
 
   // topology launch + studio-link click. Pick the first non-empty option; click launchbtn.
   await p.evaluate(() => {

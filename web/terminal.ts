@@ -1,7 +1,7 @@
 // terminal.ts — the daily-driver terminal column mounted inside #view-terminal.
-// Sprint 035 promotes the terminal from its bottom-dock legacy shape
-// (#termdock, kept one release inside #view-desktop; sprint 037c retires it)
-// to a full column that talks to the piece-B session endpoints:
+// Sprint 035 promoted the terminal from its bottom-dock legacy shape (which
+// sprint 037c retired outright — the dock DOM and its eleven vocab tags are
+// gone) to a full column that talks to the piece-B session endpoints:
 //
 //   POST /api/session               — open a session (deterministic driver)
 //   POST /api/session/<id>/turn     — send one turn's user text
@@ -123,9 +123,9 @@ function _mkChildren(root: HTMLElement): {
   driverSelect.title = "the driver this session runs against; change fires PATCH /api/session/<id> {driver}";
   driverLabel.appendChild(driverSelect);
   header.appendChild(driverLabel);
-  // Sprint 035v: params hint. Renders `think off · tokens ∞ · timeout 300s`
-  // matching the dock's #termparams shape. Updates on session-open (read from
-  // POST /api/session ACK's driver_params echo) and on /set slash PATCH ACK.
+  // Sprint 035v: params hint. Renders `think off · tokens ∞ · timeout 300s`.
+  // Updates on session-open (read from POST /api/session ACK's driver_params
+  // echo) and on /set slash PATCH ACK.
   const paramsHint = document.createElement("span");
   paramsHint.id = "terminal-params";
   paramsHint.className = "term-hint";

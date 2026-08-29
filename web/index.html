@@ -63,7 +63,6 @@ button{font-family:inherit;color:inherit;cursor:pointer;background:none;border:n
 #diffsel{ background:var(--panel); border:1px solid var(--line2); border-radius:6px; padding:3px 7px; color:var(--tx-dim); font-size:11px; }
 #play{ min-width:30px; text-align:center; }
 #play.playing{ color:var(--green); border-color:var(--green); }
-#termToggle.on{ color:var(--green); border-color:var(--green); }
 #speedsel{ background:var(--panel); border:1px solid var(--line2); border-radius:6px; padding:3px 6px; color:var(--tx-dim); font-size:11px; }
 .diff-hi{ color:var(--amber); } .diff-eq{ color:var(--green); }
 
@@ -239,7 +238,6 @@ button{font-family:inherit;color:inherit;cursor:pointer;background:none;border:n
     <span class="spacer"></span>
     <span id="runname" class="runname"></span><span id="runid" class="runid"></span>
     <button class="btn" id="modeToggle" title="toggle Inputs &amp; Outputs">I/O</button>
-    <button class="btn" id="termToggle" title="toggle the terminal (Ctrl+`)">terminal</button>
     <a class="btn" id="studiolink" href="/studio.html" target="_blank" rel="noopener" title="open the studio — author a Topology (new tab)">studio</a>
     <select id="diffsel" class="btn" title="diff this record against another (first divergence by seq, D-8)"><option value="">⇄ diff vs…</option></select>
     <span id="verdict" class="verdict"></span>
@@ -271,23 +269,6 @@ button{font-family:inherit;color:inherit;cursor:pointer;background:none;border:n
       <div id="assaypane" style="display:none"></div>
     </div>
     <div class="col"><div class="col-h">inspector</div><div class="insp" id="insp"><span class="dim">Select an event or a Producer to trace its provenance.</span></div></div>
-  </div>
-  <div class="term-row" id="termrow">
-    <button class="btn term-reopen" id="termOpen" title="open the terminal (Ctrl+`)">▌ terminal</button>
-    <div class="term-dock" id="termdock" style="display:none">
-      <div class="term-head">
-        <span class="term-title">▌ substrate — agent terminal</span>
-        <label class="term-hint">driver <select id="agentmodel" class="term-model" title="the model that drives the agent"></select></label>
-        <span class="term-hint" id="termparams" title="call parameters — set with: think on|off · tokens N (0 = uncapped) · timeout N"></span>
-        <span class="term-hint" id="termhint"><b>chat</b> to talk · <b>help</b></span>
-        <button class="btn" id="termClose" title="close the terminal">close ⌄</button>
-      </div>
-      <div class="term-body" id="termbody"></div>
-      <div class="term-input-row">
-        <span class="term-prompt" id="termprompt">substrate$</span>
-        <input class="term-input" id="terminput" spellcheck="false" autocomplete="off" placeholder="type 'chat' to talk to the model — or a command (help)" />
-      </div>
-    </div>
   </div>
   <div class="health" id="health"></div>
   </div>
