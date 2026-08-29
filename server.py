@@ -716,11 +716,49 @@ def _builtins(obj: object) -> object:
     return msgspec.to_builtins(obj)
 
 
-def _records_index() -> list[dict[str, object]]:
+def _bundles_index() -> list[dict[str, object]]:
+    """Sprint 034a: the bundle catalog for the rail's four-bucket read
+    (sprint 034b) and the daily-driver terminal's create-time picker
+    (sprint 035w). Consumes `substrate.bundles.list_bundles()` (substrate
+    sprint 238). Response shape per bundle:
+
+        {name, description, tools_enabled, slot_count}
+
+    `slot_count` counts the three prose slots present per §7b (methodology,
+    personality, per_turn). A bundle with only methodology has slot_count=1.
+    """
+    from substrate.bundles import list_bundles
+
+    out: list[dict[str, object]] = []
+    for b in list_bundles():
+        prose_slots = [b.methodology, b.personality, b.per_turn]
+        slot_count = sum(1 for slot in prose_slots if slot)
+        out.append(
+            {
+                "name": b.name,
+                "description": b.description,
+                "tools_enabled": list(b.tools_enabled),
+                "slot_count": slot_count,
+            }
+        )
+    return out
+
+
+def _records_index(exclude_sessions: bool = False) -> list[dict[str, object]]:
     """The record list for the rail: each record's real run-level status + a one-glance summary
-    (so a broken/paused run is flagged in the list itself — §7.2)."""
+    (so a broken/paused run is flagged in the list itself — §7.2).
+
+    Sprint 034a: `exclude_sessions=True` filters out records whose name is a
+    session-run (starts with `_SESSION_PREFIXES`: launch_/build_/resume_) OR a
+    daemon-session record (matches `_SESSION_ID_RE`: `s_[0-9a-f]{8,32}`). The
+    rail's four-bucket read renders live sessions in its own bucket (via
+    `GET /api/session`), so the records bucket suppresses them to avoid
+    double-rendering.
+    """
     out: list[dict[str, object]] = []
     for name in _record_names():
+        if exclude_sessions and (name.startswith(_SESSION_PREFIXES) or _SESSION_ID_RE.match(name)):
+            continue
         path = _record_path(name)
         if path is None:
             continue
@@ -2525,7 +2563,15 @@ class Handler(BaseHTTPRequestHandler):
                 self._session_events(session_id, since_seq)
                 return
             if path == "/api/records":
-                self._json(_records_index())
+                # Sprint 034a: optional ?exclude_sessions=true filter.
+                q = parse_qs(urlparse(self.path).query)
+                exclude = (q.get("exclude_sessions", ["false"])[0] or "false").lower() in ("1", "true", "yes")
+                self._json(_records_index(exclude_sessions=exclude))
+                return
+            if path == "/api/bundles":
+                # Sprint 034a: bundle catalog for the rail's four-bucket read
+                # (034b) and the terminal-view create-time picker (035w).
+                self._json(_bundles_index())
                 return
             if path == "/api/models":
                 self._json(_agent_models())

@@ -1,69 +1,71 @@
-# Sprint 034a — `server.py`: records/bundles endpoints
+# Sprint 034a — server: records/bundles endpoints
 
 ```yaml
 ---
 id: 034a
-status: pending
+status: closed
 phase: 5
 pass_kind: functional
 ---
 ```
 
-## scope
+## Product-spec conformance
 
-Add two read endpoints to `substrate-ui/server.py` that the four-bucket
-rail (sprint 034b) will consume:
+**Fulfills:** PRODUCT-SPEC-2026-08-17-round12.md §13 "the rail becomes
+a project browser" — four buckets need distinct backends. §7b bundle
+listing on-demand. §9 "one record" per session — the rail's records
+bucket must not double-render live sessions the sessions bucket
+already shows.
 
-- `GET /api/records?exclude_sessions=true` — returns non-session records
-  only. Existing `GET /api/records` returns all records; the query param
-  filters live sessions out server-side (the rail already renders them
-  in a separate bucket).
-- `GET /api/bundles` — lists every bundle from
-  `substrate/src/substrate/topologies/applications/registry.py`'s
-  bundle catalog. Response shape: `[{name, description, slot_count}]`.
+**Enables:** substrate-ui sprint 034b (four-bucket rail) reads `GET
+/api/records?exclude_sessions=true` + `GET /api/bundles`; sprint 035w
+(create-time controls dialog) reads `GET /api/bundles` for the bundle
+picker in the new-session flow.
 
-One file. The rail rewrite (034b) is the consumer.
+## Scope
 
-## context_files
+Two GET endpoints on the daemon:
 
-- `substrate-ui/server.py` — the daemon. Existing `_records` handler is
-  the anchor for the query-param extension.
-- `substrate/src/substrate/bundles.py` — `list_bundles()` helper. This
-  function does not exist today (verified: `grep -n 'def list_bundles'`
-  returns no hits). Substrate-side prerequisite sprint
-  `sprint-215e-bundle-patch-and-list-bundles` adds it; 034a cannot
-  close until 215e lands.
-- `substrate/src/substrate/topologies/applications/registry.py` — bundle
-  catalog source (referenced by `list_bundles()` internally).
-- `../substrate/process/signals/current.json` — for reference.
+- `GET /api/records` gains optional `?exclude_sessions=true` query
+  param. When set, drops any record whose name starts with
+  `_SESSION_PREFIXES` (`launch_`, `build_`, `resume_`) or matches
+  `_SESSION_ID_RE` (`^s_[0-9a-f]{8,32}$`).
+- `GET /api/bundles` new; consumes `substrate.bundles.list_bundles()`
+  (substrate sprint 238, closed today). Response shape per bundle:
+  `{name, description, tools_enabled, slot_count}` where slot_count
+  counts the three prose slots (methodology, personality, per_turn)
+  that carry text.
 
-## artifact contract → Files created/modified
+## Artifact contract → Files created/modified
 
-- `substrate-ui/server.py` — two new handlers (or one handler with a
-  branch on path), routed from `_dispatch`.
-- `substrate-ui/tests/test_server_records_bundles.py` — new. Three
-  cases: `GET /api/records` (unchanged), `GET /api/records?exclude_sessions=true`
-  (filters live sessions), `GET /api/bundles` (lists ≥5 bundles per the
-  five default bundles from piece H).
+- `substrate-ui/server.py` — `_records_index(exclude_sessions=False)`
+  extended with the filter; new `_bundles_index()` helper; `do_GET`
+  gains the two dispatch branches.
+- `substrate-ui/tests/test_server_records_bundles.py` — new; 6 test
+  cases (default records list, exclude_sessions is subset of default,
+  session-prefixed names filtered, bundles lists shipped defaults,
+  bundle shape check, bundles sorted by name).
 
-## signal contract → Emits
+## Signal contract → Emits
 
 None (server-side; no UI-emitted tags).
 
-## observation contract
+## Observation contract
 
-- `POST /api/session` create a session; `GET /api/records` includes it;
-  `GET /api/records?exclude_sessions=true` does not.
-- `GET /api/bundles` returns the five default bundles from piece H's
-  `bundles.py`.
-- `test_server_records_bundles.py` green.
-- Existing `npm run e2e` green (no regression on the unmodified
-  `/api/records` path).
+- 6/6 pytests PASS.
+- Live daemon: `GET /api/bundles` returns 5 bundles with correct
+  shape; `GET /api/records?exclude_sessions=true` returns 30 records
+  with zero session-prefixed names.
+- Full `npm run signals` chain PASS (no regression on existing
+  `/api/records` consumers).
 
-## halt conditions
+## Halt conditions
 
-- `dual_contract_fail` if filtering breaks the existing records read.
+- `dual_contract_fail` if the filter breaks existing `/api/records`
+  consumers.
 
-## definition of done
+## Definition of done
 
-Both endpoints live; test green; existing e2e unchanged.
+Both endpoints live. Six pytests PASS. Live verification. Full signals
+chain PASS. Cleared: sprint 034b (rail rewrite) + sprint 035w
+(create-time controls) — both consumers unblocked.
