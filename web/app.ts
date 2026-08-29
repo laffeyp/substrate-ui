@@ -66,6 +66,7 @@ function gist(ev) {
 }
 
 import { createAppState, type AppState } from "./state";
+import { mountRail, type RailHandle } from "./rail";
 const STATE: AppState = createAppState();
 
 // the time dimension alongside the order: seq is the order (no time), t the time (no order). Show
@@ -74,67 +75,39 @@ const STATE: AppState = createAppState();
 function relT(t) { const t0 = STATE.events.length ? STATE.events[0].t : (t || 0); const d = (t || 0) - t0; return "t+" + (d < 10 ? d.toFixed(3) : d.toFixed(1)) + "s"; }
 
 // ---------- record rail ----------
-async function loadRecords() {
-  const recs = await api("/api/records");
-  emit("RECORDS_LOADED", {
-    count: recs.length,
-    run_count: recs.filter((r) => r.source === "run").length,
-    demo_count: recs.filter((r) => r.source !== "run").length,
-  });
-  $("rail").innerHTML = "";
-  const mkRec = (r) => {
-    const div = document.createElement("div");
-    div.className = "rec";
-    div.dataset.name = r.name;
-    const broken = r.status === "failed" || r.producers_failed > 0;
-    const color = r.status === "failed" ? "var(--red)" : r.status === "paused" ? "var(--cyan)"
-      : r.status === "incomplete" ? "var(--amber)" : broken ? "var(--red)" : "var(--green)";
-    const meta = r.status === "failed" ? `FAILED · ${r.final_reason || ""}`
-      : r.status === "paused" ? `paused · awaiting ${r.paused_on || "input"}`
-      : broken ? `${r.producers_failed} failures · finalised` : `${r.status} · ${r.total_events} events`;
-    div.innerHTML = `<span class="dot" style="background:${color}"></span>
-      <div class="nm">${escapeHtml(r.name)}</div><div class="meta ${broken ? "broken" : ""}">${escapeHtml(r.run_id.slice(0, 8))}… · ${escapeHtml(meta)}</div>`;
-    div.onclick = () => { STATE.delegateParent = null; selectRecord(r.name); };  // rail pick clears the delegate crumb; RECORD_SELECTED fires from selectRecord (covers deep-link + delegate paths too)
-    return div;
-  };
-  const groupHdr = (label) => { const h = document.createElement("div"); h.className = "rail-group"; h.textContent = label; $("rail").appendChild(h); };
-  // group "your runs" (the runs/ session records, newest-first by ULID run_id) ABOVE the stable
-  // "demos" fixtures, so accumulating session runs stay corralled + scannable (Drift watchlist fold).
-  const runs = recs.filter((r) => r.source === "run").sort((a, b) => (b.run_id || "").localeCompare(a.run_id || ""));
-  const demos = recs.filter((r) => r.source !== "run");
-  if (runs.length) {
-    const h = document.createElement("div");
-    h.className = "rail-group";
-    h.innerHTML = `your runs · ${runs.length} <span class="rail-clear" title="delete all your session runs — the demos are kept">clear</span>`;
-    h.querySelector(".rail-clear").onclick = async (ev) => {
-      ev.stopPropagation();
-      if (!window.confirm(`Delete all ${runs.length} session runs? (the demos are kept)`)) return;
-      const cleared_count = runs.length;
-      await fetch("/api/runs/clear", { method: "POST" }).then((x) => x.json());
-      emit("RECORDS_PRUNED", { cleared_count });
-      STATE.name = null;  // the selected run may be gone -> re-land on a demo
-      await loadRecords();
-    };
-    $("rail").appendChild(h);
-    runs.forEach((r) => $("rail").appendChild(mkRec(r)));
-  }
-  groupHdr("demos"); demos.forEach((r) => $("rail").appendChild(mkRec(r)));
-  const ordered = [...runs, ...demos];  // visual order: newest run first, else first demo
-  STATE.resumable = new Set(recs.filter((r) => r.resumable).map((r) => r.name));  // paused + has a continuation
-  // populate the diff selector (compare this record against another — first divergence by seq)
+// Sprint 034b: the rail extracted into `web/rail.ts` as a four-bucket module
+// (live sessions, recent records, bundles, records-collapsed). `loadRecords`
+// stays here as the app-side wrapper — it drives rail refresh + preserves the
+// diff-selector + STATE.resumable + first-load auto-select behavior via the
+// `onRailPopulated(records)` callback the rail module invokes after render.
+let _rail: RailHandle | null = null;
+const _railOnPopulated = (recs: any[]) => {
+  STATE.resumable = new Set(recs.filter((r) => r.resumable).map((r) => r.name));
   const sel = $("diffsel");
-  sel.innerHTML = '<option value="">⇄ diff vs…</option>' +
-    recs.map((r) => `<option value="${escapeHtml(r.name)}">${escapeHtml(r.name)}</option>`).join("");
-  sel.onchange = () => { if (sel.value) { emit("DIFF_REQUESTED", { a: STATE.name, b: sel.value }); renderDiff(sel.value); } };
-  // auto-select only on FIRST load (else a refresh after launch/resume yanks selection to the top
-  // record with a dangling fetch — the race behind the verdict flicker. review #38, obs b).
+  if (sel) {
+    sel.innerHTML = '<option value="">⇄ diff vs…</option>' +
+      recs.map((r) => `<option value="${escapeHtml(r.name)}">${escapeHtml(r.name)}</option>`).join("");
+    sel.onchange = () => { if (sel.value) { emit("DIFF_REQUESTED", { a: STATE.name, b: sel.value }); renderDiff(sel.value); } };
+  }
   if (STATE.name === null) {
-    // honor a ?record=<name> deep-link (the Studio's "view the run in the console" lands here);
-    // fall back to the first record. Only if the named record actually exists.
     const want = new URLSearchParams(location.search).get("record");
+    const runs = recs.filter((r) => r.source === "run").sort((a, b) => (b.run_id || "").localeCompare(a.run_id || ""));
+    const demos = recs.filter((r) => r.source !== "run");
+    const ordered = [...runs, ...demos];
     const target = (want && recs.some((r) => r.name === want)) ? want : (ordered[0] && ordered[0].name);
     if (target) selectRecord(target);
   }
+};
+async function loadRecords() {
+  if (!_rail) {
+    _rail = mountRail($("rail"), {
+      api,
+      escapeHtml,
+      selectRecord: (name) => { STATE.delegateParent = null; selectRecord(name); },
+      onRailPopulated: _railOnPopulated,
+    });
+  }
+  await _rail.refresh();
 }
 
 // ---------- assays: many records (arms × cases × trials) read as ONE arm comparison ----------
