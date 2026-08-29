@@ -27,7 +27,15 @@ button{font-family:inherit;color:inherit;cursor:pointer;background:none;border:n
 /* two-view scaffold (sprint 033) — the daily-driver reshape */
 .view{ display:none; min-height:0; overflow:hidden; }
 .view.active#view-desktop{ display:grid; grid-template-rows:auto 1fr auto auto; min-height:0; }
-.view.active#view-terminal{ display:flex; flex-direction:column; min-height:0; align-items:center; justify-content:center; color:var(--tx-faint); font-size:12px; padding:40px; }
+.view.active#view-terminal{ display:flex; flex-direction:column; min-height:0; }
+/* terminal column (sprint 035) */
+.terminal-column{ display:flex; flex-direction:column; height:100%; background:var(--bg2); }
+.terminal-column .term-head{ display:flex; align-items:center; gap:12px; padding:8px 14px; border-bottom:1px solid var(--line); }
+.terminal-column .term-body{ flex:1; overflow:auto; padding:10px 14px; font-size:12px; line-height:1.5; }
+.terminal-column .term-line{ white-space:pre-wrap; word-break:break-word; padding:1px 0; }
+.terminal-column .term-input-row{ display:flex; align-items:center; gap:8px; padding:8px 14px; border-top:1px solid var(--line); }
+.terminal-column .term-prompt{ color:var(--green); font-size:12px; white-space:nowrap; }
+.terminal-column .term-input{ flex:1; background:none; border:none; outline:none; color:var(--tx); font-family:var(--mono); font-size:12px; }
 #view-toggle{ margin-left:auto; border:1px solid var(--line2); border-radius:6px; padding:3px 9px; font-size:12px; color:var(--tx-dim); cursor:pointer; }
 #view-toggle:hover{ border-color:var(--line3); color:var(--tx); }
 #view-toggle.on-terminal{ color:var(--green); border-color:var(--green); }
@@ -283,9 +291,7 @@ button{font-family:inherit;color:inherit;cursor:pointer;background:none;border:n
   </div>
   <div class="health" id="health"></div>
   </div>
-  <div id="view-terminal" class="view">
-    <div>the terminal view lands here in sprint 035</div>
-  </div>
+  <div id="view-terminal" class="view"></div>
 </div>
 <script type="module" src="./app.ts"></script>
 </body>

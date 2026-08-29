@@ -144,6 +144,18 @@ patterns:
 **Writes:** `screenshots/33-desktop-view-console.png`, `screenshots/33-terminal-view-empty.png`.
 **Run:** `node harness/capture_view_toggle.js` (server on :8765).
 
+### capture_terminal_session.js (sprint 035)
+
+**Purpose:** exercises the new terminal column + piece-B session endpoints end-to-end.
+**Kind:** structural + signal-trace + perceptual (two-frame) + session-fixture writer. Fifteen assertions.
+**Drives:** flip to #view-terminal, type "hello" + Enter (opens session on first turn), type "again" + Enter, /exit.
+**Asserts:** DRIVER_SESSION_STARTED shape, USER_MESSAGE_INJECTED shape, PARK_LANDED after each turn, DRIVER_SESSION_ENDED on /exit, session_id stable across bookends, no page errors.
+**Emits used:** DRIVER_SESSION_STARTED, USER_MESSAGE_INJECTED, PARK_LANDED, DRIVER_SESSION_ENDED (v0.6+).
+**Writes:** `screenshots/35-terminal-view-post-user-message.png`, `screenshots/35-terminal-view-post-model-reply.png`, `captures/sprint-035/terminal-session.jsonl`.
+**Run:** `node harness/capture_terminal_session.js` (server on :8765).
+**Grader:** `npx tsx tools/capture-grade.ts captures/sprint-035/terminal-session.jsonl --kind session`.
+**Wired into `npm run signals`:** yes (via `capture:terminal-session` + `grade:terminal-session`).
+
 ## What DOES NOT exist yet (piece-G territory)
 
 - `harness/e2e_session.js` — the session-shape harness the tech spec names.

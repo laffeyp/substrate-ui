@@ -22,7 +22,9 @@
     "grade:studio-signals": "npx tsx tools/capture-grade.ts captures/sprint-021/studio.jsonl --kind studio",
     "check:vocab-parity": "npx tsx tools/check-vocabulary-parity.ts",
     "capture:view-toggle": "node harness/capture_view_toggle.js",
-    "signals": "npm run check:vocab-parity && npm run capture:signals && npm run grade:signals && npm run capture:studio-signals && npm run grade:studio-signals && npm run capture:view-toggle",
+    "capture:terminal-session": "node harness/capture_terminal_session.js",
+    "grade:terminal-session": "npx tsx tools/capture-grade.ts captures/sprint-035/terminal-session.jsonl --kind session",
+    "signals": "npm run check:vocab-parity && npm run capture:signals && npm run grade:signals && npm run capture:studio-signals && npm run grade:studio-signals && npm run capture:view-toggle && npm run capture:terminal-session && npm run grade:terminal-session",
     "sync:substrate-vocab": "npx tsx tools/sync-substrate-vocab.ts",
     "e2e:terminal-v1": "node _deprecated/terminal-v1-round1/harness/e2e_terminal_v1.js",
     "capture:terminal-v1": "node _deprecated/terminal-v1-round1/harness/capture_terminal_v1.js"

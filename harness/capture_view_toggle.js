@@ -128,6 +128,13 @@ const fail = (m) => { console.error(`  FAIL  ${m}`); fails.push(m); };
   await page.waitForFunction(() => (window).STATE?.view === "terminal", { timeout: 2000 });
   await page.dispatchEvent("#view-toggle", "mousedown");
   await page.waitForFunction(() => (window).STATE?.view === "desktop", { timeout: 2000 });
+  // The restore runs inside requestAnimationFrame after the flip; the state
+  // flag flips first. Wait for the actual DOM effect (focus landing) so the
+  // assertion below is not racing the rAF callback.
+  await page.waitForFunction(
+    () => document.activeElement && (document.activeElement).id === "launchsel",
+    { timeout: 2000 },
+  );
   const afterRestore = await page.evaluate(() => ({
     activeId: document.activeElement?.id,
     colScroll: document.getElementById("test-rail-col")?.scrollTop,
