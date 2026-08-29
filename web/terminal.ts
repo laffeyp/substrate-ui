@@ -56,6 +56,20 @@ interface TerminalHandle {
   // Sprint 035v: queued driver_params for the next _openSession call —
   // used when the user runs `/set` before opening a session.
   pendingDriverParams: Record<string, unknown> | null;
+  // Sprint 035w: create-time controls queued via /bundle, /tools,
+  // /workspace, /isolate, /name before a session opens. `_openSession`
+  // reads + clears + threads into the POST /api/session body. Workspace,
+  // workspace_shape, and isolate are create-only per product spec §9c
+  // ("SessionStarted.workspace_path frozen at seq 1"); mid-session PATCH
+  // is refused by the daemon. Name is create-only too.
+  pendingCreate: {
+    bundle?: string;
+    workspace?: string;
+    workspace_shape?: string;
+    isolate?: boolean;
+    tools?: string[];
+    name?: string;
+  };
   // Sprint 035s: /context <lo-hi> [--kind K] stashes here; the next _sendTurn
   // reads + clears + passes as the POST body's `context` field per piece B
   // sprint 217e. Mirrors the CLI's `pending_context` dict at cli.py:1114.
@@ -249,7 +263,24 @@ async function _openSession(h: TerminalHandle, body: HTMLDivElement): Promise<bo
     createBody.driver_params = h.pendingDriverParams;
     h.pendingDriverParams = null;
   }
-  const result = await _postJson<{ session_id: string; bundle?: string | null; driver_params?: Record<string, unknown> | null }>("/api/session", createBody);
+  // Sprint 035w: queued create-time controls (/bundle, /tools,
+  // /workspace, /isolate, /name) thread into the POST body.
+  const pending = h.pendingCreate;
+  if (pending.bundle !== undefined) createBody.bundle = pending.bundle;
+  if (pending.tools !== undefined) createBody.tools = pending.tools;
+  if (pending.workspace !== undefined) createBody.workspace = pending.workspace;
+  if (pending.workspace_shape !== undefined) createBody.workspace_shape = pending.workspace_shape;
+  if (pending.isolate !== undefined) createBody.isolate = pending.isolate;
+  if (pending.name !== undefined) createBody.name = pending.name;
+  h.pendingCreate = {};
+  const result = await _postJson<{
+    session_id: string;
+    name?: string | null;
+    bundle?: string | null;
+    workspace?: string | null;
+    workspace_shape?: string | null;
+    driver_params?: Record<string, unknown> | null;
+  }>("/api/session", createBody);
   if (!result.ok) {
     _push(body, `session: open failed [${result.failure_class}] ${result.detail}`, CLS.err);
     return false;
@@ -264,6 +295,25 @@ async function _openSession(h: TerminalHandle, body: HTMLDivElement): Promise<bo
   // returns the manifest slice; sprint 032c added `driver_params` to it).
   h.driverParams = res.driver_params ?? null;
   h.updateParamsHint();
+  // Sprint 035w: fire the four v0.7 session-control tags on ACK, one per
+  // queued create-time field. BUNDLE_ATTACHED (bundle attached at create;
+  // prior_bundle null); WORKSPACE_SELECTED (workspace + workspace_shape);
+  // TOOLS_RESTRICTED (tool suite pinned); ISOLATE_TOGGLED (isolate on).
+  // Each only fires when the user set the corresponding field.
+  const bundleEchoed = res.bundle ?? undefined;
+  if (bundleEchoed) {
+    h.bundleSlug = String(bundleEchoed);
+    emit("BUNDLE_ATTACHED", { session_id: h.sessionId, bundle: String(bundleEchoed), prior_bundle: null });
+  }
+  if (res.workspace && res.workspace_shape) {
+    emit("WORKSPACE_SELECTED", { session_id: h.sessionId, workspace: String(res.workspace), workspace_shape: String(res.workspace_shape) });
+  }
+  if (pending.tools !== undefined) {
+    emit("TOOLS_RESTRICTED", { session_id: h.sessionId, tools: pending.tools });
+  }
+  if (pending.isolate === true) {
+    emit("ISOLATE_TOGGLED", { session_id: h.sessionId, isolate: true });
+  }
   // Sprint 035s: remember the record basename so read-slashes (/inspect,
   // /narrate, /tail, /cat, /diff) default to "the current session's record"
   // when called without an arg. The daemon returns the record path;
@@ -483,7 +533,10 @@ const _HELP_TEXT = [
   "  /exit                              end this session cleanly",
   "  /model <name>                      swap driver mid-session",
   "  /tools <a,b,c>                     restrict tool suite (empty for unrestricted)",
-  "  /bundle <name>                     attach a bundle mid-session",
+  "  /bundle <name>                     attach a bundle (queues if no session; PATCH mid-session)",
+  "  /workspace <path>                  set workspace at create time (immutable per session)",
+  "  /isolate on|off                    Mode 3 nested-child dirs at create time",
+  "  /name <n>                          register the next session under a name",
   "  /context <lo-hi> [--kind K]        inject a record slice into the next turn",
   "  /inspect [<record>]                narrate the record's causal beats",
   "  /narrate [<record>]                same as /inspect",
@@ -535,8 +588,13 @@ async function _slashRoute(h: TerminalHandle, body: HTMLDivElement, line: string
 
   if (slash === "/tools") {
     if (args.length === 0) { _push(body, "/tools <comma-list> — restrict tool suite (empty for unrestricted)", CLS.err); return true; }
-    if (!h.sessionId) { _push(body, "/tools needs an active session", CLS.err); return true; }
     const toolList = args[0].split(",").map((t) => t.trim()).filter((t) => t.length > 0);
+    if (!h.sessionId) {
+      // Sprint 035w: queue for next session-open.
+      h.pendingCreate.tools = toolList;
+      _push(body, `tools → [${toolList.join(", ")}] (queued for next session)`, CLS.dim);
+      return true;
+    }
     const result = await _fetch(`/api/session/${encodeURIComponent(h.sessionId)}`, "PATCH", { tools: toolList });
     if (!result.ok) { _push(body, `/tools failed [${result.failure_class}] ${result.detail}`, CLS.err); return true; }
     emit("TOOLS_RESTRICTED", { session_id: h.sessionId, tools: toolList });
@@ -545,14 +603,57 @@ async function _slashRoute(h: TerminalHandle, body: HTMLDivElement, line: string
   }
 
   if (slash === "/bundle") {
-    if (args.length !== 1) { _push(body, "/bundle <name> — attach bundle mid-session", CLS.err); return true; }
-    if (!h.sessionId) { _push(body, "/bundle needs an active session", CLS.err); return true; }
+    if (args.length !== 1) { _push(body, "/bundle <name> — attach bundle mid-session (or before)", CLS.err); return true; }
+    if (!h.sessionId) {
+      // Sprint 035w: queue for next session-open. The daemon validates
+      // the name via load_bundle at POST time; unknown names 400 then.
+      h.pendingCreate.bundle = args[0];
+      _push(body, `bundle → ${args[0]} (queued for next session)`, CLS.dim);
+      return true;
+    }
     const priorBundle = h.bundleSlug || null;
     const result = await _fetch<{ bundle?: string | null }>(`/api/session/${encodeURIComponent(h.sessionId)}`, "PATCH", { bundle: args[0] });
     if (!result.ok) { _push(body, `/bundle failed [${result.failure_class}] ${result.detail}`, CLS.err); return true; }
     h.bundleSlug = args[0];
     emit("BUNDLE_ATTACHED", { session_id: h.sessionId, bundle: args[0], prior_bundle: priorBundle });
     _push(body, `bundle → ${args[0]} (next turn seed re-assembles)`, CLS.accent);
+    return true;
+  }
+
+  if (slash === "/workspace") {
+    // Sprint 035w: queue-only. Product spec §9c: workspace_path frozen
+    // at SessionStarted seq 1; the daemon refuses mid-session PATCH.
+    if (args.length !== 1) { _push(body, "/workspace <path> — set workspace at create time (immutable per session)", CLS.err); return true; }
+    if (h.sessionId) { _push(body, "/workspace: workspace is create-only per spec §9c; end this session (/exit) first", CLS.err); return true; }
+    h.pendingCreate.workspace = args[0];
+    _push(body, `workspace → ${args[0]} (queued for next session)`, CLS.dim);
+    return true;
+  }
+
+  if (slash === "/isolate") {
+    // Sprint 035w: queue-only. Product spec §9c Mode 3 opt-in;
+    // create-time only. Grays out when workspace is a git repo per
+    // 036e; here at the terminal we accept the value without validating
+    // against workspace shape (daemon does that at POST time).
+    if (args.length !== 1 || (args[0] !== "on" && args[0] !== "off")) {
+      _push(body, "/isolate on|off — enable Mode 3 (nested-by-directory child dirs) at create time", CLS.err);
+      return true;
+    }
+    if (h.sessionId) { _push(body, "/isolate: isolate is create-only per spec §9c; end this session (/exit) first", CLS.err); return true; }
+    h.pendingCreate.isolate = args[0] === "on";
+    _push(body, `isolate → ${args[0]} (queued for next session)`, CLS.dim);
+    return true;
+  }
+
+  if (slash === "/name") {
+    // Sprint 035w: queue-only. Register the next session under a name
+    // per product spec §2 --name flag; addressable via delegate
+    // {child_session_name} per §5/§6. Daemon returns 409 on collision;
+    // the ACK path handles it.
+    if (args.length !== 1) { _push(body, "/name <name> — register the next session under a name", CLS.err); return true; }
+    if (h.sessionId) { _push(body, "/name: name registration is at create time; end this session (/exit) first", CLS.err); return true; }
+    h.pendingCreate.name = args[0];
+    _push(body, `name → ${args[0]} (queued for next session)`, CLS.dim);
     return true;
   }
 
@@ -820,6 +921,7 @@ export function mountTerminal(root: HTMLElement, opts: MountTerminalOptions = {}
     updateParamsHint: () => undefined,  // real updater installed below.
     driverParams: null,
     pendingDriverParams: null,
+    pendingCreate: {},
     pendingContext: null,
     currentRecord: null,
   };

@@ -1168,7 +1168,9 @@ class Handler(BaseHTTPRequestHandler):
                 "session_id": manifest.session_id,
                 "name": manifest.name,
                 "record": manifest.record_root,
+                "workspace": manifest.workspace,
                 "workspace_shape": manifest.workspace_shape,
+                "bundle": manifest.bundle,
                 "role": manifest.role,
                 "driver_params": dict(current.driver_params) if current.driver_params is not None else None,
             }
@@ -1580,6 +1582,34 @@ class Handler(BaseHTTPRequestHandler):
             if key in buckets:
                 buckets[key].append(payload)
         self._json(buckets)
+
+    def _session_get(self, session_id: str) -> None:
+        """Sprint 035w: GET /api/session/<id>. Returns the manifest slice the
+        UI needs to render header fields — session_id, name, driver, workspace,
+        workspace_shape, bundle, record, created_at, status, role,
+        driver_params. 404 for unknown id."""
+        if _SESSION_REGISTRY is None:
+            self._error(503, "session registry not initialized (boot ordering)")
+            return
+        manifest = _SESSION_REGISTRY.get(session_id)
+        if manifest is None:
+            self._error(404, f"not found: /api/session/{session_id}")
+            return
+        self._json(
+            {
+                "session_id": manifest.session_id,
+                "name": manifest.name,
+                "driver": manifest.driver,
+                "workspace": manifest.workspace,
+                "workspace_shape": manifest.workspace_shape,
+                "bundle": manifest.bundle,
+                "record": manifest.record_root,
+                "created_at": manifest.created_at,
+                "status": manifest.status,
+                "role": manifest.role,
+                "driver_params": dict(manifest.driver_params) if manifest.driver_params is not None else None,
+            }
+        )
 
     def _session_by_name(self, name: str) -> None:
         """Sprint 214b: GET /api/session/by-name/<name>. Returns `{"session_id":
@@ -2548,6 +2578,9 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if path.startswith("/api/session/by-name/"):
                 self._session_by_name(unquote(path[len("/api/session/by-name/") :]))
+                return
+            if path.startswith("/api/session/") and "/" not in path[len("/api/session/"):]:
+                self._session_get(path[len("/api/session/"):])
                 return
             if path.startswith("/api/session/") and path.endswith("/events"):
                 session_id = path[len("/api/session/") : -len("/events")]
