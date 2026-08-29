@@ -218,41 +218,10 @@ function _push(body: HTMLDivElement, text: string, cls: string): void {
   body.scrollTop = body.scrollHeight;
 }
 
-type FetchResult<T> = { ok: true; data: T } | { ok: false; failure_class: "network" | "http" | "parse"; detail: string };
-
-async function _postJson<T = Record<string, unknown>>(url: string, body: unknown): Promise<FetchResult<T>> {
-  // One JSON-POST helper for terminal.ts. Distinguishes network / HTTP / parse
-  // failure classes so the caller can surface them separately instead of the
-  // prior .catch(() => null) coerce-to-null that swallowed diagnostic info.
-  let response: Response;
-  try {
-    response = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-  } catch (err) {
-    const detail = err instanceof Error ? err.message : String(err);
-    return { ok: false, failure_class: "network", detail };
-  }
-  const text = await response.text();
-  if (!response.ok) {
-    // The daemon returns JSON error bodies (`{"error": "..."}`) on 4xx / 5xx.
-    let detail = `HTTP ${response.status}`;
-    try {
-      const parsed = JSON.parse(text) as { error?: string };
-      if (parsed.error) detail = `HTTP ${response.status}: ${parsed.error}`;
-    } catch { /* body was not JSON; the plain status suffices */ }
-    return { ok: false, failure_class: "http", detail };
-  }
-  if (!text) return { ok: true, data: {} as T };
-  try {
-    return { ok: true, data: JSON.parse(text) as T };
-  } catch (err) {
-    const detail = err instanceof Error ? err.message : String(err);
-    return { ok: false, failure_class: "parse", detail };
-  }
-}
+// Sprint 036a: FetchResult + the three helpers extracted to web/lib/fetch.ts
+// so the desktop-view controls share the wire (SPEC-3 from
+// REVIEW-2026-08-28-piece-g-eod). Local aliases keep call sites unchanged.
+import { postJson as _postJson, fetchJson as _fetch, fetchGet as _fetchGet, type FetchResult } from "./lib/fetch";
 
 async function _openSession(h: TerminalHandle, body: HTMLDivElement): Promise<boolean> {
   const createBody: Record<string, unknown> = { driver: h.driverName };
@@ -375,6 +344,7 @@ function _handleEnvelope(h: TerminalHandle, body: HTMLDivElement, env: RecordEnv
       bundle_slug: bundleSlug,
       ...(parentSessionId ? { parent_session_id: parentSessionId } : {}),
     });
+    window.dispatchEvent(new CustomEvent("substrate:session-changed", { detail: { session_id: h.sessionId } }));
     _push(body, `session ${h.sessionId} started · driver ${driverName}`, CLS.dim);
     h.updatePrompt();
     return;
@@ -409,6 +379,7 @@ function _handleEnvelope(h: TerminalHandle, body: HTMLDivElement, env: RecordEnv
       });
       h.endedEmittedFor = h.sessionId;
     }
+    window.dispatchEvent(new CustomEvent("substrate:session-changed", { detail: { session_id: h.sessionId } }));
     _push(body, `session ended (${reason}, ${totalTurns} turns)`, CLS.dim);
     _closeStream(h);
     return;
@@ -491,6 +462,7 @@ async function _endSession(h: TerminalHandle, body: HTMLDivElement, reason: stri
   if (result.ok && result.data.status === "ended") {
     emit("DRIVER_SESSION_ENDED", { session_id: sid, reason });
     h.endedEmittedFor = sid;
+    window.dispatchEvent(new CustomEvent("substrate:session-changed", { detail: { session_id: h.sessionId } }));
     _push(body, `session ended (${reason})`, CLS.dim);
     // Sprint 035v: close the stream synchronously so the params hint,
     // prompt, and other per-session UI reset immediately — not
@@ -849,48 +821,8 @@ async function _slashRoute(h: TerminalHandle, body: HTMLDivElement, line: string
   return true;
 }
 
-// Two typed HTTP helpers alongside `_postJson`. `_fetch` handles POST/PATCH/
-// PUT with a JSON body; `_fetchGet` handles GET. Both return the same
-// FetchResult<T> discriminated union so callers can name the failure class.
-async function _fetch<T = Record<string, unknown>>(url: string, method: string, body: unknown): Promise<FetchResult<T>> {
-  let response: Response;
-  try {
-    response = await fetch(url, {
-      method,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-  } catch (err) {
-    return { ok: false, failure_class: "network", detail: err instanceof Error ? err.message : String(err) };
-  }
-  const text = await response.text();
-  if (!response.ok) {
-    let detail = `HTTP ${response.status}`;
-    try {
-      const parsed = JSON.parse(text) as { error?: string };
-      if (parsed.error) detail = `HTTP ${response.status}: ${parsed.error}`;
-    } catch { /* body not JSON */ }
-    return { ok: false, failure_class: "http", detail };
-  }
-  if (!text) return { ok: true, data: {} as T };
-  try { return { ok: true, data: JSON.parse(text) as T }; }
-  catch (err) { return { ok: false, failure_class: "parse", detail: err instanceof Error ? err.message : String(err) }; }
-}
-
-async function _fetchGet<T>(url: string): Promise<FetchResult<T>> {
-  let response: Response;
-  try { response = await fetch(url); }
-  catch (err) { return { ok: false, failure_class: "network", detail: err instanceof Error ? err.message : String(err) }; }
-  const text = await response.text();
-  if (!response.ok) {
-    let detail = `HTTP ${response.status}`;
-    try { const parsed = JSON.parse(text) as { error?: string }; if (parsed.error) detail = `HTTP ${response.status}: ${parsed.error}`; }
-    catch { /* body not JSON */ }
-    return { ok: false, failure_class: "http", detail };
-  }
-  try { return { ok: true, data: JSON.parse(text) as T }; }
-  catch (err) { return { ok: false, failure_class: "parse", detail: err instanceof Error ? err.message : String(err) }; }
-}
+// _fetch + _fetchGet retired from terminal.ts (sprint 036a); the imports at
+// the top of this file provide them via ./lib/fetch.
 
 export interface MountTerminalOptions {
   driverDefault?: string;

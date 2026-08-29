@@ -1,0 +1,157 @@
+/* Sprint 036a — desktop-view driver picker.
+
+   Mounts inside the desktop-view session-header (#driver-picker). Reads
+   GET /api/models to populate the dropdown; reads GET /api/session to
+   bind to the current live/parked session; on user change, fires
+   PATCH /api/session/<id> {driver} and emits DRIVER_PATCHED on ACK
+   (SPEC-3: same wire as web/terminal.ts's `/model` slash from sprint 035t).
+
+   Public surface: `mountDriverPicker(root, deps?) → DriverPickerHandle`.
+   The handle exposes `.refresh()` for callers that create or end sessions
+   externally; the terminal view calls it after DRIVER_SESSION_STARTED so
+   the desktop picker binds to the just-opened session without a page
+   reload. Everything else is `_`-prefixed local. */
+
+import { emit } from "../instrumentation/sdd";
+import { postJson, fetchJson, fetchGet, type FetchResult } from "../lib/fetch";
+
+export interface DriverPickerHandle {
+  refresh: (preferSid?: string | null) => Promise<void>;
+  el: HTMLElement;
+  select: HTMLSelectElement;
+  status: HTMLSpanElement;
+  currentSessionId: () => string | null;
+}
+
+export interface DriverPickerDeps {
+  api?: (path: string) => Promise<any>;
+}
+
+type ModelsResponse = { models?: string[]; cli?: string[]; default?: string };
+type SessionBucket = { session_id: string; driver: string; name?: string | null; status?: string };
+type SessionList = { live?: SessionBucket[]; parked?: SessionBucket[]; ended?: SessionBucket[]; interrupted?: SessionBucket[] };
+
+const _mkSelect = (): HTMLSelectElement => {
+  const s = document.createElement("select");
+  s.id = "driver-picker-select";
+  s.title = "session driver — change fires PATCH /api/session/<id> {driver}";
+  s.style.marginLeft = "6px";
+  return s;
+};
+
+const _mkStatus = (): HTMLSpanElement => {
+  const s = document.createElement("span");
+  s.id = "driver-picker-status";
+  s.className = "dim sm";
+  s.style.marginLeft = "8px";
+  return s;
+};
+
+const _populateOptions = async (select: HTMLSelectElement): Promise<string[]> => {
+  const result = await fetchGet<ModelsResponse>("/api/models");
+  const merged = new Set<string>(["deterministic"]);
+  if (result.ok) {
+    for (const m of result.data.models || []) merged.add(m);
+    for (const c of result.data.cli || []) merged.add(c);
+  }
+  const options = Array.from(merged);
+  select.innerHTML = options.map((m) => `<option value="${m}">${m}</option>`).join("");
+  return options;
+};
+
+const _readCurrentSession = async (preferSid: string | null): Promise<{ session_id: string; driver: string } | null> => {
+  const result = await fetchGet<SessionList>("/api/session");
+  if (!result.ok) return null;
+  const s = result.data;
+  const pool = [
+    ...(s.live || []),
+    ...(s.parked || []),
+    ...(s.interrupted || []),
+  ];
+  // Prefer a session_id the caller nominated (fired via
+  // substrate:session-changed.detail); else fall back to the first live/parked.
+  if (preferSid) {
+    const match = pool.find((b) => b.session_id === preferSid);
+    if (match) return { session_id: match.session_id, driver: match.driver };
+  }
+  const first = pool[0];
+  if (!first) return null;
+  return { session_id: first.session_id, driver: first.driver };
+};
+
+export function mountDriverPicker(root: HTMLElement, _deps: DriverPickerDeps = {}): DriverPickerHandle {
+  root.innerHTML = "";
+  const label = document.createElement("label");
+  label.textContent = "driver";
+  label.style.color = "var(--tx-dim)";
+  label.style.fontSize = "12px";
+  const select = _mkSelect();
+  const status = _mkStatus();
+  status.textContent = "· no live session";
+  label.appendChild(select);
+  root.appendChild(label);
+  root.appendChild(status);
+
+  let sessionId: string | null = null;
+  let priorDriver: string | null = null;
+
+  const handle: DriverPickerHandle = {
+    el: root,
+    select,
+    status,
+    currentSessionId: () => sessionId,
+    async refresh(preferSid: string | null = null) {
+      await _populateOptions(select);
+      const current = await _readCurrentSession(preferSid);
+      if (!current) {
+        sessionId = null;
+        priorDriver = null;
+        select.disabled = true;
+        status.textContent = "· no live session";
+        return;
+      }
+      sessionId = current.session_id;
+      priorDriver = current.driver;
+      const options = Array.from(select.options).map((o) => o.value);
+      if (!options.includes(current.driver)) {
+        const opt = document.createElement("option");
+        opt.value = current.driver;
+        opt.textContent = current.driver;
+        select.appendChild(opt);
+      }
+      select.value = current.driver;
+      select.disabled = false;
+      status.textContent = `· session ${sessionId.slice(0, 12)}…`;
+    },
+  };
+
+  select.addEventListener("change", async () => {
+    const next = select.value;
+    if (!sessionId) {
+      status.textContent = "· no live session — cannot patch";
+      return;
+    }
+    if (priorDriver === next) return;
+    const priorSnapshot = priorDriver;
+    const result: FetchResult<{ driver?: string }> = await fetchJson<{ driver?: string }>(
+      `/api/session/${encodeURIComponent(sessionId)}`,
+      "PATCH",
+      { driver: next },
+    );
+    if (!result.ok) {
+      status.textContent = `· PATCH failed [${result.failure_class}] ${result.detail}`;
+      if (priorSnapshot) select.value = priorSnapshot;
+      return;
+    }
+    priorDriver = next;
+    emit("DRIVER_PATCHED", { session_id: sessionId, driver: next, prior_driver: priorSnapshot ?? "" });
+    status.textContent = `· driver → ${next}`;
+  });
+
+  // Suppress the unused import lint for postJson (kept exported for callers
+  // that build session-creation dialogs on top of this control later).
+  void postJson;
+
+  void handle.refresh();
+  return handle;
+}
