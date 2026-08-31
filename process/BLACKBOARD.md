@@ -300,6 +300,13 @@
 
 *Agent maintains. Last 10 increment closes; older roll into ## Built as compressed paragraphs.*
 
+### process/ reorg (2026-08-31, closed) — mirrors the substrate cleanup shape
+- **Scope:** substrate landed sprint 257's cleanup arc the same day and pushed the docs/ reorg on top; this repo gets the parallel move on process/. Only the persistent process docs stay at process/ root (BLACKBOARD, KIT_DIARY, BACKLOG, ROADMAP, WORKING_AGREEMENT, HARNESS-CATALOG, SDD-ARC-PLAN, SDD-HARNESS-PORT-PLAN). Existing subdirs (sprints/, refactor-reviews/) unchanged.
+- **Moves:** 24 files into three new subfolders — `process/reviews/` (17 REVIEW-2026-08-* files, including the -RESPONSE variants), `process/planning/` (PLAN, FEATURE-MAP, FOLD, POSTMORTEM, ROADMAP-2026-08-16 dated round), `process/archive/` (2 -superseded plans).
+- **Cross-refs:** 12 files across process/, signals/, and sprints/ rewritten to the new paths in one pass. Runtime code untouched.
+- **Landed as:** commit `d0649d1`, pushed to origin/main.
+- **Method note (mirrors substrate side):** files were `git mv`'d so every rename shows as R100 in git; path substitutions were done by a single Python pass grepping `git ls-files` for the old string and rewriting it, so no reference was missed and the diff shape is auditable (24 renames + 12 files at 23 insertions / 23 deletions — even numbers, one-for-one substitutions).
+
 ### Sprint 012 (2026-06-22, in progress) — drift-watchlist polish (B, C done; C2, A next)
 - **Scope:** clear the Drift watchlist. B (rAF replay), C (rail grouping) done; C2 (prune + clean), A (glider fixture) next.
 - **Honesty note (Architect-flagged):** B + C were built CODE-FIRST before the sprint card existed — a discipline miss. Corrected: `sprint-012-drift-polish.md` now declares the contract, and C2 + A are contract-before-code.
