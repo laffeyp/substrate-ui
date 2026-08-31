@@ -300,6 +300,24 @@
 
 *Agent maintains. Last 10 increment closes; older roll into ## Built as compressed paragraphs.*
 
+### Sprint 044 (2026-08-31, closed) — piece G close: the terminal drives a real cloud model
+- **Scope:** the last unfinished stripe of piece G. Every wired-up part — the driver picker, all nineteen slashes, Ctrl+C → `/api/session/<id>/interrupt`, the SSE renderer with `ModelReply` in accent, the /model PATCH — landed in sprints 035-041. What remained: on a fresh open the terminal seeded `deterministic` every time, so the daily driver was demonstrably driving nothing.
+- **Fixes (four edits + one new harness):**
+  - `web/app.ts:877` — drop `driverDefault: "deterministic"` from the `mountTerminal(#view-terminal, …)` call so the terminal reads the server's default instead.
+  - `web/terminal.ts` — empty-sentinel fallback for `driverName`; also read a `?driver=<name>` URL query so a harness that must not pay cloud tokens (the sprint 035 lifecycle test) pins deterministic without a server env or restart.
+  - `web/terminal.ts:175` (`_openSession`) — when neither `h.driverName` nor a visibly-bound picker has a value, fetch `/api/models` default. `pickerSelect?.value` is treated as authoritative only when its parent is `offsetParent !== null` (visible), because the desktop picker is `display: none` pre-session and its first option is the literal `"deterministic"` (driver_picker.ts:52). Reading it otherwise would seed deterministic on every first open — the exact bug this sprint fixes.
+  - `server.py:_agent_models` — refresh the `prefer` list against live Ollama Cloud on this box: `kimi-k2.6` → `kimi-k2.7-code`, `glm-5.1` → `glm-5.2`. Verified via `/api/tags` + a hi-in-three-words `/api/chat` probe (1.4s round-trip).
+  - `harness/capture_terminal_daily_driver.js` — new. Real backend, real cloud model, no mocks. Flip to terminal view, type a real prompt, assert `DRIVER_SESSION_STARTED{driver_name != "deterministic"}`, wait for a `.accent` row in `#terminal-body`, assert non-empty text, `/exit`, assert `DRIVER_SESSION_ENDED`. Three screenshots at named anchors (44-terminal-session-opened.png, 44-terminal-model-reply-rendered.png, 44-terminal-session-ended.png).
+  - `harness/capture_terminal_session.js` — one line: `page.goto(`${BASE}/?driver=deterministic`)` keeps the sprint 035 lifecycle test cost-neutral now that the daily-driver default is a paid cloud model.
+- **Dual contract:** artifact — `npm run build` clean (tsc --noEmit + vite build) at 121ms; typecheck clean. Observation — both harnesses green live: the new daily-driver capture rendered "hello" from `kimi-k2.7-code:cloud` in the terminal body; the sprint 035 lifecycle test still passes on deterministic via the URL pin.
+- **Live run receipt (2026-08-31, this box):**
+  - `ok  session started: driver=kimi-k2.7-code:cloud tokens=262144`
+  - `ok  ModelReply rendered: "hello"`
+  - `ok  PARK_LANDED — turn 1 complete`
+  - `ok  DRIVER_SESSION_ENDED fired on /exit`
+- **Piece G status:** closed. Type into the terminal, real model responds, the toggle button flips to the desktop side which already works. The minimum to use it as a daily driver is here.
+- **Non-goals (deferred):** wiring the daily-driver capture into the batched `signals` npm script (needs live Ollama Cloud, GitHub runner has none — it fits as a local smoke, not a CI gate); a visible in-terminal picker pre-session (desktop picker binds post-session and works for mid-session changes); token/cost metering in the header.
+
 ### process/ reorg (2026-08-31, closed) — mirrors the substrate cleanup shape
 - **Scope:** substrate landed sprint 257's cleanup arc the same day and pushed the docs/ reorg on top; this repo gets the parallel move on process/. Only the persistent process docs stay at process/ root (BLACKBOARD, KIT_DIARY, BACKLOG, ROADMAP, WORKING_AGREEMENT, HARNESS-CATALOG, SDD-ARC-PLAN, SDD-HARNESS-PORT-PLAN). Existing subdirs (sprints/, refactor-reviews/) unchanged.
 - **Moves:** 24 files into three new subfolders — `process/reviews/` (17 REVIEW-2026-08-* files, including the -RESPONSE variants), `process/planning/` (PLAN, FEATURE-MAP, FOLD, POSTMORTEM, ROADMAP-2026-08-16 dated round), `process/archive/` (2 -superseded plans).
