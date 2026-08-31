@@ -831,6 +831,10 @@ function _toggleView(source: string, preClickFocus: Element | null): void {
   const toggle = document.getElementById("view-toggle");
   if (toggle) toggle.classList.toggle("on-terminal", next === VIEW_IDS.TERMINAL);
   STATE.view = next;
+  // Sprint 045: move the single terminal DOM to whichever host is now
+  // active (desktop → bottom dock, terminal → fullscreen). Same DOM
+  // element, so session/EventSource/input state survives the flip.
+  (window as any)._placeTerminal?.(next);
   emit("VIEW_SWITCHED", { to_view: next, prior_view: prior, subject_record: STATE.name });
   requestAnimationFrame(() => _restoreView(`view-${next}`, STATE.viewSnap[next] as any));
   // On flip-in to desktop, repaint the active pane so the grader's
@@ -873,24 +877,38 @@ import { mountNewSessionDialog, workspacePickerField, workspaceShapeField, mount
 import { mountToolsDrawer, toolsField } from "./controls/tools_drawer.js";
 import { isolateField } from "./controls/isolate_toggle.js";
 installObservabilitySurface({ STATE, loadRecords, selectRecord: selectRecord as (...a: unknown[]) => unknown, loadAssays });
-const _viewTerminalRoot = document.getElementById("view-terminal");
-// No driverDefault: mountTerminal falls through to the server's /api/models
-// default (server.py:_agent_models prefers the verified agentic cloud models
-// — kimi-k2.7-code, glm-5.2, nemotron-3-super, deepseek-v4-pro — in order).
-// The picker still lists every driver; the user changes it live via the
-// header <select> or /model <name>.
-if (_viewTerminalRoot) mountTerminal(_viewTerminalRoot as HTMLElement);
-// Sprint 045: if state.ts read `terminal` as the initial view (either the
-// default or ?view=terminal), swap the DOM's `.active` class off the
-// hardcoded #view-desktop and onto #view-terminal so the first paint
-// matches state. Without this, STATE.view is "terminal" but the DOM
-// still shows the desktop view — every subsequent toggle flips the
-// wrong way.
+// Sprint 045: the terminal DOM is mounted ONCE into a movable
+// `.terminal-column` element, then re-parented between the fullscreen
+// #view-terminal host and the bottom #terminal-dock on view flip.
+// One mount = one session, one EventSource, one input — the flip is
+// purely visual. `terminalColumnEl` is exported (window.terminalColumnEl)
+// so a harness can grep it, and the flip logic in _toggleView (below)
+// moves it.
+const terminalColumnEl = document.createElement("div");
+terminalColumnEl.className = "terminal-column";
+terminalColumnEl.id = "terminal-column";
+mountTerminal(terminalColumnEl);
+
+function _placeTerminal(view: "desktop" | "terminal"): void {
+  const dock = document.getElementById("terminal-dock");
+  const full = document.getElementById("view-terminal");
+  const host = view === "desktop" ? dock : full;
+  if (host && terminalColumnEl.parentElement !== host) {
+    host.appendChild(terminalColumnEl);
+  }
+}
+_placeTerminal(STATE.view as "desktop" | "terminal");
+// If state.ts landed on `terminal`, swap the DOM's `.active` class off
+// the hardcoded #view-desktop and onto #view-terminal so the first
+// paint matches state. Without this, STATE.view is "terminal" but the
+// DOM still shows the desktop view.
 if (STATE.view === "terminal") {
   document.getElementById("view-desktop")?.classList.remove("active");
   document.getElementById("view-terminal")?.classList.add("active");
   document.getElementById("view-toggle")?.classList.add("on-terminal");
 }
+(window as any).terminalColumnEl = terminalColumnEl;
+(window as any)._placeTerminal = _placeTerminal;
 // Sprint 041: session-control mounts are inside the terminal view now
 // (terminal.ts::_mkChildren renders the mount spans in its header).
 // Bundle picker is DELIBERATELY NOT MOUNTED: the terminal session's
@@ -927,6 +945,12 @@ window.addEventListener("substrate:session-changed", (ev: Event) => {
   if (_driverPickerHandle) void _driverPickerHandle.refresh(sid);
   if (_workspaceBadgeHandle) void _workspaceBadgeHandle.refresh(sid);
   if (_toolsDrawerHandle) void _toolsDrawerHandle.refresh(sid);
+  // Sprint 045: refresh the rail so the new/patched live session
+  // shows up in the "live sessions" bucket without a page reload.
+  // Before this, the rail rendered only on boot + on explicit
+  // loadRecords calls; a session opened via the terminal never
+  // appeared until the next page load.
+  if (_rail) void _rail.refresh();
 });
 if (_driverPickerHandle) (window as any).driverPicker = _driverPickerHandle;
 if (_newSessionHandle) (window as any).newSessionDialog = _newSessionHandle;
