@@ -182,7 +182,12 @@ def _daemon_driver_resolver(name: str, params: dict[str, Any] | None = None) -> 
         p = params or {}
         responder = OllamaResponder(
             model=name,
-            think=bool(p.get("think", False)),
+            # Sprint 045: thinking defaults ON. The daily-driver is a real
+            # reasoning workflow, not a benchmark path — kimi-k2.7-code,
+            # glm-5.2, and nemotron-3-super all produce measurably better
+            # answers with think=True. Callers who need it off pass it
+            # explicitly (or /set think off mid-session).
+            think=bool(p.get("think", True)),
             max_tokens=int(p.get("max_tokens", 0)),
             num_ctx=int(p.get("num_ctx", 32768)),
             timeout=float(p.get("timeout", 300.0)),
