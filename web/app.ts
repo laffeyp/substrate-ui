@@ -880,6 +880,17 @@ const _viewTerminalRoot = document.getElementById("view-terminal");
 // The picker still lists every driver; the user changes it live via the
 // header <select> or /model <name>.
 if (_viewTerminalRoot) mountTerminal(_viewTerminalRoot as HTMLElement);
+// Sprint 045: if state.ts read `terminal` as the initial view (either the
+// default or ?view=terminal), swap the DOM's `.active` class off the
+// hardcoded #view-desktop and onto #view-terminal so the first paint
+// matches state. Without this, STATE.view is "terminal" but the DOM
+// still shows the desktop view — every subsequent toggle flips the
+// wrong way.
+if (STATE.view === "terminal") {
+  document.getElementById("view-desktop")?.classList.remove("active");
+  document.getElementById("view-terminal")?.classList.add("active");
+  document.getElementById("view-toggle")?.classList.add("on-terminal");
+}
 // Sprint 041: session-control mounts are inside the terminal view now
 // (terminal.ts::_mkChildren renders the mount spans in its header).
 // Bundle picker is DELIBERATELY NOT MOUNTED: the terminal session's

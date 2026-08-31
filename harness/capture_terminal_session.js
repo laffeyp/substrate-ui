@@ -29,7 +29,10 @@ const fail = (m) => { console.error(`  FAIL  ${m}`); fails.push(m); };
   // Sprint 044: pin the driver via URL so this harness stays cost-neutral
   // regardless of what /api/models defaults to (locally it may resolve to
   // a paid cloud model). terminal.ts reads window.location.search.
-  await page.goto(`${BASE}/?driver=deterministic`);
+  // Sprint 045: default view is now terminal (see state.ts). This harness
+  // asserts #view-desktop.active on load, so pin ?view=desktop; ?driver=
+  // deterministic still keeps it cost-neutral.
+  await page.goto(`${BASE}/?view=desktop&driver=deterministic`);
   await page.waitForSelector("#view-desktop.active", { timeout: 5000 });
 
   // Flip to the terminal view.

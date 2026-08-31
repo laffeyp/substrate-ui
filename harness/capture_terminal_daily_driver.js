@@ -32,7 +32,7 @@ const fail = (m) => { console.error(`  FAIL  ${m}`); fails.push(m); };
     // Surface console errors from the app so a wire break shows up in the log.
     if (msg.type() === "error") console.log(`  [console.error] ${msg.text()}`);
   });
-  await page.goto(BASE);
+  await page.goto(BASE + "?view=desktop");
   await page.waitForSelector("#view-desktop.active", { timeout: 5000 });
 
   // Flip to the terminal view.

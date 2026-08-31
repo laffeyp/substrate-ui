@@ -27,7 +27,7 @@ const shot = async (page, name) => {
   const page = await ctx.newPage();
   page.on("pageerror", (e) => { throw e; });
 
-  await page.goto(BASE);
+  await page.goto(BASE + "?view=desktop");
   await page.waitForFunction(
     () => ((window).__signals || []).some((s) => s.name === "SESSION_INIT"),
     { timeout: 5000 },

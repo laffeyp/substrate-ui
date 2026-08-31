@@ -42,7 +42,7 @@ const waitSigCount = (p, name, min, timeout = 10000) =>
   const page = await ctx.newPage();
   page.on("pageerror", (e) => { throw e; });
 
-  await page.goto(BASE);
+  await page.goto(BASE + "?view=desktop");
   await waitSig(page, "SESSION_INIT");
   await page.waitForSelector("#view-desktop.active", { timeout: 5000 });
   // Wait for the initial auto-selected record's paint tags so
