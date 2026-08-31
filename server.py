@@ -1056,14 +1056,11 @@ class Handler(BaseHTTPRequestHandler):
             return
         driver = str(body.get("driver") or "deterministic")
         name = body.get("name")
-        workspace = str(body.get("workspace") or str(_SESSIONS_BASE / "default"))
+        _workspace_arg = body.get("workspace")
         workspace_shape = str(body.get("workspace_shape") or "flat")
-        # Sprint 223c: `isolate` (§9c Mode 3). When true, the session's tool
-        # writes stay in a per-session directory under ~/.substrate/sessions/
-        # regardless of the caller's `workspace`. Mutual exclusion with
-        # `workspace_shape: "worktree"` — the two shape a session two
-        # different ways; picking one silently would hide the operator's
-        # intent. Enforce explicit halt.
+        # Sprint 223c: `isolate` (§9c Mode 3). Mutual exclusion with
+        # workspace_shape: "worktree" — pick one, don't hide the operator's
+        # intent behind silent precedence.
         isolate = bool(body.get("isolate"))
         if isolate and workspace_shape == "worktree":
             self._error(
@@ -1072,18 +1069,37 @@ class Handler(BaseHTTPRequestHandler):
                 "pick one",
             )
             return
+        # Sprint 046: workspace resolution matches product spec round 12
+        # §9c and §3. Every session gets its OWN workspace under
+        # ~/.substrate/sessions/<id>/workspace/ — never a shared
+        # `default/` singleton. The session_id is not yet known at this
+        # point (create() below assigns it), so mint a fresh one here
+        # and force it through _forced_session_id. Substrate creates the
+        # workspace dir at open — the spec says "substrate creates" and
+        # a first-run bare `substrate` must Just Work, not fail on a
+        # nonexistent cwd inside the bash tool.
+        _minted_sid = f"s_{uuid.uuid4().hex[:24]}"
+        _forced_session_id: str | None = None
         if isolate:
             workspace_shape = "isolate"
-            # The session_id is not yet known at this point; use a fresh uuid
-            # so the isolated workspace path can be created before create()
-            # returns. session_id below matches this same uuid.
-            _iso_uuid = uuid.uuid4().hex[:24]
-            _iso_ws = _SESSIONS_BASE / f"s_{_iso_uuid}" / "workspace"
-            _iso_ws.mkdir(parents=True, exist_ok=True)
-            workspace = str(_iso_ws)
-            _forced_session_id = f"s_{_iso_uuid}"
+            workspace = str(_SESSIONS_BASE / _minted_sid / "workspace")
+            _forced_session_id = _minted_sid
+        elif _workspace_arg:
+            # Caller pointed at a specific path. If it's a git repo the
+            # session-registry create() promotes shape → worktree and
+            # substrate creates the worktree there; if it's a plain
+            # directory the session writes into it flat (Mode 1).
+            workspace = str(_workspace_arg)
         else:
-            _forced_session_id = None
+            # Bare session, no --workspace. Spec §3 line 35 + §9c line 587:
+            # sandbox at ~/.substrate/sessions/<id>/workspace/, flat shape.
+            workspace = str(_SESSIONS_BASE / _minted_sid / "workspace")
+            _forced_session_id = _minted_sid
+        try:
+            Path(workspace).mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            self._error(400, f"workspace {workspace!r} is not creatable: {exc}")
+            return
         # Piece-B review finding 6: TECH-SPEC §4 names this field `seed_text`;
         # the earlier draft read `seed` only, so a client following the spec
         # silently sent nothing. Both names accepted; the spec wins on writes.
