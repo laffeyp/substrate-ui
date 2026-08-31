@@ -26,7 +26,15 @@ button{font-family:inherit;color:inherit;cursor:pointer;background:none;border:n
 
 /* two-view scaffold (sprint 033) — the daily-driver reshape */
 .view{ display:none; min-height:0; overflow:hidden; }
-.view.active#view-desktop{ display:grid; grid-template-rows:auto 1fr auto auto; min-height:0; }
+.view.active#view-desktop{ display:grid; grid-template-rows:auto 1fr auto auto auto; min-height:0; }
+/* Sprint 045: the desktop view carries a live terminal DOCK at the bottom.
+   The terminal DOM (mounted once at boot) is re-parented into #terminal-dock
+   when view=desktop and back to #view-terminal when view=terminal, so
+   session state and the open EventSource survive the flip. Fixed 38vh
+   height keeps records legible above; the dock has its own top border. */
+.terminal-dock{ height:38vh; min-height:220px; border-top:1px solid var(--line2); background:var(--bg2); overflow:hidden; }
+.view.active#view-desktop .terminal-dock{ display:block; }
+.terminal-dock .terminal-column{ display:flex; flex-direction:column; height:100%; }
 .view.active#view-terminal{ display:flex; flex-direction:column; min-height:0; }
 /* terminal column (sprint 035); .active gate added at 037b — without it,
    the class's display:flex overrode `.view{display:none}` and the
@@ -277,6 +285,7 @@ button{font-family:inherit;color:inherit;cursor:pointer;background:none;border:n
     <div class="col"><div class="col-h">inspector</div><div class="insp" id="insp"><span class="dim">Select an event or a Producer to trace its provenance.</span></div></div>
   </div>
   <div class="health" id="health"></div>
+  <div id="terminal-dock" class="terminal-dock"></div>
   </div>
   <div id="view-terminal" class="view"></div>
   <div id="new-session-dialog" class="new-session-dialog-mount"></div>
