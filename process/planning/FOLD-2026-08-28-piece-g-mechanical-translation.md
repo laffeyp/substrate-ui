@@ -7,13 +7,13 @@ three source docs stay untouched on disk).
 
 **Source docs (unchanged):**
 
-1. `process/PLAN-2026-08-28-piece-g-mechanical-translation.md` — my
+1. `process/planning/PLAN-2026-08-28-piece-g-mechanical-translation.md` — my
    earlier two-phase plan (Phase 1 = daemon-side `driver_params`
    surface; Phase 2 = terminal.ts rewrite).
-2. `process/REVIEW-2026-08-28-daily-driver-terminal-vs-spec.md` — the
+2. `process/reviews/REVIEW-2026-08-28-daily-driver-terminal-vs-spec.md` — the
    Architect-diagnosed confusion, confirmed against product spec §13
    View A and tech spec §10.
-3. `process/FEATURE-MAP-2026-08-28-agent-terminal-to-daily-driver.md`
+3. `process/planning/FEATURE-MAP-2026-08-28-agent-terminal-to-daily-driver.md`
    — nineteen features across nine sections, each with substrate wire,
    sub-side status, DD-side status, and card that lands it.
 

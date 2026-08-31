@@ -15,7 +15,7 @@
 - `web/app.ts`: 923 lines (down from 1,285 at the piece-G open — 28% reduction).
 - `web/terminal.ts`: 583 lines (down from 1,037 at the sprint 037c open — 44% reduction post-035x extraction).
 - `web/console/`: two files (`health.ts` 124, `transport.ts` 130) per Plan-web-app-ts-split partial application.
-- Fold on file: `process/REVIEW-2026-08-29-piece-g-fold.md` (five audit categories A-E; three passed, one vacuous positive, one real finding closed in-sprint).
+- Fold on file: `process/reviews/REVIEW-2026-08-29-piece-g-fold.md` (five audit categories A-E; three passed, one vacuous positive, one real finding closed in-sprint).
 
 ---
 
@@ -49,7 +49,7 @@ Piece G surfaced three genuine halt-and-articulate moments and each landed corre
 
 ## SDD-5 — The 038 fold's finding E (HARNESS-CATALOG.md stale) closed same-sprint.
 
-The fold review at `process/REVIEW-2026-08-29-piece-g-fold.md` categorized findings A-E. A, B, C, D read positive. E surfaced real drift: catalog listed 18 harnesses but disk had 29, "What DOES NOT exist yet" section named four artifacts that now exist, grader-invariants table cited three retired checks, "How to write" section referenced `PANE_SWITCHED` (superseded by `VIEW_SWITCHED` at v0.7.1). Response: full catalog rewrite. Landed in 038. Zero deferral.
+The fold review at `process/reviews/REVIEW-2026-08-29-piece-g-fold.md` categorized findings A-E. A, B, C, D read positive. E surfaced real drift: catalog listed 18 harnesses but disk had 29, "What DOES NOT exist yet" section named four artifacts that now exist, grader-invariants table cited three retired checks, "How to write" section referenced `PANE_SWITCHED` (superseded by `VIEW_SWITCHED` at v0.7.1). Response: full catalog rewrite. Landed in 038. Zero deferral.
 
 ## Minor — sprint-038 card's `## artifact contract` names `REVIEW-2026-08-DD-piece-g-close.md`; actual file is `REVIEW-2026-08-29-piece-g-fold.md`.
 

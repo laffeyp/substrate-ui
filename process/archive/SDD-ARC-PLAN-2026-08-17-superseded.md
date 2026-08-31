@@ -10,7 +10,7 @@ Superseded. The plan scoped sprints 021–029 for a nine-sprint SDD arc across t
 
 ## Consult instead
 
-- `process/ROADMAP-2026-08-16.md` — current roadmap, Wave-1 status, held UI-NEXT queue.
+- `process/planning/ROADMAP-2026-08-16.md` — current roadmap, Wave-1 status, held UI-NEXT queue.
 - `sprints/sprint-018-typescript-conversion.md` through `sprint-032-studio-instrumentation.md` — every landed sprint card.
 - `signals/versions/current.json` (symlink → 0.3.json) — the locked vocabulary.
 - `signals/versions/0.3-rationale.md` — the current rationale, with the per-change ledger back through 0.1.
