@@ -53,5 +53,5 @@ Four gates: parity, build, e2e, grader. All expected green.
 
 ## follow-on
 
-Wait for the workflow-parity hold to lift (substrate-side, per `docs/cockpit/WORKFLOW-PARITY-PLAN-2026-07-31.md`) — or pick up the two remaining Wave-2 candidates in `process/ROADMAP-2026-08-16.md § 2`: fold `capture_scene.js` assertions into `e2e_console.js`, and an optional signal-capture tail on the standing e2e harnesses behind an env flag.
+Wait for the workflow-parity hold to lift (substrate-side, per `docs/cockpit/WORKFLOW-PARITY-PLAN-2026-07-31.md`) — or pick up the two remaining Wave-2 candidates in `process/planning/ROADMAP-2026-08-16.md § 2`: fold `capture_scene.js` assertions into `e2e_console.js`, and an optional signal-capture tail on the standing e2e harnesses behind an env flag.
 

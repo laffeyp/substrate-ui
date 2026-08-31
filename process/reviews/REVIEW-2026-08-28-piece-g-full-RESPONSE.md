@@ -151,8 +151,8 @@ exercise sprint 240's new instrument at all.
   section (SDD-4).
 - `process/refactor-reviews/PLAN-2026-08-28-web-app-ts-split.md` —
   new (ARCH-1).
-- `process/REVIEW-2026-08-28-piece-g-full.md` — the review itself.
-- `process/REVIEW-2026-08-28-piece-g-full-RESPONSE.md` — this file.
+- `process/reviews/REVIEW-2026-08-28-piece-g-full.md` — the review itself.
+- `process/reviews/REVIEW-2026-08-28-piece-g-full-RESPONSE.md` — this file.
 - `sprints/sprint-036a` through `sprint-036e` — each amended for
   ARCH-5 (each control ships as `web/controls/<name>.ts`).
 - `server.py` — companion edit passing `workspace_shape`, `bundle`,

@@ -128,7 +128,7 @@ the first consumers.
 - `sprints/sprint-033-CLOSEOUT-ADDENDUM.md` — AP8.
 - `sprints/sprint-033a-vocab-sync-substrate-current.md` — status:closed.
 - `process/BLACKBOARD.md` — new close entry (below).
-- `process/REVIEW-2026-08-28-piece-g-work-so-far-RESPONSE.md` — this
+- `process/reviews/REVIEW-2026-08-28-piece-g-work-so-far-RESPONSE.md` — this
   file.
 
 **substrate/**

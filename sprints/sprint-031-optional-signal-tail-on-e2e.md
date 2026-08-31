@@ -55,5 +55,5 @@ Four gates: parity, build, all four e2e (with the flag off and on), `npm run sig
 
 ## follow-on
 
-Wave-2 SDD candidates all closed (Sprint 030 substrate_kind enforcement; Sprint 031 optional e2e signal tail; drift-item "fold capture_scene.js" was already closed at review #49 per verification in `process/ROADMAP-2026-08-16.md § 2`). Substrate-ui-NEXT still held behind substrate-side workflow parity per `docs/cockpit/WORKFLOW-PARITY-PLAN-2026-07-31.md`.
+Wave-2 SDD candidates all closed (Sprint 030 substrate_kind enforcement; Sprint 031 optional e2e signal tail; drift-item "fold capture_scene.js" was already closed at review #49 per verification in `process/planning/ROADMAP-2026-08-16.md § 2`). Substrate-ui-NEXT still held behind substrate-side workflow parity per `docs/cockpit/WORKFLOW-PARITY-PLAN-2026-07-31.md`.
 
