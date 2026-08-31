@@ -105,15 +105,25 @@ export function mountDriverPicker(root: HTMLElement, _deps: DriverPickerDeps = {
     status,
     currentSessionId: () => sessionId,
     async refresh(preferSid: string | null = null) {
+      const modelsResult = await fetchGet<ModelsResponse>("/api/models");
       await _populateOptions(select);
       const current = await _readCurrentSession(preferSid);
       if (!current) {
+        // Sprint 045: pre-session, keep the picker VISIBLE with the API
+        // default pre-selected so it acts as the create-time choice.
+        // Terminal.ts (_openSession) reads select.value when the parent
+        // is visible, so a first message opens against whatever the user
+        // sees here. Pre-041 the picker collapsed pre-session; that read
+        // as "no picker" for a user who wanted to change the model
+        // before typing.
         sessionId = null;
         priorDriver = null;
-        // Sprint 041 pre-session hide: the picker mount collapses when
-        // there's no session. The `+ new session` button carries the
-        // start affordance.
-        root.style.display = "none";
+        root.style.display = "";
+        const apiDefault = (modelsResult.ok && modelsResult.data.default) || "";
+        const options = Array.from(select.options).map((o) => o.value);
+        if (apiDefault && options.includes(apiDefault)) select.value = apiDefault;
+        select.disabled = false;
+        status.textContent = "· pick a driver, then type to open a session";
         return;
       }
       root.style.display = "";

@@ -78,7 +78,12 @@ function _mkChildren(root: HTMLElement): {
   // `session` by contract (the daily-driver's own methodology + role +
   // per_turn slots). Bundle SELECTION is a launcher concern (choosing an
   // application to run), not a session concern.
-  for (const id of ["new-session-trigger", "driver-picker", "workspace-shape-badge-mount", "tools-drawer"]) {
+  // Sprint 045: dropped "tools-drawer" from the toolbar. Sessions run
+  // unrestricted (every registered tool available) by default; a user
+  // who needs to restrict still has `/tools <comma-list>` mid-session.
+  // The comma-input in the header confused the daily-driver flow —
+  // it looked like a required field, not an optional restriction.
+  for (const id of ["new-session-trigger", "driver-picker", "workspace-shape-badge-mount"]) {
     const span = document.createElement("span");
     span.id = id;
     controls.appendChild(span);
@@ -92,7 +97,7 @@ function _mkChildren(root: HTMLElement): {
   paramsHint.className = "term-hint";
   paramsHint.style.marginLeft = "12px";
   paramsHint.title = "call parameters — set with /set think on|off · /set tokens N (0 = uncapped) · /set timeout N (seconds)";
-  paramsHint.textContent = "think off · tokens ∞ · timeout 300s";
+  paramsHint.textContent = "think on · tokens ∞ · timeout 300s";
   header.appendChild(paramsHint);
   const hint = document.createElement("span");
   hint.id = "terminal-hint";

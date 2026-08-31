@@ -54,7 +54,12 @@ const _mkRec = (r: any, esc: (s: string) => string, onClick: () => void) => {
   return div;
 };
 
-const _mkSession = (s: any, esc: (s: string) => string, status: string) => {
+const _mkSession = (
+  s: any,
+  esc: (s: string) => string,
+  status: string,
+  selectRecord: (name: string) => void,
+) => {
   const div = document.createElement("div");
   div.className = "rec session";
   div.dataset.sessionId = s.session_id;
@@ -66,6 +71,13 @@ const _mkSession = (s: any, esc: (s: string) => string, status: string) => {
   const label = s.name || s.session_id.slice(0, 12) + "…";
   div.innerHTML = `<span class="dot" style="background:${color}"></span>
     <div class="nm">${esc(label)}</div><div class="meta">${esc(status)} · ${esc(s.driver || "?")}</div>`;
+  // Sprint 045: session rows are clickable and resolve to the session's
+  // record. server.py _record_path routes `s_<id>` names to
+  // ~/.substrate/sessions/<id>/record — so selectRecord(session_id)
+  // loads the live session's graph/events/summary just like a regular
+  // record. Before, the row rendered with no onclick and looked dead.
+  div.style.cursor = "pointer";
+  div.onclick = () => selectRecord(s.session_id);
   return div;
 };
 
@@ -109,7 +121,7 @@ export function mountRail(el: HTMLElement, deps: RailDeps): RailHandle {
       ...interrupted.map((s) => ({ ...s, _status: "interrupted" })),
     ];
     el.appendChild(_mkHdr("live sessions", sessionsAll.length));
-    sessionsAll.forEach((s) => el.appendChild(_mkSession(s, esc, s._status)));
+    sessionsAll.forEach((s) => el.appendChild(_mkSession(s, esc, s._status, selectRecord)));
     _fireBucket("sessions", sessionsAll.length, {
       run_count: live.length,
       demo_count: 0,
