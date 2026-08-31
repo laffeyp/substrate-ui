@@ -53,7 +53,7 @@ const lastSignal = (page, name) =>
   const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 } });
   const page = await ctx.newPage();
   page.on("pageerror", (e) => pageErrors.push(String(e.message)));
-  await page.goto(BASE);
+  await page.goto(BASE + "?view=desktop");
 
   await page.waitForFunction(
     () => ((window).__signals || []).some((s) => s.name === "SESSION_INIT"),

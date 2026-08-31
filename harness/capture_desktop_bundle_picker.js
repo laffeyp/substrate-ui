@@ -18,7 +18,7 @@ const fail = (m) => { console.error(`  FAIL  ${m}`); fails.push(m); };
   const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 } });
   const page = await ctx.newPage();
   page.on("pageerror", (e) => pageErrors.push(String(e.message)));
-  await page.goto(BASE);
+  await page.goto(BASE + "?view=desktop");
   await page.waitForSelector("#view-desktop.active", { timeout: 5000 });
 
   await page.waitForSelector("#bundle-picker-select", { timeout: 3000 });

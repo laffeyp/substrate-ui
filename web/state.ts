@@ -135,7 +135,13 @@ export function createAppState(): AppState {
     assay: null,
     assays: [],
     assayReport: null,
-    view: "desktop",
+    // Sprint 045: the daily driver IS the terminal. Land there on first
+    // load so a user opening the app can type immediately. `?view=desktop`
+    // in the URL lands on the record browser instead — used by the
+    // Playwright harnesses that assert `#view-desktop.active` on goto.
+    view: (new URLSearchParams(window.location.search).get("view") === "desktop"
+      ? "desktop"
+      : "terminal"),
     viewSnap: { desktop: null, terminal: null },
     delegateParent: null,
   };

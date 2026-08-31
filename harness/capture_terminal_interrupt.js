@@ -35,7 +35,7 @@ const bodyText = (page) => page.evaluate(() => document.getElementById("terminal
   const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 } });
   const page = await ctx.newPage();
   page.on("pageerror", (e) => pageErrors.push(String(e.message)));
-  await page.goto(BASE);
+  await page.goto(BASE + "?view=desktop");
   await page.waitForSelector("#view-desktop.active", { timeout: 5000 });
   await page.dispatchEvent("#view-toggle", "mousedown");
   await page.waitForFunction(() => (window).STATE?.view === "terminal", { timeout: 2000 });
