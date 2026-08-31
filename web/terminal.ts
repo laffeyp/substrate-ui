@@ -174,11 +174,23 @@ import { postJson as _postJson, fetchJson as _fetch, fetchGet as _fetchGet, type
 
 async function _openSession(h: TerminalHandle, body: HTMLDivElement): Promise<boolean> {
   // Sprint 041: seed the create body's driver from the mounted
-  // #driver-picker-select (036a) if present; else fall back to
-  // h.driverName (opts.driverDefault). One picker owns the driver
-  // choice — the header's mount.
+  // #driver-picker-select (036a) if the picker is visibly bound to a
+  // session. Pre-first-session the picker is hidden AND its select's
+  // first option is "deterministic" (driver_picker.ts:52), so reading
+  // `.value` there would seed deterministic every time and bypass the
+  // server's real default. Sprint 044 (piece G): pre-session, resolve
+  // via `/api/models` default (the verified agentic cloud model).
+  // h.driverName (caller's driverDefault, or the current session's
+  // driver once one is open) always wins when set.
   const pickerSelect = document.getElementById("driver-picker-select") as HTMLSelectElement | null;
-  const seededDriver = (pickerSelect?.value || h.driverName || "deterministic");
+  const pickerBound = pickerSelect
+    && pickerSelect.parentElement
+    && (pickerSelect.parentElement as HTMLElement).offsetParent !== null;
+  let seededDriver = h.driverName || (pickerBound ? pickerSelect?.value : "") || "";
+  if (!seededDriver) {
+    const modelsResult = await _fetchGet<{ default?: string }>("/api/models");
+    seededDriver = (modelsResult.ok && modelsResult.data.default) || "deterministic";
+  }
   h.driverName = seededDriver;
   const createBody: Record<string, unknown> = { driver: seededDriver };
   // Sprint 035v: if the user ran `/set` before opening a session, the
@@ -466,7 +478,13 @@ export function mountTerminal(root: HTMLElement, opts: MountTerminalOptions = {}
   const h: TerminalHandle = {
     el: root,
     sessionId: null,
-    driverName: opts.driverDefault ?? "deterministic",
+    // Empty sentinel means "no caller default". _openSession sees "" and
+    // falls through to /api/models default (the server's verified agentic
+    // cloud model). A caller who wants a specific driver still passes
+    // { driverDefault: "..." }; a harness that must not pay cloud tokens
+    // can also pin it via the URL, e.g. ?driver=deterministic — which
+    // wins over both opts and the API default.
+    driverName: new URLSearchParams(window.location.search).get("driver") ?? opts.driverDefault ?? "",
     bundleSlug: "",
     eventSource: null,
     turnIndex: 0,

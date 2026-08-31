@@ -23,6 +23,7 @@
     "check:vocab-parity": "npx tsx tools/check-vocabulary-parity.ts",
     "capture:view-toggle": "node harness/capture_view_toggle.js",
     "capture:terminal-session": "node harness/capture_terminal_session.js",
+    "capture:terminal-daily-driver": "node harness/capture_terminal_daily_driver.js",
     "grade:terminal-session": "npx tsx tools/capture-grade.ts captures/sprint-035/terminal-session.jsonl --kind session",
     "check:tsc-new": "npx tsc --noEmit 2>&1 | grep -E '(view-ids|observability|state|terminal|rail|controls/|lib/|console/|capture-grade|check-vocabulary-parity|sync-substrate-vocab)\\.ts' && exit 1 || exit 0",
     "capture:terminal-slash-router": "node harness/capture_terminal_slash_router.js",

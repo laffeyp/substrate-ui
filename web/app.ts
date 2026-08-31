@@ -874,7 +874,12 @@ import { mountToolsDrawer, toolsField } from "./controls/tools_drawer.js";
 import { isolateField } from "./controls/isolate_toggle.js";
 installObservabilitySurface({ STATE, loadRecords, selectRecord: selectRecord as (...a: unknown[]) => unknown, loadAssays });
 const _viewTerminalRoot = document.getElementById("view-terminal");
-if (_viewTerminalRoot) mountTerminal(_viewTerminalRoot as HTMLElement, { driverDefault: "deterministic" });
+// No driverDefault: mountTerminal falls through to the server's /api/models
+// default (server.py:_agent_models prefers the verified agentic cloud models
+// — kimi-k2.7-code, glm-5.2, nemotron-3-super, deepseek-v4-pro — in order).
+// The picker still lists every driver; the user changes it live via the
+// header <select> or /model <name>.
+if (_viewTerminalRoot) mountTerminal(_viewTerminalRoot as HTMLElement);
 // Sprint 041: session-control mounts are inside the terminal view now
 // (terminal.ts::_mkChildren renders the mount spans in its header).
 // Bundle picker is DELIBERATELY NOT MOUNTED: the terminal session's

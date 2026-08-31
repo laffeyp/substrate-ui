@@ -561,9 +561,15 @@ def _agent_models() -> dict[str, object]:
     # found the top coder qwen3-coder:480b WRITE-SPINS — it is the worst agent — so shipping it as the
     # default is a bug. Prefer thinking+tools models that self-verify (write->run->check), scored
     # agency 100: kimi/glm/nemotron/deepseek-v4-pro. Fall back to any local model, else deterministic.
+    # Refreshed 2026-08-31 against live Ollama Cloud: kimi-k2.6 retired
+    # in favour of kimi-k2.7-code (thinking + tools, ~1.5s to first token
+    # on hi-in-three-words probe); glm-5.1 → glm-5.2. Order = preference.
+    # Harnesses that must not pay cloud tokens open the terminal with
+    # ?driver=deterministic (terminal.ts reads window.location.search) —
+    # that wins over this server-side default without needing a restart.
     prefer = [
-        "kimi-k2.6:cloud",
-        "glm-5.1:cloud",
+        "kimi-k2.7-code:cloud",
+        "glm-5.2:cloud",
         "nemotron-3-super:cloud",
         "deepseek-v4-pro:cloud",
     ]

@@ -26,7 +26,10 @@ const fail = (m) => { console.error(`  FAIL  ${m}`); fails.push(m); };
   const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 } });
   const page = await ctx.newPage();
   page.on("pageerror", (e) => pageErrors.push(String(e.message)));
-  await page.goto(BASE);
+  // Sprint 044: pin the driver via URL so this harness stays cost-neutral
+  // regardless of what /api/models defaults to (locally it may resolve to
+  // a paid cloud model). terminal.ts reads window.location.search.
+  await page.goto(`${BASE}/?driver=deterministic`);
   await page.waitForSelector("#view-desktop.active", { timeout: 5000 });
 
   // Flip to the terminal view.
