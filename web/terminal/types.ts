@@ -44,6 +44,15 @@ export interface TerminalHandle {
   };
   pendingContext: PendingContext | null;
   currentRecord: string | null;
+  // Sprint 048: dedup for local echo. _sendTurn pushes "> text" locally on
+  // Enter (before any await) so the user sees their message immediately;
+  // the SSE UserMessage envelope's render then dedups against this so the
+  // same line does not print twice. `lastReplyText` does the same job for
+  // the ModelReply → FinalAnswer pair (they carry the same text on a
+  // normal answer; FinalAnswer.text on a bail is DIFFERENT and must
+  // render).
+  lastEchoedUserText: string | null;
+  lastRenderedReplyText: string | null;
   // Sprint 035x: /exit slash calls this; mountTerminal binds it to the
   // module-private _endSession so slash files stay decoupled.
   endSession: (reason: string) => Promise<void>;
