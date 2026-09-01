@@ -15,6 +15,12 @@
 
 ## Entries
 
+### 2026-09-01 (later) — License pivot to PolyForm Noncommercial
+
+**The AGPL relicense that landed on `feat/license-agpl-with-ai-terms` (see the entry below) is superseded.** The Architect rebuilt the bundle on PolyForm Noncommercial 1.0.0 and directed a direct-to-main landing with no feature branch. Same shape as the substrate-side pivot; sibling lesson lives in that repo's `KIT_DIARY.md` finding 72 ("a procedure with more approval gates than committers is theater"). Second lesson (substrate-side finding 73) applies here too: when the arc closes, the report is "done"; reaching for the next thing to look useful buries the state under noise.
+
+---
+
 ### 2026-09-01 — Sprints 056/057 + the AGPL relicense: three kit-worthy lessons
 
 **Sprint 056 (test hygiene) and sprint 057 (test migration off private substrate helpers) closed on this side; the paired substrate-side work is in that repo's diary at findings 68-71. Three additional lessons landed on this side.**
