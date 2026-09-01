@@ -275,7 +275,10 @@ async function _openSession(h: TerminalHandle, body: HTMLDivElement): Promise<bo
 
 function _openStream(h: TerminalHandle, body: HTMLDivElement): void {
   if (!h.sessionId) return;
-  const url = `/api/session/${encodeURIComponent(h.sessionId)}/events?since_seq=-1`;
+  // Sprint 048: resume from h.lastSeq so a reconnect never loses envelopes.
+  // Fresh session → h.lastSeq = -1 (state.ts init) → server treats as tail.
+  const since = typeof h.lastSeq === "number" && h.lastSeq >= 0 ? h.lastSeq : -1;
+  const url = `/api/session/${encodeURIComponent(h.sessionId)}/events?since_seq=${since}`;
   const es = new EventSource(url);
   h.eventSource = es;
   es.onmessage = (ev) => {
@@ -288,10 +291,18 @@ function _openStream(h: TerminalHandle, body: HTMLDivElement): void {
   es.onerror = () => {
     // The daemon closes the stream on RunFinalised; the browser treats that
     // as an error. Distinguish a graceful close (readyState CLOSED) from a
-    // network error (retry-able).
-    if (es.readyState === EventSource.CLOSED) {
-      h.eventSource = null;
-    }
+    // network error and RECONNECT in the second case — a server restart or
+    // a transient WiFi blip used to leave the terminal permanently deaf
+    // (h.eventSource nulled, never re-opened). Resume from h.lastSeq so
+    // events emitted while disconnected still arrive.
+    if (es.readyState !== EventSource.CLOSED) return;
+    h.eventSource = null;
+    if (!h.sessionId) return;  // session ended — stay closed.
+    _push(body, "· reconnecting…", CLS.dim);
+    setTimeout(() => {
+      if (h.eventSource || !h.sessionId) return;  // reconnected/ended already
+      _openStream(h, body);
+    }, 1000);
   };
 }
 
@@ -324,12 +335,35 @@ function _handleEnvelope(h: TerminalHandle, body: HTMLDivElement, env: RecordEnv
   }
   if (kind === "UserMessage") {
     const text = String(payload.text ?? "");
+    // Sprint 048: dedup — if _sendTurn already echoed this same text
+    // locally on Enter (the common case), do NOT double-print. Only
+    // an out-of-band UserMessage (daemon-injected, first_turn from a
+    // scripted opener, etc.) shows up here without a matching echo.
+    if (h.lastEchoedUserText === text) {
+      h.lastEchoedUserText = null;
+      return;
+    }
     _push(body, `> ${text}`, CLS.in);
     return;
   }
   if (kind === "ModelReply") {
     const text = String(payload.text ?? "");
     _push(body, text, CLS.accent);
+    h.lastRenderedReplyText = text;
+    return;
+  }
+  if (kind === "FinalAnswer") {
+    // Sprint 048: on a normal turn the model emits ModelReply(text) then
+    // FinalAnswer(text) with the SAME text — the reply was already
+    // rendered, skip. On an anti-spin bail there is NO ModelReply and
+    // FinalAnswer.text is "stopped after N failed tool call(s): …" —
+    // that has to render or the user sees nothing between their message
+    // and the next "· parked" line (the "hung" symptom the user named).
+    const text = String(payload.text ?? "");
+    if (text && text !== h.lastRenderedReplyText) {
+      _push(body, text, CLS.err);
+    }
+    h.lastRenderedReplyText = null;
     return;
   }
   if (kind === "Park" && h.sessionId) {
@@ -397,6 +431,14 @@ function _closeStream(h: TerminalHandle): void {
 }
 
 async function _sendTurn(h: TerminalHandle, body: HTMLDivElement, text: string): Promise<void> {
+  // Sprint 048: local echo of the user's message FIRST, before any await.
+  // The SSE round-trip that emits the UserMessage envelope can take
+  // seconds under a cloud driver; typing into a terminal that shows
+  // nothing back reads as "hung." The UserMessage envelope's render
+  // (in _handleEnvelope) still fires later — it dedups against the
+  // last locally-echoed row so the input line doesn't double-print.
+  _push(body, `> ${text}`, CLS.in);
+  h.lastEchoedUserText = text;
   if (!h.sessionId) {
     const opened = await _openSession(h, body);
     if (!opened) return;
@@ -507,6 +549,8 @@ export function mountTerminal(root: HTMLElement, opts: MountTerminalOptions = {}
     // call h.endSession(reason). Bound below once mountTerminal has
     // captured `body` in its closure.
     endSession: async () => undefined,
+    lastEchoedUserText: null,
+    lastRenderedReplyText: null,
   };
   h.endSession = (reason: string) => _endSession(h, body, reason);
   _push(body, "substrate daily-driver terminal · type to talk to the model · /exit to leave", CLS.dim);
