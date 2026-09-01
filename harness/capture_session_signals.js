@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* Sprint 037b — session-flow signal-trace capture.
 
    Drives the same session narrative as 037a's E2E (page load → view

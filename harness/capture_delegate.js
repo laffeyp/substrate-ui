@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* Perceptual capture for the delegated-child branch (sprint 017, W2.2) — track 2 of the observation
    contract. Element-screenshots the bounded I/O pane (Addendum A6: bounded surface, capped dims) at
    two frames: the parent with the delegate child branch, and the child with the breadcrumb. The agent

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Sprint 217e — POST /api/session/<id>/turn body accepts `context`.
 
 Shape: `{"text": "...", "context": {"parent_seq_range": [lo, hi], "kinds": [str, ...]}?}`

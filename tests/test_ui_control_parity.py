@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Sprint 036f — UI/CLI control parity gate.
 
 The UI (web/controls/*.ts + web/terminal.ts) and the CLI's REPL slash router

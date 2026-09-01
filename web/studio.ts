@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* substrate studio — author a Topology from structured form input, validate + build it through the
    REAL seam (/api/validate static TopologyBuilder.build(); /api/build runs a real api.Runtime). The
    spec shape mirrors builder.py EXACTLY. Reads substrate.api only (over HTTP). The eight words only.

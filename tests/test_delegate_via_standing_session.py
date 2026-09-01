@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Sprint 213b — delegate path 1 routes into a standing session via SessionRegistry.turn_sync.
 
 Sprint 054 phase D — post the SessionRegistry move into substrate, this

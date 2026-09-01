@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // state.ts — the AppState schema (ARCH-2 fix from REVIEW-2026-08-28-piece-g-full).
 //
 // The god-struct `STATE` in app.ts had grown to 23 fields inferred from the

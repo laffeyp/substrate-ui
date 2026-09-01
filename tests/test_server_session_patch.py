@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Sprint 215c — PATCH /api/session/<id> mutates driver + name.
 
 Body: {"driver"?: str, "name"?: str}. Every absent key leaves that

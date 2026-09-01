@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* Structural E2E for the ASSAY arm-matrix view (sprint 014) — track 1 of the observation contract
    (DOM assertions; capture_assay.js is track 2, the screenshot). Drives the real console in real
    Chrome against the real backend, selects an assay, and asserts the matrix is wired right: the

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Piece-B closure review (2026-08-26) — regression pins for the folded findings.
 
 One test per real behavioral fold in `REVIEW-2026-08-26-piece-b-closure.md`.

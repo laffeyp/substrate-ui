@@ -2,6 +2,7 @@
   "name": "substrate-ui-e2e",
   "version": "1.0.0",
   "private": true,
+  "license": "PolyForm-Noncommercial-1.0.0",
   "description": "Live end-to-end test harness for the substrate-ui console — drives the real console in real Chrome (Playwright channel:'chrome') against the real server. The observation contract's tooling, scoped to this repo and pinned by package-lock.json so it is reproducible, not an ad-hoc /tmp install.",
   "scripts": {
     "dev": "vite",

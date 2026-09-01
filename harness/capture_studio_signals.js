@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* Sprint 032 studio-signals capture — drives /studio.html through one authoring round-trip in real
    Chrome against the real backend, then dumps window.__signals to captures/sprint-021/studio.jsonl.
    Grader reads that file at `npm run grade:studio-signals`. */

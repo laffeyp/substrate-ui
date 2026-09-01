@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* Perceptual-signal capture for the ASSAY arm-matrix view (sprint 014) — the second of the two-track
    visual grading the observation contract requires. Drives the real console in real Chrome against the
    real backend, selects an assay from the rail, and screenshots the arm matrix so the agent Reads the

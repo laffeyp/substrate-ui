@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* Sprint 021+022 fixture capture — drives the console through records, record-load, view toggles,
    cursor + transport, and prune in real Chrome against the real backend, then dumps window.__signals
    to a JSONL under captures/sprint-NNN/. The grader (tools/capture-grade.ts) reads that file.

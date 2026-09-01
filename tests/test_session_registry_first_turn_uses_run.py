@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Sprint 217a invariant — the first turn on an empty record uses `Runtime.run`,
 not `Runtime.resume`.
 

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* substrate-ui live console — reads the REAL substrate read API over HTTP (server.py).
    Every surface is a projection of one record; nothing is invented (§7.1). The one seq-cursor
    drives the graph and the stream in lock-step. Failures are loud (§7.2); concurrency comes from

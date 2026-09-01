@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // terminal.ts — the daily-driver terminal column mounted inside #view-terminal.
 // Sprint 035 promoted the terminal from its bottom-dock legacy shape (which
 // sprint 037c retired outright — the dock DOM and its eleven vocab tags are

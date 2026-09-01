@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* Sprint 033 (v0.7.1 refactor) observation-contract harness: the two-view
    scaffold. Opens /, asserts the initial state, mousedown-triggers the
    header toggle, asserts the flip, presses Ctrl+`, asserts the flip back,

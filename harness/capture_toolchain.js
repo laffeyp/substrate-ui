@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // Perceptual-track capture: the console on the live tool-use-chain agent run, in REAL Chrome.
 // Repo-scoped Playwright (channel:'chrome'), per ADDENDUMS.md Addendum A5 — not a /tmp install.
 const { chromium } = require("playwright");

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* Sprint 035t observation harness: terminal-header driver picker.
    Asserts the picker mounts, populates from /api/models, changes fire
    DRIVER_PATCHED when a session is active, and changes queue when no

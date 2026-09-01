@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // observability.ts — the harness-facing observability seam. Every function
 // the Playwright harness reaches through `page.evaluate(() => window.X)`
 // lives here. Previously scattered as `(window as any).STATE = STATE;` in

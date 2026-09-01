@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* Live E2E for the Studio authoring surface — drives /studio.html in real Chrome against the real
    backend: author (pre-filled reviewer/judge) -> validate -> build a REAL run -> follow the console
    deep-link -> assert the authored run EXECUTED (a Verdict exists because the adjudicate Trigger fired

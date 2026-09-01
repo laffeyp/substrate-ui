@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* Sprint 036b observation harness — desktop-view bundle picker.
    Mounts alongside the driver picker; reads GET /api/bundles for options;
    binds to the current session via substrate:session-changed; on flip

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // view-ids.ts — the closed set of view identifiers for the piece-G two-view
 // scaffold. One source of truth for app.ts, capture-grade.ts, and every
 // harness that asserts on VIEW_SWITCHED payloads. Import here; do not

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* e2e_terminal_v1.js — STRUCTURAL track for terminal-v1.
    Runs against the real parent server on :8765. Playwright is the parent substrate-ui's pinned
    devDep — reused, not re-installed.

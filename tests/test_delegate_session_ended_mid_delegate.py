@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Sprint 213b — delegate returns a typed failure when the reviewer session has ended.
 
 `SessionRegistry.turn_sync` raises `SessionEndedMidTurn` if the session's status

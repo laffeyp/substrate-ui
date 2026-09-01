@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* Sprint 035 observation harness — the terminal column as a real
    session driver. Flips to #view-terminal, opens a deterministic
    session via the first turn, sends two turns, asserts the four

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Topology SPEC -> a real TopologyBuilder topology (the Studio's "build & launch" seam).
 
 The visual Studio authors a topology as JSON; this translates it into an ACTUAL topology(b)

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* Sprint 036d observation harness — desktop tools drawer + create-time
    tools field on the new-session dialog.
 

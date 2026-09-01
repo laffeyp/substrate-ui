@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* web/lib/fetch.ts — shared JSON fetch helpers with typed FetchResult.
    Extracted from web/terminal.ts as part of sprint 036a per
    REVIEW-2026-08-28-piece-g-eod SPEC-3: the desktop-view controls and the

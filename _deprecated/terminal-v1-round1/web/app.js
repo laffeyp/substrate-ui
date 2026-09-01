@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* app.js — terminal-v1 tab-switch mechanics.
    One delegated click handler on .tabbar. Toggles aria-selected on tab buttons and .active on the
    matching anchor in the anchor strip. No frameworks, no build step. */

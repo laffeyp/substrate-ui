@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Sprint 228 composition contract — every session's tool suite carries
 the seven substrate toolkit tools alongside full_suite.
 

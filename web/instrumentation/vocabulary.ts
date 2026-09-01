@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // Vocabulary loader for substrate-ui. Imports the locked v0.2 vocabulary + the mirrored substrate
 // vocabulary at module load; builds a typed dictionary + a foreign-key closed set for enforcement.
 

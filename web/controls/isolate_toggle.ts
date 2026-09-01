@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* Sprint 036e — isolate toggle DialogField.
 
    A checkbox in the new-session dialog (036c). When workspace_shape ==

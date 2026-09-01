@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* Sprint 035u observation harness: Ctrl+C interrupt.
    Asserts: Ctrl+C without a session prints a hint; Ctrl+C with an
    idle session prints "no turn in flight"; Ctrl+C with a selection

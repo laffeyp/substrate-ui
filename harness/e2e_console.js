@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* Live end-to-end test of the substrate-ui console — drives the REAL app in real Chrome against
    the REAL running server (no mocks). Asserts §7 holds in the rendered DOM: records load from the
    backend, the run-as-graph shows firing-anchored lifespans + the spawn-cohort band, provenance

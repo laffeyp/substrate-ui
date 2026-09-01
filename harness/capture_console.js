@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* Perceptual-signal capture for the substrate-ui console — the SECOND track of the two-track
    visual grading the observation contract requires (AGENTS.md hard rule 9; foundation 01 signal
    type #2 "Screenshots at Key Frames"; TECHNIQUES Visual/UI "Two-track visual grading"). The live
