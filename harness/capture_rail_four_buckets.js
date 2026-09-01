@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* Sprint 034b observation harness: four-bucket rail.
    Asserts the extracted rail module renders four bucket headings (live
    sessions, recent records, bundles, records) and emits RECORDS_LOADED once

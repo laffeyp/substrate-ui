@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* Sprint 035v observation harness: params drawer + /set slash. */
 "use strict";
 const { chromium } = require("playwright");

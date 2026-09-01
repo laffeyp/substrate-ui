@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* capture_terminal_v1.js — PERCEPTUAL track for terminal-v1.
    Element-shots bounded surfaces (A6), decodes deterministic pixel anchors (A2), asserts state,
    and diffs against committed fixture hashes (#38 confirmed-good captures as regression baselines).

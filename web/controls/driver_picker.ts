@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* Sprint 036a — desktop-view driver picker.
 
    Mounts inside the desktop-view session-header (#driver-picker). Reads

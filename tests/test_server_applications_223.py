@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Sprint 223 observation contract — GET /api/applications end-to-end.
 
 Card's observation contract: "Fire GET /api/applications against a

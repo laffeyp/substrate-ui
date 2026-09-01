@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Sprint 223e — `/api/agent` compat bridge routes through /api/session.
 
 Named at TECH-SPEC line 700 (`test_server_agent_compat.py`); the invariant

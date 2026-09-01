@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* Sprint 037a — end-to-end session harness.
 
    The single narrative that composes what the per-feature harnesses

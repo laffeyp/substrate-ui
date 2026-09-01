@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* Perceptual capture for the Studio authoring surface — the second observation track. Drives
    /studio.html and screenshots the key frames (filled form, validated, built) so the agent can VIEW
    and grade what it looks like. Run: npm run capture:studio (server up). View screenshots/3*-*.png. */

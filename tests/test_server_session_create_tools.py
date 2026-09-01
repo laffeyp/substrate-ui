@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Sprint 223b — `tools` on POST /api/session (create-time tool allow-list)."""
 
 from __future__ import annotations

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Sprint 224f — direct test that `boot_scan` preserves `"ended"` as terminal.
 
 The 217a shutdown path flips a fresh session's manifest to `"ended"` at

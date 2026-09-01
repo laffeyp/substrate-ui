@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Sprint 217a invariant — `_shutdown_all_sessions` buckets fresh sessions
 under `skipped_fresh` and transitions their manifest to `"ended"` without
 opening the record.

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Sprint 214b — DELETE /api/session/<id> removes the manifest + by-name entry.
 
 The record directory STAYS. SDD hard rule 12 says the audit trail is the work,

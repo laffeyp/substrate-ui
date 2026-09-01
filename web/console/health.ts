@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* Sprint 040a — console health surface, extracted from web/app.ts.
 
    Owns two DOM elements: `#verdict` in the head (top badge) and

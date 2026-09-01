@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* Sprint 035s observation harness: the terminal-view slash router.
    Opens a session, exercises each slash the router handles, asserts
    the expected side-effect (either an emit or a body-line print).

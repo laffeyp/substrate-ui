@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Sprint 216 — /turn returns 410 for a session that was live and is now gone.
 
 Three code paths converge on 410 with

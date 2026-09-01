@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Sprint 034a — GET /api/records?exclude_sessions=true + GET /api/bundles.
 
 The rail rewrite (034b) and the terminal-view create-time picker (035w)

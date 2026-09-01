@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Sprint 211 — atomic-create refuses colliding names, survives concurrent writers.
 
 Two behaviors under test:

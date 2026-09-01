@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* capture_scene.js — PERCEPTUAL track for the scene panel via DETERMINISTIC PIXEL ANCHORS.
    (SDD TECHNIQUES, Visual/UI: "Visualizations include deterministic pixel colors at known
    coordinates. Screenshots can be decoded for state without manual visual inspection.")

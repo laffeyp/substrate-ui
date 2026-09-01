@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // Signal-Driven Development library for substrate-ui — TypeScript port of
 // sdd-kit-2/lib/sdd.py, adapted from Katybird's src/instrumentation/sdd.ts.
 // Bound to the locked vocabulary (signals/versions/0.1.json). Unknown tags throw at emit time.

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* Sprint 036a observation harness — desktop-view driver picker.
    Opens the page (desktop view active), asserts the picker mounts, creates
    a session via the terminal-view path, waits for the picker to bind,

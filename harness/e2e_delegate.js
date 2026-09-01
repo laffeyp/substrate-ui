@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* Structural E2E for the delegated-child BRANCH (sprint 017, W2.2) — track 1 of the observation
    contract (DOM assertions; capture_delegate.js is track 2, the screenshot). Drives the real console
    in real Chrome against the real backend: selects the demo_delegate parent, switches to the I/O

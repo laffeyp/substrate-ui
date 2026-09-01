@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Sprint 032c — SessionManifest.driver_params + PATCH surface + resolver.
 
 Closes the one substrate-side gap piece-G's mechanical translation

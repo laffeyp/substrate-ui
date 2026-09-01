@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* Sprint 037b — session-flow perceptual capture.
 
    Four screenshots under substrate-ui/screenshots/37-*.png:

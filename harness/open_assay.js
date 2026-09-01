@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* Open the console in a VISIBLE Chrome window (headed) and land on the assay arm matrix — so the
    human sees it live, not a screenshot. Stays open until the window is closed or the process killed.
 

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* Optional signal-capture tail for the standing e2e harnesses (Sprint 031).
    Reads window.__signals and writes it to captures/e2e-<name>.jsonl when CAPTURE_SIGNALS=1.
    With the env var unset, returns immediately. Never throws — a capture failure logs and moves on;

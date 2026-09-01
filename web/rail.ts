@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* Sprint 034b — rail module: four buckets over the daemon's read surface.
    Extracted from web/app.ts's inline loadRecords. Consumes 034a's two
    endpoints (/api/records?exclude_sessions=true + /api/bundles) plus the

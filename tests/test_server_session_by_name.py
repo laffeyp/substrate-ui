@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Sprint 214b — GET /api/session/by-name/<name> resolves a name to a session_id.
 
 Response: `{"session_id": "s_...", "name": "reviewer"}` on hit; 404 with

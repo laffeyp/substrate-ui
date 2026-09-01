@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """substrate-ui read-API server — the production seam (build-order step 1).
 
 Serves the REAL substrate read API over HTTP as JSON: `read_record` + the tested projections

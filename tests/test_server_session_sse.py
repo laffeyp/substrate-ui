@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Sprint 214c — GET /api/session/<id>/events streams SSE frames.
 
 The endpoint holds the connection open and writes `data: <json>\\n\\n` per

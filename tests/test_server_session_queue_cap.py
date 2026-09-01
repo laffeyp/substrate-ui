@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Sprint 216 — per-session /turn queue cap.
 
 The registry's `try_enqueue_turn` increments a per-session queued-turn

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Generate REAL non-clean run records for the UI's §7.2 surfaces (review #32 finding 2).
 
 The 9 bundled records are all clean/finalised, so the console's red-FAILED / cyan-PAUSED /

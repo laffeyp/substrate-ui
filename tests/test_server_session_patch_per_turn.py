@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Sprint 223d — `per_turn` on PATCH /api/session/<id> + manifest round-trip."""
 
 from __future__ import annotations

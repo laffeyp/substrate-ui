@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 /* Perceptual capture — DYNAMIC + EDGE states the static key-frame pass (capture_console.js) doesn't
    cover: the live ● LIVE pulse mid-write, a torn record's amber INCOMPLETE, the resume result + the
    interrupted-stage bar, the event-click inspector (distinct from lane-click provenance), and the

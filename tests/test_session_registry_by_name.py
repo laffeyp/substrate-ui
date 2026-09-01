@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Sprint 211 — SessionRegistry name → session_id lookup.
 
 The daemon holds an in-memory `_by_name` dict mirrored to disk at

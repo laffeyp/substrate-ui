@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Sprint 211 — boot scan restores manifests and rewrites stale status fields.
 
 Simulates a daemon restart by constructing a second `SessionRegistry` against

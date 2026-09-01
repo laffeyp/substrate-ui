@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Sprint 217e — PATCH /api/session/<id> accepts `tools`.
 
 The daemon promotes `tools` from `_NOT_YET` to `_PATCHABLE`. A patched

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Sprint 225a — POST /api/topology/<name>/run one-shot dispatch tests.
 
 Four cases per the card's assertions block:

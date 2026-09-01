@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Sprint 215d — SIGTERM graceful shutdown ends every session cleanly.
 
 `_shutdown_all_sessions()` walks the registered sessions and injects
