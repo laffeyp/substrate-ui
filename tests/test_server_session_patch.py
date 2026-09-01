@@ -170,11 +170,16 @@ def test_patch_empty_body_returns_400(base: tuple[str, Path]) -> None:
 def test_patch_deferred_field_returns_400_naming_the_field(base: tuple[str, Path]) -> None:
     url, tmp_path = base
     sid = _create(url, tmp_path / "wsp", name="wanting-tools")
-    # Sprint 223d: `per_turn` moved from _NOT_YET to _PATCHABLE. Use `bundle`,
-    # still in _NOT_YET (belongs to piece H).
-    status, body = _patch_json(url + f"/api/session/{sid}", {"bundle": "some-bundle"})
+    # Sprint 056: `bundle` moved from _NOT_YET to _PATCHABLE at some point
+    # between the test's writing and now (server.py:2447-2448 currently
+    # lists {workspace, workspace_shape, seed} as _NOT_YET; `bundle` is on
+    # _PATCHABLE with existence validation). Use `workspace`, still on the
+    # deferred set — the invariant the test pins is unchanged: a PATCH
+    # against ANY _NOT_YET field returns 400 with a message that names
+    # the field and the "not PATCH-able yet" phrase.
+    status, body = _patch_json(url + f"/api/session/{sid}", {"workspace": "/tmp/other"})
     assert status == 400
-    assert "bundle" in body["error"]
+    assert "workspace" in body["error"]
     assert "not PATCH-able yet" in body["error"]
 
 
