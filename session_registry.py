@@ -39,12 +39,16 @@ from substrate.session_registry import (
     SessionStatus,
     TornRecordOnResume,
     TurnHandle,
-    _manifest_from_dict,
-    _manifest_to_dict,
-    _record_state,
-    _scan_record_status,
+    manifest_from_dict,
+    scan_record_status,
 )
 
+# Sprint 057: private helpers used to leak through this shim's __all__.
+# The two with legitimate public shape (scan_record_status,
+# manifest_from_dict) are now public in substrate. The other two
+# (_manifest_to_dict, _record_state) are test-fixture and test-assertion
+# conveniences with no consumer-facing role — tests migrate off them in
+# this same sprint, and they stay private on the substrate side.
 __all__ = [
     "STATUS_ENDED",
     "STATUS_INTERRUPTED",
@@ -58,8 +62,6 @@ __all__ = [
     "SessionStatus",
     "TornRecordOnResume",
     "TurnHandle",
-    "_manifest_from_dict",
-    "_manifest_to_dict",
-    "_record_state",
-    "_scan_record_status",
+    "manifest_from_dict",
+    "scan_record_status",
 ]
