@@ -25,14 +25,14 @@ import json
 import sys
 from pathlib import Path
 
+import msgspec
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from session_registry import (  # noqa: E402
     SessionManifest,
     SessionRegistry,
-    _manifest_to_dict,
-    _scan_record_status,
+    scan_record_status,
 )
 
 from substrate import api  # noqa: E402
@@ -40,10 +40,14 @@ from substrate.topologies.session.ci import ci_session_topology  # noqa: E402
 
 
 def _write_manifest(base: Path, m: SessionManifest) -> None:
+    # Sprint 057: the registry's private `_manifest_to_dict` is no longer
+    # imported here. `msgspec.to_builtins` on the same `SessionManifest`
+    # Struct yields the identical dict shape (verified: same keys, same
+    # values, JSON round-trippable through the registry's loader).
     session_dir = base / m.session_id
     session_dir.mkdir(parents=True, exist_ok=True)
     (session_dir / "manifest.json").write_text(
-        json.dumps(_manifest_to_dict(m), indent=2, sort_keys=True), encoding="utf-8"
+        json.dumps(msgspec.to_builtins(m), indent=2, sort_keys=True), encoding="utf-8"
     )
 
 
@@ -128,7 +132,7 @@ def test_boot_scan_marks_interrupted_from_torn_hot_segment(tmp_path: Path) -> No
     _write_manifest(tmp_path, stale)
 
     # Confirm the helper on its own recognizes torn.
-    assert _scan_record_status(record_root) == "interrupted"
+    assert scan_record_status(record_root) == "interrupted"
 
     fresh = SessionRegistry(base=tmp_path)
     fresh.boot_scan()

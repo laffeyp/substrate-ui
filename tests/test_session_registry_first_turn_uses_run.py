@@ -20,8 +20,9 @@ with `UserMessage` — no `substrate.RunStarted` at all. Finding 16 in the
 piece-B review named this.
 
 The compose is verified end-to-end elsewhere; this file locks the
-invariant so a regression that flips `_record_state` or reverts the
-branch fails a named test rather than a downstream one.
+invariant so a regression that flips the registry's dispatch
+classifier or reverts the branch fails a named test rather than
+a downstream one.
 """
 
 from __future__ import annotations
@@ -37,7 +38,7 @@ from session_registry import (  # noqa: E402
     FreshSessionRequiresUserMessage,
     SessionRegistry,
     TornRecordOnResume,
-    _record_state,
+    scan_record_status,
 )
 
 from substrate import api  # noqa: E402
@@ -132,14 +133,15 @@ def test_torn_record_raises_typed_and_flips_status_to_interrupted(
     to `"interrupted"`. This is the fix for finding 1 in the piece-D
     fold review.
 
-    `_record_state` classifies via `api.read_record`, which raises on
-    sealed-segment gaps and CRC mismatches but silently recovers a torn
-    HOT tail (that is the whole point of `framing.recover` on the hot
-    segment). Rolling a sealed segment mid-test would take megabytes of
-    written frames, so this test patches `api.read_record` from the
-    session_registry module namespace to raise `RecordGapError` — the
-    exact class the record module raises on a torn sealed tail. The
-    signal being tested is the branch, not the corruption mode.
+    The registry's dispatch classifier reads the record via
+    `api.read_record`, which raises on sealed-segment gaps and CRC
+    mismatches but silently recovers a torn HOT tail (that is the whole
+    point of `framing.recover` on the hot segment). Rolling a sealed
+    segment mid-test would take megabytes of written frames, so this
+    test patches `api.read_record` from the session_registry module
+    namespace to raise `RecordGapError` — the exact class the record
+    module raises on a torn sealed tail. The signal being tested is the
+    branch, not the corruption mode.
     """
     from substrate.errors import RecordGapError
     import session_registry as sreg
@@ -154,16 +156,22 @@ def test_torn_record_raises_typed_and_flips_status_to_interrupted(
         timeout_seconds=30.0,
     )
     record_root = Path(registry.get(sid).record_root)
-    assert _record_state(record_root)[0] == "has_envelopes"
+    # Sanity: the first turn wrote envelopes. The boot-scan classifier
+    # (`scan_record_status`) reports `parked` here — the last envelope
+    # is `TerminationMatched(pause-await-input)`, the session-topology's
+    # normal pause between turns.
+    assert list(api.read_record(record_root)), "first turn must have written envelopes"
+    assert scan_record_status(record_root) == "parked"
 
     def _raise_read(*_a, **_kw):
         raise RecordGapError("simulated torn sealed segment (test)")
 
     monkeypatch.setattr(sreg.api, "read_record", _raise_read)
 
-    state, cause = _record_state(record_root)
-    assert state == "torn", f"expected torn, got {state} (cause={cause!r})"
-    assert isinstance(cause, RecordGapError)
+    # Post-patch the classifier sees the read raise → `interrupted`. Both
+    # the boot-scan status (public) and the dispatch classifier (private,
+    # covered by the pytest.raises below) route the torn case correctly.
+    assert scan_record_status(record_root) == "interrupted"
 
     with pytest.raises(TornRecordOnResume):
         registry.turn_sync(
