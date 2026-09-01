@@ -180,6 +180,29 @@ def _daemon_driver_resolver(name: str, params: dict[str, Any] | None = None) -> 
         responder = CliResponder(["gemini", "-p"], name="gemini")
     else:
         p = params or {}
+        # Sprint 051: num_ctx must match the model's advertised context, not
+        # a hardcoded 32768. Live probe (2026-08-31) confirmed Ollama
+        # SILENTLY TRUNCATES a prompt that exceeds num_ctx — sent a ~2000-
+        # token prompt with num_ctx=512, got prompt_eval_count=258 back,
+        # no warning field, no error, just the tail of the prompt. That
+        # means: our compaction budgeted against kimi's 262144-token
+        # advertised context (via resolve_driver_context_tokens), but the
+        # responder built here capped Ollama input at 32768. Kimi silently
+        # lost ~200 K tokens per turn and the TranscriptCompacted event
+        # on the record undercounted what actually got dropped.
+        #
+        # Resolution: probe /api/show once at responder construction
+        # (light call, cached process-wide by resolve_driver_context_tokens
+        # too), cap at 262144 in case of a runaway advert, and let the
+        # user override with a smaller num_ctx if VRAM matters. The
+        # session topology also passes this same value to compaction
+        # via resolve_driver_context_tokens — one number, two consumers.
+        probe = OllamaResponder(model=name)  # for the /api/show probe only
+        try:
+            advertised = probe.context_tokens()
+        except Exception:  # noqa: BLE001 — /api/show unreachable → fall back
+            advertised = 32768
+        num_ctx_default = min(advertised, 262144)
         responder = OllamaResponder(
             model=name,
             # Sprint 045: thinking defaults ON. The daily-driver is a real
@@ -189,7 +212,7 @@ def _daemon_driver_resolver(name: str, params: dict[str, Any] | None = None) -> 
             # explicitly (or /set think off mid-session).
             think=bool(p.get("think", True)),
             max_tokens=int(p.get("max_tokens", 0)),
-            num_ctx=int(p.get("num_ctx", 32768)),
+            num_ctx=int(p.get("num_ctx", num_ctx_default)),
             timeout=float(p.get("timeout", 300.0)),
         )
     _RESPONDER_CACHE[key] = responder
