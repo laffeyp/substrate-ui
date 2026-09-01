@@ -1,10 +1,24 @@
 """Sprint 213b — delegate path 1 routes into a standing session via SessionRegistry.turn_sync.
 
-The reviewer session is a real `session_topology` running under `Runtime.resume`;
-the delegate's parent thread calls `session_registry.turn_sync(session_id, UserMessage(...))`,
-which serializes on the per-session `threading.Lock`, drives the resume in a
-fresh worker event loop, and returns the reviewer's manifest + record_root. The
-parent reads the tail `FinalAnswer` off that record and folds the answer back.
+Sprint 054 phase D — post the SessionRegistry move into substrate, this
+file's boundary reads clearly: this is the DAEMON-flow test. It exercises
+the per-session threading.Lock's cross-parent FIFO invariant (behaviour 2)
+plus the fresh-open-via-.run() shape (behaviour 1) — both concerns of how
+the DAEMON drives the registry across concurrent parent handlers.
+
+The library-side unit test for delegate path 1 lives at
+`substrate/tests/test_delegate_per_call_child_session_name.py`. The
+library-side live test lives at
+`substrate/tests/test_realmodel_delegate_standing.py`. Both were split
+out of this file when the registry moved.
+
+Reviewer session is a real `session_topology` running under
+`Runtime.resume`; the delegate's parent thread calls
+`session_registry.turn_sync(session_id, UserMessage(...))`, which
+serializes on the per-session `threading.Lock`, drives the resume in a
+fresh worker event loop, and returns the reviewer's manifest +
+record_root. The parent reads the tail `FinalAnswer` off that record and
+folds the answer back.
 
 Two behaviors under test:
   1. A first turn opens the reviewer via `.run()` (writes RunStarted), pauses on
@@ -14,9 +28,6 @@ Two behaviors under test:
   2. Two concurrent parents both delegating to the reviewer FIFO-queue on the
      per-session threading lock — both complete, no interleaved writes on the
      reviewer's record.
-
-Run from the substrate venv:
-    cd substrate && uv run python -m pytest ../substrate-ui/tests/test_delegate_via_standing_session.py -q
 """
 
 from __future__ import annotations
