@@ -1,8 +1,8 @@
-# Sprint 057 — refresh two stale substrate-ui test expectations
+# Sprint 056 — refresh two stale substrate-ui test expectations
 
 ```yaml
 ---
-id: 057
+id: 056
 status: open
 phase: 7
 pass_kind: hygiene
