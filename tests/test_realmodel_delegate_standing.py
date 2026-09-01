@@ -258,3 +258,91 @@ async def test_live_standing_reviewer_answers_and_parent_quotes(tmp_path: Path) 
         f"parent's FinalAnswer must quote what the reviewer said; "
         f"got {final_answers[-1]['payload']['text']!r}"
     )
+
+    # ── turn 2: parent resumes, delegates AGAIN to the same reviewer ────
+    # The whole point of a STANDING sub-agent is that it survives across
+    # parent turns and keeps its own accumulated context. Turn 2 asks a
+    # different question ("what is 2 + 2?"); a fresh child would have no
+    # memory of turn 1, but a standing session shares the same session_id
+    # and record. Contract: same reviewer session_id, same record path,
+    # reviewer's record grows again, reviewer STILL knows its identity
+    # from the seed (proves the role prompt persisted, not just the wire).
+    reviewer_users_after_turn_1 = len(reviewer_users)
+
+    result_2 = await api.Runtime(parent_record, persistent=True).resume(
+        parent_factory,
+        resume_event=UserMessage(
+            text=(
+                "Delegate to the same 'reviewer' standing session again. "
+                "Ask it: 'remind me — what is your name, and what is 2 + 2?' "
+                "Quote exactly what it said."
+            ),
+            turn_index=1,
+            assembled_prompt=(
+                "Delegate to the same 'reviewer' standing session again. "
+                "Ask it: 'remind me — what is your name, and what is 2 + 2?' "
+                "Quote exactly what it said."
+            ),
+            slash_source="test",
+        ),
+    )
+    assert result_2.status == "paused", f"parent turn 2 expected paused, got {result_2.status}"
+
+    # ── turn-2 assertions ───────────────────────────────────────────────
+    parent_envs_2 = list(api.read_record(parent_record))
+    parent_finals_2 = [e for e in parent_envs_2 if e["kind"] == "FinalAnswer"]
+    parent_tool_results_2 = [e for e in parent_envs_2 if e["kind"] == "ToolResult"]
+
+    turn_2_delegates = [
+        r
+        for r in parent_tool_results_2
+        if r["payload"].get("ok") is True
+        and isinstance(r["payload"].get("output"), dict)
+        and str(r["payload"]["output"].get("via", "")).startswith("standing_session:")
+    ][len(ok_delegates) :]
+    assert turn_2_delegates, (
+        f"parent turn 2 must add at least one standing-session delegate call; "
+        f"got {len(parent_tool_results_2) - len(tool_results)} new tool results"
+    )
+    output_2 = turn_2_delegates[0]["payload"]["output"]
+    assert output_2["via"] == "standing_session:reviewer", output_2
+    assert Path(output_2["child_root"]) == reviewer_record, (
+        f"turn-2 delegate must land on the SAME reviewer record as turn 1 "
+        f"(that is what 'standing' means); got {output_2['child_root']} vs {reviewer_record}"
+    )
+    # The reviewer must still know its identity — the seed persisted across
+    # the parent's park + resume. And it must answer 2+2.
+    assert "REVIEWER-42" in output_2["answer"], (
+        f"reviewer lost its identity between parent turns — seed did not "
+        f"persist. Got {output_2['answer']!r}"
+    )
+    assert "4" in output_2["answer"], (
+        f"reviewer did not answer 2+2 on turn 2; got {output_2['answer']!r}"
+    )
+
+    # The reviewer's own record grew again.
+    reviewer_users_final = [e for e in api.read_record(reviewer_record) if e["kind"] == "UserMessage"]
+    assert len(reviewer_users_final) > reviewer_users_after_turn_1, (
+        f"reviewer's record must have grown between parent turns; "
+        f"was {reviewer_users_after_turn_1}, now {len(reviewer_users_final)}"
+    )
+    # Both delegated UserMessages on the reviewer carry slash_source='delegate'.
+    delegated_msgs = [
+        u
+        for u in reviewer_users_final
+        if u["payload"].get("slash_source") == "delegate"
+    ]
+    assert len(delegated_msgs) >= 2, (
+        f"reviewer must have received at least 2 delegated UserMessages "
+        f"across the parent's two turns; got {len(delegated_msgs)}"
+    )
+
+    # Parent's FinalAnswer on turn 2 quotes both the identity and the math.
+    assert "REVIEWER-42" in parent_finals_2[-1]["payload"]["text"], (
+        f"parent turn 2 must quote the reviewer's identity again; "
+        f"got {parent_finals_2[-1]['payload']['text']!r}"
+    )
+    assert "4" in parent_finals_2[-1]["payload"]["text"], (
+        f"parent turn 2 must quote the reviewer's math answer; "
+        f"got {parent_finals_2[-1]['payload']['text']!r}"
+    )
