@@ -573,7 +573,21 @@ def test_ui_imports_only_sanctioned_substrate_surfaces() -> None:
     # as records, and the assay VIEW (sprint 013/014) legitimately consumes it. Kernel internals stay out.
     import ast
 
-    sanctioned = {"substrate.api", "substrate.reference", "substrate.topologies", "substrate.assay"}
+    # Sprint 054: `substrate.session_registry` joins the sanctioned set. The
+    # SessionRegistry primitive moved from substrate-ui into substrate (the
+    # library owns the concept; the daemon wraps its process boundary). The
+    # UI's session_registry.py is now a re-export shim; it legitimately
+    # imports the substrate-side module. `substrate.bundles` is likewise
+    # sanctioned — server.py reads bundle manifests through it, same public-
+    # read shape as substrate.assay.
+    sanctioned = {
+        "substrate.api",
+        "substrate.reference",
+        "substrate.topologies",
+        "substrate.assay",
+        "substrate.session_registry",
+        "substrate.bundles",
+    }
     ui_root = Path(__file__).resolve().parent.parent  # the repo root, where the UI source lives
     sources = [p for p in sorted(ui_root.glob("*.py")) if not p.name.startswith("test_")]
     assert sources, "no UI source files found to scan — the boundary test would be vacuous"
