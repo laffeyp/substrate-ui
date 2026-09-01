@@ -300,6 +300,34 @@
 
 *Agent maintains. Last 10 increment closes; older roll into ## Built as compressed paragraphs.*
 
+### Sprint 051 (2026-08-31, closed) — Ollama num_ctx tracks the model's advertised context
+- **Scope:** substrate sprint 051 live probe (`/api/chat` with a 2000-token prompt and `num_ctx=512`) confirmed Ollama silently truncates a prompt that exceeds `num_ctx` — `prompt_eval_count=258` came back, no warning, `done_reason=stop`. Two windows out of sync: `resolve_driver_context_tokens` reads `/api/show` (kimi advertises 262144), but this repo's `server.py:_responder_for` constructed `OllamaResponder(num_ctx=32768)` by default. Compaction budgeted for 262K while Ollama input was capped at 32K; kimi's TranscriptCompacted event on the record undercounted the actual drop.
+- **Fix (commit `874536d`):** `_responder_for` now probes `/api/show` at construction, caps at 262144 as a sanity ceiling, and passes THAT to `OllamaResponder(num_ctx=)`. Fallback 32768 when the probe fails. User override (via `driver_params.num_ctx`) still wins for VRAM-constrained local runs.
+- **Live receipt:** session `s_0c70bbc0fb2d4e228d1dbb3d` (kimi-k2.7-code:cloud) — SessionStarted carries `driver_context_tokens: 262144`, and the responder passes the same 262144 to Ollama. Both windows aligned.
+- **Regression pin on the substrate side:** `tests/test_realmodel_ollama_num_ctx_truncation.py` — two contract tests, both live-verified.
+
+### Sprint 048 (2026-08-31, closed) — terminal never goes deaf
+- **Scope:** three UI bugs that combined into "terminal is hung." Commit `4518770`. See KIT_DIARY finding 31.
+- **SSE never reconnected:** `web/terminal.ts:288` nulled `h.eventSource` on error and stopped. Server restart or WiFi blip = permanent deafness. Fix: `onerror` schedules a 1s reconnect that resumes at `h.lastSeq` (server routes `since_seq=<n>` so no envelopes are lost); a "· reconnecting…" line prints so the transition is visible.
+- **User echo lagged the SSE round-trip:** Enter fired POST and waited for the UserMessage envelope to come back over SSE — several seconds under a cloud driver, reads as hung. Fix: `_sendTurn` pushes `> text` locally BEFORE the await; the SSE handler dedups against `h.lastEchoedUserText`.
+- **FinalAnswer text invisible on bails:** only `ModelReply.text` rendered. On the anti-spin bail path there's no ModelReply, only a FinalAnswer carrying "stopped after N failed tool call(s): …". Fix: track `h.lastRenderedReplyText`, render FinalAnswer in `CLS.err` when it differs.
+
+### Sprint 046 (2026-08-31, closed) — session workspace matches product spec (per-session, mkdir'd)
+- **Scope:** commit `72fe073`. Diagnostic on live session `s_8c86dca9869b41ab80cc0b3a`: the bash tool raised `FileNotFoundError` before running any command. Root cause: `server.py:1059` defaulted `workspace` to `~/.substrate/sessions/default/` (a shared singleton) and nothing ever created it. `subprocess.run(cwd=<nonexistent>)` raises before executing.
+- **Product spec drift:** round 12 §3 line 35 + §9c line 587 name the default as `~/.substrate/sessions/<id>/workspace/` — PER-session, substrate creates it. The shared `default` folder was never part of the design.
+- **Fix:** mint the session_id early when no `--workspace` is provided, default to `~/.substrate/sessions/<sid>/workspace/`, `mkdir(parents=True, exist_ok=True)` before create. `--isolate` honours the same per-session path with shape `isolate`. `--workspace <path>` still honours the caller's path (git-repo detection promotes to Mode 2 / worktree in the session-registry create).
+- **Live receipt:** POST /api/session with just `{driver, name}` returned `workspace=~/.substrate/sessions/s_5f9a…/workspace`, and two `bash pwd` turns landed `exit=0` with that exact path as stdout.
+
+### Sprint 045 (2026-08-31, closed) — terminal toolbar correct from the start (three commits)
+- **Scope:** eight small edits landing across three commits (`45fe436`, `8261810`, `137be05`). Each earned its keep separately; each ties to a specific user complaint. See KIT_DIARY findings 32-36.
+- **Driver picker visible pre-session** (`driver_picker.ts`): was `display:none` pre-session, then `pickerSelect?.value` was empty on first open and the terminal fell through to "deterministic." Now stays visible with the `/api/models` default pre-selected so the picker acts as the create-time choice too.
+- **`think` defaults ON** (`server.py`): kimi-k2.7-code, glm-5.2, nemotron-3-super all produce measurably better answers with `think=True`. `/set think off` mid-session for the exceptions.
+- **Tools drawer dropped from the header** (`terminal.ts`): sessions run unrestricted by default; `/tools <comma-list>` remains for mid-session restriction. The comma input read as required and nobody used it.
+- **Live session rows clickable** (`rail.ts`): `_mkSession` had no onclick. Now `div.onclick = () => selectRecord(s.session_id)` — server's `_record_path` routes `s_<id>` to `~/.substrate/sessions/<id>/record`, so clicking a live row loads its graph/events/summary like any regular record.
+- **Terminal is the default view** (`state.ts` + `app.ts`): opening the app lands on the terminal directly (`?view=desktop` still lands on the record browser for the fifteen Playwright harnesses that assert `#view-desktop.active` on load).
+- **Bottom-dock terminal on desktop view** (`index.html` + `app.ts` `_placeTerminal`): terminal DOM mounted once into a movable `.terminal-column`, re-parented between `#view-terminal` (fullscreen) and `#terminal-dock` (bottom of the desktop view) on toggle. Same DOM, so session + SSE + input survive the flip.
+- **Rail refreshes on session-changed**: the `substrate:session-changed` handler now also calls `_rail.refresh()`. New/patched sessions surface in the "live sessions" bucket without a page reload.
+
 ### Sprint 044 (2026-08-31, closed) — piece G close: the terminal drives a real cloud model
 - **Scope:** the last unfinished stripe of piece G. Every wired-up part — the driver picker, all nineteen slashes, Ctrl+C → `/api/session/<id>/interrupt`, the SSE renderer with `ModelReply` in accent, the /model PATCH — landed in sprints 035-041. What remained: on a fresh open the terminal seeded `deterministic` every time, so the daily driver was demonstrably driving nothing.
 - **Fixes (four edits + one new harness):**

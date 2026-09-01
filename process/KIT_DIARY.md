@@ -193,6 +193,68 @@
 | H15 | Green tests + zero tsc errors + all harnesses passing does not imply correctness against intent when the tests were written against the same wrong architecture the code implements. | **confirmed** | Piece G, 2026-08-29. Every discipline gate was green at 038 close; the app itself doesn't do what was asked. |
 | H16 | Two consecutive user corrections against the same UI surface = architectural miss on that surface. | **hypothesized 2026-08-29** | Piece G's terminal-header surface received five corrections this turn ("controls belong on terminal" → "no + new session" → "no deterministic in picker" → "layout crowded" → "same conceptual model as before, and that framing is still wrong"). Each patched a symptom. Rule: after correction #2 on the same surface, halt and articulate the model, don't propose the next patch. |
 
+### 2026-08-31 — piece G audit arc, sprint 044-051 (bring-up and bug hunt)
+
+Piece G's mechanical translation completed at sprint 038 (2026-08-29). The 2026-08-31 arc
+is a different mode: bring the daily driver up, use it live, close the bugs a real user
+finds. Eight sprints landed across substrate + substrate-ui in one day; five load-bearing
+lessons for the kit sit under the finding-30 series above.
+
+31. **A silent SSE means "the app is broken" to the user.** Sprint 048. The terminal opened
+   an EventSource on session-open and never reconnected. A server restart (sprint 046/047
+   deploy) left every open tab permanently deaf; the server kept receiving turns and
+   producing events, the browser rendered nothing, the user watched their message vanish.
+   Fix: reconnect on error with a 1s backoff resuming at `h.lastSeq`, a visible
+   "· reconnecting…" line so the transition is legible, plus a local echo of the user's
+   Enter (the SSE UserMessage envelope's round-trip echo took seconds under kimi; that
+   also read as hung). **For the kit:** any long-lived stream in a UI harness needs
+   reconnect + resume-cursor + a visible transition line, not silence.
+
+32. **A default-visible pre-session picker is worth more than a hidden post-session one.**
+   Sprint 045 batch. The desktop `mountDriverPicker` was `display:none` pre-session so
+   `pickerSelect?.value` was empty on the very first open — the terminal fell through to
+   the "deterministic" literal. User's real ask ("driver dropdown ready to go before I type
+   anything") required the picker to render visibly at page load, pre-selected to the
+   `/api/models` default, and to WIN over any historical hardcode. Fix touched three
+   files (`app.ts` dropped its hardcoded default, `terminal.ts` widened the empty-sentinel
+   fallback, `driver_picker.ts` stopped hiding pre-session). **For the kit:** a picker
+   that's meaningful pre-session should render pre-session; hiding a control until state
+   arrives is a footgun when its value is read at open time.
+
+33. **`?driver=` URL param is a clean way to keep a token-paying CI harness token-neutral
+   when the runtime default rightfully points at a paid model.** Sprint 045. Once the
+   daily-driver default became `kimi-k2.7-code:cloud`, the sprint 035 lifecycle harness
+   started paying tokens on every run. Adding `?driver=deterministic` to the URL (read
+   in `terminal.ts` via `URLSearchParams`) gave the harness a per-request pin that no
+   server env var or restart could get wrong. **For the kit:** URL-param pins for
+   CI-cost-sensitive harnesses are cheaper than env vars because they live in the exact
+   request that needs the pin.
+
+34. **When a control the user asks for exists but nobody uses it, delete it from the
+   default UI.** Sprint 045. The "tools" text input in the terminal header let users pass
+   a comma-separated tool restriction on session creation. Every user reads it as a
+   required field; nobody types into it because "all tools" is the daily-driver default.
+   Fix: dropped the mount span; sessions default unrestricted; `/tools <list>` remains
+   for mid-session restriction. **For the kit:** a control that reads as required and is
+   used ~0% of the time is worse than no control.
+
+35. **Live-session rows in the rail need onclick.** Sprint 045. `_mkSession` in `rail.ts`
+   built a row for each live/parked/interrupted session but attached no click handler.
+   The record was reachable via `/api/records/<session_id>/…` (server routes
+   `s_<id>` to `~/.substrate/sessions/<id>/record`), so a one-line `div.onclick =
+   () => selectRecord(s.session_id)` was the whole fix. **For the kit:** a UI listing
+   items that resolve to a viewable target should default to clickable; a bare row that
+   looks selectable but isn't reads as broken.
+
+36. **A bottom-dock terminal alongside the record view beats a toggle-only split.** Sprint
+   045. The user's ask was "let me watch the record grow while I type." The two-view
+   toggle satisfied "I can see both" only if the user kept flipping. Fix: mount the terminal
+   DOM ONCE into a movable `.terminal-column` element, re-parent it between the
+   fullscreen `#view-terminal` host and a `#terminal-dock` inside `#view-desktop` on
+   view flip. Same DOM, so the session, the SSE EventSource, and the input focus survive
+   the flip. **For the kit:** a UI needing "both surfaces visible" is not the same
+   requirement as "either surface visible." Toggle is not a substitute for dock.
+
 ---
 
 *KIT_DIARY.md for substrate-ui. Nine entries. Ten hypotheses: five confirmed (H1, H4, H6 by prior entries; H9, H10 by the SDD arc); four tentative-confirmed (H3, H5, H7, H8); one falsified (H2 — the pure-reader carve-out did not apply to substrate-ui once it was reader-AND-controller). The SDD arc (Sprints 018–032, three days, five vocab bumps, five review passes) instrumented both surfaces of the app under one vocabulary and closed every review finding with an outcome. The diary starts where formal discipline starts — the review-#39 retrofit — not at the project's true beginning, by ruling.*
