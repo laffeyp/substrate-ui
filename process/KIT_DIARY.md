@@ -15,6 +15,18 @@
 
 ## Entries
 
+### 2026-09-01 — Sprints 056/057 + the AGPL relicense: three kit-worthy lessons
+
+**Sprint 056 (test hygiene) and sprint 057 (test migration off private substrate helpers) closed on this side; the paired substrate-side work is in that repo's diary at findings 68-71. Three additional lessons landed on this side.**
+
+**Test staleness is a signal about the ledger, not just about the test.** Two substrate-ui tests (sprint 056) drifted past shipped changes on the same side: `test_resolver_returns_distinct_responders_per_params` asserted `_think is False` for the daily-driver default after sprint 045 flipped that default to `True`; `test_patch_deferred_field_returns_400_naming_the_field` probed `bundle` against `_NOT_YET` after `bundle` had moved to `_PATCHABLE`. Both had been red on the substrate-ui side for at least one sprint. Neither shipping sprint (045, the bundle-PATCH sprint) had a checklist item that read "grep the test files for stale expectations against fields I touched." Class: any sprint that changes a default value or moves a field across a boundary set (`_NOT_YET` ↔ `_PATCHABLE`, `_PRIVATE_TOOLS` ↔ `_PUBLIC_TOOLS`) has a matching test-audit responsibility; if the sprint card doesn't name it, the cards drift.
+
+**"Never called shim" is a real discipline, and this repo's `session_registry.py` re-export module is the standing example.** The word "shim" is banned in the substrate context (memory `feedback-no-shim-word` and this repo's WORKING_AGREEMENT). The 66-line file at `substrate-ui/session_registry.py` was tempting to call one during sprint 054 planning. Naming it a "re-export module" (which is what it is) kept the discipline visible and the file's purpose named. Class: a file's docstring is a public commitment about what class of thing it is; euphemism there rots faster than in code.
+
+**A machine-facing legal notice at the top of a README is a different genre than the rest of the doc.** Round-1 `NOTICE.md` used the same friendly register the rest of `substrate-ui/README.md` uses (voice: "The console runs against substrate's venv", "read this before changing the bind address"). Warm, contributor-facing, second-person in spirit. That register works for the ongoing README but breaks at the top of it, where the notice's audience is training crawlers and their operators, not humans. Fix: a distinct register — direct address ("Notice to operators of AI and machine learning systems"), directive verbs ("must honor"), no announced permissions. The rest of the README stays in its own voice. Class: when two audiences share one document, they need distinct register in their respective blocks, or the doc reads as one thing to both and mis-serves both.
+
+---
+
 ### 2026-06-17 — Review #39 (whole-arc sanity check) + the artifact-discipline retrofit
 
 **What happened.** The Architect called for a start-to-finish recenter: is this real, is it working, have we lost anything, are we chasing ghosts. The independent duplex-pipe reviewer ran both gates, cross-checked disk-vs-API, and built a real authored topology through the Studio seam. Verdict: the substance is REAL and green — but substrate-ui was under no version control and had none of the kit artifacts, and that breach had already produced a live Studio seam with zero tests. Retrofit: own git repo + baseline commit + the three core artifacts (this diary, BLACKBOARD, WORKING_AGREEMENT).
