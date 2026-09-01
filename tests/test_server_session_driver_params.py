@@ -182,16 +182,24 @@ def test_create_rejects_bad_driver_params(base: str, tmp_path: Path) -> None:
 
 
 def test_resolver_returns_distinct_responders_per_params(base: str, tmp_path: Path) -> None:
-    """The cache key includes params — think=True yields a different Responder
-    instance than think=False (or the default)."""
+    """The cache key includes params — think=False yields a different
+    Responder instance than the default. Sprint 045 flipped the daily-
+    driver default to think=True (kimi, glm, nemotron all improve
+    measurably with thinking on), so this test asserts against that
+    default and probes the OTHER direction: explicit think=False must
+    produce a distinct cached Responder that carries think=False on
+    the OllamaResponder itself."""
     responder_default = server._daemon_driver_resolver("kimi-k2.6:cloud")
-    responder_thinking = server._daemon_driver_resolver("kimi-k2.6:cloud", {"think": True})
-    responder_thinking_again = server._daemon_driver_resolver("kimi-k2.6:cloud", {"think": True})
-    assert responder_default is not responder_thinking, "different params must yield different Responder"
-    assert responder_thinking is responder_thinking_again, "same params must hit the cache"
-    # The thinking Responder actually carries think=True on the OllamaResponder.
-    assert getattr(responder_thinking, "_think", False) is True
-    assert getattr(responder_default, "_think", True) is False
+    responder_off = server._daemon_driver_resolver("kimi-k2.6:cloud", {"think": False})
+    responder_off_again = server._daemon_driver_resolver("kimi-k2.6:cloud", {"think": False})
+    assert responder_default is not responder_off, (
+        "different params must yield different Responder"
+    )
+    assert responder_off is responder_off_again, "same params must hit the cache"
+    # The default Responder carries think=True (sprint 045 daily-driver default).
+    assert getattr(responder_default, "_think", False) is True
+    # The explicit think=False Responder carries think=False.
+    assert getattr(responder_off, "_think", True) is False
 
 
 def test_workspace_and_seed_still_deferred(base: str, tmp_path: Path) -> None:
