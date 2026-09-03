@@ -3,7 +3,7 @@
 """Sprint 228 composition contract — every session's tool suite carries
 the seven substrate toolkit tools alongside full_suite.
 
-TECH-SPEC §8 line 1066-1078 declares the composition. This test proves
+the tech spec-1078 declares the composition. This test proves
 the daemon's _build_session_topology_from_manifest hands the full
 toolkit to session_topology; a rename in substrate_tools that the
 daemon does not follow would fail here.
@@ -88,3 +88,5 @@ def test_session_tools_include_seven_substrate_toolkit_tools(
     # full_suite tools also present (a subset spot-check).
     for expected in ("read_file", "grep", "write_file", "bash"):
         assert expected in composed, f"full_suite tool {expected!r} missing"
+
+# spec-audit: 2026-09-01
