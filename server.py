@@ -42,6 +42,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 import msgspec
 from msgspec import Struct
 from substrate import api
+from substrate.adapters import DriverFamily
 from substrate.topologies import bundled
 from substrate.topologies.tool_loop import tool_loop_topology
 from substrate.topologies.tool_loop.delegate import make_delegate
@@ -82,6 +83,7 @@ class _UnixHTTPServer(socketserver.ThreadingUnixStreamServer):
         self.server_name = "localhost"
         self.server_port = 0
 
+
 # Sprint 214a: daemon-side session API. SessionRegistry is a MODULE-scope singleton
 # so every handler sees the same catalog + per-session lock. Initialized in main()
 # with a session_topology_factory closure that resolves a manifest's driver string
@@ -118,6 +120,7 @@ def _application_spec_to_wire(spec: Any) -> dict[str, Any]:
     from substrate.topologies.applications.registry import spec_to_wire
 
     return spec_to_wire(spec)
+
 
 # Sprint 215d: SIGTERM guard so a second signal during shutdown is a no-op
 # instead of re-entering `_shutdown_all_sessions` on a half-torn catalog.
@@ -173,7 +176,7 @@ def _daemon_driver_resolver(name: str, params: dict[str, Any] | None = None) -> 
     cached = _RESPONDER_CACHE.get(key)
     if cached is not None:
         return cached
-    if name == "deterministic":
+    if name == DriverFamily.DETERMINISTIC:
         # DeterministicResponder is stateful; skip cache entirely.
         return DeterministicResponder(seed=0)
     if name == "claude":
@@ -395,9 +398,7 @@ _APP_BUILDERS: dict[str, Callable[[dict[str, Any]], Callable[..., Any]]] = {
 }
 
 
-def _build_pair_coding_composite(
-    session_registry: Any, inputs: dict[str, Any]
-) -> tuple[Any, Any]:
+def _build_pair_coding_composite(session_registry: Any, inputs: dict[str, Any]) -> tuple[Any, Any]:
     """Sprint 225c — register the pair_coding builder + reviewer pair.
     Returns `(builder_manifest, reviewer_manifest)` — the reviewer's
     `composite_of` points at the builder's session_id so sprint 225b's
@@ -501,6 +502,13 @@ def _build_session_topology_from_manifest(
         record_root=Path(manifest.record_root),
         script=None,
         first_turn_user_message=first_turn_user_message,
+        # Sprint 061: role is a live runtime input now. resolve_role_prompt
+        # ran at POST /api/session for validation; here it runs once per
+        # session at RunStarted and yields a PromptFragment(source=role)
+        # onto the record. repo_root is the daemon's cwd — session create
+        # captures it via Path.cwd() at the validator call site.
+        role=manifest.role,
+        role_repo_root=Path.cwd(),
     )
 
 
@@ -508,7 +516,14 @@ def _responder_for(spec: dict[str, object]) -> object:
     """The Responder a model-backed authored topology runs against: 'deterministic' (CI mode, pure +
     seeded — the default; no network, replay-stable) or 'ollama' (a real local LLM; loud failure if
     Ollama is not running — never a silent stub)."""
-    if str(spec.get("responder") or "deterministic").lower() == "ollama":
+    raw_family = str(spec.get("responder") or DriverFamily.DETERMINISTIC.value).lower()
+    try:
+        family = DriverFamily(raw_family)
+    except ValueError as exc:
+        raise ValueError(
+            f"responder must be one of {sorted(f.value for f in DriverFamily)}; got {raw_family!r}"
+        ) from exc
+    if family is DriverFamily.OLLAMA:
         return OllamaResponder(model=str(spec.get("model_name") or "llama3.2"), timeout=300.0)
     return DeterministicResponder(seed=int(spec.get("seed", 0)))  # type: ignore[arg-type]
 
@@ -527,9 +542,7 @@ class LiveTick(Struct, frozen=True):
 def _slow_topology() -> Any:
     async def ticker(_inp: Any) -> Any:
         for i in range(1, 7):
-            await asyncio.sleep(
-                0.5
-            )  # ~3s total, so the console can follow it being written
+            await asyncio.sleep(0.5)  # ~3s total, so the console can follow it being written
             yield LiveTick(n=i)
 
     def topo(b: Any) -> None:
@@ -540,16 +553,12 @@ def _slow_topology() -> Any:
     return topo
 
 
-_EXTRA_TOPOS = {
-    "live_demo": _slow_topology
-}  # launchable, alongside the bundled topologies
+_EXTRA_TOPOS = {"live_demo": _slow_topology}  # launchable, alongside the bundled topologies
 # run_name -> the launch thread. The server SPAWNED the run, so it alone knows if it's still alive:
 # a launch whose thread is dead with no terminal RunFinalised has TORN — the authoritative signal
 # that distinguishes "incomplete = live (still writing)" from "incomplete = torn (dead)" (review #36).
 _LAUNCHES: dict[str, "threading.Thread"] = {}
-MAX_LIVE_RUNS = (
-    8  # concurrency cap: a POST flood can't spawn unbounded run threads (security-3)
-)
+MAX_LIVE_RUNS = 8  # concurrency cap: a POST flood can't spawn unbounded run threads (security-3)
 
 
 def _is_live(name: str) -> bool:
@@ -558,9 +567,7 @@ def _is_live(name: str) -> bool:
         return False
     if th.is_alive():
         return True
-    _LAUNCHES.pop(
-        name, None
-    )  # evict the dead thread (no unbounded growth on a long-lived server)
+    _LAUNCHES.pop(name, None)  # evict the dead thread (no unbounded growth on a long-lived server)
     return False
 
 
@@ -582,9 +589,7 @@ def _agent_models() -> dict[str, object]:
     try:
         with _u.urlopen("http://localhost:11434/api/tags", timeout=2) as r:  # noqa: S310 - localhost
             tags = msgspec.json.decode(r.read())
-        ollama = sorted(
-            str(m.get("name", "")) for m in tags.get("models", []) if m.get("name")
-        )
+        ollama = sorted(str(m.get("name", "")) for m in tags.get("models", []) if m.get("name"))
     except Exception:  # noqa: BLE001 — no ollama / daemon down: still offer claude/gemini/deterministic
         ollama = []
     # Default to a VERIFIED AGENTIC model, not the biggest coder. The agency assay (RESEARCH R-16/R-17)
@@ -603,9 +608,7 @@ def _agent_models() -> dict[str, object]:
         "nemotron-3-super:cloud",
         "deepseek-v4-pro:cloud",
     ]
-    default = next(
-        (m for m in prefer if m in ollama), ollama[0] if ollama else "deterministic"
-    )
+    default = next((m for m in prefer if m in ollama), ollama[0] if ollama else "deterministic")
     return {
         "models": [*ollama, "claude", "gemini", "deterministic"],
         "cli": ["claude", "gemini"],
@@ -623,7 +626,9 @@ HOST, PORT = (
 _WEB_SRC = Path(__file__).resolve().parent / "web"
 _WEB_DIST = _WEB_SRC / "dist"
 WEB = _WEB_DIST if _WEB_DIST.is_dir() else _WEB_SRC
-TERMINAL_V1 = Path(__file__).resolve().parent / "terminal-v1" / "web"  # sub-project (A10) — currently empty; round-1 archived to _deprecated/terminal-v1-round1/
+TERMINAL_V1 = (
+    Path(__file__).resolve().parent / "terminal-v1" / "web"
+)  # sub-project (A10) — currently empty; round-1 archived to _deprecated/terminal-v1-round1/
 RUNS = (
     Path(__file__).resolve().parent / "runs"
 )  # generated/live records (failed/paused/broken demos)
@@ -665,9 +670,7 @@ def _worktree_diff(wt: Path) -> dict[str, object]:
     subprocess.run(  # intent-to-add so write_file'd NEW files show in the diff too
         ["git", "-C", str(wt), "add", "-A", "--intent-to-add"], check=False, capture_output=True
     )
-    diff = subprocess.run(
-        ["git", "-C", str(wt), "diff"], capture_output=True, text=True
-    ).stdout
+    diff = subprocess.run(["git", "-C", str(wt), "diff"], capture_output=True, text=True).stdout
     names = subprocess.run(
         ["git", "-C", str(wt), "diff", "--name-status"], capture_output=True, text=True
     ).stdout
@@ -760,7 +763,7 @@ def _bundles_index() -> list[dict[str, object]]:
 
         {name, description, tools_enabled, slot_count}
 
-    `slot_count` counts the three prose slots present per §7b (methodology,
+    `slot_count` counts the three prose slots present per the topology-layer contract (methodology,
     personality, per_turn). A bundle with only methodology has slot_count=1.
     """
     from substrate.bundles import list_bundles
@@ -816,8 +819,7 @@ def _records_index(exclude_sessions: bool = False) -> list[dict[str, object]]:
                 "status": g.status,  # incomplete | paused | finalised | failed (the real run-level outcome)
                 "final_reason": g.final_reason,
                 "paused_on": g.paused_on,
-                "resumable": name
-                in _RESUMABLE,  # a paused run the UI can feed + continue
+                "resumable": name in _RESUMABLE,  # a paused run the UI can feed + continue
                 "total_events": s.total_events,
                 "producers_failed": s.producers_failed
                 + s.input_build_failures
@@ -873,9 +875,7 @@ _PROJECTIONS = {
     "topology_graph": lambda ev: _builtins(api.topology_graph(ev)),
     "summary": lambda ev: _builtins(api.narration_summary(ev)),
     "narrate": lambda ev: [_builtins(line) for line in api.narrate(ev)],
-    "narrate_full": lambda ev: [
-        _builtins(line) for line in api.narrate(ev, lifecycle=True)
-    ],
+    "narrate_full": lambda ev: [_builtins(line) for line in api.narrate(ev, lifecycle=True)],
     "io": _io,
 }
 
@@ -885,12 +885,7 @@ _PROJECTIONS = {
 BENCH_RESULTS = Path(
     os.environ.get(
         "BENCH_RESULTS",
-        str(
-            Path(__file__).resolve().parent.parent
-            / "substrate"
-            / "process"
-            / "bench_results"
-        ),
+        str(Path(__file__).resolve().parent.parent / "substrate" / "process" / "bench_results"),
     )
 )
 
@@ -982,9 +977,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:  # noqa: N802 — the thin control layer (launch + resume only, per ruling C1)
         path = unquote(urlparse(self.path).path)
         if not self._origin_ok():
-            self._error(
-                403, "cross-origin request rejected (Origin does not match Host)"
-            )
+            self._error(403, "cross-origin request rejected (Origin does not match Host)")
             return
         try:
             if path == "/api/session":
@@ -1004,7 +997,7 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if path.startswith("/api/topology/") and path.endswith("/run"):
                 # Sprint 225a: POST /api/topology/<name>/run — piece-E
-                # application dispatch endpoint per TECH-SPEC §7.6 line
+                # application dispatch endpoint line
                 # 1043. One-shot only (session-shape apps route through
                 # POST /api/session or /api/session/composite instead).
                 topology_name = path[len("/api/topology/") : -len("/run")]
@@ -1090,8 +1083,7 @@ class Handler(BaseHTTPRequestHandler):
         if isolate and workspace_shape == "worktree":
             self._error(
                 400,
-                "isolate=true and workspace_shape='worktree' are mutually exclusive; "
-                "pick one",
+                "isolate=true and workspace_shape='worktree' are mutually exclusive; pick one",
             )
             return
         # Sprint 046: workspace resolution matches product spec round 12
@@ -1130,7 +1122,7 @@ class Handler(BaseHTTPRequestHandler):
         # silently sent nothing. Both names accepted; the spec wins on writes.
         seed = str(body.get("seed_text") or body.get("seed") or "")
         bundle = body.get("bundle")
-        # Sprint 223a: `role` per TECH-SPEC §1.6.5. Resolve at create time so
+        # Sprint 223a: `role`. Resolve at create time so
         # a nonexistent role name fails 400 immediately rather than at first
         # `/turn`. The resolver's `RegistrationError` carries the four-layer
         # search trail; forward the message verbatim.
@@ -1142,7 +1134,7 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as exc:  # noqa: BLE001 — RegistrationError forwarded as 400
             self._error(400, f"role {role!r}: {exc}")
             return
-        # Sprint 223b: `tools` on POST per TECH-SPEC §7 line 674. Same shape as
+        # Sprint 223b: `tools` on POST. Same shape as
         # the PATCH branch (217e): list of non-empty strings. Empty list → None
         # (unrestricted). Missing → None. Any other type → 400.
         tools_raw = body.get("tools")
@@ -1224,7 +1216,9 @@ class Handler(BaseHTTPRequestHandler):
                 "workspace_shape": manifest.workspace_shape,
                 "bundle": manifest.bundle,
                 "role": manifest.role,
-                "driver_params": dict(current.driver_params) if current.driver_params is not None else None,
+                "driver_params": dict(current.driver_params)
+                if current.driver_params is not None
+                else None,
             }
         )
 
@@ -1292,9 +1286,7 @@ class Handler(BaseHTTPRequestHandler):
                 )
                 return
             kinds = context_raw.get("kinds", [])
-            if not (
-                isinstance(kinds, list) and all(isinstance(k, str) for k in kinds)
-            ):
+            if not (isinstance(kinds, list) and all(isinstance(k, str) for k in kinds)):
                 self._error(400, "context.kinds must be a list of strings")
                 return
             context_slice = {
@@ -1350,10 +1342,8 @@ class Handler(BaseHTTPRequestHandler):
             if context_slice is not None and record_root_locked.exists():
                 from substrate.topologies.tool_loop.delegate import _prefix_context_slice
 
-                assembled_prompt = _prefix_context_slice(
-                    record_root_locked, text, context_slice
-                )
-            # Sprint 223d: per_turn (spec §7b) prefixes every UserMessage's
+                assembled_prompt = _prefix_context_slice(record_root_locked, text, context_slice)
+            # Sprint 223d: per_turn (spec the topology-layer contract) prefixes every UserMessage's
             # assembled_prompt. Empty string is the no-op default.
             live_pt = _manifest.per_turn
             if live_pt:
@@ -1483,9 +1473,7 @@ class Handler(BaseHTTPRequestHandler):
             )
         except Exception as exc:
             if isinstance(exc, SessionEndedMidTurn):
-                self._json(
-                    {"status": STATUS_ENDED, "error": SESSION_ENDED_MID_DELEGATE}, 410
-                )
+                self._json({"status": STATUS_ENDED, "error": SESSION_ENDED_MID_DELEGATE}, 410)
                 return
             # Sprint 220 (piece-D dispatch): a fresh session that never opened
             # its record cannot receive a SessionEndRequested (which is not a
@@ -1567,9 +1555,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         ref = _SESSION_REGISTRY.interrupt(session_id)
         if ref is None:
-            self._json(
-                {"interrupted": False, "landed": False, "session_id": session_id}
-            )
+            self._json({"interrupted": False, "landed": False, "session_id": session_id})
             return
         # Poll the record for a matching ProducerCancelled envelope. Poll interval
         # 50 ms; cap at max_wait_ms. Match on the (kind, instance) pair the
@@ -1586,7 +1572,10 @@ class Handler(BaseHTTPRequestHandler):
                         if env.get("kind") != api.PRODUCER_CANCELLED:
                             continue
                         producer = (env.get("payload") or {}).get("producer") or {}
-                        if isinstance(producer, dict) and producer.get("instance") == target_instance:
+                        if (
+                            isinstance(producer, dict)
+                            and producer.get("instance") == target_instance
+                        ):
                             landed = True
                             break
                 except _RECORD_IO_ERRORS:  # REVIEW-2026-08-28 Q6: narrow mid-write catch
@@ -1659,7 +1648,9 @@ class Handler(BaseHTTPRequestHandler):
                 "created_at": manifest.created_at,
                 "status": manifest.status,
                 "role": manifest.role,
-                "driver_params": dict(manifest.driver_params) if manifest.driver_params is not None else None,
+                "driver_params": dict(manifest.driver_params)
+                if manifest.driver_params is not None
+                else None,
                 "tools": list(manifest.tools) if manifest.tools is not None else None,
             }
         )
@@ -1794,7 +1785,7 @@ class Handler(BaseHTTPRequestHandler):
         strings via `_daemon_driver_resolver`; hands the resolved inputs
         to the `_APP_BUILDERS` dispatch. `runs = "session"` and
         `runs = "session_composite"` return 400 with a pointer at the
-        right endpoint (this launcher is one-shot only per §7.6).
+        right endpoint (this launcher is one-shot only).
 
         `await_completion=true` (default): blocks; response is
         `{run_id, record_root, status: "finalised", final_seq}`.
@@ -1905,7 +1896,7 @@ class Handler(BaseHTTPRequestHandler):
     def _topology_status(self, application_name: str, run_id: str) -> None:
         """Sprint 225d: GET /api/topology/<name>/status?run_id=<id>.
 
-        Response shape per TECH-SPEC §8 line 1057: `{run_id, status,
+        Response shape: `{run_id, status,
         record_root, elapsed_seconds, output?, application}`. Status
         derives from the record's tail using the same rules
         `_scan_record_status` uses on session boot: RunFinalised → finalised,
@@ -2040,8 +2031,7 @@ class Handler(BaseHTTPRequestHandler):
         for _ in range(80):
             try:
                 if root.exists() and any(
-                    e.get("kind") == api.RUN_STARTED
-                    for e in api.read_record(root)
+                    e.get("kind") == api.RUN_STARTED for e in api.read_record(root)
                 ):
                     break
             except _RECORD_IO_ERRORS:  # REVIEW-2026-08-28 Q6: narrow mid-write catch
@@ -2051,7 +2041,7 @@ class Handler(BaseHTTPRequestHandler):
         self._json({"name": run_name, "status": status, "launched": name})
 
     def _agent(self, q: dict[str, list[str]]) -> None:
-        """`/api/agent` compat bridge (TECH-SPEC §7 line 690).
+        """`/api/agent` compat bridge (the tech spec).
 
         Per the spec: `/api/agent` stays for one release; internally creates a
         session on first request and routes subsequent requests to
@@ -2079,7 +2069,7 @@ class Handler(BaseHTTPRequestHandler):
         if _SESSION_REGISTRY is None:
             # No silent legacy fallback. The bridge is the default; the
             # legacy shape ships one release with explicit `legacy=true`
-            # opt-in per TECH-SPEC §7 line 690. A caller reaching here
+            # opt-in. A caller reaching here
             # without a registry is a real 503 — the daemon boots the
             # registry at main() and every serve_forever call sees it.
             self._error(503, "session registry not initialized (boot ordering)")
@@ -2087,16 +2077,19 @@ class Handler(BaseHTTPRequestHandler):
 
         session_name = q.get("session", [""])[0] or ""
         task = q.get("task", [""])[0] or "Use the available tools to help."
-        model = (q.get("model", ["deterministic"])[0] or "deterministic").lower()
+        model = (
+            q.get("model", [DriverFamily.DETERMINISTIC.value])[0]
+            or DriverFamily.DETERMINISTIC.value
+        ).lower()
         ws_arg = q.get("workspace", [""])[0]
         # Driver string per the create/PATCH shape. `model=ollama` + `name=X`
         # → driver=X so /api/session's PATCH-driver stays useful downstream.
-        if model == "ollama":
+        if model == DriverFamily.OLLAMA:
             driver = q.get("name", ["llama3.2:1b"])[0]
         elif model in ("claude", "gemini", "cli"):
             driver = model
         else:
-            driver = "deterministic"
+            driver = DriverFamily.DETERMINISTIC.value
 
         # Find-or-create by name. A collision-free session name means create;
         # a hit means resume.
@@ -2166,7 +2159,7 @@ class Handler(BaseHTTPRequestHandler):
         )
 
     def _agent_legacy(self, q: dict[str, list[str]]) -> None:
-        """The pre-bridge behavior. Stays one release per TECH-SPEC §7 line 690.
+        """The pre-bridge behavior. Stays one release.
 
         Callers that pass `?legacy=true` get the old launch-thread shape;
         every other caller goes through the session-routed bridge above.
@@ -2186,14 +2179,9 @@ class Handler(BaseHTTPRequestHandler):
         wt_arg = q.get("worktree", [""])[
             0
         ]  # a repo path -> isolate this session in its own worktree
-        session = (
-            re.sub(r"[^A-Za-z0-9._-]", "-", ws_arg)[:40]
-            or f"adhoc-{uuid.uuid4().hex[:8]}"
-        )
+        session = re.sub(r"[^A-Za-z0-9._-]", "-", ws_arg)[:40] or f"adhoc-{uuid.uuid4().hex[:8]}"
         branch = ""
-        if (
-            wt_arg
-        ):  # git-worktree-per-session: operate on a branch adjacent to the repo (B)
+        if wt_arg:  # git-worktree-per-session: operate on a branch adjacent to the repo (B)
             try:
                 workspace, branch = _session_worktree(Path(wt_arg), session)
             except Exception as exc:  # noqa: BLE001 — not a repo / git failed: fall back, surfaced
@@ -2224,7 +2212,7 @@ class Handler(BaseHTTPRequestHandler):
             }
 
         think, max_tokens, timeout = _agent_params(q)
-        if model == "ollama":
+        if model == DriverFamily.OLLAMA:
             model_name = q.get("name", ["llama3.2:1b"])[0]
             task = q.get("task", [""])[0] or "Use the available tools to help."
             responder = OllamaResponder(
@@ -2263,15 +2251,13 @@ class Handler(BaseHTTPRequestHandler):
             )
             label = "agent_" + model
         else:
-            topo = (
-                tool_loop_topology()
-            )  # deterministic calculator loop — CI-safe, no network
+            topo = tool_loop_topology()  # deterministic calculator loop — CI-safe, no network
             label = "agent_calc"
-        run_name = f"launch_{label}_{uuid.uuid4().hex[:12]}"  # launch_ prefix => prunable session run
-        root = RUNS / f"{run_name}.record"
-        th = threading.Thread(
-            target=lambda: asyncio.run(api.Runtime(root).run(topo)), daemon=True
+        run_name = (
+            f"launch_{label}_{uuid.uuid4().hex[:12]}"  # launch_ prefix => prunable session run
         )
+        root = RUNS / f"{run_name}.record"
+        th = threading.Thread(target=lambda: asyncio.run(api.Runtime(root).run(topo)), daemon=True)
         _LAUNCHES[run_name] = th
         th.start()
         for _ in range(
@@ -2279,8 +2265,7 @@ class Handler(BaseHTTPRequestHandler):
         ):  # wait only until RunStarted lands, so the console can follow immediately
             try:
                 if root.exists() and any(
-                    e.get("kind") == api.RUN_STARTED
-                    for e in api.read_record(root)
+                    e.get("kind") == api.RUN_STARTED for e in api.read_record(root)
                 ):
                     break
             except _RECORD_IO_ERRORS:  # REVIEW-2026-08-28 Q6: narrow mid-write catch
@@ -2327,9 +2312,7 @@ class Handler(BaseHTTPRequestHandler):
             lock.unlink()
         th = threading.Thread(
             target=lambda: asyncio.run(
-                api.Runtime(root, persistent=True).resume(
-                    topo, resume_event=ev_factory()
-                )
+                api.Runtime(root, persistent=True).resume(topo, resume_event=ev_factory())
             ),
             daemon=True,
         )
@@ -2342,9 +2325,7 @@ class Handler(BaseHTTPRequestHandler):
             except _RECORD_IO_ERRORS:  # REVIEW-2026-08-28 Q6: narrow mid-write catch
                 pass
             time.sleep(0.05)
-        self._json(
-            {"name": resume_name, "status": api.run_graph(root).status, "resumed": name}
-        )
+        self._json({"name": resume_name, "status": api.run_graph(root).status, "resumed": name})
 
     def _body(self) -> dict[str, object]:
         length = int(self.headers.get("Content-Length", 0))
@@ -2388,9 +2369,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         run_name = f"build_{name}_{uuid.uuid4().hex[:12]}"
         root = RUNS / f"{run_name}.record"
-        th = threading.Thread(
-            target=lambda: asyncio.run(api.Runtime(root).run(topo)), daemon=True
-        )
+        th = threading.Thread(target=lambda: asyncio.run(api.Runtime(root).run(topo)), daemon=True)
         _LAUNCHES[run_name] = th
         th.start()
         # authored stub topologies are deterministic + fast — wait briefly for a TERMINAL so the
@@ -2418,9 +2397,7 @@ class Handler(BaseHTTPRequestHandler):
             fired = {i.trigger_id for i in g.instances if i.trigger_id}
             unfired = [t for t in authored if t not in fired]
             if unfired:
-                out["unfired_triggers"] = (
-                    unfired  # authored Triggers whose Predicate never matured
-                )
+                out["unfired_triggers"] = unfired  # authored Triggers whose Predicate never matured
         self._json(out)
 
     def _session_patch(self, session_id: str) -> None:
@@ -2506,7 +2483,9 @@ class Handler(BaseHTTPRequestHandler):
             elif isinstance(per_turn_raw, str):
                 per_turn_value = per_turn_raw
             else:
-                self._error(400, f"per_turn must be a string or null; got {type(per_turn_raw).__name__}")
+                self._error(
+                    400, f"per_turn must be a string or null; got {type(per_turn_raw).__name__}"
+                )
                 return
             updated = _SESSION_REGISTRY.set_per_turn(session_id, per_turn_value)
         if "bundle" in body:
@@ -2516,7 +2495,9 @@ class Handler(BaseHTTPRequestHandler):
             # seen at the next turn's UserMessage.assembled_prompt.
             bundle_raw = body["bundle"]
             if bundle_raw is not None and not isinstance(bundle_raw, str):
-                self._error(400, f"bundle must be a string or null; got {type(bundle_raw).__name__}")
+                self._error(
+                    400, f"bundle must be a string or null; got {type(bundle_raw).__name__}"
+                )
                 return
             bundle_value = str(bundle_raw) if bundle_raw else None
             try:
@@ -2553,7 +2534,9 @@ class Handler(BaseHTTPRequestHandler):
                 "workspace": updated.workspace,
                 "workspace_shape": updated.workspace_shape,
                 "bundle": updated.bundle,
-                "driver_params": dict(updated.driver_params) if updated.driver_params is not None else None,
+                "driver_params": dict(updated.driver_params)
+                if updated.driver_params is not None
+                else None,
                 "record": updated.record_root,
                 "status": updated.status,
             }
@@ -2609,13 +2592,11 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if path == "/api/applications":
                 # Sprint 223 — piece E's flat manifest catalog. Response
-                # shape is a JSON list of parsed specs per TECH-SPEC §7.6
+                # shape is a JSON list of parsed specs
                 # line 1044: `{name, description, inputs_schema,
                 # output_kind, runs}`. Read from the boot-loaded
                 # `_APPLICATIONS` dict; the load fires at main().
-                self._json(
-                    [_application_spec_to_wire(spec) for spec in _APPLICATIONS.values()]
-                )
+                self._json([_application_spec_to_wire(spec) for spec in _APPLICATIONS.values()])
                 return
             if path.startswith("/api/topology/") and path.endswith("/status"):
                 # Sprint 225d — GET /api/topology/<name>/status?run_id=<id>.
@@ -2632,8 +2613,8 @@ class Handler(BaseHTTPRequestHandler):
             if path.startswith("/api/session/by-name/"):
                 self._session_by_name(unquote(path[len("/api/session/by-name/") :]))
                 return
-            if path.startswith("/api/session/") and "/" not in path[len("/api/session/"):]:
-                self._session_get(path[len("/api/session/"):])
+            if path.startswith("/api/session/") and "/" not in path[len("/api/session/") :]:
+                self._session_get(path[len("/api/session/") :])
                 return
             if path.startswith("/api/session/") and path.endswith("/events"):
                 session_id = path[len("/api/session/") : -len("/events")]
@@ -2651,7 +2632,11 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/records":
                 # Sprint 034a: optional ?exclude_sessions=true filter.
                 q = parse_qs(urlparse(self.path).query)
-                exclude = (q.get("exclude_sessions", ["false"])[0] or "false").lower() in ("1", "true", "yes")
+                exclude = (q.get("exclude_sessions", ["false"])[0] or "false").lower() in (
+                    "1",
+                    "true",
+                    "yes",
+                )
                 self._json(_records_index(exclude_sessions=exclude))
                 return
             if path == "/api/bundles":
@@ -2677,14 +2662,14 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(res, 404 if "error" in res else 200)
                 return
             if path == "/api/topologies":
-                self._json(
-                    bundled.names() + list(_EXTRA_TOPOS)
-                )  # the launchable topologies
+                self._json(bundled.names() + list(_EXTRA_TOPOS))  # the launchable topologies
                 return
             if path == "/api/diff":
                 self._diff(parse_qs(urlparse(self.path).query))
                 return
-            if path == "/api/resolve_child":  # W2.2: a delegate ToolResult's child_root -> served name
+            if (
+                path == "/api/resolve_child"
+            ):  # W2.2: a delegate ToolResult's child_root -> served name
                 cp = parse_qs(urlparse(self.path).query).get("path", [""])[0]
                 self._json({"name": _resolve_child_name(cp)})
                 return
@@ -2709,9 +2694,7 @@ class Handler(BaseHTTPRequestHandler):
             self._error(404, f"no record {name!r}")
             return
         events = list(api.read_record(record))
-        if (
-            len(parts) == 1
-        ):  # the whole run: events + the manifest + the run-level status
+        if len(parts) == 1:  # the whole run: events + the manifest + the run-level status
             manifest = next(
                 (
                     (e.get("payload") or {}).get("topology")
@@ -2756,22 +2739,16 @@ class Handler(BaseHTTPRequestHandler):
         if div is None:
             self._json({"a": a, "b": b, "equivalent": True})
         else:
-            self._json(
-                {"a": a, "b": b, "equivalent": False, "divergence": _builtins(div)}
-            )
+            self._json({"a": a, "b": b, "equivalent": False, "divergence": _builtins(div)})
 
-    def _explain(
-        self, name: str, events: list[dict[str, object]], producer: str
-    ) -> None:
+    def _explain(self, name: str, events: list[dict[str, object]], producer: str) -> None:
         try:
             exp = api.explain_producer(events, producer)
             chain = api.trace_ancestry(events, producer)
         except (api.ProducerNotFound, api.SequenceOutOfRange) as exc:
             self._error(404, str(exc))
             return
-        self._json(
-            {"explanation": _builtins(exp), "ancestry": [_builtins(e) for e in chain]}
-        )
+        self._json({"explanation": _builtins(exp), "ancestry": [_builtins(e) for e in chain]})
 
     def _static(self, path: str) -> None:
         self._static_root(WEB, path)
@@ -2789,9 +2766,7 @@ class Handler(BaseHTTPRequestHandler):
         if not target.is_file():
             self._error(404, f"not found: {path}")
             return
-        self._send(
-            200, target.read_bytes(), _CT.get(target.suffix, "application/octet-stream")
-        )
+        self._send(200, target.read_bytes(), _CT.get(target.suffix, "application/octet-stream"))
 
 
 def main() -> None:
@@ -2811,7 +2786,7 @@ def main() -> None:
     _SESSION_REGISTRY = registry
     # Sprint 223 — application catalog boot-scan. Scans
     # `substrate/topologies/applications/*.manifest.toml` and loads what
-    # parses. `on_error="skip"` per §7.6: a fresh install has zero
+    # parses. `on_error="skip"`: a fresh install has zero
     # manifests; a malformed one is logged and skipped so one bad file
     # does not kill the daemon. Served by `GET /api/applications`.
     global _APPLICATIONS
@@ -2888,3 +2863,5 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+# spec-audit: 2026-09-01

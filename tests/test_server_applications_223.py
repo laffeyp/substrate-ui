@@ -102,7 +102,7 @@ def test_three_fixture_manifests_return_three_entries(
 def test_wire_shape_excludes_slots_and_default_bundle(
     base: str, tmp_path: Path
 ) -> None:
-    """§7.6 line 1044: wire response is 5 fields. `slots` + `default_bundle`
+    """the tech spec: wire response is 5 fields. `slots` + `default_bundle`
     are internal to the piece-H binding step, NOT visible to a caller
     browsing the app catalog."""
     fixture_root = tmp_path / "fixture-slots"
@@ -118,3 +118,5 @@ def test_wire_shape_excludes_slots_and_default_bundle(
     assert len(body) == 1
     assert "slots" not in body[0]
     assert "default_bundle" not in body[0]
+
+# spec-audit: 2026-09-01
