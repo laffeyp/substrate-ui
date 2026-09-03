@@ -20,7 +20,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import server  # noqa: E402
-from session_registry import STATUS_ENDED, SessionRegistry  # noqa: E402
+from session_registry import SessionRegistry, SessionStatus  # noqa: E402
 
 from substrate import api  # noqa: E402
 
@@ -86,8 +86,8 @@ def test_end_on_parent_cascades_to_child(base: tuple[str, Path]) -> None:
     status, _body = _post(url + f"/api/session/{builder_id}/end", {"source": "user_end"})
     assert status == 200
 
-    assert server._SESSION_REGISTRY.get(builder_id).status == STATUS_ENDED
-    assert server._SESSION_REGISTRY.get(reviewer_id).status == STATUS_ENDED
+    assert server._SESSION_REGISTRY.get(builder_id).status == SessionStatus.ENDED
+    assert server._SESSION_REGISTRY.get(reviewer_id).status == SessionStatus.ENDED
     # Both records carry SessionEnded on the record.
     for sid in (builder_id, reviewer_id):
         record = Path(server._SESSION_REGISTRY.get(sid).record_root)
@@ -127,8 +127,8 @@ def test_standalone_session_end_does_not_cascade(base: tuple[str, Path]) -> None
 
     _post(url + f"/api/session/{solo_id}/end", {"source": "user_end"})
 
-    assert registry.get(solo_id).status == STATUS_ENDED
-    assert registry.get(other_id).status != STATUS_ENDED
+    assert registry.get(solo_id).status == SessionStatus.ENDED
+    assert registry.get(other_id).status != SessionStatus.ENDED
 
 
 def test_composite_of_survives_boot_scan(base: tuple[str, Path], tmp_path: Path) -> None:

@@ -29,10 +29,6 @@ from __future__ import annotations
 from substrate import api  # noqa: F401 — re-export for monkeypatch targets
 
 from substrate.session_registry import (
-    STATUS_ENDED,
-    STATUS_INTERRUPTED,
-    STATUS_PARKED,
-    STATUS_RUNNING,
     FreshSessionRequiresUserMessage,
     NameCollision,
     SessionEndedMidTurn,
@@ -52,10 +48,6 @@ from substrate.session_registry import (
 # conveniences with no consumer-facing role — tests migrate off them in
 # this same sprint, and they stay private on the substrate side.
 __all__ = [
-    "STATUS_ENDED",
-    "STATUS_INTERRUPTED",
-    "STATUS_PARKED",
-    "STATUS_RUNNING",
     "FreshSessionRequiresUserMessage",
     "NameCollision",
     "SessionEndedMidTurn",

@@ -22,7 +22,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import server  # noqa: E402
-from session_registry import STATUS_ENDED, SessionRegistry  # noqa: E402
+from session_registry import SessionRegistry, SessionStatus  # noqa: E402
 
 from substrate.topologies.applications.registry import load_manifests  # noqa: E402
 
@@ -107,5 +107,5 @@ def test_pair_coding_cascade_end_ties_both_together(
     _post(url + f"/api/session/{reviewer_id}/turn", {"text": "seed"})
     # End on parent cascades to child.
     _post(url + f"/api/session/{builder_id}/end", {"source": "user_end"})
-    assert server._SESSION_REGISTRY.get(builder_id).status == STATUS_ENDED
-    assert server._SESSION_REGISTRY.get(reviewer_id).status == STATUS_ENDED
+    assert server._SESSION_REGISTRY.get(builder_id).status == SessionStatus.ENDED
+    assert server._SESSION_REGISTRY.get(reviewer_id).status == SessionStatus.ENDED

@@ -56,13 +56,10 @@ from session_errors import (
     SESSION_ENDED_MID_DELEGATE,
 )
 from session_registry import (
-    STATUS_ENDED,
-    STATUS_INTERRUPTED,
-    STATUS_PARKED,
-    STATUS_RUNNING,
     FreshSessionRequiresUserMessage,
     NameCollision,
     SessionEndedMidTurn,
+    SessionStatus,
     TornRecordOnResume,
 )
 from substrate.reference import CliResponder, DeterministicResponder, OllamaResponder
@@ -281,7 +278,7 @@ def _shutdown_all_sessions(*, per_session_timeout: float = 10.0) -> dict[str, in
     from substrate.topologies.session import SessionEndRequested
 
     for manifest in list(_SESSION_REGISTRY.list_all()):
-        if manifest.status in (STATUS_ENDED, STATUS_INTERRUPTED):
+        if manifest.status in (SessionStatus.ENDED, SessionStatus.INTERRUPTED):
             result["skipped_ended"] += 1
             continue
         try:
@@ -300,7 +297,7 @@ def _shutdown_all_sessions(*, per_session_timeout: float = 10.0) -> dict[str, in
                 # the run. Rule 12 preserves nothing (no record existed);
                 # the manifest hint just gets a terminal status.
                 try:
-                    _SESSION_REGISTRY.update_status(manifest.session_id, STATUS_ENDED)
+                    _SESSION_REGISTRY.update_status(manifest.session_id, SessionStatus.ENDED)
                     result["skipped_fresh"] += 1
                 except Exception:  # noqa: BLE001 — shutdown sweep must not raise; unknown per-session failure buckets as `failed` and the loop continues.
                     result["failed"] += 1
@@ -1241,15 +1238,15 @@ class Handler(BaseHTTPRequestHandler):
         if manifest is None:
             if _SESSION_REGISTRY.has_session_dir(session_id):
                 self._json(
-                    {"ok": False, "status": STATUS_ENDED, "error": SESSION_ENDED_MID_DELEGATE},
+                    {"ok": False, "status": SessionStatus.ENDED, "error": SESSION_ENDED_MID_DELEGATE},
                     410,
                 )
                 return
             self._error(404, f"unknown session_id {session_id!r}")
             return
-        if manifest.status == STATUS_ENDED:
+        if manifest.status == SessionStatus.ENDED:
             self._json(
-                {"ok": False, "status": STATUS_ENDED, "error": SESSION_ENDED_MID_DELEGATE},
+                {"ok": False, "status": SessionStatus.ENDED, "error": SESSION_ENDED_MID_DELEGATE},
                 410,
             )
             return
@@ -1365,7 +1362,7 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc:
                 if isinstance(exc, SessionEndedMidTurn):
                     self._json(
-                        {"ok": False, "status": STATUS_ENDED, "error": SESSION_ENDED_MID_DELEGATE},
+                        {"ok": False, "status": SessionStatus.ENDED, "error": SESSION_ENDED_MID_DELEGATE},
                         410,
                     )
                     return
@@ -1373,7 +1370,7 @@ class Handler(BaseHTTPRequestHandler):
                     self._json(
                         {
                             "ok": False,
-                            "status": STATUS_INTERRUPTED,
+                            "status": SessionStatus.INTERRUPTED,
                             "error": RECORD_TORN,
                             "detail": str(exc),
                         },
@@ -1450,7 +1447,7 @@ class Handler(BaseHTTPRequestHandler):
                     timeout_seconds=30.0,
                 )
             except FreshSessionRequiresUserMessage:
-                _SESSION_REGISTRY.update_status(child_manifest.session_id, STATUS_ENDED)
+                _SESSION_REGISTRY.update_status(child_manifest.session_id, SessionStatus.ENDED)
             except Exception:  # noqa: BLE001 — child cascade is best-effort; one child's failure does not block the parent.
                 traceback.print_exc()
 
@@ -1473,18 +1470,18 @@ class Handler(BaseHTTPRequestHandler):
             )
         except Exception as exc:
             if isinstance(exc, SessionEndedMidTurn):
-                self._json({"status": STATUS_ENDED, "error": SESSION_ENDED_MID_DELEGATE}, 410)
+                self._json({"status": SessionStatus.ENDED, "error": SESSION_ENDED_MID_DELEGATE}, 410)
                 return
             # Sprint 220 (piece-D dispatch): a fresh session that never opened
             # its record cannot receive a SessionEndRequested (which is not a
             # UserMessage). Transition the manifest to "ended" at the daemon
             # layer without opening. Same shape as _shutdown_all_sessions.
             if isinstance(exc, FreshSessionRequiresUserMessage):
-                _SESSION_REGISTRY.update_status(session_id, STATUS_ENDED)
+                _SESSION_REGISTRY.update_status(session_id, SessionStatus.ENDED)
                 self._json(
                     {
                         "seq": seq_at_start,
-                        "status": STATUS_ENDED,
+                        "status": SessionStatus.ENDED,
                         "final_seq": seq_at_start,
                         "record": manifest.record_root,
                         "reason": FRESH_SESSION_NEVER_OPENED,
@@ -1494,7 +1491,7 @@ class Handler(BaseHTTPRequestHandler):
             if isinstance(exc, TornRecordOnResume):
                 self._json(
                     {
-                        "status": STATUS_INTERRUPTED,
+                        "status": SessionStatus.INTERRUPTED,
                         "error": RECORD_TORN,
                         "detail": str(exc),
                     },
@@ -1619,7 +1616,7 @@ class Handler(BaseHTTPRequestHandler):
                 "created_at": manifest.created_at,
                 "bundle": manifest.bundle,
             }
-            key = "live" if manifest.status == STATUS_RUNNING else manifest.status
+            key = "live" if manifest.status == SessionStatus.RUNNING else manifest.status
             if key in buckets:
                 buckets[key].append(payload)
         self._json(buckets)
@@ -2153,7 +2150,7 @@ class Handler(BaseHTTPRequestHandler):
             )
         except SessionEndedMidTurn:
             self._json(
-                {"ok": False, "status": STATUS_ENDED, "error": SESSION_ENDED_MID_DELEGATE}, 410
+                {"ok": False, "status": SessionStatus.ENDED, "error": SESSION_ENDED_MID_DELEGATE}, 410
             )
             return
         except Exception as exc:  # noqa: BLE001 — bridge surfaces the class + text
