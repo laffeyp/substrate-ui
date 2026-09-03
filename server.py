@@ -1793,18 +1793,29 @@ class Handler(BaseHTTPRequestHandler):
         `{run_id, record_root, status: "running"}` and sprint 225d's
         status endpoint polls the record to observe transitions.
         """
+        from substrate.topologies.applications.registry import ApplicationRuns
+
         spec = _APPLICATIONS.get(application_name)
         if spec is None:
             self._error(404, f"unknown application {application_name!r}")
             return
-        if spec.runs == "session":
+        try:
+            runs = ApplicationRuns(spec.runs)
+        except ValueError:
+            self._error(
+                500,
+                f"application {application_name!r} has invalid runs={spec.runs!r}; "
+                "manifest passed load_manifests but no longer matches ApplicationRuns",
+            )
+            return
+        if runs is ApplicationRuns.SESSION:
             self._error(
                 400,
-                f"application {application_name!r} has runs='session'; open it via "
+                f"application {application_name!r} has runs={runs.value!r}; open it via "
                 "POST /api/session (session-shape apps do not dispatch through /run)",
             )
             return
-        if spec.runs == "session_composite":
+        if runs is ApplicationRuns.SESSION_COMPOSITE:
             self._topology_run_composite(application_name, spec)
             return
         try:
