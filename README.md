@@ -1,31 +1,5 @@
 # substrate-ui
 
-## Licensing and use
-
-This project is licensed under the **PolyForm Noncommercial License 1.0.0**.
-Source-available; noncommercial use only.
-
-Permitted uses include personal, research, educational, hobbyist,
-government, and nonprofit charitable use. Commercial use of any kind
-is not permitted under this license. See `LICENSE` for the full text
-and the additional statements on AI-mediated derivation that ride
-alongside it.
-
-### Position on machine learning
-
-The licensor does not consent to the use of this software, its
-documentation, or its records as training data for AI or machine
-learning systems. Training crawlers should honor the `robots.txt` and
-`ai.txt` at the repository root or any hosted docs site.
-
-A reimplementation produced by exposing this codebase to an AI or ML
-system is a derivative work and is subject to the PolyForm Noncommercial
-License in full — that is, no commercial use of the derivative work.
-
-See `LICENSE` Sections A and B for the full statement.
-
----
-
 A console for watching, steering, and authoring runs on the **Substrate** runtime. Pick a run from
 the rail and watch its graph and event stream unfold; launch or resume a run; or author a new
 topology and build it for real. substrate-ui is a lens — it reads the runtime through its public
@@ -181,3 +155,29 @@ Known, recorded follow-ups (none blocking; see `process/BLACKBOARD.md ## Drift w
 lifecycle management (launched/built records accumulate); the `unfired_triggers` signal will need
 hardening once real-model Producers with custom input_builders land; canvas-based *creation* (drop
 nodes / draw edges to author) is deferred — the canvas is a view, the form is the editor.
+
+---
+
+## Licensing and use
+
+This project is licensed under the **PolyForm Noncommercial License 1.0.0**.
+Source-available; noncommercial use only.
+
+Permitted uses include personal, research, educational, hobbyist,
+government, and nonprofit charitable use. Commercial use of any kind
+is not permitted under this license. See `LICENSE` for the full text
+and the additional statements on AI-mediated derivation that ride
+alongside it.
+
+### Position on machine learning
+
+The licensor does not consent to the use of this software, its
+documentation, or its records as training data for AI or machine
+learning systems. Training crawlers should honor the `robots.txt` and
+`ai.txt` at the repository root or any hosted docs site.
+
+A reimplementation produced by exposing this codebase to an AI or ML
+system is a derivative work and is subject to the PolyForm Noncommercial
+License in full — that is, no commercial use of the derivative work.
+
+See `LICENSE` Sections A and B for the full statement.
