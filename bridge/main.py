@@ -233,6 +233,73 @@ def op_session_resume(payload: dict) -> dict:
     }
 
 
+def op_turn_submit(payload: dict) -> dict:
+    """Submit one turn against a bound session. Returns {turn_index} on ack;
+    typed failure reasons on refusal."""
+    from substrate.session_registry import (  # type: ignore[import-not-found]
+        SessionEndedMidTurn, FreshSessionRequiresUserMessage, TornRecordOnResume,
+    )
+    from substrate.topologies.session import UserMessage  # type: ignore[import-not-found]
+    reg = _registry()
+    session_id = payload.get("session_id", "")
+    text = payload.get("text", "")
+    timeout_seconds = float(payload.get("timeout_seconds", 60))
+    manifest = reg.get(session_id)  # type: ignore[attr-defined]
+    if manifest is None:
+        return {"__error__": True, "reason": "not_found"}
+
+    # Queue-cap check per session_registry.py:878-888.
+    admitted, cap = reg.try_enqueue_turn(session_id)  # type: ignore[attr-defined]
+    if not admitted:
+        return {"__error__": True, "reason": "queue_full", "cap": cap}
+
+    def _turn_event_builder(m, root):  # noqa: ANN001, ANN202
+        from substrate import api  # type: ignore[import-not-found]
+        max_ti = -1
+        try:
+            for env in api.read_record(root):
+                pl = env.get("payload") or {}
+                if env.get("kind") == "UserMessage" and "turn_index" in pl:
+                    max_ti = max(max_ti, int(pl["turn_index"]))
+        except Exception:  # noqa: BLE001
+            max_ti = -1
+        return UserMessage(
+            text=text, turn_index=max_ti + 1,
+            assembled_prompt=text, slash_source=None,
+        )
+
+    try:
+        final_manifest, _root = reg.turn_sync(  # type: ignore[attr-defined]
+            session_id, resume_event_builder=_turn_event_builder,
+            timeout_seconds=timeout_seconds,
+        )
+    except SessionEndedMidTurn as e:
+        return {"__error__": True, "reason": "session_ended", "detail": str(e)}
+    except FreshSessionRequiresUserMessage as e:
+        return {"__error__": True, "reason": "fresh_session_requires_user_message", "detail": str(e)}
+    except TornRecordOnResume as e:
+        return {"__error__": True, "reason": "torn_record_on_resume", "detail": str(e)}
+    except TimeoutError as e:
+        return {"__error__": True, "reason": "timeout", "detail": str(e)}
+    except (RuntimeError, KeyError, ValueError) as e:
+        return {"__error__": True, "reason": "registry_error", "detail": str(e)}
+    finally:
+        reg.dequeue_turn(session_id)  # type: ignore[attr-defined]
+
+    # Scan the record tail for the highest turn_index (the one this call just wrote).
+    from substrate import api  # type: ignore[import-not-found]
+    max_ti = -1
+    try:
+        from pathlib import Path as _Path
+        for env in api.read_record(_Path(final_manifest.record_root)):
+            pl = env.get("payload") or {}
+            if env.get("kind") == "UserMessage" and "turn_index" in pl:
+                max_ti = max(max_ti, int(pl["turn_index"]))
+    except Exception:  # noqa: BLE001
+        pass
+    return {"session_id": session_id, "turn_index": max_ti}
+
+
 def op_session_end(payload: dict) -> dict:
     """Fire an /exit turn through the injected topology factory. Returns
     {end_reason, record_finalised, envelope_seq} where envelope_seq is the
@@ -361,6 +428,15 @@ def main() -> int:
                 result = op_probe_driver(msg)
                 if result.get("__error__"):
                     reply_err(rid, result.get("reason", "not_installed"))
+                else:
+                    reply_ok(rid, result)
+            except Exception as e:  # noqa: BLE001
+                reply_err(rid, f"registry_error:{e}")
+        elif op == "turn_submit":
+            try:
+                result = op_turn_submit(msg)
+                if result.get("__error__"):
+                    reply_err(rid, result.get("reason", "registry_error"))
                 else:
                     reply_ok(rid, result)
             except Exception as e:  # noqa: BLE001

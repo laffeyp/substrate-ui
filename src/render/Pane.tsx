@@ -19,6 +19,7 @@ interface Props {
   onResume?: (paneId: string, sessionId: string) => void;
   onPromptText?: (paneId: string, text: string) => void;
   onPromptLengthChanged?: (paneId: string, length: number) => void;
+  onPromptSubmit?: (paneId: string, text: string) => void;
 }
 
 const PER_PANE_SLOTS = [
@@ -50,7 +51,7 @@ function initialByte(slot: string, pane: PaneModel): number {
   return 0;
 }
 
-export function Pane({ pane, onFocus, onDragStart, onClose, onPickerText, onPickerWalk, onPickerCommit, onResume, onPromptText, onPromptLengthChanged }: Props): JSX.Element {
+export function Pane({ pane, onFocus, onDragStart, onClose, onPickerText, onPickerWalk, onPickerCommit, onResume, onPromptText, onPromptLengthChanged, onPromptSubmit }: Props): JSX.Element {
   return (
     <div
       data-testid={`pane-${pane.id}`}
@@ -69,7 +70,7 @@ export function Pane({ pane, onFocus, onDragStart, onClose, onPickerText, onPick
             onCommit={onPickerCommit}
             onResume={onResume}
           />
-        ) : pane.boundSessionId && onPromptText && onPromptLengthChanged ? (
+        ) : pane.boundSessionId && onPromptText && onPromptLengthChanged && onPromptSubmit ? (
           <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
             <div style={{ flex: 1, overflow: "auto" }}>
               <div className="label" style={{ color: "#5f636b" }}>session {pane.sessionName ?? pane.boundSessionId?.slice(0, 8)}</div>
@@ -78,6 +79,7 @@ export function Pane({ pane, onFocus, onDragStart, onClose, onPickerText, onPick
               pane={pane}
               onText={onPromptText}
               onLengthChanged={onPromptLengthChanged}
+              onSubmit={onPromptSubmit}
             />
           </div>
         ) : (

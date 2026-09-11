@@ -3,7 +3,7 @@
 ---
 id: 012
 epic: D — Turn flow
-status: pending
+status: closed
 phase: 3
 pass_kind: architecture
 spec_reference: signals/0.1.json § prompt + bridge TURN_SUBMIT_*; session_registry.py turn_sync + resume_event_builder :799; turn_queue_cap=4 :281
