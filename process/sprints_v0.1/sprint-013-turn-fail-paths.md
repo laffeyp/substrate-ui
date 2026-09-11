@@ -3,7 +3,7 @@
 ---
 id: 013
 epic: D — Turn flow
-status: pending
+status: closed
 phase: 3
 pass_kind: widening
 spec_reference: signals/0.1.json § bridge TURN_SUBMIT_FAILED enum; session_registry.py:164-204 typed exceptions
