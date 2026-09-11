@@ -5,6 +5,9 @@ export type PaneStatus = "unbound" | "parked" | "running" | "interrupted" | "end
 
 export type WorkspaceShape = "flat" | "worktree" | "isolate";
 
+export type Lens = "stream+graph" | "i/o" | "structure" | "scene";
+export const LENSES: readonly Lens[] = ["stream+graph", "i/o", "structure", "scene"] as const;
+
 export interface TranscriptRow {
   seq: number;
   kind: string;
@@ -42,6 +45,7 @@ export interface Pane {
   transcriptRows: TranscriptRow[];
   transcriptLastSeq: number;        // highest envelope seq the shell has rendered
   reveal: "terminal" | "reveal";    // Sprint 016 — Layer 5 mutex: at most one open reveal-instance per pane
+  lens: Lens;                        // Sprint 017 — current lens inside RevealShell
   // Later sprints extend: lens, reveal, surface, find, header_popover, etc.
 }
 

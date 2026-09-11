@@ -1,7 +1,7 @@
 // WindowFrame.tsx — renders one window's split tree as a nested grid.
 
 import { useRef } from "react";
-import { ShellState, Window, WorkspaceShape } from "@/state/ShellState";
+import { ShellState, Window, WorkspaceShape, Lens } from "@/state/ShellState";
 import { Pane } from "./Pane";
 import { Gutter } from "./Gutter";
 
@@ -17,6 +17,7 @@ export interface PaneCallbacks {
   onPromptLengthChanged: (paneId: string, length: number) => void;
   onPromptSubmit: (paneId: string, text: string) => void;
   onRevealToggle: (paneId: string) => void;
+  onLensSwitch: (paneId: string, to: Lens) => void;
 }
 
 export interface GutterCallbacks {
@@ -50,6 +51,7 @@ function Node({ id, state, gutter, pane }: { id: string; state: ShellState; gutt
         onPromptLengthChanged={pane.onPromptLengthChanged}
         onPromptSubmit={pane.onPromptSubmit}
         onRevealToggle={pane.onRevealToggle}
+        onLensSwitch={pane.onLensSwitch}
       />
     );
   }

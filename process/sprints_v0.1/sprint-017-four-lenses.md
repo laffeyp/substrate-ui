@@ -3,7 +3,7 @@
 ---
 id: 017
 epic: E — Reveal & lenses
-status: pending
+status: closed
 phase: 3
 pass_kind: architecture
 spec_reference: signals/0.1.json § lens LENS_SWITCHED; D10/D20 (four lenses); v7 Structure lens 298-312; FUNCTIONALITY

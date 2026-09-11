@@ -41,6 +41,7 @@ export function splitPane(
     transcriptRows: [],
     transcriptLastSeq: -1,
     reveal: "terminal",
+    lens: "stream+graph",
   };
   const updatedParent: Pane = { ...parent, splitParentId: newSplitId, ratio: 0.5 };
   const newSplit: Split = {

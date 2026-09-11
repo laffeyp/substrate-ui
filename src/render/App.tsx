@@ -210,6 +210,7 @@ function Shell(): JSX.Element {
             onPromptLengthChanged: (paneId, length) => dispatch({ type: "PROMPT_LENGTH_CHANGED", paneId, length }),
             onPromptSubmit: submitTurn,
             onRevealToggle: (paneId) => dispatch({ type: "REVEAL_TOGGLE", paneId }),
+            onLensSwitch: (paneId, to) => dispatch({ type: "LENS_SWITCH", paneId, to }),
           }}
         />
       )}
