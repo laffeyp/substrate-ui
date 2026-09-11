@@ -3,7 +3,7 @@
 ---
 id: 014
 epic: D — Turn flow
-status: pending
+status: closed
 phase: 3
 pass_kind: architecture
 spec_reference: signals/0.1.json § transcript TRANSCRIPT_ROW_RENDERED; session vocabulary UserMessage/ModelReply; Layer 6 RecordSubscriber

@@ -22,6 +22,22 @@ interface Props {
   onPromptSubmit?: (paneId: string, text: string) => void;
 }
 
+function rowColor(kind: string): string {
+  if (kind === "UserMessage") return "#82a5c8";
+  if (kind === "ModelReply") return "#a7c893";
+  if (kind === "SessionEnded") return "#c26058";
+  if (kind === "Park") return "#c89a6b";
+  return "#5f636b";
+}
+
+function rowGlyph(kind: string): string {
+  if (kind === "UserMessage") return ">";
+  if (kind === "ModelReply") return "<";
+  if (kind === "SessionEnded") return "!";
+  if (kind === "Park") return "-";
+  return "*";
+}
+
 const PER_PANE_SLOTS = [
   "focus", "status", "reveal", "lens", "level", "dir",
   "descent", "surface", "find", "inspect", "header_popover",
@@ -72,8 +88,32 @@ export function Pane({ pane, onFocus, onDragStart, onClose, onPickerText, onPick
           />
         ) : pane.boundSessionId && onPromptText && onPromptLengthChanged && onPromptSubmit ? (
           <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-            <div style={{ flex: 1, overflow: "auto" }}>
-              <div className="label" style={{ color: "#5f636b" }}>session {pane.sessionName ?? pane.boundSessionId?.slice(0, 8)}</div>
+            <div style={{ flex: 1, overflow: "auto", padding: "6px 0" }}>
+              <div className="label" style={{ color: "#5f636b", padding: "0 4px 4px" }}>
+                session {pane.sessionName ?? pane.boundSessionId?.slice(0, 8)}
+              </div>
+              {pane.transcriptRows.length === 0 ? (
+                <div className="label" style={{ color: "#5f636b", padding: "0 4px" }}>
+                  ◐ parked — awaiting your first message
+                </div>
+              ) : (
+                pane.transcriptRows.map((row) => (
+                  <div
+                    key={row.seq}
+                    data-testid={`transcript-row-${pane.id}-${row.seq}`}
+                    data-kind={row.kind}
+                    style={{
+                      padding: "3px 6px", borderBottom: "1px solid #23262a",
+                      fontSize: 12, whiteSpace: "pre-wrap" as const, wordBreak: "break-word" as const,
+                    }}
+                  >
+                    <span className="label" style={{ color: rowColor(row.kind), marginRight: 6 }}>
+                      {rowGlyph(row.kind)} {row.kind}
+                    </span>
+                    <span style={{ color: "#8a8f96" }}>{row.summary}</span>
+                  </div>
+                ))
+              )}
             </div>
             <Prompt
               pane={pane}

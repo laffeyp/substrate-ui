@@ -3,7 +3,7 @@
 // caller fires them through the Emitter after the reducer returns, so state
 // and trace stay in lockstep.
 
-import { emptyShellState, ShellState, Pane, Window } from "@/state/ShellState";
+import { emptyShellState, ShellState, Pane, Window, TranscriptRow } from "@/state/ShellState";
 import { newId } from "@/state/ids";
 import { splitPane, resizeSplit, atCap, movePane, closePane, Zone } from "@/state/SplitTree";
 
@@ -38,6 +38,7 @@ export type Action =
   | { type: "TURN_SUBMIT_START"; paneId: string; requestId: string; sessionId: string; textLength: number; timeoutSeconds: number }
   | { type: "TURN_SUBMIT_OK"; paneId: string; requestId: string; sessionId: string; turnIndex: number }
   | { type: "TURN_SUBMIT_ERR"; paneId: string; requestId: string; sessionId: string; reason: string }
+  | { type: "TRANSCRIPT_ROWS_LOADED"; paneId: string; rows: TranscriptRow[] }
   ;
 
 export interface Emission {
@@ -142,6 +143,45 @@ export function reduce(state: ShellState, action: Action): Step {
         }}],
       };
     }
+    case "TRANSCRIPT_ROWS_LOADED": {
+      const pane = state.panes[action.paneId];
+      if (!pane) return { state, emissions: [] };
+      const newRows = action.rows.filter((r) => r.seq > pane.transcriptLastSeq);
+      if (newRows.length === 0) return { state, emissions: [] };
+      const emissions: Emission[] = [];
+      let maxSeq = pane.transcriptLastSeq;
+      for (const r of newRows) {
+        if (r.kind === "Park") {
+          emissions.push({ kind: "TRANSCRIPT_PARK_RENDERED", payload: {
+            pane_id: action.paneId, envelope_seq: r.seq, park_reason: mapParkReason(r.summary),
+          }});
+        } else if (r.kind === "SessionEnded") {
+          emissions.push({ kind: "TRANSCRIPT_SESSION_ENDED_RENDERED", payload: {
+            pane_id: action.paneId, envelope_seq: r.seq, end_reason: r.summary || "user_end",
+          }});
+        } else {
+          emissions.push({ kind: "TRANSCRIPT_ROW_RENDERED", payload: {
+            pane_id: action.paneId, envelope_seq: r.seq,
+            envelope_kind: r.kind, envelope_producer_kind: r.producer_kind,
+          }});
+        }
+        if (r.seq > maxSeq) maxSeq = r.seq;
+      }
+      return {
+        state: {
+          ...state,
+          panes: {
+            ...state.panes,
+            [action.paneId]: {
+              ...pane,
+              transcriptRows: [...pane.transcriptRows, ...newRows],
+              transcriptLastSeq: maxSeq,
+            },
+          },
+        },
+        emissions,
+      };
+    }
     case "TURN_SUBMIT_ERR": {
       const pane = state.panes[action.paneId];
       if (!pane) return { state, emissions: [] };
@@ -240,6 +280,13 @@ function doResumeErr(state: ShellState, a: Extract<Action, { type: "SESSION_RESU
     state: { ...state, panes: { ...state.panes, [a.paneId]: { ...pane, creating: null } } },
     emissions: [], // Failure surfaces as UI banner; no tag in Layer 1 v0.1 for resume_failed
   };
+}
+
+function mapParkReason(reason: string): "final_answer" | "model_error" | "interrupt" {
+  const r = reason.toLowerCase();
+  if (r.includes("interrupt")) return "interrupt";
+  if (r.includes("error") || r.includes("fail")) return "model_error";
+  return "final_answer";
 }
 
 function stripSecrets(obj: unknown): unknown {
@@ -399,6 +446,8 @@ function boot(): Step {
     workspacePath: null,
     workspaceShape: null,
     promptDraft: "",
+    transcriptRows: [],
+    transcriptLastSeq: -1,
   };
   const window: Window = { id: windowId, rootId: paneId };
   const next: ShellState = {
