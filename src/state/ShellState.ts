@@ -1,12 +1,17 @@
 // src/state/ShellState.ts — the shell's canonical state shape.
 // Grows sprint-by-sprint. Sprint 002 plants windows + panes + focus.
 
-export type PaneStatus = "unbound" | "parked" | "running" | "interrupted" | "ended";
-
-export type WorkspaceShape = "flat" | "worktree" | "isolate";
+// Canonical enums live in observability/reasons.ts (they read from
+// signals/*.json). Re-exported here for the callers already importing from
+// ShellState — no drift.
+export { PaneStatus, WorkspaceShape, isPaneStatus, isWorkspaceShape } from "@/observability/reasons";
+import type { PaneStatus, WorkspaceShape } from "@/observability/reasons";
 
 export type Lens = "stream+graph" | "i/o" | "structure" | "scene";
 export const LENSES: readonly Lens[] = ["stream+graph", "i/o", "structure", "scene"] as const;
+export const Lens = {
+  STREAM_GRAPH: "stream+graph", IO: "i/o", STRUCTURE: "structure", SCENE: "scene",
+} as const satisfies Record<string, Lens>;
 
 export interface TranscriptRow {
   seq: number;
@@ -51,7 +56,7 @@ export interface Pane {
 
 export interface Split {
   id: string;                       // uuid4 hex 12-char
-  axis: "row" | "col";              // row = side-by-side (splits width); col = stacked (splits height)
+  axis: "row" | "col";              // row = side-by-side (splits width); col = stacked (splits height); mirrors Axis in ./SplitTree — declared inline to avoid the ShellState↔SplitTree circular import
   aId: string;                      // child node id (pane or split)
   bId: string;                      // child node id (pane or split)
   ratio: number;                    // 0..1 — fraction the aId child occupies

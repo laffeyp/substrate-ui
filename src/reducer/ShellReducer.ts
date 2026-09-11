@@ -3,13 +3,15 @@
 // caller fires them through the Emitter after the reducer returns, so state
 // and trace stay in lockstep.
 
-import { emptyShellState, ShellState, Pane, Window, TranscriptRow, Lens } from "@/state/ShellState";
+import { emptyShellState, ShellState, Pane, Window, TranscriptRow, Lens, WorkspaceShape, PaneStatus } from "@/state/ShellState";
+import { SessionEndReason, ParkReason, isParkReason, SECRET_KEY_PATTERN, isPaneStatus } from "@/observability/reasons";
 import { newId } from "@/state/ids";
-import { splitPane, resizeSplit, atCap, movePane, closePane, Zone } from "@/state/SplitTree";
+import { splitPane, resizeSplit, atCap, movePane, closePane, Zone, Axis } from "@/state/SplitTree";
+import { RevealState } from "@/observability/reasons";
 
 export type Action =
   | { type: "BOOT" }
-  | { type: "SPLIT_PANE"; paneId: string; axis: "row" | "col" }
+  | { type: "SPLIT_PANE"; paneId: string; axis: Axis }
   | { type: "FOCUS_PANE"; paneId: string }
   | { type: "GUTTER_DRAG_START"; splitId: string }
   | { type: "GUTTER_DRAG_STOP"; splitId: string; ratio: number }
@@ -19,16 +21,16 @@ export type Action =
   | { type: "MOVE_PANE"; sourceId: string; targetId: string; zone: Zone }
   | { type: "CLOSE_PANE"; paneId: string; reason?: "user" }
   | { type: "PICKER_TEXT"; paneId: string; text: string }
-  | { type: "PICKER_WALK"; paneId: string; index: number; path: string; shape: "flat" | "worktree" | "isolate" }
-  | { type: "PICKER_COMMIT"; paneId: string; path: string; shape: "flat" | "worktree" | "isolate" }
+  | { type: "PICKER_WALK"; paneId: string; index: number; path: string; shape: WorkspaceShape }
+  | { type: "PICKER_COMMIT"; paneId: string; path: string; shape: WorkspaceShape }
   | { type: "SESSION_CREATE_START"; paneId: string; requestId: string; sessionId: string; sessionName: string; driver: string }
-  | { type: "SESSION_CREATE_OK"; paneId: string; requestId: string; sessionId: string; sessionName: string; driver: string; workspacePath: string; workspaceShape: "flat" | "worktree" | "isolate" }
+  | { type: "SESSION_CREATE_OK"; paneId: string; requestId: string; sessionId: string; sessionName: string; driver: string; workspacePath: string; workspaceShape: WorkspaceShape }
   | { type: "SESSION_CREATE_ERR"; paneId: string; requestId: string; reason: string }
   | { type: "PROBE_DRIVER_START"; paneId: string; requestId: string; driverName: string; driverParams: Record<string, unknown> }
   | { type: "PROBE_DRIVER_OK"; requestId: string; driverName: string; contextTokens: number | null; modelFamilies: string[] }
   | { type: "PROBE_DRIVER_ERR"; requestId: string; driverName: string; reason: string }
   | { type: "SESSION_RESUME_START"; paneId: string; requestId: string; sessionId: string }
-  | { type: "SESSION_RESUME_OK"; paneId: string; requestId: string; sessionId: string; sessionName: string | null; workspacePath: string; workspaceShape: "flat" | "worktree" | "isolate"; status: "unbound" | "parked" | "running" | "interrupted" | "ended"; lastTurnIndex: number }
+  | { type: "SESSION_RESUME_OK"; paneId: string; requestId: string; sessionId: string; sessionName: string | null; workspacePath: string; workspaceShape: WorkspaceShape; status: PaneStatus; lastTurnIndex: number }
   | { type: "SESSION_RESUME_ERR"; paneId: string; requestId: string; reason: string }
   | { type: "SESSION_END_START"; paneId: string; requestId: string; sessionId: string; source: "menu" | "slash" | "shortcut" }
   | { type: "SESSION_END_OK"; paneId: string; requestId: string; sessionId: string; endReason: string; recordFinalised: boolean; envelopeSeq: number }
@@ -124,7 +126,7 @@ export function reduce(state: ShellState, action: Action): Step {
       return {
         state: {
           ...state,
-          panes: { ...state.panes, [action.paneId]: { ...pane, promptDraft: "", status: "running" } },
+          panes: { ...state.panes, [action.paneId]: { ...pane, promptDraft: "", status: PaneStatus.RUNNING } },
         },
         emissions: [
           { kind: "PROMPT_SUBMITTED", payload: { pane_id: action.paneId, text_length: action.textLength } },
@@ -139,7 +141,7 @@ export function reduce(state: ShellState, action: Action): Step {
       const pane = state.panes[action.paneId];
       if (!pane) return { state, emissions: [] };
       return {
-        state: { ...state, panes: { ...state.panes, [action.paneId]: { ...pane, status: "parked" } } },
+        state: { ...state, panes: { ...state.panes, [action.paneId]: { ...pane, status: PaneStatus.PARKED } } },
         emissions: [{ kind: "TURN_SUBMITTED", payload: {
           request_id: action.requestId, session_id: action.sessionId, turn_index: action.turnIndex,
         }}],
@@ -174,16 +176,15 @@ export function reduce(state: ShellState, action: Action): Step {
       let maxSeq = pane.transcriptLastSeq;
       for (const r of newRows) {
         if (r.kind === "Park") {
-          const parkReason: "final_answer" | "model_error" | "interrupt" =
-            r.park_reason === "final_answer" || r.park_reason === "model_error" || r.park_reason === "interrupt"
-              ? r.park_reason : "final_answer";
+          const parkReason: ParkReason = isParkReason(r.park_reason)
+            ? r.park_reason : ParkReason.FINAL_ANSWER;
           emissions.push({ kind: "TRANSCRIPT_PARK_RENDERED", payload: {
             pane_id: action.paneId, envelope_seq: r.seq, park_reason: parkReason,
           }});
         } else if (r.kind === "SessionEnded") {
           emissions.push({ kind: "TRANSCRIPT_SESSION_ENDED_RENDERED", payload: {
             pane_id: action.paneId, envelope_seq: r.seq,
-            end_reason: r.end_reason || "user_end",
+            end_reason: r.end_reason || SessionEndReason.USER_END,
           }});
         } else if (r.kind === "TranscriptCompacted") {
           emissions.push({ kind: "TRANSCRIPT_COMPACTED_RENDERED", payload: {
@@ -227,7 +228,7 @@ export function reduce(state: ShellState, action: Action): Step {
       if (!pane) return { state, emissions: [] };
       // Restore parked status; the turn didn't take.
       return {
-        state: { ...state, panes: { ...state.panes, [action.paneId]: { ...pane, status: "parked" } } },
+        state: { ...state, panes: { ...state.panes, [action.paneId]: { ...pane, status: PaneStatus.PARKED } } },
         emissions: [{ kind: "TURN_SUBMIT_FAILED", payload: {
           request_id: action.requestId, session_id: action.sessionId, reason: action.reason,
         }}],
@@ -254,7 +255,7 @@ function doEndOk(state: ShellState, a: Extract<Action, { type: "SESSION_END_OK" 
     ...pane, creating: null,
     boundSessionId: null, sessionName: null,
     workspacePath: null, workspaceShape: null,
-    status: "unbound",
+    status: PaneStatus.UNBOUND,
     pickerText: "", pickerIndex: -1, pickerSelection: null,
   };
   return {
@@ -296,7 +297,7 @@ function doResumeOk(state: ShellState, a: Extract<Action, { type: "SESSION_RESUM
     ...pane, creating: null,
     boundSessionId: a.sessionId, sessionName: a.sessionName,
     workspacePath: a.workspacePath, workspaceShape: a.workspaceShape,
-    status: a.status === "ended" ? "ended" : (a.status === "unbound" ? "unbound" : a.status),
+    status: isPaneStatus(a.status) ? a.status : PaneStatus.PARKED,
   };
   return {
     state: { ...state, panes: { ...state.panes, [a.paneId]: nextPane } },
@@ -328,11 +329,10 @@ function doResumeErr(state: ShellState, a: Extract<Action, { type: "SESSION_RESU
 }
 
 function stripSecrets(obj: unknown): unknown {
-  const rx = /key|token|secret|password/i;
   if (obj && typeof obj === "object" && !Array.isArray(obj)) {
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
-      out[k] = rx.test(k) ? "<stripped>" : stripSecrets(v);
+      out[k] = SECRET_KEY_PATTERN.test(k) ? "<stripped>" : stripSecrets(v);
     }
     return out;
   }
@@ -371,7 +371,7 @@ function doSessionCreateOk(state: ShellState, a: Extract<Action, { type: "SESSIO
     sessionName: a.sessionName,
     workspacePath: a.workspacePath,
     workspaceShape: a.workspaceShape,
-    status: "parked",
+    status: PaneStatus.PARKED,
   };
   return {
     state: { ...state, panes: { ...state.panes, [a.paneId]: nextPane } },
@@ -379,7 +379,7 @@ function doSessionCreateOk(state: ShellState, a: Extract<Action, { type: "SESSIO
       { kind: "SESSION_CREATED", payload: {
         request_id: a.requestId, session_id: a.sessionId, name: a.sessionName,
         driver: a.driver, workspace: a.workspacePath, workspace_shape: a.workspaceShape,
-        status: "running",
+        status: PaneStatus.RUNNING,
       }},
       { kind: "WORKSPACE_BOUND", payload: {
         request_id: a.requestId, session_id: a.sessionId,
@@ -417,7 +417,7 @@ function doPickerText(state: ShellState, paneId: string, text: string): Step {
   };
 }
 
-function doPickerWalk(state: ShellState, paneId: string, index: number, path: string, shape: "flat" | "worktree" | "isolate"): Step {
+function doPickerWalk(state: ShellState, paneId: string, index: number, path: string, shape: WorkspaceShape): Step {
   const pane = state.panes[paneId];
   if (!pane) return { state, emissions: [] };
   return {
@@ -434,7 +434,7 @@ function doPickerWalk(state: ShellState, paneId: string, index: number, path: st
   };
 }
 
-function doPickerCommit(state: ShellState, paneId: string, path: string, shape: "flat" | "worktree" | "isolate"): Step {
+function doPickerCommit(state: ShellState, paneId: string, path: string, shape: WorkspaceShape): Step {
   const pane = state.panes[paneId];
   if (!pane) return { state, emissions: [] };
   return {
@@ -478,7 +478,7 @@ function boot(): Step {
     ratio: 1.0,
     focused: true,
     boundSessionId: null,
-    status: "unbound",
+    status: PaneStatus.UNBOUND,
     pickerText: "",
     pickerIndex: -1,
     pickerSelection: null,
@@ -489,8 +489,8 @@ function boot(): Step {
     promptDraft: "",
     transcriptRows: [],
     transcriptLastSeq: -1,
-    reveal: "terminal",
-    lens: "stream+graph",
+    reveal: RevealState.TERMINAL,
+    lens: Lens.STREAM_GRAPH,
   };
   const window: Window = { id: windowId, rootId: paneId };
   const next: ShellState = {
@@ -512,7 +512,7 @@ function boot(): Step {
   };
 }
 
-function doSplit(state: ShellState, paneId: string, axis: "row" | "col"): Step {
+function doSplit(state: ShellState, paneId: string, axis: Axis): Step {
   const pane = state.panes[paneId];
   if (!pane) return { state, emissions: [] };
   if (atCap(state, pane.windowId)) return { state, emissions: [] };

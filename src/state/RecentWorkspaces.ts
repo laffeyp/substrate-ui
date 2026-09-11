@@ -2,6 +2,7 @@
 
 import { bridgeRequest } from "@/observability/BridgeClient";
 import { WorkspaceShape } from "./ShellState";
+import { isWorkspaceShape } from "@/observability/reasons";
 
 export interface RecentWorkspace {
   path: string;
@@ -18,8 +19,7 @@ export async function readRecentWorkspaces(): Promise<RecentWorkspace[]> {
       if (typeof row !== "object" || row === null) continue;
       const r = row as { path?: unknown; shape?: unknown; last_used?: unknown };
       if (typeof r.path !== "string") continue;
-      const shape: WorkspaceShape =
-        r.shape === "flat" || r.shape === "worktree" || r.shape === "isolate" ? r.shape : "flat";
+      const shape: WorkspaceShape = isWorkspaceShape(r.shape) ? r.shape : "flat";
       out.push({
         path: r.path,
         shape,
