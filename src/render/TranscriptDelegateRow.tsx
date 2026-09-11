@@ -16,11 +16,24 @@ interface Props {
   depth: number;
   expanded: boolean;
   onExpandToggle?: (paneId: string, toolCallId: string, childRecordRoot: string | null) => void;
+  onDescend?: (paneId: string, toolCallId: string, childRecordRoot: string | null) => void;
 }
 
-export function TranscriptDelegateRow({ paneId, row, depth, expanded, onExpandToggle }: Props): JSX.Element {
+export function TranscriptDelegateRow({
+  paneId, row, depth, expanded, onExpandToggle, onDescend,
+}: Props): JSX.Element {
   const accent = depthAccent(depth);
   const clickable = !!row.tool_call_id;
+  const handleClick = (ev: React.MouseEvent) => {
+    if (!clickable) return;
+    if (ev.altKey && onDescend) {
+      onDescend(paneId, row.tool_call_id!, row.child_record_root ?? null);
+      return;
+    }
+    if (onExpandToggle) {
+      onExpandToggle(paneId, row.tool_call_id!, row.child_record_root ?? null);
+    }
+  };
   return (
     <div
       data-testid={`transcript-row-${paneId}-${row.seq}`}
@@ -29,9 +42,7 @@ export function TranscriptDelegateRow({ paneId, row, depth, expanded, onExpandTo
       data-tool-call-id={row.tool_call_id || ""}
       data-depth={String(depth)}
       data-expanded={expanded ? "true" : "false"}
-      onClick={clickable && onExpandToggle
-        ? () => onExpandToggle(paneId, row.tool_call_id!, row.child_record_root ?? null)
-        : undefined}
+      onClick={clickable ? handleClick : undefined}
       style={{
         padding: "3px 6px",
         borderLeft: `3px solid ${accent}`,

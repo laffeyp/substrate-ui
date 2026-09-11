@@ -70,6 +70,11 @@ export interface Pane {
   // present ⇒ expanded (even if the row list is still loading and
   // hence empty). Key absent ⇒ collapsed.
   delegateExpansions: Record<string, TranscriptRow[]>;
+  // Sprint 022 — descent stack. Empty at base (depth 0). Each entry
+  // holds the child record root the pane rebinds to and the rows
+  // loaded for that record. Layer 5 caps depth at 2 (delegate.py
+  // max_depth); the reducer refuses a third push.
+  descentStack: Array<{ toolCallId: string; childRecordRoot: string; rows: TranscriptRow[] }>;
   // Later sprints extend: surface, find, header_popover, etc.
 }
 

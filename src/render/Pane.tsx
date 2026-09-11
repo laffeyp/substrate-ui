@@ -2,7 +2,7 @@
 // Layer 7 pixel-anchor slots per pane: focus, status, reveal, lens, level,
 // dir, descent, surface, find, inspect, header_popover.
 
-import { Pane as PaneModel, WorkspaceShape, Lens } from "@/state/ShellState";
+import { Pane as PaneModel, WorkspaceShape, Lens, TranscriptRow } from "@/state/ShellState";
 import { PaneStatus, RevealState, StreamLevel, StreamDir } from "@/observability/reasons";
 import { PaneHeader } from "./PaneHeader";
 import { Anchor, AnchorScope } from "./Anchor";
@@ -35,6 +35,8 @@ interface Props {
   onStreamDirToggle?: (paneId: string) => void;
   onRevealFocusToggle?: (paneId: string) => void;
   onDelegateExpandToggle?: (paneId: string, toolCallId: string, childRecordRoot: string | null) => void;
+  onDescend?: (paneId: string, toolCallId: string, childRecordRoot: string | null) => void;
+  onDescentExit?: (paneId: string) => void;
 }
 
 const ROW_COLORS: Record<string, string> = {
@@ -93,10 +95,16 @@ function initialByte(slot: string, pane: PaneModel): number {
   }
   if (slot === "level") return pane.streamLevel === StreamLevel.APP ? 255 : 0;
   if (slot === "dir")   return pane.streamDir === StreamDir.SIDE ? 255 : 0;
+  if (slot === "descent") return pane.descentStack.length; // 0 · 1 · 2 per Layer 7
   return 0;
 }
 
-export function Pane({ pane, onFocus, onDragStart, onClose, onPickerText, onPickerWalk, onPickerCommit, onResume, onPromptText, onPromptLengthChanged, onPromptSubmit, onRevealToggle, onLensSwitch, onStreamLevelToggle, onStreamDirToggle, onRevealFocusToggle, onDelegateExpandToggle }: Props): JSX.Element {
+export function Pane({ pane, onFocus, onDragStart, onClose, onPickerText, onPickerWalk, onPickerCommit, onResume, onPromptText, onPromptLengthChanged, onPromptSubmit, onRevealToggle, onLensSwitch, onStreamLevelToggle, onStreamDirToggle, onRevealFocusToggle, onDelegateExpandToggle, onDescend, onDescentExit }: Props): JSX.Element {
+  const depth = pane.descentStack.length;
+  const inDescent = depth > 0;
+  const activeRows: TranscriptRow[] = inDescent
+    ? pane.descentStack[depth - 1].rows
+    : pane.transcriptRows;
   return (
     <div
       data-testid={`pane-${pane.id}`}
@@ -126,33 +134,52 @@ export function Pane({ pane, onFocus, onDragStart, onClose, onPickerText, onPick
         ) : pane.boundSessionId && onPromptText && onPromptLengthChanged && onPromptSubmit ? (
           <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
             <div style={{ flex: 1, overflow: "auto", padding: "6px 0" }}>
-              <div className="label" style={{ color: "#5f636b", padding: "0 4px 4px" }}>
-                session {pane.sessionName ?? pane.boundSessionId?.slice(0, 8)}
+              <div
+                className="label"
+                data-testid={`pane-header-crumb-${pane.id}`}
+                data-descent-depth={String(depth)}
+                style={{ color: "#5f636b", padding: "0 4px 4px" }}
+              >
+                {inDescent
+                  ? `session ▸ ${pane.descentStack.map(() => "child").join(" ▸ ")}`
+                  : `session ${pane.sessionName ?? pane.boundSessionId?.slice(0, 8)}`}
+                {inDescent && onDescentExit ? (
+                  <span
+                    data-testid={`descent-exit-${pane.id}`}
+                    onClick={() => onDescentExit(pane.id)}
+                    style={{ cursor: "pointer", marginLeft: 8, color: "#82a5c8" }}
+                  >⌫ back</span>
+                ) : null}
               </div>
-              {pane.transcriptRows.length === 0 ? (
+              {activeRows.length === 0 ? (
                 <div className="label" style={{ color: "#5f636b", padding: "0 4px" }}>
-                  ◐ parked — awaiting your first message
+                  {inDescent ? "loading descent transcript…" : "◐ parked — awaiting your first message"}
                 </div>
               ) : (
-                pane.transcriptRows.map((row) => {
+                activeRows.map((row) => {
                   if (row.kind === TOOL_CALL && row.tool_name === TOOL_NAME_DELEGATE) {
                     const tcId = row.tool_call_id ?? "";
-                    const expanded = tcId in pane.delegateExpansions;
+                    const expanded = !inDescent && tcId in pane.delegateExpansions;
+                    // Row depth = 1 when at base (children live under
+                    // this pane's session), 2 when already inside a
+                    // depth-1 descent (grandchildren live under childA).
+                    const rowDepth = Math.min(depth + 1, 2);
                     return (
                       <div key={row.seq}>
                         <TranscriptDelegateRow
                           paneId={pane.id}
                           row={row}
-                          depth={1}
+                          depth={rowDepth}
                           expanded={expanded}
-                          onExpandToggle={onDelegateExpandToggle}
+                          onExpandToggle={inDescent ? undefined : onDelegateExpandToggle}
+                          onDescend={onDescend}
                         />
                         {expanded ? (
                           <TranscriptDelegateExpanded
                             paneId={pane.id}
                             toolCallId={tcId}
                             childRows={pane.delegateExpansions[tcId]}
-                            depth={1}
+                            depth={rowDepth}
                           />
                         ) : null}
                       </div>
