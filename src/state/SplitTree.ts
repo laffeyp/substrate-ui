@@ -48,6 +48,8 @@ export function splitPane(
     revealFocus: RevealFocus.TRANSCRIPT,
     delegateExpansions: {},
     descentStack: [],
+    refusedToolCallIds: new Set(),
+    fanoutExpansions: {},
   };
   const updatedParent: Pane = { ...parent, splitParentId: newSplitId, ratio: 0.5 };
   const newSplit: Split = {

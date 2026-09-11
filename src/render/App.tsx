@@ -270,6 +270,12 @@ function Shell(): JSX.Element {
             onDescend: (paneId, toolCallId, childRecordRoot) =>
               descend(paneId, toolCallId, childRecordRoot),
             onDescentExit: (paneId) => exitDescent(paneId),
+            onFanoutExpand: (paneId, leaderToolCallId) =>
+              dispatch({ type: ActionType.FANOUT_EXPAND, paneId, leaderToolCallId }),
+            onFanoutWalk: (paneId, leaderToolCallId, toIndex, siblingCount) =>
+              dispatch({ type: ActionType.FANOUT_WALK, paneId, leaderToolCallId, toIndex, siblingCount }),
+            onFanoutCollapse: (paneId, leaderToolCallId) =>
+              dispatch({ type: ActionType.FANOUT_COLLAPSE, paneId, leaderToolCallId }),
           }}
         />
       )}

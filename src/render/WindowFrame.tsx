@@ -25,6 +25,9 @@ export interface PaneCallbacks {
   onDelegateExpandToggle: (paneId: string, toolCallId: string, childRecordRoot: string | null) => void;
   onDescend: (paneId: string, toolCallId: string, childRecordRoot: string | null) => void;
   onDescentExit: (paneId: string) => void;
+  onFanoutExpand: (paneId: string, leaderToolCallId: string) => void;
+  onFanoutWalk: (paneId: string, leaderToolCallId: string, toIndex: number, siblingCount: number) => void;
+  onFanoutCollapse: (paneId: string, leaderToolCallId: string) => void;
 }
 
 export interface GutterCallbacks {
@@ -65,6 +68,9 @@ function Node({ id, state, gutter, pane }: { id: string; state: ShellState; gutt
         onDelegateExpandToggle={pane.onDelegateExpandToggle}
         onDescend={pane.onDescend}
         onDescentExit={pane.onDescentExit}
+        onFanoutExpand={pane.onFanoutExpand}
+        onFanoutWalk={pane.onFanoutWalk}
+        onFanoutCollapse={pane.onFanoutCollapse}
       />
     );
   }
