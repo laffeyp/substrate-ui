@@ -21,6 +21,7 @@ export interface PaneCallbacks {
   onLensSwitch: (paneId: string, to: Lens) => void;
   onStreamLevelToggle: (paneId: string) => void;
   onStreamDirToggle: (paneId: string) => void;
+  onRevealFocusToggle: (paneId: string) => void;
 }
 
 export interface GutterCallbacks {
@@ -57,6 +58,7 @@ function Node({ id, state, gutter, pane }: { id: string; state: ShellState; gutt
         onLensSwitch={pane.onLensSwitch}
         onStreamLevelToggle={pane.onStreamLevelToggle}
         onStreamDirToggle={pane.onStreamDirToggle}
+        onRevealFocusToggle={pane.onRevealFocusToggle}
       />
     );
   }

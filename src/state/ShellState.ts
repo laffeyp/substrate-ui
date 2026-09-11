@@ -5,8 +5,9 @@
 // signals/*.json). Re-exported here for the callers already importing from
 // ShellState — no drift.
 export { PaneStatus, WorkspaceShape, isPaneStatus, isWorkspaceShape,
-  StreamLevel, StreamDir, isStreamLevel, isStreamDir } from "@/observability/reasons";
-import type { PaneStatus, WorkspaceShape, StreamLevel, StreamDir } from "@/observability/reasons";
+  StreamLevel, StreamDir, isStreamLevel, isStreamDir,
+  RevealFocus, isRevealFocus } from "@/observability/reasons";
+import type { PaneStatus, WorkspaceShape, StreamLevel, StreamDir, RevealFocus } from "@/observability/reasons";
 
 export type Lens = "stream+graph" | "i/o" | "structure" | "scene";
 export const LENSES: readonly Lens[] = ["stream+graph", "i/o", "structure", "scene"] as const;
@@ -54,6 +55,7 @@ export interface Pane {
   lens: Lens;                        // Sprint 017 — current lens inside RevealShell
   streamLevel: StreamLevel;          // Sprint 018 — all: every producer; app: filter framework noise
   streamDir: StreamDir;              // Sprint 018 — down: parent→child temporal; side: peer structural
+  revealFocus: RevealFocus;          // Sprint 019 — Tab toggles focus between transcript half and stream half
   // Later sprints extend: surface, find, header_popover, etc.
 }
 
