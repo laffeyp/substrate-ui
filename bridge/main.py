@@ -81,19 +81,27 @@ _REGISTRY_CACHE: object | None = None
 
 
 def _build_session_topology_from_manifest(manifest, first_turn_user_message):  # noqa: ANN001, ANN202
-    """Factory closure passed to SessionRegistry at construction. Rebuilds a
-    session_topology bound to the manifest each time turn_sync fires. The
-    deterministic driver runs every session for Sprint 010's purposes —
-    Ollama and CLI drivers wire in at later sprints when the shell owns a
-    Responder-per-manifest resolver.
-    """
+    """Factory closure passed to SessionRegistry at construction. Routes on
+    manifest.driver: 'deterministic' → DeterministicResponder(seed=0);
+    'ollama:<model>' → OllamaResponder(model=<model>); other prefixes fall
+    back to Deterministic with a stderr note. Runs a real local LLM turn
+    when the shell picks an ollama:* driver."""
     from substrate.topologies.session import session_topology
     from substrate.adapters import DeterministicResponder
     from pathlib import Path as _Path
+    driver_name = manifest.driver
+    driver_context_tokens = 4096
+    if driver_name.startswith("ollama:"):
+        model = driver_name.split(":", 1)[1]
+        from substrate.adapters.models import OllamaResponder
+        driver = OllamaResponder(model=model, num_ctx=8192, timeout=180.0)
+        driver_context_tokens = 8192
+    else:
+        driver = DeterministicResponder(seed=0)
     return session_topology(
-        driver=DeterministicResponder(seed=0),
-        driver_name=manifest.driver,
-        driver_context_tokens=4096,
+        driver=driver,
+        driver_name=driver_name,
+        driver_context_tokens=driver_context_tokens,
         seed=manifest.seed,
         tools={},
         session_id=manifest.session_id,

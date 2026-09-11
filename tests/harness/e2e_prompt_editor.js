@@ -10,7 +10,7 @@ const path = require("node:path");
 const fs = require("node:fs");
 const os = require("node:os");
 const { runTonalChecks } = require("./tonal-checks");
-const { assertLayer2ShapesInTrace } = require("./payload-check");
+const { assertLayer2ShapesInTrace, assertNoInventedTags } = require("./payload-check");
 
 const REPO = path.resolve(__dirname, "..", "..");
 const AS = () => path.join(os.homedir(), "Library", "Application Support", "substrate-ui");
@@ -89,10 +89,8 @@ async function main() {
     // Vocabulary + shape discipline.
     const allEmits = await readJsonl();
     const kinds = allEmits.map((s) => s.kind);
-    const V0_1 = new Set(fs.readFileSync(path.join(REPO, "src/observability/vocab.ts"), "utf8")
-      .match(/"[A-Z][A-Z0-9_]{3,}"/g)?.map((s) => s.slice(1, -1)) || []);
-    const invented = kinds.filter((k) => !V0_1.has(k));
-    check(invented.length === 0, `zero invented tag names in the trace (found ${invented.length})`);
+    try { assertNoInventedTags(allEmits); ok("zero invented tag names in the trace"); }
+    catch (e) { fails.push(e.message); }
     try { assertLayer2ShapesInTrace(allEmits); ok("Layer 2 payload shapes match required fields"); }
     catch (e) { fails.push(e.message); }
 

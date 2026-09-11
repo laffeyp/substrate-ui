@@ -12,7 +12,7 @@ const fs = require("node:fs");
 const zlib = require("node:zlib");
 const os = require("node:os");
 const { runTonalChecks } = require("./tonal-checks");
-const { assertLayer2ShapesInTrace } = require("./payload-check");
+const { assertLayer2ShapesInTrace, assertNoInventedTags } = require("./payload-check");
 
 const REPO = path.resolve(__dirname, "..", "..");
 const AS = () => path.join(os.homedir(), "Library", "Application Support", "substrate-ui");
@@ -116,10 +116,8 @@ async function main() {
   check(pcPid && pcPid === pfPid, `pane_id agrees across PANE_CREATED + PANE_FOCUSED`);
 
   // Vocabulary discipline: every emitted kind must be in v0.1.
-  const V0_1 = new Set(fs.readFileSync(path.join(REPO, "src/observability/vocab.ts"), "utf8")
-    .match(/"[A-Z][A-Z0-9_]{3,}"/g)?.map((s) => s.slice(1, -1)) || []);
-  const invented = kinds.filter((k) => !V0_1.has(k));
-  check(invented.length === 0, `zero invented tag names in the trace (found ${invented.length})`);
+  try { assertNoInventedTags(lines); ok("zero invented tag names in the trace"); }
+  catch (e) { fails.push(e.message); }
 
   // Layer 2 shape discipline: every emitted payload carries every required field.
   try { assertLayer2ShapesInTrace(lines); ok("Layer 2 payload shapes match required fields"); }

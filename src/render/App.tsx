@@ -48,7 +48,10 @@ function Shell(): JSX.Element {
 
   const startSessionCreate = useMemo(() => (paneId: string, path: string, shape: WorkspaceShape) => {
     dispatch({ type: "PICKER_COMMIT", paneId, path, shape });
-    const driver = "deterministic";
+    const harnessDriver = (globalThis as unknown as {
+      __substrateHarness?: { defaultDriver?: string | null };
+    }).__substrateHarness?.defaultDriver;
+    const driver = harnessDriver || "deterministic";
     const driverParams: Record<string, unknown> = {};
 
     // Probe the driver first per Layer 5 forced_next: PROBE_DRIVER_PROBED gates SESSION_CREATE_REQUESTED.

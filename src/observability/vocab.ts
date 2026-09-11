@@ -1,141 +1,21 @@
 // Emitter guard: the set of tag names ratified in signals/0.1.json v0.1.
-// Any emit call whose tag name is outside this set fails loud — vocabulary
-// is the contract; workers cannot invent tags (SDD hard rule 2).
+//
+// V0_1_TAGS is derived from the vocabulary JSON at build time (esbuild
+// inlines the imported JSON). The vocabulary lives in one place —
+// signals/0.1.json § layer_1_lexical.tags[].name — and this module is a
+// mechanical projection. Any tag added or removed there flows through
+// automatically at the next build. No hand-maintained mirror. That closes
+// the drift class the last review named (feedback-read-the-code-grep-
+// repeated-literals): vocabulary as contract, single-sourced.
 
-export const V0_1_TAGS: ReadonlySet<string> = new Set([
-  // Sprint 001 — boot
-  "BRIDGE_HELLO_RECEIVED",
-  "ANCHOR_PAINTED",
-  "HARNESS_HEARTBEAT",
-  "BRIDGE_DEAD_SURFACED",
-  // Sprint 002 — pane grid open
-  "WINDOW_OPENED",
-  "PANE_CREATED",
-  "PANE_FOCUSED",
-  // Sprint 003 — splits
-  "PANE_SPLIT",
-  "GUTTER_DRAG_STARTED",
-  "GUTTER_DRAG_STOPPED",
-  // Sprint 004 — rearrange
-  "DROP_HINT_SHOWN",
-  "DROP_HINT_HIDDEN",
-  "DROP_HINT_ZONE_CHANGED",
-  "PANE_MOVED",
-  // Sprint 005 — close
-  "PANE_CLOSED",
-  "WINDOW_CLOSED",
-  // Sprint 006 — picker
-  "WORKSPACE_PICKER_WALKED",
-  // Sprint 007 — create
-  "SESSION_CREATE_REQUESTED",
-  "SESSION_CREATED",
-  "SESSION_CREATE_FAILED",
-  "WORKSPACE_BOUND",
-  "PANE_UNBOUND_BOUND",
-  // Sprint 008 — probe
-  "PROBE_DRIVER_REQUESTED",
-  "PROBE_DRIVER_PROBED",
-  "PROBE_DRIVER_FAILED",
-  // Sprint 010 — end
-  "SESSION_END_REQUESTED",
-  "SESSION_ENDED_ACK",
-  "TRANSCRIPT_SESSION_ENDED_RENDERED",
-  // Sprint 011 — prompt
-  "PROMPT_CHANGED",
-  "PROMPT_SUBMITTED",
-  // Sprint 012–013 — turn submit
-  "TURN_SUBMIT_REQUESTED",
-  "TURN_SUBMITTED",
-  "TURN_SUBMIT_FAILED",
-  // Sprint 014–015 — transcript
-  "TRANSCRIPT_ROW_RENDERED",
-  "TRANSCRIPT_PARK_RENDERED",
-  "TRANSCRIPT_AWAITING_FIRST_MESSAGE_RENDERED",
-  "TRANSCRIPT_COMPACTED_RENDERED",
-  "TRANSCRIPT_RATE_LIMITED_RENDERED",
-  // Sprint 016–019 — reveal + lenses
-  "REVEAL_TOGGLED",
-  "LENS_SWITCHED",
-  "STREAM_LEVEL_TOGGLED",
-  "STREAM_DIR_TOGGLED",
-  "REVEAL_FOCUS_MOVED",
-  // Sprint 020–023 — delegate
-  "DELEGATE_CALL_RENDERED",
-  "TRANSCRIPT_DELEGATE_LINE_RENDERED",
-  "DELEGATE_INLINE_EXPANDED",
-  "DELEGATE_INLINE_COLLAPSED",
-  "DELEGATE_CALL_FOLDED",
-  "DESCENT_ENTERED",
-  "DESCENT_EXITED",
-  "DELEGATE_DEPTH_CAP_REFUSED",
-  "FAN_OUT_INLINE_EXPANDED",
-  "FAN_OUT_INLINE_WALKED",
-  "FAN_OUT_INLINE_COLLAPSED",
-  "TRANSCRIPT_FANOUT_LINE_RENDERED",
-  // Sprint 024–027 — surfaces
-  "INSPECTOR_OPENED",
-  "INSPECTOR_CLOSED",
-  "STREAM_ROW_CLICKED",
-  "SURFACE_OPENED",
-  "SURFACE_CLOSED",
-  "STUDIO_VIEW_TOGGLED",
-  "STUDIO_VALIDATE_REQUESTED",
-  "STUDIO_VALIDATED",
-  "STUDIO_VALIDATE_FAILED",
-  "STUDIO_BUILD_REQUESTED",
-  "STUDIO_BUILT",
-  "STUDIO_BUILD_REJECTED",
-  // Sprint 028–029 — find
-  "FIND_OPENED",
-  "FIND_SCOPE_CHANGED",
-  "FIND_QUERY_CHANGED",
-  "FIND_CLOSED",
-  // Sprint 030 — slash router
-  "SLASH_ROUTER_OPENED",
-  "SLASH_ROUTER_WALKED",
-  "SLASH_ROUTER_CLOSED",
-  "SLASH_COMMAND_ROUTED",
-  // Sprint 031–033 — header
-  "DRIVER_DROPDOWN_OPENED",
-  "DRIVER_DROPDOWN_CLOSED",
-  "DRIVER_PICKED",
-  "DRIVER_CHANGE_REQUESTED",
-  "DRIVER_CHANGED",
-  "DRIVER_CHANGE_FAILED",
-  "WORKSPACE_POPOVER_OPENED",
-  "WORKSPACE_POPOVER_CLOSED",
-  // Sprint 034 — bundle
-  "BUNDLE_ATTACH_REQUESTED",
-  "BUNDLE_ATTACHED",
-  "BUNDLE_ATTACH_FAILED",
-  // Sprint 035 — tools
-  "TOOLS_RESTRICTED",
-  // Sprint 036–037 — end + interrupt
-  "END_CONFIRM_OPENED",
-  "END_CONFIRM_CLOSED",
-  "END_CONFIRM_COMMITTED",
-  "INTERRUPT_REQUESTED",
-  "INTERRUPTED",
-  // Sprint 038–039 — first run
-  "FIRST_RUN_OPENED",
-  "FIRST_RUN_DRIVER_PICKED",
-  "FIRST_RUN_COMPLETED",
-  // Sprint 040–042 — dialogs
-  "SETTINGS_OPENED",
-  "SETTING_CHANGED",
-  "SETTINGS_CLOSED",
-  "EXPORT_DIALOG_OPENED",
-  "EXPORT_COMMITTED",
-  "EXPORT_DIALOG_CLOSED",
-  "SESSION_RENAME_REQUESTED",
-  "SESSION_RENAMED",
-  "SESSION_RENAME_FAILED",
-  "PANE_RENAMED",
-  // Sprint 043–044 — collections
-  "COLLECTION_PERSISTED",
-  "COLLECTION_OPENED",
-  "COLLECTION_RESTORED",
-]);
+import signalsV01 from "@/../signals/0.1.json";
+
+interface Layer1Tag { name: string; }
+interface SignalsV01 { layer_1_lexical: { tags: Layer1Tag[] }; }
+
+const layer1 = (signalsV01 as unknown as SignalsV01).layer_1_lexical;
+
+export const V0_1_TAGS: ReadonlySet<string> = new Set(layer1.tags.map((t) => t.name));
 
 export function isRatifiedTag(kind: string): boolean {
   return V0_1_TAGS.has(kind);
