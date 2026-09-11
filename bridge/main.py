@@ -24,7 +24,9 @@ from __future__ import annotations
 import json
 import os
 import sys
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 try:
@@ -41,9 +43,14 @@ except Exception as e:  # noqa: BLE001
 PROTOCOL = 1
 
 
+_STDOUT_LOCK = threading.Lock()
+_LONG_OP_POOL = ThreadPoolExecutor(max_workers=16, thread_name_prefix="bridge-long")
+
+
 def emit(msg: dict) -> None:
-    sys.stdout.write(json.dumps(msg) + "\n")
-    sys.stdout.flush()
+    with _STDOUT_LOCK:
+        sys.stdout.write(json.dumps(msg) + "\n")
+        sys.stdout.flush()
 
 
 def reply_ok(rid: str, result: object) -> None:
@@ -52,6 +59,22 @@ def reply_ok(rid: str, result: object) -> None:
 
 def reply_err(rid: str, reason: str) -> None:
     emit({"op": "reply", "request_id": rid, "ok": False, "reason": reason})
+
+
+def _long_op(rid: str, fn, msg: dict) -> None:  # noqa: ANN001
+    """Run a long-op on the thread pool so concurrent turn_submit / session_end
+    calls actually stack up on SessionRegistry's per-session lock — the bridge
+    read loop stays free to admit the next request."""
+    def _run() -> None:
+        try:
+            result = fn(msg)
+            if isinstance(result, dict) and result.get("__error__"):
+                reply_err(rid, result.get("reason", "registry_error"))
+            else:
+                reply_ok(rid, result)
+        except Exception as e:  # noqa: BLE001
+            reply_err(rid, f"registry_error:{e}")
+    _LONG_OP_POOL.submit(_run)
 
 
 _REGISTRY_CACHE: object | None = None
@@ -253,6 +276,16 @@ def op_turn_submit(payload: dict) -> dict:
     if not admitted:
         return {"__error__": True, "reason": "queue_full", "cap": cap}
 
+    # Harness-only stall: when HARNESS_TURN_SLEEP_MS is set, hold the admitted
+    # slot for the named duration BEFORE turn_sync. Lets the queue-cap test drive
+    # five concurrent op_turn_submit calls whose try_enqueue_turns all race to
+    # increment depth before any dequeue fires. Deterministic turns finish in a
+    # few ms; without this stall the fifth call always slots into a freshly-
+    # dequeued slot and admits.
+    _sleep_ms = int(os.environ.get("HARNESS_TURN_SLEEP_MS", "0"))
+    if _sleep_ms > 0:
+        time.sleep(_sleep_ms / 1000.0)
+
     def _turn_event_builder(m, root):  # noqa: ANN001, ANN202
         from substrate import api  # type: ignore[import-not-found]
         max_ti = -1
@@ -433,23 +466,9 @@ def main() -> int:
             except Exception as e:  # noqa: BLE001
                 reply_err(rid, f"registry_error:{e}")
         elif op == "turn_submit":
-            try:
-                result = op_turn_submit(msg)
-                if result.get("__error__"):
-                    reply_err(rid, result.get("reason", "registry_error"))
-                else:
-                    reply_ok(rid, result)
-            except Exception as e:  # noqa: BLE001
-                reply_err(rid, f"registry_error:{e}")
+            _long_op(rid, op_turn_submit, msg)
         elif op == "session_end":
-            try:
-                result = op_session_end(msg)
-                if result.get("__error__"):
-                    reply_err(rid, result.get("reason", "registry_error"))
-                else:
-                    reply_ok(rid, result)
-            except Exception as e:  # noqa: BLE001
-                reply_err(rid, f"registry_error:{e}")
+            _long_op(rid, op_session_end, msg)
         elif op == "session_create":
             try:
                 result = op_session_create(msg)
