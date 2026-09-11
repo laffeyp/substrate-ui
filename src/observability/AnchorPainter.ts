@@ -3,6 +3,7 @@
 // paint for the next animation frame; ANCHOR_PAINTED fires after paint.
 
 import { emit } from "./Emitter";
+import { Tag } from "./tags";
 
 const canvases = new Map<string, HTMLCanvasElement>();
 const pending = new Map<string, number>();
@@ -38,5 +39,5 @@ function paint(id: string, byte: number): void {
   const b = byte & 0xff;
   ctx.fillStyle = `rgb(${b},${b},${b})`;
   ctx.fillRect(0, 0, 1, 1);
-  emit("ANCHOR_PAINTED", { anchor_id: id, byte: b });
+  emit(Tag.ANCHOR_PAINTED, { anchor_id: id, byte: b });
 }

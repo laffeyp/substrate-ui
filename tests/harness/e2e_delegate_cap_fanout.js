@@ -44,6 +44,20 @@ function assertDelegatePyGuardStillLandsAtLine436() {
   return guardLine + 1;
 }
 
+// Verify substrate's own error text still contains the substring the
+// shell keys on. A rename in delegate.py breaks the DEPTH_CAP_REFUSED
+// terminal routing on the envelope path; better to fail loud here.
+function assertDelegatePyErrorStringHolds() {
+  const p = path.join(REPO, "..", "substrate", "src", "substrate", "topologies", "tool_loop", "delegate.py");
+  const src = fs.readFileSync(p, "utf8");
+  const br = JSON.parse(fs.readFileSync(path.join(REPO, "signals", "bridge-reasons.json"), "utf8"));
+  const substr = br.delegate_error_prefixes.max_depth;
+  if (!src.includes(substr)) {
+    throw new Error(`delegate.py no longer contains "${substr}" — update signals/bridge-reasons.json`);
+  }
+  return substr;
+}
+
 function plantCapChain(workspace) {
   const py = `
 from substrate.session_registry import SessionRegistry
@@ -171,6 +185,8 @@ print(json.dumps({"session_id": sid, "leader_tc": "f0",
 // Line-drift check first.
 const guardLine = assertDelegatePyGuardStillLandsAtLine436();
 console.log(`  ok  delegate.py 'if depth >= max_depth' at line ${guardLine} (sprint card cites 436)`);
+const errSubstr = assertDelegatePyErrorStringHolds();
+console.log(`  ok  delegate.py raise text still contains "${errSubstr}"`);
 
 const capWorkspace = mkWorkspace("cap");
 const cap = plantCapChain(capWorkspace);

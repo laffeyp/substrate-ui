@@ -12,10 +12,12 @@ import bridgeReasons from "@/../signals/bridge-reasons.json";
 interface EnvelopeKindsTable {
   substrate_envelope_kinds: Record<string, string>;
   tool_names: Record<string, string>;
+  delegate_error_prefixes: Record<string, string>;
 }
 
 const table = (bridgeReasons as unknown as EnvelopeKindsTable).substrate_envelope_kinds;
 const toolNames = (bridgeReasons as unknown as EnvelopeKindsTable).tool_names;
+const delegateErrs = (bridgeReasons as unknown as EnvelopeKindsTable).delegate_error_prefixes;
 
 export const SESSION_STARTED = table.session_started;
 export const USER_MESSAGE = table.user_message;
@@ -38,3 +40,10 @@ export const PRODUCER_EMITTED_INVALID_EVENT = table.producer_emitted_invalid_eve
 // bridge-reasons.json § tool_names; Python bridge imports the same
 // constants directly from substrate.topologies.tool_loop.tools.
 export const TOOL_NAME_DELEGATE = toolNames.delegate;
+
+// Sprint 023-fix — delegate.py's max-depth raise text prefix. The
+// reducer keys on this to distinguish the DEPTH_CAP_REFUSED terminal
+// from the generic FOLDED terminal when a delegate ToolResult comes
+// back with ok=false. Rename in substrate → drift-check in the harness
+// fires; one JSON entry updates both sides.
+export const DELEGATE_ERROR_MAX_DEPTH = delegateErrs.max_depth;

@@ -340,6 +340,8 @@ def op_record_read(payload: dict) -> dict:
             retry_after_seconds = None
             tool_name = None
             tool_call_id = None
+            tool_ok = None
+            tool_error = None
             if kind == USER_MESSAGE:
                 summary = str(pl.get("assembled_prompt", ""))[:200]
             elif kind == MODEL_REPLY:
@@ -368,10 +370,15 @@ def op_record_read(payload: dict) -> dict:
             elif kind == TOOL_RESULT:
                 # Sprint 021 — a delegate ToolResult carries the child
                 # record_root; the shell folds the delegate flow on the
-                # parent side when this envelope lands.
+                # parent side when this envelope lands. Sprint 023-fix
+                # — a delegate raise (depth cap, etc.) lands as ok=false
+                # with the error text; the shell reads that to fire the
+                # correct terminal (DEPTH_CAP_REFUSED or FOLDED).
                 tool_name = pl.get("tool") if isinstance(pl, dict) else None
                 tool_call_id = pl.get("call_id") if isinstance(pl, dict) else None
-                summary = f"{tool_name} → ok" if pl.get("ok") else f"{tool_name} → err"
+                tool_ok = bool(pl.get("ok", True)) if isinstance(pl, dict) else None
+                tool_error = pl.get("error") if isinstance(pl, dict) else None
+                summary = f"{tool_name} → ok" if tool_ok else f"{tool_name} → err"
             child_record_root = (
                 tool_call_id_to_child_root.get(tool_call_id) if tool_call_id else None
             )
@@ -391,6 +398,8 @@ def op_record_read(payload: dict) -> dict:
                 "retry_after_seconds": retry_after_seconds,
                 "tool_name": tool_name,
                 "tool_call_id": tool_call_id,
+                "tool_ok": tool_ok,
+                "tool_error": tool_error,
                 "child_record_root": child_record_root,
             })
     except Exception as e:  # noqa: BLE001

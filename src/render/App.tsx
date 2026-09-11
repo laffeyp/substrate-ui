@@ -8,6 +8,7 @@ import { createRoot } from "react-dom/client";
 import { initial, reduce, Action, Emission, ActionType, EndSource, type EndSourceT } from "@/reducer/ShellReducer";
 import { ShellState, TranscriptRow } from "@/state/ShellState";
 import { emit } from "@/observability/Emitter";
+import { Tag } from "@/observability/tags";
 import { WindowFrame } from "./WindowFrame";
 import { Anchor, AnchorScope } from "./Anchor";
 import { DragLayer } from "./DragLayer";
@@ -214,11 +215,11 @@ function Shell(): JSX.Element {
     const offHello = s.onHello?.((msg: { substrate: string; protocol: number }) => {
       setBridge(BridgeStatus.ALIVE);
       setSubstrateVersion(msg.substrate);
-      emit("BRIDGE_HELLO_RECEIVED", { substrate_version: msg.substrate, protocol: msg.protocol });
+      emit(Tag.BRIDGE_HELLO_RECEIVED, { substrate_version: msg.substrate, protocol: msg.protocol });
     });
     const offDead = s.onDead?.(() => {
       setBridge(BridgeStatus.DEAD);
-      emit("BRIDGE_DEAD_SURFACED", { crash_count: 2 });
+      emit(Tag.BRIDGE_DEAD_SURFACED, { crash_count: 2 });
     });
     return () => { offHello?.(); offDead?.(); };
   }, []);
