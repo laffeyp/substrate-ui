@@ -30,6 +30,9 @@ export type Action =
   | { type: "SESSION_RESUME_START"; paneId: string; requestId: string; sessionId: string }
   | { type: "SESSION_RESUME_OK"; paneId: string; requestId: string; sessionId: string; sessionName: string | null; workspacePath: string; workspaceShape: "flat" | "worktree" | "isolate"; status: "unbound" | "parked" | "running" | "interrupted" | "ended" }
   | { type: "SESSION_RESUME_ERR"; paneId: string; requestId: string; reason: string }
+  | { type: "SESSION_END_START"; paneId: string; requestId: string; sessionId: string; source: "menu" | "slash" | "shortcut" }
+  | { type: "SESSION_END_OK"; paneId: string; requestId: string; sessionId: string; endReason: string; recordFinalised: boolean; envelopeSeq: number }
+  | { type: "SESSION_END_ERR"; paneId: string; requestId: string; reason: string }
   ;
 
 export interface Emission {
@@ -88,7 +91,57 @@ export function reduce(state: ShellState, action: Action): Step {
       return doResumeOk(state, action);
     case "SESSION_RESUME_ERR":
       return doResumeErr(state, action);
+    case "SESSION_END_START":
+      return doEndStart(state, action);
+    case "SESSION_END_OK":
+      return doEndOk(state, action);
+    case "SESSION_END_ERR":
+      return doEndErr(state, action);
   }
+}
+
+function doEndStart(state: ShellState, a: Extract<Action, { type: "SESSION_END_START" }>): Step {
+  const pane = state.panes[a.paneId];
+  if (!pane || !pane.boundSessionId) return { state, emissions: [] };
+  return {
+    state: { ...state, panes: { ...state.panes, [a.paneId]: { ...pane, creating: a.requestId } } },
+    emissions: [{ kind: "SESSION_END_REQUESTED", payload: {
+      request_id: a.requestId, session_id: a.sessionId, source: a.source,
+    }}],
+  };
+}
+
+function doEndOk(state: ShellState, a: Extract<Action, { type: "SESSION_END_OK" }>): Step {
+  const pane = state.panes[a.paneId];
+  if (!pane || pane.creating !== a.requestId) return { state, emissions: [] };
+  const nextPane: Pane = {
+    ...pane, creating: null,
+    boundSessionId: null, sessionName: null,
+    workspacePath: null, workspaceShape: null,
+    status: "unbound",
+    pickerText: "", pickerIndex: -1, pickerSelection: null,
+  };
+  return {
+    state: { ...state, panes: { ...state.panes, [a.paneId]: nextPane } },
+    emissions: [
+      { kind: "SESSION_ENDED_ACK", payload: {
+        request_id: a.requestId, session_id: a.sessionId,
+        end_reason: a.endReason, record_finalised: a.recordFinalised,
+      }},
+      { kind: "TRANSCRIPT_SESSION_ENDED_RENDERED", payload: {
+        pane_id: a.paneId, envelope_seq: a.envelopeSeq, end_reason: a.endReason,
+      }},
+    ],
+  };
+}
+
+function doEndErr(state: ShellState, a: Extract<Action, { type: "SESSION_END_ERR" }>): Step {
+  const pane = state.panes[a.paneId];
+  if (!pane || pane.creating !== a.requestId) return { state, emissions: [] };
+  return {
+    state: { ...state, panes: { ...state.panes, [a.paneId]: { ...pane, creating: null } } },
+    emissions: [], // No SESSION_END_FAILED tag in Layer 1 v0.1 — failure surfaces as absent ACK
+  };
 }
 
 function doResumeStart(state: ShellState, a: Extract<Action, { type: "SESSION_RESUME_START" }>): Step {

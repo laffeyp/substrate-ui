@@ -57,12 +57,41 @@ def reply_err(rid: str, reason: str) -> None:
 _REGISTRY_CACHE: object | None = None
 
 
+def _build_session_topology_from_manifest(manifest, first_turn_user_message):  # noqa: ANN001, ANN202
+    """Factory closure passed to SessionRegistry at construction. Rebuilds a
+    session_topology bound to the manifest each time turn_sync fires. The
+    deterministic driver runs every session for Sprint 010's purposes —
+    Ollama and CLI drivers wire in at later sprints when the shell owns a
+    Responder-per-manifest resolver.
+    """
+    from substrate.topologies.session import session_topology
+    from substrate.adapters import DeterministicResponder
+    from pathlib import Path as _Path
+    return session_topology(
+        driver=DeterministicResponder(seed=0),
+        driver_name=manifest.driver,
+        driver_context_tokens=4096,
+        seed=manifest.seed,
+        tools={},
+        session_id=manifest.session_id,
+        workspace_path=manifest.workspace,
+        workspace_shape=manifest.workspace_shape,
+        bundle=manifest.bundle,
+        record_root=_Path(manifest.record_root),
+        first_turn_user_message=first_turn_user_message,
+    )
+
+
 def _registry() -> object:
-    """Lazy SessionRegistry singleton. Auto-boot scans ~/.substrate/sessions."""
+    """Lazy SessionRegistry singleton with a session_topology_factory injected
+    so turn_sync can drive /exit."""
     global _REGISTRY_CACHE
     if _REGISTRY_CACHE is None:
         from substrate.session_registry import SessionRegistry
-        _REGISTRY_CACHE = SessionRegistry(auto_boot=True)
+        _REGISTRY_CACHE = SessionRegistry(
+            auto_boot=True,
+            session_topology_factory=_build_session_topology_from_manifest,
+        )
     return _REGISTRY_CACHE
 
 
@@ -204,6 +233,67 @@ def op_session_resume(payload: dict) -> dict:
     }
 
 
+def op_session_end(payload: dict) -> dict:
+    """Fire an /exit turn through the injected topology factory. Returns
+    {end_reason, record_finalised, envelope_seq} where envelope_seq is the
+    record position of the SessionEnded envelope (or -1 if not found)."""
+    from substrate.session_registry import SessionEndedMidTurn, SessionStatus  # type: ignore[import-not-found]
+    from substrate.topologies.session import UserMessage, END_ON_EXIT_SENTINEL  # type: ignore[import-not-found]
+    from substrate import api  # type: ignore[import-not-found]
+    reg = _registry()
+    session_id = payload.get("session_id", "")
+    manifest = reg.get(session_id)  # type: ignore[attr-defined]
+    if manifest is None:
+        return {"__error__": True, "reason": "not_found"}
+    if manifest.status == SessionStatus.ENDED:
+        return {"__error__": True, "reason": "session_already_ended"}
+
+    def _end_event_builder(m, root):  # noqa: ANN001, ANN202
+        max_ti = -1
+        try:
+            for env in api.read_record(root):
+                pl = env.get("payload") or {}
+                if env.get("kind") == "UserMessage" and "turn_index" in pl:
+                    max_ti = max(max_ti, int(pl["turn_index"]))
+        except Exception:  # noqa: BLE001
+            max_ti = -1
+        next_ti = max_ti + 1
+        return UserMessage(
+            text=END_ON_EXIT_SENTINEL, turn_index=next_ti,
+            assembled_prompt=END_ON_EXIT_SENTINEL, slash_source="menu:end",
+        )
+
+    try:
+        final_manifest, record_root = reg.turn_sync(  # type: ignore[attr-defined]
+            session_id, resume_event_builder=_end_event_builder, timeout_seconds=30.0,
+        )
+    except SessionEndedMidTurn as e:
+        return {"__error__": True, "reason": "session_ended", "detail": str(e)}
+    except (RuntimeError, KeyError, ValueError) as e:
+        return {"__error__": True, "reason": "registry_error", "detail": str(e)}
+
+    # Scan the record for the SessionEnded envelope's seq.
+    envelope_seq = -1
+    end_reason = "user_end"
+    try:
+        for env in api.read_record(record_root):
+            if env.get("kind") == "SessionEnded":
+                envelope_seq = int(env.get("seq", -1))
+                pl = env.get("payload") or {}
+                if isinstance(pl, dict) and "reason" in pl:
+                    end_reason = str(pl["reason"])
+                break
+    except Exception:  # noqa: BLE001
+        pass
+
+    return {
+        "session_id": session_id,
+        "end_reason": end_reason,
+        "record_finalised": final_manifest.status == SessionStatus.ENDED,
+        "envelope_seq": envelope_seq,
+    }
+
+
 def op_read_recent_workspaces() -> list[dict]:
     """Return the recent-workspaces roster; empty list on absence or read error."""
     path = Path.home() / ".substrate" / "recent-workspaces.json"
@@ -271,6 +361,15 @@ def main() -> int:
                 result = op_probe_driver(msg)
                 if result.get("__error__"):
                     reply_err(rid, result.get("reason", "not_installed"))
+                else:
+                    reply_ok(rid, result)
+            except Exception as e:  # noqa: BLE001
+                reply_err(rid, f"registry_error:{e}")
+        elif op == "session_end":
+            try:
+                result = op_session_end(msg)
+                if result.get("__error__"):
+                    reply_err(rid, result.get("reason", "registry_error"))
                 else:
                     reply_ok(rid, result)
             except Exception as e:  # noqa: BLE001

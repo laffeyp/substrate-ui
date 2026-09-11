@@ -3,7 +3,7 @@
 ---
 id: 010
 epic: C — Substrate binding
-status: pending
+status: closed
 phase: 2
 pass_kind: architecture
 spec_reference: signals/0.1.json § bridge SESSION_END_*; SESSION_ENDED_ACK terminal; session_registry.py end path; Layer 5 SessionEndedMidTurn

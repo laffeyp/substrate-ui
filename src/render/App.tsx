@@ -83,6 +83,21 @@ function Shell(): JSX.Element {
     });
   }, [dispatch]);
 
+  const startSessionEnd = useMemo(() => (paneId: string, sessionId: string, source: "menu" | "slash" | "shortcut") => {
+    const requestId = newId();
+    dispatch({ type: "SESSION_END_START", paneId, requestId, sessionId, source });
+    bridgeRequest<{
+      session_id: string; end_reason: string; record_finalised: boolean; envelope_seq: number;
+    }>("session_end", { session_id: sessionId }, 30000).then((result) => {
+      dispatch({ type: "SESSION_END_OK", paneId, requestId,
+        sessionId: result.session_id, endReason: result.end_reason,
+        recordFinalised: result.record_finalised, envelopeSeq: result.envelope_seq,
+      });
+    }).catch((reason) => {
+      dispatch({ type: "SESSION_END_ERR", paneId, requestId, reason: String(reason) });
+    });
+  }, [dispatch]);
+
   const startSessionResume = useMemo(() => (paneId: string, sessionId: string) => {
     const requestId = newId();
     dispatch({ type: "SESSION_RESUME_START", paneId, requestId, sessionId });
@@ -185,7 +200,14 @@ function Shell(): JSX.Element {
           }}
         />
       )}
-      {window && <SplitShortcuts dispatch={dispatch} focusedPaneId={state.focusedPaneId} />}
+      {window && (
+        <ShellShortcuts
+          dispatch={dispatch}
+          focusedPaneId={state.focusedPaneId}
+          focusedPane={state.focusedPaneId ? state.panes[state.focusedPaneId] : null}
+          onEnd={startSessionEnd}
+        />
+      )}
       <Anchor id="anchor-dialog"        scope="app" slot="dialog"        byte={0} />
       <Anchor id="anchor-window-strip"  scope="app" slot="window-strip"  byte={0} />
       <Anchor id="anchor-bridge"        scope="app" slot="bridge"        byte={bridgeByte} />
@@ -196,8 +218,13 @@ function Shell(): JSX.Element {
   );
 }
 
-function SplitShortcuts({ dispatch, focusedPaneId }: {
-  dispatch: (a: Action) => void; focusedPaneId: string | null;
+import type { Pane as PaneModel } from "@/state/ShellState";
+
+function ShellShortcuts({ dispatch, focusedPaneId, focusedPane, onEnd }: {
+  dispatch: (a: Action) => void;
+  focusedPaneId: string | null;
+  focusedPane: PaneModel | null;
+  onEnd: (paneId: string, sessionId: string, source: "menu" | "slash" | "shortcut") => void;
 }): JSX.Element | null {
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
@@ -211,11 +238,15 @@ function SplitShortcuts({ dispatch, focusedPaneId }: {
       } else if (e.key === "w" || e.key === "W") {
         e.preventDefault();
         dispatch({ type: "CLOSE_PANE", paneId: focusedPaneId });
+      } else if (e.key === "e" || e.key === "E") {
+        if (!focusedPane?.boundSessionId) return;
+        e.preventDefault();
+        onEnd(focusedPaneId, focusedPane.boundSessionId, "shortcut");
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [dispatch, focusedPaneId]);
+  }, [dispatch, focusedPaneId, focusedPane, onEnd]);
   return null;
 }
 
