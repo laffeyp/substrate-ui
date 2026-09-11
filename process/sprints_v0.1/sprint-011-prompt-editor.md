@@ -3,7 +3,7 @@
 ---
 id: 011
 epic: D — Turn flow
-status: pending
+status: closed
 phase: 3
 pass_kind: architecture
 spec_reference: signals/0.1.json § prompt PROMPT_CHANGED; Layer 4 (100ms debounce per pane); privacy invariant (Layer 2: text_length, not text)

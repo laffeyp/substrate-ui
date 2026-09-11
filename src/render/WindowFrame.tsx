@@ -13,6 +13,8 @@ export interface PaneCallbacks {
   onPickerWalk: (paneId: string, index: number, path: string, shape: WorkspaceShape) => void;
   onPickerCommit: (paneId: string, path: string, shape: WorkspaceShape) => void;
   onResume: (paneId: string, sessionId: string) => void;
+  onPromptText: (paneId: string, text: string) => void;
+  onPromptLengthChanged: (paneId: string, length: number) => void;
 }
 
 export interface GutterCallbacks {
@@ -42,6 +44,8 @@ function Node({ id, state, gutter, pane }: { id: string; state: ShellState; gutt
         onPickerWalk={pane.onPickerWalk}
         onPickerCommit={pane.onPickerCommit}
         onResume={pane.onResume}
+        onPromptText={pane.onPromptText}
+        onPromptLengthChanged={pane.onPromptLengthChanged}
       />
     );
   }
