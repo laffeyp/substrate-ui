@@ -2,7 +2,7 @@
 // Layer 7 pixel-anchor slots per pane: focus, status, reveal, lens, level,
 // dir, descent, surface, find, inspect, header_popover.
 
-import { Pane as PaneModel, WorkspaceShape } from "@/state/ShellState";
+import { Pane as PaneModel, WorkspaceShape, Lens } from "@/state/ShellState";
 import { PaneHeader } from "./PaneHeader";
 import { Anchor } from "./Anchor";
 import { UnboundPanePicker } from "./UnboundPanePicker";
@@ -22,6 +22,7 @@ interface Props {
   onPromptLengthChanged?: (paneId: string, length: number) => void;
   onPromptSubmit?: (paneId: string, text: string) => void;
   onRevealToggle?: (paneId: string) => void;
+  onLensSwitch?: (paneId: string, to: Lens) => void;
 }
 
 function rowColor(kind: string): string {
@@ -71,10 +72,18 @@ function initialByte(slot: string, pane: PaneModel): number {
     }
   }
   if (slot === "reveal") return pane.reveal === "reveal" ? 128 : 0;
+  if (slot === "lens") {
+    switch (pane.lens) {
+      case "stream+graph": return 0;
+      case "i/o":          return 64;
+      case "structure":    return 128;
+      case "scene":        return 192;
+    }
+  }
   return 0;
 }
 
-export function Pane({ pane, onFocus, onDragStart, onClose, onPickerText, onPickerWalk, onPickerCommit, onResume, onPromptText, onPromptLengthChanged, onPromptSubmit, onRevealToggle }: Props): JSX.Element {
+export function Pane({ pane, onFocus, onDragStart, onClose, onPickerText, onPickerWalk, onPickerCommit, onResume, onPromptText, onPromptLengthChanged, onPromptSubmit, onRevealToggle, onLensSwitch }: Props): JSX.Element {
   return (
     <div
       data-testid={`pane-${pane.id}`}
@@ -94,7 +103,7 @@ export function Pane({ pane, onFocus, onDragStart, onClose, onPickerText, onPick
             onResume={onResume}
           />
         ) : pane.boundSessionId && pane.reveal === "reveal" ? (
-          <RevealShell pane={pane} />
+          <RevealShell pane={pane} onLensSwitch={onLensSwitch} />
         ) : pane.boundSessionId && onPromptText && onPromptLengthChanged && onPromptSubmit ? (
           <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
             <div style={{ flex: 1, overflow: "auto", padding: "6px 0" }}>

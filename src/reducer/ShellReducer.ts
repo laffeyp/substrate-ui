@@ -3,7 +3,7 @@
 // caller fires them through the Emitter after the reducer returns, so state
 // and trace stay in lockstep.
 
-import { emptyShellState, ShellState, Pane, Window, TranscriptRow } from "@/state/ShellState";
+import { emptyShellState, ShellState, Pane, Window, TranscriptRow, Lens } from "@/state/ShellState";
 import { newId } from "@/state/ids";
 import { splitPane, resizeSplit, atCap, movePane, closePane, Zone } from "@/state/SplitTree";
 
@@ -40,6 +40,7 @@ export type Action =
   | { type: "TURN_SUBMIT_ERR"; paneId: string; requestId: string; sessionId: string; reason: string }
   | { type: "TRANSCRIPT_ROWS_LOADED"; paneId: string; rows: TranscriptRow[] }
   | { type: "REVEAL_TOGGLE"; paneId: string }
+  | { type: "LENS_SWITCH"; paneId: string; to: Lens }
   ;
 
 export interface Emission {
@@ -142,6 +143,16 @@ export function reduce(state: ShellState, action: Action): Step {
         emissions: [{ kind: "TURN_SUBMITTED", payload: {
           request_id: action.requestId, session_id: action.sessionId, turn_index: action.turnIndex,
         }}],
+      };
+    }
+    case "LENS_SWITCH": {
+      const pane = state.panes[action.paneId];
+      if (!pane) return { state, emissions: [] };
+      if (pane.lens === action.to) return { state, emissions: [] };
+      const from = pane.lens;
+      return {
+        state: { ...state, panes: { ...state.panes, [action.paneId]: { ...pane, lens: action.to } } },
+        emissions: [{ kind: "LENS_SWITCHED", payload: { pane_id: action.paneId, from, to: action.to } }],
       };
     }
     case "REVEAL_TOGGLE": {
@@ -479,6 +490,7 @@ function boot(): Step {
     transcriptRows: [],
     transcriptLastSeq: -1,
     reveal: "terminal",
+    lens: "stream+graph",
   };
   const window: Window = { id: windowId, rootId: paneId };
   const next: ShellState = {
