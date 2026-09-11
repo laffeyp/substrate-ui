@@ -108,6 +108,20 @@ export function isStreamDir(x: unknown): x is StreamDir {
   return typeof x === "string" && (STREAM_DIRS as readonly string[]).includes(x);
 }
 
+// Sprint 019 — reveal focus. Inside a revealed pane, focus toggles
+// between transcript-side and stream-side. Find (Epic H) scopes by
+// this focus. Enum from Layer 2's ratified `to` enum on
+// REVEAL_FOCUS_MOVED, not hand-copied.
+export const REVEAL_FOCI = enumOf("REVEAL_FOCUS_MOVED", "to") as
+  readonly ["transcript", "stream"];
+export type RevealFocus = typeof REVEAL_FOCI[number];
+export const RevealFocus = {
+  TRANSCRIPT: "transcript", STREAM: "stream",
+} as const satisfies Record<string, RevealFocus>;
+export function isRevealFocus(x: unknown): x is RevealFocus {
+  return typeof x === "string" && (REVEAL_FOCI as readonly string[]).includes(x);
+}
+
 // --- Bridge-invented reason enums (from bridge-reasons.json) ------------
 
 interface BridgeReasons {

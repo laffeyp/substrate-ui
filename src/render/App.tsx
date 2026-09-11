@@ -218,6 +218,7 @@ function Shell(): JSX.Element {
             onLensSwitch: (paneId, to) => dispatch({ type: "LENS_SWITCH", paneId, to }),
             onStreamLevelToggle: (paneId) => dispatch({ type: "STREAM_LEVEL_TOGGLE", paneId }),
             onStreamDirToggle: (paneId) => dispatch({ type: "STREAM_DIR_TOGGLE", paneId }),
+            onRevealFocusToggle: (paneId) => dispatch({ type: "REVEAL_FOCUS_TOGGLE", paneId }),
           }}
         />
       )}

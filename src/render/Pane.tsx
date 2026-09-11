@@ -30,6 +30,7 @@ interface Props {
   onLensSwitch?: (paneId: string, to: Lens) => void;
   onStreamLevelToggle?: (paneId: string) => void;
   onStreamDirToggle?: (paneId: string) => void;
+  onRevealFocusToggle?: (paneId: string) => void;
 }
 
 const ROW_COLORS: Record<string, string> = {
@@ -91,7 +92,7 @@ function initialByte(slot: string, pane: PaneModel): number {
   return 0;
 }
 
-export function Pane({ pane, onFocus, onDragStart, onClose, onPickerText, onPickerWalk, onPickerCommit, onResume, onPromptText, onPromptLengthChanged, onPromptSubmit, onRevealToggle, onLensSwitch, onStreamLevelToggle, onStreamDirToggle }: Props): JSX.Element {
+export function Pane({ pane, onFocus, onDragStart, onClose, onPickerText, onPickerWalk, onPickerCommit, onResume, onPromptText, onPromptLengthChanged, onPromptSubmit, onRevealToggle, onLensSwitch, onStreamLevelToggle, onStreamDirToggle, onRevealFocusToggle }: Props): JSX.Element {
   return (
     <div
       data-testid={`pane-${pane.id}`}
@@ -116,6 +117,7 @@ export function Pane({ pane, onFocus, onDragStart, onClose, onPickerText, onPick
             onLensSwitch={onLensSwitch}
             onStreamLevelToggle={onStreamLevelToggle}
             onStreamDirToggle={onStreamDirToggle}
+            onRevealFocusToggle={onRevealFocusToggle}
           />
         ) : pane.boundSessionId && onPromptText && onPromptLengthChanged && onPromptSubmit ? (
           <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>

@@ -4,7 +4,7 @@
 // and trace stay in lockstep.
 
 import { emptyShellState, ShellState, Pane, Window, TranscriptRow, Lens, WorkspaceShape, PaneStatus } from "@/state/ShellState";
-import { SessionEndReason, ParkReason, isParkReason, SECRET_KEY_PATTERN, isPaneStatus, StreamLevel, StreamDir } from "@/observability/reasons";
+import { SessionEndReason, ParkReason, isParkReason, SECRET_KEY_PATTERN, isPaneStatus, StreamLevel, StreamDir, RevealFocus } from "@/observability/reasons";
 import { newId } from "@/state/ids";
 import { splitPane, resizeSplit, atCap, movePane, closePane, Zone, Axis } from "@/state/SplitTree";
 import { RevealState } from "@/observability/reasons";
@@ -45,6 +45,7 @@ export type Action =
   | { type: "LENS_SWITCH"; paneId: string; to: Lens }
   | { type: "STREAM_LEVEL_TOGGLE"; paneId: string }
   | { type: "STREAM_DIR_TOGGLE"; paneId: string }
+  | { type: "REVEAL_FOCUS_TOGGLE"; paneId: string }
   ;
 
 export interface Emission {
@@ -187,6 +188,16 @@ export function reduce(state: ShellState, action: Action): Step {
       return {
         state: { ...state, panes: { ...state.panes, [action.paneId]: { ...pane, streamDir: to } } },
         emissions: [{ kind: "STREAM_DIR_TOGGLED", payload: { pane_id: action.paneId, from, to } }],
+      };
+    }
+    case "REVEAL_FOCUS_TOGGLE": {
+      const pane = state.panes[action.paneId];
+      if (!pane) return { state, emissions: [] };
+      const from = pane.revealFocus;
+      const to = from === RevealFocus.TRANSCRIPT ? RevealFocus.STREAM : RevealFocus.TRANSCRIPT;
+      return {
+        state: { ...state, panes: { ...state.panes, [action.paneId]: { ...pane, revealFocus: to } } },
+        emissions: [{ kind: "REVEAL_FOCUS_MOVED", payload: { pane_id: action.paneId, from, to } }],
       };
     }
     case "TRANSCRIPT_ROWS_LOADED": {
@@ -515,6 +526,7 @@ function boot(): Step {
     lens: Lens.STREAM_GRAPH,
     streamLevel: StreamLevel.ALL,
     streamDir: StreamDir.DOWN,
+    revealFocus: RevealFocus.TRANSCRIPT,
   };
   const window: Window = { id: windowId, rootId: paneId };
   const next: ShellState = {

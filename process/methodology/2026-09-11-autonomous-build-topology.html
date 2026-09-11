@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.10.1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>Autonomous build topology</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    html {
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    svg {
+      height: auto;
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      white-space: pre-wrap;
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      border: none;
+      border-top: 1px solid #1a1a1a;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">Autonomous build topology</h1>
+</header>
+<h1
+id="autonomous-build-topology-the-human-out-of-the-loop-parallel-builder">Autonomous
+build topology — the human-out-of-the-loop parallel builder</h1>
+<p><em>Idea captured 2026-09-11 during the SDD-drift review of sprints
+010-014. This document sketches a topology, not a build plan. It is
+meant to sit next to
+<code>2026-09-11-bootstrap-streamlining-lessons.md</code>; the
+streamlining lessons apply inside each parallel build; this document is
+the frame that spawns and steers them.</em></p>
+<hr />
+<h2 id="the-shape-of-the-topology">The shape of the topology</h2>
+<p>Substrate’s <code>session_topology</code> today assumes a human at
+the other end of the prompt. It parks after each turn and waits. That
+assumption is the load-bearing constraint on human throughput — one
+operator can drive one session at a time because each session pauses for
+the operator to read the model’s reply and decide whether it is on
+track.</p>
+<p>The autonomous build topology drops that constraint. It spins up N
+session runs from the same initial conditions (design lock, substrate
+source, bootstrap kit, sprint queue) and lets each run to completion
+without a human sitting on the prompt. The human role is replaced by a
+small deterministic responder that watches signals, not text, and issues
+one of a fixed set of replies.</p>
+<p>The topology has three components:</p>
+<ul>
+<li><strong>A spawner.</strong> Reads a run manifest that names the
+initial conditions and the N. Materialises N session workspaces (git
+worktrees, three copies of the repo, whatever the substrate
+<code>WorkspaceShape</code> calls for). Starts N session runs against
+those workspaces, each with the same driver and the same sprint
+queue.</li>
+<li><strong>A watcher per session.</strong> Subscribes to the session’s
+JSONL emissions (<code>signals/0.1.json</code> tags), the sprint card
+queue, the harness pass/fail log, and the writing-style / SDD /
+coding-canon linters. Every model turn ends with a signal that says
+either “on track” or names the drift.</li>
+<li><strong>A dispatcher per session.</strong> Given the watcher’s
+verdict, sends the next prompt. The dispatcher’s vocabulary is small:
+“continue”, “keep going”, “next sprint”, or one of a handful of
+corrective prompts keyed to the drift kind the watcher named.</li>
+</ul>
+<p>The whole loop runs without human keystrokes as long as no session
+enters a state the watcher cannot classify.</p>
+<hr />
+<h2 id="why-the-human-is-removable-from-the-loop">Why the human is
+removable from the loop</h2>
+<p>The reason an operator has to sit on a session today is not that the
+model’s text output is inscrutable. It is that no one wired the signals
+that would otherwise report on-track / off-track directly. A human
+reading the model’s reply is doing signal detection on prose. That
+signal detection is mechanisable when the signals exist.</p>
+<p>Every drift kind a reviewer would catch has a mechanical
+detector:</p>
+<ul>
+<li><strong>SDD drift</strong> — invented tag names, payload shape
+mismatches, sequence violations against Layer 5, missing
+<code>BLACKBOARD.md</code> / <code>KIT_DIARY.md</code> entries per
+sprint close. The Emitter (mouth-side, per streamlining document §2)
+refuses the first two at runtime. A card linter catches the third. The
+absent audit files are <code>ls</code> failures.</li>
+<li><strong>Coding-canon drift</strong> — retyped literals where an enum
+lives elsewhere, raw strings in switch cases where a discriminated union
+exists, dead code paths, unhandled promise rejections, functions past a
+length threshold. Standard static-analysis lives here; no model
+judgement required.</li>
+<li><strong>Design drift</strong> — Playwright screenshots against the
+design lock’s PNG set, byte-diffed or region-diffed. When the shell
+renders something v7 does not show, the diff catches it.</li>
+<li><strong>Writing-style drift</strong> — the <code>dellm</code>
+skill’s checks run against every committed markdown file. Machine
+register leaves a fingerprint (uniform sentence length, adverb
+frequency, the phrases the plain-register memo names). The linter output
+is a scalar per file.</li>
+</ul>
+<p>Any watcher assembled from those four detectors reads the session’s
+state at higher fidelity than a human reading the model’s reply, and
+does it in milliseconds instead of minutes. When all four detectors
+return green, the dispatcher sends “continue” and the session takes its
+next turn.</p>
+<hr />
+<h2 id="rotating-review-focus">Rotating review focus</h2>
+<p>A single watcher checking everything on every turn is wasteful and
+also tends to accumulate noise (design drift matters at UI-touching
+sprints; SDD drift matters on every sprint). The topology rotates its
+focus:</p>
+<ul>
+<li><strong>Every turn.</strong> Vocabulary conformance (mouth-side
+Emitter output, always on). Harness pass/fail.
+<code>BLACKBOARD.md</code> entry present for the closed sprint.</li>
+<li><strong>Every second turn.</strong> SDD hygiene — proposals filed
+for any drift, no invented tag names in cards, Layer 5 sequence
+assertions used instead of hand-coded ones, primitives library used
+instead of copy-pasted harness boilerplate.</li>
+<li><strong>Every fifth turn.</strong> Coding-canon review — retyped
+literals, discriminated unions, function length, module boundaries. Same
+pass a human reviewer would run against the diff since last review.</li>
+<li><strong>On UI-touching sprints only.</strong> Screenshot diff
+against the design lock for every state the sprint’s card claims to
+render.</li>
+</ul>
+<p>The rotation keeps per-turn cost bounded. Full review coverage lands
+over a window of five turns, not per turn.</p>
+<hr />
+<h2 id="the-dispatchers-vocabulary">The dispatcher’s vocabulary</h2>
+<p>Kept small on purpose. Five prompts cover almost every case:</p>
+<ul>
+<li><code>CONTINUE</code> — no drift, take the next action on the sprint
+card.</li>
+<li><code>NEXT_SPRINT</code> — sprint’s done criteria are met; move to
+the next card.</li>
+<li><code>HALT_AND_ARTICULATE</code> — the watcher saw a signal the
+model would have missed (a Layer 2 refusal, a screenshot diff over
+threshold, an unexplained test regression). The session halts, files a
+Signal Report, and waits for either a human or the reviewer topology to
+unblock.</li>
+<li><code>PROPOSE_AND_HALT</code> — the model attempted to invent
+vocabulary; the Emitter refused. The session files a
+<code>NEW_TAG_PROPOSED</code> (or the right taxon per PRINCIPLES §10)
+and halts pending ratification.</li>
+<li><code>REVERT_AND_TRY_AGAIN</code> — a coding-canon violation the
+linter flags on commit. The session reverts the last diff and retries
+the sprint.</li>
+</ul>
+<p>Nothing in this vocabulary requires reading the model’s prose. Every
+element is a function of the signals.</p>
+<hr />
+<h2 id="variant-runs">Variant runs</h2>
+<p>The topology accepts a bootstrap-kit-variant field per session. Three
+parallel builds can each carry a different instruction bundle: build A
+runs with the current bootstrap; build B runs with mouth-side payload
+validation moved to a different point in the emit path; build C runs
+with Layer 5 enforced as a hard gate instead of a warning. Same design
+lock, same substrate, same sprint queue, different bootstrap
+instructions. The convergence data across the three is the finding.</p>
+<p>This is where the topology stops being a productivity tool and
+becomes a research instrument on SDD itself.</p>
+<hr />
+<h2 id="substrate-primitives-the-topology-needs">Substrate primitives
+the topology needs</h2>
+<p>Roughly:</p>
+<ul>
+<li>Session run with a driver, a workspace, and a bundle — exists
+today.</li>
+<li>A responder interface that can be either human, model, or
+deterministic (rule-based). The last one is what the dispatcher
+becomes.</li>
+<li>A JSONL subscriber that reads a running session’s emissions without
+pausing it — the shell has <code>harness/last.jsonl</code>; substrate
+has <code>record_root/events-*.jsonl</code>. A watcher reads from
+either.</li>
+<li>A way to spawn N sessions with a shared parent-topology id so their
+emissions carry a run-group tag. Layer 3 (Session) probably needs one
+new field on the <code>SessionManifest</code>:
+<code>run_group_id</code>.</li>
+<li>A ratification queue for proposals filed by the halted sessions.
+Human clears it once per day.</li>
+</ul>
+<p>None of these are exotic. The substrate registry already handles the
+per-session lifecycle; the topology is a thin coordinator on top.</p>
+<hr />
+<h2 id="what-this-replaces">What this replaces</h2>
+<p>An operator sitting on three terminal windows, typing “keep going”
+and “looks fine” and reading model output for signs of drift. That mode
+does not scale past one operator watching a small number of sessions,
+and it never produces the drift-detection log that a mechanised watcher
+produces as a side effect. The autonomous topology scales linearly with
+cluster size and its watcher output is the audit trail the SDD kit
+already asks for.</p>
+<hr />
+<h2 id="what-it-does-not-replace">What it does not replace</h2>
+<p>Ratification. The Architect still decides which
+<code>NEW_TAG_PROPOSED</code> becomes <code>signals/0.2.json</code>. The
+dispatcher will halt the session and file the proposal; a human reads
+the proposal and either ratifies or rejects. The work compresses onto
+the human’s decision points, not the human’s per-turn prompting.</p>
+<p>Design-lock authorship. v7 exists because a designer worked it out.
+The topology drives the build from a design lock; it does not draw
+one.</p>
+<p>Sprint-card authorship. The 48 cards were written by a human against
+the epic plan. The topology consumes them and executes them; it does not
+generate them.</p>
+<hr />
+<h2 id="the-name">The name</h2>
+<p>The topology is a <code>parallel_build_topology</code> under
+substrate’s topology tree. It calls into <code>session_topology</code> N
+times with the deterministic dispatcher instead of the human responder.
+Vocabulary the topology adds:</p>
+<ul>
+<li><code>RUN_GROUP_SPAWNED{run_group_id, n, bootstrap_variant}</code> —
+the spawner fired.</li>
+<li><code>WATCHER_VERDICT{run_group_id, session_id, verdict, drift_kind?}</code>
+— per-turn watcher output.</li>
+<li><code>DISPATCHER_REPLIED{run_group_id, session_id, reply_kind}</code>
+— one of the five dispatcher prompts fired.</li>
+<li><code>RUN_GROUP_CONVERGED{run_group_id, converged_at_layer}</code> —
+all N sessions agree on <code>signals/0.1.json</code> through layer
+K.</li>
+<li><code>RUN_GROUP_DIVERGED{run_group_id, diverged_at_tag}</code> — the
+sessions’ vocabularies stopped matching at this tag.</li>
+</ul>
+<p>The convergence and divergence tags are the point of the whole
+exercise when the topology is used as a research instrument.</p>
+<hr />
+<p><em>Draft. Sits alongside
+<code>2026-09-11-bootstrap-streamlining-lessons.md</code>. The
+streamlining doc says what should be in each session’s bootstrap kit;
+this doc says what wraps N of those sessions in parallel.</em></p>
+</body>
+</html>
