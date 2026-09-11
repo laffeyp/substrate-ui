@@ -34,6 +34,12 @@ export interface TranscriptRow {
   // these when kind === "ToolCall" && tool_name === "delegate".
   tool_name?: string | null;
   tool_call_id?: string | null;
+  // Sprint 023 — a ToolResult's ok flag + error text. The reducer reads
+  // these on ToolResult(tool="delegate") arrivals to pick the correct
+  // Layer 5 terminal: DELEGATE_DEPTH_CAP_REFUSED when the error names
+  // the max-depth guard, DELEGATE_CALL_FOLDED otherwise.
+  tool_ok?: boolean | null;
+  tool_error?: string | null;
   // Sprint 021 — delegate expand. The bridge pairs a ToolResult's
   // output.child_root with the parent ToolCall by call_id and attaches
   // it here so the shell can load the child transcript when the user

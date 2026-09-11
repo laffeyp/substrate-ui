@@ -8,6 +8,8 @@
     "dev": "electron .",
     "start": "electron .",
     "bridge": "python3 bridge/main.py",
+    "gen:tags": "node scripts/gen-tags.mjs",
+    "prebuild": "node scripts/gen-tags.mjs",
     "build": "node esbuild.config.mjs",
     "typecheck": "tsc --noEmit",
     "harness:boot": "node tests/harness/e2e_boot.js",

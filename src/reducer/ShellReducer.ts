@@ -6,9 +6,10 @@
 import { emptyShellState, ShellState, Pane, Window, TranscriptRow, Lens, WorkspaceShape, PaneStatus } from "@/state/ShellState";
 import { SessionEndReason, ParkReason, isParkReason, SECRET_KEY_PATTERN, isPaneStatus, StreamLevel, StreamDir, RevealFocus } from "@/observability/reasons";
 import {
-  TOOL_CALL, TOOL_RESULT, TOOL_NAME_DELEGATE,
+  TOOL_CALL, TOOL_RESULT, TOOL_NAME_DELEGATE, DELEGATE_ERROR_MAX_DEPTH,
   PARK, SESSION_ENDED, TRANSCRIPT_COMPACTED, RATE_LIMITED_WAITING,
 } from "@/observability/envelope-kinds";
+import { Tag } from "@/observability/tags";
 import { newId } from "@/state/ids";
 import { splitPane, resizeSplit, atCap, movePane, closePane, Zone, Axis } from "@/state/SplitTree";
 import { RevealState } from "@/observability/reasons";
@@ -208,15 +209,15 @@ export function reduce(state: ShellState, action: Action): Step {
       // driver_params gets secret-stripped for logging separately from the wire payload,
       // which Layer 2 requires be exactly {request_id, driver}.
       void stripSecrets(action.driverParams);
-      return { state, emissions: [{ kind: "PROBE_DRIVER_REQUESTED", payload: {
+      return { state, emissions: [{ kind: Tag.PROBE_DRIVER_REQUESTED, payload: {
         request_id: action.requestId, driver: action.driverName,
       }}]};
     case ActionType.PROBE_DRIVER_OK:
-      return { state, emissions: [{ kind: "PROBE_DRIVER_PROBED", payload: {
+      return { state, emissions: [{ kind: Tag.PROBE_DRIVER_PROBED, payload: {
         request_id: action.requestId, driver: action.driverName, context_tokens: action.contextTokens,
       }}]};
     case ActionType.PROBE_DRIVER_ERR:
-      return { state, emissions: [{ kind: "PROBE_DRIVER_FAILED", payload: {
+      return { state, emissions: [{ kind: Tag.PROBE_DRIVER_FAILED, payload: {
         request_id: action.requestId, driver: action.driverName, reason: action.reason,
       }}]};
     case ActionType.SESSION_RESUME_START:
@@ -242,7 +243,7 @@ export function reduce(state: ShellState, action: Action): Step {
     case ActionType.PROMPT_LENGTH_CHANGED:
       return {
         state,
-        emissions: [{ kind: "PROMPT_CHANGED", payload: { pane_id: action.paneId, length: action.length } }],
+        emissions: [{ kind: Tag.PROMPT_CHANGED, payload: { pane_id: action.paneId, length: action.length } }],
       };
     case ActionType.TURN_SUBMIT_START: {
       const pane = state.panes[action.paneId];
@@ -253,8 +254,8 @@ export function reduce(state: ShellState, action: Action): Step {
           panes: { ...state.panes, [action.paneId]: { ...pane, promptDraft: "", status: PaneStatus.RUNNING } },
         },
         emissions: [
-          { kind: "PROMPT_SUBMITTED", payload: { pane_id: action.paneId, text_length: action.textLength } },
-          { kind: "TURN_SUBMIT_REQUESTED", payload: {
+          { kind: Tag.PROMPT_SUBMITTED, payload: { pane_id: action.paneId, text_length: action.textLength } },
+          { kind: Tag.TURN_SUBMIT_REQUESTED, payload: {
             request_id: action.requestId, pane_id: action.paneId, session_id: action.sessionId,
             text_length: action.textLength, timeout_seconds: action.timeoutSeconds,
           }},
@@ -266,7 +267,7 @@ export function reduce(state: ShellState, action: Action): Step {
       if (!pane) return { state, emissions: [] };
       return {
         state: { ...state, panes: { ...state.panes, [action.paneId]: { ...pane, status: PaneStatus.PARKED } } },
-        emissions: [{ kind: "TURN_SUBMITTED", payload: {
+        emissions: [{ kind: Tag.TURN_SUBMITTED, payload: {
           request_id: action.requestId, session_id: action.sessionId, turn_index: action.turnIndex,
         }}],
       };
@@ -278,7 +279,7 @@ export function reduce(state: ShellState, action: Action): Step {
       const from = pane.lens;
       return {
         state: { ...state, panes: { ...state.panes, [action.paneId]: { ...pane, lens: action.to } } },
-        emissions: [{ kind: "LENS_SWITCHED", payload: { pane_id: action.paneId, from, to: action.to } }],
+        emissions: [{ kind: Tag.LENS_SWITCHED, payload: { pane_id: action.paneId, from, to: action.to } }],
       };
     }
     case ActionType.REVEAL_TOGGLE: {
@@ -288,7 +289,7 @@ export function reduce(state: ShellState, action: Action): Step {
       const to: RevealState = from === RevealState.TERMINAL ? RevealState.REVEAL : RevealState.TERMINAL;
       return {
         state: { ...state, panes: { ...state.panes, [action.paneId]: { ...pane, reveal: to } } },
-        emissions: [{ kind: "REVEAL_TOGGLED", payload: { pane_id: action.paneId, from, to } }],
+        emissions: [{ kind: Tag.REVEAL_TOGGLED, payload: { pane_id: action.paneId, from, to } }],
       };
     }
     case ActionType.STREAM_LEVEL_TOGGLE: {
@@ -298,7 +299,7 @@ export function reduce(state: ShellState, action: Action): Step {
       const to = from === StreamLevel.ALL ? StreamLevel.APP : StreamLevel.ALL;
       return {
         state: { ...state, panes: { ...state.panes, [action.paneId]: { ...pane, streamLevel: to } } },
-        emissions: [{ kind: "STREAM_LEVEL_TOGGLED", payload: { pane_id: action.paneId, from, to } }],
+        emissions: [{ kind: Tag.STREAM_LEVEL_TOGGLED, payload: { pane_id: action.paneId, from, to } }],
       };
     }
     case ActionType.STREAM_DIR_TOGGLE: {
@@ -308,7 +309,7 @@ export function reduce(state: ShellState, action: Action): Step {
       const to = from === StreamDir.DOWN ? StreamDir.SIDE : StreamDir.DOWN;
       return {
         state: { ...state, panes: { ...state.panes, [action.paneId]: { ...pane, streamDir: to } } },
-        emissions: [{ kind: "STREAM_DIR_TOGGLED", payload: { pane_id: action.paneId, from, to } }],
+        emissions: [{ kind: Tag.STREAM_DIR_TOGGLED, payload: { pane_id: action.paneId, from, to } }],
       };
     }
     case ActionType.REVEAL_FOCUS_TOGGLE: {
@@ -318,7 +319,7 @@ export function reduce(state: ShellState, action: Action): Step {
       const to = from === RevealFocus.TRANSCRIPT ? RevealFocus.STREAM : RevealFocus.TRANSCRIPT;
       return {
         state: { ...state, panes: { ...state.panes, [action.paneId]: { ...pane, revealFocus: to } } },
-        emissions: [{ kind: "REVEAL_FOCUS_MOVED", payload: { pane_id: action.paneId, from, to } }],
+        emissions: [{ kind: Tag.REVEAL_FOCUS_MOVED, payload: { pane_id: action.paneId, from, to } }],
       };
     }
     case ActionType.DELEGATE_EXPAND_START: {
@@ -336,7 +337,7 @@ export function reduce(state: ShellState, action: Action): Step {
             },
           },
         },
-        emissions: [{ kind: "DELEGATE_INLINE_EXPANDED", payload: {
+        emissions: [{ kind: Tag.DELEGATE_INLINE_EXPANDED, payload: {
           pane_id: action.paneId, tool_call_id: action.toolCallId,
         }}],
       };
@@ -370,7 +371,7 @@ export function reduce(state: ShellState, action: Action): Step {
       delete next[action.toolCallId];
       return {
         state: { ...state, panes: { ...state.panes, [action.paneId]: { ...pane, delegateExpansions: next } } },
-        emissions: [{ kind: "DELEGATE_INLINE_COLLAPSED", payload: {
+        emissions: [{ kind: Tag.DELEGATE_INLINE_COLLAPSED, payload: {
           pane_id: action.paneId, tool_call_id: action.toolCallId,
         }}],
       };
@@ -390,7 +391,7 @@ export function reduce(state: ShellState, action: Action): Step {
           state: { ...state, panes: { ...state.panes, [action.paneId]: {
             ...pane, refusedToolCallIds: refused,
           } } },
-          emissions: [{ kind: "DELEGATE_DEPTH_CAP_REFUSED", payload: {
+          emissions: [{ kind: Tag.DELEGATE_DEPTH_CAP_REFUSED, payload: {
             pane_id: action.paneId, tool_call_id: action.toolCallId, depth: DESCENT_MAX_DEPTH,
           }}],
         };
@@ -401,7 +402,7 @@ export function reduce(state: ShellState, action: Action): Step {
       ];
       return {
         state: { ...state, panes: { ...state.panes, [action.paneId]: { ...pane, descentStack: nextStack } } },
-        emissions: [{ kind: "DESCENT_ENTERED", payload: {
+        emissions: [{ kind: Tag.DESCENT_ENTERED, payload: {
           pane_id: action.paneId,
           child_record_root: action.childRecordRoot,
           depth: nextStack.length,
@@ -427,7 +428,7 @@ export function reduce(state: ShellState, action: Action): Step {
       const nextStack = pane.descentStack.slice(0, -1);
       return {
         state: { ...state, panes: { ...state.panes, [action.paneId]: { ...pane, descentStack: nextStack } } },
-        emissions: [{ kind: "DESCENT_EXITED", payload: {
+        emissions: [{ kind: Tag.DESCENT_EXITED, payload: {
           pane_id: action.paneId, to_depth: nextStack.length,
         }}],
       };
@@ -442,7 +443,7 @@ export function reduce(state: ShellState, action: Action): Step {
           fanoutExpansions: { ...pane.fanoutExpansions,
             [action.leaderToolCallId]: { walkedIndex: 0 } },
         } } },
-        emissions: [{ kind: "FAN_OUT_INLINE_EXPANDED", payload: {
+        emissions: [{ kind: Tag.FAN_OUT_INLINE_EXPANDED, payload: {
           pane_id: action.paneId, tool_call_id: action.leaderToolCallId,
         }}],
       };
@@ -460,7 +461,7 @@ export function reduce(state: ShellState, action: Action): Step {
           fanoutExpansions: { ...pane.fanoutExpansions,
             [action.leaderToolCallId]: { walkedIndex: clamped } },
         } } },
-        emissions: [{ kind: "FAN_OUT_INLINE_WALKED", payload: {
+        emissions: [{ kind: Tag.FAN_OUT_INLINE_WALKED, payload: {
           pane_id: action.paneId, tool_call_id: action.leaderToolCallId,
           from_index: cur.walkedIndex, to_index: clamped,
         }}],
@@ -474,7 +475,7 @@ export function reduce(state: ShellState, action: Action): Step {
       delete next[action.leaderToolCallId];
       return {
         state: { ...state, panes: { ...state.panes, [action.paneId]: { ...pane, fanoutExpansions: next } } },
-        emissions: [{ kind: "FAN_OUT_INLINE_COLLAPSED", payload: {
+        emissions: [{ kind: Tag.FAN_OUT_INLINE_COLLAPSED, payload: {
           pane_id: action.paneId, tool_call_id: action.leaderToolCallId,
         }}],
       };
@@ -486,6 +487,9 @@ export function reduce(state: ShellState, action: Action): Step {
       if (newRows.length === 0) return { state, emissions: [] };
       const emissions: Emission[] = [];
       let maxSeq = pane.transcriptLastSeq;
+      // Sprint 023-fix — refused-set accumulator for envelope-driven
+      // depth-cap refusals surfaced through a delegate ToolResult.
+      const newRefused = new Set<string>();
       // Sprint 023 — fan-out detection over the whole loaded set.
       // Emits TRANSCRIPT_FANOUT_LINE_RENDERED once per group of >= 2
       // adjacent delegate ToolCalls; the individual delegate emits
@@ -497,23 +501,23 @@ export function reduce(state: ShellState, action: Action): Step {
         if (r.kind === PARK) {
           const parkReason: ParkReason = isParkReason(r.park_reason)
             ? r.park_reason : ParkReason.FINAL_ANSWER;
-          emissions.push({ kind: "TRANSCRIPT_PARK_RENDERED", payload: {
+          emissions.push({ kind: Tag.TRANSCRIPT_PARK_RENDERED, payload: {
             pane_id: action.paneId, envelope_seq: r.seq, park_reason: parkReason,
           }});
         } else if (r.kind === SESSION_ENDED) {
-          emissions.push({ kind: "TRANSCRIPT_SESSION_ENDED_RENDERED", payload: {
+          emissions.push({ kind: Tag.TRANSCRIPT_SESSION_ENDED_RENDERED, payload: {
             pane_id: action.paneId, envelope_seq: r.seq,
             end_reason: r.end_reason || SessionEndReason.USER_END,
           }});
         } else if (r.kind === TRANSCRIPT_COMPACTED) {
-          emissions.push({ kind: "TRANSCRIPT_COMPACTED_RENDERED", payload: {
+          emissions.push({ kind: Tag.TRANSCRIPT_COMPACTED_RENDERED, payload: {
             pane_id: action.paneId, envelope_seq: r.seq,
             tokens_before: r.tokens_before ?? 0,
             tokens_after: r.tokens_after ?? 0,
             strategy: r.compact_strategy ?? "unknown",
           }});
         } else if (r.kind === RATE_LIMITED_WAITING) {
-          emissions.push({ kind: "TRANSCRIPT_RATE_LIMITED_RENDERED", payload: {
+          emissions.push({ kind: Tag.TRANSCRIPT_RATE_LIMITED_RENDERED, payload: {
             pane_id: action.paneId, envelope_seq: r.seq,
             retry_index: r.retry_index ?? 0,
             retry_max: r.retry_max ?? 0,
@@ -526,25 +530,40 @@ export function reduce(state: ShellState, action: Action): Step {
           // Same-step pair per Layer 4: DELEGATE_CALL_RENDERED fires
           // with the semantic payload; TRANSCRIPT_DELEGATE_LINE_RENDERED
           // fires with the envelope anchor.
-          emissions.push({ kind: "DELEGATE_CALL_RENDERED", payload: {
+          emissions.push({ kind: Tag.DELEGATE_CALL_RENDERED, payload: {
             pane_id: action.paneId, tool_call_id: r.tool_call_id, depth: 1,
           }});
-          emissions.push({ kind: "TRANSCRIPT_DELEGATE_LINE_RENDERED", payload: {
+          emissions.push({ kind: Tag.TRANSCRIPT_DELEGATE_LINE_RENDERED, payload: {
             pane_id: action.paneId, envelope_seq: r.seq, tool_call_id: r.tool_call_id,
           }});
-        } else if (r.kind === TOOL_RESULT && r.tool_name === TOOL_NAME_DELEGATE && r.tool_call_id && r.child_record_root) {
-          // Sprint 021 — automatic fold. Layer 5 terminal for the
-          // delegate_flow: the parent's turn resumes past the delegate
-          // when its ToolResult arrives, so the whole flow ends here.
-          // Distinct from an INLINE_COLLAPSED emitted by a manual fold
-          // click (which does not terminate the flow — the flow was
-          // already folded automatically when the ToolResult landed).
-          emissions.push({ kind: "DELEGATE_CALL_FOLDED", payload: {
-            pane_id: action.paneId, tool_call_id: r.tool_call_id,
-            child_record_root: r.child_record_root,
-          }});
+        } else if (r.kind === TOOL_RESULT && r.tool_name === TOOL_NAME_DELEGATE && r.tool_call_id) {
+          // Sprint 021 + Sprint 023-fix — Layer 5 terminals on delegate
+          // ToolResult arrival. Layer 5 says "fold on ToolResult
+          // arrival ends the flow" — every delegate ToolResult fires a
+          // terminal, no exceptions. Which terminal depends on the
+          // ok/error payload:
+          //   ok=false && error contains DELEGATE_ERROR_MAX_DEPTH →
+          //     DELEGATE_DEPTH_CAP_REFUSED (substrate raised the cap).
+          //   any other case → DELEGATE_CALL_FOLDED.
+          // A missing child_record_root serialises as empty string so
+          // Layer 2's required-field check at the Emitter's mouth
+          // still passes (schema pins type: string, not min length).
+          const isDepthCap = r.tool_ok === false
+            && typeof r.tool_error === "string"
+            && r.tool_error.includes(DELEGATE_ERROR_MAX_DEPTH);
+          if (isDepthCap) {
+            emissions.push({ kind: Tag.DELEGATE_DEPTH_CAP_REFUSED, payload: {
+              pane_id: action.paneId, tool_call_id: r.tool_call_id, depth: DESCENT_MAX_DEPTH,
+            }});
+            newRefused.add(r.tool_call_id);
+          } else {
+            emissions.push({ kind: Tag.DELEGATE_CALL_FOLDED, payload: {
+              pane_id: action.paneId, tool_call_id: r.tool_call_id,
+              child_record_root: r.child_record_root ?? "",
+            }});
+          }
         } else {
-          emissions.push({ kind: "TRANSCRIPT_ROW_RENDERED", payload: {
+          emissions.push({ kind: Tag.TRANSCRIPT_ROW_RENDERED, payload: {
             pane_id: action.paneId, envelope_seq: r.seq,
             envelope_kind: r.kind, envelope_producer_kind: r.producer_kind,
           }});
@@ -553,13 +572,16 @@ export function reduce(state: ShellState, action: Action): Step {
       }
       // Same-step fan-out line — one per group leader.
       for (const g of fanoutGroups) {
-        emissions.push({ kind: "TRANSCRIPT_FANOUT_LINE_RENDERED", payload: {
+        emissions.push({ kind: Tag.TRANSCRIPT_FANOUT_LINE_RENDERED, payload: {
           pane_id: action.paneId,
           envelope_seq: g.leaderSeq,
           tool_call_id: g.leaderToolCallId,
           children_count: g.siblingToolCallIds.length,
         }});
       }
+      const nextRefused = newRefused.size === 0
+        ? pane.refusedToolCallIds
+        : new Set([...pane.refusedToolCallIds, ...newRefused]);
       return {
         state: {
           ...state,
@@ -569,6 +591,7 @@ export function reduce(state: ShellState, action: Action): Step {
               ...pane,
               transcriptRows: [...pane.transcriptRows, ...newRows],
               transcriptLastSeq: maxSeq,
+              refusedToolCallIds: nextRefused,
             },
           },
         },
@@ -581,7 +604,7 @@ export function reduce(state: ShellState, action: Action): Step {
       // Restore parked status; the turn didn't take.
       return {
         state: { ...state, panes: { ...state.panes, [action.paneId]: { ...pane, status: PaneStatus.PARKED } } },
-        emissions: [{ kind: "TURN_SUBMIT_FAILED", payload: {
+        emissions: [{ kind: Tag.TURN_SUBMIT_FAILED, payload: {
           request_id: action.requestId, session_id: action.sessionId, reason: action.reason,
         }}],
       };
@@ -594,7 +617,7 @@ function doEndStart(state: ShellState, a: Extract<Action, { type: typeof ActionT
   if (!pane || !pane.boundSessionId) return { state, emissions: [] };
   return {
     state: { ...state, panes: { ...state.panes, [a.paneId]: { ...pane, creating: a.requestId } } },
-    emissions: [{ kind: "SESSION_END_REQUESTED", payload: {
+    emissions: [{ kind: Tag.SESSION_END_REQUESTED, payload: {
       request_id: a.requestId, session_id: a.sessionId, source: a.source,
     }}],
   };
@@ -613,11 +636,11 @@ function doEndOk(state: ShellState, a: Extract<Action, { type: typeof ActionType
   return {
     state: { ...state, panes: { ...state.panes, [a.paneId]: nextPane } },
     emissions: [
-      { kind: "SESSION_ENDED_ACK", payload: {
+      { kind: Tag.SESSION_ENDED_ACK, payload: {
         request_id: a.requestId, session_id: a.sessionId,
         end_reason: a.endReason, record_finalised: a.recordFinalised,
       }},
-      { kind: "TRANSCRIPT_SESSION_ENDED_RENDERED", payload: {
+      { kind: Tag.TRANSCRIPT_SESSION_ENDED_RENDERED, payload: {
         pane_id: a.paneId, envelope_seq: a.envelopeSeq, end_reason: a.endReason,
       }},
     ],
@@ -654,16 +677,16 @@ function doResumeOk(state: ShellState, a: Extract<Action, { type: typeof ActionT
   return {
     state: { ...state, panes: { ...state.panes, [a.paneId]: nextPane } },
     emissions: [
-      { kind: "WORKSPACE_BOUND", payload: {
+      { kind: Tag.WORKSPACE_BOUND, payload: {
         request_id: a.requestId, session_id: a.sessionId,
         workspace_path: a.workspacePath, shape: a.workspaceShape,
       }},
-      { kind: "PANE_UNBOUND_BOUND", payload: {
+      { kind: Tag.PANE_UNBOUND_BOUND, payload: {
         pane_id: a.paneId, session_id: a.sessionId,
         workspace_path: a.workspacePath, shape: a.workspaceShape,
       }},
       ...(a.lastTurnIndex < 0
-        ? [{ kind: "TRANSCRIPT_AWAITING_FIRST_MESSAGE_RENDERED", payload: {
+        ? [{ kind: Tag.TRANSCRIPT_AWAITING_FIRST_MESSAGE_RENDERED, payload: {
             pane_id: a.paneId, session_id: a.sessionId,
           }}]
         : []),
@@ -699,7 +722,7 @@ function doSessionCreateStart(state: ShellState, a: Extract<Action, { type: type
   const nextPane: Pane = { ...pane, creating: a.requestId };
   return {
     state: { ...state, panes: { ...state.panes, [a.paneId]: nextPane } },
-    emissions: [{ kind: "SESSION_CREATE_REQUESTED", payload: {
+    emissions: [{ kind: Tag.SESSION_CREATE_REQUESTED, payload: {
       request_id: a.requestId,
       pane_id: a.paneId,
       session_id: a.sessionId,
@@ -728,20 +751,20 @@ function doSessionCreateOk(state: ShellState, a: Extract<Action, { type: typeof 
   return {
     state: { ...state, panes: { ...state.panes, [a.paneId]: nextPane } },
     emissions: [
-      { kind: "SESSION_CREATED", payload: {
+      { kind: Tag.SESSION_CREATED, payload: {
         request_id: a.requestId, session_id: a.sessionId, name: a.sessionName,
         driver: a.driver, workspace: a.workspacePath, workspace_shape: a.workspaceShape,
         status: PaneStatus.RUNNING,
       }},
-      { kind: "WORKSPACE_BOUND", payload: {
+      { kind: Tag.WORKSPACE_BOUND, payload: {
         request_id: a.requestId, session_id: a.sessionId,
         workspace_path: a.workspacePath, shape: a.workspaceShape,
       }},
-      { kind: "PANE_UNBOUND_BOUND", payload: {
+      { kind: Tag.PANE_UNBOUND_BOUND, payload: {
         pane_id: a.paneId, session_id: a.sessionId,
         workspace_path: a.workspacePath, shape: a.workspaceShape,
       }},
-      { kind: "TRANSCRIPT_AWAITING_FIRST_MESSAGE_RENDERED", payload: {
+      { kind: Tag.TRANSCRIPT_AWAITING_FIRST_MESSAGE_RENDERED, payload: {
         pane_id: a.paneId, session_id: a.sessionId,
       }},
     ],
@@ -754,7 +777,7 @@ function doSessionCreateErr(state: ShellState, a: Extract<Action, { type: typeof
   const nextPane: Pane = { ...pane, creating: null };
   return {
     state: { ...state, panes: { ...state.panes, [a.paneId]: nextPane } },
-    emissions: [{ kind: "SESSION_CREATE_FAILED", payload: {
+    emissions: [{ kind: Tag.SESSION_CREATE_FAILED, payload: {
       request_id: a.requestId, reason: a.reason,
     }}],
   };
@@ -780,7 +803,7 @@ function doPickerWalk(state: ShellState, paneId: string, index: number, path: st
         [paneId]: { ...pane, pickerIndex: index, pickerText: path, pickerSelection: { path, shape } },
       },
     },
-    emissions: [{ kind: "WORKSPACE_PICKER_WALKED", payload: {
+    emissions: [{ kind: Tag.WORKSPACE_PICKER_WALKED, payload: {
       pane_id: paneId, from_index: pane.pickerIndex, to_index: index,
     }}],
   };
@@ -807,12 +830,12 @@ function doClose(state: ShellState, paneId: string, reason: CloseReasonT): Step 
   const windowId = pane.windowId;
   const result = closePane(state, paneId);
   if (!result) return { state, emissions: [] };
-  const emissions: Emission[] = [{ kind: "PANE_CLOSED", payload: { pane_id: paneId } }];
+  const emissions: Emission[] = [{ kind: Tag.PANE_CLOSED, payload: { pane_id: paneId } }];
   void reason;
   if (result.windowClosed) {
-    emissions.push({ kind: "WINDOW_CLOSED", payload: { window_id: windowId }});
+    emissions.push({ kind: Tag.WINDOW_CLOSED, payload: { window_id: windowId }});
   } else if (result.walkedFocusPaneId && result.walkedFocusPaneId !== state.focusedPaneId) {
-    emissions.push({ kind: "PANE_FOCUSED", payload: {
+    emissions.push({ kind: Tag.PANE_FOCUSED, payload: {
       pane_id: result.walkedFocusPaneId,
       prior_pane_id: state.focusedPaneId,
     }});
@@ -862,11 +885,11 @@ function boot(): Step {
   return {
     state: next,
     emissions: [
-      { kind: "WINDOW_OPENED", payload: { window_id: windowId } },
-      { kind: "PANE_CREATED", payload: {
+      { kind: Tag.WINDOW_OPENED, payload: { window_id: windowId } },
+      { kind: Tag.PANE_CREATED, payload: {
         pane_id: paneId, window_id: windowId, session_id: null, from_split: null,
       }},
-      { kind: "PANE_FOCUSED", payload: { pane_id: paneId, prior_pane_id: null } },
+      { kind: Tag.PANE_FOCUSED, payload: { pane_id: paneId, prior_pane_id: null } },
     ],
   };
 }
@@ -890,14 +913,14 @@ function doSplit(state: ShellState, paneId: string, axis: Axis): Step {
   return {
     state: nextState,
     emissions: [
-      { kind: "PANE_SPLIT", payload: {
+      { kind: Tag.PANE_SPLIT, payload: {
         from_pane_id: result.parentPaneId, new_pane_id: result.newPaneId, axis,
       }},
-      { kind: "PANE_CREATED", payload: {
+      { kind: Tag.PANE_CREATED, payload: {
         pane_id: result.newPaneId, window_id: pane.windowId,
         session_id: null, from_split: result.newSplitId,
       }},
-      { kind: "PANE_FOCUSED", payload: {
+      { kind: Tag.PANE_FOCUSED, payload: {
         pane_id: result.newPaneId, prior_pane_id: priorPaneId,
       }},
     ],
@@ -913,7 +936,7 @@ function doFocus(state: ShellState, paneId: string): Step {
   panes[paneId] = { ...panes[paneId], focused: true };
   return {
     state: { ...state, panes, focusedPaneId: paneId },
-    emissions: [{ kind: "PANE_FOCUSED", payload: { pane_id: paneId, prior_pane_id: prior } }],
+    emissions: [{ kind: Tag.PANE_FOCUSED, payload: { pane_id: paneId, prior_pane_id: prior } }],
   };
 }
 
@@ -926,7 +949,7 @@ function doGutterStart(state: ShellState, splitId: string): Step {
   if (!split) return { state, emissions: [] };
   return {
     state,
-    emissions: [{ kind: "GUTTER_DRAG_STARTED", payload: {
+    emissions: [{ kind: Tag.GUTTER_DRAG_STARTED, payload: {
       kind: split.axis, gutter_index: gutterIndex(splitId),
     }}],
   };
@@ -935,7 +958,7 @@ function doGutterStart(state: ShellState, splitId: string): Step {
 function doDropShow(state: ShellState, sourceId: string, targetId: string, zone: Zone): Step {
   return {
     state,
-    emissions: [{ kind: "DROP_HINT_SHOWN", payload: {
+    emissions: [{ kind: Tag.DROP_HINT_SHOWN, payload: {
       source_pane_id: sourceId, target_pane_id: targetId, zone,
     }}],
   };
@@ -944,7 +967,7 @@ function doDropShow(state: ShellState, sourceId: string, targetId: string, zone:
 function doDropZone(state: ShellState, sourceId: string, targetId: string, fromZone: Zone, toZone: Zone): Step {
   return {
     state,
-    emissions: [{ kind: "DROP_HINT_ZONE_CHANGED", payload: {
+    emissions: [{ kind: Tag.DROP_HINT_ZONE_CHANGED, payload: {
       source_pane_id: sourceId, target_pane_id: targetId, from_zone: fromZone, to_zone: toZone,
     }}],
   };
@@ -954,7 +977,7 @@ function doDropHide(state: ShellState, sourceId: string, targetId: string | null
   if (!targetId) return { state, emissions: [] };
   return {
     state,
-    emissions: [{ kind: "DROP_HINT_HIDDEN", payload: {
+    emissions: [{ kind: Tag.DROP_HINT_HIDDEN, payload: {
       source_pane_id: sourceId, target_pane_id: targetId,
     }}],
   };
@@ -965,7 +988,7 @@ function doMove(state: ShellState, sourceId: string, targetId: string, zone: Zon
   if (!next) return { state, emissions: [] };
   return {
     state: next,
-    emissions: [{ kind: "PANE_MOVED", payload: {
+    emissions: [{ kind: Tag.PANE_MOVED, payload: {
       a_pane_id: sourceId, b_pane_id: targetId, zone,
     }}],
   };
@@ -979,7 +1002,7 @@ function doGutterStop(state: ShellState, splitId: string, ratio: number): Step {
   const finalRatio = nextState.splits[splitId].ratio;
   return {
     state: nextState,
-    emissions: [{ kind: "GUTTER_DRAG_STOPPED", payload: {
+    emissions: [{ kind: Tag.GUTTER_DRAG_STOPPED, payload: {
       kind: split.axis, gutter_index: gutterIndex(splitId), delta: finalRatio - startRatio,
     }}],
   };

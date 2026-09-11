@@ -12,6 +12,7 @@
 
 import signalsV01 from "@/../signals/0.1.json";
 import bridgeReasons from "@/../signals/bridge-reasons.json";
+import { Tag } from "./tags";
 
 interface Schema { properties?: Record<string, { enum?: string[] }>; }
 interface SignalsV01 {
@@ -26,7 +27,7 @@ function enumOf(schema: string, field: string): readonly string[] {
 
 // --- Substrate-owned enums (read from Layer 2's ratified enums) ---------
 
-export const PARK_REASONS = enumOf("TRANSCRIPT_PARK_RENDERED", "park_reason") as
+export const PARK_REASONS = enumOf(Tag.TRANSCRIPT_PARK_RENDERED, "park_reason") as
   readonly ["final_answer", "model_error", "interrupt"];
 export type ParkReason = typeof PARK_REASONS[number];
 export const ParkReason = {
@@ -38,7 +39,7 @@ export function isParkReason(x: unknown): x is ParkReason {
   return typeof x === "string" && (PARK_REASONS as readonly string[]).includes(x);
 }
 
-export const END_REASONS = enumOf("TRANSCRIPT_SESSION_ENDED_RENDERED", "end_reason") as
+export const END_REASONS = enumOf(Tag.TRANSCRIPT_SESSION_ENDED_RENDERED, "end_reason") as
   readonly ["user_exit", "user_end", "timeout", "daemon_shutdown"];
 export type SessionEndReason = typeof END_REASONS[number];
 export const SessionEndReason = {
@@ -48,7 +49,7 @@ export const SessionEndReason = {
   DAEMON_SHUTDOWN: "daemon_shutdown",
 } as const satisfies Record<string, SessionEndReason>;
 
-export const TURN_SUBMIT_FAILED_REASONS = enumOf("TURN_SUBMIT_FAILED", "reason") as
+export const TURN_SUBMIT_FAILED_REASONS = enumOf(Tag.TURN_SUBMIT_FAILED, "reason") as
   readonly ["queue_full", "session_ended", "fresh_session_requires_user_message", "torn_record_on_resume", "timeout"];
 export type TurnSubmitFailedReason = typeof TURN_SUBMIT_FAILED_REASONS[number];
 
@@ -88,7 +89,7 @@ export const RevealState = {
 // Sprint 018 — lens level + direction. Both are two-state; the enum
 // values come from Layer 2's ratified `to` enums on STREAM_LEVEL_TOGGLED
 // and STREAM_DIR_TOGGLED, not hand-copied.
-export const STREAM_LEVELS = enumOf("STREAM_LEVEL_TOGGLED", "to") as
+export const STREAM_LEVELS = enumOf(Tag.STREAM_LEVEL_TOGGLED, "to") as
   readonly ["all", "app"];
 export type StreamLevel = typeof STREAM_LEVELS[number];
 export const StreamLevel = {
@@ -98,7 +99,7 @@ export function isStreamLevel(x: unknown): x is StreamLevel {
   return typeof x === "string" && (STREAM_LEVELS as readonly string[]).includes(x);
 }
 
-export const STREAM_DIRS = enumOf("STREAM_DIR_TOGGLED", "to") as
+export const STREAM_DIRS = enumOf(Tag.STREAM_DIR_TOGGLED, "to") as
   readonly ["down", "side"];
 export type StreamDir = typeof STREAM_DIRS[number];
 export const StreamDir = {
@@ -112,7 +113,7 @@ export function isStreamDir(x: unknown): x is StreamDir {
 // between transcript-side and stream-side. Find (Epic H) scopes by
 // this focus. Enum from Layer 2's ratified `to` enum on
 // REVEAL_FOCUS_MOVED, not hand-copied.
-export const REVEAL_FOCI = enumOf("REVEAL_FOCUS_MOVED", "to") as
+export const REVEAL_FOCI = enumOf(Tag.REVEAL_FOCUS_MOVED, "to") as
   readonly ["transcript", "stream"];
 export type RevealFocus = typeof REVEAL_FOCI[number];
 export const RevealFocus = {

@@ -45,5 +45,11 @@
   "tool_names": {
     "note": "Tool names substrate's tool_loop suite exports. Mirrored from substrate.topologies.tool_loop.tools TOOL_NAME_* constants for the TypeScript side; the Python bridge imports them directly (see bridge/vocab.py).",
     "delegate": "delegate"
+  },
+
+  "delegate_error_prefixes": {
+    "note": "Error-text substrings substrate.topologies.tool_loop.delegate.py raises for named terminal cases. Mirrored here so the reducer picks the correct Layer 5 terminal on a ToolResult(ok=false); the harness greps delegate.py at run time to fail loudly on substrate rename.",
+    "max_depth": "max delegation depth",
+    "max_depth_cite": "substrate/src/substrate/topologies/tool_loop/delegate.py:437-438"
   }
 }
