@@ -5,48 +5,109 @@
 
 import { emptyShellState, ShellState, Pane, Window, TranscriptRow, Lens, WorkspaceShape, PaneStatus } from "@/state/ShellState";
 import { SessionEndReason, ParkReason, isParkReason, SECRET_KEY_PATTERN, isPaneStatus, StreamLevel, StreamDir, RevealFocus } from "@/observability/reasons";
-import { TOOL_CALL, TOOL_NAME_DELEGATE } from "@/observability/envelope-kinds";
+import { TOOL_CALL, TOOL_RESULT, TOOL_NAME_DELEGATE } from "@/observability/envelope-kinds";
 import { newId } from "@/state/ids";
 import { splitPane, resizeSplit, atCap, movePane, closePane, Zone, Axis } from "@/state/SplitTree";
 import { RevealState } from "@/observability/reasons";
 
+// The reducer's action-type discriminant. Every action's `type` field
+// pulls its string from this const object. Value+type enum pattern:
+// callers dispatch via ActionType.X, case labels are ActionType.X, and
+// the TS discriminated union keeps its exhaustiveness check. No raw
+// action-type literals live anywhere in the codebase.
+export const ActionType = {
+  BOOT: "BOOT",
+  SPLIT_PANE: "SPLIT_PANE",
+  FOCUS_PANE: "FOCUS_PANE",
+  GUTTER_DRAG_START: "GUTTER_DRAG_START",
+  GUTTER_DRAG_STOP: "GUTTER_DRAG_STOP",
+  DROP_HINT_SHOW: "DROP_HINT_SHOW",
+  DROP_HINT_ZONE: "DROP_HINT_ZONE",
+  DROP_HINT_HIDE: "DROP_HINT_HIDE",
+  MOVE_PANE: "MOVE_PANE",
+  CLOSE_PANE: "CLOSE_PANE",
+  PICKER_TEXT: "PICKER_TEXT",
+  PICKER_WALK: "PICKER_WALK",
+  PICKER_COMMIT: "PICKER_COMMIT",
+  SESSION_CREATE_START: "SESSION_CREATE_START",
+  SESSION_CREATE_OK: "SESSION_CREATE_OK",
+  SESSION_CREATE_ERR: "SESSION_CREATE_ERR",
+  PROBE_DRIVER_START: "PROBE_DRIVER_START",
+  PROBE_DRIVER_OK: "PROBE_DRIVER_OK",
+  PROBE_DRIVER_ERR: "PROBE_DRIVER_ERR",
+  SESSION_RESUME_START: "SESSION_RESUME_START",
+  SESSION_RESUME_OK: "SESSION_RESUME_OK",
+  SESSION_RESUME_ERR: "SESSION_RESUME_ERR",
+  SESSION_END_START: "SESSION_END_START",
+  SESSION_END_OK: "SESSION_END_OK",
+  SESSION_END_ERR: "SESSION_END_ERR",
+  PROMPT_TEXT: "PROMPT_TEXT",
+  PROMPT_LENGTH_CHANGED: "PROMPT_LENGTH_CHANGED",
+  TURN_SUBMIT_START: "TURN_SUBMIT_START",
+  TURN_SUBMIT_OK: "TURN_SUBMIT_OK",
+  TURN_SUBMIT_ERR: "TURN_SUBMIT_ERR",
+  TRANSCRIPT_ROWS_LOADED: "TRANSCRIPT_ROWS_LOADED",
+  REVEAL_TOGGLE: "REVEAL_TOGGLE",
+  LENS_SWITCH: "LENS_SWITCH",
+  STREAM_LEVEL_TOGGLE: "STREAM_LEVEL_TOGGLE",
+  STREAM_DIR_TOGGLE: "STREAM_DIR_TOGGLE",
+  REVEAL_FOCUS_TOGGLE: "REVEAL_FOCUS_TOGGLE",
+  DELEGATE_EXPAND_START: "DELEGATE_EXPAND_START",
+  DELEGATE_EXPAND_ROWS_LOADED: "DELEGATE_EXPAND_ROWS_LOADED",
+  DELEGATE_COLLAPSE: "DELEGATE_COLLAPSE",
+} as const;
+export type ActionTypeT = typeof ActionType[keyof typeof ActionType];
+
+// The CloseReason literal is scoped small enough to inline in
+// CLOSE_PANE's `reason?` field, but the value itself lives here so
+// the reducer never compares against a raw string.
+export const CloseReason = { USER: "user" } as const;
+export type CloseReasonT = typeof CloseReason[keyof typeof CloseReason];
+
+// Session-end initiators.
+export const EndSource = { MENU: "menu", SLASH: "slash", SHORTCUT: "shortcut" } as const;
+export type EndSourceT = typeof EndSource[keyof typeof EndSource];
+
 export type Action =
-  | { type: "BOOT" }
-  | { type: "SPLIT_PANE"; paneId: string; axis: Axis }
-  | { type: "FOCUS_PANE"; paneId: string }
-  | { type: "GUTTER_DRAG_START"; splitId: string }
-  | { type: "GUTTER_DRAG_STOP"; splitId: string; ratio: number }
-  | { type: "DROP_HINT_SHOW"; sourceId: string; targetId: string; zone: Zone }
-  | { type: "DROP_HINT_ZONE"; sourceId: string; targetId: string; fromZone: Zone; toZone: Zone }
-  | { type: "DROP_HINT_HIDE"; sourceId: string; targetId: string | null }
-  | { type: "MOVE_PANE"; sourceId: string; targetId: string; zone: Zone }
-  | { type: "CLOSE_PANE"; paneId: string; reason?: "user" }
-  | { type: "PICKER_TEXT"; paneId: string; text: string }
-  | { type: "PICKER_WALK"; paneId: string; index: number; path: string; shape: WorkspaceShape }
-  | { type: "PICKER_COMMIT"; paneId: string; path: string; shape: WorkspaceShape }
-  | { type: "SESSION_CREATE_START"; paneId: string; requestId: string; sessionId: string; sessionName: string; driver: string }
-  | { type: "SESSION_CREATE_OK"; paneId: string; requestId: string; sessionId: string; sessionName: string; driver: string; workspacePath: string; workspaceShape: WorkspaceShape }
-  | { type: "SESSION_CREATE_ERR"; paneId: string; requestId: string; reason: string }
-  | { type: "PROBE_DRIVER_START"; paneId: string; requestId: string; driverName: string; driverParams: Record<string, unknown> }
-  | { type: "PROBE_DRIVER_OK"; requestId: string; driverName: string; contextTokens: number | null; modelFamilies: string[] }
-  | { type: "PROBE_DRIVER_ERR"; requestId: string; driverName: string; reason: string }
-  | { type: "SESSION_RESUME_START"; paneId: string; requestId: string; sessionId: string }
-  | { type: "SESSION_RESUME_OK"; paneId: string; requestId: string; sessionId: string; sessionName: string | null; workspacePath: string; workspaceShape: WorkspaceShape; status: PaneStatus; lastTurnIndex: number }
-  | { type: "SESSION_RESUME_ERR"; paneId: string; requestId: string; reason: string }
-  | { type: "SESSION_END_START"; paneId: string; requestId: string; sessionId: string; source: "menu" | "slash" | "shortcut" }
-  | { type: "SESSION_END_OK"; paneId: string; requestId: string; sessionId: string; endReason: string; recordFinalised: boolean; envelopeSeq: number }
-  | { type: "SESSION_END_ERR"; paneId: string; requestId: string; reason: string }
-  | { type: "PROMPT_TEXT"; paneId: string; text: string }         // private — no emit
-  | { type: "PROMPT_LENGTH_CHANGED"; paneId: string; length: number } // debounced emit
-  | { type: "TURN_SUBMIT_START"; paneId: string; requestId: string; sessionId: string; textLength: number; timeoutSeconds: number }
-  | { type: "TURN_SUBMIT_OK"; paneId: string; requestId: string; sessionId: string; turnIndex: number }
-  | { type: "TURN_SUBMIT_ERR"; paneId: string; requestId: string; sessionId: string; reason: string }
-  | { type: "TRANSCRIPT_ROWS_LOADED"; paneId: string; rows: TranscriptRow[] }
-  | { type: "REVEAL_TOGGLE"; paneId: string }
-  | { type: "LENS_SWITCH"; paneId: string; to: Lens }
-  | { type: "STREAM_LEVEL_TOGGLE"; paneId: string }
-  | { type: "STREAM_DIR_TOGGLE"; paneId: string }
-  | { type: "REVEAL_FOCUS_TOGGLE"; paneId: string }
+  | { type: typeof ActionType.BOOT }
+  | { type: typeof ActionType.SPLIT_PANE; paneId: string; axis: Axis }
+  | { type: typeof ActionType.FOCUS_PANE; paneId: string }
+  | { type: typeof ActionType.GUTTER_DRAG_START; splitId: string }
+  | { type: typeof ActionType.GUTTER_DRAG_STOP; splitId: string; ratio: number }
+  | { type: typeof ActionType.DROP_HINT_SHOW; sourceId: string; targetId: string; zone: Zone }
+  | { type: typeof ActionType.DROP_HINT_ZONE; sourceId: string; targetId: string; fromZone: Zone; toZone: Zone }
+  | { type: typeof ActionType.DROP_HINT_HIDE; sourceId: string; targetId: string | null }
+  | { type: typeof ActionType.MOVE_PANE; sourceId: string; targetId: string; zone: Zone }
+  | { type: typeof ActionType.CLOSE_PANE; paneId: string; reason?: CloseReasonT }
+  | { type: typeof ActionType.PICKER_TEXT; paneId: string; text: string }
+  | { type: typeof ActionType.PICKER_WALK; paneId: string; index: number; path: string; shape: WorkspaceShape }
+  | { type: typeof ActionType.PICKER_COMMIT; paneId: string; path: string; shape: WorkspaceShape }
+  | { type: typeof ActionType.SESSION_CREATE_START; paneId: string; requestId: string; sessionId: string; sessionName: string; driver: string }
+  | { type: typeof ActionType.SESSION_CREATE_OK; paneId: string; requestId: string; sessionId: string; sessionName: string; driver: string; workspacePath: string; workspaceShape: WorkspaceShape }
+  | { type: typeof ActionType.SESSION_CREATE_ERR; paneId: string; requestId: string; reason: string }
+  | { type: typeof ActionType.PROBE_DRIVER_START; paneId: string; requestId: string; driverName: string; driverParams: Record<string, unknown> }
+  | { type: typeof ActionType.PROBE_DRIVER_OK; requestId: string; driverName: string; contextTokens: number | null; modelFamilies: string[] }
+  | { type: typeof ActionType.PROBE_DRIVER_ERR; requestId: string; driverName: string; reason: string }
+  | { type: typeof ActionType.SESSION_RESUME_START; paneId: string; requestId: string; sessionId: string }
+  | { type: typeof ActionType.SESSION_RESUME_OK; paneId: string; requestId: string; sessionId: string; sessionName: string | null; workspacePath: string; workspaceShape: WorkspaceShape; status: PaneStatus; lastTurnIndex: number }
+  | { type: typeof ActionType.SESSION_RESUME_ERR; paneId: string; requestId: string; reason: string }
+  | { type: typeof ActionType.SESSION_END_START; paneId: string; requestId: string; sessionId: string; source: EndSourceT }
+  | { type: typeof ActionType.SESSION_END_OK; paneId: string; requestId: string; sessionId: string; endReason: string; recordFinalised: boolean; envelopeSeq: number }
+  | { type: typeof ActionType.SESSION_END_ERR; paneId: string; requestId: string; reason: string }
+  | { type: typeof ActionType.PROMPT_TEXT; paneId: string; text: string }
+  | { type: typeof ActionType.PROMPT_LENGTH_CHANGED; paneId: string; length: number }
+  | { type: typeof ActionType.TURN_SUBMIT_START; paneId: string; requestId: string; sessionId: string; textLength: number; timeoutSeconds: number }
+  | { type: typeof ActionType.TURN_SUBMIT_OK; paneId: string; requestId: string; sessionId: string; turnIndex: number }
+  | { type: typeof ActionType.TURN_SUBMIT_ERR; paneId: string; requestId: string; sessionId: string; reason: string }
+  | { type: typeof ActionType.TRANSCRIPT_ROWS_LOADED; paneId: string; rows: TranscriptRow[] }
+  | { type: typeof ActionType.REVEAL_TOGGLE; paneId: string }
+  | { type: typeof ActionType.LENS_SWITCH; paneId: string; to: Lens }
+  | { type: typeof ActionType.STREAM_LEVEL_TOGGLE; paneId: string }
+  | { type: typeof ActionType.STREAM_DIR_TOGGLE; paneId: string }
+  | { type: typeof ActionType.REVEAL_FOCUS_TOGGLE; paneId: string }
+  | { type: typeof ActionType.DELEGATE_EXPAND_START; paneId: string; toolCallId: string; childRecordRoot: string }
+  | { type: typeof ActionType.DELEGATE_EXPAND_ROWS_LOADED; paneId: string; toolCallId: string; rows: TranscriptRow[] }
+  | { type: typeof ActionType.DELEGATE_COLLAPSE; paneId: string; toolCallId: string; childRecordRoot: string }
   ;
 
 export interface Emission {
@@ -65,53 +126,53 @@ export function initial(): ShellState {
 
 export function reduce(state: ShellState, action: Action): Step {
   switch (action.type) {
-    case "BOOT":              return boot();
-    case "SPLIT_PANE":        return doSplit(state, action.paneId, action.axis);
-    case "FOCUS_PANE":        return doFocus(state, action.paneId);
-    case "GUTTER_DRAG_START": return doGutterStart(state, action.splitId);
-    case "GUTTER_DRAG_STOP":  return doGutterStop(state, action.splitId, action.ratio);
-    case "DROP_HINT_SHOW":    return doDropShow(state, action.sourceId, action.targetId, action.zone);
-    case "DROP_HINT_ZONE":    return doDropZone(state, action.sourceId, action.targetId, action.fromZone, action.toZone);
-    case "DROP_HINT_HIDE":    return doDropHide(state, action.sourceId, action.targetId);
-    case "MOVE_PANE":         return doMove(state, action.sourceId, action.targetId, action.zone);
-    case "CLOSE_PANE":        return doClose(state, action.paneId, action.reason ?? "user");
-    case "PICKER_TEXT":       return doPickerText(state, action.paneId, action.text);
-    case "PICKER_WALK":       return doPickerWalk(state, action.paneId, action.index, action.path, action.shape);
-    case "PICKER_COMMIT":     return doPickerCommit(state, action.paneId, action.path, action.shape);
-    case "SESSION_CREATE_START":
+    case ActionType.BOOT:              return boot();
+    case ActionType.SPLIT_PANE:        return doSplit(state, action.paneId, action.axis);
+    case ActionType.FOCUS_PANE:        return doFocus(state, action.paneId);
+    case ActionType.GUTTER_DRAG_START: return doGutterStart(state, action.splitId);
+    case ActionType.GUTTER_DRAG_STOP:  return doGutterStop(state, action.splitId, action.ratio);
+    case ActionType.DROP_HINT_SHOW:    return doDropShow(state, action.sourceId, action.targetId, action.zone);
+    case ActionType.DROP_HINT_ZONE:    return doDropZone(state, action.sourceId, action.targetId, action.fromZone, action.toZone);
+    case ActionType.DROP_HINT_HIDE:    return doDropHide(state, action.sourceId, action.targetId);
+    case ActionType.MOVE_PANE:         return doMove(state, action.sourceId, action.targetId, action.zone);
+    case ActionType.CLOSE_PANE:        return doClose(state, action.paneId, action.reason ?? CloseReason.USER);
+    case ActionType.PICKER_TEXT:       return doPickerText(state, action.paneId, action.text);
+    case ActionType.PICKER_WALK:       return doPickerWalk(state, action.paneId, action.index, action.path, action.shape);
+    case ActionType.PICKER_COMMIT:     return doPickerCommit(state, action.paneId, action.path, action.shape);
+    case ActionType.SESSION_CREATE_START:
       return doSessionCreateStart(state, action);
-    case "SESSION_CREATE_OK":
+    case ActionType.SESSION_CREATE_OK:
       return doSessionCreateOk(state, action);
-    case "SESSION_CREATE_ERR":
+    case ActionType.SESSION_CREATE_ERR:
       return doSessionCreateErr(state, action);
-    case "PROBE_DRIVER_START":
+    case ActionType.PROBE_DRIVER_START:
       // driver_params gets secret-stripped for logging separately from the wire payload,
       // which Layer 2 requires be exactly {request_id, driver}.
       void stripSecrets(action.driverParams);
       return { state, emissions: [{ kind: "PROBE_DRIVER_REQUESTED", payload: {
         request_id: action.requestId, driver: action.driverName,
       }}]};
-    case "PROBE_DRIVER_OK":
+    case ActionType.PROBE_DRIVER_OK:
       return { state, emissions: [{ kind: "PROBE_DRIVER_PROBED", payload: {
         request_id: action.requestId, driver: action.driverName, context_tokens: action.contextTokens,
       }}]};
-    case "PROBE_DRIVER_ERR":
+    case ActionType.PROBE_DRIVER_ERR:
       return { state, emissions: [{ kind: "PROBE_DRIVER_FAILED", payload: {
         request_id: action.requestId, driver: action.driverName, reason: action.reason,
       }}]};
-    case "SESSION_RESUME_START":
+    case ActionType.SESSION_RESUME_START:
       return doResumeStart(state, action);
-    case "SESSION_RESUME_OK":
+    case ActionType.SESSION_RESUME_OK:
       return doResumeOk(state, action);
-    case "SESSION_RESUME_ERR":
+    case ActionType.SESSION_RESUME_ERR:
       return doResumeErr(state, action);
-    case "SESSION_END_START":
+    case ActionType.SESSION_END_START:
       return doEndStart(state, action);
-    case "SESSION_END_OK":
+    case ActionType.SESSION_END_OK:
       return doEndOk(state, action);
-    case "SESSION_END_ERR":
+    case ActionType.SESSION_END_ERR:
       return doEndErr(state, action);
-    case "PROMPT_TEXT": {
+    case ActionType.PROMPT_TEXT: {
       const pane = state.panes[action.paneId];
       if (!pane) return { state, emissions: [] };
       return {
@@ -119,12 +180,12 @@ export function reduce(state: ShellState, action: Action): Step {
         emissions: [], // Private — draft never appears in the trace.
       };
     }
-    case "PROMPT_LENGTH_CHANGED":
+    case ActionType.PROMPT_LENGTH_CHANGED:
       return {
         state,
         emissions: [{ kind: "PROMPT_CHANGED", payload: { pane_id: action.paneId, length: action.length } }],
       };
-    case "TURN_SUBMIT_START": {
+    case ActionType.TURN_SUBMIT_START: {
       const pane = state.panes[action.paneId];
       if (!pane) return { state, emissions: [] };
       return {
@@ -141,7 +202,7 @@ export function reduce(state: ShellState, action: Action): Step {
         ],
       };
     }
-    case "TURN_SUBMIT_OK": {
+    case ActionType.TURN_SUBMIT_OK: {
       const pane = state.panes[action.paneId];
       if (!pane) return { state, emissions: [] };
       return {
@@ -151,7 +212,7 @@ export function reduce(state: ShellState, action: Action): Step {
         }}],
       };
     }
-    case "LENS_SWITCH": {
+    case ActionType.LENS_SWITCH: {
       const pane = state.panes[action.paneId];
       if (!pane) return { state, emissions: [] };
       if (pane.lens === action.to) return { state, emissions: [] };
@@ -161,17 +222,17 @@ export function reduce(state: ShellState, action: Action): Step {
         emissions: [{ kind: "LENS_SWITCHED", payload: { pane_id: action.paneId, from, to: action.to } }],
       };
     }
-    case "REVEAL_TOGGLE": {
+    case ActionType.REVEAL_TOGGLE: {
       const pane = state.panes[action.paneId];
       if (!pane) return { state, emissions: [] };
       const from = pane.reveal;
-      const to: "terminal" | "reveal" = from === "terminal" ? "reveal" : "terminal";
+      const to: RevealState = from === RevealState.TERMINAL ? RevealState.REVEAL : RevealState.TERMINAL;
       return {
         state: { ...state, panes: { ...state.panes, [action.paneId]: { ...pane, reveal: to } } },
         emissions: [{ kind: "REVEAL_TOGGLED", payload: { pane_id: action.paneId, from, to } }],
       };
     }
-    case "STREAM_LEVEL_TOGGLE": {
+    case ActionType.STREAM_LEVEL_TOGGLE: {
       const pane = state.panes[action.paneId];
       if (!pane) return { state, emissions: [] };
       const from = pane.streamLevel;
@@ -181,7 +242,7 @@ export function reduce(state: ShellState, action: Action): Step {
         emissions: [{ kind: "STREAM_LEVEL_TOGGLED", payload: { pane_id: action.paneId, from, to } }],
       };
     }
-    case "STREAM_DIR_TOGGLE": {
+    case ActionType.STREAM_DIR_TOGGLE: {
       const pane = state.panes[action.paneId];
       if (!pane) return { state, emissions: [] };
       const from = pane.streamDir;
@@ -191,7 +252,7 @@ export function reduce(state: ShellState, action: Action): Step {
         emissions: [{ kind: "STREAM_DIR_TOGGLED", payload: { pane_id: action.paneId, from, to } }],
       };
     }
-    case "REVEAL_FOCUS_TOGGLE": {
+    case ActionType.REVEAL_FOCUS_TOGGLE: {
       const pane = state.panes[action.paneId];
       if (!pane) return { state, emissions: [] };
       const from = pane.revealFocus;
@@ -201,7 +262,61 @@ export function reduce(state: ShellState, action: Action): Step {
         emissions: [{ kind: "REVEAL_FOCUS_MOVED", payload: { pane_id: action.paneId, from, to } }],
       };
     }
-    case "TRANSCRIPT_ROWS_LOADED": {
+    case ActionType.DELEGATE_EXPAND_START: {
+      const pane = state.panes[action.paneId];
+      if (!pane) return { state, emissions: [] };
+      if (action.toolCallId in pane.delegateExpansions) return { state, emissions: [] };
+      return {
+        state: {
+          ...state,
+          panes: {
+            ...state.panes,
+            [action.paneId]: {
+              ...pane,
+              delegateExpansions: { ...pane.delegateExpansions, [action.toolCallId]: [] },
+            },
+          },
+        },
+        emissions: [{ kind: "DELEGATE_INLINE_EXPANDED", payload: {
+          pane_id: action.paneId, tool_call_id: action.toolCallId,
+        }}],
+      };
+    }
+    case ActionType.DELEGATE_EXPAND_ROWS_LOADED: {
+      const pane = state.panes[action.paneId];
+      if (!pane) return { state, emissions: [] };
+      if (!(action.toolCallId in pane.delegateExpansions)) return { state, emissions: [] };
+      return {
+        state: {
+          ...state,
+          panes: {
+            ...state.panes,
+            [action.paneId]: {
+              ...pane,
+              delegateExpansions: {
+                ...pane.delegateExpansions,
+                [action.toolCallId]: action.rows,
+              },
+            },
+          },
+        },
+        emissions: [],
+      };
+    }
+    case ActionType.DELEGATE_COLLAPSE: {
+      const pane = state.panes[action.paneId];
+      if (!pane) return { state, emissions: [] };
+      if (!(action.toolCallId in pane.delegateExpansions)) return { state, emissions: [] };
+      const next = { ...pane.delegateExpansions };
+      delete next[action.toolCallId];
+      return {
+        state: { ...state, panes: { ...state.panes, [action.paneId]: { ...pane, delegateExpansions: next } } },
+        emissions: [{ kind: "DELEGATE_INLINE_COLLAPSED", payload: {
+          pane_id: action.paneId, tool_call_id: action.toolCallId,
+        }}],
+      };
+    }
+    case ActionType.TRANSCRIPT_ROWS_LOADED: {
       const pane = state.panes[action.paneId];
       if (!pane) return { state, emissions: [] };
       const newRows = action.rows.filter((r) => r.seq > pane.transcriptLastSeq);
@@ -247,6 +362,17 @@ export function reduce(state: ShellState, action: Action): Step {
           emissions.push({ kind: "TRANSCRIPT_DELEGATE_LINE_RENDERED", payload: {
             pane_id: action.paneId, envelope_seq: r.seq, tool_call_id: r.tool_call_id,
           }});
+        } else if (r.kind === TOOL_RESULT && r.tool_name === TOOL_NAME_DELEGATE && r.tool_call_id && r.child_record_root) {
+          // Sprint 021 — automatic fold. Layer 5 terminal for the
+          // delegate_flow: the parent's turn resumes past the delegate
+          // when its ToolResult arrives, so the whole flow ends here.
+          // Distinct from an INLINE_COLLAPSED emitted by a manual fold
+          // click (which does not terminate the flow — the flow was
+          // already folded automatically when the ToolResult landed).
+          emissions.push({ kind: "DELEGATE_CALL_FOLDED", payload: {
+            pane_id: action.paneId, tool_call_id: r.tool_call_id,
+            child_record_root: r.child_record_root,
+          }});
         } else {
           emissions.push({ kind: "TRANSCRIPT_ROW_RENDERED", payload: {
             pane_id: action.paneId, envelope_seq: r.seq,
@@ -270,7 +396,7 @@ export function reduce(state: ShellState, action: Action): Step {
         emissions,
       };
     }
-    case "TURN_SUBMIT_ERR": {
+    case ActionType.TURN_SUBMIT_ERR: {
       const pane = state.panes[action.paneId];
       if (!pane) return { state, emissions: [] };
       // Restore parked status; the turn didn't take.
@@ -284,7 +410,7 @@ export function reduce(state: ShellState, action: Action): Step {
   }
 }
 
-function doEndStart(state: ShellState, a: Extract<Action, { type: "SESSION_END_START" }>): Step {
+function doEndStart(state: ShellState, a: Extract<Action, { type: typeof ActionType.SESSION_END_START }>): Step {
   const pane = state.panes[a.paneId];
   if (!pane || !pane.boundSessionId) return { state, emissions: [] };
   return {
@@ -295,7 +421,7 @@ function doEndStart(state: ShellState, a: Extract<Action, { type: "SESSION_END_S
   };
 }
 
-function doEndOk(state: ShellState, a: Extract<Action, { type: "SESSION_END_OK" }>): Step {
+function doEndOk(state: ShellState, a: Extract<Action, { type: typeof ActionType.SESSION_END_OK }>): Step {
   const pane = state.panes[a.paneId];
   if (!pane || pane.creating !== a.requestId) return { state, emissions: [] };
   const nextPane: Pane = {
@@ -319,7 +445,7 @@ function doEndOk(state: ShellState, a: Extract<Action, { type: "SESSION_END_OK" 
   };
 }
 
-function doEndErr(state: ShellState, a: Extract<Action, { type: "SESSION_END_ERR" }>): Step {
+function doEndErr(state: ShellState, a: Extract<Action, { type: typeof ActionType.SESSION_END_ERR }>): Step {
   const pane = state.panes[a.paneId];
   if (!pane || pane.creating !== a.requestId) return { state, emissions: [] };
   return {
@@ -328,7 +454,7 @@ function doEndErr(state: ShellState, a: Extract<Action, { type: "SESSION_END_ERR
   };
 }
 
-function doResumeStart(state: ShellState, a: Extract<Action, { type: "SESSION_RESUME_START" }>): Step {
+function doResumeStart(state: ShellState, a: Extract<Action, { type: typeof ActionType.SESSION_RESUME_START }>): Step {
   const pane = state.panes[a.paneId];
   if (!pane) return { state, emissions: [] };
   return {
@@ -337,7 +463,7 @@ function doResumeStart(state: ShellState, a: Extract<Action, { type: "SESSION_RE
   };
 }
 
-function doResumeOk(state: ShellState, a: Extract<Action, { type: "SESSION_RESUME_OK" }>): Step {
+function doResumeOk(state: ShellState, a: Extract<Action, { type: typeof ActionType.SESSION_RESUME_OK }>): Step {
   const pane = state.panes[a.paneId];
   if (!pane || pane.creating !== a.requestId) return { state, emissions: [] };
   const nextPane: Pane = {
@@ -366,7 +492,7 @@ function doResumeOk(state: ShellState, a: Extract<Action, { type: "SESSION_RESUM
   };
 }
 
-function doResumeErr(state: ShellState, a: Extract<Action, { type: "SESSION_RESUME_ERR" }>): Step {
+function doResumeErr(state: ShellState, a: Extract<Action, { type: typeof ActionType.SESSION_RESUME_ERR }>): Step {
   const pane = state.panes[a.paneId];
   if (!pane || pane.creating !== a.requestId) return { state, emissions: [] };
   return {
@@ -387,7 +513,7 @@ function stripSecrets(obj: unknown): unknown {
   return obj;
 }
 
-function doSessionCreateStart(state: ShellState, a: Extract<Action, { type: "SESSION_CREATE_START" }>): Step {
+function doSessionCreateStart(state: ShellState, a: Extract<Action, { type: typeof ActionType.SESSION_CREATE_START }>): Step {
   const pane = state.panes[a.paneId];
   if (!pane || !pane.pickerSelection) return { state, emissions: [] };
   const { path, shape } = pane.pickerSelection;
@@ -408,7 +534,7 @@ function doSessionCreateStart(state: ShellState, a: Extract<Action, { type: "SES
   };
 }
 
-function doSessionCreateOk(state: ShellState, a: Extract<Action, { type: "SESSION_CREATE_OK" }>): Step {
+function doSessionCreateOk(state: ShellState, a: Extract<Action, { type: typeof ActionType.SESSION_CREATE_OK }>): Step {
   const pane = state.panes[a.paneId];
   if (!pane || pane.creating !== a.requestId) return { state, emissions: [] };
   const nextPane: Pane = {
@@ -443,7 +569,7 @@ function doSessionCreateOk(state: ShellState, a: Extract<Action, { type: "SESSIO
   };
 }
 
-function doSessionCreateErr(state: ShellState, a: Extract<Action, { type: "SESSION_CREATE_ERR" }>): Step {
+function doSessionCreateErr(state: ShellState, a: Extract<Action, { type: typeof ActionType.SESSION_CREATE_ERR }>): Step {
   const pane = state.panes[a.paneId];
   if (!pane || pane.creating !== a.requestId) return { state, emissions: [] };
   const nextPane: Pane = { ...pane, creating: null };
@@ -496,7 +622,7 @@ function doPickerCommit(state: ShellState, paneId: string, path: string, shape: 
   };
 }
 
-function doClose(state: ShellState, paneId: string, reason: "user"): Step {
+function doClose(state: ShellState, paneId: string, reason: CloseReasonT): Step {
   const pane = state.panes[paneId];
   if (!pane) return { state, emissions: [] };
   const windowId = pane.windowId;
@@ -541,6 +667,7 @@ function boot(): Step {
     streamLevel: StreamLevel.ALL,
     streamDir: StreamDir.DOWN,
     revealFocus: RevealFocus.TRANSCRIPT,
+    delegateExpansions: {},
   };
   const window: Window = { id: windowId, rootId: paneId };
   const next: ShellState = {

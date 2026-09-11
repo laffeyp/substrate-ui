@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.10.1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>autonomous_build_topology — design paper</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    html {
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    svg {
+      height: auto;
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      white-space: pre-wrap;
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      border: none;
+      border-top: 1px solid #1a1a1a;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">autonomous_build_topology — design paper</h1>
+</header>
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a
+href="#autonomous_build_topology-a-substrate-topology-for-driverless-build-work"
+id="toc-autonomous_build_topology-a-substrate-topology-for-driverless-build-work">autonomous_build_topology
+— a substrate topology for driverless build work</a>
+<ul>
+<li><a href="#what-the-topology-is" id="toc-what-the-topology-is">1.
+What the topology is</a></li>
+<li><a href="#event-schemas" id="toc-event-schemas">2. Event
+schemas</a></li>
+<li><a href="#producer-graph" id="toc-producer-graph">3. Producer
+graph</a>
+<ul>
+<li><a href="#driver" id="toc-driver">3.1 <code>driver</code></a></li>
+<li><a href="#watcher" id="toc-watcher">3.2
+<code>watcher</code></a></li>
+<li><a href="#director" id="toc-director">3.3
+<code>director</code></a></li>
+</ul></li>
+<li><a href="#views" id="toc-views">4. Views</a></li>
+<li><a href="#where-directives-come-from"
+id="toc-where-directives-come-from">5. Where directives come
+from</a></li>
+<li><a href="#termination" id="toc-termination">6. Termination</a></li>
+<li><a href="#triggers-routes-initials"
+id="toc-triggers-routes-initials">7. Triggers, routes, initials</a></li>
+<li><a href="#what-runs-the-topology" id="toc-what-runs-the-topology">8.
+What runs the topology</a></li>
+<li><a href="#what-substrate-needs" id="toc-what-substrate-needs">9.
+What substrate needs</a></li>
+<li><a href="#what-the-topology-does-not-do"
+id="toc-what-the-topology-does-not-do">10. What the topology does not
+do</a></li>
+<li><a href="#risks" id="toc-risks">11. Risks</a></li>
+<li><a href="#next-steps" id="toc-next-steps">12. Next steps</a></li>
+</ul></li>
+</ul>
+</nav>
+<h1
+id="autonomous_build_topology-a-substrate-topology-for-driverless-build-work">autonomous_build_topology
+— a substrate topology for driverless build work</h1>
+<p><em>Design paper, round 4. 2026-09-11. Supersedes rounds 1, 2, and 3,
+which stay on disk. Round 3 dropped the outer orchestration but still
+shoehorned <code>session_topology</code>’s user-oriented schemas into a
+loop that has no user. This round designs the topology from its own
+vocabulary. Nothing named “user” appears in the event graph because
+there is no user. Every event, Producer, and field names what the
+driverless loop actually contains.</em></p>
+<hr />
+<h2 id="what-the-topology-is">1. What the topology is</h2>
+<p>A three-Producer loop that runs a build against a sprint queue with
+no human in the loop. The model produces work; a watcher classifies it
+against mechanical signals; a director issues the next directive. The
+loop runs until the sprint queue is exhausted, the model emits a
+build-end, or the watcher raises a red halt the operator must clear out
+of band.</p>
+<p>The topology has no shell attached. It is not a variant of
+<code>session_topology</code> and it does not compose one. It reuses
+substrate’s kernel primitives (<code>Producer</code>, <code>View</code>,
+<code>Trigger</code>, <code>Route</code>, termination policies) and
+nothing from the session vocabulary.</p>
+<hr />
+<h2 id="event-schemas">2. Event schemas</h2>
+<p>Seven <code>msgspec.Struct(frozen=True)</code> events, defined in
+<code>substrate/src/substrate/topologies/autonomous_build/events.py</code>.</p>
+<pre><code>class BuildStarted(Struct, frozen=True):
+    build_id: str
+    workspace_path: str
+    sprint_queue_path: str
+    corpus_version: str
+    driver_name: str            # names the Responder the driver Producer uses
+    started_at: float
+
+class Directive(Struct, frozen=True):
+    build_id: str
+    turn_index: int
+    text: str
+    origin: str                 # &quot;seed&quot; | &quot;director&quot; | &quot;reminder&quot;
+    triggering_verdict_id: str | None
+
+class WorkTurn(Struct, frozen=True):
+    build_id: str
+    turn_index: int
+    text: str                   # the model&#39;s output
+    tool_calls: list[dict]      # any tool calls in this turn, with args and results
+    tags_emitted: list[str]     # signal tags the shell/library fired during the turn
+    files_touched: list[str]    # files changed during the turn
+    duration_seconds: float
+
+class Verdict(Struct, frozen=True):
+    build_id: str
+    turn_index: int
+    verdict_id: str
+    verdict: str                # &quot;green&quot; | &quot;yellow&quot; | &quot;red&quot;
+    checkpoint_kinds: list[str] # which detectors ran this firing
+    drift_kind: str | None
+    drift_detail: str | None
+    detector_scores: dict[str, float]
+
+class SprintClosed(Struct, frozen=True):
+    build_id: str
+    sprint_id: str
+    closed_at_turn: int
+    signal_report_path: str
+
+class BuildEnded(Struct, frozen=True):
+    build_id: str
+    reason: str                 # &quot;queue_exhausted&quot; | &quot;model_ended&quot; | &quot;quiescence&quot;
+    ended_at_turn: int
+
+class BuildHalted(Struct, frozen=True):
+    build_id: str
+    reason: str                 # &quot;ratification_required&quot; | &quot;director_uncertain&quot; | &quot;turn_cap&quot;
+    detail: str
+    resume_condition: str</code></pre>
+<p>No event is named for a “user”. No field carries a “user id” or a
+“slash source”. <code>Directive.origin</code> names three legitimate
+sources of a directive — the seed at build start, the director at each
+turn, and a periodic reminder — none of which pretend to be a
+person.</p>
+<hr />
+<h2 id="producer-graph">3. Producer graph</h2>
+<p>Three Producers plus a small set of Views. The whole graph is under
+400 lines of Python.</p>
+<h3 id="driver">3.1 <code>driver</code></h3>
+<p>Consumes a <code>Directive</code>. Runs the underlying model (via any
+substrate <code>Responder</code>) with the directive as prompt. Emits
+one <code>WorkTurn</code> carrying the model’s output, any tool calls it
+made, the signal tags it fired, and the files it touched.</p>
+<p><code>driver</code> is a Producer per the substrate protocol
+(<code>substrate/src/substrate/protocols.py:24</code>) — a callable
+<code>(Directive) -&gt; AsyncIterable[WorkTurn]</code>. The Responder it
+wraps is selected at build start from
+<code>BuildStarted.driver_name</code>; today’s supported values are
+<code>deterministic</code>, <code>ollama:&lt;model&gt;</code>,
+<code>cli:claude</code>, <code>cli:gemini</code>, mirroring
+<code>substrate/src/substrate/adapters/models.py</code>.</p>
+<h3 id="watcher">3.2 <code>watcher</code></h3>
+<p>Consumes a <code>WorkTurn</code>. Reads the <code>trace_view</code>
+and <code>state_view</code> (§4). Runs the detectors that the rotation
+schedule selects this turn. Emits one <code>Verdict</code>.</p>
+<p>Five detectors, each a pure function
+<code>(work_turn, trace_view, project_state) -&gt; DetectorScore</code>:</p>
+<ul>
+<li><strong>vocabulary_conformance</strong> — checks that every tag in
+<code>WorkTurn.tags_emitted</code> is present in
+<code>signals/0.1.json § layer_1_lexical</code> and that every payload
+the trace carries satisfies the Layer 2 schema. Any miss is red; the
+mouth-side Emitter should have caught it earlier.</li>
+<li><strong>sdd_hygiene</strong> — checks that
+<code>BLACKBOARD.md</code> and <code>KIT_DIARY.md</code> carry an entry
+per closed sprint and that any drift the other detectors flagged has a
+proposal filed against it in <code>signals/proposals.json</code>.</li>
+<li><strong>coding_canon</strong> — runs the linter suite against
+<code>WorkTurn.files_touched</code>: retyped-literals grep,
+discriminated-union coverage, function-length scan, unused-code
+finder.</li>
+<li><strong>design_lock</strong> — screenshots the states the current
+sprint’s card claims to render and region-diffs each against the design
+lock’s PNG at <code>handoff_latest/prototypes/</code>. Skipped on non-UI
+sprints.</li>
+<li><strong>prose_register</strong> — runs the <code>dellm</code>
+skill’s checks over every markdown file in
+<code>WorkTurn.files_touched</code>.</li>
+</ul>
+<p>Rotation, keyed on <code>state_view.turn_index</code>:</p>
+<ul>
+<li>every turn: <code>vocabulary_conformance</code>, sprint-close
+check.</li>
+<li>every second turn: <code>sdd_hygiene</code>.</li>
+<li>every fifth turn: <code>coding_canon</code>.</li>
+<li>when the sprint card names UI states: <code>design_lock</code>.</li>
+<li>when the diff touches <code>.md</code>:
+<code>prose_register</code>.</li>
+</ul>
+<p>Verdict composition is monotone. Any red detector → red verdict; any
+yellow detector → yellow; otherwise green.</p>
+<h3 id="director">3.3 <code>director</code></h3>
+<p>Consumes a <code>Verdict</code>. Reads the <code>corpus_view</code>
+(§4). Emits one <code>Directive</code> whose <code>text</code> is the
+next directive to feed <code>driver</code>, or emits a
+<code>BuildHalted</code> if no directive in the corpus matches the
+verdict.</p>
+<p>Three invariants over the director:</p>
+<ul>
+<li>On green, emit the shortest directive that keeps the model on task —
+“continue”, “next”, “proceed with the sprint” — drawn from the corpus’s
+<code>continue</code> cluster.</li>
+<li>On yellow, emit the directive from the cluster matching
+<code>Verdict.drift_kind</code>. If no cluster matches, emit
+<code>BuildHalted{reason= "director_uncertain", detail=&lt;drift_detail&gt;}</code>.</li>
+<li>On red, emit
+<code>BuildHalted{reason="ratification_required", detail=...}</code>.</li>
+</ul>
+<p>Independent of verdict, the director prepends a reminder to its
+directive when a detector has gone stale. If <code>sdd_hygiene</code>
+has not run in the last five turns, the directive text opens with
+“confirm SDD hygiene before the next step”. If <code>design_lock</code>
+is stale on a UI sprint, likewise. The reminders are the mechanised
+version of the periodic “remember SDD” and “look at the designs again”
+prompts the operator issued by hand in prior sessions.</p>
+<hr />
+<h2 id="views">4. Views</h2>
+<p>Four <code>View</code>s, all deterministic per the substrate contract
+at <code>substrate/src/substrate/protocols.py:61</code>.</p>
+<ul>
+<li><strong><code>trace_view</code></strong> — a <code>KindBuffer</code>
+over every <code>WorkTurn</code> and <code>Verdict</code> since the last
+<code>Directive</code> was emitted. The watcher reads it.</li>
+<li><strong><code>state_view</code></strong> — a small keyed struct
+holding <code>turn_index</code>, <code>current_sprint_id</code>,
+<code>last_verdict_id</code>, <code>detector_last_ran_at</code>. Updated
+by every <code>WorkTurn</code> and <code>Verdict</code>.</li>
+<li><strong><code>corpus_view</code></strong> — a keyed lookup over the
+mined directive corpus (§5). Loaded from
+<code>BuildStarted.corpus_version</code> as run baseline; read-only
+after <code>RunStarted</code>.</li>
+<li><strong><code>sprint_queue_view</code></strong> — parses the sprint
+queue file named by <code>BuildStarted.sprint_queue_path</code> and
+holds the ordered list of pending cards.</li>
+</ul>
+<hr />
+<h2 id="where-directives-come-from">5. Where directives come from</h2>
+<p>The director’s rule table is mined out of prior operator-driven build
+sessions, not designed a priori. The pass:</p>
+<ol type="1">
+<li>Read the transcript files under
+<code>~/.claude/projects/-Users-peterlaffey-Documents-Claude-Projects-Agent-Orchestration/*.jsonl</code>.</li>
+<li>For each transcript, enumerate every operator turn.</li>
+<li>For each operator turn, record: the signal shape of the prior
+assistant turn (tags fired, tools called, sprint card referenced), the
+reply text the operator typed, and an intervention-kind label.</li>
+<li>Include silent-continue evidence. Every assistant turn the operator
+let stand becomes <code>(signal_shape, "", "continue")</code>. Silent
+continues are the majority of turns in a well-run session; without them
+the corpus over-weights correction.</li>
+<li>Cluster the signal shapes. Each cluster becomes a rule-table entry:
+<code>(verdict shape) -&gt; [directive templates]</code>.</li>
+</ol>
+<p>The corpus is versioned and carried in the run manifest so replays
+are exact. The corpus contains tonal corrections — the operator’s
+writing-style interventions — mapped to the prose-register drift
+handler.</p>
+<hr />
+<h2 id="termination">6. Termination</h2>
+<pre><code>b.termination(api.any_of(
+    api.threshold_count(&quot;BuildEnded&quot;, 1),
+    api.threshold_count(&quot;BuildHalted&quot;, 1),
+    api.quiescence_with_watchdog(seconds=1800),
+))</code></pre>
+<p>The run ends when the driver emits <code>BuildEnded</code>, when the
+watcher raises <code>BuildHalted</code>, or when nothing moves for
+thirty minutes. There is no <code>pause_await_input</code>. The topology
+never waits for an external event to resume.</p>
+<hr />
+<h2 id="triggers-routes-initials">7. Triggers, routes, initials</h2>
+<ul>
+<li><code>initial("seed", input=None)</code> — a small Producer that
+emits the first <code>Directive</code> from
+<code>sprint_queue_view.first_card.opening_directive</code> with
+<code>Directive.origin = "seed"</code>.</li>
+<li>Trigger <code>drive</code>: subscription <code>{Directive}</code>,
+starts <code>driver</code>, input = the Directive.</li>
+<li>Trigger <code>watch</code>: subscription <code>{WorkTurn}</code>,
+starts <code>watcher</code>, input = the WorkTurn.</li>
+<li>Trigger <code>direct</code>: subscription <code>{Verdict}</code>,
+starts <code>director</code>, input = the Verdict.</li>
+<li>Trigger <code>close_sprint</code>: subscription
+<code>{WorkTurn}</code>, predicate reads <code>sprint_queue_view</code>
+and checks whether the card’s done-criteria are satisfied by the current
+project state, starts a <code>sprint_closer</code> Producer that writes
+the Signal Report and emits <code>SprintClosed</code>.</li>
+<li>Trigger <code>end_on_exhaustion</code>: subscription
+<code>{SprintClosed}</code>, predicate checks
+<code>sprint_queue_view.remaining == 0</code>, starts a
+<code>build_ender</code> that emits
+<code>BuildEnded{reason="queue_exhausted"}</code>.</li>
+</ul>
+<hr />
+<h2 id="what-runs-the-topology">8. What runs the topology</h2>
+<pre><code>substrate --topology autonomous_build --manifest build.json</code></pre>
+<p><code>build.json</code> names the workspace path, the sprint queue
+file, the corpus version, the driver name (any Responder identifier),
+and optional detector overrides.</p>
+<p>If a person wants to run three builds in three separate workspaces,
+they open three shells and invoke the command three times. That is not a
+feature of the topology.</p>
+<hr />
+<h2 id="what-substrate-needs">9. What substrate needs</h2>
+<p>Nothing new.</p>
+<ul>
+<li><code>Producer</code>, <code>View</code>, <code>Responder</code> —
+<code>substrate/src/substrate/protocols.py</code>.</li>
+<li><code>TopologyBuilder</code>, <code>producer_kind</code>,
+<code>view</code>, <code>trigger</code>, <code>route</code>,
+<code>initial</code>, <code>termination</code> —
+<code>substrate/src/substrate/kernel/topology.py</code>.</li>
+<li><code>threshold_count</code>, <code>quiescence_with_watchdog</code>,
+<code>any_of</code> —
+<code>substrate/src/substrate/kernel/policies.py</code>.</li>
+<li>Responder implementations —
+<code>substrate/src/substrate/adapters/models.py</code>.</li>
+</ul>
+<p>The topology declares its own vocabulary in a new file
+<code>autonomous_build/vocabulary.py</code>; it does not import from
+<code>topologies/session/vocabulary.py</code>.</p>
+<hr />
+<h2 id="what-the-topology-does-not-do">10. What the topology does not
+do</h2>
+<ul>
+<li>It does not compose or wrap <code>session_topology</code>.</li>
+<li>It does not emit <code>UserMessage</code>,
+<code>SessionStarted</code>, <code>SessionEnded</code>, or any other
+schema whose name presupposes a human role. There is no human.</li>
+<li>It does not measure convergence across multiple runs. Someone
+reading N runs’ JSONL after the fact can do that; it is not the
+topology’s job.</li>
+<li>It does not ratify vocabulary proposals. On a red verdict flagging
+an invented tag or a schema refusal, the director halts and the operator
+ratifies out of band.</li>
+<li>It does not author sprint cards. The sprint queue is input.</li>
+</ul>
+<hr />
+<h2 id="risks">11. Risks</h2>
+<ul>
+<li><strong>Corpus coverage.</strong> Thin corpus → poor director
+replies. Iterate: ship a first cut, grow it as more transcripts are
+mined.</li>
+<li><strong>Detector false positives.</strong> A watcher that classifies
+clean work as yellow halts too often. Every detector needs a fixture set
+of real transcript excerpts before it goes live.</li>
+<li><strong>Loops.</strong> Director and driver can oscillate
+green-yellow without progress. The termination policy carries a
+per-sprint turn cap: if <code>state_view.current_sprint_id</code> does
+not advance in K turns, emit
+<code>BuildHalted{reason="turn_cap"}</code>.</li>
+<li><strong>Silent drift.</strong> A drift kind no detector covers goes
+unnoticed. New drift kinds need new detectors; detectors are pure
+functions and cheap to add.</li>
+</ul>
+<hr />
+<h2 id="next-steps">12. Next steps</h2>
+<ol type="1">
+<li>Run the transcript-mining pass on four to six strong prior sessions.
+Produce the first-cut corpus with cluster labels.</li>
+<li>Implement each detector as a standalone function under
+<code>substrate-ui/tools/detectors/</code>. Unit-test against fixture
+events.</li>
+<li>Implement <code>autonomous_build_topology</code> at
+<code>substrate/src/substrate/topologies/autonomous_build/</code>: the
+seven events in §2, the three Producers in §3, the four Views in §4, the
+triggers in §7, the termination in §6.</li>
+<li>Run it against a small sprint queue and a deterministic Responder.
+Read the JSONL. Confirm the director’s directives land at the right
+turns and its halts land at the right red verdicts.</li>
+<li>Swap the deterministic Responder for an Ollama Responder and
+re-run.</li>
+</ol>
+<p>That is the whole plan.</p>
+</body>
+</html>

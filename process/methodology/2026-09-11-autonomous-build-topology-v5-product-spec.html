@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.10.1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>Autonomous build topology — product spec</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    html {
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    svg {
+      height: auto;
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      white-space: pre-wrap;
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      border: none;
+      border-top: 1px solid #1a1a1a;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">Autonomous build topology — product spec</h1>
+</header>
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#autonomous-build-topology-product-spec"
+id="toc-autonomous-build-topology-product-spec">Autonomous build
+topology — product spec</a>
+<ul>
+<li><a href="#what-this-is" id="toc-what-this-is">What this is</a></li>
+<li><a href="#the-problem" id="toc-the-problem">The problem</a></li>
+<li><a href="#the-idea" id="toc-the-idea">The idea</a></li>
+<li><a href="#what-the-topology-does"
+id="toc-what-the-topology-does">What the topology does</a></li>
+<li><a href="#what-it-feels-like-to-run"
+id="toc-what-it-feels-like-to-run">What it feels like to run</a></li>
+<li><a href="#what-decides-on-track" id="toc-what-decides-on-track">What
+decides “on track”</a></li>
+<li><a href="#what-the-topology-says-back-to-the-model"
+id="toc-what-the-topology-says-back-to-the-model">What the topology says
+back to the model</a></li>
+<li><a href="#what-the-topology-halts-on"
+id="toc-what-the-topology-halts-on">What the topology halts on</a></li>
+<li><a href="#watching-the-writing-itself"
+id="toc-watching-the-writing-itself">Watching the writing
+itself</a></li>
+<li><a href="#running-many-of-these-at-once"
+id="toc-running-many-of-these-at-once">Running many of these at
+once</a></li>
+<li><a href="#comparing-variants" id="toc-comparing-variants">Comparing
+variants</a></li>
+<li><a href="#what-the-topology-is-for-and-who-it-is-for"
+id="toc-what-the-topology-is-for-and-who-it-is-for">What the topology is
+for and who it is for</a></li>
+<li><a href="#what-the-topology-is-not"
+id="toc-what-the-topology-is-not">What the topology is not</a></li>
+<li><a href="#what-this-lets-a-person-stop-doing"
+id="toc-what-this-lets-a-person-stop-doing">What this lets a person stop
+doing</a></li>
+<li><a href="#success-looks-like" id="toc-success-looks-like">Success
+looks like</a></li>
+<li><a href="#failure-looks-like" id="toc-failure-looks-like">Failure
+looks like</a></li>
+</ul></li>
+</ul>
+</nav>
+<h1 id="autonomous-build-topology-product-spec">Autonomous build
+topology — product spec</h1>
+<p><em>Round 5. 2026-09-11. Product spec, not an engineering doc. Rounds
+1-4 stay on disk. Rounds 3 and 4 tried to write this as a kernel design
+and drowned the idea in schema tables. This one describes the
+feature.</em></p>
+<hr />
+<h2 id="what-this-is">What this is</h2>
+<p>A new kind of substrate topology that runs a build to completion
+without a person sitting on the keyboard. The topology speaks to the
+model on the person’s behalf every time the model returns. It knows when
+to say “keep going” and when to stop and wait for a person, and it
+decides which of those to do by watching signals, not by reading the
+model’s prose.</p>
+<p>The session topology substrate ships today pauses after every model
+reply. That pause is correct — a person is on the other end of it,
+reading, thinking, and typing the next thing. The autonomous build
+topology is what runs when no person is on the other end. It replaces
+the pause with a small, disciplined loop that keeps a build moving
+through its sprint queue on its own.</p>
+<hr />
+<h2 id="the-problem">The problem</h2>
+<p>A build session today needs an operator. The operator’s job is not
+the work — the model does the work — but the operator’s presence is what
+keeps the loop moving. The model finishes a turn. The operator reads the
+reply. The operator decides the reply is fine, or the operator decides
+it drifted, and either way the operator types the next prompt. Without
+the operator, the loop stops.</p>
+<p>The operator’s decision on almost every turn is one of three things:
+keep going, correct a small drift, or halt because something needs a
+person’s judgment. The first two are mechanical. The third is where a
+person is needed and nowhere else.</p>
+<p>The current arrangement wastes the operator on the mechanical turns
+and makes the loop unable to run without them. That is the problem the
+autonomous topology addresses.</p>
+<hr />
+<h2 id="the-idea">The idea</h2>
+<p>Give the topology the operator’s role, minus the judgment calls only
+a person can make. The topology observes the model’s output through
+mechanical detectors, not through prose. It replies with a small
+vocabulary of short prompts — “continue”, “next sprint”, “check SDD
+hygiene”, “revert and try again” — chosen from a library mined out of
+what operators have said in real sessions. On the small number of turns
+where the mechanical detectors cannot tell whether the work is on track,
+the topology halts and waits for a person to look at it.</p>
+<p>The model works. The topology watches. The person is on call, not on
+shift.</p>
+<hr />
+<h2 id="what-the-topology-does">What the topology does</h2>
+<p>The topology runs a build against a sprint queue. Every model turn is
+one directive in and one work output out. Between the model’s output and
+the next directive, the topology does three things:</p>
+<ul>
+<li><strong>Watch.</strong> Run a rotating set of detectors against the
+work that just landed. The detectors check the things a good operator
+checks: does the vocabulary still match the ratified signals; is the
+coding-canon still holding; do the UI states still match the design
+lock; is the writing register still plain; is the sprint’s done-criteria
+met yet.</li>
+<li><strong>Classify.</strong> From the detector output, decide whether
+the turn is on track, drifting, or broken.</li>
+<li><strong>Direct.</strong> Send the next prompt from a small library
+of prompts. On track: a short “continue”. Drifting: a corrective prompt
+keyed to the drift kind. Broken: halt and wait for a person.</li>
+</ul>
+<p>The loop then feeds the directive back to the model and waits for the
+next turn. The build runs until the sprint queue is exhausted, the model
+announces it is done, or the topology halts for a person.</p>
+<hr />
+<h2 id="what-it-feels-like-to-run">What it feels like to run</h2>
+<p>A person starts the topology and walks away. Every few seconds a new
+turn completes and a new detector verdict lands in the log. Most turns
+are green and get a “continue”. Some turns are yellow and get a short
+corrective prompt. The build moves through the sprint queue on its own;
+sprint cards close one after another; the audit files fill in as the
+topology goes.</p>
+<p>Occasionally the topology halts. When it does, the person sees a
+clear note: this is what the model produced, this is what the detector
+flagged, this is what the topology decided it could not resolve, here is
+the sprint card the build is holding on. The person reads it, ratifies
+the decision or corrects the state, and starts the build up again.</p>
+<p>The person is not typing “keep going” fifty times an hour. The person
+is handling three or four ratification points a day.</p>
+<hr />
+<h2 id="what-decides-on-track">What decides “on track”</h2>
+<p>Five detectors, run on a rotating schedule so the check load stays
+bounded and each detector fires when it has something meaningful to
+say.</p>
+<ul>
+<li><strong>Vocabulary conformance.</strong> The mouth-side check on
+ratified signals — every tag the shell fired belongs to
+<code>signals/0.1.json</code>; every payload matches its Layer 2 schema.
+Runs every turn. A miss here is a hole in the mouth-side Emitter and is
+always red.</li>
+<li><strong>SDD hygiene.</strong> Are <code>BLACKBOARD.md</code> and
+<code>KIT_DIARY.md</code> up to date with the last closed sprint? Is
+every drift the detectors have flagged answered with a proposal? Runs
+every second turn.</li>
+<li><strong>Coding canon.</strong> The linter suite: retyped literals
+against enums that exist, discriminated-union coverage, function-length
+caps, dead-code detection. Runs every fifth turn.</li>
+<li><strong>Design lock.</strong> For sprints that render UI states,
+screenshot the state and region-diff it against the design lock. Runs
+whenever the sprint card claims a UI state.</li>
+<li><strong>Prose register.</strong> Runs the <code>dellm</code> skill’s
+checks over every markdown file the turn touched. Flags machine
+register, cliché tokens, uniform sentence rhythm. Runs whenever the turn
+edits markdown.</li>
+</ul>
+<p>Each detector returns green, yellow, or red. The turn’s verdict is
+the worst of the detectors that ran. The verdict, and which detectors
+produced it, lands in the trace so the topology’s decisions are
+reconstructable.</p>
+<hr />
+<h2 id="what-the-topology-says-back-to-the-model">What the topology says
+back to the model</h2>
+<p>The prompt library is not designed a priori. It is mined out of prior
+sessions where a person was driving well. The mining pass reads the
+transcripts under <code>~/.claude/projects/</code>, enumerates every
+operator turn, and for each one records the shape of the signal that
+triggered the reply, the reply text itself, and a label naming what kind
+of intervention it was. Silent-continue evidence is included — every
+turn the operator let stand is data too, and in a well-run session those
+are the majority. The corpus clusters into a small number of
+intervention kinds; each cluster becomes one entry in the topology’s
+prompt library, keyed by the verdict shape that should trigger it.</p>
+<p>Three properties matter for the library:</p>
+<ul>
+<li><strong>Short.</strong> A good directive is one line. The model has
+the full context; the directive is just the operator’s steer.</li>
+<li><strong>Faithful.</strong> The words come from what operators
+actually said. The library captures the operator’s voice, not an
+idealised version of it.</li>
+<li><strong>Includes silence.</strong> The library has a “continue”
+cluster with variants — “continue”, “next”, “go on” — and the topology
+uses them when the verdict is green. Without them, the topology
+overcorrects.</li>
+</ul>
+<p>The topology also inserts periodic reminders on its own. If SDD
+hygiene has not been checked in the last five turns, the next directive
+opens with a reminder to run it. If the design lock is stale on a UI
+sprint, the next directive says so. These are the mechanised version of
+the “remember SDD” and “look at the designs again” prompts a person
+issues by hand every so often.</p>
+<hr />
+<h2 id="what-the-topology-halts-on">What the topology halts on</h2>
+<p>Three halts. Each names its reason and its resume condition, so a
+person picking the build up knows what to do.</p>
+<ul>
+<li><strong>Ratification required.</strong> The mouth-side Emitter
+refused a tag or payload; the model tried to invent vocabulary and the
+check caught it. A person needs to ratify a proposal into
+<code>signals/0.2.json</code> or correct the code that emitted the
+invented tag.</li>
+<li><strong>Director uncertain.</strong> The verdict is yellow but no
+cluster in the prompt library matches its drift kind. A person needs to
+read the trace, decide what should have happened, and either extend the
+library or fix the state.</li>
+<li><strong>Turn cap.</strong> The sprint pointer has not advanced in K
+turns. The model is looping; a person needs to look.</li>
+</ul>
+<p>Everything else — every red-but-known-drift, every
+yellow-with-matching-cluster — the topology handles on its own.</p>
+<hr />
+<h2 id="watching-the-writing-itself">Watching the writing itself</h2>
+<p>The prose-register detector deserves its own note because it is the
+piece that looks least like signal work and most like taste work. The
+<code>dellm</code> skill’s checks are not taste. They are
+pattern-matching against the fingerprint of machine register — uniform
+sentence length, adverb frequency, high-frequency LLM-tell tokens
+(“admits”, “load-bearing”, “surfacing rather than building”, “seamlessly
+leverages”). A score above threshold is a signal. The detector reads the
+score, not the text.</p>
+<p>This is the same principle as every other detector. The topology
+never reads what the model said. It reads what the model did — which
+files changed, which tags fired, which scores moved. When the scores are
+inside their bands, the topology says “continue” and moves on. When they
+are not, it says something about what specifically drifted.</p>
+<p>Drift is detectable from signals other than the model’s own words
+because the model’s stochastic text output has structure. That structure
+has measurable properties. Those properties are what the detectors
+read.</p>
+<hr />
+<h2 id="running-many-of-these-at-once">Running many of these at
+once</h2>
+<p>A single autonomous build runs in one workspace against one sprint
+queue with one Responder. A person who wants to run three builds opens
+three shells and starts three of them. That is not a feature of the
+topology; it is what a person does with a topology that no longer needs
+a person watching it.</p>
+<p>Three concurrent unattended builds is where the throughput story
+lives. Each build files its own halts against its own trace. A person
+clears halts across the three whenever they land.</p>
+<p>The topology can also be invoked from an outer session. An operator
+running a manual <code>session_topology</code> can type “spin up three
+autonomous builds of the current state against different bootstrap
+variants,” and the session’s shell launches three autonomous topologies
+against three workspaces. The operator continues driving their own
+session; the three autonomous ones run underneath.</p>
+<hr />
+<h2 id="comparing-variants">Comparing variants</h2>
+<p>The natural next step from unattended builds is unattended
+experiments. Two builds running against the same design lock with the
+same substrate but different bootstrap kits are a comparison. Three
+builds running against the same everything but different Responders
+(different Ollama models, or Ollama versus a CLI driver) are another.
+The output — how far each build got, which sprints closed, which halts
+fired, what the vocabularies look like at the end — is the finding.</p>
+<p>This is not part of the topology’s design. It is what the topology
+enables because the topology reduced per-build human cost to near zero.
+The comparisons run in whatever configuration the person specifies at
+start.</p>
+<hr />
+<h2 id="what-the-topology-is-for-and-who-it-is-for">What the topology is
+for and who it is for</h2>
+<p>For: any build that already has a ratified vocabulary, a sprint
+queue, and a mouth-side Emitter that refuses invented tags. Without the
+first, there is no Layer 2 shape to check. Without the second, there is
+nothing to progress through. Without the third, the
+vocabulary-conformance detector is toothless.</p>
+<p>Who: an operator who has already run a build manually and knows what
+a good turn looks like. Their expertise flows into the topology through
+the mined prompt corpus and through the detector thresholds. The
+operator’s judgment still runs the build; it runs it once, in mining and
+threshold-setting, rather than continuously, in turn-by-turn
+prompting.</p>
+<hr />
+<h2 id="what-the-topology-is-not">What the topology is not</h2>
+<p>Not a way to bootstrap a build without vocabulary. Vocabulary comes
+first; this topology consumes it.</p>
+<p>Not a research instrument by design. It becomes one when someone
+chooses to run comparative builds against it, but its own purpose is to
+run one build.</p>
+<p>Not a replacement for the session topology. Manual sessions keep
+working; the autonomous topology is a sibling. A person can flip between
+them or run both.</p>
+<p>Not a way to remove the operator from the project. The operator’s
+role compresses onto ratification, correction, and design; it does not
+disappear.</p>
+<hr />
+<h2 id="what-this-lets-a-person-stop-doing">What this lets a person stop
+doing</h2>
+<p>Typing “continue” one hundred times a day. Reading model output for
+signs of drift the linter would have caught in a second. Sitting on a
+shell while a long deterministic sprint runs. Watching three builds in
+three panes and context-switching between them. Manually inserting
+reminders about SDD.</p>
+<p>What remains for the person: designing the vocabulary, ratifying its
+evolution, correcting the halts the mechanical detectors cannot resolve,
+adding new detectors when new drift kinds appear, and mining new prompt
+corpus entries as the operator’s own patterns evolve.</p>
+<hr />
+<h2 id="success-looks-like">Success looks like</h2>
+<p>An operator starts three autonomous builds against three variant
+bootstrap kits at nine in the morning and goes to do other work. By noon
+the topologies have each closed six sprints, halted once for a
+ratification, and are waiting for the operator’s ratification decisions.
+The operator clears the three halts in five minutes. By evening the
+builds have closed twenty sprints and finished their queues. The
+operator reads the finished audit files, picks which variant produced
+the strongest result, and starts the next day’s work from there.</p>
+<h2 id="failure-looks-like">Failure looks like</h2>
+<p>The topology halts every third turn because the detectors are too
+tight or the prompt corpus is too thin. The operator is called back to
+the loop constantly and the arrangement is worse than running the builds
+by hand. The fix is not in the topology; it is in the detectors and the
+corpus. Both are data, both are iterable.</p>
+</body>
+</html>

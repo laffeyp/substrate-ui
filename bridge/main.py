@@ -285,16 +285,43 @@ def op_session_resume(payload: dict) -> dict:
 def op_record_read(payload: dict) -> dict:
     """Return the ordered envelopes for a session's record. Only envelopes
     whose `kind` names a user-visible beat come back; framework brackets
-    (RunStarted, ProducerStarted, TriggerFired, etc.) are elided."""
+    (RunStarted, ProducerStarted, TriggerFired, etc.) are elided.
+
+    Payload accepts either `session_id` (looks up the manifest) or
+    `record_root` (reads that path directly — used by Sprint 021's
+    delegate-expand path to load a child session's transcript without
+    going through the SessionRegistry, since a child session's record
+    can live outside ~/.substrate/sessions/)."""
     from substrate import api  # type: ignore[import-not-found]
-    reg = _registry()
-    session_id = payload.get("session_id", "")
-    manifest = reg.get(session_id)  # type: ignore[attr-defined]
-    if manifest is None:
-        return {"__error__": True, "reason": RRR.NOT_FOUND.value}
-    root = Path(manifest.record_root)
+    record_root_str = payload.get("record_root")
+    if record_root_str:
+        root = Path(record_root_str)
+        session_id = ""
+    else:
+        reg = _registry()
+        session_id = payload.get("session_id", "")
+        manifest = reg.get(session_id)  # type: ignore[attr-defined]
+        if manifest is None:
+            return {"__error__": True, "reason": RRR.NOT_FOUND.value}
+        root = Path(manifest.record_root)
     out = []
+    # Sprint 021 — first pass builds a call_id → child_root map from
+    # ToolResult(tool="delegate") envelopes. delegate's ToolResult
+    # carries {"child_root": <path>} on its output payload; the second
+    # pass attaches that path to the matching parent ToolCall row, so
+    # the shell can load the child transcript on expand.
+    tool_call_id_to_child_root: dict[str, str] = {}
     try:
+        for env in api.read_record(root):
+            if env.get("kind") == TOOL_RESULT:
+                pl = env.get("payload") or {}
+                if isinstance(pl, dict):
+                    call_id = pl.get("call_id")
+                    output = pl.get("output")
+                    if isinstance(call_id, str) and isinstance(output, dict):
+                        child_root = output.get("child_root")
+                        if isinstance(child_root, str):
+                            tool_call_id_to_child_root[call_id] = child_root
         for env in api.read_record(root):
             kind = env.get("kind", "")
             if kind not in VISIBLE_KINDS:
@@ -338,6 +365,16 @@ def op_record_read(payload: dict) -> dict:
                 tool_name = pl.get("tool") if isinstance(pl, dict) else None
                 tool_call_id = pl.get("call_id") if isinstance(pl, dict) else None
                 summary = str(tool_name or "")
+            elif kind == TOOL_RESULT:
+                # Sprint 021 — a delegate ToolResult carries the child
+                # record_root; the shell folds the delegate flow on the
+                # parent side when this envelope lands.
+                tool_name = pl.get("tool") if isinstance(pl, dict) else None
+                tool_call_id = pl.get("call_id") if isinstance(pl, dict) else None
+                summary = f"{tool_name} → ok" if pl.get("ok") else f"{tool_name} → err"
+            child_record_root = (
+                tool_call_id_to_child_root.get(tool_call_id) if tool_call_id else None
+            )
             out.append({
                 "seq": int(env.get("seq", -1)),
                 "kind": kind,
@@ -354,6 +391,7 @@ def op_record_read(payload: dict) -> dict:
                 "retry_after_seconds": retry_after_seconds,
                 "tool_name": tool_name,
                 "tool_call_id": tool_call_id,
+                "child_record_root": child_record_root,
             })
     except Exception as e:  # noqa: BLE001
         return {"__error__": True, "reason": f"{RRR.READ_ERROR.value}:{e}"}

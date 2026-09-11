@@ -2,7 +2,7 @@
 // unbound pane. Text input + walked history from ~/.substrate/recent-workspaces.json.
 
 import { useEffect, useRef, useState } from "react";
-import { Pane, WorkspaceShape } from "@/state/ShellState";
+import { Pane, WorkspaceShape, PaneStatus } from "@/state/ShellState";
 import { readRecentWorkspaces, RecentWorkspace } from "@/state/RecentWorkspaces";
 import { listSessions, ManifestRow } from "@/state/Sessions";
 
@@ -22,7 +22,7 @@ export function UnboundPanePicker({ pane, onText, onWalk, onCommit, onResume }: 
   useEffect(() => {
     readRecentWorkspaces().then(setRows).catch(() => setRows([]));
     listSessions().then((rows) =>
-      setSessions(rows.filter((r) => r.status !== "ended"))
+      setSessions(rows.filter((r) => r.status !== PaneStatus.ENDED))
     ).catch(() => setSessions([]));
   }, []);
 
@@ -38,7 +38,7 @@ export function UnboundPanePicker({ pane, onText, onWalk, onCommit, onResume }: 
   const commit = (): void => {
     const path = pane.pickerText.trim();
     if (!path) return;
-    const shape: WorkspaceShape = pane.pickerSelection?.shape ?? "flat";
+    const shape: WorkspaceShape = pane.pickerSelection?.shape ?? WorkspaceShape.FLAT;
     onCommit(pane.id, path, shape);
   };
 

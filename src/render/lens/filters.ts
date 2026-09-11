@@ -29,9 +29,12 @@ export function filterByLevel(rows: readonly TranscriptRow[], level: StreamLevel
 // wrote to a child producer's queue; peer (side) when two peer
 // producers share a graph edge. The reducer projects both edge sets;
 // the direction toggle only picks which set the lens draws.
-export type EdgeKind = "down" | "side";
+// Edge kinds mirror StreamDir's enum: a temporal (down) edge represents
+// parent→child ordering, a peer (side) edge represents graph adjacency.
+// Kept as the same string set so an edge datum can be filtered against
+// the toggle without a mapping step.
+export type EdgeKind = StreamDir;
 
 export function filterEdgesByDir(edges: readonly { kind: EdgeKind }[], dir: StreamDir): typeof edges[number][] {
-  const want: EdgeKind = dir === StreamDir.DOWN ? "down" : "side";
-  return edges.filter((e) => e.kind === want);
+  return edges.filter((e) => e.kind === dir);
 }

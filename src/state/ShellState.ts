@@ -34,6 +34,11 @@ export interface TranscriptRow {
   // these when kind === "ToolCall" && tool_name === "delegate".
   tool_name?: string | null;
   tool_call_id?: string | null;
+  // Sprint 021 — delegate expand. The bridge pairs a ToolResult's
+  // output.child_root with the parent ToolCall by call_id and attaches
+  // it here so the shell can load the child transcript when the user
+  // clicks the ↳ handle.
+  child_record_root?: string | null;
 }
 
 export interface Pane {
@@ -60,6 +65,11 @@ export interface Pane {
   streamLevel: StreamLevel;          // Sprint 018 — all: every producer; app: filter framework noise
   streamDir: StreamDir;              // Sprint 018 — down: parent→child temporal; side: peer structural
   revealFocus: RevealFocus;          // Sprint 019 — Tab toggles focus between transcript half and stream half
+  // Sprint 021 — delegate expand state. Key = tool_call_id; value =
+  // the child transcript rows loaded from child_record_root. Key
+  // present ⇒ expanded (even if the row list is still loading and
+  // hence empty). Key absent ⇒ collapsed.
+  delegateExpansions: Record<string, TranscriptRow[]>;
   // Later sprints extend: surface, find, header_popover, etc.
 }
 

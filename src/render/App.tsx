@@ -5,11 +5,11 @@
 
 import { StrictMode, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { initial, reduce, Action, Emission } from "@/reducer/ShellReducer";
-import { ShellState } from "@/state/ShellState";
+import { initial, reduce, Action, Emission, ActionType, EndSource, type EndSourceT } from "@/reducer/ShellReducer";
+import { ShellState, TranscriptRow } from "@/state/ShellState";
 import { emit } from "@/observability/Emitter";
 import { WindowFrame } from "./WindowFrame";
-import { Anchor } from "./Anchor";
+import { Anchor, AnchorScope } from "./Anchor";
 import { DragLayer } from "./DragLayer";
 import { Zone, Axis } from "@/state/SplitTree";
 import { WorkspaceShape } from "@/state/ShellState";
@@ -50,7 +50,7 @@ function Shell(): JSX.Element {
   const state = stateRef.current;
 
   const startSessionCreate = useMemo(() => (paneId: string, path: string, shape: WorkspaceShape) => {
-    dispatch({ type: "PICKER_COMMIT", paneId, path, shape });
+    dispatch({ type: ActionType.PICKER_COMMIT, paneId, path, shape });
     const harnessDriver = (globalThis as unknown as {
       __substrateHarness?: { defaultDriver?: string | null };
     }).__substrateHarness?.defaultDriver;
@@ -59,34 +59,34 @@ function Shell(): JSX.Element {
 
     // Probe the driver first per Layer 5 forced_next: PROBE_DRIVER_PROBED gates SESSION_CREATE_REQUESTED.
     const probeReq = newId();
-    dispatch({ type: "PROBE_DRIVER_START", paneId, requestId: probeReq, driverName: driver, driverParams });
+    dispatch({ type: ActionType.PROBE_DRIVER_START, paneId, requestId: probeReq, driverName: driver, driverParams });
     bridgeRequest<{ available: boolean; context_tokens: number | null; model_families: string[] }>(
       "probe_driver", { driver_name: driver, driver_params: driverParams }, 10000,
     ).then((probe) => {
-      dispatch({ type: "PROBE_DRIVER_OK", requestId: probeReq, driverName: driver,
+      dispatch({ type: ActionType.PROBE_DRIVER_OK, requestId: probeReq, driverName: driver,
         contextTokens: probe.context_tokens ?? null, modelFamilies: probe.model_families ?? [] });
 
       // Probe succeeded — fire create.
       const requestId = newId();
       const sessionId = newId();
       const sessionName = `session-${sessionId.slice(0, 6)}`;
-      dispatch({ type: "SESSION_CREATE_START", paneId, requestId, sessionId, sessionName, driver });
+      dispatch({ type: ActionType.SESSION_CREATE_START, paneId, requestId, sessionId, sessionName, driver });
       bridgeRequest<{
         session_id: string; session_name: string; workspace_path: string; workspace_shape: WorkspaceShape;
       }>("session_create", {
         session_id: sessionId, name: sessionName, driver,
         workspace_path: path, workspace_shape: shape, bundle: "", seed: "",
       }, 5000).then((result) => {
-        dispatch({ type: "SESSION_CREATE_OK", paneId, requestId,
+        dispatch({ type: ActionType.SESSION_CREATE_OK, paneId, requestId,
           sessionId: result.session_id, sessionName: result.session_name, driver,
           workspacePath: result.workspace_path, workspaceShape: result.workspace_shape });
         refreshTranscript(paneId, result.session_id);
       }).catch((reason) => {
-        dispatch({ type: "SESSION_CREATE_ERR", paneId, requestId, reason: String(reason) });
+        dispatch({ type: ActionType.SESSION_CREATE_ERR, paneId, requestId, reason: String(reason) });
       });
     }).catch((reason) => {
       // Probe failed — SESSION_CREATE never fires (fail-fast per D69).
-      dispatch({ type: "PROBE_DRIVER_ERR", requestId: probeReq, driverName: driver, reason: String(reason) });
+      dispatch({ type: ActionType.PROBE_DRIVER_ERR, requestId: probeReq, driverName: driver, reason: String(reason) });
     });
   }, [dispatch]);
 
@@ -94,49 +94,72 @@ function Shell(): JSX.Element {
     bridgeRequest<{ session_id: string; envelopes: Array<{
       seq: number; kind: string; producer_kind: string; summary: string; turn_index: number | null;
     }> }>("record_read", { session_id: sessionId }, 5000).then((result) => {
-      dispatch({ type: "TRANSCRIPT_ROWS_LOADED", paneId, rows: result.envelopes });
+      dispatch({ type: ActionType.TRANSCRIPT_ROWS_LOADED, paneId, rows: result.envelopes });
     }).catch(() => { /* transcript fetch is best-effort */ });
   }, [dispatch]);
+
+  const toggleDelegateExpand = useMemo(() =>
+    (paneId: string, toolCallId: string, childRecordRoot: string | null) => {
+      const pane = stateRef.current.panes[paneId];
+      if (!pane) return;
+      const alreadyExpanded = toolCallId in pane.delegateExpansions;
+      if (alreadyExpanded) {
+        dispatch({ type: ActionType.DELEGATE_COLLAPSE, paneId, toolCallId,
+          childRecordRoot: childRecordRoot ?? "" });
+        return;
+      }
+      dispatch({ type: ActionType.DELEGATE_EXPAND_START, paneId, toolCallId,
+        childRecordRoot: childRecordRoot ?? "" });
+      if (!childRecordRoot) return; // no child transcript to load (ToolResult not yet on record)
+      bridgeRequest<{ session_id: string; envelopes: TranscriptRow[] }>(
+        "record_read", { record_root: childRecordRoot }, 5000,
+      ).then((result) => {
+        dispatch({
+          type: ActionType.DELEGATE_EXPAND_ROWS_LOADED,
+          paneId, toolCallId, rows: result.envelopes,
+        });
+      }).catch(() => { /* best-effort */ });
+    }, [dispatch]);
 
   const submitTurn = useMemo(() => (paneId: string, text: string) => {
     const pane = stateRef.current.panes[paneId];
     if (!pane?.boundSessionId) return;
     const requestId = newId();
     const timeoutSeconds = 60;
-    dispatch({ type: "TURN_SUBMIT_START", paneId, requestId,
+    dispatch({ type: ActionType.TURN_SUBMIT_START, paneId, requestId,
       sessionId: pane.boundSessionId, textLength: text.length, timeoutSeconds });
     bridgeRequest<{ session_id: string; turn_index: number }>(
       "turn_submit",
       { session_id: pane.boundSessionId, text, timeout_seconds: timeoutSeconds },
       (timeoutSeconds + 5) * 1000,
     ).then((result) => {
-      dispatch({ type: "TURN_SUBMIT_OK", paneId, requestId,
+      dispatch({ type: ActionType.TURN_SUBMIT_OK, paneId, requestId,
         sessionId: result.session_id, turnIndex: result.turn_index });
       refreshTranscript(paneId, result.session_id);
     }).catch((reason) => {
-      dispatch({ type: "TURN_SUBMIT_ERR", paneId, requestId,
+      dispatch({ type: ActionType.TURN_SUBMIT_ERR, paneId, requestId,
         sessionId: pane.boundSessionId!, reason: String(reason) });
     });
   }, [dispatch]);
 
-  const startSessionEnd = useMemo(() => (paneId: string, sessionId: string, source: "menu" | "slash" | "shortcut") => {
+  const startSessionEnd = useMemo(() => (paneId: string, sessionId: string, source: EndSourceT) => {
     const requestId = newId();
-    dispatch({ type: "SESSION_END_START", paneId, requestId, sessionId, source });
+    dispatch({ type: ActionType.SESSION_END_START, paneId, requestId, sessionId, source });
     bridgeRequest<{
       session_id: string; end_reason: string; record_finalised: boolean; envelope_seq: number;
     }>("session_end", { session_id: sessionId }, 30000).then((result) => {
-      dispatch({ type: "SESSION_END_OK", paneId, requestId,
+      dispatch({ type: ActionType.SESSION_END_OK, paneId, requestId,
         sessionId: result.session_id, endReason: result.end_reason,
         recordFinalised: result.record_finalised, envelopeSeq: result.envelope_seq,
       });
     }).catch((reason) => {
-      dispatch({ type: "SESSION_END_ERR", paneId, requestId, reason: String(reason) });
+      dispatch({ type: ActionType.SESSION_END_ERR, paneId, requestId, reason: String(reason) });
     });
   }, [dispatch]);
 
   const startSessionResume = useMemo(() => (paneId: string, sessionId: string) => {
     const requestId = newId();
-    dispatch({ type: "SESSION_RESUME_START", paneId, requestId, sessionId });
+    dispatch({ type: ActionType.SESSION_RESUME_START, paneId, requestId, sessionId });
     bridgeRequest<{
       session_id: string; session_name: string | null;
       workspace_path: string; workspace_shape: WorkspaceShape;
@@ -144,7 +167,7 @@ function Shell(): JSX.Element {
     }>("session_resume", { session_id: sessionId }, 5000).then((result) => {
       const r = result as unknown as { last_turn_index?: number } & typeof result;
       const status: PaneStatus = isPaneStatus(result.status) ? result.status : PaneStatus.PARKED;
-      dispatch({ type: "SESSION_RESUME_OK", paneId, requestId,
+      dispatch({ type: ActionType.SESSION_RESUME_OK, paneId, requestId,
         sessionId: result.session_id, sessionName: result.session_name,
         workspacePath: result.workspace_path, workspaceShape: result.workspace_shape,
         status,
@@ -152,14 +175,14 @@ function Shell(): JSX.Element {
       });
       refreshTranscript(paneId, result.session_id);
     }).catch((reason) => {
-      dispatch({ type: "SESSION_RESUME_ERR", paneId, requestId, reason: String(reason) });
+      dispatch({ type: ActionType.SESSION_RESUME_ERR, paneId, requestId, reason: String(reason) });
     });
   }, [dispatch]);
 
   useEffect(() => {
     if (bootedRef.current) return;
     bootedRef.current = true;
-    dispatch({ type: "BOOT" });
+    dispatch({ type: ActionType.BOOT });
   }, [dispatch]);
 
   useEffect(() => {
@@ -200,25 +223,27 @@ function Shell(): JSX.Element {
           window={window}
           state={state}
           gutter={{
-            onStart: (splitId) => dispatch({ type: "GUTTER_DRAG_START", splitId }),
-            onStop:  (splitId, ratio) => dispatch({ type: "GUTTER_DRAG_STOP", splitId, ratio }),
+            onStart: (splitId) => dispatch({ type: ActionType.GUTTER_DRAG_START, splitId }),
+            onStop:  (splitId, ratio) => dispatch({ type: ActionType.GUTTER_DRAG_STOP, splitId, ratio }),
           }}
           pane={{
-            onFocus: (paneId) => dispatch({ type: "FOCUS_PANE", paneId }),
+            onFocus: (paneId) => dispatch({ type: ActionType.FOCUS_PANE, paneId }),
             onDragStart: (paneId) => setDrag({ sourceId: paneId, targetId: null, zone: null }),
-            onClose: (paneId) => dispatch({ type: "CLOSE_PANE", paneId }),
-            onPickerText: (paneId, text) => dispatch({ type: "PICKER_TEXT", paneId, text }),
-            onPickerWalk: (paneId, index, path, shape) => dispatch({ type: "PICKER_WALK", paneId, index, path, shape }),
+            onClose: (paneId) => dispatch({ type: ActionType.CLOSE_PANE, paneId }),
+            onPickerText: (paneId, text) => dispatch({ type: ActionType.PICKER_TEXT, paneId, text }),
+            onPickerWalk: (paneId, index, path, shape) => dispatch({ type: ActionType.PICKER_WALK, paneId, index, path, shape }),
             onPickerCommit: (paneId, path, shape) => startSessionCreate(paneId, path, shape),
             onResume: (paneId, sessionId) => startSessionResume(paneId, sessionId),
-            onPromptText: (paneId, text) => dispatch({ type: "PROMPT_TEXT", paneId, text }),
-            onPromptLengthChanged: (paneId, length) => dispatch({ type: "PROMPT_LENGTH_CHANGED", paneId, length }),
+            onPromptText: (paneId, text) => dispatch({ type: ActionType.PROMPT_TEXT, paneId, text }),
+            onPromptLengthChanged: (paneId, length) => dispatch({ type: ActionType.PROMPT_LENGTH_CHANGED, paneId, length }),
             onPromptSubmit: submitTurn,
-            onRevealToggle: (paneId) => dispatch({ type: "REVEAL_TOGGLE", paneId }),
-            onLensSwitch: (paneId, to) => dispatch({ type: "LENS_SWITCH", paneId, to }),
-            onStreamLevelToggle: (paneId) => dispatch({ type: "STREAM_LEVEL_TOGGLE", paneId }),
-            onStreamDirToggle: (paneId) => dispatch({ type: "STREAM_DIR_TOGGLE", paneId }),
-            onRevealFocusToggle: (paneId) => dispatch({ type: "REVEAL_FOCUS_TOGGLE", paneId }),
+            onRevealToggle: (paneId) => dispatch({ type: ActionType.REVEAL_TOGGLE, paneId }),
+            onLensSwitch: (paneId, to) => dispatch({ type: ActionType.LENS_SWITCH, paneId, to }),
+            onStreamLevelToggle: (paneId) => dispatch({ type: ActionType.STREAM_LEVEL_TOGGLE, paneId }),
+            onStreamDirToggle: (paneId) => dispatch({ type: ActionType.STREAM_DIR_TOGGLE, paneId }),
+            onRevealFocusToggle: (paneId) => dispatch({ type: ActionType.REVEAL_FOCUS_TOGGLE, paneId }),
+            onDelegateExpandToggle: (paneId, toolCallId, childRecordRoot) =>
+              toggleDelegateExpand(paneId, toolCallId, childRecordRoot),
           }}
         />
       )}
@@ -229,19 +254,19 @@ function Shell(): JSX.Element {
           activeZone={drag.zone}
           onZoneChange={(targetId, zone) => {
             if (drag.targetId !== targetId) {
-              dispatch({ type: "DROP_HINT_SHOW", sourceId: drag.sourceId, targetId, zone });
+              dispatch({ type: ActionType.DROP_HINT_SHOW, sourceId: drag.sourceId, targetId, zone });
             } else if (drag.zone !== zone && drag.zone) {
-              dispatch({ type: "DROP_HINT_ZONE", sourceId: drag.sourceId, targetId, fromZone: drag.zone, toZone: zone });
+              dispatch({ type: ActionType.DROP_HINT_ZONE, sourceId: drag.sourceId, targetId, fromZone: drag.zone, toZone: zone });
             }
             setDrag({ sourceId: drag.sourceId, targetId, zone });
           }}
           onCommit={(targetId, zone) => {
-            dispatch({ type: "MOVE_PANE", sourceId: drag.sourceId, targetId, zone });
-            dispatch({ type: "DROP_HINT_HIDE", sourceId: drag.sourceId, targetId });
+            dispatch({ type: ActionType.MOVE_PANE, sourceId: drag.sourceId, targetId, zone });
+            dispatch({ type: ActionType.DROP_HINT_HIDE, sourceId: drag.sourceId, targetId });
             setDrag(null);
           }}
           onCancel={() => {
-            dispatch({ type: "DROP_HINT_HIDE", sourceId: drag.sourceId, targetId: drag.targetId });
+            dispatch({ type: ActionType.DROP_HINT_HIDE, sourceId: drag.sourceId, targetId: drag.targetId });
             setDrag(null);
           }}
         />
@@ -254,12 +279,12 @@ function Shell(): JSX.Element {
           onEnd={startSessionEnd}
         />
       )}
-      <Anchor id="anchor-dialog"        scope="app" slot="dialog"        byte={0} />
-      <Anchor id="anchor-window-strip"  scope="app" slot="window-strip"  byte={0} />
-      <Anchor id="anchor-bridge"        scope="app" slot="bridge"        byte={bridgeByte} />
+      <Anchor id="anchor-dialog"        scope={AnchorScope.APP} slot="dialog"        byte={0} />
+      <Anchor id="anchor-window-strip"  scope={AnchorScope.APP} slot="window-strip"  byte={0} />
+      <Anchor id="anchor-bridge"        scope={AnchorScope.APP} slot="bridge"        byte={bridgeByte} />
       {substrateVersion && <span data-testid="substrate-version" style={{ display: "none" }}>{substrateVersion}</span>}
-      <Anchor id="anchor-last-tag"      scope="app" slot="last-tag"      byte={0} />
-      <Anchor id="anchor-heartbeat"     scope="app" slot="heartbeat"     byte={0} />
+      <Anchor id="anchor-last-tag"      scope={AnchorScope.APP} slot="last-tag"      byte={0} />
+      <Anchor id="anchor-heartbeat"     scope={AnchorScope.APP} slot="heartbeat"     byte={0} />
     </>
   );
 }
@@ -270,7 +295,7 @@ function ShellShortcuts({ dispatch, focusedPaneId, focusedPane, onEnd }: {
   dispatch: (a: Action) => void;
   focusedPaneId: string | null;
   focusedPane: PaneModel | null;
-  onEnd: (paneId: string, sessionId: string, source: "menu" | "slash" | "shortcut") => void;
+  onEnd: (paneId: string, sessionId: string, source: EndSourceT) => void;
 }): JSX.Element | null {
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
@@ -280,14 +305,14 @@ function ShellShortcuts({ dispatch, focusedPaneId, focusedPane, onEnd }: {
       if (e.key === "d" || e.key === "D") {
         e.preventDefault();
         const axis: Axis = e.shiftKey ? Axis.COL : Axis.ROW;
-        dispatch({ type: "SPLIT_PANE", paneId: focusedPaneId, axis });
+        dispatch({ type: ActionType.SPLIT_PANE, paneId: focusedPaneId, axis });
       } else if (e.key === "w" || e.key === "W") {
         e.preventDefault();
-        dispatch({ type: "CLOSE_PANE", paneId: focusedPaneId });
+        dispatch({ type: ActionType.CLOSE_PANE, paneId: focusedPaneId });
       } else if (e.key === "e" || e.key === "E") {
         if (!focusedPane?.boundSessionId) return;
         e.preventDefault();
-        onEnd(focusedPaneId, focusedPane.boundSessionId, "shortcut");
+        onEnd(focusedPaneId, focusedPane.boundSessionId, EndSource.SHORTCUT);
       }
     };
     window.addEventListener("keydown", onKey);

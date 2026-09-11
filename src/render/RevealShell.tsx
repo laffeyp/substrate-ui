@@ -110,7 +110,7 @@ export function RevealShell({
           onClick={() => onStreamLevelToggle?.(pane.id)}
           style={chipStyle}
         >
-          <span className="label">level: {pane.streamLevel === StreamLevel.ALL ? "all" : "app"}</span>
+          <span className="label">level: {pane.streamLevel === StreamLevel.ALL ? StreamLevel.ALL : StreamLevel.APP}</span>
         </span>
         <span
           data-testid={`stream-dir-toggle-${pane.id}`}
@@ -118,7 +118,7 @@ export function RevealShell({
           onClick={() => onStreamDirToggle?.(pane.id)}
           style={chipStyle}
         >
-          <span className="label">dir: {pane.streamDir === StreamDir.DOWN ? "down" : "side"}</span>
+          <span className="label">dir: {pane.streamDir === StreamDir.DOWN ? StreamDir.DOWN : StreamDir.SIDE}</span>
         </span>
       </div>
       <div style={{ display: "flex", gap: 8, flex: 1, minHeight: 0 }}>

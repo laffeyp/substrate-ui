@@ -5,6 +5,7 @@
 // adds the drag handle for pane rearrange.
 
 import { Pane } from "@/state/ShellState";
+import { RevealState } from "@/observability/reasons";
 
 interface Props {
   pane: Pane;
@@ -45,8 +46,8 @@ export function PaneHeader({ pane, onDragStart, onClose, onRevealToggle }: Props
         data-reveal={pane.reveal}
         onClick={onRevealToggle ? () => onRevealToggle(pane.id) : undefined}
         style={{ ...S.handle, cursor: onRevealToggle ? "pointer" : "default",
-          color: pane.reveal === "reveal" ? "#82a5c8" : S.handle.color }}
-        title={pane.reveal === "reveal" ? "back to transcript" : "reveal machinery"}
+          color: pane.reveal === RevealState.REVEAL ? "#82a5c8" : S.handle.color }}
+        title={pane.reveal === RevealState.REVEAL ? "back to transcript" : "reveal machinery"}
       >◐</span>
       <span style={S.handle} title="records">▤</span>
       <span
