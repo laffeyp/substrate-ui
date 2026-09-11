@@ -5,7 +5,7 @@
 import { Pane as PaneModel, WorkspaceShape, Lens } from "@/state/ShellState";
 import { PaneStatus, RevealState, StreamLevel, StreamDir } from "@/observability/reasons";
 import { PaneHeader } from "./PaneHeader";
-import { Anchor } from "./Anchor";
+import { Anchor, AnchorScope } from "./Anchor";
 import { UnboundPanePicker } from "./UnboundPanePicker";
 import { Prompt } from "./Prompt";
 import { RevealShell } from "./RevealShell";
@@ -15,6 +15,7 @@ import {
   TOOL_CALL, TOOL_NAME_DELEGATE,
 } from "@/observability/envelope-kinds";
 import { TranscriptDelegateRow } from "./TranscriptDelegateRow";
+import { TranscriptDelegateExpanded } from "./TranscriptDelegateExpanded";
 
 interface Props {
   pane: PaneModel;
@@ -33,6 +34,7 @@ interface Props {
   onStreamLevelToggle?: (paneId: string) => void;
   onStreamDirToggle?: (paneId: string) => void;
   onRevealFocusToggle?: (paneId: string) => void;
+  onDelegateExpandToggle?: (paneId: string, toolCallId: string, childRecordRoot: string | null) => void;
 }
 
 const ROW_COLORS: Record<string, string> = {
@@ -94,7 +96,7 @@ function initialByte(slot: string, pane: PaneModel): number {
   return 0;
 }
 
-export function Pane({ pane, onFocus, onDragStart, onClose, onPickerText, onPickerWalk, onPickerCommit, onResume, onPromptText, onPromptLengthChanged, onPromptSubmit, onRevealToggle, onLensSwitch, onStreamLevelToggle, onStreamDirToggle, onRevealFocusToggle }: Props): JSX.Element {
+export function Pane({ pane, onFocus, onDragStart, onClose, onPickerText, onPickerWalk, onPickerCommit, onResume, onPromptText, onPromptLengthChanged, onPromptSubmit, onRevealToggle, onLensSwitch, onStreamLevelToggle, onStreamDirToggle, onRevealFocusToggle, onDelegateExpandToggle }: Props): JSX.Element {
   return (
     <div
       data-testid={`pane-${pane.id}`}
@@ -134,7 +136,27 @@ export function Pane({ pane, onFocus, onDragStart, onClose, onPickerText, onPick
               ) : (
                 pane.transcriptRows.map((row) => {
                   if (row.kind === TOOL_CALL && row.tool_name === TOOL_NAME_DELEGATE) {
-                    return <TranscriptDelegateRow key={row.seq} paneId={pane.id} row={row} depth={1} />;
+                    const tcId = row.tool_call_id ?? "";
+                    const expanded = tcId in pane.delegateExpansions;
+                    return (
+                      <div key={row.seq}>
+                        <TranscriptDelegateRow
+                          paneId={pane.id}
+                          row={row}
+                          depth={1}
+                          expanded={expanded}
+                          onExpandToggle={onDelegateExpandToggle}
+                        />
+                        {expanded ? (
+                          <TranscriptDelegateExpanded
+                            paneId={pane.id}
+                            toolCallId={tcId}
+                            childRows={pane.delegateExpansions[tcId]}
+                            depth={1}
+                          />
+                        ) : null}
+                      </div>
+                    );
                   }
                   return (
                     <div
@@ -170,7 +192,7 @@ export function Pane({ pane, onFocus, onDragStart, onClose, onPickerText, onPick
         <Anchor
           key={slot}
           id={`anchor-pane-${pane.id}-${slot}`}
-          scope="pane"
+          scope={AnchorScope.PANE}
           paneId={pane.id}
           slot={slot}
           byte={initialByte(slot, pane)}

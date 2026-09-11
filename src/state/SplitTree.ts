@@ -1,7 +1,7 @@
 // SplitTree.ts — pure operations over the split tree in ShellState.
 
 import { Pane, Split, ShellState, isSplit, paneCount, PANE_CAP_PER_WINDOW, Lens } from "./ShellState";
-import { RevealState, StreamLevel, StreamDir, RevealFocus } from "@/observability/reasons";
+import { RevealState, StreamLevel, StreamDir, RevealFocus, PaneStatus } from "@/observability/reasons";
 import { newId } from "./ids";
 
 export interface SplitResult {
@@ -30,7 +30,7 @@ export function splitPane(
     ratio: 0.5,
     focused: false,
     boundSessionId: null,
-    status: "unbound",
+    status: PaneStatus.UNBOUND,
     pickerText: "",
     pickerIndex: -1,
     pickerSelection: null,
@@ -46,6 +46,7 @@ export function splitPane(
     streamLevel: StreamLevel.ALL,
     streamDir: StreamDir.DOWN,
     revealFocus: RevealFocus.TRANSCRIPT,
+    delegateExpansions: {},
   };
   const updatedParent: Pane = { ...parent, splitParentId: newSplitId, ratio: 0.5 };
   const newSplit: Split = {

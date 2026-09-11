@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.10.1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>autonomous_session_topology — design paper</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    html {
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    svg {
+      height: auto;
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      white-space: pre-wrap;
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      border: none;
+      border-top: 1px solid #1a1a1a;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">autonomous_session_topology — design paper</h1>
+</header>
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a
+href="#autonomous_session_topology-a-session-topology-that-does-not-pause-for-a-human"
+id="toc-autonomous_session_topology-a-session-topology-that-does-not-pause-for-a-human">autonomous_session_topology
+— a session topology that does not pause for a human</a>
+<ul>
+<li><a href="#what-this-topology-is" id="toc-what-this-topology-is">1.
+What this topology is</a></li>
+<li><a href="#what-changes-from-session_topology-precisely"
+id="toc-what-changes-from-session_topology-precisely">2. What changes
+from session_topology, precisely</a></li>
+<li><a href="#user_side-in-two-halves"
+id="toc-user_side-in-two-halves">3. <code>user_side</code> in two
+halves</a>
+<ul>
+<li><a href="#watcher" id="toc-watcher">3.1
+<code>watcher</code></a></li>
+<li><a href="#dispatcher" id="toc-dispatcher">3.2
+<code>dispatcher</code></a></li>
+</ul></li>
+<li><a href="#where-the-reply-text-comes-from"
+id="toc-where-the-reply-text-comes-from">4. Where the reply text comes
+from</a></li>
+<li><a href="#what-the-topology-declares"
+id="toc-what-the-topology-declares">5. What the topology
+declares</a></li>
+<li><a href="#running-the-topology" id="toc-running-the-topology">6.
+Running the topology</a></li>
+<li><a href="#what-substrate-needs" id="toc-what-substrate-needs">7.
+What substrate needs</a></li>
+<li><a href="#what-the-topology-does-not-do"
+id="toc-what-the-topology-does-not-do">8. What the topology does not
+do</a></li>
+<li><a href="#risks" id="toc-risks">9. Risks</a></li>
+<li><a href="#next-steps" id="toc-next-steps">10. Next steps</a></li>
+</ul></li>
+</ul>
+</nav>
+<h1
+id="autonomous_session_topology-a-session-topology-that-does-not-pause-for-a-human">autonomous_session_topology
+— a session topology that does not pause for a human</h1>
+<p><em>Design paper, round 3. 2026-09-11. Supersedes v1 and v2, both on
+disk as audit trail. v2 was overbuilt. It invented an outer
+parallel-orchestration topology with N embedded substrates, cross-slot
+convergence measurement, and a research programme around variant runs.
+That was the wrong frame. The user’s idea is one topology, not an
+orchestrator over many. The N-copies use case is what a person does with
+it after it exists — not part of the design. This paper describes the
+one topology, and nothing else.</em></p>
+<hr />
+<h2 id="what-this-topology-is">1. What this topology is</h2>
+<p>A session topology whose user-side turn is generated by the topology
+itself, not by a person typing into a shell. It runs the same substrate
+turn loop <code>session_topology</code> runs — <code>UserMessage</code>
+→ <code>PromptComposed</code> → <code>ModelReply</code> →
+<code>Park</code> → <code>UserMessage</code> again — with one
+substitution. Where <code>session_topology</code> uses
+<code>pause_await_input</code> to halt after each model turn and wait
+for a shell to append the next <code>UserMessage</code>, this topology
+emits the next <code>UserMessage</code> itself, from a Producer inside
+the topology.</p>
+<p>That is the whole design. Everything else in this paper describes how
+the emitted <code>UserMessage</code> gets chosen so it is useful rather
+than random.</p>
+<hr />
+<h2 id="what-changes-from-session_topology-precisely">2. What changes
+from session_topology, precisely</h2>
+<p><code>substrate/src/substrate/topologies/session/__init__.py</code>
+composes:</p>
+<ul>
+<li>Event schemas: <code>SessionStarted</code>,
+<code>UserMessage</code>, <code>ModelReply</code>, <code>Park</code>,
+<code>SessionEnded</code>, <code>SessionEndRequested</code>,
+<code>SessionWarning</code>, <code>PromptFragment</code>,
+<code>PromptComposed</code>.</li>
+<li>Producers: composer, parent-context, per-turn, role, tools-suite,
+bundle, user-message-fragment, CI/walkthrough dual-mode.</li>
+<li>Termination: an <code>any_of</code> that includes
+<code>pause_await_input(when=&lt;awaiting user&gt;, resume_condition="user_message")</code>.</li>
+</ul>
+<p>The autonomous topology reuses every one of those event schemas and
+every one of those Producers unchanged. Two things change:</p>
+<ul>
+<li><strong>Termination.</strong> <code>pause_await_input</code> is
+dropped. Termination becomes
+<code>any_of(threshold_count("SessionEnded", 1), quiescence_with_watchdog(seconds=1800))</code>
+— the run ends when the model emits <code>SessionEnded</code> or when
+nothing has moved in thirty minutes.</li>
+<li><strong>A new Producer, <code>user_side</code>, is added.</strong>
+It is triggered by every <code>ModelReply</code>, every
+<code>Park</code>, and every <code>SessionWarning</code>. Its output is
+a <code>UserMessage</code> — the next turn’s input. The topology now
+closes the loop on its own; the shell is not required for it to make
+progress.</li>
+</ul>
+<p>Two new views feed the <code>user_side</code> Producer:</p>
+<ul>
+<li><code>trace_view</code> — a <code>KindBuffer</code> over the
+session’s events since the last <code>UserMessage</code>.</li>
+<li><code>state_view</code> — a small deterministic view holding the
+current sprint pointer, the last watcher verdict, and the checkpoint
+index for the rotation schedule.</li>
+</ul>
+<p>That is the whole topology change. No composition, no embedded
+substrate, no outer orchestration.</p>
+<hr />
+<h2 id="user_side-in-two-halves">3. <code>user_side</code> in two
+halves</h2>
+<p><code>user_side</code> decomposes into two smaller Producers so each
+half is separately testable.</p>
+<h3 id="watcher">3.1 <code>watcher</code></h3>
+<p>A pure function of
+<code>(trace_view, state_view, project_files) → Verdict</code>. Emits
+one <code>WatcherVerdict{verdict, drift_kind, detector_scores}</code>
+per firing. Verdict values are <code>green</code>, <code>yellow</code>,
+or <code>red</code>.</p>
+<p>Five detectors. On any given firing, a subset runs per the rotation
+schedule below.</p>
+<ul>
+<li><strong>vocabulary_conformance</strong> — checks the sprint’s git
+diff and the JSONL trace for tag names not in
+<code>signals/0.1.json § layer_1_lexical</code>. Score 1.0 means every
+emit matches a ratified schema. Anything less is a mouth-side Emitter
+hole and is red.</li>
+<li><strong>sdd_hygiene</strong> — checks that
+<code>BLACKBOARD.md</code> and <code>KIT_DIARY.md</code> carry an entry
+for the last closed sprint and that any drift found by the other
+detectors has a proposal filed against it.</li>
+<li><strong>coding_canon</strong> — runs the linter suite
+(retyped-literals grep, discriminated-union coverage, function-length
+scan, unused-code finder) on the diff since the last verdict.</li>
+<li><strong>design_lock</strong> — screenshots every state the current
+sprint’s card claims to render, region-diffs each against the design
+lock’s PNG in <code>handoff_latest/prototypes/</code>. Skipped on non-UI
+sprints.</li>
+<li><strong>prose_register</strong> — runs the <code>dellm</code>
+skill’s checks over every committed markdown file the diff touched.
+Returns the machine-tell fingerprint score.</li>
+</ul>
+<p>Rotation:</p>
+<ul>
+<li>Every turn: <code>vocabulary_conformance</code>, plus a sprint-close
+check that reads the card.</li>
+<li>Every second turn: <code>sdd_hygiene</code>.</li>
+<li>Every fifth turn: <code>coding_canon</code>.</li>
+<li>Every UI-touching sprint: <code>design_lock</code>.</li>
+<li>Every markdown-touching turn: <code>prose_register</code>.</li>
+</ul>
+<p>The rotation lives in <code>state_view.checkpoint_index</code>; the
+trace records which detectors ran on each firing.</p>
+<p>Verdict composition is monotone. Any red detector makes the verdict
+red; any yellow without a red makes it yellow; otherwise green.</p>
+<h3 id="dispatcher">3.2 <code>dispatcher</code></h3>
+<p>Triggered by every <code>WatcherVerdict</code>. Emits one
+<code>UserMessage</code> whose <code>text</code> is the next turn’s user
+prompt and whose <code>slash_source</code> field is set to
+<code>"dispatcher"</code> so the transcript distinguishes a
+topology-emitted turn from a human-typed one. The
+<code>slash_source</code> field already exists on
+<code>UserMessage</code> per
+<code>topologies/session/__init__.py:121</code>.</p>
+<p>The dispatcher’s behaviour is a rule table, not a program. Three
+invariants over the table:</p>
+<ul>
+<li>On any green verdict, emit a <code>silent_continue</code> reply —
+the shortest text that keeps the model on task (“continue”, “next”, “go
+on”, or the empty prompt on the paths where the composer accepts
+one).</li>
+<li>On a yellow verdict, emit the reply whose <code>drift_kind</code>
+matches the verdict’s <code>drift_kind</code>. If none matches, emit a
+<code>halt</code> reply and let termination quiescence close the
+run.</li>
+<li>On any red verdict, emit a <code>halt</code> reply carrying the
+drift detail. The operator reads the halted run, ratifies or corrects,
+and — if resuming makes sense — starts a fresh run against the corrected
+state.</li>
+</ul>
+<p>Independent of the verdict, the dispatcher inserts periodic reminders
+keyed to detector staleness. If <code>sdd_hygiene</code> has not fired
+in the last five turns, the next reply prepends “confirm SDD hygiene
+before continuing.” If <code>design_lock</code> is stale on a
+UI-touching sprint, likewise. This is the mechanised version of the
+periodic “look at the designs again” and “remember SDD best practices”
+prompts observed in the current session’s transcript.</p>
+<hr />
+<h2 id="where-the-reply-text-comes-from">4. Where the reply text comes
+from</h2>
+<p>The dispatcher’s rule table is not designed a priori. Its clusters
+and its text templates are mined out of prior successful sessions. The
+pass runs once, produces a corpus file, and the topology loads that file
+as a run baseline.</p>
+<p>Pass:</p>
+<ol type="1">
+<li>Read the transcripts from
+<code>~/.claude/projects/-Users-peterlaffey-Documents-Claude-Projects-Agent-Orchestration/*.jsonl</code>.</li>
+<li>For each transcript, enumerate every operator turn.</li>
+<li>For each operator turn, record: the prior assistant turn’s signal
+shape (which tools it called, which tags fired, which sprint card it
+referenced), the reply text the operator typed, and a hand-assigned
+label for the intervention kind.</li>
+<li>Include silent-continue evidence. Every assistant turn the operator
+did not interrupt is a
+<code>(signal_shape, "", "silent_continue")</code> datum. These are the
+majority of turns in a well-run session; without them the corpus
+over-weights correction.</li>
+<li>Cluster the signal shapes. Each cluster becomes one rule-table
+entry: which verdict shape triggers it, which reply text fires, which
+intervention kind it labels.</li>
+</ol>
+<p>The corpus is versioned; the run manifest carries the corpus version
+so replays are exact. The corpus contains the operator’s writing-style
+corrections too — the tonal interventions (“no LLM-speak”, “stop
+preambling”, “you are being bizarrely hostile”) map to prose-register
+drift replies.</p>
+<p>Corpus quality dominates dispatcher quality. A thin corpus produces a
+dispatcher that hangs often or repeats itself. Scale is the fix: mine
+more transcripts, refine clusters, iterate.</p>
+<hr />
+<h2 id="what-the-topology-declares">5. What the topology declares</h2>
+<p>Under
+<code>substrate/src/substrate/topologies/autonomous_session/</code>:</p>
+<ul>
+<li><code>producer_kind("watcher", schemas=[WatcherVerdict], factory=...)</code>.</li>
+<li><code>producer_kind("dispatcher", schemas=[UserMessage], factory=...)</code>.
+The dispatcher emits <code>UserMessage</code> directly into the
+session’s own event stream, so the composer, per-turn, and model-reply
+Producers see it as the next turn’s input.</li>
+<li><code>view("trace_view", KindBuffer(...))</code>.</li>
+<li><code>view("state_view", &lt;deterministic small struct&gt;)</code>.</li>
+<li><code>view("corpus", &lt;keyed lookup over the mined corpus&gt;)</code>
+— loaded from baseline metadata, deterministic, read-only after
+RunStarted.</li>
+<li><code>trigger("run_watcher", subscription={ModelReply, Park, SessionWarning}, starts="watcher", ...)</code>.</li>
+<li><code>trigger("run_dispatcher", subscription={WatcherVerdict}, starts="dispatcher", ...)</code>.</li>
+<li>Every producer_kind and trigger from <code>session_topology</code>
+verbatim.</li>
+<li><code>termination(any_of(threshold_count("SessionEnded", 1), quiescence_with_watchdog(seconds=1800)))</code>.</li>
+</ul>
+<p>No new kernel primitive. No new termination policy. No composition
+boundary. The topology sits alongside <code>session_topology</code> in
+the registry as a sibling, not an outer wrapper.</p>
+<hr />
+<h2 id="running-the-topology">6. Running the topology</h2>
+<p><code>substrate --topology autonomous_session --manifest run.json</code>.
+That is the whole invocation.</p>
+<p>The run manifest names: the workspace, the driver (any Responder —
+Ollama, CLI Claude, Deterministic), the sprint queue file, the corpus
+version, and any detector overrides.</p>
+<p>To run it three times in parallel: open three shells and invoke it
+three times against three separate workspaces. That is not part of the
+topology’s design. It is what a person does with a topology that no
+longer needs a person watching it.</p>
+<p>If a shell wants to visualise a running autonomous session, the
+existing substrate-ui pane binds to it exactly as it binds to a manual
+session — the events on the bus have identical schemas. The only
+shell-visible difference is that
+<code>UserMessage.slash_source == "dispatcher"</code> on the auto-typed
+turns; the pane can render those in a muted style to distinguish
+them.</p>
+<hr />
+<h2 id="what-substrate-needs">7. What substrate needs</h2>
+<p>Nothing new. Every primitive is already declared:</p>
+<ul>
+<li><code>Producer</code>, <code>View</code>, <code>Responder</code> —
+<code>substrate/src/substrate/protocols.py</code>.</li>
+<li><code>producer_kind</code>, <code>view</code>, <code>trigger</code>,
+<code>route</code>, <code>termination</code> — the
+<code>TopologyBuilder</code> methods at
+<code>substrate/src/substrate/kernel/topology.py:130</code>.</li>
+<li><code>threshold_count</code>, <code>quiescence_with_watchdog</code>,
+<code>any_of</code> —
+<code>substrate/src/substrate/kernel/policies.py</code>.</li>
+<li><code>UserMessage</code>, <code>ModelReply</code>,
+<code>Park</code>, <code>SessionWarning</code> event schemas —
+<code>substrate/src/substrate/topologies/session/__init__.py</code>.</li>
+<li><code>slash_source: str | None</code> field on
+<code>UserMessage</code> — same file.</li>
+</ul>
+<p>The one design choice worth flagging is that the dispatcher emits
+<code>UserMessage</code> into the topology’s own bus. In
+<code>session_topology</code> today, <code>UserMessage</code> is
+externally appended by a caller of
+<code>SessionRegistry.turn_sync</code>. Here it comes from an
+in-topology Producer. The kernel places no restriction on which Producer
+emits which kind, so this is only a convention change; the composer’s
+trigger already subscribes to <code>UserMessage</code> and does not care
+about its provenance beyond the <code>slash_source</code> field.</p>
+<hr />
+<h2 id="what-the-topology-does-not-do">8. What the topology does not
+do</h2>
+<ul>
+<li><strong>It does not compose N session topologies.</strong> N
+sessions running in parallel is a person opening N shells. Not part of
+the topology.</li>
+<li><strong>It does not measure cross-run convergence.</strong> That is
+an analysis someone runs over N runs’ JSONL after the fact. Not part of
+the topology.</li>
+<li><strong>It does not ratify vocabulary proposals.</strong> On a red
+verdict flagging an invented tag or a payload-shape refusal, the
+dispatcher halts and the operator ratifies out of band.</li>
+<li><strong>It does not author sprint cards.</strong> Sprint cards are
+authored by the model under operator direction, elsewhere. The topology
+consumes the sprint queue as input.</li>
+<li><strong>It does not replace the shell for interactive work.</strong>
+A person driving a session by hand still uses
+<code>session_topology</code> via the substrate-ui bridge. The
+autonomous topology exists for the case where a person does not want to
+sit and type.</li>
+</ul>
+<hr />
+<h2 id="risks">9. Risks</h2>
+<ul>
+<li><strong>Corpus coverage.</strong> A poor corpus means poor
+dispatcher replies. Iterate on the mining pass; ship a first cut and
+grow it.</li>
+<li><strong>Detector false positives.</strong> A watcher that classifies
+green work as yellow halts too often and kills throughput. Every
+detector needs a small unit-test fixture set derived from real
+transcript excerpts before it goes live.</li>
+<li><strong>Silent drift.</strong> A drift kind that no detector covers
+will not be caught. The five detectors above are the coverage today. New
+drift kinds need new detectors, which are pure functions and cheap to
+add.</li>
+<li><strong>Dispatcher loops.</strong> A dispatcher-model interaction
+that oscillates between yellow and green without progress is possible.
+The mitigation is a per-sprint turn cap in the termination policy: if
+the sprint pointer does not advance in K turns, halt.</li>
+</ul>
+<hr />
+<h2 id="next-steps">10. Next steps</h2>
+<ol type="1">
+<li>Run the transcript-mining pass on four to six strong prior sessions.
+Produce a first-cut corpus with cluster labels.</li>
+<li>Implement each detector as a standalone function under
+<code>substrate-ui/tools/detectors/</code>. Unit-test against fixture
+events.</li>
+<li>Implement <code>autonomous_session_topology</code> in
+<code>substrate/src/substrate/topologies/autonomous_session/</code>.
+Reuse every schema and Producer from <code>session_topology</code>; add
+<code>watcher</code>, <code>dispatcher</code>, the two views, the two
+triggers, and the new termination.</li>
+<li>Run it against a small sprint queue and a deterministic Responder.
+Read the JSONL. Confirm the dispatcher’s silent-continue replies land at
+the right turns and its halts land at the right red verdicts.</li>
+<li>Swap the deterministic Responder for an Ollama Responder and
+re-run.</li>
+</ol>
+<p>That is the whole plan. A person can then open three shells and run
+it three times if that is what they want.</p>
+</body>
+</html>

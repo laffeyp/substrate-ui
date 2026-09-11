@@ -9,10 +9,16 @@
 import { useEffect, useRef } from "react";
 import { register, unregister, setByte } from "@/observability/AnchorPainter";
 
+// Anchor scope: app-wide (top strip) or pane-scoped (per-pane row).
+// Sourced here as the single-source table; every caller compares
+// against the enum member, never a literal.
+export const AnchorScope = { APP: "app", PANE: "pane" } as const;
+export type AnchorScopeT = typeof AnchorScope[keyof typeof AnchorScope];
+
 interface Props {
   id: string;
   byte: number;
-  scope: "app" | "pane";
+  scope: AnchorScopeT;
   paneId?: string;
   slot: string;
 }
@@ -30,7 +36,7 @@ function paneRow(paneId: string): number {
 }
 
 function xy(props: Props): { x: number; y: number } {
-  if (props.scope === "app") {
+  if (props.scope === AnchorScope.APP) {
     const i = APP_SLOT_ORDER.indexOf(props.slot as (typeof APP_SLOT_ORDER)[number]);
     return { x: i >= 0 ? i : 0, y: 0 };
   }
@@ -52,7 +58,7 @@ export function Anchor(props: Props): JSX.Element {
   }, [id]);
   useEffect(() => { setByte(id, byte); }, [id, byte]);
 
-  const testid = scope === "pane" ? `anchor-pane-${paneId}-${slot}` : `anchor-${slot}`;
+  const testid = scope === AnchorScope.PANE ? `anchor-pane-${paneId}-${slot}` : `anchor-${slot}`;
   return (
     <canvas
       ref={ref}

@@ -14,10 +14,13 @@ interface Props {
   paneId: string;
   row: TranscriptRow;
   depth: number;
+  expanded: boolean;
+  onExpandToggle?: (paneId: string, toolCallId: string, childRecordRoot: string | null) => void;
 }
 
-export function TranscriptDelegateRow({ paneId, row, depth }: Props): JSX.Element {
+export function TranscriptDelegateRow({ paneId, row, depth, expanded, onExpandToggle }: Props): JSX.Element {
   const accent = depthAccent(depth);
+  const clickable = !!row.tool_call_id;
   return (
     <div
       data-testid={`transcript-row-${paneId}-${row.seq}`}
@@ -25,6 +28,10 @@ export function TranscriptDelegateRow({ paneId, row, depth }: Props): JSX.Elemen
       data-tool-name={row.tool_name || ""}
       data-tool-call-id={row.tool_call_id || ""}
       data-depth={String(depth)}
+      data-expanded={expanded ? "true" : "false"}
+      onClick={clickable && onExpandToggle
+        ? () => onExpandToggle(paneId, row.tool_call_id!, row.child_record_root ?? null)
+        : undefined}
       style={{
         padding: "3px 6px",
         borderLeft: `3px solid ${accent}`,
@@ -34,13 +41,20 @@ export function TranscriptDelegateRow({ paneId, row, depth }: Props): JSX.Elemen
         display: "flex",
         alignItems: "center",
         gap: 6,
+        cursor: clickable ? "pointer" : "default",
       }}
     >
       <span className="label" style={{ color: accent, fontWeight: 600 }}>
         reviewer-{String.fromCharCode(96 + depth)}
       </span>
       <span style={{ color: "#8a8f96" }}>…</span>
-      <span className="label" style={{ color: accent }}>↳</span>
+      <span
+        className="label"
+        data-testid={`delegate-expand-handle-${paneId}-${row.tool_call_id || row.seq}`}
+        style={{ color: accent }}
+      >
+        {expanded ? "▾" : "↳"}
+      </span>
       <span style={{ color: "#5f636b", marginLeft: "auto", fontSize: 10 }}>
         depth {depth}
       </span>
