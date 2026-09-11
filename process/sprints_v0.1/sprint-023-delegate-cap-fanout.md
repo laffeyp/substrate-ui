@@ -3,7 +3,7 @@
 ---
 id: 023
 epic: F — Delegate flow
-status: pending
+status: closed
 phase: 3
 pass_kind: widening
 spec_reference: signals/0.1.json § DELEGATE_DEPTH_CAP_REFUSED + FAN_OUT_INLINE_WALKED; delegate.py:436 guard :437-439 raise; D72

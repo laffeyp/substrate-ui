@@ -3,7 +3,7 @@
 ---
 id: 022
 epic: F — Delegate flow
-status: pending
+status: closed
 phase: 3
 pass_kind: architecture
 spec_reference: signals/0.1.json § descent DESCENT_ENTERED/EXITED; D70 (nested descent); depth 1..2

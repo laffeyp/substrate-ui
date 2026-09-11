@@ -52,6 +52,13 @@ export const SessionEndReason = {
 export const TURN_SUBMIT_FAILED_REASONS = enumOf(Tag.TURN_SUBMIT_FAILED, "reason") as
   readonly ["queue_full", "session_ended", "fresh_session_requires_user_message", "torn_record_on_resume", "timeout"];
 export type TurnSubmitFailedReason = typeof TURN_SUBMIT_FAILED_REASONS[number];
+export const TurnSubmitFailedReason = {
+  QUEUE_FULL: "queue_full",
+  SESSION_ENDED: "session_ended",
+  FRESH_SESSION_REQUIRES_USER_MESSAGE: "fresh_session_requires_user_message",
+  TORN_RECORD_ON_RESUME: "torn_record_on_resume",
+  TIMEOUT: "timeout",
+} as const satisfies Record<string, TurnSubmitFailedReason>;
 
 // --- Shell-owned unions --------------------------------------------------
 

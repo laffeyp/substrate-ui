@@ -30,12 +30,20 @@ async function assertNoEmoji(page) {
 }
 
 async function assertNoWrap(page) {
+  // D32 — labels never wrap. F-2 widening: the selector now matches
+  // both `.label` and `[data-tonal-label]` so a header chip, session
+  // name, or driver label doesn't slip past the check by wearing a
+  // non-.label class. Every wrapping candidate opts in with either.
   const bad = await page.evaluate(() => {
     const out = [];
-    const els = document.querySelectorAll(".label");
+    const els = document.querySelectorAll(".label, [data-tonal-label]");
     for (const el of els) {
       const ws = getComputedStyle(el).whiteSpace;
-      if (ws !== "nowrap" && ws !== "pre") out.push({ selector: el.tagName + "." + [...el.classList].join("."), whiteSpace: ws });
+      if (ws !== "nowrap" && ws !== "pre") out.push({
+        selector: el.tagName + (el.className ? "." + [...el.classList].join(".") : ""),
+        dataLabel: el.getAttribute("data-tonal-label"),
+        whiteSpace: ws,
+      });
     }
     return out;
   });

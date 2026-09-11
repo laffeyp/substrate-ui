@@ -4,7 +4,7 @@
 // and trace stay in lockstep.
 
 import { emptyShellState, ShellState, Pane, Window, TranscriptRow, Lens, WorkspaceShape, PaneStatus } from "@/state/ShellState";
-import { SessionEndReason, ParkReason, isParkReason, SECRET_KEY_PATTERN, isPaneStatus, StreamLevel, StreamDir, RevealFocus } from "@/observability/reasons";
+import { SessionEndReason, ParkReason, isParkReason, SECRET_KEY_PATTERN, isPaneStatus, StreamLevel, StreamDir, RevealFocus, TurnSubmitFailedReason } from "@/observability/reasons";
 import {
   TOOL_CALL, TOOL_RESULT, TOOL_NAME_DELEGATE, DELEGATE_ERROR_MAX_DEPTH,
   PARK, SESSION_ENDED, TRANSCRIPT_COMPACTED, RATE_LIMITED_WAITING,
@@ -382,11 +382,16 @@ export function reduce(state: ShellState, action: Action): Step {
       const pane = state.panes[action.paneId];
       if (!pane) return { state, emissions: [] };
       if (pane.descentStack.length >= DESCENT_MAX_DEPTH) {
-        // Sprint 023 — depth cap refusal. Layer 2 pins depth to 2
-        // (const). Same-step Layer-5 companion when the refusal is
-        // triggered by an at-cap descent attempt. The pane records
-        // the refused tool_call_id so the row renders its refusal
-        // affordance ("delegate refused (depth cap 2)") on next paint.
+        // Layer 5 terminal — DELEGATE_DEPTH_CAP_REFUSED. Deduped per
+        // tool_call_id (F-3): the envelope-driven path (ToolResult
+        // with substrate's max-depth error) and this UI-driven path
+        // can both fire for one logical refusal. `refusedToolCallIds`
+        // is the single source of truth — whichever fires first adds
+        // the id and any subsequent refusal for the same id is silent
+        // (state-only stamp, no double emit).
+        if (pane.refusedToolCallIds.has(action.toolCallId)) {
+          return { state, emissions: [] };
+        }
         const refused = new Set(pane.refusedToolCallIds);
         refused.add(action.toolCallId);
         return {
@@ -594,9 +599,14 @@ export function reduce(state: ShellState, action: Action): Step {
             && typeof r.tool_error === "string"
             && r.tool_error.includes(DELEGATE_ERROR_MAX_DEPTH);
           if (isDepthCap) {
-            emissions.push({ kind: Tag.DELEGATE_DEPTH_CAP_REFUSED, payload: {
-              pane_id: action.paneId, tool_call_id: r.tool_call_id, depth: DESCENT_MAX_DEPTH,
-            }});
+            // Dedupe (F-3): if the UI-driven path already refused
+            // this tool_call_id, don't double-emit — the state stamp
+            // stays; the trace carries exactly one refusal per id.
+            if (!pane.refusedToolCallIds.has(r.tool_call_id) && !newRefused.has(r.tool_call_id)) {
+              emissions.push({ kind: Tag.DELEGATE_DEPTH_CAP_REFUSED, payload: {
+                pane_id: action.paneId, tool_call_id: r.tool_call_id, depth: DESCENT_MAX_DEPTH,
+              }});
+            }
             newRefused.add(r.tool_call_id);
           } else {
             emissions.push({ kind: Tag.DELEGATE_CALL_FOLDED, payload: {
@@ -643,9 +653,17 @@ export function reduce(state: ShellState, action: Action): Step {
     case ActionType.TURN_SUBMIT_ERR: {
       const pane = state.panes[action.paneId];
       if (!pane) return { state, emissions: [] };
-      // Restore parked status; the turn didn't take.
+      // Pane status reflects the reason (F-4). A `session_ended`
+      // failure means the session is dead — the pane must not read
+      // as parked, or the next PROMPT_SUBMITTED tries against a
+      // dead session and the bridge refuses again. Every other
+      // reason (queue_full, timeout, torn_record_on_resume,
+      // fresh_session_requires_user_message) leaves the session
+      // alive, so the pane returns to parked.
+      const nextStatus = action.reason === TurnSubmitFailedReason.SESSION_ENDED
+        ? PaneStatus.ENDED : PaneStatus.PARKED;
       return {
-        state: { ...state, panes: { ...state.panes, [action.paneId]: { ...pane, status: PaneStatus.PARKED } } },
+        state: { ...state, panes: { ...state.panes, [action.paneId]: { ...pane, status: nextStatus } } },
         emissions: [{ kind: Tag.TURN_SUBMIT_FAILED, payload: {
           request_id: action.requestId, session_id: action.sessionId, reason: action.reason,
         }}],

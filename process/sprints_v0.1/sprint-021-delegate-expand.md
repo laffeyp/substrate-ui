@@ -3,7 +3,7 @@
 ---
 id: 021
 epic: F — Delegate flow
-status: pending
+status: closed
 phase: 3
 pass_kind: architecture
 spec_reference: signals/0.1.json § transcript DELEGATE_INLINE_EXPANDED / DELEGATE_CALL_FOLDED

@@ -3,7 +3,7 @@
 ---
 id: 024
 epic: G — Surfaces
-status: pending
+status: closed
 phase: 3
 pass_kind: architecture
 spec_reference: signals/0.1.json § surface INSPECTOR_OPENED/CLOSED; D22 (same-click-closes)
