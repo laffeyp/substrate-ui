@@ -3,7 +3,7 @@
 ---
 id: 015
 epic: D — Turn flow
-status: pending
+status: closed
 phase: 3
 pass_kind: architecture
 spec_reference: signals/0.1.json § TRANSCRIPT_PARK_RENDERED (3 park_reasons) + TRANSCRIPT_AWAITING_FIRST_MESSAGE_RENDERED (v7:543); ParkReason enum (FINAL_ANSWER/MODEL_ERROR/INTERRUPT)
