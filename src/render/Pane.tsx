@@ -12,7 +12,9 @@ import { RevealShell } from "./RevealShell";
 import {
   USER_MESSAGE, MODEL_REPLY, PARK, SESSION_ENDED,
   TRANSCRIPT_COMPACTED, RATE_LIMITED_WAITING,
+  TOOL_CALL, TOOL_NAME_DELEGATE,
 } from "@/observability/envelope-kinds";
+import { TranscriptDelegateRow } from "./TranscriptDelegateRow";
 
 interface Props {
   pane: PaneModel;
@@ -130,22 +132,27 @@ export function Pane({ pane, onFocus, onDragStart, onClose, onPickerText, onPick
                   ◐ parked — awaiting your first message
                 </div>
               ) : (
-                pane.transcriptRows.map((row) => (
-                  <div
-                    key={row.seq}
-                    data-testid={`transcript-row-${pane.id}-${row.seq}`}
-                    data-kind={row.kind}
-                    style={{
-                      padding: "3px 6px", borderBottom: "1px solid #23262a",
-                      fontSize: 12, whiteSpace: "pre-wrap" as const, wordBreak: "break-word" as const,
-                    }}
-                  >
-                    <span className="label" style={{ color: rowColor(row.kind), marginRight: 6 }}>
-                      {rowGlyph(row.kind)} {row.kind}
-                    </span>
-                    <span style={{ color: "#8a8f96" }}>{row.summary}</span>
-                  </div>
-                ))
+                pane.transcriptRows.map((row) => {
+                  if (row.kind === TOOL_CALL && row.tool_name === TOOL_NAME_DELEGATE) {
+                    return <TranscriptDelegateRow key={row.seq} paneId={pane.id} row={row} depth={1} />;
+                  }
+                  return (
+                    <div
+                      key={row.seq}
+                      data-testid={`transcript-row-${pane.id}-${row.seq}`}
+                      data-kind={row.kind}
+                      style={{
+                        padding: "3px 6px", borderBottom: "1px solid #23262a",
+                        fontSize: 12, whiteSpace: "pre-wrap" as const, wordBreak: "break-word" as const,
+                      }}
+                    >
+                      <span className="label" style={{ color: rowColor(row.kind), marginRight: 6 }}>
+                        {rowGlyph(row.kind)} {row.kind}
+                      </span>
+                      <span style={{ color: "#8a8f96" }}>{row.summary}</span>
+                    </div>
+                  );
+                })
               )}
             </div>
             <Prompt

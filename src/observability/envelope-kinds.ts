@@ -11,9 +11,11 @@ import bridgeReasons from "@/../signals/bridge-reasons.json";
 
 interface EnvelopeKindsTable {
   substrate_envelope_kinds: Record<string, string>;
+  tool_names: Record<string, string>;
 }
 
 const table = (bridgeReasons as unknown as EnvelopeKindsTable).substrate_envelope_kinds;
+const toolNames = (bridgeReasons as unknown as EnvelopeKindsTable).tool_names;
 
 export const SESSION_STARTED = table.session_started;
 export const USER_MESSAGE = table.user_message;
@@ -31,3 +33,8 @@ export const RATE_LIMITED_WAITING = table.rate_limited_waiting;
 export const PRODUCER_FAILED = table.producer_failed;
 export const PREDICATE_QUARANTINED = table.predicate_quarantined;
 export const PRODUCER_EMITTED_INVALID_EVENT = table.producer_emitted_invalid_event;
+
+// Sprint 020 — tool names the shell branches on. Sourced from
+// bridge-reasons.json § tool_names; Python bridge imports the same
+// constants directly from substrate.topologies.tool_loop.tools.
+export const TOOL_NAME_DELEGATE = toolNames.delegate;
