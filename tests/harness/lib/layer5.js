@@ -21,20 +21,22 @@ function loadLayer5() {
   return cached;
 }
 
-function rulesByKind(kind) {
+function rulesByKind() {
   const l5 = loadLayer5();
-  const rules = Array.isArray(l5.rules) ? l5.rules : Array.isArray(l5) ? l5 : [];
-  return { pairingOrdering: [], forbiddenAfter: [], forcedNext: [], terminal: [], ...groupByKind(rules) };
-  function groupByKind(rs) {
-    const out = { pairingOrdering: [], forbiddenAfter: [], forcedNext: [], terminal: [] };
-    for (const r of rs) {
-      if (r.kind === "pairing_ordering") out.pairingOrdering.push(r);
-      else if (r.kind === "forbidden_after") out.forbiddenAfter.push(r);
-      else if (r.kind === "forced_next") out.forcedNext.push(r);
-      else if (r.kind === "terminal") out.terminal.push(r);
-    }
-    return out;
+  const rules = Array.isArray(l5.state_transitions) ? l5.state_transitions
+              : Array.isArray(l5.rules) ? l5.rules
+              : Array.isArray(l5) ? l5 : [];
+  const out = {
+    pairingOrdering: [], forbiddenAfter: [], forcedNext: [], terminal: [], allowedSet: [],
+  };
+  for (const r of rules) {
+    if (r.kind === "pairing_ordering") out.pairingOrdering.push(r);
+    else if (r.kind === "forbidden_after") out.forbiddenAfter.push(r);
+    else if (r.kind === "forced_next") out.forcedNext.push(r);
+    else if (r.kind === "terminal") out.terminal.push(r);
+    else if (r.kind === "allowed_set") out.allowedSet.push(r);
   }
+  return out;
 }
 
 // Assert every pairing_ordering rule of the form "if X emits, then Y must
@@ -85,9 +87,78 @@ function assertLayer5ForbiddenAfter(emits) {
   }
 }
 
+// Assert every allowed_set rule.
+//
+// Semantics: a rule declares a flow keyed by `key` (a payload field
+// name like "tool_call_id") and rooted in `from`. The flow's OWN tag
+// set is the union of {from, every literal tag in to_allowed, every
+// terminal for the flow's stratum}. Wildcard entries in to_allowed
+// like "any pane-scoped tag with the same pane_id" are natural
+// language — skipped by the parser.
+//
+// Once `from` fires with key value K, the flow is OPEN for K. Every
+// subsequent emit sharing K AND belonging to the flow's own tag set
+// must appear in allowed_set (or in terminals). A terminal closes
+// the flow. Emits sharing K but NOT in the flow's tag set belong to
+// a different flow that happens to share the key; skipped.
+//
+// This catches: allowed emits firing out of order, terminal-then-non-
+// terminal reopens without a fresh `from`, and any tag rogue-emitted
+// while the flow is open.
+function assertLayer5AllowedSet(emits) {
+  const { allowedSet, terminal } = rulesByKind();
+  const terminalByStratum = new Map();
+  for (const t of terminal) {
+    if (!t.stratum || !t.tag) continue;
+    if (!terminalByStratum.has(t.stratum)) terminalByStratum.set(t.stratum, new Set());
+    terminalByStratum.get(t.stratum).add(t.tag);
+  }
+  const isTagName = (s) => typeof s === "string" && /^[A-Z][A-Z0-9_ ()]*$/.test(s.split(" ")[0]) && !/[a-z]/.test(s.split(" ")[0]);
+  const misses = [];
+  for (const rule of allowedSet) {
+    const from = rule.from;
+    const allowedRaw = rule.to_allowed || [];
+    // to_allowed may contain wildcards like "any pane-scoped tag with
+    // the same pane_id" — those are natural language, not tags. Keep
+    // only entries that look like a real tag name (all-caps, may
+    // include parenthetical qualifiers like "REVEAL_TOGGLED (to: reveal)").
+    const allowedTags = new Set();
+    for (const a of allowedRaw) {
+      if (typeof a !== "string") continue;
+      const bareName = a.split(" (")[0].trim();
+      if (/^[A-Z][A-Z0-9_]*$/.test(bareName)) allowedTags.add(bareName);
+    }
+    const key = rule.key;
+    const stratum = rule.stratum || "";
+    const terminals = terminalByStratum.get(stratum) || new Set();
+    const flowTags = new Set([from, ...allowedTags, ...terminals]);
+    if (!key) continue; // skip keyless dialog-scoped rules for this pass
+    const openByKey = new Map();
+    for (let i = 0; i < emits.length; i++) {
+      const e = emits[i];
+      const keyVal = e.payload && e.payload[key];
+      if (keyVal === undefined || keyVal === null) continue;
+      if (!flowTags.has(e.kind)) continue; // out-of-flow emit sharing the key — ignore
+      if (e.kind === from) { openByKey.set(keyVal, i); continue; }
+      if (!openByKey.has(keyVal)) continue;
+      if (!allowedTags.has(e.kind) && !terminals.has(e.kind)) {
+        misses.push(`${from}(${key}=${keyVal}) → ${e.kind} at index ${i}, not in allowed_set or terminals`);
+      }
+      if (terminals.has(e.kind)) openByKey.delete(keyVal);
+    }
+  }
+  if (misses.length) {
+    throw new Error(`Layer 5 allowed_set violated: ${misses.slice(0, 5).join("; ")}`);
+  }
+}
+
 function assertLayer5(emits) {
   assertLayer5PairingOrdering(emits);
   assertLayer5ForbiddenAfter(emits);
+  assertLayer5AllowedSet(emits);
 }
 
-module.exports = { loadLayer5, assertLayer5PairingOrdering, assertLayer5ForbiddenAfter, assertLayer5 };
+module.exports = {
+  loadLayer5, assertLayer5PairingOrdering, assertLayer5ForbiddenAfter,
+  assertLayer5AllowedSet, assertLayer5,
+};

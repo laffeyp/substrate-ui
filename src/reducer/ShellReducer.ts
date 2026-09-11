@@ -5,7 +5,10 @@
 
 import { emptyShellState, ShellState, Pane, Window, TranscriptRow, Lens, WorkspaceShape, PaneStatus } from "@/state/ShellState";
 import { SessionEndReason, ParkReason, isParkReason, SECRET_KEY_PATTERN, isPaneStatus, StreamLevel, StreamDir, RevealFocus } from "@/observability/reasons";
-import { TOOL_CALL, TOOL_RESULT, TOOL_NAME_DELEGATE } from "@/observability/envelope-kinds";
+import {
+  TOOL_CALL, TOOL_RESULT, TOOL_NAME_DELEGATE,
+  PARK, SESSION_ENDED, TRANSCRIPT_COMPACTED, RATE_LIMITED_WAITING,
+} from "@/observability/envelope-kinds";
 import { newId } from "@/state/ids";
 import { splitPane, resizeSplit, atCap, movePane, closePane, Zone, Axis } from "@/state/SplitTree";
 import { RevealState } from "@/observability/reasons";
@@ -491,25 +494,25 @@ export function reduce(state: ShellState, action: Action): Step {
       const inFanoutGroup = new Set<number>();
       for (const g of fanoutGroups) for (const seq of g.siblingSeqs) inFanoutGroup.add(seq);
       for (const r of newRows) {
-        if (r.kind === "Park") {
+        if (r.kind === PARK) {
           const parkReason: ParkReason = isParkReason(r.park_reason)
             ? r.park_reason : ParkReason.FINAL_ANSWER;
           emissions.push({ kind: "TRANSCRIPT_PARK_RENDERED", payload: {
             pane_id: action.paneId, envelope_seq: r.seq, park_reason: parkReason,
           }});
-        } else if (r.kind === "SessionEnded") {
+        } else if (r.kind === SESSION_ENDED) {
           emissions.push({ kind: "TRANSCRIPT_SESSION_ENDED_RENDERED", payload: {
             pane_id: action.paneId, envelope_seq: r.seq,
             end_reason: r.end_reason || SessionEndReason.USER_END,
           }});
-        } else if (r.kind === "TranscriptCompacted") {
+        } else if (r.kind === TRANSCRIPT_COMPACTED) {
           emissions.push({ kind: "TRANSCRIPT_COMPACTED_RENDERED", payload: {
             pane_id: action.paneId, envelope_seq: r.seq,
             tokens_before: r.tokens_before ?? 0,
             tokens_after: r.tokens_after ?? 0,
             strategy: r.compact_strategy ?? "unknown",
           }});
-        } else if (r.kind === "RateLimitedWaiting") {
+        } else if (r.kind === RATE_LIMITED_WAITING) {
           emissions.push({ kind: "TRANSCRIPT_RATE_LIMITED_RENDERED", payload: {
             pane_id: action.paneId, envelope_seq: r.seq,
             retry_index: r.retry_index ?? 0,

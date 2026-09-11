@@ -9,6 +9,7 @@
 import { useEffect, useRef } from "react";
 import type { FanoutGroup } from "@/reducer/ShellReducer";
 import { depthAccent } from "@/lib/depthAccent";
+import { TOOL_CALL } from "@/observability/envelope-kinds";
 
 interface Props {
   paneId: string;
@@ -55,7 +56,7 @@ export function TranscriptFanOutList({
       ref={containerRef}
       tabIndex={0}
       data-testid={`transcript-row-${paneId}-${group.leaderSeq}`}
-      data-kind="ToolCall"
+      data-kind={TOOL_CALL}
       data-fanout="true"
       data-tool-call-id={group.leaderToolCallId}
       data-children-count={String(siblingCount)}

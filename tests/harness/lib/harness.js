@@ -63,7 +63,7 @@ async function runHarness(name, body, { extraEnv = {}, skipTonal = false, skipLa
   try { assertLayer2ShapesInTrace(emits); check.ok("Layer 2 payload shapes match required fields"); }
   catch (e) { check(false, e.message); }
   if (!skipLayer5) {
-    try { assertLayer5(emits); check.ok("Layer 5 pairing_ordering + forbidden_after hold"); }
+    try { assertLayer5(emits); check.ok("Layer 5 pairing_ordering + forbidden_after + allowed_set hold"); }
     catch (e) { check(false, e.message); }
   }
 
