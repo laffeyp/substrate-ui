@@ -6,6 +6,7 @@ import { Pane as PaneModel, WorkspaceShape } from "@/state/ShellState";
 import { PaneHeader } from "./PaneHeader";
 import { Anchor } from "./Anchor";
 import { UnboundPanePicker } from "./UnboundPanePicker";
+import { Prompt } from "./Prompt";
 
 interface Props {
   pane: PaneModel;
@@ -16,6 +17,8 @@ interface Props {
   onPickerWalk?: (paneId: string, index: number, path: string, shape: WorkspaceShape) => void;
   onPickerCommit?: (paneId: string, path: string, shape: WorkspaceShape) => void;
   onResume?: (paneId: string, sessionId: string) => void;
+  onPromptText?: (paneId: string, text: string) => void;
+  onPromptLengthChanged?: (paneId: string, length: number) => void;
 }
 
 const PER_PANE_SLOTS = [
@@ -47,7 +50,7 @@ function initialByte(slot: string, pane: PaneModel): number {
   return 0;
 }
 
-export function Pane({ pane, onFocus, onDragStart, onClose, onPickerText, onPickerWalk, onPickerCommit, onResume }: Props): JSX.Element {
+export function Pane({ pane, onFocus, onDragStart, onClose, onPickerText, onPickerWalk, onPickerCommit, onResume, onPromptText, onPromptLengthChanged }: Props): JSX.Element {
   return (
     <div
       data-testid={`pane-${pane.id}`}
@@ -66,6 +69,17 @@ export function Pane({ pane, onFocus, onDragStart, onClose, onPickerText, onPick
             onCommit={onPickerCommit}
             onResume={onResume}
           />
+        ) : pane.boundSessionId && onPromptText && onPromptLengthChanged ? (
+          <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+            <div style={{ flex: 1, overflow: "auto" }}>
+              <div className="label" style={{ color: "#5f636b" }}>session {pane.sessionName ?? pane.boundSessionId?.slice(0, 8)}</div>
+            </div>
+            <Prompt
+              pane={pane}
+              onText={onPromptText}
+              onLengthChanged={onPromptLengthChanged}
+            />
+          </div>
         ) : (
           <div className="label">substrate — pane {pane.id.slice(0, 6)}</div>
         )}

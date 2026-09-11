@@ -33,6 +33,8 @@ export type Action =
   | { type: "SESSION_END_START"; paneId: string; requestId: string; sessionId: string; source: "menu" | "slash" | "shortcut" }
   | { type: "SESSION_END_OK"; paneId: string; requestId: string; sessionId: string; endReason: string; recordFinalised: boolean; envelopeSeq: number }
   | { type: "SESSION_END_ERR"; paneId: string; requestId: string; reason: string }
+  | { type: "PROMPT_TEXT"; paneId: string; text: string }         // private — no emit
+  | { type: "PROMPT_LENGTH_CHANGED"; paneId: string; length: number } // debounced emit
   ;
 
 export interface Emission {
@@ -97,6 +99,19 @@ export function reduce(state: ShellState, action: Action): Step {
       return doEndOk(state, action);
     case "SESSION_END_ERR":
       return doEndErr(state, action);
+    case "PROMPT_TEXT": {
+      const pane = state.panes[action.paneId];
+      if (!pane) return { state, emissions: [] };
+      return {
+        state: { ...state, panes: { ...state.panes, [action.paneId]: { ...pane, promptDraft: action.text } } },
+        emissions: [], // Private — draft never appears in the trace.
+      };
+    }
+    case "PROMPT_LENGTH_CHANGED":
+      return {
+        state,
+        emissions: [{ kind: "PROMPT_CHANGED", payload: { pane_id: action.paneId, length: action.length } }],
+      };
   }
 }
 
@@ -342,6 +357,7 @@ function boot(): Step {
     sessionName: null,
     workspacePath: null,
     workspaceShape: null,
+    promptDraft: "",
   };
   const window: Window = { id: windowId, rootId: paneId };
   const next: ShellState = {

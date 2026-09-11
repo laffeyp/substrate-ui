@@ -21,6 +21,7 @@ export interface Pane {
   sessionName: string | null;       // set after SESSION_CREATED
   workspacePath: string | null;
   workspaceShape: WorkspaceShape | null;
+  promptDraft: string;              // never emitted; text_length is (privacy)
   // Later sprints extend: lens, reveal, surface, find, header_popover, etc.
 }
 

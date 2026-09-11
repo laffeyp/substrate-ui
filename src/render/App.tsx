@@ -173,6 +173,8 @@ function Shell(): JSX.Element {
             onPickerWalk: (paneId, index, path, shape) => dispatch({ type: "PICKER_WALK", paneId, index, path, shape }),
             onPickerCommit: (paneId, path, shape) => startSessionCreate(paneId, path, shape),
             onResume: (paneId, sessionId) => startSessionResume(paneId, sessionId),
+            onPromptText: (paneId, text) => dispatch({ type: "PROMPT_TEXT", paneId, text }),
+            onPromptLengthChanged: (paneId, length) => dispatch({ type: "PROMPT_LENGTH_CHANGED", paneId, length }),
           }}
         />
       )}

@@ -37,6 +37,7 @@ export function splitPane(
     sessionName: null,
     workspacePath: null,
     workspaceShape: null,
+    promptDraft: "",
   };
   const updatedParent: Pane = { ...parent, splitParentId: newSplitId, ratio: 0.5 };
   const newSplit: Split = {
