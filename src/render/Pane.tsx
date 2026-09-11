@@ -7,6 +7,7 @@ import { PaneHeader } from "./PaneHeader";
 import { Anchor } from "./Anchor";
 import { UnboundPanePicker } from "./UnboundPanePicker";
 import { Prompt } from "./Prompt";
+import { RevealShell } from "./RevealShell";
 
 interface Props {
   pane: PaneModel;
@@ -20,6 +21,7 @@ interface Props {
   onPromptText?: (paneId: string, text: string) => void;
   onPromptLengthChanged?: (paneId: string, length: number) => void;
   onPromptSubmit?: (paneId: string, text: string) => void;
+  onRevealToggle?: (paneId: string) => void;
 }
 
 function rowColor(kind: string): string {
@@ -68,10 +70,11 @@ function initialByte(slot: string, pane: PaneModel): number {
       case "ended": return 32;
     }
   }
+  if (slot === "reveal") return pane.reveal === "reveal" ? 128 : 0;
   return 0;
 }
 
-export function Pane({ pane, onFocus, onDragStart, onClose, onPickerText, onPickerWalk, onPickerCommit, onResume, onPromptText, onPromptLengthChanged, onPromptSubmit }: Props): JSX.Element {
+export function Pane({ pane, onFocus, onDragStart, onClose, onPickerText, onPickerWalk, onPickerCommit, onResume, onPromptText, onPromptLengthChanged, onPromptSubmit, onRevealToggle }: Props): JSX.Element {
   return (
     <div
       data-testid={`pane-${pane.id}`}
@@ -80,7 +83,7 @@ export function Pane({ pane, onFocus, onDragStart, onClose, onPickerText, onPick
       onMouseDown={onFocus ? () => onFocus(pane.id) : undefined}
       style={S.frame}
     >
-      <PaneHeader pane={pane} onDragStart={onDragStart} onClose={onClose} />
+      <PaneHeader pane={pane} onDragStart={onDragStart} onClose={onClose} onRevealToggle={onRevealToggle} />
       <div style={S.body}>
         {pane.status === "unbound" && onPickerText && onPickerWalk && onPickerCommit && onResume ? (
           <UnboundPanePicker
@@ -90,6 +93,8 @@ export function Pane({ pane, onFocus, onDragStart, onClose, onPickerText, onPick
             onCommit={onPickerCommit}
             onResume={onResume}
           />
+        ) : pane.boundSessionId && pane.reveal === "reveal" ? (
+          <RevealShell pane={pane} />
         ) : pane.boundSessionId && onPromptText && onPromptLengthChanged && onPromptSubmit ? (
           <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
             <div style={{ flex: 1, overflow: "auto", padding: "6px 0" }}>

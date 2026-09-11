@@ -3,7 +3,7 @@
 ---
 id: 016
 epic: E — Reveal & lenses
-status: pending
+status: closed
 phase: 3
 pass_kind: architecture
 spec_reference: signals/0.1.json § reveal REVEAL_TOGGLED; D4 (reveal-toggle terminal↔machinery); Layer 5 mutex (at most one open reveal per pane)

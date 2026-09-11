@@ -209,6 +209,7 @@ function Shell(): JSX.Element {
             onPromptText: (paneId, text) => dispatch({ type: "PROMPT_TEXT", paneId, text }),
             onPromptLengthChanged: (paneId, length) => dispatch({ type: "PROMPT_LENGTH_CHANGED", paneId, length }),
             onPromptSubmit: submitTurn,
+            onRevealToggle: (paneId) => dispatch({ type: "REVEAL_TOGGLE", paneId }),
           }}
         />
       )}

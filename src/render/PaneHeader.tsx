@@ -10,6 +10,7 @@ interface Props {
   pane: Pane;
   onDragStart?: (paneId: string, ev: React.PointerEvent) => void;
   onClose?: (paneId: string) => void;
+  onRevealToggle?: (paneId: string) => void;
 }
 
 const S = {
@@ -25,7 +26,7 @@ const S = {
   handle: { color: "#5f636b", cursor: "pointer", padding: "0 2px" },
 };
 
-export function PaneHeader({ pane, onDragStart, onClose }: Props): JSX.Element {
+export function PaneHeader({ pane, onDragStart, onClose, onRevealToggle }: Props): JSX.Element {
   return (
     <div data-testid="pane-header" style={S.wrap}>
       <span
@@ -39,7 +40,14 @@ export function PaneHeader({ pane, onDragStart, onClose }: Props): JSX.Element {
       <span className="label" style={S.chip}>workspace</span>
       <span className="label" style={S.slot}>{pane.boundSessionId ? "session" : "(unbound)"}</span>
       <span style={S.spacer} />
-      <span style={S.handle} title="reveal">◐</span>
+      <span
+        data-testid={`pane-reveal-toggle-${pane.id}`}
+        data-reveal={pane.reveal}
+        onClick={onRevealToggle ? () => onRevealToggle(pane.id) : undefined}
+        style={{ ...S.handle, cursor: onRevealToggle ? "pointer" : "default",
+          color: pane.reveal === "reveal" ? "#82a5c8" : S.handle.color }}
+        title={pane.reveal === "reveal" ? "back to transcript" : "reveal machinery"}
+      >◐</span>
       <span style={S.handle} title="records">▤</span>
       <span
         data-testid={`pane-close-${pane.id}`}

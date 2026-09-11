@@ -39,6 +39,7 @@ export type Action =
   | { type: "TURN_SUBMIT_OK"; paneId: string; requestId: string; sessionId: string; turnIndex: number }
   | { type: "TURN_SUBMIT_ERR"; paneId: string; requestId: string; sessionId: string; reason: string }
   | { type: "TRANSCRIPT_ROWS_LOADED"; paneId: string; rows: TranscriptRow[] }
+  | { type: "REVEAL_TOGGLE"; paneId: string }
   ;
 
 export interface Emission {
@@ -141,6 +142,16 @@ export function reduce(state: ShellState, action: Action): Step {
         emissions: [{ kind: "TURN_SUBMITTED", payload: {
           request_id: action.requestId, session_id: action.sessionId, turn_index: action.turnIndex,
         }}],
+      };
+    }
+    case "REVEAL_TOGGLE": {
+      const pane = state.panes[action.paneId];
+      if (!pane) return { state, emissions: [] };
+      const from = pane.reveal;
+      const to: "terminal" | "reveal" = from === "terminal" ? "reveal" : "terminal";
+      return {
+        state: { ...state, panes: { ...state.panes, [action.paneId]: { ...pane, reveal: to } } },
+        emissions: [{ kind: "REVEAL_TOGGLED", payload: { pane_id: action.paneId, from, to } }],
       };
     }
     case "TRANSCRIPT_ROWS_LOADED": {
@@ -467,6 +478,7 @@ function boot(): Step {
     promptDraft: "",
     transcriptRows: [],
     transcriptLastSeq: -1,
+    reveal: "terminal",
   };
   const window: Window = { id: windowId, rootId: paneId };
   const next: ShellState = {
