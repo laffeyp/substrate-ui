@@ -11,6 +11,15 @@ export interface TranscriptRow {
   producer_kind: string;
   summary: string;
   turn_index: number | null;
+  // Kind-specific fields populated by the bridge from the envelope payload:
+  park_reason?: "final_answer" | "model_error" | "interrupt" | null;
+  end_reason?: string | null;
+  tokens_before?: number | null;
+  tokens_after?: number | null;
+  compact_strategy?: string | null;
+  retry_index?: number | null;
+  retry_max?: number | null;
+  retry_after_seconds?: number | null;
 }
 
 export interface Pane {

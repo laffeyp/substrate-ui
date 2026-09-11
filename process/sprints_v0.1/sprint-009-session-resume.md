@@ -18,10 +18,11 @@ Existing session (parked or interrupted) attaches to an unbound pane. Resume is 
 
 ### Emits
 
-- `SESSION_RESUME_REQUESTED` (`{request_id, pane_id, session_id}`)
-- `SESSION_RESUMED` (`{request_id, session_id, status, record_root, last_turn_index}`)
-- `SESSION_RESUME_FAILED` (`{request_id, reason: "not_found"|"torn_record"|"session_ended"}`)
-- `PANE_UNBOUND_BOUND` — reused pairing
+- `WORKSPACE_BOUND` (`{request_id, session_id, workspace_path, shape}`) — reused from Sprint 007
+- `PANE_UNBOUND_BOUND` (`{pane_id, session_id, workspace_path, shape}`) — reused Layer 5 pairing
+- `TRANSCRIPT_AWAITING_FIRST_MESSAGE_RENDERED` (`{pane_id, session_id}`) — fires only when the resumed session's `last_turn_index` is -1 (no prior turns)
+
+Layer 1 v0.1 did not ratify a SESSION_RESUME_REQUESTED / SESSION_RESUMED / SESSION_RESUME_FAILED chain — the bridge round-trip is silent in the trace. The two ratified pairing tags above cover the observation contract: WORKSPACE_BOUND and PANE_UNBOUND_BOUND fire same-step on resume with matching session_id + workspace fields drawn from the manifest.
 
 ### Consumes
 

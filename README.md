@@ -78,7 +78,7 @@ The Quickstart above starts the backend and console; the Studio is at `/studio.h
 
 ### Tests + the two-track observation contract
 
-Behavior-touching changes are graded on **both** tracks (this is mandatory — see process/WORKING_AGREEMENT.md):
+Behavior-touching changes are graded on **both** tracks (this is mandatory — see WORKING_AGREEMENT.md):
 
 ```bash
 # Track 0 — server (real server on an ephemeral port, real substrate.api over HTTP)
@@ -115,12 +115,12 @@ early console (#30–#38) was built test-first and observation-tracked *before* 
 place, a gap an external review (#39) caught and retrofitted. The history lives in the project's own
 artifacts — read them in this order:
 
-- **`process/BLACKBOARD.md`** — `## Decisions` (scope + binding rulings), `## Built` (one entry per increment),
+- **`BLACKBOARD.md`** — `## Decisions` (scope + binding rulings), `## Built` (one entry per increment),
   `## Sprint tail` (the Rubber Duck pass per close), `## Surfaced for review` (the discipline failures
   the Architect caught + their fixes), `## Drift watchlist`.
 - **`process/sprints/`** — `sprint-001` … `sprint-007`, each a dual + observation contract declared **before**
   the code.
-- **`process/KIT_DIARY.md`** — what the kit did well, what got in the way, the next-kit-version findings + the
+- **`KIT_DIARY.md`** — what the kit did well, what got in the way, the next-kit-version findings + the
   hypotheses (the lessons, including the two the Architect had to catch).
 - **`../.review-pipe/resp-0NN.txt`** — the independent duplex-pipe reviews (#30–#42); the reviewer
   verifies by running, not by trusting the builder's "green".
@@ -151,7 +151,7 @@ The arc, briefly:
 green and the frames viewed, independently reviewed (#42: REAL and HONEST). The SDD discipline —
 cards, Rubber Duck passes, two-track observation, the eight-word vocabulary — held throughout.
 
-Known, recorded follow-ups (none blocking; see `process/BLACKBOARD.md ## Drift watchlist`): `runs/` has no
+Known, recorded follow-ups (none blocking; see `BLACKBOARD.md ## Drift watchlist`): `runs/` has no
 lifecycle management (launched/built records accumulate); the `unfired_triggers` signal will need
 hardening once real-model Producers with custom input_builders land; canvas-based *creation* (drop
 nodes / draw edges to author) is deferred — the canvas is a view, the form is the editor.
