@@ -1,0 +1,18 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>substrate</title>
+<style>
+  html, body { margin: 0; padding: 0; background: #212327; color: #b9bec5;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 13px; }
+  #root { height: 100vh; width: 100vw; }
+  /* D32: labels never wrap — shrink → ellipsize → tooltip. Tonal-check enforces this. */
+  .label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+</style>
+</head>
+<body>
+  <div id="root"></div>
+  <script src="build.js"></script>
+</body>
+</html>

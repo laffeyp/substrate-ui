@@ -1,0 +1,1477 @@
+{
+  "version_id": "0.1",
+  "locked": true,
+  "locked_at": "2026-09-10",
+  "locked_by": "Architect ratified via 'go' directive 2026-09-10; Agent recorded per the substrate-ui BLACKBOARD's 2026-08-25 amendment (Agent records Architect decisions on the substrate-ui side).",
+  "prior_version": null,
+  "project": "substrate-ui — the substrate desktop shell",
+  "founding_note": "The substrate shell is a reader-AND-controller UI (KIT_DIARY finding 18): it renders every substrate event AND causes them (create/rename/turn/interrupt/end/patch). It gets its own vocabulary. The vocabulary carries the observability contract: every shell tag emits BOTH as a JSONL log line (Foundation 01 signal type #1 + #8) AND paints its state through a deterministic pixel anchor (Addendum A2), so a Playwright harness reconstructs the full visual state from a screenshot + the JSONL trace + the bridge log. Non-negotiable per Architect 2026-09-08. Total coverage — every visual state named, no shade uncovered.",
+
+  "layer_0_ontology": {
+    "shell_entity_count": 34,
+    "substrate_reference_entity_count": 14,
+    "total_entity_count": 48,
+    "pressure_test_2026_09_10": "Post-review pass: substrate reference set was ten; four load-bearing topology primitives were missing — Trigger, View, Route, TerminationPolicy. Substrate-shell renders them in the Structure lens (v7:298–312), the Studio form authors them (v7:394–411), and the Studio canvas draws Route as dashed edges into slot nodes (v7:1019–1024). Added. Also: `Run` and `Record` are the same substrate entity (substrate uses `run_id`, substrate-ui-legacy called it `Record`) — kept as `Record` with an entity-merge note. `PromptFragment` and `SessionWarning` are Envelope kinds, not distinct entities.",
+    "review_verified_2026_09_10": "REVIEW-2026-09-10-layer-0-substrate-shell-vocabulary.md ran a Playwright + PNG-decode pass across Prototype v7 states and sheet v3 turns 12–20; walked the list forward (entity → design line) and backward (rendered element → entity); confirmed every substrate line-number claim (SessionStatus 65–77, WorkspaceShape 80–90, SessionManifest 96–149, TurnHandle 207–217, SESSION_ENDED_MID_DELEGATE at delegate.py:59, session vocab 10 kinds at 73–100, kernel constants 12 kinds at 41–52, producer_kinds write at runtime.py:483–512). Verdict: `Layer 0 ready. Proceed to Layer 1.` The five surfaced items (DelegateInline↔DelegateCall separate, FanOutInline↔multi-child separate, SplitTree deferred to FD-2, editor level modes deferred to v0.2, native macOS menu bar not in Layer 0, RateLimitedWaiting derived from SessionWarning) all ratified as proposed. Corrections applied: `shell_entity_count: 34` (was `(33)` in chat presentation).",
+    "note": "PascalCase names. `owner` says who owns the state: `shell` = the renderer's own reducer; `substrate` = read from substrate.session_registry or the record; `harness` = observability-only, painted by the shell for the harness to read. Every load-bearing entity has a corresponding pixel-anchor testid (Layer 6). Citations use `v7:LINE` for Substrate Prototype v7.dc.html and `D-NN` for DESIGN-DECISIONS.",
+
+    "shell_entities": [
+      { "name": "Window",         "owner": "shell",     "definition": "An OS window carrying a pane grid. ⌘N adds another; multiple windows coexist.",                                                                              "cites": ["D57", "MENU-BAR § Window", "DESIGN-SPEC §3.5"] },
+      { "name": "WindowStrip",    "owner": "shell",     "definition": "The top-of-window row above the first pane; carries the traffic-light dots. Blank per D46 — an entity because it shows/hides on single-pane vs multi-pane state.", "cites": ["D43", "D46", "v7:12-14"] },
+      { "name": "Pane",           "owner": "shell",     "definition": "A leaf in a window's split tree; carries at most one Session; owns focus, dim, editing, drop-hint, split-tree position.",                                       "cites": ["D35", "D42", "DESIGN-SPEC §3", "v7:36-51"] },
+      { "name": "PaneHeader",     "owner": "shell",     "definition": "The identical full header per Pane — substrate wordmark + status dot + session name + driver chip + ⌥ workspace chip + records + studio + ⌃`.",                "cites": ["D42", "D31", "D32", "FUNCTIONALITY row 8", "v7:39-52"] },
+      { "name": "DriverChip",     "owner": "shell",     "definition": "The clickable driver-name pill on a PaneHeader; opens the DriverDropdown.",                                                                                     "cites": ["D33", "D37", "v7:45"] },
+      { "name": "DriverDropdown", "owner": "shell",     "definition": "The menu of driver options anchored under a DriverChip.",                                                                                                        "cites": ["v7:46", "v7:761"] },
+      { "name": "WorkspaceChip",  "owner": "shell",     "definition": "The ⌥ workspace pill on a PaneHeader; opens the WorkspacePopover; reads workspace shape.",                                                                        "cites": ["D33", "v7:47"] },
+      { "name": "WorkspacePopover","owner": "shell",    "definition": "The read-only informational popover anchored under a WorkspaceChip; shows path + shape + branch; frozen at seq 1.",                                              "cites": ["D33", "v7:48"] },
+      { "name": "Prompt",         "owner": "shell",     "definition": "The input line at the bottom of a Pane; ↵ sends; `/` opens SlashRouter; carries caret color per focus (Layer 7 tonal rule).",                                    "cites": ["D3", "v7:120", "v7:144"] },
+      { "name": "SlashRouter",    "owner": "shell",     "definition": "The command menu that grows upward out of a Prompt when the user types `/`; renders one row per matching SlashCommand.",                                         "cites": ["D3", "v7:113-118", "v7:902-904"] },
+      { "name": "SlashCommand",   "owner": "shell",     "definition": "One entry in the slash inventory — /list, /run, /inspect, /diff, /context, /model, /studio, /export, /exit.",                                                     "cites": ["D3", "v7:902"] },
+      { "name": "Transcript",     "owner": "shell",     "definition": "The message + tool-cycle event log rendered in a Pane's body (terminal level) or in the left column of the Reveal.",                                             "cites": ["DESIGN-SPEC §4", "v7:79-107", "v7:184-199"] },
+      { "name": "DelegateInline", "owner": "shell",     "definition": "The `⑂` line in a Transcript representing one delegate call; folds to one line by default; click expands to child inset; `⏎` descends.",                          "cites": ["D38", "D70", "v7:86-92"] },
+      { "name": "FanOutInline",   "owner": "shell",     "definition": "The `⑂ delegate → N children` line in a Transcript representing one delegate call with multiple children; expands to a child list; ↑↓/↵ walks; ↵ descends.",     "cites": ["D72", "v7:96-104"] },
+      { "name": "Descent",        "owner": "shell",     "definition": "The pane-focus stack from the session down into a delegate child. Depth 0 = session; 1–2 inside a child (engine cap per D41).",                                  "cites": ["D41", "D70", "v7:694-708"] },
+      { "name": "Reveal",         "owner": "shell",     "definition": "The revealed-machinery state of a Pane; renders transcript-left + machinery-right with a draggable gutter between them.",                                        "cites": ["D4", "v7:156-329"] },
+      { "name": "Lens",           "owner": "shell",     "definition": "A machinery view mode — one of stream+graph, i/o, structure, scene.",                                                                                            "cites": ["D10", "D20", "v7:218-323", "v7:898"] },
+      { "name": "Stream",         "owner": "shell",     "definition": "The scrollable event-row list in the stream+graph Lens; each row shows seq · t · kind · producer · gist; clicking opens an Inspector.",                          "cites": ["D10", "D26", "v7:258-285"] },
+      { "name": "SideGraph",      "owner": "shell",     "definition": "The pinned horizontal gantt (in `→` direction) or the inline down-lane cells (in `⇅` direction); one lane per producer kind; spans are call intervals.",           "cites": ["D17", "D29", "D30", "v7:226-250", "v7:844-856"] },
+      { "name": "Inspector",      "owner": "shell",     "definition": "The inline expansion under a Stream row showing schema · time · producer · content · payload; click same row again to close.",                                    "cites": ["D11", "D22", "v7:267-282"] },
+      { "name": "Surface",        "owner": "shell",     "definition": "A summoned full-window view — one of records, studio, assay; esc returns to the prior level.",                                                                    "cites": ["D5", "D24", "D28"] },
+      { "name": "Records",        "owner": "shell",     "definition": "The records Surface — workspace-grouped session and record list; assay click-through; click a session to switch pane.",                                          "cites": ["D28", "P3", "v7:332-354"] },
+      { "name": "Assay",          "owner": "shell",     "definition": "The assay board Surface — arms × cases × trials bars with verdict words, preregistration banner, underpowered banner.",                                          "cites": ["D13", "D18", "v7:358-373"] },
+      { "name": "Studio",         "owner": "shell",     "definition": "The studio Surface — form ⇄ canvas topology authoring at parity with substrate's TopologyBuilder; validate; build & launch.",                                    "cites": ["D27", "v7:378-443"] },
+      { "name": "Find",           "owner": "shell",     "definition": "The ⌘F search bar over a Pane's current focused lens; scope is transcript or stream; matches paint bright while rest dim to 0.35.",                              "cites": ["19h", "19k", "19l", "v7:54-56", "v7:167"] },
+      { "name": "Settings",       "owner": "shell",     "definition": "The ⌘, modal — theme, type size, nested-descent, bindings.",                                                                                                     "cites": ["19c", "v7:449-467"] },
+      { "name": "ExportDialog",   "owner": "shell",     "definition": "The /export modal — pick .record dir or events.jsonl and target path.",                                                                                          "cites": ["19f", "v7:469-481"] },
+      { "name": "EndConfirm",     "owner": "shell",     "definition": "The /exit confirm modal — end-session interrupts a live turn and finalises the record.",                                                                          "cites": ["19g", "D68 corollary b", "v7:482-490"] },
+      { "name": "FirstRun",       "owner": "shell",     "definition": "The first-run driver picker — probes local Ollama, CLI drivers on PATH, API keys in env, deterministic floor; ↵ starts.",                                        "cites": ["D69", "v7:493-511"] },
+      { "name": "Footer",         "owner": "shell",     "definition": "The persistent one-line bottom bar — session-status swatch · record identity · esc/⌃` hint.",                                                                    "cites": ["v7:446"] },
+      { "name": "DropHint",       "owner": "shell",     "definition": "The zone-highlight overlay drawn on a Pane during a header-drag; one of five zones (W, E, N, S, C); previews the drop outcome.",                                 "cites": ["PANE-MECHANICS §Drop zones", "v7:38", "v7:771-777"] },
+      { "name": "Gutter",         "owner": "shell",     "definition": "A drag-resize handle between two Panes or between transcript and machinery; ⌥ modifier promotes to full-line drag.",                                              "cites": ["D66c", "PANE-MECHANICS §Dividers", "v7:150-151", "v7:326"] },
+      { "name": "Collection",     "owner": "shell",     "definition": "The whole-UI ephemeral state — windows × pane grids × pane→session bindings × per-pane level + lens + focus + collapsed states. Persisted for whole-state restore.", "cites": ["D57", "D68", "APP-ARCHITECTURE §The model"] },
+      { "name": "Anchor",         "owner": "harness",   "definition": "A deterministic pixel-anchor painted at a fixed known coordinate encoding one byte of shell state; the Playwright harness screenshots + PNG-decodes the anchor to reconstruct the state. Every load-bearing shell state has one.", "cites": ["Addendum A2", "Architect 2026-09-08 (non-negotiable)"] }
+    ],
+
+    "substrate_reference_entities": [
+      { "name": "Session",       "owner": "substrate", "definition": "A substrate session; the SessionManifest row in session_registry — session_id, name, driver, workspace, workspace_shape, bundle, seed, role, status, record_root, tools, driver_params.", "cites": ["session_registry.py:80-150", "session_registry.py:400"] },
+      { "name": "Record",        "owner": "substrate", "definition": "The append-only event log for a Session; on disk at ~/.substrate/sessions/<sid>/record/events-*.jsonl; replayable byte-identically.",                                                    "cites": ["P-DATA-AUDIT", "APP-ARCHITECTURE"] },
+      { "name": "Envelope",      "owner": "substrate", "definition": "One event on a Record — {crc, kind, payload, producer, schema, seq, t}. `kind` is drawn from substrate.constants + substrate.topologies.session.vocabulary.",                            "cites": ["P-DATA-AUDIT §Real envelope"] },
+      { "name": "Producer",      "owner": "substrate", "definition": "A substrate producer instance emitting events; has kind (model/tool/park/session_end/…), instance id, parent.",                                                                          "cites": ["P-DATA-AUDIT §Payload shapes"] },
+      { "name": "Driver",        "owner": "substrate", "definition": "The Responder backing a Session — DeterministicResponder | CliResponder(claude|gemini) | OllamaResponder(<model>).",                                                                     "cites": ["D33", "D69", "substrate.reference"] },
+      { "name": "Workspace",     "owner": "substrate", "definition": "A directory bound to a Session; shape ∈ {flat, worktree, isolate}; frozen at seq 1 (SessionManifest.workspace + workspace_shape).",                                                     "cites": ["D14", "D33", "session_registry.py:80-90 WorkspaceShape"] },
+      { "name": "Bundle",        "owner": "substrate", "definition": "A context bundle attached to a Session (methodology / personality / per_turn / tools / role / parent_context); shipped defaults live at substrate.bundles.",                              "cites": ["APP-ARCHITECTURE", "sprint 034a"] },
+      { "name": "Tools",         "owner": "substrate", "definition": "The per-session tool allowlist (SessionManifest.tools) — sorted list of tool names or None for unrestricted.",                                                                            "cites": ["D33", "sprint 034a", "sprint 036d"] },
+      { "name": "Turn",          "owner": "substrate", "definition": "One session turn — UserMessage → PromptComposed → ModelReply → (ToolCall × N + ToolResult × N)* → FinalAnswer → Park; turn_index is under-lock (session_registry.py:799).",                "cites": ["substrate.topologies.session.__init__.py", "session_registry.py:799 resume_event_builder"] },
+      { "name": "DelegateCall",  "owner": "substrate", "definition": "A substrate ToolCall{tool:'delegate'} in a Turn; the ToolResult carries {answer, child_root, steps} and the child_root points at a child Record. Depth cap max_depth=2.",                 "cites": ["D38", "D41", "topologies/tool_loop/delegate.py"] },
+      { "name": "Trigger",       "owner": "substrate", "definition": "A named starter in a substrate topology; fires a Producer when its Predicate over a View matures. Emits `substrate.TriggerFired`. The Structure lens renders triggers; the Studio form authors them.",                                    "cites": ["D6", "D27", "constants.py TRIGGER_FIRED", "v7:303-307", "v7:399-403"] },
+      { "name": "View",          "owner": "substrate", "definition": "A running projection of the Bus a Predicate reads (KindCount / KindBuffer / …). Referenced by Triggers. The Structure lens shows the view list; the Studio form authors them.",                                                            "cites": ["D6", "D27", "v7:308-309", "v7:394-398"] },
+      { "name": "Route",         "owner": "substrate", "definition": "A staging rule that carries an event of a named kind into a future Producer's named input slot. The Studio form authors routes; the Studio canvas draws them as dashed edges into slot nodes.",                                            "cites": ["D6", "D27", "v7:404-408", "v7:1019-1024"] },
+      { "name": "TerminationPolicy", "owner": "substrate", "definition": "The composed condition under which a Run finalises; six named policies (quiescence_with_watchdog, all_completed, threshold_count, cancel_all_others, any_of, all_of). The Structure lens renders the policy; the Studio chips select it.", "cites": ["D6", "D27", "v7:310-312", "v7:409-411"] }
+    ],
+
+    "surfaced_for_ratification": [
+      { "flag": "ENTITY_MERGE_PROPOSED", "candidates": ["DelegateInline (shell)", "DelegateCall (substrate)"], "note": "DelegateInline is the ⑂ line the shell renders; DelegateCall is the substrate ToolCall it renders FROM. Two entities, one bounded context each — the shell owns render state (folded/expanded, descend-focus), substrate owns wire state (child_root, depth, ok, error). Proposed disposition: KEEP AS TWO ENTITIES (DDD bounded contexts) — Layer 2 payloads reference DelegateCall via its child_root and depth; Layer 5 pairs them with an ordering invariant." },
+      { "flag": "ENTITY_MERGE_PROPOSED", "candidates": ["FanOutInline (shell)", "DelegateCall (substrate) with children_count > 1"], "note": "FanOutInline is one ⑂ line for a delegate call producing multiple children. Substrate models this as one DelegateCall whose ToolResult carries multiple child_roots. Proposed disposition: KEEP FanOutInline as a distinct shell entity (its expanded state and ↑↓/↵ walk are shell-only)." },
+      { "flag": "COVERAGE_QUESTION", "topic": "SplitTree", "note": "Not surfaced as a Layer 0 entity — a recursive tree over Panes, not a thing state is tracked ON. If FD-2 lands the split-tree layout, that changes; propose a Layer 0 entity SplitNode then." },
+      { "flag": "COVERAGE_QUESTION", "topic": "Editor level (D48–D53)", "note": "The editor level and its modes (code / documents / images / video / plain-shell) are SPECULATIVE per DESIGN-SPEC §5. Not in v0.1 Layer 0. When they ratify, they land as new entities in a v0.2 bump via NEW_TAG/PAYLOAD_FIELD proposals." },
+      { "flag": "COVERAGE_QUESTION", "topic": "Native macOS menu bar (D63)", "note": "Rendered by the OS via Electron, not by the shell renderer. Its state (which menu open, which item hovered) is machine-readable via Electron's `Menu` API, not through pixel-anchors. Proposed disposition: NOT in Layer 0 (OS-owned surface) — but the menu ITEMS map to existing shell tags (the menu items are alternative entry points to the same verbs). Surface at the appropriate sprint." },
+      { "flag": "COVERAGE_QUESTION", "topic": "Rate-limited transcript event", "note": "Rendered as a `◌ rate-limited · retry 3/6 in 14s` line inside a Transcript per 19i; substrate emits SessionWarning{kind:...}. Currently modeled as a Transcript row rendering, not as its own shell entity. Question: does `RateLimitedWaiting` earn its own Layer 0 entity? Proposed disposition: NO — it's a Transcript render of a substrate SessionWarning; the shell state is `is_rate_limited: bool` on the focused Session's derived status." }
+    ]
+  },
+
+  "layer_1_lexical": {
+    "note": "Tag form: {ENTITY_SNAKE_UPPER}_{VERB_PAST_PARTICIPLE_UPPER}. Every tag is emitted at the reducer-commit that changes shell state; the emit lands as a JSONL line in the harness trace AND flips a pixel-anchor testid the harness reads (Architect 2026-09-08 non-negotiable). Category = architectural boundary (14 categories). Stratum = event | ambient | summary | incident (per Foundation 01, PRINCIPLES §Layer 6/7). Passive-render entities (WindowStrip, PaneHeader, DriverChip, WorkspaceChip, Footer, Records, Assay) produce zero shell-emit tags — they are paint witnesses of ancestor entities' state; Layer 7 (Evidence) will pair them with pixel-anchors. Substrate-owned entities do not get shell-emit tags — the shell renders substrate wire strings (RunStarted, UserMessage, Park, …); the reader-side integration lives in Layer 5 (State-Transition) pairing rules. The reader-AND-controller half — every shell-issued substrate call — appears here as `bridge` + `bridge_reply` categories.",
+
+    "categories": ["window", "pane", "header", "prompt", "transcript", "reveal", "lens", "surface", "find", "descent", "dialog", "layout", "harness", "bridge", "bridge_reply"],
+    "strata": ["event", "ambient", "summary", "incident"],
+
+    "tags": [
+      { "name": "WINDOW_OPENED",                    "entity": "Window",           "category": "window",     "stratum": "event",    "note": "an OS window opened — ⌘N or app start" },
+      { "name": "WINDOW_CLOSED",                    "entity": "Window",           "category": "window",     "stratum": "event",    "note": "an OS window closed — panes inside close first" },
+
+      { "name": "PANE_CREATED",                     "entity": "Pane",             "category": "pane",       "stratum": "event",    "note": "a new pane entered the shell state; session_id null for unbound (D66f)" },
+      { "name": "PANE_CLOSED",                      "entity": "Pane",             "category": "pane",       "stratum": "event",    "note": "a pane left the shell state; the bound session persists in the registry" },
+      { "name": "PANE_FOCUSED",                     "entity": "Pane",             "category": "pane",       "stratum": "event",    "note": "focus transferred to a pane; prior_pane_id set unless first focus" },
+      { "name": "PANE_SPLIT",                       "entity": "Pane",             "category": "pane",       "stratum": "event",    "note": "a pane split; new_pane_id created; axis row|col; PANE_CREATED fires in the same reducer step" },
+      { "name": "PANE_RENAMED",                     "entity": "Pane",             "category": "pane",       "stratum": "event",    "note": "a pane's session name changed; from and to carried" },
+      { "name": "PANE_MOVED",                       "entity": "Pane",             "category": "pane",       "stratum": "event",    "note": "grip-swap moved a pane to a different split_tree slot (PANE-MECHANICS)" },
+      { "name": "PANE_UNBOUND_BOUND",               "entity": "Pane",             "category": "pane",       "stratum": "event",    "note": "an unbound pane completed the workspace picker and bound to a session (D66f)" },
+
+      { "name": "DRIVER_DROPDOWN_OPENED",           "entity": "DriverDropdown",   "category": "header",     "stratum": "event",    "note": "the driver ▾ dropdown opened under a pane header" },
+      { "name": "DRIVER_DROPDOWN_CLOSED",           "entity": "DriverDropdown",   "category": "header",     "stratum": "event",    "note": "the driver ▾ dropdown closed without picking" },
+      { "name": "DRIVER_PICKED",                    "entity": "DriverDropdown",   "category": "header",     "stratum": "event",    "note": "a driver option was picked from the dropdown; feeds DRIVER_CHANGE_REQUESTED (D37)" },
+      { "name": "WORKSPACE_POPOVER_OPENED",         "entity": "WorkspacePopover", "category": "header",     "stratum": "event",    "note": "the ⌥ workspace popover opened; read-only path + shape + branch" },
+      { "name": "WORKSPACE_POPOVER_CLOSED",         "entity": "WorkspacePopover", "category": "header",     "stratum": "event",    "note": "the ⌥ workspace popover closed" },
+
+      { "name": "PROMPT_CHANGED",                   "entity": "Prompt",           "category": "prompt",     "stratum": "event",    "note": "the prompt input value changed (per-keystroke — coalescing considered in Layer 4)" },
+      { "name": "PROMPT_SUBMITTED",                 "entity": "Prompt",           "category": "prompt",     "stratum": "event",    "note": "↵ pressed on the prompt with non-empty non-slash text; feeds TURN_SUBMIT_REQUESTED" },
+      { "name": "SLASH_ROUTER_OPENED",              "entity": "SlashRouter",      "category": "prompt",     "stratum": "event",    "note": "the slash router surface opened above the prompt (typed leading /)" },
+      { "name": "SLASH_ROUTER_CLOSED",              "entity": "SlashRouter",      "category": "prompt",     "stratum": "event",    "note": "the slash router closed (esc / non-slash char / picked)" },
+      { "name": "SLASH_ROUTER_WALKED",              "entity": "SlashRouter",      "category": "prompt",     "stratum": "event",    "note": "↑↓ moved the highlight through the slash menu" },
+      { "name": "SLASH_COMMAND_ROUTED",             "entity": "SlashCommand",     "category": "prompt",     "stratum": "event",    "note": "a slash command routed — carries {command: /list|/run|/inspect|/diff|/context|/model|/studio|/export|/exit, arg}" },
+      { "name": "WORKSPACE_PICKER_WALKED",          "entity": "Prompt",           "category": "prompt",     "stratum": "event",    "note": "↑↓ moved the highlighted row in the unbound-pane workspace picker (D66f + sheet 19a); consistency with SLASH_ROUTER_WALKED / FAN_OUT_INLINE_WALKED" },
+
+      { "name": "TRANSCRIPT_ROW_RENDERED",          "entity": "Transcript",       "category": "transcript", "stratum": "event",    "note": "one row rendered from an incoming envelope; event-cadence (one emit per envelope arrival), not sample-cadence — recategorized from ambient per REVIEW-2026-09-10 Layer-1 stratum question against Foundation 01 ('ambient = sampled at high frequency')" },
+      { "name": "TRANSCRIPT_COMPACTED_RENDERED",    "entity": "Transcript",       "category": "transcript", "stratum": "event",    "note": "◇ line rendered from a substrate TranscriptCompacted envelope; the transcript's display state materially changes (older turns collapse) so it gets a dedicated tag alongside the other special-shape substrate kinds" },
+      { "name": "TRANSCRIPT_AWAITING_FIRST_MESSAGE_RENDERED", "entity": "Transcript", "category": "transcript", "stratum": "event",   "note": "'◐ parked — awaiting your first message' line rendered pre-first-turn (v7:543). Not a Park envelope render — a shell-emitted transcript row shown after PANE_UNBOUND_BOUND and before the first PROMPT_SUBMITTED. Added per REVIEW-2026-09-10-layer-2-3 P1 (park_reason enum invented a fourth substrate value — corrected here with a real shell-owned tag)." },
+      { "name": "TRANSCRIPT_DELEGATE_LINE_RENDERED","entity": "DelegateInline",   "category": "transcript", "stratum": "event",    "note": "a ⑂ line rendered from a ToolCall{tool:delegate}" },
+      { "name": "TRANSCRIPT_FANOUT_LINE_RENDERED",  "entity": "FanOutInline",     "category": "transcript", "stratum": "event",    "note": "a ⑂ delegate → N children line rendered" },
+      { "name": "TRANSCRIPT_PARK_RENDERED",         "entity": "Transcript",       "category": "transcript", "stratum": "event",    "note": "◐ parked line rendered from a session Park envelope" },
+      { "name": "TRANSCRIPT_SESSION_ENDED_RENDERED","entity": "Transcript",       "category": "transcript", "stratum": "event",    "note": "◇ SessionEnded finalised line rendered" },
+      { "name": "TRANSCRIPT_RATE_LIMITED_RENDERED", "entity": "Transcript",       "category": "transcript", "stratum": "event",    "note": "◌ rate-limited line rendered from a SessionWarning envelope (19i)" },
+
+      { "name": "DELEGATE_INLINE_EXPANDED",         "entity": "DelegateInline",   "category": "descent",    "stratum": "event",    "note": "a folded ⑂ line clicked open to show its child inset" },
+      { "name": "DELEGATE_INLINE_COLLAPSED",        "entity": "DelegateInline",   "category": "descent",    "stratum": "event",    "note": "an expanded ⑂ inset collapsed back to one line" },
+      { "name": "FAN_OUT_INLINE_EXPANDED",          "entity": "FanOutInline",     "category": "descent",    "stratum": "event",    "note": "a fan-out ⑂ line expanded to the child list" },
+      { "name": "FAN_OUT_INLINE_COLLAPSED",         "entity": "FanOutInline",     "category": "descent",    "stratum": "event",    "note": "the fan-out child list collapsed back" },
+      { "name": "FAN_OUT_INLINE_WALKED",            "entity": "FanOutInline",     "category": "descent",    "stratum": "event",    "note": "↑↓ moved the highlighted row in the fan-out child list" },
+      { "name": "DESCENT_ENTERED",                  "entity": "Descent",          "category": "descent",    "stratum": "event",    "note": "focus descended one level into a delegate child (D70)" },
+      { "name": "DESCENT_EXITED",                   "entity": "Descent",          "category": "descent",    "stratum": "event",    "note": "esc climbed one level of descent back toward the session" },
+
+      { "name": "REVEAL_TOGGLED",                   "entity": "Reveal",           "category": "reveal",     "stratum": "event",    "note": "⌃` cycled reveal state; to: terminal|reveal (D4)" },
+      { "name": "LENS_SWITCHED",                    "entity": "Lens",             "category": "lens",       "stratum": "event",    "note": "the machinery lens switched; to: stream+graph|i/o|structure|scene (D10, D20)" },
+      { "name": "STREAM_LEVEL_TOGGLED",             "entity": "Stream",           "category": "lens",       "stratum": "event",    "note": "stream granularity flipped; to: all|app (D26)" },
+      { "name": "STREAM_DIR_TOGGLED",               "entity": "SideGraph",        "category": "lens",       "stratum": "event",    "note": "graph direction flipped; to: down|side (D17)" },
+      { "name": "STREAM_ROW_CLICKED",               "entity": "Stream",           "category": "lens",       "stratum": "event",    "note": "a stream row (or a side-graph bar sharing the same element per D23) was clicked; opens the Inspector" },
+      { "name": "INSPECTOR_OPENED",                 "entity": "Inspector",        "category": "lens",       "stratum": "event",    "note": "the inspector attached under a clicked row (D11, D22)" },
+      { "name": "INSPECTOR_CLOSED",                 "entity": "Inspector",        "category": "lens",       "stratum": "event",    "note": "the inspector closed (same row clicked again per D22)" },
+      { "name": "REVEAL_FOCUS_MOVED",               "entity": "Reveal",           "category": "lens",       "stratum": "event",    "note": "focus moved between the transcript half and the stream half of the revealed view; carries `to: transcript|stream` — the Find scope observation-contract handle per sheet 19h / 19k / 19l (v7:167, 184, 252)" },
+
+      { "name": "SURFACE_OPENED",                   "entity": "Surface",          "category": "surface",    "stratum": "event",    "note": "a summoned surface opened; kind: records|studio|assay (D5, D24)" },
+      { "name": "SURFACE_CLOSED",                   "entity": "Surface",          "category": "surface",    "stratum": "event",    "note": "a summoned surface closed; esc or repeat click (D28)" },
+      { "name": "STUDIO_VIEW_TOGGLED",              "entity": "Studio",           "category": "surface",    "stratum": "event",    "note": "studio flipped form ⇄ canvas (D27)" },
+      { "name": "STUDIO_VALIDATE_REQUESTED",        "entity": "Studio",           "category": "surface",    "stratum": "event",    "note": "validate button clicked" },
+      { "name": "STUDIO_VALIDATED",                 "entity": "Studio",           "category": "surface",    "stratum": "event",    "note": "validate returned ok" },
+      { "name": "STUDIO_VALIDATE_FAILED",           "entity": "Studio",           "category": "surface",    "stratum": "incident", "note": "validate returned errors; carries the error list" },
+      { "name": "STUDIO_BUILD_REQUESTED",           "entity": "Studio",           "category": "surface",    "stratum": "event",    "note": "build & launch ▸ clicked" },
+      { "name": "STUDIO_BUILT",                     "entity": "Studio",           "category": "surface",    "stratum": "event",    "note": "build produced a registered topology + launched a Run" },
+      { "name": "STUDIO_BUILD_REJECTED",            "entity": "Studio",           "category": "surface",    "stratum": "incident", "note": "build refused; carries the validator error list" },
+
+      { "name": "FIND_OPENED",                      "entity": "Find",             "category": "find",       "stratum": "event",    "note": "⌘F opened the find bar over the focused lens (19h/19k/19l)" },
+      { "name": "FIND_CLOSED",                      "entity": "Find",             "category": "find",       "stratum": "event",    "note": "the find bar closed (esc)" },
+      { "name": "FIND_SCOPE_CHANGED",               "entity": "Find",             "category": "find",       "stratum": "event",    "note": "the find scope moved; scope: transcript|stream" },
+      { "name": "FIND_QUERY_CHANGED",               "entity": "Find",             "category": "find",       "stratum": "event",    "note": "the find query changed; carries q + count" },
+
+      { "name": "SETTINGS_OPENED",                  "entity": "Settings",         "category": "dialog",     "stratum": "event",    "note": "⌘, opened the settings modal (19c)" },
+      { "name": "SETTINGS_CLOSED",                  "entity": "Settings",         "category": "dialog",     "stratum": "event",    "note": "the settings modal closed" },
+      { "name": "SETTING_CHANGED",                  "entity": "Settings",         "category": "dialog",     "stratum": "event",    "note": "one preference flipped; key: theme|type_size|nested_descent|bindings; from and to typed per key (Layer 7 constraint)" },
+      { "name": "EXPORT_DIALOG_OPENED",             "entity": "ExportDialog",     "category": "dialog",     "stratum": "event",    "note": "/export opened the modal (19f)" },
+      { "name": "EXPORT_DIALOG_CLOSED",             "entity": "ExportDialog",     "category": "dialog",     "stratum": "event",    "note": "the export modal closed without exporting" },
+      { "name": "EXPORT_COMMITTED",                 "entity": "ExportDialog",     "category": "dialog",     "stratum": "event",    "note": "export ↵ ran; carries kind: record_dir|events_jsonl, target_path" },
+      { "name": "END_CONFIRM_OPENED",               "entity": "EndConfirm",       "category": "dialog",     "stratum": "event",    "note": "/exit opened the confirm modal (19g)" },
+      { "name": "END_CONFIRM_CLOSED",               "entity": "EndConfirm",       "category": "dialog",     "stratum": "event",    "note": "the end-session confirm closed via cancel" },
+      { "name": "END_CONFIRM_COMMITTED",            "entity": "EndConfirm",       "category": "dialog",     "stratum": "event",    "note": "end-session confirmed; feeds INTERRUPT_REQUESTED (if RUNNING) then SESSION_END_REQUESTED" },
+      { "name": "FIRST_RUN_OPENED",                 "entity": "FirstRun",         "category": "dialog",     "stratum": "event",    "note": "the first-run picker rendered at app boot with no prior collection (19m/D69)" },
+      { "name": "FIRST_RUN_DRIVER_PICKED",          "entity": "FirstRun",         "category": "dialog",     "stratum": "event",    "note": "a driver row was picked in first-run; carries driver name + params" },
+      { "name": "FIRST_RUN_COMPLETED",              "entity": "FirstRun",         "category": "dialog",     "stratum": "event",    "note": "first-run finished; the first session opened via SESSION_CREATE_REQUESTED" },
+
+      { "name": "DROP_HINT_SHOWN",                  "entity": "DropHint",         "category": "layout",     "stratum": "event",    "note": "a header-drag entered a pane and painted a zone highlight" },
+      { "name": "DROP_HINT_ZONE_CHANGED",           "entity": "DropHint",         "category": "layout",     "stratum": "event",    "note": "the header-drag moved into a different zone within the target pane (W/E/N/S/C)" },
+      { "name": "DROP_HINT_HIDDEN",                 "entity": "DropHint",         "category": "layout",     "stratum": "event",    "note": "the header-drag left the target pane or dropped" },
+      { "name": "GUTTER_DRAG_STARTED",              "entity": "Gutter",           "category": "layout",     "stratum": "event",    "note": "a resize drag began on a boundary; carries gutter kind: col|row|reveal" },
+      { "name": "GUTTER_DRAG_STOPPED",              "entity": "Gutter",           "category": "layout",     "stratum": "event",    "note": "a resize drag ended; carries the delta applied to the affected weights" },
+
+      { "name": "COLLECTION_OPENED",                "entity": "Collection",       "category": "window",     "stratum": "event",    "note": "the collection state loaded at app boot (D68 whole-state restore)" },
+      { "name": "COLLECTION_PERSISTED",             "entity": "Collection",       "category": "window",     "stratum": "summary",  "note": "collection state written to SQLite (throttled — see Layer 4 cadence)" },
+      { "name": "COLLECTION_RESTORED",              "entity": "Collection",       "category": "window",     "stratum": "event",    "note": "collection rehydrated on relaunch — panes rebind to session_ids" },
+
+      { "name": "ANCHOR_PAINTED",                   "entity": "Anchor",           "category": "harness",    "stratum": "ambient",  "note": "one anchor's byte was repainted on this frame; cadence invariant: rAF while any watched anchor is dirty (Layer 4)" },
+      { "name": "HARNESS_HEARTBEAT",                "entity": "Anchor",           "category": "harness",    "stratum": "ambient",  "note": "the anchor-harness-heartbeat testid ticked; cadence: 60Hz gated on window.__substrateHarness (Addendum A B4 — the witness must fire)" },
+
+      { "name": "SESSION_CREATE_REQUESTED",         "entity": "Session",          "category": "bridge",     "stratum": "event",    "note": "shell dispatched substrate.session_registry.create over the Python bridge" },
+      { "name": "SESSION_CREATED",                  "entity": "Session",          "category": "bridge_reply","stratum": "event",   "note": "bridge acked create with the SessionManifest slice" },
+      { "name": "SESSION_CREATE_FAILED",            "entity": "Session",          "category": "bridge_reply","stratum": "incident","note": "bridge returned NameCollision or driver_unavailable or workspace_shape_invalid" },
+      { "name": "SESSION_RENAME_REQUESTED",         "entity": "Session",          "category": "bridge",     "stratum": "event",    "note": "shell dispatched set_name" },
+      { "name": "SESSION_RENAMED",                  "entity": "Session",          "category": "bridge_reply","stratum": "event",   "note": "bridge acked rename" },
+      { "name": "SESSION_RENAME_FAILED",            "entity": "Session",          "category": "bridge_reply","stratum": "incident","note": "bridge returned NameCollision" },
+      { "name": "TURN_SUBMIT_REQUESTED",            "entity": "Turn",             "category": "bridge",     "stratum": "event",    "note": "shell dispatched submit_user_message (wraps try_enqueue_turn → turn_sync with resume_event_builder → dequeue_turn)" },
+      { "name": "TURN_SUBMITTED",                   "entity": "Turn",             "category": "bridge_reply","stratum": "event",   "note": "bridge acked turn_sync completion; carries turn_index" },
+      { "name": "TURN_SUBMIT_FAILED",               "entity": "Turn",             "category": "bridge_reply","stratum": "incident","note": "bridge returned queue_full | session_ended | fresh_session_requires_user_message | torn_record_on_resume | timeout" },
+      { "name": "INTERRUPT_REQUESTED",              "entity": "Turn",             "category": "bridge",     "stratum": "event",    "note": "shell dispatched registry.interrupt (from /exit path when session is RUNNING, or Ctrl+C in prompt per PRODUCT-SPEC §2)" },
+      { "name": "INTERRUPTED",                      "entity": "Turn",             "category": "bridge_reply","stratum": "event",   "note": "bridge acked interrupt; carries the ProducerRef | null" },
+      { "name": "SESSION_END_REQUESTED",            "entity": "Session",          "category": "bridge",     "stratum": "event",    "note": "shell dispatched turn_sync with UserMessage(text=END_ON_EXIT_SENTINEL)" },
+      { "name": "SESSION_ENDED_ACK",                "entity": "Session",          "category": "bridge_reply","stratum": "event",   "note": "bridge acked the SessionEnded envelope on the record" },
+      { "name": "DRIVER_CHANGE_REQUESTED",          "entity": "Driver",           "category": "bridge",     "stratum": "event",    "note": "shell dispatched set_driver (mid-session PATCH per D37)" },
+      { "name": "DRIVER_CHANGED",                   "entity": "Driver",           "category": "bridge_reply","stratum": "event",   "note": "bridge acked set_driver with updated manifest slice" },
+      { "name": "DRIVER_CHANGE_FAILED",             "entity": "Driver",           "category": "bridge_reply","stratum": "incident","note": "bridge returned driver_unavailable" },
+      { "name": "BUNDLE_ATTACH_REQUESTED",          "entity": "Bundle",           "category": "bridge",     "stratum": "event",    "note": "shell dispatched set_bundle" },
+      { "name": "BUNDLE_ATTACHED",                  "entity": "Bundle",           "category": "bridge_reply","stratum": "event",   "note": "bridge acked set_bundle" },
+      { "name": "BUNDLE_ATTACH_FAILED",             "entity": "Bundle",           "category": "bridge_reply","stratum": "incident","note": "bridge returned unknown_bundle" },
+      { "name": "TOOLS_RESTRICTED",                 "entity": "Tools",            "category": "bridge_reply","stratum": "event",   "note": "session's tools list changed (create-time or mid-session PATCH); carries the sorted allowlist or null" },
+      { "name": "WORKSPACE_BOUND",                  "entity": "Workspace",        "category": "bridge_reply","stratum": "event",   "note": "an unbound pane's workspace picker committed; carries workspace_path + shape ∈ {flat|worktree|isolate}" },
+      { "name": "PROBE_DRIVER_REQUESTED",           "entity": "Driver",           "category": "bridge",     "stratum": "event",    "note": "shell dispatched probe_driver — the fail-fast pre-create check + the first-run enumerator (D69); carries driver name + params" },
+      { "name": "PROBE_DRIVER_PROBED",              "entity": "Driver",           "category": "bridge_reply","stratum": "event",   "note": "bridge acked probe_driver; carries driver name + advertised context_tokens" },
+      { "name": "PROBE_DRIVER_FAILED",              "entity": "Driver",           "category": "bridge_reply","stratum": "incident","note": "bridge returned driver_unavailable:<family>:<detail> — CLI not on PATH, ollama /api/show error, or API key absent" },
+      { "name": "BRIDGE_HELLO_RECEIVED",            "entity": "Session",          "category": "bridge_reply","stratum": "event",   "note": "the Python bridge sent its hello with substrate.__version__ + protocol=1" },
+      { "name": "BRIDGE_DEAD_SURFACED",             "entity": "Session",          "category": "bridge_reply","stratum": "incident","note": "the Python bridge died twice within 30s (second crash pins the dead-banner)" },
+
+      { "name": "DELEGATE_CALL_RENDERED",           "entity": "DelegateCall",     "category": "transcript", "stratum": "event",    "note": "a substrate ToolCall{tool:delegate} was rendered into a Transcript as a ⑂ line; folded until DELEGATE_INLINE_EXPANDED or DESCENT_ENTERED" },
+      { "name": "DELEGATE_CALL_FOLDED",             "entity": "DelegateCall",     "category": "transcript", "stratum": "event",    "note": "the ToolResult carrying answer + child_root arrived; the ⑂ line folded to one line with the folded text" },
+      { "name": "DELEGATE_DEPTH_CAP_REFUSED",       "entity": "DelegateCall",     "category": "transcript", "stratum": "incident", "note": "a delegate call at depth 2 refused per D41 max_depth=2; rendered as failed ToolResult in the child inset (19j)" }
+    ],
+
+    "surfaced_for_ratification": [
+      { "flag": "NEW_TAG_PROPOSED", "candidates": ["PANE_UNBOUND_BOUND"], "note": "Pane has a distinct 'unbound → bound' transition when the workspace picker commits (D66f). Currently sits between PANE_CREATED (unbound) and WORKSPACE_BOUND (the substrate ack). Proposed as its own event so the shell trace shows the transition without needing to join to the bridge log." },
+      { "flag": "OVER_DECOMPOSITION_CHECK", "target": "Studio", "note": "Studio produces 8 tags in Layer 1 (STUDIO_VIEW_TOGGLED, VALIDATE_REQUESTED, VALIDATED, VALIDATE_FAILED, BUILD_REQUESTED, BUILT, BUILD_REJECTED, plus the surface's SURFACE_OPENED with kind=studio). BOOTSTRAP §Step 2 halt-check: `single entity-verb pair decomposes into more than five tags` — this is Studio with 8 across five verb classes (view/validate/build states). Proposed disposition: NOT over-decomposition — five distinct verb classes, each needs its own tag; the count is 8 because validate and build each have three ack states (requested/ok/failed). Keep as drafted." },
+      { "flag": "PASSIVE_ENTITIES", "entities": ["WindowStrip", "PaneHeader", "DriverChip", "WorkspaceChip", "Records", "Assay", "Footer"], "note": "Seven Layer-0 entities produce zero shell-emit tags in Layer 1 because they are paint witnesses of ancestor entities' state — WindowStrip renders when panes.length > 1 (derived from PANE_CREATED count); PaneHeader is the full-width identical header (D42) that renders whenever its pane renders; DriverChip and WorkspaceChip are the click surfaces for the dropdown/popover; Records and Assay are Surface renderings driven by SURFACE_OPENED with kind=records|assay; Footer reads Session status + Descent depth + Record identity. Layer 7 (Evidence) pairs each with a pixel-anchor testid. This is expected per PRINCIPLES §Layer 1 — Layer 1 is state transitions, not paint. Surface: is this the right disposition, or should each passive entity get a paint-witness ambient tag (e.g., PANE_HEADER_RENDERED)?" },
+      { "flag": "CHAIN_DECOMPOSITION_CHECK", "target": "Turn + Session + delegate flow", "note": "The shell-side turn chain: PROMPT_SUBMITTED → TURN_SUBMIT_REQUESTED → (bridge admits or rejects) → TURN_SUBMITTED | TURN_SUBMIT_FAILED. On admission, substrate emits UserMessage → PromptFragment × N → PromptComposed → ModelReply → (ToolCall × M + ToolResult × M) → FinalAnswer → Park. The shell renders those as TRANSCRIPT_ROW_RENDERED × K plus special-shape tags. This is the Audio Object REC_QUEUED → REC_FIRE → REC_START_NOW pattern applied to a session turn. Chain looks right; Layer 5 (State-Transition) will pin the ordering invariant." },
+      { "flag": "REVIEW_APPLIED_2026_09_10", "target": "REVIEW-2026-09-10-layer-1-substrate-shell-lexical.md", "note": "Six gaps + one stratum question applied same-turn. Gap 1: WORKSPACE_PICKER_WALKED added (prompt / event). Gap 2: REVEAL_FOCUS_MOVED added (lens / event). Gap 3: TRANSCRIPT_COMPACTED_RENDERED added (transcript / event). Gap 4: PROBE_DRIVER_REQUESTED / PROBED / FAILED added (bridge + bridge_reply). Gap 5 (SESSION_DELETE_*): deferred — MENU-BAR names Session ▸ End Session which maps to SESSION_END_REQUESTED (finalises via SessionEnded), not delete; propose SESSION_DELETE_REQUESTED / SESSION_DELETED as a v0.2 NEW_TAG_PROPOSED when a future build sprint wires delete (e.g., a records-surface trash affordance). Gap 6 (Assay drill-in): deferred to v0.2 — ASSAY_ARM_INSPECTED / ASSAY_CELL_OPENED propose when the drill-in path materializes. Stratum question: TRANSCRIPT_ROW_RENDERED recategorized ambient → event per Foundation 01 ('ambient = sampled at high frequency'; envelope arrivals are event-cadence). Citation staleness note: the review's `electron/ipc.ts:63-71` and `bridge/registry.py:164` reference the ABANDONED substrate-shell scaffold (`substrate-shell-abandoned-2026-09-08/`); the current substrate-ui restart has only `electron/main.js` (crash policy inline) and `bridge/main.py` (minimal — no registry.py yet). The BRIDGE_DEAD_SURFACED semantic still applies; the concrete crash-count implementation lives in a future sprint's `electron/main.js` edit or a fresh `electron/ipc.ts`. PROBE_DRIVER_* similarly names the vocabulary target for when the bridge grows `op_probe_driver`." }
+    ],
+
+    "shell_tag_count": 108,
+    "shell_tag_count_by_category": { "window": 5, "pane": 7, "header": 5, "prompt": 7, "transcript": 11, "reveal": 1, "lens": 7, "surface": 9, "find": 4, "descent": 7, "dialog": 12, "layout": 5, "harness": 2, "bridge": 8, "bridge_reply": 18 },
+    "shell_tag_count_by_stratum": { "event": 95, "ambient": 2, "summary": 1, "incident": 10 }
+  },
+  "layer_2_payload": {
+    "note": "Per-tag payload schemas, Draft-07 shape. Every payload has `additionalProperties: false` (envelope-level convention — Trading System's documentation-only-extras is NOT adopted here; the shell is a controller UI and typos in payload keys are load-bearing bugs). Every `_id` field is a foreign key to a Layer-0 entity. `_length` fields on prompt / find carry the character count only — the raw text lives on the substrate record; the shell trace never logs prompt text (Layer 7 privacy constraint). Every bridge / bridge_reply pair correlates through `request_id` (uuid4 hex 12-char, minted at REQUESTED emit-site). Every entry's `pane_id` foreign-keys to `Pane`, `session_id` to `Session`, `envelope_seq` to `Envelope`, `record_root` to `Record`, `child_record_root` to `Record`, `tool_call_id` to `DelegateCall`, `driver` and `to_driver` and `from_driver` to `Driver`, `bundle` to `Bundle`, `anchor_id` to `Anchor`.",
+
+    "envelope": {
+      "description": "The shell-side JSONL envelope; every line the harness sink reads has this shape.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["t", "kind", "payload"],
+      "properties": {
+        "t":       {"type": "integer", "description": "milliseconds since shell start (performance.now() - START; clamped to Date.now() delta on non-performance environments)"},
+        "kind":    {"type": "string",  "description": "one of the 107 tag names in layer_1_lexical.tags", "pattern": "^[A-Z][A-Z0-9_]*[A-Z0-9]$"},
+        "payload": {"type": "object",  "description": "per-tag object per this section's payload_schemas map"}
+      }
+    },
+
+    "payload_schemas": {
+      "WINDOW_OPENED":                    {"required": ["window_id"], "properties": {"window_id": {"type": "string"}}},
+      "WINDOW_CLOSED":                    {"required": ["window_id"], "properties": {"window_id": {"type": "string"}}},
+      "COLLECTION_OPENED":                {"required": ["collection_bytes"], "properties": {"collection_bytes": {"type": "integer", "minimum": 0}}},
+      "COLLECTION_PERSISTED":             {"required": ["collection_bytes"], "properties": {"collection_bytes": {"type": "integer", "minimum": 0}}},
+      "COLLECTION_RESTORED":              {"required": ["window_count", "pane_count", "bound_session_count"], "properties": {"window_count": {"type": "integer", "minimum": 1}, "pane_count": {"type": "integer", "minimum": 1}, "bound_session_count": {"type": "integer", "minimum": 0}}},
+
+      "PANE_CREATED":                     {"required": ["pane_id", "window_id", "session_id", "from_split"], "properties": {"pane_id": {"type": "string"}, "window_id": {"type": "string"}, "session_id": {"type": ["string", "null"]}, "from_split": {"type": ["string", "null"]}}},
+      "PANE_CLOSED":                      {"required": ["pane_id"], "properties": {"pane_id": {"type": "string"}}},
+      "PANE_FOCUSED":                     {"required": ["pane_id", "prior_pane_id"], "properties": {"pane_id": {"type": "string"}, "prior_pane_id": {"type": ["string", "null"]}}},
+      "PANE_SPLIT":                       {"required": ["from_pane_id", "new_pane_id", "axis"], "properties": {"from_pane_id": {"type": "string"}, "new_pane_id": {"type": "string"}, "axis": {"enum": ["row", "col"]}}},
+      "PANE_RENAMED":                     {"required": ["pane_id", "from", "to"], "properties": {"pane_id": {"type": "string"}, "from": {"type": ["string", "null"]}, "to": {"type": "string"}}},
+      "PANE_MOVED":                       {"required": ["a_pane_id", "b_pane_id", "zone"], "properties": {"a_pane_id": {"type": "string"}, "b_pane_id": {"type": "string"}, "zone": {"enum": ["w", "e", "n", "s", "c"]}}},
+      "PANE_UNBOUND_BOUND":               {"required": ["pane_id", "workspace_path", "shape", "session_id"], "properties": {"pane_id": {"type": "string"}, "workspace_path": {"type": "string"}, "shape": {"enum": ["flat", "worktree", "isolate"]}, "session_id": {"type": "string"}}},
+
+      "DRIVER_DROPDOWN_OPENED":           {"required": ["pane_id"], "properties": {"pane_id": {"type": "string"}}},
+      "DRIVER_DROPDOWN_CLOSED":           {"required": ["pane_id"], "properties": {"pane_id": {"type": "string"}}},
+      "DRIVER_PICKED":                    {"required": ["pane_id", "from_driver", "to_driver"], "properties": {"pane_id": {"type": "string"}, "from_driver": {"type": "string"}, "to_driver": {"type": "string"}}},
+      "WORKSPACE_POPOVER_OPENED":         {"required": ["pane_id"], "properties": {"pane_id": {"type": "string"}}},
+      "WORKSPACE_POPOVER_CLOSED":         {"required": ["pane_id"], "properties": {"pane_id": {"type": "string"}}},
+
+      "PROMPT_CHANGED":                   {"required": ["pane_id", "length"], "properties": {"pane_id": {"type": "string"}, "length": {"type": "integer", "minimum": 0}}},
+      "PROMPT_SUBMITTED":                 {"required": ["pane_id", "text_length"], "properties": {"pane_id": {"type": "string"}, "text_length": {"type": "integer", "minimum": 0}}},
+      "SLASH_ROUTER_OPENED":              {"required": ["pane_id"], "properties": {"pane_id": {"type": "string"}}},
+      "SLASH_ROUTER_CLOSED":              {"required": ["pane_id"], "properties": {"pane_id": {"type": "string"}}},
+      "SLASH_ROUTER_WALKED":              {"required": ["pane_id", "from_index", "to_index"], "properties": {"pane_id": {"type": "string"}, "from_index": {"type": "integer", "minimum": 0}, "to_index": {"type": "integer", "minimum": 0}}},
+      "SLASH_COMMAND_ROUTED":             {"required": ["pane_id", "command", "arg_length"], "properties": {"pane_id": {"type": "string"}, "command": {"type": "string", "pattern": "^/[a-z_-]+$"}, "arg_length": {"type": "integer", "minimum": 0}}},
+      "WORKSPACE_PICKER_WALKED":          {"required": ["pane_id", "from_index", "to_index"], "properties": {"pane_id": {"type": "string"}, "from_index": {"type": "integer", "minimum": 0}, "to_index": {"type": "integer", "minimum": 0}}},
+
+      "TRANSCRIPT_ROW_RENDERED":          {"required": ["pane_id", "envelope_seq", "envelope_kind", "envelope_producer_kind"], "properties": {"pane_id": {"type": "string"}, "envelope_seq": {"type": "integer", "minimum": 0}, "envelope_kind": {"type": "string"}, "envelope_producer_kind": {"type": ["string", "null"]}}},
+      "TRANSCRIPT_DELEGATE_LINE_RENDERED":{"required": ["pane_id", "envelope_seq", "tool_call_id"], "properties": {"pane_id": {"type": "string"}, "envelope_seq": {"type": "integer", "minimum": 0}, "tool_call_id": {"type": "string"}}},
+      "TRANSCRIPT_FANOUT_LINE_RENDERED":  {"required": ["pane_id", "envelope_seq", "tool_call_id", "children_count"], "properties": {"pane_id": {"type": "string"}, "envelope_seq": {"type": "integer", "minimum": 0}, "tool_call_id": {"type": "string"}, "children_count": {"type": "integer", "minimum": 2}}},
+      "TRANSCRIPT_PARK_RENDERED":         {"required": ["pane_id", "envelope_seq", "park_reason"], "properties": {"pane_id": {"type": "string"}, "envelope_seq": {"type": "integer", "minimum": 0}, "park_reason": {"enum": ["final_answer", "model_error", "interrupt"]}}, "note": "park_reason enum matches substrate.topologies.session.vocabulary.ParkReason verbatim (three values). The pre-first-turn '◐ parked — awaiting your first message' line (v7:543) is a shell-emitted line under TRANSCRIPT_AWAITING_FIRST_MESSAGE_RENDERED, not a Park envelope render (hard rule 2 — workers do not invent vocabulary; substrate's ParkReason is the contract)."},
+      "TRANSCRIPT_AWAITING_FIRST_MESSAGE_RENDERED": {"required": ["pane_id", "session_id"], "properties": {"pane_id": {"type": "string"}, "session_id": {"type": "string"}}, "note": "the '◐ parked — awaiting your first message' line rendered pre-first-turn (v7:543). Not a Park envelope render — a shell-emitted transcript row shown after PANE_UNBOUND_BOUND and before the first PROMPT_SUBMITTED. Added per REVIEW-2026-09-10-layer-2-3 P1 as the honest home for a state that was mislabelled as a fourth ParkReason."},
+      "TRANSCRIPT_SESSION_ENDED_RENDERED":{"required": ["pane_id", "envelope_seq", "end_reason"], "properties": {"pane_id": {"type": "string"}, "envelope_seq": {"type": "integer", "minimum": 0}, "end_reason": {"enum": ["user_exit", "user_end", "timeout", "daemon_shutdown"]}}},
+      "TRANSCRIPT_RATE_LIMITED_RENDERED": {"required": ["pane_id", "envelope_seq", "retry_index", "retry_max", "retry_after_seconds"], "properties": {"pane_id": {"type": "string"}, "envelope_seq": {"type": "integer", "minimum": 0}, "retry_index": {"type": "integer", "minimum": 1}, "retry_max": {"type": "integer", "minimum": 1}, "retry_after_seconds": {"type": "integer", "minimum": 0}}},
+      "TRANSCRIPT_COMPACTED_RENDERED":    {"required": ["pane_id", "envelope_seq", "tokens_before", "tokens_after", "strategy"], "properties": {"pane_id": {"type": "string"}, "envelope_seq": {"type": "integer", "minimum": 0}, "tokens_before": {"type": "integer", "minimum": 0}, "tokens_after": {"type": "integer", "minimum": 0}, "strategy": {"type": "string"}}},
+      "DELEGATE_CALL_RENDERED":           {"required": ["pane_id", "tool_call_id", "depth"], "properties": {"pane_id": {"type": "string"}, "tool_call_id": {"type": "string"}, "depth": {"type": "integer", "minimum": 1, "maximum": 2}}},
+      "DELEGATE_CALL_FOLDED":             {"required": ["pane_id", "tool_call_id", "child_record_root"], "properties": {"pane_id": {"type": "string"}, "tool_call_id": {"type": "string"}, "child_record_root": {"type": "string"}}},
+      "DELEGATE_DEPTH_CAP_REFUSED":       {"required": ["pane_id", "tool_call_id", "depth"], "properties": {"pane_id": {"type": "string"}, "tool_call_id": {"type": "string"}, "depth": {"const": 2}}},
+
+      "REVEAL_TOGGLED":                   {"required": ["pane_id", "from", "to"], "properties": {"pane_id": {"type": "string"}, "from": {"enum": ["terminal", "reveal"]}, "to": {"enum": ["terminal", "reveal"]}}},
+
+      "LENS_SWITCHED":                    {"required": ["pane_id", "from", "to"], "properties": {"pane_id": {"type": "string"}, "from": {"enum": ["stream+graph", "i/o", "structure", "scene"]}, "to": {"enum": ["stream+graph", "i/o", "structure", "scene"]}}},
+      "STREAM_LEVEL_TOGGLED":             {"required": ["pane_id", "from", "to"], "properties": {"pane_id": {"type": "string"}, "from": {"enum": ["all", "app"]}, "to": {"enum": ["all", "app"]}}},
+      "STREAM_DIR_TOGGLED":               {"required": ["pane_id", "from", "to"], "properties": {"pane_id": {"type": "string"}, "from": {"enum": ["down", "side"]}, "to": {"enum": ["down", "side"]}}},
+      "STREAM_ROW_CLICKED":               {"required": ["pane_id", "envelope_seq", "envelope_kind"], "properties": {"pane_id": {"type": "string"}, "envelope_seq": {"type": "integer", "minimum": 0}, "envelope_kind": {"type": "string"}}},
+      "INSPECTOR_OPENED":                 {"required": ["pane_id", "envelope_seq"], "properties": {"pane_id": {"type": "string"}, "envelope_seq": {"type": "integer", "minimum": 0}}},
+      "INSPECTOR_CLOSED":                 {"required": ["pane_id", "envelope_seq"], "properties": {"pane_id": {"type": "string"}, "envelope_seq": {"type": "integer", "minimum": 0}}},
+      "REVEAL_FOCUS_MOVED":               {"required": ["pane_id", "from", "to"], "properties": {"pane_id": {"type": "string"}, "from": {"enum": ["transcript", "stream"]}, "to": {"enum": ["transcript", "stream"]}}},
+
+      "SURFACE_OPENED":                   {"required": ["pane_id", "kind", "prior_kind"], "properties": {"pane_id": {"type": "string"}, "kind": {"enum": ["records", "studio", "assay"]}, "prior_kind": {"type": ["string", "null"], "enum": ["records", "studio", "assay", null]}}},
+      "SURFACE_CLOSED":                   {"required": ["pane_id", "kind"], "properties": {"pane_id": {"type": "string"}, "kind": {"enum": ["records", "studio", "assay"]}}},
+      "STUDIO_VIEW_TOGGLED":              {"required": ["from", "to"], "properties": {"from": {"enum": ["form", "canvas"]}, "to": {"enum": ["form", "canvas"]}}},
+      "STUDIO_VALIDATE_REQUESTED":        {"required": ["topo_name"], "properties": {"topo_name": {"type": "string", "pattern": "^[a-z0-9_]+$"}}},
+      "STUDIO_VALIDATED":                 {"required": ["topo_name", "producer_count", "view_count", "trigger_count", "route_count"], "properties": {"topo_name": {"type": "string"}, "producer_count": {"type": "integer", "minimum": 1}, "view_count": {"type": "integer", "minimum": 0}, "trigger_count": {"type": "integer", "minimum": 0}, "route_count": {"type": "integer", "minimum": 0}}},
+      "STUDIO_VALIDATE_FAILED":           {"required": ["topo_name", "errors"], "properties": {"topo_name": {"type": "string"}, "errors": {"type": "array", "items": {"type": "string"}, "minItems": 1}}},
+      "STUDIO_BUILD_REQUESTED":           {"required": ["topo_name"], "properties": {"topo_name": {"type": "string"}}},
+      "STUDIO_BUILT":                     {"required": ["topo_name", "record_root"], "properties": {"topo_name": {"type": "string"}, "record_root": {"type": "string"}}},
+      "STUDIO_BUILD_REJECTED":            {"required": ["topo_name", "errors"], "properties": {"topo_name": {"type": "string"}, "errors": {"type": "array", "items": {"type": "string"}, "minItems": 1}}},
+
+      "FIND_OPENED":                      {"required": ["pane_id", "scope"], "properties": {"pane_id": {"type": "string"}, "scope": {"enum": ["transcript", "stream"]}}},
+      "FIND_CLOSED":                      {"required": ["pane_id"], "properties": {"pane_id": {"type": "string"}}},
+      "FIND_SCOPE_CHANGED":               {"required": ["pane_id", "from", "to"], "properties": {"pane_id": {"type": "string"}, "from": {"enum": ["transcript", "stream"]}, "to": {"enum": ["transcript", "stream"]}}},
+      "FIND_QUERY_CHANGED":               {"required": ["pane_id", "q_length", "count"], "properties": {"pane_id": {"type": "string"}, "q_length": {"type": "integer", "minimum": 0}, "count": {"type": "integer", "minimum": 0}}},
+
+      "SETTINGS_OPENED":                  {"required": [], "properties": {}},
+      "SETTINGS_CLOSED":                  {"required": [], "properties": {}},
+      "SETTING_CHANGED":                  {"required": ["key", "from", "to"], "properties": {"key": {"enum": ["theme", "type_size", "nested_descent", "bindings"]}, "from": {}, "to": {}}, "layer_7_constraint": "value shape per key: theme → enum[dark|light|system]; type_size → integer 9..19; nested_descent → boolean; bindings → object of {reveal_cycle|split_right|split_down|find|full_line_divider|plain_shell_pane → key-combo string}"},
+      "EXPORT_DIALOG_OPENED":             {"required": ["pane_id", "record_root"], "properties": {"pane_id": {"type": "string"}, "record_root": {"type": "string"}}},
+      "EXPORT_DIALOG_CLOSED":             {"required": ["pane_id"], "properties": {"pane_id": {"type": "string"}}},
+      "EXPORT_COMMITTED":                 {"required": ["pane_id", "record_root", "kind", "target_path"], "properties": {"pane_id": {"type": "string"}, "record_root": {"type": "string"}, "kind": {"enum": ["record_dir", "events_jsonl"]}, "target_path": {"type": "string"}}},
+      "END_CONFIRM_OPENED":               {"required": ["pane_id", "session_id"], "properties": {"pane_id": {"type": "string"}, "session_id": {"type": "string"}}},
+      "END_CONFIRM_CLOSED":               {"required": ["pane_id", "session_id"], "properties": {"pane_id": {"type": "string"}, "session_id": {"type": "string"}}},
+      "END_CONFIRM_COMMITTED":            {"required": ["pane_id", "session_id"], "properties": {"pane_id": {"type": "string"}, "session_id": {"type": "string"}}},
+      "FIRST_RUN_OPENED":                 {"required": [], "properties": {}},
+      "FIRST_RUN_DRIVER_PICKED":          {"required": ["driver"], "properties": {"driver": {"type": "string"}, "driver_params": {"type": "object"}}},
+      "FIRST_RUN_COMPLETED":              {"required": ["driver", "workspace_path", "session_id"], "properties": {"driver": {"type": "string"}, "workspace_path": {"type": "string"}, "session_id": {"type": "string"}}},
+
+      "DELEGATE_INLINE_EXPANDED":         {"required": ["pane_id", "tool_call_id"], "properties": {"pane_id": {"type": "string"}, "tool_call_id": {"type": "string"}}},
+      "DELEGATE_INLINE_COLLAPSED":        {"required": ["pane_id", "tool_call_id"], "properties": {"pane_id": {"type": "string"}, "tool_call_id": {"type": "string"}}},
+      "FAN_OUT_INLINE_EXPANDED":          {"required": ["pane_id", "tool_call_id"], "properties": {"pane_id": {"type": "string"}, "tool_call_id": {"type": "string"}}},
+      "FAN_OUT_INLINE_COLLAPSED":         {"required": ["pane_id", "tool_call_id"], "properties": {"pane_id": {"type": "string"}, "tool_call_id": {"type": "string"}}},
+      "FAN_OUT_INLINE_WALKED":            {"required": ["pane_id", "tool_call_id", "from_index", "to_index"], "properties": {"pane_id": {"type": "string"}, "tool_call_id": {"type": "string"}, "from_index": {"type": "integer", "minimum": 0}, "to_index": {"type": "integer", "minimum": 0}}},
+      "DESCENT_ENTERED":                  {"required": ["pane_id", "child_record_root", "depth"], "properties": {"pane_id": {"type": "string"}, "child_record_root": {"type": "string"}, "depth": {"type": "integer", "minimum": 1, "maximum": 2}}},
+      "DESCENT_EXITED":                   {"required": ["pane_id", "to_depth"], "properties": {"pane_id": {"type": "string"}, "to_depth": {"type": "integer", "minimum": 0, "maximum": 1}}},
+
+      "DROP_HINT_SHOWN":                  {"required": ["source_pane_id", "target_pane_id", "zone"], "properties": {"source_pane_id": {"type": "string"}, "target_pane_id": {"type": "string"}, "zone": {"enum": ["w", "e", "n", "s", "c"]}}},
+      "DROP_HINT_ZONE_CHANGED":           {"required": ["source_pane_id", "target_pane_id", "from_zone", "to_zone"], "properties": {"source_pane_id": {"type": "string"}, "target_pane_id": {"type": "string"}, "from_zone": {"enum": ["w", "e", "n", "s", "c"]}, "to_zone": {"enum": ["w", "e", "n", "s", "c"]}}},
+      "DROP_HINT_HIDDEN":                 {"required": ["source_pane_id", "target_pane_id"], "properties": {"source_pane_id": {"type": "string"}, "target_pane_id": {"type": ["string", "null"]}}},
+      "GUTTER_DRAG_STARTED":              {"required": ["kind", "gutter_index"], "properties": {"kind": {"enum": ["col", "row", "reveal"]}, "gutter_index": {"type": "integer", "minimum": 0}}},
+      "GUTTER_DRAG_STOPPED":              {"required": ["kind", "gutter_index", "delta"], "properties": {"kind": {"enum": ["col", "row", "reveal"]}, "gutter_index": {"type": "integer", "minimum": 0}, "delta": {"type": "number"}}},
+
+      "ANCHOR_PAINTED":                   {"required": ["anchor_id", "byte"], "properties": {"anchor_id": {"type": "string"}, "byte": {"type": "integer", "minimum": 0, "maximum": 255}}},
+      "HARNESS_HEARTBEAT":                {"required": ["frame_index"], "properties": {"frame_index": {"type": "integer", "minimum": 0, "maximum": 255}}},
+
+      "SESSION_CREATE_REQUESTED":         {"required": ["request_id", "pane_id", "session_id", "name", "driver", "workspace_path", "workspace_shape", "bundle", "seed"], "properties": {"request_id": {"type": "string"}, "pane_id": {"type": "string"}, "session_id": {"type": "string"}, "name": {"type": ["string", "null"]}, "driver": {"type": "string"}, "workspace_path": {"type": "string"}, "workspace_shape": {"enum": ["flat", "worktree", "isolate"]}, "bundle": {"type": ["string", "null"]}, "seed": {"type": "string"}}},
+      "SESSION_CREATED":                  {"required": ["request_id", "session_id", "name", "driver", "workspace", "workspace_shape", "status"], "properties": {"request_id": {"type": "string"}, "session_id": {"type": "string"}, "name": {"type": ["string", "null"]}, "driver": {"type": "string"}, "workspace": {"type": "string"}, "workspace_shape": {"enum": ["flat", "worktree", "isolate"]}, "status": {"enum": ["running", "parked", "interrupted", "ended"]}}},
+      "SESSION_CREATE_FAILED":            {"required": ["request_id", "reason"], "properties": {"request_id": {"type": "string"}, "reason": {"type": "string"}, "detail": {"type": "string"}}},
+      "SESSION_RENAME_REQUESTED":         {"required": ["request_id", "session_id", "to_name"], "properties": {"request_id": {"type": "string"}, "session_id": {"type": "string"}, "to_name": {"type": "string"}}},
+      "SESSION_RENAMED":                  {"required": ["request_id", "session_id", "from_name", "to_name"], "properties": {"request_id": {"type": "string"}, "session_id": {"type": "string"}, "from_name": {"type": ["string", "null"]}, "to_name": {"type": "string"}}},
+      "SESSION_RENAME_FAILED":            {"required": ["request_id", "reason"], "properties": {"request_id": {"type": "string"}, "reason": {"type": "string"}, "existing_session_id": {"type": "string"}}},
+      "TURN_SUBMIT_REQUESTED":            {"required": ["request_id", "pane_id", "session_id", "text_length", "timeout_seconds"], "properties": {"request_id": {"type": "string"}, "pane_id": {"type": "string"}, "session_id": {"type": "string"}, "text_length": {"type": "integer", "minimum": 1}, "timeout_seconds": {"type": "number", "exclusiveMinimum": 0}}},
+      "TURN_SUBMITTED":                   {"required": ["request_id", "session_id", "turn_index"], "properties": {"request_id": {"type": "string"}, "session_id": {"type": "string"}, "turn_index": {"type": "integer", "minimum": 0}}},
+      "TURN_SUBMIT_FAILED":               {"required": ["request_id", "session_id", "reason"], "properties": {"request_id": {"type": "string"}, "session_id": {"type": "string"}, "reason": {"enum": ["queue_full", "session_ended", "fresh_session_requires_user_message", "torn_record_on_resume", "timeout"]}, "detail": {"type": "string"}}},
+      "INTERRUPT_REQUESTED":              {"required": ["request_id", "session_id"], "properties": {"request_id": {"type": "string"}, "session_id": {"type": "string"}}},
+      "INTERRUPTED":                      {"required": ["request_id", "session_id"], "properties": {"request_id": {"type": "string"}, "session_id": {"type": "string"}, "interrupted": {}}},
+      "SESSION_END_REQUESTED":            {"required": ["request_id", "session_id", "source"], "properties": {"request_id": {"type": "string"}, "session_id": {"type": "string"}, "source": {"enum": ["user_end", "user_exit", "daemon_shutdown", "timeout"]}}},
+      "SESSION_ENDED_ACK":                {"required": ["request_id", "session_id", "end_reason", "record_finalised"], "properties": {"request_id": {"type": "string"}, "session_id": {"type": "string"}, "end_reason": {"enum": ["user_end", "user_exit", "timeout", "daemon_shutdown"]}, "record_finalised": {"type": "boolean"}}},
+      "DRIVER_CHANGE_REQUESTED":          {"required": ["request_id", "session_id", "to_driver"], "properties": {"request_id": {"type": "string"}, "session_id": {"type": "string"}, "to_driver": {"type": "string"}}},
+      "DRIVER_CHANGED":                   {"required": ["request_id", "session_id", "from_driver", "to_driver"], "properties": {"request_id": {"type": "string"}, "session_id": {"type": "string"}, "from_driver": {"type": "string"}, "to_driver": {"type": "string"}}},
+      "DRIVER_CHANGE_FAILED":             {"required": ["request_id", "session_id", "reason"], "properties": {"request_id": {"type": "string"}, "session_id": {"type": "string"}, "reason": {"type": "string"}}},
+      "BUNDLE_ATTACH_REQUESTED":          {"required": ["request_id", "session_id", "bundle"], "properties": {"request_id": {"type": "string"}, "session_id": {"type": "string"}, "bundle": {"type": ["string", "null"]}}},
+      "BUNDLE_ATTACHED":                  {"required": ["request_id", "session_id", "bundle", "prior_bundle"], "properties": {"request_id": {"type": "string"}, "session_id": {"type": "string"}, "bundle": {"type": ["string", "null"]}, "prior_bundle": {"type": ["string", "null"]}}},
+      "BUNDLE_ATTACH_FAILED":             {"required": ["request_id", "session_id", "reason"], "properties": {"request_id": {"type": "string"}, "session_id": {"type": "string"}, "reason": {"type": "string"}}},
+      "TOOLS_RESTRICTED":                 {"required": ["request_id", "session_id", "tools"], "properties": {"request_id": {"type": "string"}, "session_id": {"type": "string"}, "tools": {"type": ["array", "null"], "items": {"type": "string"}}}},
+      "WORKSPACE_BOUND":                  {"required": ["request_id", "session_id", "workspace_path", "shape"], "properties": {"request_id": {"type": "string"}, "session_id": {"type": "string"}, "workspace_path": {"type": "string"}, "shape": {"enum": ["flat", "worktree", "isolate"]}}},
+      "PROBE_DRIVER_REQUESTED":           {"required": ["request_id", "driver"], "properties": {"request_id": {"type": "string"}, "driver": {"type": "string"}, "driver_params": {"type": "object"}}},
+      "PROBE_DRIVER_PROBED":              {"required": ["request_id", "driver", "context_tokens"], "properties": {"request_id": {"type": "string"}, "driver": {"type": "string"}, "context_tokens": {"type": "integer", "minimum": 1}}},
+      "PROBE_DRIVER_FAILED":              {"required": ["request_id", "driver", "reason"], "properties": {"request_id": {"type": "string"}, "driver": {"type": "string"}, "reason": {"type": "string"}}},
+      "BRIDGE_HELLO_RECEIVED":            {"required": ["substrate_version", "protocol"], "properties": {"substrate_version": {"type": "string"}, "protocol": {"type": "integer", "const": 1}}},
+      "BRIDGE_DEAD_SURFACED":             {"required": ["crash_count"], "properties": {"crash_count": {"type": "integer", "minimum": 2}}}
+    }
+  },
+  "layer_3_sessions": {
+    "note": "Situated event streams per PRINCIPLES §Layer 3. Each stratum names its boundary-open tag, boundary-close tag(s), persistent attributes (carried in the boundary-open payload), and framed tags (which Layer 1 tags fire inside this stratum). Nesting is hierarchical. Layer 5 (State-Transition) will pin the ordering invariants; Layer 4 (Temporal) will pin cadence and pairing timeouts.",
+
+    "nesting_diagram": [
+      "app_session",
+      "  ├── first_run (× 0..1, install-lifetime; may precede collection restore)",
+      "  ├── window_session (× N)",
+      "  │     ├── pane_session (× 1..8)",
+      "  │     │     ├── substrate_binding (× 0..1)",
+      "  │     │     │     └── turn (× M, one-at-a-time-per-session)",
+      "  │     │     │           └── delegate_flow (× K, per turn)",
+      "  │     │     │                 └── descent (× 0..1 per delegate_flow; depth 1..2)",
+      "  │     │     ├── reveal (instance-based: each REVEAL_TOGGLED to:reveal opens a new instance; matching to:terminal closes it)",
+      "  │     │     ├── surface (× 0..1 open)",
+      "  │     │     ├── find (× 0..1 open)",
+      "  │     │     └── header_popover (× 0..1 open; driver_dropdown | workspace_popover)",
+      "  │     └── dialog (× 0..1 open; settings | export | end_confirm)",
+      "  └── bridge_request (× many, correlated by request_id)"
+    ],
+
+    "sessions": [
+      {
+        "name": "app_session",
+        "boundary_open": "COLLECTION_OPENED",
+        "boundary_close": ["WINDOW_CLOSED (last window)"],
+        "note": "The whole shell run from boot to quit. Opens with the collection load (SQLite whole-state restore per D68). Closes when the last window closes. Every other stratum is nested inside.",
+        "persistent_attributes": ["substrate_version (from BRIDGE_HELLO_RECEIVED)", "protocol (from BRIDGE_HELLO_RECEIVED — must equal 1)", "harness_enabled (from window.__substrateHarness presence)"],
+        "framed_tags": "all 107 tags"
+      },
+      {
+        "name": "first_run",
+        "boundary_open": "FIRST_RUN_OPENED",
+        "boundary_close": ["FIRST_RUN_COMPLETED"],
+        "note": "One-shot per install lifetime. Runs when the collection has no prior state (D69). Concurrent with app_session's opening moments.",
+        "persistent_attributes": ["driver (from FIRST_RUN_DRIVER_PICKED)"],
+        "framed_tags": ["FIRST_RUN_OPENED", "PROBE_DRIVER_REQUESTED", "PROBE_DRIVER_PROBED", "PROBE_DRIVER_FAILED", "FIRST_RUN_DRIVER_PICKED", "FIRST_RUN_COMPLETED"]
+      },
+      {
+        "name": "window_session",
+        "boundary_open": "WINDOW_OPENED",
+        "boundary_close": ["WINDOW_CLOSED"],
+        "note": "One OS window; ⌘N adds another (D57). Carries a pane grid (up to 4×2 = 8 per D35).",
+        "persistent_attributes": ["window_id"],
+        "framed_tags": ["PANE_CREATED (× 1..8)", "PANE_CLOSED", "PANE_FOCUSED", "PANE_SPLIT", "PANE_RENAMED", "PANE_MOVED", "PANE_UNBOUND_BOUND", "DROP_HINT_*", "GUTTER_DRAG_*"]
+      },
+      {
+        "name": "pane_session",
+        "boundary_open": "PANE_CREATED",
+        "boundary_close": ["PANE_CLOSED"],
+        "note": "One pane; carries at most one substrate session. Its bound substrate Session persists on disk after the pane closes (registry — D57 explicit rule 'closing a pane never deletes').",
+        "persistent_attributes": ["pane_id", "window_id (from PANE_CREATED.window_id)", "session_id (initially null; set by PANE_UNBOUND_BOUND)"],
+        "framed_tags": ["PANE_FOCUSED (this pane)", "PANE_RENAMED", "PANE_UNBOUND_BOUND", "PROMPT_*", "SLASH_*", "TRANSCRIPT_*", "DELEGATE_*", "DESCENT_*", "FAN_OUT_*", "REVEAL_*", "LENS_*", "STREAM_*", "INSPECTOR_*", "SURFACE_*", "FIND_*", "DRIVER_DROPDOWN_*", "DRIVER_PICKED", "WORKSPACE_POPOVER_*", "WORKSPACE_PICKER_WALKED"]
+      },
+      {
+        "name": "substrate_binding",
+        "boundary_open": "SESSION_CREATED (bridge_reply)",
+        "boundary_close": ["SESSION_ENDED_ACK", "PANE_CLOSED (unbinding; session persists)"],
+        "note": "The shell's projection of a substrate Session onto a Pane. Opens when the workspace picker commits and the bridge acks create; closes when the substrate SessionEnded envelope acks OR when the pane closes (which unbinds but does NOT end the session — the manifest stays on disk).",
+        "persistent_attributes": ["session_id", "pane_id", "driver", "workspace", "workspace_shape (flat|worktree|isolate)", "bundle (str|null)", "status (running|parked|interrupted|ended)"],
+        "framed_tags": ["turn events (see nested)", "DRIVER_CHANGE_*", "BUNDLE_ATTACH_*", "TOOLS_RESTRICTED", "WORKSPACE_BOUND", "SESSION_RENAME_*", "INTERRUPT_REQUESTED", "INTERRUPTED", "SESSION_END_REQUESTED", "TRANSCRIPT_ROW_RENDERED (× K per session)", "TRANSCRIPT_PARK_RENDERED", "TRANSCRIPT_SESSION_ENDED_RENDERED", "TRANSCRIPT_COMPACTED_RENDERED", "TRANSCRIPT_RATE_LIMITED_RENDERED"]
+      },
+      {
+        "name": "turn",
+        "boundary_open": "TURN_SUBMIT_REQUESTED",
+        "boundary_close": ["TURN_SUBMITTED", "TURN_SUBMIT_FAILED"],
+        "note": "One turn — the shell action wrapping substrate.SessionRegistry.turn_sync guarded by try_enqueue_turn / dequeue_turn (cap = 4 per session, session_registry.py:281). One-at-a-time per session_id (per-session threading.Lock). The turn's actual envelope stream (UserMessage → PromptFragment × N → PromptComposed → ModelReply → ToolCall + ToolResult × M → FinalAnswer → Park) is substrate-owned; the shell renders it via TRANSCRIPT_ROW_RENDERED × K.",
+        "persistent_attributes": ["request_id", "session_id", "pane_id", "turn_index (assigned under-lock via resume_event_builder, session_registry.py:799)"],
+        "framed_tags": ["TRANSCRIPT_ROW_RENDERED (× K)", "TRANSCRIPT_DELEGATE_LINE_RENDERED (× J for J delegate calls in this turn)", "TRANSCRIPT_FANOUT_LINE_RENDERED", "DELEGATE_CALL_RENDERED", "DELEGATE_CALL_FOLDED", "TRANSCRIPT_PARK_RENDERED (once — final)", "TRANSCRIPT_RATE_LIMITED_RENDERED (× R retries)", "TRANSCRIPT_COMPACTED_RENDERED (once if triggered)", "DELEGATE_DEPTH_CAP_REFUSED"]
+      },
+      {
+        "name": "delegate_flow",
+        "boundary_open": "DELEGATE_CALL_RENDERED",
+        "boundary_close": ["DELEGATE_CALL_FOLDED", "DELEGATE_DEPTH_CAP_REFUSED"],
+        "note": "One delegate call from parent turn to child. Depth 1..2 (substrate max_depth=2 per D41 + delegate.py:353). A child at depth 2 that tries to delegate refuses (DELEGATE_DEPTH_CAP_REFUSED). Multiple delegate_flows can coexist inside one turn (concurrent tool calls).",
+        "persistent_attributes": ["tool_call_id", "pane_id", "session_id", "depth", "child_record_root (bound at fold)"],
+        "framed_tags": ["DELEGATE_INLINE_EXPANDED", "DELEGATE_INLINE_COLLAPSED", "FAN_OUT_INLINE_EXPANDED", "FAN_OUT_INLINE_COLLAPSED", "FAN_OUT_INLINE_WALKED", "DESCENT_ENTERED (into this child)", "DESCENT_EXITED (out of this child)"]
+      },
+      {
+        "name": "descent",
+        "boundary_open": "DESCENT_ENTERED",
+        "boundary_close": ["DESCENT_EXITED (to_depth: 0 or 1)"],
+        "note": "The pane-focus stack down into a delegate child (D70). Depth 1 or 2; deeper refused by substrate. Nested descents (depth 2) are stacked — each DESCENT_ENTERED increments; each DESCENT_EXITED decrements.",
+        "persistent_attributes": ["pane_id", "depth (1 or 2)", "child_record_root", "talkable (bool — derived from child topology)"],
+        "framed_tags": ["PROMPT_*", "SLASH_*", "TRANSCRIPT_ROW_RENDERED (the child's stream)"]
+      },
+      {
+        "name": "reveal",
+        "boundary_open": "REVEAL_TOGGLED (to: reveal)",
+        "boundary_close": ["REVEAL_TOGGLED (to: terminal)"],
+        "note": "Instance-based per REVIEW-2026-09-10-layer-2-3 S3: each REVEAL_TOGGLED (to: reveal) opens a new stratum instance; each matching REVEAL_TOGGLED (to: terminal) closes it. A pane hosts any number of reveal-instances across its lifetime (a real user flips reveal on and off many times per session). Layer 4 cadence-invariant: at most one open reveal-instance per pane at any moment (no double-open).",
+        "persistent_attributes": ["pane_id", "revealed (bool)"],
+        "framed_tags": ["LENS_SWITCHED", "STREAM_LEVEL_TOGGLED", "STREAM_DIR_TOGGLED", "STREAM_ROW_CLICKED", "INSPECTOR_OPENED", "INSPECTOR_CLOSED", "REVEAL_FOCUS_MOVED", "FIND_* (revealed scope)"]
+      },
+      {
+        "name": "surface",
+        "boundary_open": "SURFACE_OPENED",
+        "boundary_close": ["SURFACE_CLOSED"],
+        "note": "A summoned full-window surface (records | studio | assay). Exactly zero or one open at a time; a second SURFACE_OPENED implicitly closes the first (prior_kind in payload).",
+        "persistent_attributes": ["pane_id", "kind (records | studio | assay)"],
+        "framed_tags": ["STUDIO_VIEW_TOGGLED", "STUDIO_VALIDATE_*", "STUDIO_BUILD_*"]
+      },
+      {
+        "name": "find",
+        "boundary_open": "FIND_OPENED",
+        "boundary_close": ["FIND_CLOSED"],
+        "note": "The ⌘F search bar over the focused pane's currently-focused lens (transcript or stream). Scope moves with REVEAL_FOCUS_MOVED (sheet 19h/19k/19l).",
+        "persistent_attributes": ["pane_id", "scope (transcript | stream)"],
+        "framed_tags": ["FIND_QUERY_CHANGED (× K)", "FIND_SCOPE_CHANGED"]
+      },
+      {
+        "name": "dialog",
+        "boundary_open": ["SETTINGS_OPENED", "EXPORT_DIALOG_OPENED", "END_CONFIRM_OPENED"],
+        "boundary_close": ["*_CLOSED", "*_COMMITTED"],
+        "note": "Modal dialogs — one at a time (esc dismisses the topmost). SETTINGS carries SETTING_CHANGED × N inside. EXPORT closes on cancel OR EXPORT_COMMITTED. END_CONFIRM closes on cancel OR END_CONFIRM_COMMITTED (which chains into INTERRUPT_REQUESTED + SESSION_END_REQUESTED).",
+        "persistent_attributes": ["dialog kind"],
+        "framed_tags": ["SETTING_CHANGED (inside settings)", "EXPORT_COMMITTED (inside export)", "END_CONFIRM_COMMITTED (inside end_confirm)"]
+      },
+      {
+        "name": "bridge_request",
+        "boundary_open": "*_REQUESTED (any bridge category tag)",
+        "boundary_close": ["*_ACKED (SESSION_CREATED, SESSION_RENAMED, TURN_SUBMITTED, INTERRUPTED, SESSION_ENDED_ACK, DRIVER_CHANGED, BUNDLE_ATTACHED, PROBE_DRIVER_PROBED)", "*_FAILED (SESSION_CREATE_FAILED, …)"],
+        "note": "One shell-issued bridge round-trip. Correlates by request_id (uuid4 hex 12-char). Every REQUESTED is paired with exactly one reply — an ACKED or a FAILED. Timeout invariant lives at Layer 4.",
+        "persistent_attributes": ["request_id", "op (create_session | rename_session | submit_user_message | interrupt | delete_session | set_driver | set_bundle | probe_driver)"],
+        "framed_tags": ["none nested — REQUESTED and its reply bracket the round-trip; other tags may fire in the same shell tick"]
+      },
+      {
+        "name": "header_popover",
+        "boundary_open": ["DRIVER_DROPDOWN_OPENED", "WORKSPACE_POPOVER_OPENED"],
+        "boundary_close": ["DRIVER_DROPDOWN_CLOSED", "WORKSPACE_POPOVER_CLOSED", "DRIVER_PICKED (implicit close)"],
+        "note": "Transient popover anchored under a pane header chip. At most one open per pane; opening a second closes the first (v7: ddFor / wsFor state pair — only one non-null at a time).",
+        "persistent_attributes": ["pane_id", "kind (driver_dropdown | workspace_popover)"],
+        "framed_tags": ["DRIVER_PICKED (inside driver_dropdown)"]
+      }
+    ],
+
+    "halts_check": {
+      "no_boundary_open_candidates": "not applicable — 14 strata framed above",
+      "boundary_open_frames_zero_tags": "none — every stratum frames ≥ 1 tag; bridge_request frames zero nested but pairs by request_id (documented as such)",
+      "framing_inferred": "not applicable — every stratum has explicit boundary tags in Layer 1"
+    },
+
+    "session_count": 14
+  },
+  "layer_4_temporal": {
+    "note": "Temporal invariants per PRINCIPLES §Layer 4. Six kinds: `pairing` (X within T of Y), `same_step` (X and Y commit in the same reducer tick — no wall time), `window` (repeated X coalesced within T), `cadence` (ambient tag fires at rate R), `forbidden_after` (X never fires after Y), `eventually_must` (X must be followed by Y with no time bound). Cadence entries are REQUIRED for every ambient-stratum tag (BOOTSTRAP §Step 5 halt); the halt check block below confirms coverage. Every entry cites the source: v7:LINE, D-NN, PANE-MECHANICS §, session_registry.py:LINE, or SDD-kit rule.",
+
+    "temporal_invariants": [
+      {
+        "kind": "cadence",
+        "tag": "ANCHOR_PAINTED",
+        "rate": "at most one emit per anchor per animation frame (rAF-gated); one emit guaranteed on any shell-state change that flips a paint anchor",
+        "note": "The pixel-anchor witness. rAF-gates limit emits to ~60Hz per anchor. The harness reads the paint on screenshot; the emit is a witness that paint fired.",
+        "cite": "Addendum A2 + Architect 2026-09-08 non-negotiable"
+      },
+      {
+        "kind": "cadence",
+        "tag": "HARNESS_HEARTBEAT",
+        "rate": "60Hz nominal (rAF); ONLY fires while window.__substrateHarness is truthy (production builds never pay the raf cost)",
+        "note": "B4 witness — the harness's own liveness check. If HARNESS_HEARTBEAT stops advancing across two consecutive screenshots the anchor isn't repainting and the sprint fails.",
+        "cite": "Addendum A B4"
+      },
+      {
+        "kind": "cadence",
+        "tag": "TRANSCRIPT_ROW_RENDERED",
+        "rate": "event-cadence — 1:1 with envelope arrivals from the substrate record tail (recategorized from ambient to event at REVIEW-2026-09-10 Layer 1)",
+        "note": "One emit per envelope the shell renders. Not sample-cadence — a quiet session emits none, a busy tool loop emits many.",
+        "cite": "Foundation 01 signal type #8 (Event Chronicles)"
+      },
+      {
+        "kind": "cadence",
+        "tag": "COLLECTION_PERSISTED",
+        "rate": "at most one per 5 seconds (throttled)",
+        "note": "Shell state changes many times a second; SQLite whole-state restore per D68 needs snapshotting, not continuous streaming. 5s throttle debounces bursts of PANE_* / LENS_SWITCHED / SETTING_CHANGED into one persist.",
+        "cite": "D68"
+      },
+
+      {
+        "kind": "same_step",
+        "tags": ["PANE_SPLIT", "PANE_CREATED"],
+        "note": "A split creates one new pane. Both tags commit in the same reducer tick. The order is PANE_SPLIT before PANE_CREATED (Layer 5 pins).",
+        "cite": "state.ts splitPane, v7:531-534"
+      },
+      {
+        "kind": "same_step",
+        "tags": ["PANE_SPLIT", "PANE_FOCUSED"],
+        "note": "The new pane takes focus in the same reducer tick as the split (D35: 'the new pane is the workspace picker'; v7 sets focused = the new pane's id).",
+        "cite": "D35, v7:557"
+      },
+
+      {
+        "kind": "pairing",
+        "from": "PROMPT_SUBMITTED",
+        "to": "TURN_SUBMIT_REQUESTED",
+        "within": "same reducer tick (< 100ms)",
+        "note": "Submitting the prompt immediately dispatches to the bridge. No user-visible delay.",
+        "cite": "shell reducer"
+      },
+      {
+        "kind": "pairing",
+        "from": "TURN_SUBMIT_REQUESTED",
+        "to": "TURN_SUBMITTED | TURN_SUBMIT_FAILED",
+        "within": "the request's `timeout_seconds` value (default 60s; up to 600s per turn_sync docstring)",
+        "note": "Substrate's turn_sync blocks the worker thread until the turn completes or times out. If neither tag fires within `timeout_seconds`, the bridge round-trip is broken (grader raises).",
+        "cite": "session_registry.py:747-874, timeout_seconds arg"
+      },
+      {
+        "kind": "pairing",
+        "from": "SESSION_CREATE_REQUESTED",
+        "to": "SESSION_CREATED | SESSION_CREATE_FAILED",
+        "within": "5 seconds",
+        "note": "Local in-process bridge call plus one flock write; anything over 5s is a bug.",
+        "cite": "session_registry.py:400-472"
+      },
+      {
+        "kind": "pairing",
+        "from": "SESSION_RENAME_REQUESTED",
+        "to": "SESSION_RENAMED | SESSION_RENAME_FAILED",
+        "within": "5 seconds",
+        "note": "Same shape as create — local flocked JSON writes.",
+        "cite": "session_registry.py:472-570"
+      },
+      {
+        "kind": "pairing",
+        "from": "INTERRUPT_REQUESTED",
+        "to": "INTERRUPTED",
+        "within": "2 seconds",
+        "note": "Interrupt reaches the worker's event loop and cancels the producer; sub-second when the turn is idle, up to ~2s when the model call is mid-flight.",
+        "cite": "session_registry.py:912-970"
+      },
+      {
+        "kind": "pairing",
+        "from": "DRIVER_CHANGE_REQUESTED",
+        "to": "DRIVER_CHANGED | DRIVER_CHANGE_FAILED",
+        "within": "5 seconds",
+        "note": "PATCH set_driver — in-process update.",
+        "cite": "session_registry.py:694-732"
+      },
+      {
+        "kind": "pairing",
+        "from": "BUNDLE_ATTACH_REQUESTED",
+        "to": "BUNDLE_ATTACHED | BUNDLE_ATTACH_FAILED",
+        "within": "5 seconds",
+        "note": "PATCH set_bundle — in-process update; bundle validation includes reading the bundle.toml.",
+        "cite": "session_registry.py:645-691"
+      },
+      {
+        "kind": "pairing",
+        "from": "SLASH_ROUTER_OPENED",
+        "to": "SLASH_ROUTER_CLOSED | SLASH_COMMAND_ROUTED",
+        "within": "no timeout (user-driven); one router-instance at a time per pane",
+        "note": "T3 (REVIEW-2026-09-10 Layer 4/5): the router closes on esc (SLASH_ROUTER_CLOSED), on pick (SLASH_COMMAND_ROUTED which closes implicitly), or when the input no longer starts with `/`. Every SLASH_ROUTER_OPENED has exactly one closing tag.",
+        "cite": "v7:904 router-rows condition on q.startsWith('/')"
+      },
+      {
+        "kind": "pairing",
+        "from": "INSPECTOR_OPENED",
+        "to": "INSPECTOR_CLOSED",
+        "within": "no timeout (user-driven); one inspector open per pane_id",
+        "note": "T4 (REVIEW-2026-09-10 Layer 4/5): D22 same-click closes. Every INSPECTOR_OPENED has exactly one INSPECTOR_CLOSED.",
+        "cite": "D22, v7:881 (`sel: () => this.setState(s => ({ sel: s.sel === e.seq ? null : e.seq }))`)"
+      },
+      {
+        "kind": "pairing",
+        "from": "TURN_SUBMITTED",
+        "to": "TRANSCRIPT_PARK_RENDERED",
+        "within": "the turn's timeout_seconds",
+        "note": "T2 (REVIEW-2026-09-10 Layer 4/5): a turn that finishes on the substrate side lands a Park envelope, which the shell paints as TRANSCRIPT_PARK_RENDERED. Ties turn-complete to park-rendered so the grader can catch a missing park (e.g. a turn that TURN_SUBMITTED but never rendered the park row — bridge log/render disagreement).",
+        "cite": "session_registry.py:747-874 + substrate.topologies.session.vocabulary.py PARK"
+      },
+      {
+        "kind": "forbidden_after",
+        "before": "process spawn without BRIDGE_HELLO_RECEIVED",
+        "after": "any *_REQUESTED",
+        "note": "S8 (REVIEW-2026-09-10 Layer 4/5): before the bridge acks its hello, no shell action can dispatch. The shell UI paints a `connecting…` state during this window.",
+        "cite": "bridge/main.py:35"
+      },
+      {
+        "kind": "pairing",
+        "from": "PROBE_DRIVER_REQUESTED",
+        "to": "PROBE_DRIVER_PROBED | PROBE_DRIVER_FAILED",
+        "within": "10 seconds",
+        "note": "Ollama /api/show can take a moment if the model is on cold disk; CLI probes are `which` speed. 10s is the outer bound.",
+        "cite": "OllamaResponder.context_tokens; CliResponder PATH probe"
+      },
+      {
+        "kind": "pairing",
+        "from": "BRIDGE_HELLO_RECEIVED",
+        "to": "any bridge_request",
+        "within": "3 seconds after Python subprocess spawn",
+        "note": "The bridge must produce `{op:'hello',substrate:<v>,protocol:1}` within 3s of spawn; longer means the substrate import failed or the process is unhealthy.",
+        "cite": "bridge/main.py:35"
+      },
+      {
+        "kind": "pairing",
+        "from": "SESSION_END_REQUESTED",
+        "to": "SESSION_ENDED_ACK",
+        "within": "the request's timeout_seconds (default 60s)",
+        "note": "End-of-session wraps a turn_sync with UserMessage(text=END_ON_EXIT_SENTINEL). Same bounds as any turn.",
+        "cite": "session_registry.py + END_ON_EXIT_SENTINEL"
+      },
+      {
+        "kind": "pairing",
+        "from": "END_CONFIRM_COMMITTED",
+        "to": "SESSION_END_REQUESTED",
+        "within": "same reducer tick (< 100ms)",
+        "note": "End-confirm chains into interrupt-if-running then session-end within the same commit.",
+        "cite": "D68 corollary b"
+      },
+
+      {
+        "kind": "window",
+        "tag": "FIND_QUERY_CHANGED",
+        "coalesce_within": "100ms per pane",
+        "note": "Debounce keystrokes in the find bar; the count re-computes on the coalesced boundary.",
+        "cite": "shell reducer"
+      },
+      {
+        "kind": "window",
+        "tag": "PROMPT_CHANGED",
+        "coalesce_within": "100ms per pane",
+        "note": "Same debounce — the prompt input value fires PROMPT_CHANGED at most every 100ms while typing; ↵ fires PROMPT_SUBMITTED regardless.",
+        "cite": "shell reducer"
+      },
+      {
+        "kind": "window",
+        "tag": "GUTTER_DRAG_STARTED",
+        "coalesce_within": "one open drag at a time per gutter kind",
+        "note": "GUTTER_DRAG_STARTED must be matched by exactly one GUTTER_DRAG_STOPPED before another can fire on the same gutter.",
+        "cite": "state.ts _gm/_gu handlers, v7:582-606"
+      },
+
+      {
+        "kind": "forbidden_after",
+        "before": "PANE_CLOSED",
+        "after": "PANE_FOCUSED with the same pane_id",
+        "note": "A closed pane never re-focuses. Focus falls to a surviving pane on close.",
+        "cite": "state.ts closePane"
+      },
+      {
+        "kind": "forbidden_after",
+        "before": "SESSION_ENDED_ACK",
+        "after": "TURN_SUBMIT_REQUESTED with the same session_id",
+        "note": "Once the session's record has RunFinalised, no new turn dispatches. The manifest status is `ended` and turn_sync raises SessionEndedMidTurn (session_registry.py:164).",
+        "cite": "session_registry.py:164"
+      },
+      {
+        "kind": "forbidden_after",
+        "before": "PANE_CLOSED",
+        "after": "any transcript/prompt/reveal/lens/find/surface tag with the same pane_id",
+        "note": "A closed pane emits nothing further. Its bound session_id is still on disk and reachable via a records-surface reopen.",
+        "cite": "state.ts closePane"
+      },
+
+      {
+        "kind": "eventually_must",
+        "from": "END_CONFIRM_COMMITTED",
+        "then": "TRANSCRIPT_SESSION_ENDED_RENDERED",
+        "note": "After the user confirms end-session, the finalised transcript row must eventually render (bounded only by the turn_sync timeout).",
+        "cite": "D68 corollary b + v7:107"
+      },
+      {
+        "kind": "eventually_must",
+        "from": "PANE_CREATED (session_id: null)",
+        "then": "PANE_UNBOUND_BOUND | PANE_CLOSED",
+        "note": "An unbound pane must either bind (via the workspace picker) or close. It cannot stay unbound forever without user action; grader tolerates the pane_session's lifetime being the bound.",
+        "cite": "D66f"
+      },
+      {
+        "kind": "eventually_must",
+        "from": "PANE_UNBOUND_BOUND",
+        "then": "SESSION_CREATE_REQUESTED (same pane_id) → SESSION_CREATED",
+        "note": "Binding the workspace immediately dispatches create; the shell tag fires in the same commit, the bridge ack follows within 5s.",
+        "cite": "D66f + Sprint 011 wiring plan"
+      },
+
+      {
+        "kind": "cadence",
+        "tag": "DELEGATE_CALL_RENDERED",
+        "rate": "one per substrate ToolCall{tool:'delegate'} envelope — event-cadence",
+        "note": "Cadence pinned to the record's tool-call envelopes.",
+        "cite": "topologies/tool_loop/delegate.py"
+      },
+
+      {
+        "kind": "same_step",
+        "tags": ["TRANSCRIPT_DELEGATE_LINE_RENDERED", "DELEGATE_CALL_RENDERED"],
+        "note": "The ⑂ line render and the delegate_flow open commit in the same reducer tick — the shell reads the envelope, paints the line, opens the flow.",
+        "cite": "shell reducer"
+      },
+      {
+        "kind": "same_step",
+        "tags": ["DELEGATE_CALL_FOLDED", "TRANSCRIPT_ROW_RENDERED"],
+        "note": "The fold-back paints the answer text into the transcript at the same seq the ToolResult arrived on.",
+        "cite": "shell reducer"
+      },
+
+      {
+        "kind": "cadence",
+        "tag": "SETTING_CHANGED",
+        "rate": "event-cadence — one emit per user toggle",
+        "note": "Not throttled; each click fires one emit. Downstream COLLECTION_PERSISTED throttles the persistence to at most one per 5s.",
+        "cite": "v7:452-461"
+      }
+    ],
+
+    "halts_check": {
+      "cadence_missing_for_ambient": "none — the two ambient tags (ANCHOR_PAINTED, HARNESS_HEARTBEAT) each carry a cadence entry; TRANSCRIPT_ROW_RENDERED (recategorized ambient → event) has an event-cadence entry",
+      "conflicting_invariants": "none observed",
+      "orphan_pairings": "every pairing entry names a `from` tag and a `to` tag both present in Layer 1"
+    },
+
+    "invariant_count": 34,
+    "invariant_count_by_kind": {"cadence": 6, "same_step": 4, "pairing": 14, "window": 3, "forbidden_after": 4, "eventually_must": 3}
+  },
+  "layer_5_state_transitions": {
+    "note": "Ordering graph per PRINCIPLES §Layer 5. Six rule kinds: `allowed_set` (from X, only these tags may follow within the stratum), `forced_next` (from X, exactly this tag must follow), `terminal` (X ends its stratum), `pairing_ordering` (X must precede Y for the same key), `forbidden_after` (short version — see Layer 4 for time-anchored versions), `exclusive` (X and Y cannot both be open within a stratum instance). Every rule cites Layer 3's stratum, the load-bearing key (pane_id, session_id, tool_call_id, request_id), and the source line. Sparseness is OK per BOOTSTRAP §Step 6 — critical paths only.",
+
+    "state_transitions": [
+      {
+        "kind": "allowed_set",
+        "from": "PANE_CREATED",
+        "to_allowed": ["PANE_FOCUSED", "PANE_RENAMED", "PANE_UNBOUND_BOUND", "PANE_SPLIT", "PANE_MOVED", "PANE_CLOSED", "any pane-scoped tag with the same pane_id"],
+        "key": "pane_id",
+        "stratum": "pane_session",
+        "note": "A newly created pane accepts every pane-scoped tag; only PANE_CLOSED ends the stratum.",
+        "cite": "state.ts createPane"
+      },
+      {
+        "kind": "terminal",
+        "tag": "PANE_CLOSED",
+        "stratum": "pane_session",
+        "note": "No pane-scoped tag with this pane_id fires after PANE_CLOSED.",
+        "cite": "state.ts closePane"
+      },
+      {
+        "kind": "pairing_ordering",
+        "before": "PANE_CREATED",
+        "after": "PANE_UNBOUND_BOUND",
+        "key": "pane_id",
+        "note": "A pane must exist before it can bind. The workspace picker only appears in an unbound pane's Prompt.",
+        "cite": "D66f"
+      },
+      {
+        "kind": "forced_next",
+        "from": "PANE_UNBOUND_BOUND",
+        "to": "SESSION_CREATE_REQUESTED",
+        "key": "pane_id → session_id",
+        "note": "Committing the workspace picker immediately dispatches create_session. Same reducer tick per Layer 4.",
+        "cite": "D66f + Sprint 011 plan"
+      },
+
+      {
+        "kind": "allowed_set",
+        "from": "SESSION_CREATE_REQUESTED",
+        "to_allowed": ["SESSION_CREATED", "SESSION_CREATE_FAILED"],
+        "key": "request_id",
+        "stratum": "bridge_request",
+        "note": "Exactly one reply — success or a typed failure (NameCollision / driver_unavailable / workspace_shape_invalid).",
+        "cite": "src/bridge/registry.py op_create_session (future sprint) + session_registry.py:400-472"
+      },
+      {
+        "kind": "pairing_ordering",
+        "before": "SESSION_CREATED",
+        "after": "TURN_SUBMIT_REQUESTED",
+        "key": "session_id",
+        "note": "A turn can only be submitted for a session that exists. Fresh session's first turn is allowed immediately after SESSION_CREATED.",
+        "cite": "session_registry.py:747-874"
+      },
+      {
+        "kind": "terminal",
+        "tag": "SESSION_ENDED_ACK",
+        "stratum": "substrate_binding",
+        "note": "After the record's SessionEnded envelope acks, the session's stratum instance ends. The manifest status becomes 'ended'.",
+        "cite": "vocabulary.py SessionEnded"
+      },
+
+      {
+        "kind": "allowed_set",
+        "from": "TURN_SUBMIT_REQUESTED",
+        "to_allowed": ["TURN_SUBMITTED", "TURN_SUBMIT_FAILED"],
+        "key": "request_id",
+        "stratum": "bridge_request",
+        "note": "Exactly one reply. Failed reasons: queue_full | session_ended | fresh_session_requires_user_message | torn_record_on_resume | timeout.",
+        "cite": "session_registry.py:164-204"
+      },
+      {
+        "kind": "terminal",
+        "tag": "TURN_SUBMITTED",
+        "stratum": "turn",
+        "note": "The turn ends when substrate's turn_sync returns cleanly (or fails via TURN_SUBMIT_FAILED).",
+        "cite": "session_registry.py:747-874"
+      },
+      {
+        "kind": "terminal",
+        "tag": "TURN_SUBMIT_FAILED",
+        "stratum": "turn",
+        "note": "Failure terminates the turn instance; the shell may issue a new TURN_SUBMIT_REQUESTED afterwards.",
+        "cite": "session_registry.py:164-204"
+      },
+
+      {
+        "kind": "allowed_set",
+        "from": "DELEGATE_CALL_RENDERED",
+        "to_allowed": ["DELEGATE_INLINE_EXPANDED", "DELEGATE_INLINE_COLLAPSED", "DESCENT_ENTERED", "TRANSCRIPT_FANOUT_LINE_RENDERED", "FAN_OUT_INLINE_EXPANDED", "FAN_OUT_INLINE_COLLAPSED", "DELEGATE_CALL_FOLDED", "DELEGATE_DEPTH_CAP_REFUSED"],
+        "key": "tool_call_id",
+        "stratum": "delegate_flow",
+        "note": "The flow accepts descend / expand / collapse / fan-out interactions until fold or refusal.",
+        "cite": "D38, D41, D70, D72"
+      },
+      {
+        "kind": "terminal",
+        "tag": "DELEGATE_CALL_FOLDED",
+        "stratum": "delegate_flow",
+        "note": "Fold on ToolResult arrival ends the flow.",
+        "cite": "D38"
+      },
+      {
+        "kind": "terminal",
+        "tag": "DELEGATE_DEPTH_CAP_REFUSED",
+        "stratum": "delegate_flow",
+        "note": "Refusal at depth 2 is a terminal state for that particular delegate call. Parent turn continues.",
+        "cite": "D41, delegate.py:436"
+      },
+      {
+        "kind": "pairing_ordering",
+        "before": "DESCENT_ENTERED",
+        "after": "DESCENT_EXITED",
+        "key": "pane_id",
+        "note": "Every DESCENT_ENTERED must be balanced by exactly one DESCENT_EXITED (same pane_id). Nested descents (depth 2) form a LIFO stack.",
+        "cite": "D70"
+      },
+      {
+        "kind": "forbidden_after",
+        "before": "DESCENT_ENTERED{depth:2}",
+        "after": "DESCENT_ENTERED with the same pane_id (deeper than 2 impossible)",
+        "note": "Depth cap is substrate-side (max_depth=2). The shell cannot descend past 2.",
+        "cite": "D41, delegate.py:353"
+      },
+
+      {
+        "kind": "pairing_ordering",
+        "before": "REVEAL_TOGGLED (to: reveal)",
+        "after": "REVEAL_TOGGLED (to: terminal)",
+        "key": "pane_id",
+        "note": "Each open-instance opens by to:reveal and closes by to:terminal. Alternating cycle per pane.",
+        "cite": "D4, v7:562, S3 (Architect 2026-09-10)"
+      },
+      {
+        "kind": "exclusive",
+        "tags": ["REVEAL_TOGGLED (to: reveal) instance open"],
+        "constraint": "at most one open instance per pane_id at a time",
+        "note": "No double-open. The next REVEAL_TOGGLED must be to:terminal (closing) before another to:reveal.",
+        "cite": "S3"
+      },
+
+      {
+        "kind": "pairing_ordering",
+        "before": "SURFACE_OPENED (kind:X)",
+        "after": "SURFACE_CLOSED (kind:X) OR SURFACE_OPENED (kind:Y, prior_kind:X)",
+        "key": "pane_id",
+        "note": "Opening a second Surface implicitly closes the first (`prior_kind` in the second's payload records which).",
+        "cite": "D24, D28"
+      },
+      {
+        "kind": "exclusive",
+        "tags": ["SURFACE_OPENED"],
+        "constraint": "at most one open surface per pane_id at a time",
+        "cite": "D5"
+      },
+
+      {
+        "kind": "allowed_set",
+        "from": "FIND_OPENED",
+        "to_allowed": ["FIND_QUERY_CHANGED", "FIND_SCOPE_CHANGED", "FIND_CLOSED"],
+        "key": "pane_id",
+        "stratum": "find",
+        "note": "Query and scope changes only fire while find is open. Closing terminates the stratum.",
+        "cite": "19h, 19k, 19l"
+      },
+      {
+        "kind": "terminal",
+        "tag": "FIND_CLOSED",
+        "stratum": "find",
+        "cite": "shell reducer"
+      },
+
+      {
+        "kind": "allowed_set",
+        "from": "SETTINGS_OPENED",
+        "to_allowed": ["SETTING_CHANGED", "SETTINGS_CLOSED"],
+        "stratum": "dialog",
+        "note": "Preference changes only fire while settings are open. No timeout — user-driven.",
+        "cite": "19c"
+      },
+      {
+        "kind": "allowed_set",
+        "from": "END_CONFIRM_OPENED",
+        "to_allowed": ["END_CONFIRM_CLOSED", "END_CONFIRM_COMMITTED"],
+        "stratum": "dialog",
+        "cite": "19g"
+      },
+      {
+        "kind": "forced_next",
+        "from": "END_CONFIRM_COMMITTED",
+        "to": "INTERRUPT_REQUESTED (if session status == running) then SESSION_END_REQUESTED",
+        "key": "session_id",
+        "note": "Chain: END_CONFIRM_COMMITTED → INTERRUPT_REQUESTED (only if RUNNING) → INTERRUPTED → SESSION_END_REQUESTED → SESSION_ENDED_ACK. Same reducer tick opens the chain (Layer 4 same_step); bridge acks arrive per the bridge_request timings.",
+        "cite": "D68 corollary b"
+      },
+      {
+        "kind": "allowed_set",
+        "from": "EXPORT_DIALOG_OPENED",
+        "to_allowed": ["EXPORT_COMMITTED", "EXPORT_DIALOG_CLOSED"],
+        "stratum": "dialog",
+        "cite": "19f"
+      },
+
+      {
+        "kind": "exclusive",
+        "tags": ["DRIVER_DROPDOWN_OPENED", "WORKSPACE_POPOVER_OPENED"],
+        "constraint": "at most one header_popover open per pane_id at a time (v7 uses ddFor / wsFor state pair, only one non-null at a time)",
+        "cite": "v7:759-760"
+      },
+      {
+        "kind": "pairing_ordering",
+        "before": "DRIVER_DROPDOWN_OPENED",
+        "after": "DRIVER_DROPDOWN_CLOSED OR DRIVER_PICKED",
+        "key": "pane_id",
+        "note": "DRIVER_PICKED closes the dropdown implicitly; DRIVER_DROPDOWN_CLOSED closes without picking.",
+        "cite": "v7:761-764"
+      },
+      {
+        "kind": "forced_next",
+        "from": "DRIVER_PICKED",
+        "to": "DRIVER_CHANGE_REQUESTED",
+        "key": "session_id",
+        "note": "Picking a driver dispatches the mid-session PATCH per D37.",
+        "cite": "D37"
+      },
+
+      {
+        "kind": "pairing_ordering",
+        "before": "GUTTER_DRAG_STARTED",
+        "after": "GUTTER_DRAG_STOPPED",
+        "key": "kind + gutter_index",
+        "note": "One drag-in-flight per gutter kind + index.",
+        "cite": "state.ts _gut handlers"
+      },
+      {
+        "kind": "pairing_ordering",
+        "before": "DROP_HINT_SHOWN",
+        "after": "DROP_HINT_HIDDEN OR PANE_MOVED",
+        "key": "source_pane_id + target_pane_id",
+        "note": "The header-drag shows a hint on entering a target pane; leaving hides it, dropping commits PANE_MOVED.",
+        "cite": "PANE-MECHANICS §Drop zones"
+      },
+
+      {
+        "kind": "pairing_ordering",
+        "before": "SESSION_CREATE_REQUESTED",
+        "after": "SESSION_CREATED OR SESSION_CREATE_FAILED",
+        "key": "request_id",
+        "note": "Every bridge REQUESTED has exactly one reply with matching request_id. Injective mapping — same shape for every bridge_request pair (RENAME / TURN_SUBMIT / INTERRUPT / SESSION_END / DRIVER_CHANGE / BUNDLE_ATTACH / PROBE_DRIVER).",
+        "cite": "bridge protocol"
+      },
+      {
+        "kind": "forbidden_after",
+        "before": "SESSION_ENDED_ACK",
+        "after": "any turn / bridge action targeting the same session_id (TURN_SUBMIT_REQUESTED, INTERRUPT_REQUESTED, DRIVER_CHANGE_REQUESTED, BUNDLE_ATTACH_REQUESTED, SESSION_END_REQUESTED, SESSION_RENAME_REQUESTED)",
+        "note": "An ended session accepts no further shell actions. Substrate raises SessionEndedMidTurn on turn_sync.",
+        "cite": "session_registry.py:164"
+      },
+      {
+        "kind": "terminal",
+        "tag": "FIRST_RUN_COMPLETED",
+        "stratum": "first_run",
+        "note": "One-shot per install lifetime. No re-entry.",
+        "cite": "D69"
+      },
+
+      {
+        "kind": "forced_next",
+        "from": "FIRST_RUN_DRIVER_PICKED",
+        "to": "SESSION_CREATE_REQUESTED",
+        "key": "driver + workspace",
+        "note": "Picking a driver in first-run dispatches the first session's create immediately with the default workspace ~/Documents/substrate.",
+        "cite": "D69"
+      },
+
+      {
+        "kind": "allowed_set",
+        "from": "TRANSCRIPT_ROW_RENDERED",
+        "to_allowed": ["any transcript-scoped tag or another TRANSCRIPT_ROW_RENDERED"],
+        "stratum": "turn / substrate_binding",
+        "note": "Rows render in seq order for a given pane_id; the sequence is monotonic on envelope_seq. Cadence pinned at Layer 4.",
+        "cite": "record tail"
+      },
+
+      {
+        "kind": "pairing_ordering",
+        "before": "PANE_UNBOUND_BOUND",
+        "after": "TRANSCRIPT_AWAITING_FIRST_MESSAGE_RENDERED",
+        "key": "pane_id + session_id",
+        "note": "After binding, before the first turn, the shell paints the pre-first-turn line. Fires once per session.",
+        "cite": "v7:543 + REVIEW-2026-09-10-layer-2-3 P1"
+      },
+      {
+        "kind": "terminal",
+        "tag": "WINDOW_CLOSED",
+        "stratum": "window_session",
+        "note": "S4 (REVIEW-2026-09-10 Layer 4/5): the window ends when its OS window closes. Every pane inside must have closed first (PANE_CLOSED × N precedes).",
+        "cite": "MENU-BAR § Window ⌘⇧W"
+      },
+      {
+        "kind": "terminal",
+        "tag": "WINDOW_CLOSED (last window)",
+        "stratum": "app_session",
+        "note": "S4 (REVIEW-2026-09-10 Layer 4/5): the app session ends when the last window closes. Not a distinct tag — the last WINDOW_CLOSED is the boundary. Electron `window-all-closed` on non-darwin platforms triggers app.quit; on macOS the app stays alive without windows (the dock icon is the app).",
+        "cite": "Electron app.on('window-all-closed')"
+      },
+      {
+        "kind": "allowed_set",
+        "from": "REVEAL_TOGGLED (to: reveal)",
+        "to_allowed": ["LENS_SWITCHED", "STREAM_LEVEL_TOGGLED", "STREAM_DIR_TOGGLED", "STREAM_ROW_CLICKED", "INSPECTOR_OPENED", "INSPECTOR_CLOSED", "REVEAL_FOCUS_MOVED", "FIND_OPENED", "FIND_QUERY_CHANGED", "FIND_SCOPE_CHANGED", "FIND_CLOSED", "REVEAL_TOGGLED (to: terminal)"],
+        "key": "pane_id",
+        "stratum": "reveal",
+        "note": "S5 (REVIEW-2026-09-10 Layer 4/5): the reveal-instance accepts every reveal-scoped tag. Lens / stream / inspector / find are all reveal-scoped by design (they only render inside the machinery view). Closing (REVEAL_TOGGLED to: terminal) ends the instance.",
+        "cite": "D4, D10, D20, D22"
+      },
+      {
+        "kind": "allowed_set",
+        "from": "WINDOW_OPENED",
+        "to_allowed": ["PANE_CREATED", "PANE_CLOSED", "PANE_FOCUSED", "PANE_SPLIT", "PANE_RENAMED", "PANE_MOVED", "PANE_UNBOUND_BOUND", "DROP_HINT_SHOWN", "DROP_HINT_ZONE_CHANGED", "DROP_HINT_HIDDEN", "GUTTER_DRAG_STARTED", "GUTTER_DRAG_STOPPED", "any pane-scoped tag with a valid pane_id in this window", "WINDOW_CLOSED"],
+        "key": "window_id",
+        "stratum": "window_session",
+        "note": "S5 (REVIEW-2026-09-10 Layer 4/5): the window_session frames every pane-scoped and layout-scoped tag inside it. Closing (WINDOW_CLOSED) ends the window.",
+        "cite": "D57"
+      },
+      {
+        "kind": "allowed_set",
+        "from": "COLLECTION_OPENED",
+        "to_allowed": ["WINDOW_OPENED (× N)", "COLLECTION_PERSISTED (throttled)", "COLLECTION_RESTORED (on relaunch, opens after)"],
+        "stratum": "app_session",
+        "note": "S5 (REVIEW-2026-09-10 Layer 4/5): the collection layer sits under app_session; opening it enables windows to open.",
+        "cite": "D57, D68"
+      }
+    ],
+
+    "graph_checks": {
+      "unexpected_cycles": "none. Named loops declared: REVEAL_TOGGLED alternates by `to` field (D4); TURN_SUBMIT_REQUESTED can fire multiple times per substrate_binding (many turns per session); DELEGATE_CALL_RENDERED can fire multiple times per turn (many tool calls); PANE_SPLIT can fire multiple times per window_session. All are expected multi-firing patterns.",
+      "unreachable_tags": "none. Post-review-fix S5 (2026-09-10): explicit allowed_sets now cover the window_session (WINDOW_OPENED accepts every pane / layout / window tag), the reveal stratum (REVEAL_TOGGLED to:reveal accepts every lens / stream / inspector / find tag), and the collection stratum (COLLECTION_OPENED accepts window / persist / restore). Ambient paint witnesses (ANCHOR_PAINTED, HARNESS_HEARTBEAT) carry no ordering rule by design — their Layer 4 cadence is the contract. BRIDGE_HELLO_RECEIVED and BRIDGE_DEAD_SURFACED are bridge-lifecycle boundaries handled by Layer 4 pairings, not by Layer 5 ordering. WORKSPACE_PICKER_WALKED / FAN_OUT_INLINE_WALKED / SLASH_ROUTER_WALKED are walk-inside-open events framed by their owning strata (Prompt / FanOutInline / SlashRouter allowed_sets). Every Layer 1 tag either appears in an explicit Layer 5 rule, or is framed by a Layer 3 stratum's allowed_set, or is a paint witness Layer 4 pins by cadence.",
+      "sessions_without_reachable_terminal": "none. Every Layer 3 stratum has a terminal (PANE_CLOSED, SESSION_ENDED_ACK, TURN_SUBMITTED/FAILED, DELEGATE_CALL_FOLDED/REFUSED, DESCENT_EXITED, REVEAL_TOGGLED (to:terminal), SURFACE_CLOSED, FIND_CLOSED, dialog *_CLOSED/_COMMITTED, bridge_request *_ACKED/FAILED, FIRST_RUN_COMPLETED, header_popover *_CLOSED/DRIVER_PICKED, WINDOW_CLOSED, COLLECTION_PERSISTED (summary)).",
+      "rule_conflicts": "none observed"
+    },
+
+    "state_transition_count": 41,
+    "state_transition_count_by_kind": {"allowed_set": 12, "pairing_ordering": 10, "terminal": 10, "forced_next": 4, "exclusive": 3, "forbidden_after": 2}
+  },
+  "layer_6_operators": {
+    "note": "Runtime / Operator layer per PRINCIPLES §Layer 6. Names how the program computed each event — the subsystems, their model routes, their fallback chains, their performance constraints. The shell runs across three process boundaries: renderer (Chromium in Electron), main (Node), bridge (Python). Every operator names which tags it EMITS and which tags it CONSUMES. Every LLM call lives inside a Responder inside substrate; the shell owns none. Substrate reference operators are named but not owned (grader-side read). Source-vs-observer convention (REVIEW-2026-09-10 Layer 6-10 O3/O4): where a tag traverses multiple operators (e.g. DriverResolver → DispatchLoop reply → BridgeClient → ShellReducer → Emitter → single JSONL line for PROBE_DRIVER_PROBED), the operator listed FIRST in the emits list is the source (the one that observes/generates the fact); subsequent operators are observers (they forward, they don't source). PROBE_DRIVER_PROBED/FAILED: source = DriverResolver, observer = BridgeClient. BRIDGE_DEAD_SURFACED: source = BridgeSupervisor, observer = BridgeClient.",
+
+    "boundaries": {
+      "renderer": "Chromium in Electron (isolated context, contextIsolation:true); JS/TSX; owns the ShellState reducer and paint",
+      "main":     "Node.js Electron main process; spawns the bridge; owns the IPC router and the harness log sink",
+      "bridge":   "Python 3.12 subprocess; imports substrate ~=1.0.1 in-process (D62); speaks stdio JSON-lines",
+      "substrate":"Read-only reference — substrate.session_registry.SessionRegistry, substrate.topologies.session.session_topology, substrate.reference Responders, substrate.topologies.tool_loop.delegate"
+    },
+
+    "operators": [
+      {
+        "name": "ShellReducer",
+        "boundary": "renderer",
+        "responsibilities": "The single reducer over ShellState. Every user gesture commits a state change through here; every commit funnels through the Emitter. Runs on the JS event loop; every commit must complete in < 16ms to keep the 60Hz rAF.",
+        "emits": ["PANE_*", "PROMPT_*", "SLASH_ROUTER_*", "SLASH_COMMAND_ROUTED", "WORKSPACE_PICKER_WALKED", "REVEAL_TOGGLED", "REVEAL_FOCUS_MOVED", "LENS_SWITCHED", "STREAM_*", "INSPECTOR_*", "SURFACE_*", "STUDIO_VIEW_TOGGLED", "STUDIO_VALIDATE_REQUESTED", "STUDIO_BUILD_REQUESTED", "FIND_*", "SETTINGS_*", "SETTING_CHANGED", "EXPORT_DIALOG_*", "EXPORT_COMMITTED", "END_CONFIRM_*", "FIRST_RUN_*", "DELEGATE_INLINE_*", "FAN_OUT_INLINE_*", "DESCENT_*", "DROP_HINT_*", "GUTTER_DRAG_*", "WINDOW_OPENED / _CLOSED", "COLLECTION_OPENED", "COLLECTION_PERSISTED", "COLLECTION_RESTORED", "TRANSCRIPT_AWAITING_FIRST_MESSAGE_RENDERED", "*_REQUESTED (dispatches to BridgeClient)"],
+        "consumes": ["user gestures via React event handlers", "bridge replies via BridgeClient callback"],
+        "constraints": "single-threaded; every state commit < 16ms; must not block on IPC (dispatch and continue; the reply lands asynchronously through BridgeClient)"
+      },
+      {
+        "name": "Emitter",
+        "boundary": "renderer",
+        "responsibilities": "The single emit(kind, payload) call site (v0.1 emit.ts equivalent). Every ShellReducer commit that changes visible state passes through Emitter, which (1) validates against `signals/0.1.json` §layer_2_payload; (2) appends {t, kind, payload} to the in-memory buffer; (3) forwards to HarnessSink when `window.__substrateHarness` is truthy; (4) touches the paint anchor associated with the kind (Layer 7 pairing).",
+        "emits": "none directly — Emitter is the funnel, not a source",
+        "consumes": "every call from ShellReducer and RecordSubscriber",
+        "constraints": "throws on unknown kind (hard rule 2 — vocabulary is the contract); throws on payload validation failure (Draft-07 additionalProperties:false envelope-level)"
+      },
+      {
+        "name": "AnchorPainter",
+        "boundary": "renderer",
+        "responsibilities": "The rAF loop that repaints Anchor testids from ShellState. Every load-bearing shell state carries a paint witness at a fixed data-testid; the harness reads pixels from a screenshot and decodes bytes back to state via Addendum A2. Non-negotiable per Architect 2026-09-08.",
+        "emits": ["ANCHOR_PAINTED", "HARNESS_HEARTBEAT"],
+        "consumes": "ShellState via React subscription; rAF ticks",
+        "constraints": "rAF-gated (~60Hz); HARNESS_HEARTBEAT only fires when `window.__substrateHarness` is truthy (production builds pay zero rAF cost); every paint witness must be visible (B4 — never `visibility:hidden`)"
+      },
+      {
+        "name": "RecordSubscriber",
+        "boundary": "renderer",
+        "responsibilities": "For each pane's bound session, tails `${record_root}/events-*.jsonl` via a bridge poll or SSE (implementation lands at Sprint 016); parses the envelope; forwards to ShellReducer which emits TRANSCRIPT_* tags matched to the envelope's kind + producer.",
+        "emits": ["TRANSCRIPT_ROW_RENDERED (× K, one per envelope arrival)", "TRANSCRIPT_DELEGATE_LINE_RENDERED", "TRANSCRIPT_FANOUT_LINE_RENDERED", "TRANSCRIPT_PARK_RENDERED", "TRANSCRIPT_SESSION_ENDED_RENDERED", "TRANSCRIPT_RATE_LIMITED_RENDERED", "TRANSCRIPT_COMPACTED_RENDERED", "DELEGATE_CALL_RENDERED", "DELEGATE_CALL_FOLDED", "DELEGATE_DEPTH_CAP_REFUSED"],
+        "note_review_2026_09_10_O2": "TRANSCRIPT_AWAITING_FIRST_MESSAGE_RENDERED moved out of this operator (reader of record envelopes only) into ShellReducer, where it fires from bind at PANE_UNBOUND_BOUND before the first PROMPT_SUBMITTED. RecordSubscriber emits only from real record envelopes.",
+        "consumes": "substrate envelopes on disk at ~/.substrate/sessions/<sid>/record/events-*.jsonl",
+        "constraints": "event-cadence 1:1 with envelope arrivals (Layer 4 pairing); envelope order strictly by seq"
+      },
+      {
+        "name": "BridgeClient",
+        "boundary": "renderer",
+        "responsibilities": "The renderer-side IPC channel exposed via `window.substrate.send({op, args})`. Correlates every *_REQUESTED with its reply by request_id (uuid4 hex 12-char minted at REQUESTED emit-site). Forwards replies back into ShellReducer which emits the matching *_ACKED or *_FAILED.",
+        "emits": ["BRIDGE_HELLO_RECEIVED", "BRIDGE_DEAD_SURFACED", "SESSION_CREATED / _FAILED", "SESSION_RENAMED / _FAILED", "TURN_SUBMITTED / _FAILED", "INTERRUPTED", "SESSION_ENDED_ACK", "DRIVER_CHANGED / _FAILED", "BUNDLE_ATTACHED / _FAILED", "TOOLS_RESTRICTED", "WORKSPACE_BOUND", "PROBE_DRIVER_PROBED / _FAILED"],
+        "consumes": "bridge:message IPC events from BridgeSupervisor (via preload)",
+        "constraints": "one pending request per request_id at a time; timeouts per Layer 4 pairing bounds"
+      },
+      {
+        "name": "BridgeSupervisor",
+        "boundary": "main",
+        "responsibilities": "Spawns the Python subprocess at app.whenReady; owns the child process handle; enforces the one-crash-then-banner policy (first crash → restart with 500ms backoff; second crash within 30s → pin the dead banner). Routes stdin/stdout as newline-delimited JSON; routes stderr to `<logs>/bridge.log`.",
+        "emits": "BRIDGE_DEAD_SURFACED (via IPC to renderer); process lifecycle events",
+        "consumes": "app.whenReady, app.window-all-closed, child_process 'exit' events",
+        "constraints": "one Python subprocess per Electron app; ~30MB resident; SUBSTRATE_UI_PYTHON env var picks the interpreter (default python3)"
+      },
+      {
+        "name": "IPCRouter",
+        "boundary": "main",
+        "responsibilities": "Wires `ipcMain.handle('bridge:send', …)` to the subprocess's stdin; forwards subprocess stdout lines to `mainWindow.webContents.send('bridge:message', msg)`. Buffers messages that arrive before the renderer's `did-finish-load` and flushes on ready.",
+        "emits": "none directly",
+        "consumes": "renderer's `bridge:send` invocations; subprocess stdout lines",
+        "constraints": "buffer flush at `did-finish-load`; no message dropped in the boot window (Layer 4 forbidden_after: no *_REQUESTED before BRIDGE_HELLO_RECEIVED)"
+      },
+      {
+        "name": "HarnessLogWriter",
+        "boundary": "main",
+        "responsibilities": "When SUBSTRATE_HARNESS=1, opens an append stream to `<userData>/harness/last.jsonl`; every `harness:emit` IPC message writes one line. Overwritten at every launch (fresh trace per test run).",
+        "emits": "none",
+        "consumes": "`harness:emit` IPC from HarnessSink (preload)",
+        "constraints": "best-effort — a write failure never breaks the reducer (preload try/catch guards)"
+      },
+      {
+        "name": "HarnessSink",
+        "boundary": "renderer (preload)",
+        "responsibilities": "Preload exposes `window.__substrateHarness.append(sig)` when process.env.SUBSTRATE_HARNESS==='1'. Emitter calls it once per emit. Forwards via `ipcRenderer.send('harness:emit', sig)` to HarnessLogWriter.",
+        "emits": "none",
+        "consumes": "Emitter's per-signal writes",
+        "constraints": "gated on env — production builds do not expose the sink to renderer JS"
+      },
+      {
+        "name": "HelloEmitter",
+        "boundary": "bridge",
+        "responsibilities": "On Python subprocess start, imports substrate and emits `{op:hello, substrate:<version>, protocol:1}` to stdout. On import failure, emits `{op:halt, reason:substrate_import_failed, detail:<str>}` and exits 1.",
+        "emits": "hello / halt",
+        "consumes": "process start",
+        "constraints": "must produce hello within 3s of spawn (Layer 4 pairing)"
+      },
+      {
+        "name": "DispatchLoop",
+        "boundary": "bridge",
+        "responsibilities": "Reads stdin line-by-line; parses JSON; routes to op handlers via OPS map. Long ops (submit_user_message) offloaded to a ThreadPoolExecutor(max_workers=16) so the read loop stays free for interrupt.",
+        "emits": "one reply per request (reply | halt)",
+        "consumes": "stdin JSON-lines from IPCRouter",
+        "constraints": "single-threaded stdin read; workers pool for long ops; every reply flushes"
+      },
+      {
+        "name": "RegistryProxy",
+        "boundary": "bridge",
+        "responsibilities": "Builds substrate.session_registry.SessionRegistry with `session_topology_factory` injected at construction (else RuntimeError at first turn_sync — session_registry.py:779). Wraps every IPC op → registry method: list_all, get, create, set_name, set_driver, set_bundle, try_enqueue_turn/turn_sync/dequeue_turn, interrupt, delete.",
+        "emits": "none directly — DispatchLoop emits the wire replies",
+        "consumes": "OPS map calls from DispatchLoop",
+        "constraints": "session_registry uses per-session threading.Lock; turn_queue_cap=4 per session (session_registry.py:281); halts `bridge_mapping_required` at construction if factory is missing"
+      },
+      {
+        "name": "DriverResolver",
+        "boundary": "bridge",
+        "responsibilities": "Resolves driver names to substrate.reference Responder instances. Three families: `deterministic` → DeterministicResponder (D69 floor; stateful; skips cache); `claude`/`gemini` → CliResponder (halts driver_unavailable:not_on_path if binary absent); any other → OllamaResponder probed via /api/show at construction (halts driver_unavailable:ollama:<name>:<ExcType> on probe failure).",
+        "emits": "PROBE_DRIVER_PROBED / PROBE_DRIVER_FAILED (via reply through DispatchLoop)",
+        "consumes": "probe_driver op; every create_session and set_driver op",
+        "model_routes": {"deterministic": "substrate.reference.DeterministicResponder(seed=params.seed or 0)", "claude": "substrate.reference.CliResponder(['claude','-p'], name='claude')", "gemini": "substrate.reference.CliResponder(['gemini','-p'], name='gemini')", "ollama_any": "substrate.reference.OllamaResponder(model=name, think=params.think or False, num_ctx=min(advertised, 262144), max_tokens=params.max_tokens or 0, timeout=params.timeout or 300.0)"},
+        "fallback_chain": "PROBE_DRIVER_FAILED at create-time → the shell falls back to `deterministic` per D69 first-run rules; PROBE_DRIVER_FAILED on set_driver → keeps prior driver, surfaces failure to Header",
+        "constraints": "RESPONDER_CACHE keyed by (name, params) — DeterministicResponder skipped (stateful); every non-deterministic Responder outlives turns for the same params combo; `think=False` default (Ollama returns HTTP 400 for non-reasoning models; reasoning families opt-in via driver_params)"
+      },
+      {
+        "name": "ManifestWatcher",
+        "boundary": "bridge",
+        "responsibilities": "Uses `watchfiles` (or Node fs.watch on the renderer side — implementation choice at Sprint 016) to monitor `~/.substrate/sessions/<sid>/manifest.json` for every bound session. Forwards status transitions (running/parked/interrupted/ended) to the renderer so PaneHeader status dots repaint.",
+        "emits": "status-change events into the bridge_reply channel (feeds Anchor repaints)",
+        "consumes": "filesystem writes from the SessionRegistry's per-session lock",
+        "constraints": "one watcher per bound session; teardown on PANE_CLOSED for that pane's session_id (unless another pane also binds the same session)"
+      },
+      {
+        "name": "SessionRegistry (substrate reference)",
+        "boundary": "substrate",
+        "responsibilities": "Substrate's in-core SessionManifest store — JSON at `~/.substrate/sessions/<sid>/manifest.json` + index `by-name.json` under fcntl.flock; per-session threading.Lock; turn queue via try_enqueue_turn/dequeue_turn (cap=4). All shell writes go through here via RegistryProxy.",
+        "emits": "none (shell-side); substrate wire envelopes come from within turn_sync's Runtime",
+        "consumes": "RegistryProxy calls",
+        "cite": "session_registry.py:96-149 SessionManifest, :400 create, :472 set_name, :645 set_bundle, :693 set_driver, :747 turn_sync, :912 interrupt, :993 delete"
+      },
+      {
+        "name": "SessionTopology (substrate reference)",
+        "boundary": "substrate",
+        "responsibilities": "The substrate topology factory the bridge's RegistryProxy injects at SessionRegistry construction. Called per-turn as `(manifest, first_turn_user_message) -> topology`. Emits SessionStarted, UserMessage, PromptFragment × N, PromptComposed, ModelReply, ToolCall + ToolResult × M, FinalAnswer, Park, SessionEnded, TranscriptCompacted, SessionWarning.",
+        "emits": "the ten session-vocabulary kinds (substrate.topologies.session.vocabulary)",
+        "consumes": "manifest fields + first_turn_user_message injection",
+        "cite": "substrate.topologies.session.session_topology; vocabulary.py:73-100"
+      },
+      {
+        "name": "DelegateTool (substrate reference)",
+        "boundary": "substrate",
+        "responsibilities": "The `delegate` tool in substrate.topologies.tool_loop. A parent session's model producer calls it; substrate spawns a child topology, records to `delegate_child_<hash>_c0`, folds back a ToolResult carrying {answer, child_root, steps}. max_depth=2 (delegate.py:353); refusal at depth 2 renders as failed ToolResult (SESSION_ENDED_MID_DELEGATE wire tag at :59 covers mid-turn child death).",
+        "emits": "ToolCall{tool:delegate}, ToolResult{ok:bool, output:{answer, child_root, steps}}",
+        "consumes": "model's ToolCall arg",
+        "cite": "topologies/tool_loop/delegate.py:353 max_depth, :436 depth-cap guard, :437-439 refusal raise (REVIEW-2026-09-10 Layer 6-10 line-number precision), :59 SESSION_ENDED_MID_DELEGATE"
+      }
+    ],
+
+    "halts_check": {
+      "operator_count_exceeds_tag_count": "17 operators vs 108 tags — well under. Not over-decomposition.",
+      "tags_with_no_emitting_operator": "every Layer 1 tag has an emitting operator: ShellReducer covers user-gesture tags; Emitter is the funnel (not a source); AnchorPainter covers ANCHOR_PAINTED + HARNESS_HEARTBEAT; RecordSubscriber covers TRANSCRIPT_* + DELEGATE_CALL_* + DELEGATE_DEPTH_CAP_REFUSED; BridgeClient covers every bridge_reply and BRIDGE_HELLO_RECEIVED/DEAD_SURFACED; BridgeSupervisor emits BRIDGE_DEAD_SURFACED at the second-crash boundary. Substrate reference operators emit substrate wire envelopes, not shell tags."
+    },
+
+    "operator_count": 17,
+    "operator_count_by_boundary": {"renderer": 5, "renderer (preload)": 1, "main": 3, "bridge": 5, "substrate": 3}
+  },
+  "layer_7_evidence": {
+    "note": "Evidence layer per PRINCIPLES §Layer 7. Four kinds of constraint: (1) `tonal` — voice canon on user-facing strings; (2) `numeric_range` — bounds on integer/float fields; (3) `cross_reference` — foreign-key resolution; (4) `pixel_anchor` — the harness paint-witness testid a tag flips (Architect 2026-09-08 non-negotiable). Enforceability: `mechanical` (schema / regex / arithmetic), `llm_check` (prose / tone), `manual_review` (human). Every load-bearing state changes exactly one pixel-anchor byte; the harness reads it from a screenshot per Addendum A2. Passive-render entities pair with anchors even though they emit no tag — their paint witness is what the harness reads.",
+
+    "evidence_constraints": [
+      {
+        "kind": "cross_reference",
+        "target": "every `_id` foreign key",
+        "constraint": "resolves to a live Layer 0 entity at emit time — pane_id ∈ ShellState.panes; session_id ∈ SessionManifest set (or minted for the pending SESSION_CREATE_REQUESTED); window_id ∈ open windows; tool_call_id from a real substrate ToolCall envelope; child_record_root exists on disk after DELEGATE_CALL_FOLDED; request_id matches exactly one bridge_request stratum instance",
+        "enforceability": "mechanical",
+        "grader_check": "at emit time, look up the id in the corresponding registry; grader post-processes the JSONL trace and flags any orphan id"
+      },
+      {
+        "kind": "cross_reference",
+        "target": "every `envelope_kind` on TRANSCRIPT_ROW_RENDERED / STREAM_ROW_CLICKED",
+        "constraint": "the string is either a substrate kernel-lifecycle kind (substrate.constants:41-52 — twelve kinds), a substrate session-vocab kind (vocabulary.py:73-100 — ten kinds), or a downstream topology kind (ToolCall, ToolResult, FinalAnswer, or any application kind on the record). Open string per D26 full-granularity view.",
+        "enforceability": "mechanical (grader reads bridge.log for the corresponding envelope on the same session_id + seq and matches the kind)"
+      },
+      {
+        "kind": "cross_reference",
+        "target": "SESSION_CREATE_REQUESTED.seed",
+        "constraint": "MUST equal empty string `\"\"` — substrate deprecates the seed field per session_registry.py:421-431 (`SessionManifest.seed is deprecated. The prompt-composition arc moved every real prompt source to a PromptFragment producer; seed has no consumer inside the topology. Pass empty string; a future sprint drops the field`)",
+        "enforceability": "mechanical (schema `const: \"\"`)",
+        "schema_addendum": "SESSION_CREATE_REQUESTED.properties.seed = {type: string, const: \"\"}"
+      },
+
+      {
+        "kind": "tonal",
+        "target": "every user-facing string the shell generates (log/status lines, dialog notes, Studio output strings, error text)",
+        "constraint": "lowercase leading words in log/status lines (Fowler-style); no emoji anywhere in strings the shell generates (D45; the tone canon in WORKING_AGREEMENT); labels never wrap (shrink → ellipsize → tooltip per D32); no narration prose (D40 — hints in tooltips, never on-screen body copy); no cost/money display anywhere (D45/D46)",
+        "enforceability": "mechanical + llm_check — mechanical grep for emoji (Unicode ranges U+1F300–U+1FAFF, U+2600–U+26FF, U+2700–U+27BF) and for `$`/`¢`/`€`/`£` in shell-generated strings; llm_check for prose tone",
+        "applies_to": ["STUDIO_VALIDATED.errors items", "STUDIO_VALIDATE_FAILED.errors items", "STUDIO_BUILT descriptive strings", "STUDIO_BUILD_REJECTED.errors items", "SETTING_CHANGED note strings", "bridge failure `reason`/`detail` strings"]
+      },
+      {
+        "kind": "tonal",
+        "target": "no cost or money display anywhere in the shell",
+        "constraint": "The shell renders zero dollar amounts, no per-call cost, no aggregate spend, no token-price conversion, no `$`/`¢`/`€`/`£` in any user-facing string, no ambient token counter converted to money. Context pressure (tokens_estimated vs driver_context_tokens) is the only token-adjacent surface (WINDOW-STRIP-EXPLORATION §2), and it renders as a fraction, never as currency.",
+        "enforceability": "mechanical (grep for currency glyphs + regex for `\\$\\d`)",
+        "cite": "D45, D46, WINDOW-STRIP-EXPLORATION §7"
+      },
+      {
+        "kind": "tonal",
+        "target": "labels never wrap",
+        "constraint": "Every UI label shrinks → ellipsizes → tooltip per D32; prose wraps normally. Header labels (name, driver ▾, ⌥ workspace, records, studio, ⌃`) are labels; transcript rows are prose.",
+        "enforceability": "manual_review + Playwright DOM assertion (`white-space: nowrap` on every `.label` class element)",
+        "cite": "D32, FUNCTIONALITY row 34"
+      },
+
+      {
+        "kind": "cross_reference",
+        "target": "every payload with a `driver_params` field",
+        "constraint": "The Emitter strips any key at any depth whose name matches `/key|token|secret|password/i` (case-insensitive) — replaces the value with the string `\"[redacted]\"` before write. Ollama's four documented params (think, max_tokens, num_ctx, timeout) never match; API-key-carrying param names always match. Runtime discipline, not schema-enforced.",
+        "enforceability": "mechanical (test at emit-site: pass a `{claude_api_key: \"sk-...\", think: true}` object and grep the JSONL — the key value must not appear)",
+        "cite": "REVIEW-2026-09-10 Layer 2/3 P2",
+        "applies_to": ["FIRST_RUN_DRIVER_PICKED.driver_params", "PROBE_DRIVER_REQUESTED.driver_params", "SESSION_CREATE_REQUESTED (any driver_params via bundle)", "DRIVER_CHANGE_REQUESTED (any params)"]
+      },
+
+      {
+        "kind": "cross_reference",
+        "target": "SETTING_CHANGED.from and .to typed per SETTING_CHANGED.key",
+        "constraint": "Draft-07 `oneOf` per key value: `theme` → both are enum `[dark|light|system]`; `type_size` → both are integer 9..19; `nested_descent` → both are boolean; `bindings` → both are objects of key-combo strings.",
+        "enforceability": "mechanical (Draft-07 `oneOf` schema — the SETTING_CHANGED payload schema in Layer 2 has a `layer_7_constraint` field naming this; the concrete oneOf lands here)",
+        "schema_addendum": "SETTING_CHANGED.payload = {type:object, additionalProperties:false, required:[key,from,to], oneOf:[ {properties:{key:{const:theme}, from:{enum:[dark,light,system]}, to:{enum:[dark,light,system]}}}, {properties:{key:{const:type_size}, from:{type:integer, minimum:9, maximum:19}, to:{type:integer, minimum:9, maximum:19}}}, {properties:{key:{const:nested_descent}, from:{type:boolean}, to:{type:boolean}}}, {properties:{key:{const:bindings}, from:{type:object}, to:{type:object}}} ]}",
+        "cite": "REVIEW-2026-09-10 Layer 2/3 seed deprecation note + P2 flag"
+      },
+
+      {
+        "kind": "numeric_range",
+        "target": "delegate depth",
+        "constraint": "DELEGATE_CALL_RENDERED.depth ∈ [1,2]; DESCENT_ENTERED.depth ∈ [1,2]; DESCENT_EXITED.to_depth ∈ [0,1]; DELEGATE_DEPTH_CAP_REFUSED.depth = 2 (const). Substrate max_depth=2 at delegate.py:353.",
+        "enforceability": "mechanical (schema minimum/maximum/const already in Layer 2)",
+        "cite": "D41, delegate.py:353"
+      },
+      {
+        "kind": "numeric_range",
+        "target": "turn queue depth",
+        "constraint": "At any moment, at most `turn_queue_cap` (default 4 per session_registry.py:281) turns can be enqueued for the same session_id. A fifth TURN_SUBMIT_REQUESTED for a session already at cap must produce TURN_SUBMIT_FAILED{reason: queue_full}. Grader counts pending turns per session across the JSONL trace.",
+        "enforceability": "mechanical (grader arithmetic over the trace)",
+        "cite": "session_registry.py:281"
+      },
+      {
+        "kind": "numeric_range",
+        "target": "pane grid",
+        "constraint": "Every window carries at most 8 panes (4 cols × 2 rows per D35). PANE_SPLIT that would create a 9th pane must not fire.",
+        "enforceability": "mechanical (grader counts alive panes per window_id from PANE_CREATED − PANE_CLOSED)",
+        "cite": "D35"
+      },
+
+      {
+        "kind": "cross_reference",
+        "target": "every incident-stratum tag carries a diagnostic-required Evidence",
+        "constraint": "STUDIO_VALIDATE_FAILED.errors + STUDIO_BUILD_REJECTED.errors (both required, minItems 1); SESSION_CREATE_FAILED.reason (required); SESSION_RENAME_FAILED.reason (required); TURN_SUBMIT_FAILED.reason (required, enumerated); DRIVER_CHANGE_FAILED.reason (required); BUNDLE_ATTACH_FAILED.reason (required); PROBE_DRIVER_FAILED.reason (required); BRIDGE_DEAD_SURFACED.crash_count (required, minimum 2); DELEGATE_DEPTH_CAP_REFUSED.depth (required, const 2). Every incident has a payload field that names the failure precisely enough to grade.",
+        "enforceability": "mechanical (schema-enforced — every incident payload in Layer 2 carries the required reason/detail field)",
+        "stratum": "incident"
+      },
+
+      {
+        "kind": "pixel_anchor",
+        "target": "every load-bearing shell state has a paint-witness testid the harness decodes",
+        "constraint": "The AnchorPainter maintains the following testids. Each carries a single byte (grayscale rgb=b,b,b) at (0,0)-of-canvas. The harness screenshots the DOM, decodes each canvas per Addendum A2, reconstructs shell state, cross-validates against the JSONL trace + the bridge.log. If the three channels disagree the sprint fails.",
+        "enforceability": "mechanical (Playwright + zero-dep PNG decode)",
+        "anchors": [
+          {"testid": "anchor-pane-{pane_id}-focus",   "byte_meaning": "0 = unfocused, 255 = focused",                                              "witnesses": "PANE_FOCUSED · PANE_CLOSED (removes)"},
+          {"testid": "anchor-pane-{pane_id}-status", "byte_meaning": "0 unbound · 64 parked · 128 running · 192 interrupted · 255 ended",       "witnesses": "PANE_UNBOUND_BOUND · manifest-watcher status transitions"},
+          {"testid": "anchor-pane-{pane_id}-reveal", "byte_meaning": "0 = terminal, 255 = reveal",                                                "witnesses": "REVEAL_TOGGLED"},
+          {"testid": "anchor-pane-{pane_id}-lens",   "byte_meaning": "0 stream+graph · 1 i/o · 2 structure · 3 scene",                             "witnesses": "LENS_SWITCHED"},
+          {"testid": "anchor-pane-{pane_id}-level",  "byte_meaning": "0 all · 255 app",                                                             "witnesses": "STREAM_LEVEL_TOGGLED"},
+          {"testid": "anchor-pane-{pane_id}-dir",    "byte_meaning": "0 down · 255 side",                                                            "witnesses": "STREAM_DIR_TOGGLED"},
+          {"testid": "anchor-pane-{pane_id}-descent","byte_meaning": "0 session · 1 depth-1 · 2 depth-2",                                             "witnesses": "DESCENT_ENTERED · DESCENT_EXITED"},
+          {"testid": "anchor-pane-{pane_id}-surface","byte_meaning": "0 none · 1 records · 2 studio · 3 assay",                                       "witnesses": "SURFACE_OPENED · SURFACE_CLOSED"},
+          {"testid": "anchor-pane-{pane_id}-find",   "byte_meaning": "0 closed · 128 transcript-scope · 255 stream-scope",                          "witnesses": "FIND_OPENED · FIND_SCOPE_CHANGED · FIND_CLOSED"},
+          {"testid": "anchor-pane-{pane_id}-inspect","byte_meaning": "low byte of selected seq (0..255) · byte 0 when closed",                       "witnesses": "INSPECTOR_OPENED · INSPECTOR_CLOSED"},
+          {"testid": "anchor-pane-{pane_id}-header-popover", "byte_meaning": "0 none · 128 driver_dropdown · 255 workspace_popover",                "witnesses": "DRIVER_DROPDOWN_OPENED/CLOSED · WORKSPACE_POPOVER_OPENED/CLOSED"},
+          {"testid": "anchor-dialog",                "byte_meaning": "0 none · 64 settings · 128 export · 192 end_confirm · 255 first_run",         "witnesses": "SETTINGS_OPENED/CLOSED · EXPORT_DIALOG_OPENED/CLOSED · END_CONFIRM_OPENED/CLOSED · FIRST_RUN_OPENED/COMPLETED"},
+          {"testid": "anchor-window-strip",          "byte_meaning": "0 hidden (single pane) · 255 visible (multi-pane per D46)",                    "witnesses": "PANE_CREATED · PANE_CLOSED"},
+          {"testid": "anchor-bridge",                "byte_meaning": "0 pre-hello · 128 alive · 255 dead",                                            "witnesses": "BRIDGE_HELLO_RECEIVED · BRIDGE_DEAD_SURFACED"},
+          {"testid": "anchor-last-tag",              "byte_meaning": "FNV-1a low byte of the last-emitted shell tag kind name",                       "witnesses": "every Emitter call"},
+          {"testid": "anchor-heartbeat",             "byte_meaning": "rAF frame counter mod 256; only paints when window.__substrateHarness is truthy", "witnesses": "AnchorPainter rAF loop (B4)"}
+        ],
+        "cite": "Addendum A2 + Architect 2026-09-08 non-negotiable",
+        "note_review_2026_09_10_E1": "harness discovers pane_ids via DOM query on `[data-testid^=\"anchor-pane-\"]` — the AnchorPainter mounts one testid group per live pane; iterate the group at screenshot time to reconstruct per-pane state.",
+        "note_review_2026_09_10_E2": "no per-instance anchor for delegate_flow or bridge_request stratum instances — multiple concurrent bridge_requests (create + set_driver + turn_submit racing on different session_ids) are told apart by request_id in the JSONL trace + bridge.log, not by pixel-anchor. Anchor coverage stops at pane-scoped + dialog-scoped state by design."
+      },
+
+      {
+        "kind": "cross_reference",
+        "target": "PANE_MOVED zone consistency",
+        "constraint": "PANE_MOVED.zone matches the last DROP_HINT_ZONE_CHANGED.to_zone for the same source_pane_id → target_pane_id pair; the drop commits the previewed zone.",
+        "enforceability": "mechanical (grader arithmetic over the trace pairs)",
+        "cite": "PANE-MECHANICS §Drop zones"
+      },
+      {
+        "kind": "cross_reference",
+        "target": "WORKSPACE_BOUND / PANE_UNBOUND_BOUND path canonicalization",
+        "constraint": "The workspace_path in both tags is POSIX-absolute (`Path(x).expanduser().resolve(strict=False)`); no tilde, no `..`, no double-slash. Runtime discipline at Sprint 011 (bridge or renderer normalization).",
+        "enforceability": "mechanical (regex on the workspace_path field)",
+        "cite": "WORKING_AGREEMENT-2026-09-08 abandoned scaffold + REVIEW-2026-09-08"
+      }
+    ],
+
+    "halts_check": {
+      "incident_without_diagnostic": "none — every incident tag carries a required `reason` or equivalent diagnostic field (verified against Layer 2)",
+      "tonal_rule_unbound": "none — every tonal rule names its target set (STUDIO_* strings, SETTING_CHANGED note strings, bridge failure reasons)",
+      "cross_reference_unresolved": "none — every foreign-key constraint names its Layer 0 entity or Layer 3 stratum",
+      "load_bearing_state_without_anchor": "none — every ShellState slot enumerated in the state class cross-check (REVIEW-2026-09-10 Layer 4/5 §Cross-check with Prototype v7 state class) has a pixel-anchor testid in the anchors table above"
+    },
+
+    "constraint_count": 15,
+    "anchor_count": 16,
+    "constraint_count_by_kind": {"cross_reference": 8, "tonal": 3, "numeric_range": 3, "pixel_anchor": 1}
+  },
+  "step_9_dual_contract_audit": {
+    "note": "For each behavior-category tag from Layer 1, name a view-side counterpart (either a pixel-anchor testid from Layer 7, or a structural DOM element the harness reads directly). No behavior tag is unpaired. The full pairings table lives in signals/0.1-rationale.md § Dual-contract audit table; this section carries the audit meta.",
+    "behavior_tag_count": 108,
+    "pixel_anchor_paired": 87,
+    "dom_element_paired": 21,
+    "unpaired": 0,
+    "gaps_surfaced": [
+      {"tag": "COLLECTION_PERSISTED", "note": "written to SQLite at ~/Library/Application Support/substrate-ui/state.sqlite — no visual witness (persistence is invisible by design per D68). Grader checks the file post-hoc if it needs to grade collection persistence.", "disposition": "accepted as file-evidence only, not a UI paint witness"}
+    ],
+    "audit_complete": true
+  },
+
+  "layer_8_report_binding": {
+    "note": "Bind Layer 1's tag set to the Signal Report template per templates/SIGNAL_REPORT.md. Report sections consume tag groups: OBSERVED (what happened during the sprint), EXPECTED (what the sprint contract declared), RENDERED (view-side paint witnesses), NOTES (incidents + surprises), GRAMMAR_DRIFT (proposals via the eight evolution kinds).",
+    "bindings": {
+      "OBSERVED": "every event-stratum shell tag emitted during the sprint's driving steps — 95 event tags",
+      "EXPECTED": "the sprint card's `## signal contract → Emits` list per SPRINT_CARD.md",
+      "RENDERED": "every pixel_anchor testid the harness decodes (16 anchors) + every DOM element the harness reads (Playwright DOM assertions)",
+      "NOTES": "every incident-stratum tag with its diagnostic reason string — 10 incident tags",
+      "AMBIENT": "cadence-verified emissions — TRANSCRIPT_ROW_RENDERED (1:1 envelope), ANCHOR_PAINTED (rAF-gated), HARNESS_HEARTBEAT (60Hz gated)",
+      "GRAMMAR_DRIFT": "any NEW_TAG_PROPOSED / PAYLOAD_FIELD_PROPOSED / SEQUENCE_RULE_PROPOSED / INVARIANT_PROPOSED / TAG_SPLIT_PROPOSED / TAG_MERGE_PROPOSED / TAG_DEPRECATION_PROPOSED / ENTITY_MERGE_PROPOSED entries the sprint surfaces"
+    }
+  },
+
+  "layer_9_version": {
+    "version_id": "0.1",
+    "locked": true,
+    "locked_at": "2026-09-10",
+    "locked_by": "Architect ratified via 'go' directive 2026-09-10; Agent recorded per the substrate-ui BLACKBOARD's 2026-08-25 amendment.",
+    "prior_version": null,
+    "migration_proposals": [],
+    "note": "v0.1 locked. Every subsequent implementation sprint grades against this vocabulary. Changes go through the eight-kind proposal taxonomy in Layer 10 and bump the version."
+  },
+
+  "layer_10_grammar_growth": {
+    "taxonomy_version": "0.1",
+    "reference": "sdd-kit-2/grammar/PRINCIPLES.md § supervised-grammar-evolution taxonomy — eight proposal kinds",
+    "project_overrides": [
+      {"topic": "validator-extras", "override": "STRICT — every payload has `additionalProperties: false`. Trading System's documentation-only-extras posture is NOT adopted; the shell is a reader-AND-controller and typos in payload keys are load-bearing bugs."},
+      {"topic": "view-payload convention", "override": "The shell's view-side counterpart is a pixel-anchor testid (Layer 7 pairing) OR a DOM element the harness reads. Not a `SCENE_RENDERED.visible_paths`-style payload field. Non-negotiable per Architect 2026-09-08."},
+      {"topic": "reader-only carve-out", "override": "Addendum A9's pure-reader carve-out DOES NOT apply — the shell is reader-AND-controller (POST create_session / turn_sync / interrupt / etc.). Locks its own vocabulary. Confirmed against substrate-ui KIT_DIARY H10."},
+      {"topic": "tonal", "override": "No cost/money display anywhere. No emoji in shell-generated strings. Labels never wrap. No narration prose."},
+      {"topic": "privacy", "override": "Prompt / find text is length-only in payloads — never the raw text. Substrate record carries the text; the shell trace does not duplicate. Secret-carrying keys in driver_params are stripped at emit-time."}
+    ]
+  }
+}
