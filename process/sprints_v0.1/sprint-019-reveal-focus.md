@@ -3,7 +3,7 @@
 ---
 id: 019
 epic: E — Reveal & lenses
-status: pending
+status: closed
 phase: 3
 pass_kind: architecture
 spec_reference: signals/0.1.json § lens REVEAL_FOCUS_MOVED (transcript|stream); v7:167/184/252; sheet 19h/19k/19l — Find scope handle

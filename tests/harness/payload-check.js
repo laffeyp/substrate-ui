@@ -17,6 +17,18 @@ function schemas() {
   if (cachedSchemas) return cachedSchemas;
   const data = JSON.parse(fs.readFileSync(path.join(REPO, "signals/0.1.json"), "utf8"));
   cachedSchemas = data.layer_2_payload.payload_schemas;
+  // F-1 tightening — Layer 1 ⊆ Layer 2 must hold: every ratified tag
+  // needs a payload schema. A Layer 1 tag with no Layer 2 entry lets
+  // a malformed payload slide past the harness (assertLayer2Shapes
+  // skips schema-less tags on line ~34). Fail loud at module load.
+  const tagNames = data.layer_1_lexical.tags.map((t) => t.name);
+  const missing = tagNames.filter((n) => !(n in cachedSchemas));
+  if (missing.length) {
+    throw new Error(
+      `Layer 1 tags missing Layer 2 schema entries (${missing.length}): ` +
+      `${missing.slice(0, 5).join(", ")}${missing.length > 5 ? " …" : ""}`,
+    );
+  }
   return cachedSchemas;
 }
 

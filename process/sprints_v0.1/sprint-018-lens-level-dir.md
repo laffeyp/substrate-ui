@@ -3,7 +3,7 @@
 ---
 id: 018
 epic: E — Reveal & lenses
-status: pending
+status: closed
 phase: 3
 pass_kind: architecture
 spec_reference: signals/0.1.json § lens STREAM_LEVEL_TOGGLED (all|app) + STREAM_DIR_TOGGLED (down|side)

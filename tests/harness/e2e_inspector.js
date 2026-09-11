@@ -97,13 +97,15 @@ runHarness("e2e_inspector", async ({ win, check }) => {
   check(await readAnchorByte(win, `anchor-pane-${paneId}-inspect`) === (secondSeq & 0xff),
     `anchor byte === ${secondSeq & 0xff} (low byte of seq ${secondSeq})`);
 
-  // Layer 4 balance — OPENED count === CLOSED count over the session.
+  // Teardown — close the still-open inspector so Layer 4 balance is
+  // exact (F-5). No `<= 1` tolerance: the harness fires the closing
+  // action itself before app close, and the trace balances.
+  await win.locator(`[data-testid="transcript-row-${paneId}-${secondSeq}"]`).click();
+  await new Promise((r) => setTimeout(r, 150));
+
   const allEmits = readJsonl();
   const totalOpen = allEmits.filter((s) => s.kind === "INSPECTOR_OPENED").length;
   const totalClose = allEmits.filter((s) => s.kind === "INSPECTOR_CLOSED").length;
-  // At session close, the runHarness scaffold closes the app while
-  // inspector is still open on row 1 — that's one unbalanced open
-  // that never gets its close emit. Assert |open - close| ≤ 1.
-  check(Math.abs(totalOpen - totalClose) <= 1,
-    `OPEN count === CLOSE count within one (open=${totalOpen}, close=${totalClose})`);
+  check(totalOpen === totalClose,
+    `OPEN count === CLOSE count exactly (open=${totalOpen}, close=${totalClose})`);
 });
