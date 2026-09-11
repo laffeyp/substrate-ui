@@ -10,11 +10,12 @@ interface Props {
   pane: Pane;
   onText: (paneId: string, text: string) => void;
   onLengthChanged: (paneId: string, length: number) => void;
+  onSubmit: (paneId: string, text: string) => void;
 }
 
 const DEBOUNCE_MS = 100;
 
-export function Prompt({ pane, onText, onLengthChanged }: Props): JSX.Element {
+export function Prompt({ pane, onText, onLengthChanged, onSubmit }: Props): JSX.Element {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastFiredLength = useRef<number>(pane.promptDraft.length);
 
@@ -41,6 +42,13 @@ export function Prompt({ pane, onText, onLengthChanged }: Props): JSX.Element {
           const text = e.target.value;
           onText(pane.id, text);
           scheduleEmit(pane.id, text.length);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+            e.preventDefault();
+            const text = pane.promptDraft.trim();
+            if (text.length > 0 && pane.boundSessionId) onSubmit(pane.id, text);
+          }
         }}
         rows={4}
         placeholder="Type a prompt…"

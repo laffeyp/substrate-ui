@@ -35,6 +35,9 @@ export type Action =
   | { type: "SESSION_END_ERR"; paneId: string; requestId: string; reason: string }
   | { type: "PROMPT_TEXT"; paneId: string; text: string }         // private — no emit
   | { type: "PROMPT_LENGTH_CHANGED"; paneId: string; length: number } // debounced emit
+  | { type: "TURN_SUBMIT_START"; paneId: string; requestId: string; sessionId: string; textLength: number; timeoutSeconds: number }
+  | { type: "TURN_SUBMIT_OK"; paneId: string; requestId: string; sessionId: string; turnIndex: number }
+  | { type: "TURN_SUBMIT_ERR"; paneId: string; requestId: string; sessionId: string; reason: string }
   ;
 
 export interface Emission {
@@ -112,6 +115,44 @@ export function reduce(state: ShellState, action: Action): Step {
         state,
         emissions: [{ kind: "PROMPT_CHANGED", payload: { pane_id: action.paneId, length: action.length } }],
       };
+    case "TURN_SUBMIT_START": {
+      const pane = state.panes[action.paneId];
+      if (!pane) return { state, emissions: [] };
+      return {
+        state: {
+          ...state,
+          panes: { ...state.panes, [action.paneId]: { ...pane, promptDraft: "", status: "running" } },
+        },
+        emissions: [
+          { kind: "PROMPT_SUBMITTED", payload: { pane_id: action.paneId, text_length: action.textLength } },
+          { kind: "TURN_SUBMIT_REQUESTED", payload: {
+            request_id: action.requestId, pane_id: action.paneId, session_id: action.sessionId,
+            text_length: action.textLength, timeout_seconds: action.timeoutSeconds,
+          }},
+        ],
+      };
+    }
+    case "TURN_SUBMIT_OK": {
+      const pane = state.panes[action.paneId];
+      if (!pane) return { state, emissions: [] };
+      return {
+        state: { ...state, panes: { ...state.panes, [action.paneId]: { ...pane, status: "parked" } } },
+        emissions: [{ kind: "TURN_SUBMITTED", payload: {
+          request_id: action.requestId, session_id: action.sessionId, turn_index: action.turnIndex,
+        }}],
+      };
+    }
+    case "TURN_SUBMIT_ERR": {
+      const pane = state.panes[action.paneId];
+      if (!pane) return { state, emissions: [] };
+      // Restore parked status; the turn didn't take.
+      return {
+        state: { ...state, panes: { ...state.panes, [action.paneId]: { ...pane, status: "parked" } } },
+        emissions: [{ kind: "TURN_SUBMIT_FAILED", payload: {
+          request_id: action.requestId, session_id: action.sessionId, reason: action.reason,
+        }}],
+      };
+    }
   }
 }
 

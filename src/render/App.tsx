@@ -83,6 +83,26 @@ function Shell(): JSX.Element {
     });
   }, [dispatch]);
 
+  const submitTurn = useMemo(() => (paneId: string, text: string) => {
+    const pane = stateRef.current.panes[paneId];
+    if (!pane?.boundSessionId) return;
+    const requestId = newId();
+    const timeoutSeconds = 60;
+    dispatch({ type: "TURN_SUBMIT_START", paneId, requestId,
+      sessionId: pane.boundSessionId, textLength: text.length, timeoutSeconds });
+    bridgeRequest<{ session_id: string; turn_index: number }>(
+      "turn_submit",
+      { session_id: pane.boundSessionId, text, timeout_seconds: timeoutSeconds },
+      (timeoutSeconds + 5) * 1000,
+    ).then((result) => {
+      dispatch({ type: "TURN_SUBMIT_OK", paneId, requestId,
+        sessionId: result.session_id, turnIndex: result.turn_index });
+    }).catch((reason) => {
+      dispatch({ type: "TURN_SUBMIT_ERR", paneId, requestId,
+        sessionId: pane.boundSessionId!, reason: String(reason) });
+    });
+  }, [dispatch]);
+
   const startSessionEnd = useMemo(() => (paneId: string, sessionId: string, source: "menu" | "slash" | "shortcut") => {
     const requestId = newId();
     dispatch({ type: "SESSION_END_START", paneId, requestId, sessionId, source });
@@ -175,6 +195,7 @@ function Shell(): JSX.Element {
             onResume: (paneId, sessionId) => startSessionResume(paneId, sessionId),
             onPromptText: (paneId, text) => dispatch({ type: "PROMPT_TEXT", paneId, text }),
             onPromptLengthChanged: (paneId, length) => dispatch({ type: "PROMPT_LENGTH_CHANGED", paneId, length }),
+            onPromptSubmit: submitTurn,
           }}
         />
       )}

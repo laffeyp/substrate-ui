@@ -15,6 +15,7 @@ export interface PaneCallbacks {
   onResume: (paneId: string, sessionId: string) => void;
   onPromptText: (paneId: string, text: string) => void;
   onPromptLengthChanged: (paneId: string, length: number) => void;
+  onPromptSubmit: (paneId: string, text: string) => void;
 }
 
 export interface GutterCallbacks {
@@ -46,6 +47,7 @@ function Node({ id, state, gutter, pane }: { id: string; state: ShellState; gutt
         onResume={pane.onResume}
         onPromptText={pane.onPromptText}
         onPromptLengthChanged={pane.onPromptLengthChanged}
+        onPromptSubmit={pane.onPromptSubmit}
       />
     );
   }
