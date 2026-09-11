@@ -83,6 +83,14 @@ function Shell(): JSX.Element {
     });
   }, [dispatch]);
 
+  const refreshTranscript = useMemo(() => (paneId: string, sessionId: string) => {
+    bridgeRequest<{ session_id: string; envelopes: Array<{
+      seq: number; kind: string; producer_kind: string; summary: string; turn_index: number | null;
+    }> }>("record_read", { session_id: sessionId }, 5000).then((result) => {
+      dispatch({ type: "TRANSCRIPT_ROWS_LOADED", paneId, rows: result.envelopes });
+    }).catch(() => { /* transcript fetch is best-effort */ });
+  }, [dispatch]);
+
   const submitTurn = useMemo(() => (paneId: string, text: string) => {
     const pane = stateRef.current.panes[paneId];
     if (!pane?.boundSessionId) return;
@@ -97,6 +105,7 @@ function Shell(): JSX.Element {
     ).then((result) => {
       dispatch({ type: "TURN_SUBMIT_OK", paneId, requestId,
         sessionId: result.session_id, turnIndex: result.turn_index });
+      refreshTranscript(paneId, result.session_id);
     }).catch((reason) => {
       dispatch({ type: "TURN_SUBMIT_ERR", paneId, requestId,
         sessionId: pane.boundSessionId!, reason: String(reason) });
@@ -133,6 +142,7 @@ function Shell(): JSX.Element {
         workspacePath: result.workspace_path, workspaceShape: result.workspace_shape,
         status: status as "parked" | "running" | "interrupted" | "ended",
       });
+      refreshTranscript(paneId, result.session_id);
     }).catch((reason) => {
       dispatch({ type: "SESSION_RESUME_ERR", paneId, requestId, reason: String(reason) });
     });

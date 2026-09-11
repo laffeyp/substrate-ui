@@ -5,6 +5,14 @@ export type PaneStatus = "unbound" | "parked" | "running" | "interrupted" | "end
 
 export type WorkspaceShape = "flat" | "worktree" | "isolate";
 
+export interface TranscriptRow {
+  seq: number;
+  kind: string;
+  producer_kind: string;
+  summary: string;
+  turn_index: number | null;
+}
+
 export interface Pane {
   id: string;                       // uuid4 hex 12-char
   windowId: string;
@@ -22,6 +30,8 @@ export interface Pane {
   workspacePath: string | null;
   workspaceShape: WorkspaceShape | null;
   promptDraft: string;              // never emitted; text_length is (privacy)
+  transcriptRows: TranscriptRow[];
+  transcriptLastSeq: number;        // highest envelope seq the shell has rendered
   // Later sprints extend: lens, reveal, surface, find, header_popover, etc.
 }
 

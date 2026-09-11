@@ -256,6 +256,55 @@ def op_session_resume(payload: dict) -> dict:
     }
 
 
+_VISIBLE_KINDS = frozenset({
+    "UserMessage", "ModelReply", "Park", "SessionEnded", "SessionWarning",
+    "PromptFragment", "TranscriptCompacted", "RateLimitedWaiting",
+    "ToolCall", "ToolResult",
+    "ProducerFailed", "PredicateQuarantined", "ProducerEmittedInvalidEvent",
+})
+
+
+def op_record_read(payload: dict) -> dict:
+    """Return the ordered envelopes for a session's record. Only envelopes
+    whose `kind` names a user-visible beat come back; framework brackets
+    (RunStarted, ProducerStarted, TriggerFired, etc.) are elided."""
+    from substrate import api  # type: ignore[import-not-found]
+    reg = _registry()
+    session_id = payload.get("session_id", "")
+    manifest = reg.get(session_id)  # type: ignore[attr-defined]
+    if manifest is None:
+        return {"__error__": True, "reason": "not_found"}
+    root = Path(manifest.record_root)
+    out = []
+    try:
+        for env in api.read_record(root):
+            kind = env.get("kind", "")
+            if kind not in _VISIBLE_KINDS:
+                continue
+            producer = env.get("producer") or {}
+            producer_kind = producer.get("kind") if isinstance(producer, dict) else None
+            pl = env.get("payload") or {}
+            summary = ""
+            if kind == "UserMessage":
+                summary = str(pl.get("assembled_prompt", ""))[:200]
+            elif kind == "ModelReply":
+                summary = str(pl.get("text", ""))[:200]
+            elif kind == "Park":
+                summary = str(pl.get("reason", ""))
+            elif kind == "SessionEnded":
+                summary = str(pl.get("reason", ""))
+            out.append({
+                "seq": int(env.get("seq", -1)),
+                "kind": kind,
+                "producer_kind": producer_kind or "?",
+                "summary": summary,
+                "turn_index": pl.get("turn_index") if isinstance(pl, dict) else None,
+            })
+    except Exception as e:  # noqa: BLE001
+        return {"__error__": True, "reason": f"read_error:{e}"}
+    return {"session_id": session_id, "envelopes": out}
+
+
 def op_turn_submit(payload: dict) -> dict:
     """Submit one turn against a bound session. Returns {turn_index} on ack;
     typed failure reasons on refusal."""
@@ -461,6 +510,15 @@ def main() -> int:
                 result = op_probe_driver(msg)
                 if result.get("__error__"):
                     reply_err(rid, result.get("reason", "not_installed"))
+                else:
+                    reply_ok(rid, result)
+            except Exception as e:  # noqa: BLE001
+                reply_err(rid, f"registry_error:{e}")
+        elif op == "record_read":
+            try:
+                result = op_record_read(msg)
+                if result.get("__error__"):
+                    reply_err(rid, result.get("reason", "read_error"))
                 else:
                     reply_ok(rid, result)
             except Exception as e:  # noqa: BLE001

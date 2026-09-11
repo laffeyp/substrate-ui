@@ -38,6 +38,8 @@ export function splitPane(
     workspacePath: null,
     workspaceShape: null,
     promptDraft: "",
+    transcriptRows: [],
+    transcriptLastSeq: -1,
   };
   const updatedParent: Pane = { ...parent, splitParentId: newSplitId, ratio: 0.5 };
   const newSplit: Split = {
