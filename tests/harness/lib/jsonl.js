@@ -13,6 +13,21 @@ function harnessJsonlPath() {
   );
 }
 
+function bridgeLogPath() {
+  return path.join(os.homedir(), "Library", "Logs", "substrate-ui", "bridge.log");
+}
+
+function resetBridgeLog() {
+  const p = bridgeLogPath();
+  fs.mkdirSync(path.dirname(p), { recursive: true });
+  fs.writeFileSync(p, "");
+}
+
+function readBridgeLog() {
+  const p = bridgeLogPath();
+  return fs.existsSync(p) ? fs.readFileSync(p, "utf8") : "";
+}
+
 function resetJsonl() {
   const p = harnessJsonlPath();
   fs.mkdirSync(path.dirname(p), { recursive: true });
@@ -39,4 +54,7 @@ async function waitForEmit(kind, { timeoutMs = 5000, pollMs = 50 } = {}) {
   throw new Error(`waitForEmit(${kind}) timed out after ${timeoutMs}ms`);
 }
 
-module.exports = { harnessJsonlPath, resetJsonl, readJsonl, waitForEmit };
+module.exports = {
+  harnessJsonlPath, resetJsonl, readJsonl, waitForEmit,
+  bridgeLogPath, resetBridgeLog, readBridgeLog,
+};
