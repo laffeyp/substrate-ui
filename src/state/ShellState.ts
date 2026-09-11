@@ -90,7 +90,15 @@ export interface Pane {
   // adjacent delegate calls at the same step). Value carries the
   // walked cursor within the sibling list. Absent ⇒ folded.
   fanoutExpansions: Record<string, { walkedIndex: number }>;
-  // Later sprints extend: surface, find, header_popover, etc.
+  // Sprint 024 — inspector surface. Layer 5 mutex says at most one
+  // surface open per pane (Sprint 025+ will add records/assay/studio
+  // into the same slot). null ⇒ closed. Number ⇒ envelope seq the
+  // inspector currently displays. Same-click on the source row closes
+  // it (D22): the reducer sees the incoming seq equal the current one
+  // and fires INSPECTOR_CLOSED.
+  inspectorSeq: number | null;
+  // Later sprints extend: surface (records/assay/studio),
+  // find, header_popover, etc.
 }
 
 export interface Split {

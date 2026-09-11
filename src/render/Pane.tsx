@@ -5,7 +5,7 @@
 import { Pane as PaneModel, WorkspaceShape, Lens, TranscriptRow } from "@/state/ShellState";
 import { PaneStatus, RevealState, StreamLevel, StreamDir } from "@/observability/reasons";
 import { PaneHeader } from "./PaneHeader";
-import { Anchor, AnchorScope } from "./Anchor";
+import { Anchor, AnchorScope, PaneSlot, PANE_SLOT_ORDER } from "./Anchor";
 import { UnboundPanePicker } from "./UnboundPanePicker";
 import { Prompt } from "./Prompt";
 import { RevealShell } from "./RevealShell";
@@ -18,6 +18,7 @@ import { TranscriptDelegateRow } from "./TranscriptDelegateRow";
 import { TranscriptDelegateExpanded } from "./TranscriptDelegateExpanded";
 import { TranscriptDelegateRefused } from "./TranscriptDelegateRefused";
 import { TranscriptFanOutList } from "./TranscriptFanOutList";
+import { Inspector } from "./Inspector";
 import { detectFanoutGroups } from "@/reducer/ShellReducer";
 
 interface Props {
@@ -43,6 +44,7 @@ interface Props {
   onFanoutExpand?: (paneId: string, leaderToolCallId: string) => void;
   onFanoutWalk?: (paneId: string, leaderToolCallId: string, toIndex: number, siblingCount: number) => void;
   onFanoutCollapse?: (paneId: string, leaderToolCallId: string) => void;
+  onInspectorToggle?: (paneId: string, envelopeSeq: number, envelopeKind: string, sourceIsStream: boolean) => void;
 }
 
 const ROW_COLORS: Record<string, string> = {
@@ -64,10 +66,9 @@ const ROW_GLYPHS: Record<string, string> = {
 function rowColor(kind: string): string { return ROW_COLORS[kind] ?? "#5f636b"; }
 function rowGlyph(kind: string): string { return ROW_GLYPHS[kind] ?? "*"; }
 
-const PER_PANE_SLOTS = [
-  "focus", "status", "reveal", "lens", "level", "dir",
-  "descent", "surface", "find", "inspect", "header_popover",
-] as const;
+// PER_PANE_SLOTS is the render order — same list as Layer 7's
+// PANE_SLOT_ORDER, sourced from the generated anchors table.
+const PER_PANE_SLOTS = PANE_SLOT_ORDER;
 
 const S = {
   frame: { position: "relative" as const, display: "flex" as const,
@@ -79,9 +80,9 @@ const S = {
   body: { flex: 1, padding: "24px 32px", overflow: "auto" as const },
 };
 
-function initialByte(slot: string, pane: PaneModel): number {
-  if (slot === "focus") return pane.focused ? 255 : 128;
-  if (slot === "status") {
+function initialByte(slot: (typeof PANE_SLOT_ORDER)[number], pane: PaneModel): number {
+  if (slot === PaneSlot.FOCUS) return pane.focused ? 255 : 128;
+  if (slot === PaneSlot.STATUS) {
     switch (pane.status) {
       case PaneStatus.UNBOUND: return 0;
       case PaneStatus.PARKED: return 64;
@@ -90,8 +91,8 @@ function initialByte(slot: string, pane: PaneModel): number {
       case PaneStatus.ENDED: return 32;
     }
   }
-  if (slot === "reveal") return pane.reveal === RevealState.REVEAL ? 128 : 0;
-  if (slot === "lens") {
+  if (slot === PaneSlot.REVEAL) return pane.reveal === RevealState.REVEAL ? 128 : 0;
+  if (slot === PaneSlot.LENS) {
     switch (pane.lens) {
       case Lens.STREAM_GRAPH: return 0;
       case Lens.IO:          return 64;
@@ -99,13 +100,17 @@ function initialByte(slot: string, pane: PaneModel): number {
       case Lens.SCENE:        return 192;
     }
   }
-  if (slot === "level") return pane.streamLevel === StreamLevel.APP ? 255 : 0;
-  if (slot === "dir")   return pane.streamDir === StreamDir.SIDE ? 255 : 0;
-  if (slot === "descent") return pane.descentStack.length; // 0 · 1 · 2 per Layer 7
+  if (slot === PaneSlot.LEVEL) return pane.streamLevel === StreamLevel.APP ? 255 : 0;
+  if (slot === PaneSlot.DIR)   return pane.streamDir === StreamDir.SIDE ? 255 : 0;
+  if (slot === PaneSlot.DESCENT) return pane.descentStack.length; // 0 · 1 · 2 per Layer 7
+  if (slot === PaneSlot.INSPECT) {
+    // Layer 7: low byte of selected seq (0..255) · byte 0 when closed.
+    return pane.inspectorSeq === null ? 0 : pane.inspectorSeq & 0xff;
+  }
   return 0;
 }
 
-export function Pane({ pane, onFocus, onDragStart, onClose, onPickerText, onPickerWalk, onPickerCommit, onResume, onPromptText, onPromptLengthChanged, onPromptSubmit, onRevealToggle, onLensSwitch, onStreamLevelToggle, onStreamDirToggle, onRevealFocusToggle, onDelegateExpandToggle, onDescend, onDescentExit, onFanoutExpand, onFanoutWalk, onFanoutCollapse }: Props): JSX.Element {
+export function Pane({ pane, onFocus, onDragStart, onClose, onPickerText, onPickerWalk, onPickerCommit, onResume, onPromptText, onPromptLengthChanged, onPromptSubmit, onRevealToggle, onLensSwitch, onStreamLevelToggle, onStreamDirToggle, onRevealFocusToggle, onDelegateExpandToggle, onDescend, onDescentExit, onFanoutExpand, onFanoutWalk, onFanoutCollapse, onInspectorToggle }: Props): JSX.Element {
   const depth = pane.descentStack.length;
   const inDescent = depth > 0;
   const activeRows: TranscriptRow[] = inDescent
@@ -127,6 +132,7 @@ export function Pane({ pane, onFocus, onDragStart, onClose, onPickerText, onPick
       style={S.frame}
     >
       <PaneHeader pane={pane} onDragStart={onDragStart} onClose={onClose} onRevealToggle={onRevealToggle} />
+      <Inspector pane={pane} />
       <div style={S.body}>
         {pane.status === PaneStatus.UNBOUND && onPickerText && onPickerWalk && onPickerCommit && onResume ? (
           <UnboundPanePicker
@@ -223,9 +229,13 @@ export function Pane({ pane, onFocus, onDragStart, onClose, onPickerText, onPick
                       key={row.seq}
                       data-testid={`transcript-row-${pane.id}-${row.seq}`}
                       data-kind={row.kind}
+                      onClick={onInspectorToggle
+                        ? () => onInspectorToggle(pane.id, row.seq, row.kind, false)
+                        : undefined}
                       style={{
                         padding: "3px 6px", borderBottom: "1px solid #23262a",
                         fontSize: 12, whiteSpace: "pre-wrap" as const, wordBreak: "break-word" as const,
+                        cursor: onInspectorToggle ? "pointer" : "default",
                       }}
                     >
                       <span className="label" style={{ color: rowColor(row.kind), marginRight: 6 }}>
@@ -248,7 +258,7 @@ export function Pane({ pane, onFocus, onDragStart, onClose, onPickerText, onPick
           <div className="label">substrate — pane {pane.id.slice(0, 6)}</div>
         )}
       </div>
-      {PER_PANE_SLOTS.map((slot) => (
+      {PER_PANE_SLOTS.map((slot: (typeof PANE_SLOT_ORDER)[number]) => (
         <Anchor
           key={slot}
           id={`anchor-pane-${pane.id}-${slot}`}

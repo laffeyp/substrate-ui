@@ -65,6 +65,7 @@ export const ActionType = {
   FANOUT_EXPAND: "FANOUT_EXPAND",
   FANOUT_WALK: "FANOUT_WALK",
   FANOUT_COLLAPSE: "FANOUT_COLLAPSE",
+  INSPECTOR_TOGGLE: "INSPECTOR_TOGGLE",
 } as const;
 export type ActionTypeT = typeof ActionType[keyof typeof ActionType];
 
@@ -124,6 +125,7 @@ export type Action =
   | { type: typeof ActionType.FANOUT_EXPAND; paneId: string; leaderToolCallId: string }
   | { type: typeof ActionType.FANOUT_WALK; paneId: string; leaderToolCallId: string; toIndex: number; siblingCount: number }
   | { type: typeof ActionType.FANOUT_COLLAPSE; paneId: string; leaderToolCallId: string }
+  | { type: typeof ActionType.INSPECTOR_TOGGLE; paneId: string; envelopeSeq: number; envelopeKind: string; sourceIsStream: boolean }
   ;
 
 // Layer 5 (delegate.py:353) caps descent at depth 2. The reducer
@@ -478,6 +480,46 @@ export function reduce(state: ShellState, action: Action): Step {
         emissions: [{ kind: Tag.FAN_OUT_INLINE_COLLAPSED, payload: {
           pane_id: action.paneId, tool_call_id: action.leaderToolCallId,
         }}],
+      };
+    }
+    case ActionType.INSPECTOR_TOGGLE: {
+      const pane = state.panes[action.paneId];
+      if (!pane) return { state, emissions: [] };
+      const cur = pane.inspectorSeq;
+      const closing = cur === action.envelopeSeq;
+      const emissions: Emission[] = [];
+      // Sprint 024 — STREAM_ROW_CLICKED fires same-step (Layer 4) when
+      // the click source is a stream row. Fired FIRST so a subscriber
+      // reading the trace sees the click before the surface open.
+      if (action.sourceIsStream) {
+        emissions.push({ kind: Tag.STREAM_ROW_CLICKED, payload: {
+          pane_id: action.paneId,
+          envelope_seq: action.envelopeSeq,
+          envelope_kind: action.envelopeKind,
+        }});
+      }
+      if (closing) {
+        emissions.push({ kind: Tag.INSPECTOR_CLOSED, payload: {
+          pane_id: action.paneId, envelope_seq: action.envelopeSeq,
+        }});
+        return {
+          state: { ...state, panes: { ...state.panes, [action.paneId]: { ...pane, inspectorSeq: null } } },
+          emissions,
+        };
+      }
+      // Layer 5 mutex — at most one surface open per pane. Opening a
+      // new inspector on a different seq closes the previous first.
+      if (cur !== null) {
+        emissions.push({ kind: Tag.INSPECTOR_CLOSED, payload: {
+          pane_id: action.paneId, envelope_seq: cur,
+        }});
+      }
+      emissions.push({ kind: Tag.INSPECTOR_OPENED, payload: {
+        pane_id: action.paneId, envelope_seq: action.envelopeSeq,
+      }});
+      return {
+        state: { ...state, panes: { ...state.panes, [action.paneId]: { ...pane, inspectorSeq: action.envelopeSeq } } },
+        emissions,
       };
     }
     case ActionType.TRANSCRIPT_ROWS_LOADED: {
@@ -873,6 +915,7 @@ function boot(): Step {
     descentStack: [],
     refusedToolCallIds: new Set(),
     fanoutExpansions: {},
+    inspectorSeq: null,
   };
   const window: Window = { id: windowId, rootId: paneId };
   const next: ShellState = {

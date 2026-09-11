@@ -50,6 +50,7 @@ export function splitPane(
     descentStack: [],
     refusedToolCallIds: new Set(),
     fanoutExpansions: {},
+    inspectorSeq: null,
   };
   const updatedParent: Pane = { ...parent, splitParentId: newSplitId, ratio: 0.5 };
   const newSplit: Split = {

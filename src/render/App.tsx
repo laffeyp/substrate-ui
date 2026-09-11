@@ -10,7 +10,7 @@ import { ShellState, TranscriptRow } from "@/state/ShellState";
 import { emit } from "@/observability/Emitter";
 import { Tag } from "@/observability/tags";
 import { WindowFrame } from "./WindowFrame";
-import { Anchor, AnchorScope } from "./Anchor";
+import { Anchor, AnchorScope, AppSlot } from "./Anchor";
 import { DragLayer } from "./DragLayer";
 import { Zone, Axis } from "@/state/SplitTree";
 import { WorkspaceShape } from "@/state/ShellState";
@@ -277,6 +277,8 @@ function Shell(): JSX.Element {
               dispatch({ type: ActionType.FANOUT_WALK, paneId, leaderToolCallId, toIndex, siblingCount }),
             onFanoutCollapse: (paneId, leaderToolCallId) =>
               dispatch({ type: ActionType.FANOUT_COLLAPSE, paneId, leaderToolCallId }),
+            onInspectorToggle: (paneId, envelopeSeq, envelopeKind, sourceIsStream) =>
+              dispatch({ type: ActionType.INSPECTOR_TOGGLE, paneId, envelopeSeq, envelopeKind, sourceIsStream }),
           }}
         />
       )}
@@ -312,12 +314,12 @@ function Shell(): JSX.Element {
           onEnd={startSessionEnd}
         />
       )}
-      <Anchor id="anchor-dialog"        scope={AnchorScope.APP} slot="dialog"        byte={0} />
-      <Anchor id="anchor-window-strip"  scope={AnchorScope.APP} slot="window-strip"  byte={0} />
-      <Anchor id="anchor-bridge"        scope={AnchorScope.APP} slot="bridge"        byte={bridgeByte} />
+      <Anchor id={`anchor-${AppSlot.DIALOG}`}       scope={AnchorScope.APP} slot={AppSlot.DIALOG}        byte={0} />
+      <Anchor id={`anchor-${AppSlot.WINDOW_STRIP}`} scope={AnchorScope.APP} slot={AppSlot.WINDOW_STRIP}  byte={0} />
+      <Anchor id={`anchor-${AppSlot.BRIDGE}`}       scope={AnchorScope.APP} slot={AppSlot.BRIDGE}        byte={bridgeByte} />
       {substrateVersion && <span data-testid="substrate-version" style={{ display: "none" }}>{substrateVersion}</span>}
-      <Anchor id="anchor-last-tag"      scope={AnchorScope.APP} slot="last-tag"      byte={0} />
-      <Anchor id="anchor-heartbeat"     scope={AnchorScope.APP} slot="heartbeat"     byte={0} />
+      <Anchor id={`anchor-${AppSlot.LAST_TAG}`}     scope={AnchorScope.APP} slot={AppSlot.LAST_TAG}      byte={0} />
+      <Anchor id={`anchor-${AppSlot.HEARTBEAT}`}    scope={AnchorScope.APP} slot={AppSlot.HEARTBEAT}     byte={0} />
     </>
   );
 }
