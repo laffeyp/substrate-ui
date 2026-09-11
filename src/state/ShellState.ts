@@ -4,8 +4,9 @@
 // Canonical enums live in observability/reasons.ts (they read from
 // signals/*.json). Re-exported here for the callers already importing from
 // ShellState — no drift.
-export { PaneStatus, WorkspaceShape, isPaneStatus, isWorkspaceShape } from "@/observability/reasons";
-import type { PaneStatus, WorkspaceShape } from "@/observability/reasons";
+export { PaneStatus, WorkspaceShape, isPaneStatus, isWorkspaceShape,
+  StreamLevel, StreamDir, isStreamLevel, isStreamDir } from "@/observability/reasons";
+import type { PaneStatus, WorkspaceShape, StreamLevel, StreamDir } from "@/observability/reasons";
 
 export type Lens = "stream+graph" | "i/o" | "structure" | "scene";
 export const LENSES: readonly Lens[] = ["stream+graph", "i/o", "structure", "scene"] as const;
@@ -51,7 +52,9 @@ export interface Pane {
   transcriptLastSeq: number;        // highest envelope seq the shell has rendered
   reveal: "terminal" | "reveal";    // Sprint 016 — Layer 5 mutex: at most one open reveal-instance per pane
   lens: Lens;                        // Sprint 017 — current lens inside RevealShell
-  // Later sprints extend: lens, reveal, surface, find, header_popover, etc.
+  streamLevel: StreamLevel;          // Sprint 018 — all: every producer; app: filter framework noise
+  streamDir: StreamDir;              // Sprint 018 — down: parent→child temporal; side: peer structural
+  // Later sprints extend: surface, find, header_popover, etc.
 }
 
 export interface Split {

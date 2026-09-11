@@ -85,6 +85,29 @@ export const RevealState = {
   TERMINAL: "terminal", REVEAL: "reveal",
 } as const satisfies Record<string, RevealState>;
 
+// Sprint 018 — lens level + direction. Both are two-state; the enum
+// values come from Layer 2's ratified `to` enums on STREAM_LEVEL_TOGGLED
+// and STREAM_DIR_TOGGLED, not hand-copied.
+export const STREAM_LEVELS = enumOf("STREAM_LEVEL_TOGGLED", "to") as
+  readonly ["all", "app"];
+export type StreamLevel = typeof STREAM_LEVELS[number];
+export const StreamLevel = {
+  ALL: "all", APP: "app",
+} as const satisfies Record<string, StreamLevel>;
+export function isStreamLevel(x: unknown): x is StreamLevel {
+  return typeof x === "string" && (STREAM_LEVELS as readonly string[]).includes(x);
+}
+
+export const STREAM_DIRS = enumOf("STREAM_DIR_TOGGLED", "to") as
+  readonly ["down", "side"];
+export type StreamDir = typeof STREAM_DIRS[number];
+export const StreamDir = {
+  DOWN: "down", SIDE: "side",
+} as const satisfies Record<string, StreamDir>;
+export function isStreamDir(x: unknown): x is StreamDir {
+  return typeof x === "string" && (STREAM_DIRS as readonly string[]).includes(x);
+}
+
 // --- Bridge-invented reason enums (from bridge-reasons.json) ------------
 
 interface BridgeReasons {
