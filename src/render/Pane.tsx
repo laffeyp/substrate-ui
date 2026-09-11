@@ -16,6 +16,9 @@ import {
 } from "@/observability/envelope-kinds";
 import { TranscriptDelegateRow } from "./TranscriptDelegateRow";
 import { TranscriptDelegateExpanded } from "./TranscriptDelegateExpanded";
+import { TranscriptDelegateRefused } from "./TranscriptDelegateRefused";
+import { TranscriptFanOutList } from "./TranscriptFanOutList";
+import { detectFanoutGroups } from "@/reducer/ShellReducer";
 
 interface Props {
   pane: PaneModel;
@@ -37,6 +40,9 @@ interface Props {
   onDelegateExpandToggle?: (paneId: string, toolCallId: string, childRecordRoot: string | null) => void;
   onDescend?: (paneId: string, toolCallId: string, childRecordRoot: string | null) => void;
   onDescentExit?: (paneId: string) => void;
+  onFanoutExpand?: (paneId: string, leaderToolCallId: string) => void;
+  onFanoutWalk?: (paneId: string, leaderToolCallId: string, toIndex: number, siblingCount: number) => void;
+  onFanoutCollapse?: (paneId: string, leaderToolCallId: string) => void;
 }
 
 const ROW_COLORS: Record<string, string> = {
@@ -99,12 +105,19 @@ function initialByte(slot: string, pane: PaneModel): number {
   return 0;
 }
 
-export function Pane({ pane, onFocus, onDragStart, onClose, onPickerText, onPickerWalk, onPickerCommit, onResume, onPromptText, onPromptLengthChanged, onPromptSubmit, onRevealToggle, onLensSwitch, onStreamLevelToggle, onStreamDirToggle, onRevealFocusToggle, onDelegateExpandToggle, onDescend, onDescentExit }: Props): JSX.Element {
+export function Pane({ pane, onFocus, onDragStart, onClose, onPickerText, onPickerWalk, onPickerCommit, onResume, onPromptText, onPromptLengthChanged, onPromptSubmit, onRevealToggle, onLensSwitch, onStreamLevelToggle, onStreamDirToggle, onRevealFocusToggle, onDelegateExpandToggle, onDescend, onDescentExit, onFanoutExpand, onFanoutWalk, onFanoutCollapse }: Props): JSX.Element {
   const depth = pane.descentStack.length;
   const inDescent = depth > 0;
   const activeRows: TranscriptRow[] = inDescent
     ? pane.descentStack[depth - 1].rows
     : pane.transcriptRows;
+  const fanoutGroups = detectFanoutGroups(activeRows);
+  const fanoutLeaderSeq = new Map<number, typeof fanoutGroups[number]>();
+  const suppressedSeqs = new Set<number>();
+  for (const g of fanoutGroups) {
+    fanoutLeaderSeq.set(g.leaderSeq, g);
+    for (const s of g.siblingSeqs) if (s !== g.leaderSeq) suppressedSeqs.add(s);
+  }
   return (
     <div
       data-testid={`pane-${pane.id}`}
@@ -157,13 +170,30 @@ export function Pane({ pane, onFocus, onDragStart, onClose, onPickerText, onPick
                 </div>
               ) : (
                 activeRows.map((row) => {
+                  if (suppressedSeqs.has(row.seq)) return null;
+                  const rowDepth = Math.min(depth + 1, 2);
+                  const fanoutGroup = fanoutLeaderSeq.get(row.seq);
+                  if (fanoutGroup) {
+                    const leaderTcId = fanoutGroup.leaderToolCallId;
+                    const expansion = pane.fanoutExpansions[leaderTcId];
+                    return (
+                      <TranscriptFanOutList
+                        key={row.seq}
+                        paneId={pane.id}
+                        group={fanoutGroup}
+                        expanded={!!expansion}
+                        walkedIndex={expansion?.walkedIndex ?? 0}
+                        depth={rowDepth}
+                        onExpand={onFanoutExpand}
+                        onWalk={onFanoutWalk}
+                        onCollapse={onFanoutCollapse}
+                      />
+                    );
+                  }
                   if (row.kind === TOOL_CALL && row.tool_name === TOOL_NAME_DELEGATE) {
                     const tcId = row.tool_call_id ?? "";
                     const expanded = !inDescent && tcId in pane.delegateExpansions;
-                    // Row depth = 1 when at base (children live under
-                    // this pane's session), 2 when already inside a
-                    // depth-1 descent (grandchildren live under childA).
-                    const rowDepth = Math.min(depth + 1, 2);
+                    const refused = pane.refusedToolCallIds.has(tcId);
                     return (
                       <div key={row.seq}>
                         <TranscriptDelegateRow
@@ -174,6 +204,9 @@ export function Pane({ pane, onFocus, onDragStart, onClose, onPickerText, onPick
                           onExpandToggle={inDescent ? undefined : onDelegateExpandToggle}
                           onDescend={onDescend}
                         />
+                        {refused ? (
+                          <TranscriptDelegateRefused paneId={pane.id} toolCallId={tcId} />
+                        ) : null}
                         {expanded ? (
                           <TranscriptDelegateExpanded
                             paneId={pane.id}

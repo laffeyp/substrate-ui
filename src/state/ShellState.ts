@@ -75,6 +75,15 @@ export interface Pane {
   // loaded for that record. Layer 5 caps depth at 2 (delegate.py
   // max_depth); the reducer refuses a third push.
   descentStack: Array<{ toolCallId: string; childRecordRoot: string; rows: TranscriptRow[] }>;
+  // Sprint 023 — depth-cap refusal. Tool-call ids whose descent attempt
+  // was refused because the stack was already at DESCENT_MAX_DEPTH. The
+  // delegate row for each id renders a "refused (depth cap 2)" affordance.
+  refusedToolCallIds: Set<string>;
+  // Sprint 023 — fan-out expand state. Key = the leader tool_call_id
+  // of a fan-out batch (the first delegate ToolCall in a run of >= 2
+  // adjacent delegate calls at the same step). Value carries the
+  // walked cursor within the sibling list. Absent ⇒ folded.
+  fanoutExpansions: Record<string, { walkedIndex: number }>;
   // Later sprints extend: surface, find, header_popover, etc.
 }
 

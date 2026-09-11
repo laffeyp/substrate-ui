@@ -58,6 +58,9 @@ export const ActionType = {
   DESCENT_ENTER: "DESCENT_ENTER",
   DESCENT_ROWS_LOADED: "DESCENT_ROWS_LOADED",
   DESCENT_EXIT: "DESCENT_EXIT",
+  FANOUT_EXPAND: "FANOUT_EXPAND",
+  FANOUT_WALK: "FANOUT_WALK",
+  FANOUT_COLLAPSE: "FANOUT_COLLAPSE",
 } as const;
 export type ActionTypeT = typeof ActionType[keyof typeof ActionType];
 
@@ -114,12 +117,54 @@ export type Action =
   | { type: typeof ActionType.DESCENT_ENTER; paneId: string; toolCallId: string; childRecordRoot: string }
   | { type: typeof ActionType.DESCENT_ROWS_LOADED; paneId: string; depth: number; rows: TranscriptRow[] }
   | { type: typeof ActionType.DESCENT_EXIT; paneId: string }
+  | { type: typeof ActionType.FANOUT_EXPAND; paneId: string; leaderToolCallId: string }
+  | { type: typeof ActionType.FANOUT_WALK; paneId: string; leaderToolCallId: string; toIndex: number; siblingCount: number }
+  | { type: typeof ActionType.FANOUT_COLLAPSE; paneId: string; leaderToolCallId: string }
   ;
 
 // Layer 5 (delegate.py:353) caps descent at depth 2. The reducer
 // refuses a third push; Sprint 023 wires the DELEGATE_DEPTH_CAP_REFUSED
 // signal at the refusal site.
 export const DESCENT_MAX_DEPTH = 2 as const;
+
+// Sprint 023 — fan-out detection. A run of >= 2 consecutive delegate
+// ToolCall envelopes at the same step forms a fan-out batch. The first
+// sibling is the batch's leader (owns the tool_call_id used by
+// TRANSCRIPT_FANOUT_LINE_RENDERED). Returns an array of {leaderSeq,
+// leaderToolCallId, siblingSeqs, siblingToolCallIds}.
+export interface FanoutGroup {
+  leaderSeq: number;
+  leaderToolCallId: string;
+  siblingSeqs: number[];
+  siblingToolCallIds: string[];
+}
+export function detectFanoutGroups(rows: readonly TranscriptRow[]): FanoutGroup[] {
+  const groups: FanoutGroup[] = [];
+  let i = 0;
+  const isDelegate = (r: TranscriptRow): boolean =>
+    r.kind === TOOL_CALL && r.tool_name === TOOL_NAME_DELEGATE && !!r.tool_call_id;
+  while (i < rows.length) {
+    if (!isDelegate(rows[i])) { i++; continue; }
+    let j = i + 1;
+    while (j < rows.length && isDelegate(rows[j])) j++;
+    if (j - i >= 2) {
+      const siblingSeqs: number[] = [];
+      const siblingToolCallIds: string[] = [];
+      for (let k = i; k < j; k++) {
+        siblingSeqs.push(rows[k].seq);
+        siblingToolCallIds.push(rows[k].tool_call_id!);
+      }
+      groups.push({
+        leaderSeq: rows[i].seq,
+        leaderToolCallId: rows[i].tool_call_id!,
+        siblingSeqs,
+        siblingToolCallIds,
+      });
+    }
+    i = j;
+  }
+  return groups;
+}
 
 export interface Emission {
   kind: string;
@@ -331,8 +376,21 @@ export function reduce(state: ShellState, action: Action): Step {
       const pane = state.panes[action.paneId];
       if (!pane) return { state, emissions: [] };
       if (pane.descentStack.length >= DESCENT_MAX_DEPTH) {
-        // Cap refusal — Sprint 023 emits DELEGATE_DEPTH_CAP_REFUSED here.
-        return { state, emissions: [] };
+        // Sprint 023 — depth cap refusal. Layer 2 pins depth to 2
+        // (const). Same-step Layer-5 companion when the refusal is
+        // triggered by an at-cap descent attempt. The pane records
+        // the refused tool_call_id so the row renders its refusal
+        // affordance ("delegate refused (depth cap 2)") on next paint.
+        const refused = new Set(pane.refusedToolCallIds);
+        refused.add(action.toolCallId);
+        return {
+          state: { ...state, panes: { ...state.panes, [action.paneId]: {
+            ...pane, refusedToolCallIds: refused,
+          } } },
+          emissions: [{ kind: "DELEGATE_DEPTH_CAP_REFUSED", payload: {
+            pane_id: action.paneId, tool_call_id: action.toolCallId, depth: DESCENT_MAX_DEPTH,
+          }}],
+        };
       }
       const nextStack = [
         ...pane.descentStack,
@@ -371,6 +429,53 @@ export function reduce(state: ShellState, action: Action): Step {
         }}],
       };
     }
+    case ActionType.FANOUT_EXPAND: {
+      const pane = state.panes[action.paneId];
+      if (!pane) return { state, emissions: [] };
+      if (action.leaderToolCallId in pane.fanoutExpansions) return { state, emissions: [] };
+      return {
+        state: { ...state, panes: { ...state.panes, [action.paneId]: {
+          ...pane,
+          fanoutExpansions: { ...pane.fanoutExpansions,
+            [action.leaderToolCallId]: { walkedIndex: 0 } },
+        } } },
+        emissions: [{ kind: "FAN_OUT_INLINE_EXPANDED", payload: {
+          pane_id: action.paneId, tool_call_id: action.leaderToolCallId,
+        }}],
+      };
+    }
+    case ActionType.FANOUT_WALK: {
+      const pane = state.panes[action.paneId];
+      if (!pane) return { state, emissions: [] };
+      const cur = pane.fanoutExpansions[action.leaderToolCallId];
+      if (!cur) return { state, emissions: [] };
+      const clamped = ((action.toIndex % action.siblingCount) + action.siblingCount) % action.siblingCount;
+      if (clamped === cur.walkedIndex) return { state, emissions: [] };
+      return {
+        state: { ...state, panes: { ...state.panes, [action.paneId]: {
+          ...pane,
+          fanoutExpansions: { ...pane.fanoutExpansions,
+            [action.leaderToolCallId]: { walkedIndex: clamped } },
+        } } },
+        emissions: [{ kind: "FAN_OUT_INLINE_WALKED", payload: {
+          pane_id: action.paneId, tool_call_id: action.leaderToolCallId,
+          from_index: cur.walkedIndex, to_index: clamped,
+        }}],
+      };
+    }
+    case ActionType.FANOUT_COLLAPSE: {
+      const pane = state.panes[action.paneId];
+      if (!pane) return { state, emissions: [] };
+      if (!(action.leaderToolCallId in pane.fanoutExpansions)) return { state, emissions: [] };
+      const next = { ...pane.fanoutExpansions };
+      delete next[action.leaderToolCallId];
+      return {
+        state: { ...state, panes: { ...state.panes, [action.paneId]: { ...pane, fanoutExpansions: next } } },
+        emissions: [{ kind: "FAN_OUT_INLINE_COLLAPSED", payload: {
+          pane_id: action.paneId, tool_call_id: action.leaderToolCallId,
+        }}],
+      };
+    }
     case ActionType.TRANSCRIPT_ROWS_LOADED: {
       const pane = state.panes[action.paneId];
       if (!pane) return { state, emissions: [] };
@@ -378,6 +483,13 @@ export function reduce(state: ShellState, action: Action): Step {
       if (newRows.length === 0) return { state, emissions: [] };
       const emissions: Emission[] = [];
       let maxSeq = pane.transcriptLastSeq;
+      // Sprint 023 — fan-out detection over the whole loaded set.
+      // Emits TRANSCRIPT_FANOUT_LINE_RENDERED once per group of >= 2
+      // adjacent delegate ToolCalls; the individual delegate emits
+      // for each sibling still fire below.
+      const fanoutGroups = detectFanoutGroups(action.rows);
+      const inFanoutGroup = new Set<number>();
+      for (const g of fanoutGroups) for (const seq of g.siblingSeqs) inFanoutGroup.add(seq);
       for (const r of newRows) {
         if (r.kind === "Park") {
           const parkReason: ParkReason = isParkReason(r.park_reason)
@@ -435,6 +547,15 @@ export function reduce(state: ShellState, action: Action): Step {
           }});
         }
         if (r.seq > maxSeq) maxSeq = r.seq;
+      }
+      // Same-step fan-out line — one per group leader.
+      for (const g of fanoutGroups) {
+        emissions.push({ kind: "TRANSCRIPT_FANOUT_LINE_RENDERED", payload: {
+          pane_id: action.paneId,
+          envelope_seq: g.leaderSeq,
+          tool_call_id: g.leaderToolCallId,
+          children_count: g.siblingToolCallIds.length,
+        }});
       }
       return {
         state: {
@@ -724,6 +845,8 @@ function boot(): Step {
     revealFocus: RevealFocus.TRANSCRIPT,
     delegateExpansions: {},
     descentStack: [],
+    refusedToolCallIds: new Set(),
+    fanoutExpansions: {},
   };
   const window: Window = { id: windowId, rootId: paneId };
   const next: ShellState = {
