@@ -49,4 +49,24 @@ function assertLayer2ShapesInTrace(emits) {
   }
 }
 
-module.exports = { assertLayer2ShapesInTrace };
+// Vocabulary-check: every emitted tag name must live in Layer 1 v0.1's
+// ratified `tags[].name` list. Sourced from signals/0.1.json — the same
+// authority the shell's Emitter reads. Any drift between the shell and
+// this check is impossible: both read the JSON.
+let cachedVocab = null;
+function vocab() {
+  if (cachedVocab) return cachedVocab;
+  const data = JSON.parse(fs.readFileSync(path.join(REPO, "signals/0.1.json"), "utf8"));
+  cachedVocab = new Set(data.layer_1_lexical.tags.map((t) => t.name));
+  return cachedVocab;
+}
+
+function assertNoInventedTags(emits) {
+  const v = vocab();
+  const invented = emits.map((e) => e.kind).filter((k) => !v.has(k));
+  if (invented.length) {
+    throw new Error(`invented tag names in the trace: ${[...new Set(invented)].join(", ")}`);
+  }
+}
+
+module.exports = { assertLayer2ShapesInTrace, assertNoInventedTags };

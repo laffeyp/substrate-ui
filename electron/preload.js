@@ -37,9 +37,11 @@ contextBridge.exposeInMainWorld("substrate", {
   onDead:    (cb) => { deadListeners.add(cb); return () => deadListeners.delete(cb); },
 });
 
-// SUBSTRATE_HARNESS=1 → expose the JSONL sink to the renderer's Emitter.
+// SUBSTRATE_HARNESS=1 → expose the JSONL sink to the renderer's Emitter,
+// plus an optional default-driver override for real-model harnesses.
 if (process.env.SUBSTRATE_HARNESS === "1") {
   contextBridge.exposeInMainWorld("__substrateHarness", {
     append: (sig) => ipcRenderer.send("harness:emit", sig),
+    defaultDriver: process.env.SUBSTRATE_HARNESS_DRIVER || null,
   });
 }

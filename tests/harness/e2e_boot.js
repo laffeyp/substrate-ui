@@ -17,7 +17,7 @@ const fs = require("node:fs");
 const zlib = require("node:zlib");
 const os = require("node:os");
 const { runTonalChecks } = require("./tonal-checks");
-const { assertLayer2ShapesInTrace } = require("./payload-check");
+const { assertLayer2ShapesInTrace, assertNoInventedTags } = require("./payload-check");
 
 const REPO = path.resolve(__dirname, "..", "..");
 
@@ -147,6 +147,8 @@ async function main() {
 
   // Layer 2 shape discipline: every emitted payload carries every required field.
   const allEmits = jsonl.split("\n").filter((L) => L.trim()).map((L) => JSON.parse(L));
+  try { assertNoInventedTags(allEmits); ok("zero invented tag names in the trace"); }
+  catch (e) { fails.push(e.message); }
   try { assertLayer2ShapesInTrace(allEmits); ok("Layer 2 payload shapes match required fields"); }
   catch (e) { fails.push(e.message); }
 
