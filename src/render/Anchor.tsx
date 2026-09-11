@@ -8,6 +8,15 @@
 
 import { useEffect, useRef } from "react";
 import { register, unregister, setByte } from "@/observability/AnchorPainter";
+import {
+  AppSlot, PaneSlot, APP_SLOT_ORDER, PANE_SLOT_ORDER,
+  type AppSlotName, type PaneSlotName,
+} from "@/observability/anchors";
+
+// Re-export the generated slot maps so the rest of the shell imports
+// from one place and never touches the codegen file directly.
+export { AppSlot, PaneSlot, APP_SLOT_ORDER, PANE_SLOT_ORDER };
+export type { AppSlotName, PaneSlotName };
 
 // Anchor scope: app-wide (top strip) or pane-scoped (per-pane row).
 // Sourced here as the single-source table; every caller compares
@@ -20,14 +29,8 @@ interface Props {
   byte: number;
   scope: AnchorScopeT;
   paneId?: string;
-  slot: string;
+  slot: AppSlotName | PaneSlotName;
 }
-
-const APP_SLOT_ORDER = ["dialog", "window-strip", "bridge", "last-tag", "heartbeat"] as const;
-const PANE_SLOT_ORDER = [
-  "focus", "status", "reveal", "lens", "level", "dir",
-  "descent", "surface", "find", "inspect", "header_popover",
-] as const;
 
 function paneRow(paneId: string): number {
   let h = 0;
@@ -37,10 +40,10 @@ function paneRow(paneId: string): number {
 
 function xy(props: Props): { x: number; y: number } {
   if (props.scope === AnchorScope.APP) {
-    const i = APP_SLOT_ORDER.indexOf(props.slot as (typeof APP_SLOT_ORDER)[number]);
+    const i = APP_SLOT_ORDER.indexOf(props.slot as AppSlotName);
     return { x: i >= 0 ? i : 0, y: 0 };
   }
-  const i = PANE_SLOT_ORDER.indexOf(props.slot as (typeof PANE_SLOT_ORDER)[number]);
+  const i = PANE_SLOT_ORDER.indexOf(props.slot as PaneSlotName);
   const row = props.paneId ? paneRow(props.paneId) : 0;
   return { x: 5 + (i >= 0 ? i : 0), y: row };
 }
