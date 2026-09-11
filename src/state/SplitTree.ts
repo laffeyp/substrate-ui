@@ -40,6 +40,7 @@ export function splitPane(
     promptDraft: "",
     transcriptRows: [],
     transcriptLastSeq: -1,
+    reveal: "terminal",
   };
   const updatedParent: Pane = { ...parent, splitParentId: newSplitId, ratio: 0.5 };
   const newSplit: Split = {

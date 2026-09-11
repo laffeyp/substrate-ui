@@ -16,6 +16,7 @@ export interface PaneCallbacks {
   onPromptText: (paneId: string, text: string) => void;
   onPromptLengthChanged: (paneId: string, length: number) => void;
   onPromptSubmit: (paneId: string, text: string) => void;
+  onRevealToggle: (paneId: string) => void;
 }
 
 export interface GutterCallbacks {
@@ -48,6 +49,7 @@ function Node({ id, state, gutter, pane }: { id: string; state: ShellState; gutt
         onPromptText={pane.onPromptText}
         onPromptLengthChanged={pane.onPromptLengthChanged}
         onPromptSubmit={pane.onPromptSubmit}
+        onRevealToggle={pane.onRevealToggle}
       />
     );
   }

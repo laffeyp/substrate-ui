@@ -41,6 +41,7 @@ export interface Pane {
   promptDraft: string;              // never emitted; text_length is (privacy)
   transcriptRows: TranscriptRow[];
   transcriptLastSeq: number;        // highest envelope seq the shell has rendered
+  reveal: "terminal" | "reveal";    // Sprint 016 — Layer 5 mutex: at most one open reveal-instance per pane
   // Later sprints extend: lens, reveal, surface, find, header_popover, etc.
 }
 
