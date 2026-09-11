@@ -2,6 +2,7 @@
 
 import { useRef } from "react";
 import { ShellState, Window, WorkspaceShape, Lens } from "@/state/ShellState";
+import { Axis } from "@/state/SplitTree";
 import { Pane } from "./Pane";
 import { Gutter } from "./Gutter";
 
@@ -55,10 +56,10 @@ function Node({ id, state, gutter, pane }: { id: string; state: ShellState; gutt
       />
     );
   }
-  const aStyle: React.CSSProperties = split.axis === "row"
+  const aStyle: React.CSSProperties = split.axis === Axis.ROW
     ? { position: "absolute", left: 0, top: 0, width: `${split.ratio * 100}%`, height: "100%" }
     : { position: "absolute", left: 0, top: 0, width: "100%", height: `${split.ratio * 100}%` };
-  const bStyle: React.CSSProperties = split.axis === "row"
+  const bStyle: React.CSSProperties = split.axis === Axis.ROW
     ? { position: "absolute", right: 0, top: 0, width: `${(1 - split.ratio) * 100}%`, height: "100%" }
     : { position: "absolute", left: 0, bottom: 0, width: "100%", height: `${(1 - split.ratio) * 100}%` };
   return (

@@ -23,10 +23,10 @@ const tabStyle = (active: boolean): React.CSSProperties => ({
 export function RevealShell({ pane, onLensSwitch }: Props): JSX.Element {
   const body = (() => {
     switch (pane.lens) {
-      case "stream+graph": return <StreamGraphLens pane={pane} />;
-      case "i/o":          return <IOLens pane={pane} />;
-      case "structure":    return <StructureLens pane={pane} />;
-      case "scene":        return <SceneLens pane={pane} />;
+      case Lens.STREAM_GRAPH: return <StreamGraphLens pane={pane} />;
+      case Lens.IO:          return <IOLens pane={pane} />;
+      case Lens.STRUCTURE:    return <StructureLens pane={pane} />;
+      case Lens.SCENE:        return <SceneLens pane={pane} />;
     }
   })();
   return (

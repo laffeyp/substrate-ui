@@ -1,0 +1,44 @@
+{
+  "note": "Single-source table for reason strings the bridge invents (not owned by substrate or by signals/0.1.json § layer_2). Both the Python bridge and the TypeScript renderer read this file so a rename lands in one place. Companion to signals/0.1.json v0.1 — not a vocabulary change, just a code-side constants table. Cited by REVIEW-2026-09-11-code-style-and-fake-data #6.",
+
+  "bridge_reasons": {
+    "session_create_failed": ["workspace_invalid", "name_collision", "registry_error", "timeout"],
+    "probe_driver_failed":   ["not_installed", "model_missing", "timeout"],
+    "session_resume_failed": ["not_found", "session_ended"],
+    "session_end_failed":    ["not_found", "session_already_ended", "registry_error"],
+    "session_rename_failed": ["name_collision", "invalid_name", "timeout", "registry_error"],
+    "bundle_attach_failed":  ["bundle_not_found", "registry_error", "timeout"],
+    "record_read_failed":    ["not_found", "read_error", "registry_error"],
+    "generic":               ["unknown_op", "bridge_unavailable"]
+  },
+
+  "secret_key_pattern": "key|token|secret|password",
+  "secret_key_pattern_flags": "i",
+  "secret_key_pattern_cite": "signals/0.1.json § layer_7_evidence.evidence_constraints[driver_params]",
+
+  "substrate_envelope_kinds": {
+    "note": "Mirrored from substrate.topologies.session.vocabulary + tool_loop for the TypeScript side. Python reads them directly from that module (see bridge/vocab.py). Any rename in substrate lands here in one place; grep-attributable drift.",
+    "session_started": "SessionStarted",
+    "user_message": "UserMessage",
+    "model_reply": "ModelReply",
+    "park": "Park",
+    "session_ended": "SessionEnded",
+    "session_end_requested": "SessionEndRequested",
+    "session_warning": "SessionWarning",
+    "transcript_compacted": "TranscriptCompacted",
+    "prompt_fragment": "PromptFragment",
+    "prompt_composed": "PromptComposed",
+    "tool_call": "ToolCall",
+    "tool_result": "ToolResult",
+    "rate_limited_waiting": "RateLimitedWaiting",
+    "producer_failed": "ProducerFailed",
+    "predicate_quarantined": "PredicateQuarantined",
+    "producer_emitted_invalid_event": "ProducerEmittedInvalidEvent"
+  },
+
+  "driver_kinds": {
+    "deterministic": "deterministic",
+    "ollama_prefix": "ollama:",
+    "cli": ["claude", "gemini"]
+  }
+}

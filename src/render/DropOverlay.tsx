@@ -1,7 +1,7 @@
 // DropOverlay.tsx — five hit zones (w/e/n/s/c) over a pane during drag.
 // Emits DROP_HINT_ZONE_CHANGED on pointer-over-zone; commit fires MOVE_PANE.
 
-import { Zone } from "@/state/SplitTree";
+import { Zone, ZONES } from "@/state/SplitTree";
 
 interface Props {
   paneId: string;
@@ -20,7 +20,7 @@ const ZONE_BOX: Record<Zone, React.CSSProperties> = {
 };
 
 export function DropOverlay({ paneId, activeZone, onZoneEnter, onDrop, onCancel }: Props): JSX.Element {
-  const zones: Zone[] = ["w", "e", "n", "s", "c"];
+  const zones: readonly Zone[] = ZONES;
   return (
     <div
       data-testid={`drop-overlay-${paneId}`}

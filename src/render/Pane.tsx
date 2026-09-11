@@ -3,11 +3,16 @@
 // dir, descent, surface, find, inspect, header_popover.
 
 import { Pane as PaneModel, WorkspaceShape, Lens } from "@/state/ShellState";
+import { PaneStatus, RevealState } from "@/observability/reasons";
 import { PaneHeader } from "./PaneHeader";
 import { Anchor } from "./Anchor";
 import { UnboundPanePicker } from "./UnboundPanePicker";
 import { Prompt } from "./Prompt";
 import { RevealShell } from "./RevealShell";
+import {
+  USER_MESSAGE, MODEL_REPLY, PARK, SESSION_ENDED,
+  TRANSCRIPT_COMPACTED, RATE_LIMITED_WAITING,
+} from "@/observability/envelope-kinds";
 
 interface Props {
   pane: PaneModel;
@@ -25,25 +30,24 @@ interface Props {
   onLensSwitch?: (paneId: string, to: Lens) => void;
 }
 
-function rowColor(kind: string): string {
-  if (kind === "UserMessage") return "#82a5c8";
-  if (kind === "ModelReply") return "#a7c893";
-  if (kind === "SessionEnded") return "#c26058";
-  if (kind === "Park") return "#c89a6b";
-  if (kind === "TranscriptCompacted") return "#6b7ac2";
-  if (kind === "RateLimitedWaiting") return "#c2a86b";
-  return "#5f636b";
-}
-
-function rowGlyph(kind: string): string {
-  if (kind === "UserMessage") return ">";
-  if (kind === "ModelReply") return "<";
-  if (kind === "SessionEnded") return "!";
-  if (kind === "Park") return "-";
-  if (kind === "TranscriptCompacted") return "=";
-  if (kind === "RateLimitedWaiting") return "~";
-  return "*";
-}
+const ROW_COLORS: Record<string, string> = {
+  [USER_MESSAGE]: "#82a5c8",
+  [MODEL_REPLY]: "#a7c893",
+  [SESSION_ENDED]: "#c26058",
+  [PARK]: "#c89a6b",
+  [TRANSCRIPT_COMPACTED]: "#6b7ac2",
+  [RATE_LIMITED_WAITING]: "#c2a86b",
+};
+const ROW_GLYPHS: Record<string, string> = {
+  [USER_MESSAGE]: ">",
+  [MODEL_REPLY]: "<",
+  [SESSION_ENDED]: "!",
+  [PARK]: "-",
+  [TRANSCRIPT_COMPACTED]: "=",
+  [RATE_LIMITED_WAITING]: "~",
+};
+function rowColor(kind: string): string { return ROW_COLORS[kind] ?? "#5f636b"; }
+function rowGlyph(kind: string): string { return ROW_GLYPHS[kind] ?? "*"; }
 
 const PER_PANE_SLOTS = [
   "focus", "status", "reveal", "lens", "level", "dir",
@@ -64,20 +68,20 @@ function initialByte(slot: string, pane: PaneModel): number {
   if (slot === "focus") return pane.focused ? 255 : 128;
   if (slot === "status") {
     switch (pane.status) {
-      case "unbound": return 0;
-      case "parked": return 64;
-      case "running": return 96;
-      case "interrupted": return 56;
-      case "ended": return 32;
+      case PaneStatus.UNBOUND: return 0;
+      case PaneStatus.PARKED: return 64;
+      case PaneStatus.RUNNING: return 96;
+      case PaneStatus.INTERRUPTED: return 56;
+      case PaneStatus.ENDED: return 32;
     }
   }
-  if (slot === "reveal") return pane.reveal === "reveal" ? 128 : 0;
+  if (slot === "reveal") return pane.reveal === RevealState.REVEAL ? 128 : 0;
   if (slot === "lens") {
     switch (pane.lens) {
-      case "stream+graph": return 0;
-      case "i/o":          return 64;
-      case "structure":    return 128;
-      case "scene":        return 192;
+      case Lens.STREAM_GRAPH: return 0;
+      case Lens.IO:          return 64;
+      case Lens.STRUCTURE:    return 128;
+      case Lens.SCENE:        return 192;
     }
   }
   return 0;
@@ -94,7 +98,7 @@ export function Pane({ pane, onFocus, onDragStart, onClose, onPickerText, onPick
     >
       <PaneHeader pane={pane} onDragStart={onDragStart} onClose={onClose} onRevealToggle={onRevealToggle} />
       <div style={S.body}>
-        {pane.status === "unbound" && onPickerText && onPickerWalk && onPickerCommit && onResume ? (
+        {pane.status === PaneStatus.UNBOUND && onPickerText && onPickerWalk && onPickerCommit && onResume ? (
           <UnboundPanePicker
             pane={pane}
             onText={onPickerText}
@@ -102,7 +106,7 @@ export function Pane({ pane, onFocus, onDragStart, onClose, onPickerText, onPick
             onCommit={onPickerCommit}
             onResume={onResume}
           />
-        ) : pane.boundSessionId && pane.reveal === "reveal" ? (
+        ) : pane.boundSessionId && pane.reveal === RevealState.REVEAL ? (
           <RevealShell pane={pane} onLensSwitch={onLensSwitch} />
         ) : pane.boundSessionId && onPromptText && onPromptLengthChanged && onPromptSubmit ? (
           <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>

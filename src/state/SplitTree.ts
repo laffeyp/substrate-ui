@@ -1,6 +1,7 @@
 // SplitTree.ts — pure operations over the split tree in ShellState.
 
-import { Pane, Split, ShellState, isSplit, paneCount, PANE_CAP_PER_WINDOW } from "./ShellState";
+import { Pane, Split, ShellState, isSplit, paneCount, PANE_CAP_PER_WINDOW, Lens } from "./ShellState";
+import { RevealState } from "@/observability/reasons";
 import { newId } from "./ids";
 
 export interface SplitResult {
@@ -40,8 +41,8 @@ export function splitPane(
     promptDraft: "",
     transcriptRows: [],
     transcriptLastSeq: -1,
-    reveal: "terminal",
-    lens: "stream+graph",
+    reveal: RevealState.TERMINAL,
+    lens: Lens.STREAM_GRAPH,
   };
   const updatedParent: Pane = { ...parent, splitParentId: newSplitId, ratio: 0.5 };
   const newSplit: Split = {
@@ -109,6 +110,11 @@ export function collectPaneIds(state: ShellState, rootId: string): string[] {
 }
 
 export type Zone = "w" | "e" | "n" | "s" | "c";
+export const Zone = { W: "w", E: "e", N: "n", S: "s", C: "c" } as const satisfies Record<string, Zone>;
+export const ZONES: readonly Zone[] = ["w", "e", "n", "s", "c"];
+
+export type Axis = "row" | "col";
+export const Axis = { ROW: "row", COL: "col" } as const satisfies Record<string, Axis>;
 
 interface DetachResult { state: ShellState; parentReplacementId: string | null; }
 

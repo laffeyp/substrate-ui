@@ -4,19 +4,15 @@ Reads newline-delimited JSON on stdin, writes newline-delimited JSON on stdout.
 Imports substrate in-process (D62 — the shell is one binary that imports substrate,
 not a client talking to a daemon).
 
-On start: emits {"op":"hello","substrate":"<version>","protocol":1}.
+Every value that names a vocabulary member — envelope kinds, driver kinds,
+reason strings, op names — comes from bridge/vocab.py. No raw strings appear
+inline. `if kind == USER_MESSAGE` reads a substrate constant; `if op ==
+BridgeOp.PING` reads a local StrEnum. A rename in substrate or in
+signals/bridge-reasons.json flows through automatically.
 
 Every request carries a `request_id` (uuid4 hex 12-char minted shell-side); every
 reply carries the same `request_id`, `op:"reply"`, and either `ok:true` with a
 `result` payload or `ok:false` with a `reason` string.
-
-Ops currently handled:
-  ping                       → pong
-  read_recent_workspaces     → list of {path, shape, last_used} rows read from
-                                ~/.substrate/recent-workspaces.json (empty on miss)
-
-Every unknown op replies {"op":"reply","request_id":<rid>,"ok":false,
-"reason":"unknown_op:<op>"}.
 """
 
 from __future__ import annotations
@@ -32,12 +28,33 @@ from pathlib import Path
 try:
     import substrate  # type: ignore[import-not-found]
 except Exception as e:  # noqa: BLE001
+    # Vocab isn't loaded yet — this is the one place the halt reason string
+    # appears in bare form, because a halt fires when the imports themselves
+    # fail. Same string ratified in vocab.HaltReason.SUBSTRATE_IMPORT_FAILED.
     sys.stdout.write(
         json.dumps({"op": "halt", "reason": "substrate_import_failed", "detail": str(e)})
         + "\n"
     )
     sys.stdout.flush()
     sys.exit(1)
+
+# Single-source vocabulary — substrate enums + bridge-reasons.json shared with
+# the shell. Every kind name / reason string / secret pattern / op name lives
+# in one place. Zero retyping.
+import vocab
+from vocab import (  # noqa: E402
+    USER_MESSAGE, MODEL_REPLY, PARK, SESSION_ENDED, TRANSCRIPT_COMPACTED,
+    TOOL_CALL, TOOL_RESULT, RATE_LIMITED_WAITING,
+    VISIBLE_KINDS, ParkReason, SessionEndReason,
+    DriverKind,
+    SessionCreateFailedReason as SCR,
+    ProbeDriverFailedReason as PDR,
+    SessionResumeFailedReason as SRR,
+    SessionEndFailedReason as SEF,
+    TurnSubmitFailedReason as TSF,
+    RecordReadFailedReason as RRR,
+    BridgeOp, ReplyOp,
+)
 
 
 PROTOCOL = 1
@@ -54,11 +71,11 @@ def emit(msg: dict) -> None:
 
 
 def reply_ok(rid: str, result: object) -> None:
-    emit({"op": "reply", "request_id": rid, "ok": True, "result": result})
+    emit({"op": ReplyOp.REPLY.value, "request_id": rid, "ok": True, "result": result})
 
 
 def reply_err(rid: str, reason: str) -> None:
-    emit({"op": "reply", "request_id": rid, "ok": False, "reason": reason})
+    emit({"op": ReplyOp.REPLY.value, "request_id": rid, "ok": False, "reason": reason})
 
 
 def _long_op(rid: str, fn, msg: dict) -> None:  # noqa: ANN001
@@ -69,11 +86,11 @@ def _long_op(rid: str, fn, msg: dict) -> None:  # noqa: ANN001
         try:
             result = fn(msg)
             if isinstance(result, dict) and result.get("__error__"):
-                reply_err(rid, result.get("reason", "registry_error"))
+                reply_err(rid, result.get("reason", SCR.REGISTRY_ERROR.value))
             else:
                 reply_ok(rid, result)
         except Exception as e:  # noqa: BLE001
-            reply_err(rid, f"registry_error:{e}")
+            reply_err(rid, f"{SCR.REGISTRY_ERROR.value}:{e}")
     _LONG_OP_POOL.submit(_run)
 
 
@@ -82,19 +99,18 @@ _REGISTRY_CACHE: object | None = None
 
 def _build_session_topology_from_manifest(manifest, first_turn_user_message):  # noqa: ANN001, ANN202
     """Factory closure passed to SessionRegistry at construction. Routes on
-    manifest.driver: 'deterministic' → DeterministicResponder(seed=0);
-    'ollama:<model>' → OllamaResponder(model=<model>); other prefixes fall
-    back to Deterministic with a stderr note. Runs a real local LLM turn
-    when the shell picks an ollama:* driver."""
+    DriverKind: DETERMINISTIC → DeterministicResponder(seed=0); OLLAMA →
+    OllamaResponder(model=<extracted>); other kinds fall back to
+    Deterministic. Runs a real local LLM turn when the shell picks an
+    ollama:* driver."""
     from substrate.topologies.session import session_topology
     from substrate.adapters import DeterministicResponder
     from pathlib import Path as _Path
     driver_name = manifest.driver
     driver_context_tokens = 4096
-    if driver_name.startswith("ollama:"):
-        model = driver_name.split(":", 1)[1]
+    if vocab.driver_kind(driver_name) is DriverKind.OLLAMA:
         from substrate.adapters.models import OllamaResponder
-        driver = OllamaResponder(model=model, num_ctx=8192, timeout=180.0)
+        driver = OllamaResponder(model=vocab.ollama_model(driver_name), num_ctx=8192, timeout=180.0)
         driver_context_tokens = 8192
     else:
         driver = DeterministicResponder(seed=0)
@@ -141,9 +157,9 @@ def op_session_create(payload: dict) -> dict:
             seed=payload.get("seed", ""),
         )
     except NameCollision as e:
-        return {"__error__": True, "reason": "name_collision", "detail": str(e)}
+        return {"__error__": True, "reason": SCR.NAME_COLLISION.value, "detail": str(e)}
     except (ValueError, KeyError) as e:
-        return {"__error__": True, "reason": "workspace_invalid", "detail": str(e)}
+        return {"__error__": True, "reason": SCR.WORKSPACE_INVALID.value, "detail": str(e)}
     return {
         "session_id": manifest.session_id,
         "session_name": manifest.name,
@@ -153,36 +169,20 @@ def op_session_create(payload: dict) -> dict:
     }
 
 
-_SECRET_KEY_RX = None  # lazily compiled
-
-
-def _strip_secrets(obj: object) -> object:
-    """Strip any key at any depth matching /key|token|secret|password/i from
-    a nested dict. Per signals/0.1.json § layer_7 constraint on driver_params."""
-    import re
-    global _SECRET_KEY_RX
-    if _SECRET_KEY_RX is None:
-        _SECRET_KEY_RX = re.compile(r"key|token|secret|password", re.IGNORECASE)
-    if isinstance(obj, dict):
-        return {k: ("<stripped>" if _SECRET_KEY_RX.search(k) else _strip_secrets(v))
-                for k, v in obj.items()}
-    if isinstance(obj, list):
-        return [_strip_secrets(v) for v in obj]
-    return obj
-
-
 def op_probe_driver(payload: dict) -> dict:
     """Probe a driver's availability. Returns {available, context_tokens?,
     model_families?} on success; raises typed reason on failure."""
     driver_name = payload.get("driver_name", "")
     driver_params = payload.get("driver_params", {})
-    _ = _strip_secrets(driver_params)  # (audit only — actual params come from caller)
+    _ = vocab.strip_secrets(driver_params)  # audit only — actual params come from caller
 
-    if driver_name == "deterministic":
-        return {"available": True, "context_tokens": None, "model_families": ["deterministic"]}
+    kind = vocab.driver_kind(driver_name)
+    if kind is DriverKind.DETERMINISTIC:
+        return {"available": True, "context_tokens": None,
+                "model_families": [DriverKind.DETERMINISTIC.value]}
 
-    if driver_name.startswith("ollama:"):
-        model = driver_name.split(":", 1)[1]
+    if kind is DriverKind.OLLAMA:
+        model = vocab.ollama_model(driver_name)
         try:
             import urllib.request
             import urllib.error
@@ -199,11 +199,11 @@ def op_probe_driver(payload: dict) -> dict:
                 "model_families": data.get("details", {}).get("families", []),
             }
         except urllib.error.HTTPError as e:  # noqa: F841
-            return {"__error__": True, "reason": "model_missing", "detail": f"HTTP {e.code}"}
+            return {"__error__": True, "reason": PDR.MODEL_MISSING.value, "detail": f"HTTP {e.code}"}
         except (urllib.error.URLError, TimeoutError, ConnectionRefusedError) as e:
-            return {"__error__": True, "reason": "not_installed", "detail": f"{type(e).__name__}"}
+            return {"__error__": True, "reason": PDR.NOT_INSTALLED.value, "detail": f"{type(e).__name__}"}
 
-    if driver_name in ("claude", "gemini"):
+    if kind is DriverKind.CLI:
         import subprocess
         try:
             r = subprocess.run(  # noqa: S603
@@ -211,13 +211,15 @@ def op_probe_driver(payload: dict) -> dict:
             )
             if r.returncode == 0:
                 return {"available": True, "model_families": [driver_name]}
-            return {"__error__": True, "reason": "not_installed", "detail": f"returncode {r.returncode}"}
+            return {"__error__": True, "reason": PDR.NOT_INSTALLED.value,
+                    "detail": f"returncode {r.returncode}"}
         except FileNotFoundError:
-            return {"__error__": True, "reason": "not_installed", "detail": "binary not on PATH"}
+            return {"__error__": True, "reason": PDR.NOT_INSTALLED.value, "detail": "binary not on PATH"}
         except subprocess.TimeoutExpired:
-            return {"__error__": True, "reason": "timeout", "detail": "cli --version exceeded 5s"}
+            return {"__error__": True, "reason": PDR.TIMEOUT.value, "detail": "cli --version exceeded 5s"}
 
-    return {"__error__": True, "reason": "not_installed", "detail": f"unknown driver kind: {driver_name}"}
+    return {"__error__": True, "reason": PDR.NOT_INSTALLED.value,
+            "detail": f"unknown driver kind: {driver_name}"}
 
 
 def op_list_sessions() -> list[dict]:
@@ -239,6 +241,23 @@ def op_list_sessions() -> list[dict]:
     return out
 
 
+def _max_user_turn_index(record_root: Path) -> int:
+    """Walk a record's envelopes; return the highest UserMessage.turn_index
+    seen (or -1 if none). Shared between resume / turn_submit / session_end."""
+    from substrate import api  # type: ignore[import-not-found]
+    max_ti = -1
+    try:
+        if not record_root.exists():
+            return -1
+        for env in api.read_record(record_root):
+            pl = env.get("payload") or {}
+            if env.get("kind") == USER_MESSAGE and isinstance(pl, dict) and "turn_index" in pl:
+                max_ti = max(max_ti, int(pl["turn_index"]))
+    except Exception:  # noqa: BLE001
+        pass
+    return max_ti
+
+
 def op_session_resume(payload: dict) -> dict:
     """Attach to an existing session — read the manifest, return the fields
     the shell needs to bind the pane. Raises typed reason on failure."""
@@ -247,22 +266,10 @@ def op_session_resume(payload: dict) -> dict:
     session_id = payload.get("session_id", "")
     manifest = reg.get(session_id)  # type: ignore[attr-defined]
     if manifest is None:
-        return {"__error__": True, "reason": "not_found"}
+        return {"__error__": True, "reason": SRR.NOT_FOUND.value}
     if manifest.status == SessionStatus.ENDED:
-        return {"__error__": True, "reason": "session_ended"}
-    # A fresh session (no turns run yet) has no record_root on disk — that is not
-    # a tear, that is fresh. Real torn-record detection lives in Sprint 013.
-    from substrate import api  # type: ignore[import-not-found]
-    last_turn_index = -1
-    try:
-        rec_root = Path(manifest.record_root)
-        if rec_root.exists():
-            for env in api.read_record(rec_root):
-                pl = env.get("payload") or {}
-                if env.get("kind") == "UserMessage" and isinstance(pl, dict) and "turn_index" in pl:
-                    last_turn_index = max(last_turn_index, int(pl["turn_index"]))
-    except Exception:  # noqa: BLE001
-        pass
+        return {"__error__": True, "reason": SRR.SESSION_ENDED.value}
+    last_turn_index = _max_user_turn_index(Path(manifest.record_root))
     return {
         "session_id": manifest.session_id,
         "session_name": manifest.name,
@@ -275,14 +282,6 @@ def op_session_resume(payload: dict) -> dict:
     }
 
 
-_VISIBLE_KINDS = frozenset({
-    "UserMessage", "ModelReply", "Park", "SessionEnded", "SessionWarning",
-    "PromptFragment", "TranscriptCompacted", "RateLimitedWaiting",
-    "ToolCall", "ToolResult",
-    "ProducerFailed", "PredicateQuarantined", "ProducerEmittedInvalidEvent",
-})
-
-
 def op_record_read(payload: dict) -> dict:
     """Return the ordered envelopes for a session's record. Only envelopes
     whose `kind` names a user-visible beat come back; framework brackets
@@ -292,13 +291,13 @@ def op_record_read(payload: dict) -> dict:
     session_id = payload.get("session_id", "")
     manifest = reg.get(session_id)  # type: ignore[attr-defined]
     if manifest is None:
-        return {"__error__": True, "reason": "not_found"}
+        return {"__error__": True, "reason": RRR.NOT_FOUND.value}
     root = Path(manifest.record_root)
     out = []
     try:
         for env in api.read_record(root):
             kind = env.get("kind", "")
-            if kind not in _VISIBLE_KINDS:
+            if kind not in VISIBLE_KINDS:
                 continue
             producer = env.get("producer") or {}
             producer_kind = producer.get("kind") if isinstance(producer, dict) else None
@@ -312,24 +311,23 @@ def op_record_read(payload: dict) -> dict:
             retry_index = None
             retry_max = None
             retry_after_seconds = None
-            if kind == "UserMessage":
+            if kind == USER_MESSAGE:
                 summary = str(pl.get("assembled_prompt", ""))[:200]
-            elif kind == "ModelReply":
+            elif kind == MODEL_REPLY:
                 summary = str(pl.get("text", ""))[:200]
-            elif kind == "Park":
-                # Propagate substrate's ParkReason enum verbatim (final_answer /
-                # model_error / interrupt) rather than fuzzy-match on prose.
+            elif kind == PARK:
+                # Propagate substrate's ParkReason enum verbatim.
                 park_reason = pl.get("reason") if isinstance(pl, dict) else None
                 summary = str(park_reason or "")
-            elif kind == "SessionEnded":
+            elif kind == SESSION_ENDED:
                 end_reason = pl.get("reason") if isinstance(pl, dict) else None
                 summary = str(end_reason or "")
-            elif kind == "TranscriptCompacted":
+            elif kind == TRANSCRIPT_COMPACTED:
                 tokens_before = pl.get("tokens_before") if isinstance(pl, dict) else None
                 tokens_after = pl.get("tokens_after") if isinstance(pl, dict) else None
                 compact_strategy = pl.get("strategy") if isinstance(pl, dict) else None
                 summary = f"{tokens_before}→{tokens_after} via {compact_strategy}"
-            elif kind == "RateLimitedWaiting":
+            elif kind == RATE_LIMITED_WAITING:
                 retry_index = pl.get("retry_index") if isinstance(pl, dict) else None
                 retry_max = pl.get("retry_max") if isinstance(pl, dict) else None
                 retry_after_seconds = pl.get("retry_after_seconds") if isinstance(pl, dict) else None
@@ -350,7 +348,7 @@ def op_record_read(payload: dict) -> dict:
                 "retry_after_seconds": retry_after_seconds,
             })
     except Exception as e:  # noqa: BLE001
-        return {"__error__": True, "reason": f"read_error:{e}"}
+        return {"__error__": True, "reason": f"{RRR.READ_ERROR.value}:{e}"}
     return {"session_id": session_id, "envelopes": out}
 
 
@@ -367,35 +365,20 @@ def op_turn_submit(payload: dict) -> dict:
     timeout_seconds = float(payload.get("timeout_seconds", 60))
     manifest = reg.get(session_id)  # type: ignore[attr-defined]
     if manifest is None:
-        return {"__error__": True, "reason": "not_found"}
+        return {"__error__": True, "reason": SRR.NOT_FOUND.value}
 
-    # Queue-cap check per session_registry.py:878-888.
     admitted, cap = reg.try_enqueue_turn(session_id)  # type: ignore[attr-defined]
     if not admitted:
-        return {"__error__": True, "reason": "queue_full", "cap": cap}
+        return {"__error__": True, "reason": TSF.QUEUE_FULL.value, "cap": cap}
 
-    # Harness-only stall: when HARNESS_TURN_SLEEP_MS is set, hold the admitted
-    # slot for the named duration BEFORE turn_sync. Lets the queue-cap test drive
-    # five concurrent op_turn_submit calls whose try_enqueue_turns all race to
-    # increment depth before any dequeue fires. Deterministic turns finish in a
-    # few ms; without this stall the fifth call always slots into a freshly-
-    # dequeued slot and admits.
+    # Harness-only stall.
     _sleep_ms = int(os.environ.get("HARNESS_TURN_SLEEP_MS", "0"))
     if _sleep_ms > 0:
         time.sleep(_sleep_ms / 1000.0)
 
     def _turn_event_builder(m, root):  # noqa: ANN001, ANN202
-        from substrate import api  # type: ignore[import-not-found]
-        max_ti = -1
-        try:
-            for env in api.read_record(root):
-                pl = env.get("payload") or {}
-                if env.get("kind") == "UserMessage" and "turn_index" in pl:
-                    max_ti = max(max_ti, int(pl["turn_index"]))
-        except Exception:  # noqa: BLE001
-            max_ti = -1
         return UserMessage(
-            text=text, turn_index=max_ti + 1,
+            text=text, turn_index=_max_user_turn_index(root) + 1,
             assembled_prompt=text, slash_source=None,
         )
 
@@ -405,36 +388,25 @@ def op_turn_submit(payload: dict) -> dict:
             timeout_seconds=timeout_seconds,
         )
     except SessionEndedMidTurn as e:
-        return {"__error__": True, "reason": "session_ended", "detail": str(e)}
+        return {"__error__": True, "reason": TSF.SESSION_ENDED.value, "detail": str(e)}
     except FreshSessionRequiresUserMessage as e:
-        return {"__error__": True, "reason": "fresh_session_requires_user_message", "detail": str(e)}
+        return {"__error__": True, "reason": TSF.FRESH_SESSION_REQUIRES_USER_MESSAGE.value, "detail": str(e)}
     except TornRecordOnResume as e:
-        return {"__error__": True, "reason": "torn_record_on_resume", "detail": str(e)}
+        return {"__error__": True, "reason": TSF.TORN_RECORD_ON_RESUME.value, "detail": str(e)}
     except TimeoutError as e:
-        return {"__error__": True, "reason": "timeout", "detail": str(e)}
+        return {"__error__": True, "reason": TSF.TIMEOUT.value, "detail": str(e)}
     except (RuntimeError, KeyError, ValueError) as e:
-        return {"__error__": True, "reason": "registry_error", "detail": str(e)}
+        return {"__error__": True, "reason": SCR.REGISTRY_ERROR.value, "detail": str(e)}
     finally:
         reg.dequeue_turn(session_id)  # type: ignore[attr-defined]
 
-    # Scan the record tail for the highest turn_index (the one this call just wrote).
-    from substrate import api  # type: ignore[import-not-found]
-    max_ti = -1
-    try:
-        from pathlib import Path as _Path
-        for env in api.read_record(_Path(final_manifest.record_root)):
-            pl = env.get("payload") or {}
-            if env.get("kind") == "UserMessage" and "turn_index" in pl:
-                max_ti = max(max_ti, int(pl["turn_index"]))
-    except Exception:  # noqa: BLE001
-        pass
+    max_ti = _max_user_turn_index(Path(final_manifest.record_root))
     return {"session_id": session_id, "turn_index": max_ti}
 
 
 def op_session_end(payload: dict) -> dict:
     """Fire an /exit turn through the injected topology factory. Returns
-    {end_reason, record_finalised, envelope_seq} where envelope_seq is the
-    record position of the SessionEnded envelope (or -1 if not found)."""
+    {end_reason, record_finalised, envelope_seq}."""
     from substrate.session_registry import SessionEndedMidTurn, SessionStatus  # type: ignore[import-not-found]
     from substrate.topologies.session import UserMessage, END_ON_EXIT_SENTINEL  # type: ignore[import-not-found]
     from substrate import api  # type: ignore[import-not-found]
@@ -442,22 +414,14 @@ def op_session_end(payload: dict) -> dict:
     session_id = payload.get("session_id", "")
     manifest = reg.get(session_id)  # type: ignore[attr-defined]
     if manifest is None:
-        return {"__error__": True, "reason": "not_found"}
+        return {"__error__": True, "reason": SEF.NOT_FOUND.value}
     if manifest.status == SessionStatus.ENDED:
-        return {"__error__": True, "reason": "session_already_ended"}
+        return {"__error__": True, "reason": SEF.SESSION_ALREADY_ENDED.value}
 
     def _end_event_builder(m, root):  # noqa: ANN001, ANN202
-        max_ti = -1
-        try:
-            for env in api.read_record(root):
-                pl = env.get("payload") or {}
-                if env.get("kind") == "UserMessage" and "turn_index" in pl:
-                    max_ti = max(max_ti, int(pl["turn_index"]))
-        except Exception:  # noqa: BLE001
-            max_ti = -1
-        next_ti = max_ti + 1
         return UserMessage(
-            text=END_ON_EXIT_SENTINEL, turn_index=next_ti,
+            text=END_ON_EXIT_SENTINEL,
+            turn_index=_max_user_turn_index(root) + 1,
             assembled_prompt=END_ON_EXIT_SENTINEL, slash_source="menu:end",
         )
 
@@ -466,16 +430,18 @@ def op_session_end(payload: dict) -> dict:
             session_id, resume_event_builder=_end_event_builder, timeout_seconds=30.0,
         )
     except SessionEndedMidTurn as e:
-        return {"__error__": True, "reason": "session_ended", "detail": str(e)}
+        return {"__error__": True, "reason": SEF.SESSION_ALREADY_ENDED.value, "detail": str(e)}
     except (RuntimeError, KeyError, ValueError) as e:
-        return {"__error__": True, "reason": "registry_error", "detail": str(e)}
+        return {"__error__": True, "reason": SEF.REGISTRY_ERROR.value, "detail": str(e)}
 
-    # Scan the record for the SessionEnded envelope's seq.
+    # Scan the record for the SessionEnded envelope. Default reason is
+    # substrate's USER_END — the ratified value the session_end producer
+    # emits when the shell drives /exit via the menu path.
     envelope_seq = -1
-    end_reason = "user_end"
+    end_reason = SessionEndReason.USER_END.value
     try:
         for env in api.read_record(record_root):
-            if env.get("kind") == "SessionEnded":
+            if env.get("kind") == SESSION_ENDED:
                 envelope_seq = int(env.get("seq", -1))
                 pl = env.get("payload") or {}
                 if isinstance(pl, dict) and "reason" in pl:
@@ -511,12 +477,68 @@ def op_read_recent_workspaces() -> list[dict]:
         s = row.get("shape")
         if not isinstance(p, str) or not isinstance(s, str):
             continue
-        out.append({
-            "path": p,
-            "shape": s,
-            "last_used": row.get("last_used"),
-        })
+        out.append({"path": p, "shape": s, "last_used": row.get("last_used")})
     return out
+
+
+def _handle_short_op(op: BridgeOp, msg: dict, rid: str) -> None:
+    """Dispatch a short (synchronous) op. Long ops (turn_submit, session_end)
+    take the thread-pool path."""
+    if op is BridgeOp.PING:
+        emit({"op": ReplyOp.PONG.value, "request_id": rid, "t": int(time.time() * 1000)})
+        return
+    if op is BridgeOp.READ_RECENT_WORKSPACES:
+        try:
+            reply_ok(rid, op_read_recent_workspaces())
+        except Exception as e:  # noqa: BLE001
+            reply_err(rid, f"{SCR.REGISTRY_ERROR.value}:{e}")
+        return
+    if op is BridgeOp.LIST_SESSIONS:
+        try:
+            reply_ok(rid, op_list_sessions())
+        except Exception as e:  # noqa: BLE001
+            reply_err(rid, f"{SCR.REGISTRY_ERROR.value}:{e}")
+        return
+    if op is BridgeOp.SESSION_RESUME:
+        try:
+            result = op_session_resume(msg)
+            if result.get("__error__"):
+                reply_err(rid, result.get("reason", SCR.REGISTRY_ERROR.value))
+            else:
+                reply_ok(rid, result)
+        except Exception as e:  # noqa: BLE001
+            reply_err(rid, f"{SCR.REGISTRY_ERROR.value}:{e}")
+        return
+    if op is BridgeOp.PROBE_DRIVER:
+        try:
+            result = op_probe_driver(msg)
+            if result.get("__error__"):
+                reply_err(rid, result.get("reason", PDR.NOT_INSTALLED.value))
+            else:
+                reply_ok(rid, result)
+        except Exception as e:  # noqa: BLE001
+            reply_err(rid, f"{SCR.REGISTRY_ERROR.value}:{e}")
+        return
+    if op is BridgeOp.RECORD_READ:
+        try:
+            result = op_record_read(msg)
+            if result.get("__error__"):
+                reply_err(rid, result.get("reason", RRR.READ_ERROR.value))
+            else:
+                reply_ok(rid, result)
+        except Exception as e:  # noqa: BLE001
+            reply_err(rid, f"{SCR.REGISTRY_ERROR.value}:{e}")
+        return
+    if op is BridgeOp.SESSION_CREATE:
+        try:
+            result = op_session_create(msg)
+            if result.get("__error__"):
+                reply_err(rid, result.get("reason", SCR.REGISTRY_ERROR.value))
+            else:
+                reply_ok(rid, result)
+        except Exception as e:  # noqa: BLE001
+            reply_err(rid, f"{SCR.REGISTRY_ERROR.value}:{e}")
+        return
 
 
 def main() -> int:
@@ -530,63 +552,20 @@ def main() -> int:
         except json.JSONDecodeError as e:
             print(f"bridge: bad json ({e}): {line[:120]}", file=sys.stderr)
             continue
-        op = msg.get("op")
+        op_str = msg.get("op")
         rid = msg.get("request_id") or msg.get("id")
+        try:
+            op = BridgeOp(op_str)
+        except ValueError:
+            reply_err(rid, f"unknown_op:{op_str}")
+            continue
 
-        if op == "ping":
-            emit({"op": "pong", "request_id": rid, "t": int(time.time() * 1000)})
-        elif op == "read_recent_workspaces":
-            try:
-                reply_ok(rid, op_read_recent_workspaces())
-            except Exception as e:  # noqa: BLE001
-                reply_err(rid, f"registry_error:{e}")
-        elif op == "list_sessions":
-            try:
-                reply_ok(rid, op_list_sessions())
-            except Exception as e:  # noqa: BLE001
-                reply_err(rid, f"registry_error:{e}")
-        elif op == "session_resume":
-            try:
-                result = op_session_resume(msg)
-                if result.get("__error__"):
-                    reply_err(rid, result.get("reason", "registry_error"))
-                else:
-                    reply_ok(rid, result)
-            except Exception as e:  # noqa: BLE001
-                reply_err(rid, f"registry_error:{e}")
-        elif op == "probe_driver":
-            try:
-                result = op_probe_driver(msg)
-                if result.get("__error__"):
-                    reply_err(rid, result.get("reason", "not_installed"))
-                else:
-                    reply_ok(rid, result)
-            except Exception as e:  # noqa: BLE001
-                reply_err(rid, f"registry_error:{e}")
-        elif op == "record_read":
-            try:
-                result = op_record_read(msg)
-                if result.get("__error__"):
-                    reply_err(rid, result.get("reason", "read_error"))
-                else:
-                    reply_ok(rid, result)
-            except Exception as e:  # noqa: BLE001
-                reply_err(rid, f"registry_error:{e}")
-        elif op == "turn_submit":
+        if op is BridgeOp.TURN_SUBMIT:
             _long_op(rid, op_turn_submit, msg)
-        elif op == "session_end":
+        elif op is BridgeOp.SESSION_END:
             _long_op(rid, op_session_end, msg)
-        elif op == "session_create":
-            try:
-                result = op_session_create(msg)
-                if result.get("__error__"):
-                    reply_err(rid, result.get("reason", "registry_error"))
-                else:
-                    reply_ok(rid, result)
-            except Exception as e:  # noqa: BLE001
-                reply_err(rid, f"registry_error:{e}")
         else:
-            reply_err(rid, f"unknown_op:{op}")
+            _handle_short_op(op, msg, rid)
     return 0
 
 

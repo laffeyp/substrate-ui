@@ -11,10 +11,13 @@ import { emit } from "@/observability/Emitter";
 import { WindowFrame } from "./WindowFrame";
 import { Anchor } from "./Anchor";
 import { DragLayer } from "./DragLayer";
-import { Zone } from "@/state/SplitTree";
+import { Zone, Axis } from "@/state/SplitTree";
 import { WorkspaceShape } from "@/state/ShellState";
 import { newId } from "@/state/ids";
 import { bridgeRequest } from "@/observability/BridgeClient";
+import {
+  BridgeStatus, PaneStatus, isPaneStatus, DriverKind,
+} from "@/observability/reasons";
 
 interface SubstrateBridge {
   onHello?: (cb: (msg: { substrate: string; protocol: number }) => void) => () => void;
@@ -34,7 +37,7 @@ function Shell(): JSX.Element {
   const stateRef = useRef<ShellState>(initial());
   const [, forceRender] = useState(0);
   const bootedRef = useRef(false);
-  const [bridge, setBridge] = useState<"pre" | "alive" | "dead">("pre");
+  const [bridge, setBridge] = useState<BridgeStatus>(BridgeStatus.PRE);
   const [substrateVersion, setSubstrateVersion] = useState<string>("");
   const [drag, setDrag] = useState<{sourceId: string; targetId: string | null; zone: Zone | null} | null>(null);
 
@@ -51,7 +54,7 @@ function Shell(): JSX.Element {
     const harnessDriver = (globalThis as unknown as {
       __substrateHarness?: { defaultDriver?: string | null };
     }).__substrateHarness?.defaultDriver;
-    const driver = harnessDriver || "deterministic";
+    const driver = harnessDriver || DriverKind.DETERMINISTIC;
     const driverParams: Record<string, unknown> = {};
 
     // Probe the driver first per Layer 5 forced_next: PROBE_DRIVER_PROBED gates SESSION_CREATE_REQUESTED.
@@ -140,12 +143,11 @@ function Shell(): JSX.Element {
       status: string;
     }>("session_resume", { session_id: sessionId }, 5000).then((result) => {
       const r = result as unknown as { last_turn_index?: number } & typeof result;
-      const status = (result.status === "parked" || result.status === "running" ||
-        result.status === "interrupted" || result.status === "ended") ? result.status : "parked";
+      const status: PaneStatus = isPaneStatus(result.status) ? result.status : PaneStatus.PARKED;
       dispatch({ type: "SESSION_RESUME_OK", paneId, requestId,
         sessionId: result.session_id, sessionName: result.session_name,
         workspacePath: result.workspace_path, workspaceShape: result.workspace_shape,
-        status: status as "parked" | "running" | "interrupted" | "ended",
+        status,
         lastTurnIndex: typeof r.last_turn_index === "number" ? r.last_turn_index : -1,
       });
       refreshTranscript(paneId, result.session_id);
@@ -164,26 +166,26 @@ function Shell(): JSX.Element {
     const s = bridgeApi();
     if (!s) return;
     const offHello = s.onHello?.((msg: { substrate: string; protocol: number }) => {
-      setBridge("alive");
+      setBridge(BridgeStatus.ALIVE);
       setSubstrateVersion(msg.substrate);
       emit("BRIDGE_HELLO_RECEIVED", { substrate_version: msg.substrate, protocol: msg.protocol });
     });
     const offDead = s.onDead?.(() => {
-      setBridge("dead");
+      setBridge(BridgeStatus.DEAD);
       emit("BRIDGE_DEAD_SURFACED", { crash_count: 2 });
     });
     return () => { offHello?.(); offDead?.(); };
   }, []);
 
-  const bridgeByte = bridge === "alive" ? 128 : bridge === "dead" ? 255 : 0;
+  const bridgeByte = bridge === BridgeStatus.ALIVE ? 128 : bridge === BridgeStatus.DEAD ? 255 : 0;
 
   const window = state.windowOrder.length > 0
     ? state.windows[state.windowOrder[0]]
     : null;
 
-  const statusClass = bridge === "alive" ? "alive" : bridge === "dead" ? "dead" : "";
-  const statusText = bridge === "alive" ? `substrate ${substrateVersion} alive`
-                    : bridge === "dead" ? "bridge dead"
+  const statusClass = bridge === BridgeStatus.ALIVE ? "alive" : bridge === BridgeStatus.DEAD ? "dead" : "";
+  const statusText = bridge === BridgeStatus.ALIVE ? `substrate ${substrateVersion} alive`
+                    : bridge === BridgeStatus.DEAD ? "bridge dead"
                     : "connecting";
 
   return (
@@ -274,7 +276,7 @@ function ShellShortcuts({ dispatch, focusedPaneId, focusedPane, onEnd }: {
       if (!meta) return;
       if (e.key === "d" || e.key === "D") {
         e.preventDefault();
-        const axis: "row" | "col" = e.shiftKey ? "col" : "row";
+        const axis: Axis = e.shiftKey ? Axis.COL : Axis.ROW;
         dispatch({ type: "SPLIT_PANE", paneId: focusedPaneId, axis });
       } else if (e.key === "w" || e.key === "W") {
         e.preventDefault();
