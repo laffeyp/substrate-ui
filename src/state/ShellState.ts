@@ -30,6 +30,10 @@ export interface TranscriptRow {
   retry_index?: number | null;
   retry_max?: number | null;
   retry_after_seconds?: number | null;
+  // ToolCall specialization (Sprint 020) — the delegate row branch reads
+  // these when kind === "ToolCall" && tool_name === "delegate".
+  tool_name?: string | null;
+  tool_call_id?: string | null;
 }
 
 export interface Pane {

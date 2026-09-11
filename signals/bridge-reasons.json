@@ -40,5 +40,10 @@
     "deterministic": "deterministic",
     "ollama_prefix": "ollama:",
     "cli": ["claude", "gemini"]
+  },
+
+  "tool_names": {
+    "note": "Tool names substrate's tool_loop suite exports. Mirrored from substrate.topologies.tool_loop.tools TOOL_NAME_* constants for the TypeScript side; the Python bridge imports them directly (see bridge/vocab.py).",
+    "delegate": "delegate"
   }
 }

@@ -311,6 +311,8 @@ def op_record_read(payload: dict) -> dict:
             retry_index = None
             retry_max = None
             retry_after_seconds = None
+            tool_name = None
+            tool_call_id = None
             if kind == USER_MESSAGE:
                 summary = str(pl.get("assembled_prompt", ""))[:200]
             elif kind == MODEL_REPLY:
@@ -332,6 +334,10 @@ def op_record_read(payload: dict) -> dict:
                 retry_max = pl.get("retry_max") if isinstance(pl, dict) else None
                 retry_after_seconds = pl.get("retry_after_seconds") if isinstance(pl, dict) else None
                 summary = f"retry {retry_index}/{retry_max} in {retry_after_seconds}s"
+            elif kind == TOOL_CALL:
+                tool_name = pl.get("tool") if isinstance(pl, dict) else None
+                tool_call_id = pl.get("call_id") if isinstance(pl, dict) else None
+                summary = str(tool_name or "")
             out.append({
                 "seq": int(env.get("seq", -1)),
                 "kind": kind,
@@ -346,6 +352,8 @@ def op_record_read(payload: dict) -> dict:
                 "retry_index": retry_index,
                 "retry_max": retry_max,
                 "retry_after_seconds": retry_after_seconds,
+                "tool_name": tool_name,
+                "tool_call_id": tool_call_id,
             })
     except Exception as e:  # noqa: BLE001
         return {"__error__": True, "reason": f"{RRR.READ_ERROR.value}:{e}"}

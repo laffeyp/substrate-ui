@@ -5,6 +5,7 @@
 
 import { emptyShellState, ShellState, Pane, Window, TranscriptRow, Lens, WorkspaceShape, PaneStatus } from "@/state/ShellState";
 import { SessionEndReason, ParkReason, isParkReason, SECRET_KEY_PATTERN, isPaneStatus, StreamLevel, StreamDir, RevealFocus } from "@/observability/reasons";
+import { TOOL_CALL, TOOL_NAME_DELEGATE } from "@/observability/envelope-kinds";
 import { newId } from "@/state/ids";
 import { splitPane, resizeSplit, atCap, movePane, closePane, Zone, Axis } from "@/state/SplitTree";
 import { RevealState } from "@/observability/reasons";
@@ -232,6 +233,19 @@ export function reduce(state: ShellState, action: Action): Step {
             retry_index: r.retry_index ?? 0,
             retry_max: r.retry_max ?? 0,
             retry_after_seconds: r.retry_after_seconds ?? 0,
+          }});
+        } else if (r.kind === TOOL_CALL && r.tool_name === TOOL_NAME_DELEGATE && r.tool_call_id) {
+          // Sprint 020 — delegate specialization. Depth in the current
+          // pane's own record is always 1 (a nested delegate lives in a
+          // child session's record, walked when that pane reveals).
+          // Same-step pair per Layer 4: DELEGATE_CALL_RENDERED fires
+          // with the semantic payload; TRANSCRIPT_DELEGATE_LINE_RENDERED
+          // fires with the envelope anchor.
+          emissions.push({ kind: "DELEGATE_CALL_RENDERED", payload: {
+            pane_id: action.paneId, tool_call_id: r.tool_call_id, depth: 1,
+          }});
+          emissions.push({ kind: "TRANSCRIPT_DELEGATE_LINE_RENDERED", payload: {
+            pane_id: action.paneId, envelope_seq: r.seq, tool_call_id: r.tool_call_id,
           }});
         } else {
           emissions.push({ kind: "TRANSCRIPT_ROW_RENDERED", payload: {

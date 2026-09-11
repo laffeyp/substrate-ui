@@ -1,0 +1,1197 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.10.1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>parallel_build_topology — design paper</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    html {
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    svg {
+      height: auto;
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      white-space: pre-wrap;
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      border: none;
+      border-top: 1px solid #1a1a1a;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">parallel_build_topology — design paper</h1>
+</header>
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a
+href="#parallel_build_topology-a-substrate-topology-for-autonomous-human-out-of-the-loop-parallel-builds"
+id="toc-parallel_build_topology-a-substrate-topology-for-autonomous-human-out-of-the-loop-parallel-builds">parallel_build_topology
+— a substrate topology for autonomous, human-out-of-the-loop parallel
+builds</a>
+<ul>
+<li><a href="#abstract" id="toc-abstract">0. Abstract</a></li>
+<li><a href="#substrates-primitives-at-the-depth-this-design-requires"
+id="toc-substrates-primitives-at-the-depth-this-design-requires">1.
+Substrate’s primitives, at the depth this design requires</a>
+<ul>
+<li><a href="#producer-view-responder"
+id="toc-producer-view-responder">1.1 Producer, View, Responder</a></li>
+<li><a href="#topologybuilder" id="toc-topologybuilder">1.2
+TopologyBuilder</a></li>
+<li><a href="#termination-policies" id="toc-termination-policies">1.3
+Termination policies</a></li>
+<li><a href="#the-composition-primitive"
+id="toc-the-composition-primitive">1.4 The composition
+primitive</a></li>
+<li><a href="#the-reusable-n-parallel-pattern"
+id="toc-the-reusable-n-parallel-pattern">1.5 The reusable N-parallel
+pattern</a></li>
+<li><a href="#the-reference-session-topology"
+id="toc-the-reference-session-topology">1.6 The reference session
+topology</a></li>
+</ul></li>
+<li><a href="#why-the-human-is-separable-from-the-loop"
+id="toc-why-the-human-is-separable-from-the-loop">2. Why the human is
+separable from the loop</a></li>
+<li><a href="#the-topologys-producer-graph"
+id="toc-the-topologys-producer-graph">3. The topology’s Producer
+graph</a>
+<ul>
+<li><a href="#event-schemas-the-topology-introduces"
+id="toc-event-schemas-the-topology-introduces">3.1 Event schemas the
+topology introduces</a></li>
+<li><a href="#producer-kinds" id="toc-producer-kinds">3.2 Producer
+kinds</a></li>
+<li><a href="#views" id="toc-views">3.3 Views</a></li>
+<li><a href="#triggers-and-routes" id="toc-triggers-and-routes">3.4
+Triggers and routes</a></li>
+<li><a href="#termination" id="toc-termination">3.5 Termination</a></li>
+<li><a href="#budget" id="toc-budget">3.6 Budget</a></li>
+</ul></li>
+<li><a href="#what-runs-inside-each-slot"
+id="toc-what-runs-inside-each-slot">4. What runs inside each
+slot</a></li>
+<li><a href="#the-user-input-seam" id="toc-the-user-input-seam">5. The
+user-input seam</a>
+<ul>
+<li><a href="#the-gap" id="toc-the-gap">5.1 The gap</a></li>
+<li><a href="#the-proposal" id="toc-the-proposal">5.2 The
+proposal</a></li>
+<li><a href="#the-fallback-if-inbound-composition-is-not-accepted"
+id="toc-the-fallback-if-inbound-composition-is-not-accepted">5.3 The
+fallback if inbound composition is not accepted</a></li>
+</ul></li>
+<li><a href="#the-watcher" id="toc-the-watcher">6. The watcher</a>
+<ul>
+<li><a href="#detector-bank" id="toc-detector-bank">6.1 Detector
+bank</a></li>
+<li><a href="#rotation-schedule" id="toc-rotation-schedule">6.2 Rotation
+schedule</a></li>
+<li><a href="#verdict-composition" id="toc-verdict-composition">6.3
+Verdict composition</a></li>
+</ul></li>
+<li><a href="#the-dispatcher" id="toc-the-dispatcher">7. The
+dispatcher</a>
+<ul>
+<li><a href="#the-corpus-not-the-design"
+id="toc-the-corpus-not-the-design">7.1 The corpus, not the
+design</a></li>
+<li><a href="#the-dispatchers-minimum-behaviour"
+id="toc-the-dispatchers-minimum-behaviour">7.2 The dispatcher’s minimum
+behaviour</a></li>
+<li><a href="#every-so-often-prompts"
+id="toc-every-so-often-prompts">7.3 Every-so-often prompts</a></li>
+</ul></li>
+<li><a href="#convergence-and-divergence-as-measurable-output"
+id="toc-convergence-and-divergence-as-measurable-output">8. Convergence
+and divergence as measurable output</a></li>
+<li><a href="#what-substrate-must-ship"
+id="toc-what-substrate-must-ship">9. What substrate must ship</a>
+<ul>
+<li><a href="#inbound-composition-import_map"
+id="toc-inbound-composition-import_map">9.1 Inbound composition
+(import_map)</a></li>
+<li><a href="#a-workspaceshape-per-slot"
+id="toc-a-workspaceshape-per-slot">9.2 A <code>WorkspaceShape</code> per
+slot</a></li>
+<li><a href="#a-run_group_id-field-on-sessionmanifest"
+id="toc-a-run_group_id-field-on-sessionmanifest">9.3 A
+<code>run_group_id</code> field on <code>SessionManifest</code></a></li>
+<li><a href="#what-is-deliberately-not-added"
+id="toc-what-is-deliberately-not-added">9.4 What is deliberately not
+added</a></li>
+</ul></li>
+<li><a href="#what-the-shell-must-ship"
+id="toc-what-the-shell-must-ship">10. What the shell must ship</a></li>
+<li><a href="#the-variant-runs-research-programme"
+id="toc-the-variant-runs-research-programme">11. The variant-runs
+research programme</a>
+<ul>
+<li><a href="#the-bootstrap-variant-programme"
+id="toc-the-bootstrap-variant-programme">11.1 The bootstrap-variant
+programme</a></li>
+<li><a href="#the-responder-variant-programme"
+id="toc-the-responder-variant-programme">11.2 The Responder-variant
+programme</a></li>
+<li><a href="#the-prose-register-programme"
+id="toc-the-prose-register-programme">11.3 The prose-register
+programme</a></li>
+</ul></li>
+<li><a href="#risks-open-questions-honest-limits"
+id="toc-risks-open-questions-honest-limits">12. Risks, open questions,
+honest limits</a>
+<ul>
+<li><a href="#ratification-bottleneck"
+id="toc-ratification-bottleneck">12.1 Ratification bottleneck</a></li>
+<li><a href="#corpus-quality-dominates-dispatcher-quality"
+id="toc-corpus-quality-dominates-dispatcher-quality">12.2 Corpus quality
+dominates dispatcher quality</a></li>
+<li><a href="#convergence-measurement-across-incompatible-vocabularies"
+id="toc-convergence-measurement-across-incompatible-vocabularies">12.3
+Convergence measurement across incompatible vocabularies</a></li>
+<li><a href="#substrate-composition-inbound-is-unverified"
+id="toc-substrate-composition-inbound-is-unverified">12.4 Substrate
+composition inbound is unverified</a></li>
+<li><a
+href="#the-topology-is-heavier-than-substrates-other-reference-topologies"
+id="toc-the-topology-is-heavier-than-substrates-other-reference-topologies">12.5
+The topology is heavier than substrate’s other reference
+topologies</a></li>
+</ul></li>
+<li><a href="#what-this-replaces-and-what-it-does-not"
+id="toc-what-this-replaces-and-what-it-does-not">13. What this replaces
+and what it does not</a></li>
+<li><a href="#adjacent-work-in-this-repo"
+id="toc-adjacent-work-in-this-repo">14. Adjacent work in this
+repo</a></li>
+<li><a href="#concrete-next-steps" id="toc-concrete-next-steps">15.
+Concrete next steps</a></li>
+<li><a href="#closing-frame" id="toc-closing-frame">16. Closing
+frame</a></li>
+</ul></li>
+</ul>
+</nav>
+<h1
+id="parallel_build_topology-a-substrate-topology-for-autonomous-human-out-of-the-loop-parallel-builds">parallel_build_topology
+— a substrate topology for autonomous, human-out-of-the-loop parallel
+builds</h1>
+<p><em>Design paper, round 2. 2026-09-11. Supersedes v1
+(<code>2026-09-11-autonomous-build-topology.md</code>, which stays on
+disk as audit trail per the no-in-place-edits rule). v1 was correctly
+criticised as too thin and factually wrong at one point: sprint cards
+were not authored by a human, they were authored by the machine under
+human direction — the Architect’s role is ratification and correction,
+not typing. This round grounds the design in substrate’s actual
+primitives as declared in
+<code>substrate/src/substrate/kernel/topology.py</code>,
+<code>substrate/src/substrate/protocols.py</code>,
+<code>substrate/src/substrate/kernel/policies.py</code>, and the
+canonical
+<code>substrate/src/substrate/topologies/session/__init__.py</code>.</em></p>
+<hr />
+<h2 id="abstract">0. Abstract</h2>
+<p>Substrate’s <code>session_topology</code> implements a turn loop that
+pauses after every model reply and waits for an external event before
+continuing. That pause is a substrate <code>TerminationPolicy</code>
+named <code>pause_await_input</code>. It exists because the current
+single-session use case has one human operator sitting on one shell
+pane, reading the model’s reply and deciding what to type next. The
+pause is the load-bearing constraint on human throughput and on the
+topology’s failure mode when the human walks away.</p>
+<p>This paper designs a new topology,
+<code>parallel_build_topology</code>, that composes N
+<code>session_topology</code> instances via substrate’s
+<code>embedded_substrate</code> primitive, replaces the human-facing
+pause with an intra-topology dispatcher, and drives every embedded
+session’s next <code>UserMessage</code> from a mechanised watcher’s
+classification of the session’s own emitted signals. The dispatcher’s
+reply vocabulary is derived empirically from a corpus mined out of prior
+successful sessions, not designed a priori. The topology’s convergence
+measurement across the N runs is the research artifact when the topology
+is used as an SDD instrument rather than as a build accelerator.</p>
+<p>The paper covers: substrate’s primitives at the depth this design
+needs; what <code>session_topology</code> actually does today; the
+parallel topology’s Producer graph; the user-input-seam expansion; the
+watcher’s detector bank and rotation schedule; the dispatcher’s
+corpus-driven reply mechanism; convergence and divergence as measurable
+outputs; what substrate must ship to enable this; what the shell must
+ship to visualise it; and the risks that determine whether this is a
+productivity tool, a research instrument, or both.</p>
+<hr />
+<h2 id="substrates-primitives-at-the-depth-this-design-requires">1.
+Substrate’s primitives, at the depth this design requires</h2>
+<p>Everything below refers to declarations that already exist in
+substrate’s kernel.</p>
+<h3 id="producer-view-responder">1.1 Producer, View, Responder</h3>
+<p><code>substrate/src/substrate/protocols.py:24</code> defines
+<code>Producer</code> as a callable
+<code>(input) -&gt; AsyncIterable[Event]</code>. The factory returns one
+Producer per instantiation; the runtime consumes the event stream until
+the Producer completes, fails, or is cancelled. State lives on the log,
+not in the Producer.</p>
+<p><code>substrate/src/substrate/protocols.py:61</code> defines
+<code>View</code> as a deterministic incremental projection over the
+bus: <code>update(event)</code>, <code>value()</code>, plus a
+<code>Subscription</code> naming what kinds and producers the view
+listens to.</p>
+<p><code>substrate/src/substrate/protocols.py:50</code> defines
+<code>Responder</code> as an application-layer seam, NOT a kernel
+primitive: <code>respond(prompt: str) -&gt; str</code>. Reference
+implementations at
+<code>substrate/src/substrate/adapters/models.py:97</code>
+(<code>DeterministicResponder</code>), <code>:124</code>
+(<code>OllamaResponder</code>), and <code>:374</code>
+(<code>CliResponder</code>).</p>
+<h3 id="topologybuilder">1.2 TopologyBuilder</h3>
+<p><code>substrate/src/substrate/kernel/topology.py:130</code> defines
+<code>TopologyBuilder</code>. Its methods are the vocabulary a topology
+factory has:</p>
+<ul>
+<li><code>producer_kind(kind, *, schemas, schema_version, factory | start, deterministic, budget)</code>
+— register a Producer with its frozen msgspec event schemas and an
+optional resource <code>Budget</code>.</li>
+<li><code>view(name, view)</code> — register a named <code>View</code>;
+subscription must be non-empty.</li>
+<li><code>trigger(id, *, subscription, predicate, starts, input_builder, policy, cooldown)</code>
+— on an event matching subscription, if
+<code>predicate(TriggerContext)</code> holds, start <code>starts</code>
+with <code>input_builder(TriggerContext)</code>.</li>
+<li><code>route(id, *, subscription, slot, transform)</code> — on an
+event matching subscription, stage <code>transform(event)</code> into
+<code>slot</code> for a later Trigger’s <code>input_builder</code> to
+read via <code>ctx.staged[slot]</code>.</li>
+<li><code>instrument(name, *, on, schemas, input_builder, factory | start, into, via)</code>
+— helper that collapses the observe-and-stage triple
+(<code>producer_kind</code> + <code>trigger</code> + optional
+<code>route</code>) into one call.</li>
+<li><code>initial(kind, *, input)</code> — declare a Producer started at
+seq 0.</li>
+<li><code>termination(policy, *, scope="run")</code> — set the
+<code>TerminationPolicy</code>; only <code>run</code> scope ships in
+v1.0.</li>
+<li><code>baseline(**metadata)</code> — attach run metadata into
+<code>RunStarted</code>.</li>
+</ul>
+<h3 id="termination-policies">1.3 Termination policies</h3>
+<p><code>substrate/src/substrate/kernel/policies.py:20</code> declares
+<code>Decision</code> with four terminal outcomes:
+<code>CONTINUE</code>, <code>FINALISE_RUN</code>,
+<code>CANCEL_OTHERS</code>, <code>PAUSE_AWAIT_INPUT</code>. The
+recipes:</p>
+<ul>
+<li><code>threshold_count(kind, n)</code> — finalise once N of
+<code>kind</code> have been appended.</li>
+<li><code>all_completed()</code> — finalise when every started Producer
+has ended (NOT resume-safe).</li>
+<li><code>cancel_all_others(when)</code> — cancel every other running
+Producer when <code>when</code> holds.</li>
+<li><code>quiescence_with_watchdog(seconds)</code> — finalise on
+quiescence.</li>
+<li><code>pause_await_input(when, resume_condition)</code> — pause with
+a typed resume condition (the primitive <code>session_topology</code>
+uses to wait for the operator).</li>
+<li><code>any_of(*policies)</code>, <code>all_of(*policies)</code> —
+composition.</li>
+</ul>
+<h3 id="the-composition-primitive">1.4 The composition primitive</h3>
+<p>Substrate ships an <code>embedded_substrate</code> composition point
+(referenced at <code>kernel/topology.py:202-214</code> and
+<code>:370-376</code>). An embedded Producer carries an
+<code>__substrate_export_map__</code> attribute that names how the inner
+substrate’s event kinds map to the outer topology’s schema names. The
+runtime derives the composition boundary from that single source; there
+is deliberately no <code>b.export</code> method (the earlier parallel
+copy was removed as a two-sources-of-truth defect). This is the
+primitive that lets one topology instantiate other topologies as
+Producers.</p>
+<h3 id="the-reusable-n-parallel-pattern">1.5 The reusable N-parallel
+pattern</h3>
+<p><code>substrate/src/substrate/topologies/best_of_n/__init__.py:90</code>
+defines <code>best_of_n_correction</code>. It fans out N Drafts,
+validates each Candidate, and a judge either selects the passing one,
+seeds the next round with N new Drafts feeding failure context back in,
+or gives up. It uses:</p>
+<ul>
+<li>One <code>seeder</code> Producer as the initial (or triggered by a
+<code>seed_on</code> kind).</li>
+<li>A <code>drafter</code> Producer triggered per
+<code>Draft</code>.</li>
+<li>A <code>validator</code> Producer triggered per
+<code>Candidate</code>.</li>
+<li>A <code>judge</code> Producer triggered per <code>Verdict</code>
+when all N verdicts for a round are in.</li>
+<li>A <code>KindBuffer("Verdict")</code> view accumulating
+verdicts.</li>
+<li><code>any_of(threshold_count("Solved", 1), threshold_count("Exhausted", 1), quiescence_with_watchdog())</code>.</li>
+</ul>
+<p><code>best_of_n</code> is the closest existing pattern to what
+<code>parallel_build_topology</code> needs. The build topology is not a
+fan-out on the same task (that is what <code>best_of_n</code> covers);
+it is a fan-out on N unrelated build workspaces from shared initial
+conditions. But the mechanical shape — N Producers with a per-instance
+verdict path and a judge — is identical.</p>
+<h3 id="the-reference-session-topology">1.6 The reference session
+topology</h3>
+<p><code>substrate/src/substrate/topologies/session/__init__.py</code>
+(1200 lines) declares <code>session_topology</code>. Its event schemas
+include <code>SessionStarted</code>, <code>UserMessage</code>,
+<code>ModelReply</code>, <code>Park</code>, <code>SessionEnded</code>,
+<code>SessionEndRequested</code>, <code>SessionWarning</code>,
+<code>PromptFragment</code>, <code>PromptComposed</code>. Its Producers
+include composer, parent-context, per-turn, role, tools-suite, bundle,
+user-message-fragment, and a CI/walkthrough dual-mode. Its termination
+is a composition that includes <code>pause_await_input</code>: after
+every <code>ModelReply</code> (and after <code>Park</code>, and after
+<code>SessionEndRequested</code> in some paths), the topology halts
+until a fresh <code>UserMessage</code> is appended by the external
+caller — the shell.</p>
+<p>This is the pause the parallel topology removes.</p>
+<hr />
+<h2 id="why-the-human-is-separable-from-the-loop">2. Why the human is
+separable from the loop</h2>
+<p>The reason an operator sits on a session today is not that the
+model’s text is inscrutable. It is that no signal reports on-track /
+off-track directly, so the operator’s role reduces to reading the
+model’s reply and inferring whether the model has drifted. The inference
+is a signal-detection task. When the signals exist as tags on the bus,
+the detection is mechanisable and runs in milliseconds instead of
+minutes.</p>
+<p>Every drift kind an experienced reviewer catches has a mechanical
+detector already demonstrated in this build:</p>
+<ul>
+<li><strong>SDD-vocabulary drift.</strong> Invented tag names raise from
+<code>substrate-ui/src/observability/Emitter.ts:22</code>. Payload-shape
+drift raises from the Layer-2 check that landed at commit
+<code>e33f36b</code>. Sequence drift against Layer 5 is a diff against
+<code>signals/0.1.json § layer_5_state_transitions</code>. Missing
+<code>BLACKBOARD.md</code> entries after sprint close is an
+<code>ls</code>.</li>
+<li><strong>Coding-canon drift.</strong> Retyped literals against enums
+that already exist (mapped from memory item
+<code>feedback-read-the-code-grep-repeated-literals</code>). Raw string
+switch cases where a discriminated union is authoritative. Function
+length past a project threshold. Standard static analysis.</li>
+<li><strong>Design-lock drift.</strong> Playwright screenshots of every
+state the sprint’s card claims to render, region-diffed against the
+corresponding PNG in
+<code>handoff_latest/prototypes/Substrate Prototype v7.dc.html</code>
+(already captured, sitting on disk).</li>
+<li><strong>Prose-register drift.</strong> Machine register has a
+fingerprint the plain-register memo names (uniform sentence length,
+adverb frequency, LLM-tell tokens like “admits”, “load-bearing”,
+“surfacing rather than building”). The <code>dellm</code> skill’s
+editing rules run as a linter over any committed markdown; the output is
+a scalar per file.</li>
+<li><strong>Sprint-completion drift.</strong> The sprint card’s stated
+done-criteria are checkable against the harness’s exit code and the
+JSONL trace’s tag list.</li>
+</ul>
+<p>A watcher assembled from those five detectors reads the session’s
+state at higher fidelity than the operator did during the sprint 1-14
+build, on every turn, without pausing.</p>
+<p>Two important observations follow. First: the model’s own words are
+almost never the load-bearing signal. The detectors read <em>what the
+model did</em> (which tags emitted, which payload shapes, which sprint
+closed, which linter score changed), not <em>how it phrased the turn’s
+summary</em>. Second: silence — the sequence of turns where the operator
+did not intervene — is data. In the current session’s transcript, the
+ratio of silent-continue turns to correction turns is a headline
+statistic; a dispatcher that never permits <code>CONTINUE</code> when
+the detectors are green will hang.</p>
+<hr />
+<h2 id="the-topologys-producer-graph">3. The topology’s Producer
+graph</h2>
+<p>The topology instantiates via
+<code>register_topology("parallel_build", parallel_build_topology)</code>
+and receives a <code>TopologyBuilder</code> per the standard authoring
+surface at <code>kernel/topology.py:130</code>.</p>
+<h3 id="event-schemas-the-topology-introduces">3.1 Event schemas the
+topology introduces</h3>
+<p>Every schema below is a <code>msgspec.Struct</code> with
+<code>frozen=True</code> per the substrate registration contract at
+<code>kernel/topology.py:190</code>.</p>
+<pre><code>class RunGroupSpawned(Struct, frozen=True):
+    run_group_id: str
+    n: int
+    bootstrap_variant: str
+    design_lock_id: str
+    substrate_version: str
+    sprint_queue_id: str
+
+class SessionSpawned(Struct, frozen=True):
+    run_group_id: str
+    session_slot: int
+    embedded_session_id: str
+    workspace_path: str
+
+class WatcherVerdict(Struct, frozen=True):
+    run_group_id: str
+    session_slot: int
+    checkpoint_kind: str   # &quot;vocabulary&quot; | &quot;sdd_hygiene&quot; | &quot;coding_canon&quot; | &quot;design_lock&quot; | &quot;prose_register&quot; | &quot;sprint_close&quot;
+    verdict: str           # &quot;green&quot; | &quot;yellow&quot; | &quot;red&quot;
+    drift_kind: str | None
+    drift_detail: str | None
+    detector_scores: dict[str, float]
+
+class DispatcherReplied(Struct, frozen=True):
+    run_group_id: str
+    session_slot: int
+    reply_kind: str        # empirically-derived label from the corpus
+    reply_text: str
+    triggering_verdict_id: str
+
+class RunGroupCheckpoint(Struct, frozen=True):
+    run_group_id: str
+    checkpoint_index: int
+    per_slot_verdicts: list[str]
+
+class RunGroupConverged(Struct, frozen=True):
+    run_group_id: str
+    layer: int             # 0-10, from the SDD grammar stack
+    converged_tag_count: int
+
+class RunGroupDiverged(Struct, frozen=True):
+    run_group_id: str
+    layer: int
+    diverged_at: str       # tag name where slots stopped matching
+
+class RunGroupHalted(Struct, frozen=True):
+    run_group_id: str
+    session_slot: int
+    reason: str            # &quot;operator_ratification_required&quot; | &quot;watcher_uncertain&quot; | &quot;detector_bank_unavailable&quot;
+    resume_condition: str</code></pre>
+<h3 id="producer-kinds">3.2 Producer kinds</h3>
+<ul>
+<li><strong><code>spawner</code></strong> — the initial. Emits one
+<code>RunGroupSpawned</code> and N <code>SessionSpawned</code>. Reads
+the run manifest that names the design lock, the substrate version, the
+sprint queue file, the bootstrap variant per slot, and the workspace
+shape (<code>flat</code> / <code>worktree</code> / <code>isolate</code>
+per substrate’s <code>WorkspaceShape</code> at
+<code>session_registry.py</code>).</li>
+<li><strong><code>embedded_session</code></strong> — an
+<code>embedded_substrate</code> Producer wrapping
+<code>session_topology</code>. Registered N times conceptually (once per
+slot via the trigger); the export map lifts every inner event kind to
+the outer topology’s schema names so the outer bus carries per-slot
+copies with <code>session_slot</code> in the payload.</li>
+<li><strong><code>watcher</code></strong> — one instance per slot,
+triggered per inner event that the detector bank cares about. Emits
+<code>WatcherVerdict</code>. The watcher is a Producer that holds the
+detector bank (five detectors above); each detector is a pure function
+<code>(events_since_last_verdict, project_state) -&gt; Score</code>. The
+watcher composes their outputs into a verdict.</li>
+<li><strong><code>dispatcher</code></strong> — one instance per slot,
+triggered per <code>WatcherVerdict</code>. Consumes the
+transcript-mining corpus (loaded once as a run baseline) as its rule
+table. Emits <code>DispatcherReplied</code> whose
+<code>reply_text</code> becomes the next inner-session
+<code>UserMessage</code> through a route.</li>
+<li><strong><code>convergence_monitor</code></strong> — a single
+Producer that reads across all slots’ vocabulary events, computes
+per-layer overlap via a <code>KindBuffer</code> view keyed on
+<code>(run_group_id, layer)</code>, and emits
+<code>RunGroupCheckpoint</code> at each epic boundary,
+<code>RunGroupConverged</code> when all slots agree at a layer, and
+<code>RunGroupDiverged</code> otherwise.</li>
+</ul>
+<h3 id="views">3.3 Views</h3>
+<ul>
+<li><strong><code>slot_transcripts</code></strong> — one View per slot
+(or one keyed View), <code>KindBuffer</code> scoped to that slot’s
+<code>SessionStarted..SessionEnded</code> window. The watcher reads
+it.</li>
+<li><strong><code>slot_vocabularies</code></strong> — per-slot
+projection of ratified tags at the moment of vocabulary lock. The
+convergence monitor reads across all slots.</li>
+<li><strong><code>dispatcher_corpus</code></strong> — a baseline-loaded
+View exposing the transcript-mining rule table as a keyed lookup:
+<code>(watcher_verdict_shape) -&gt; [candidate_reply_kinds]</code>.
+Deterministic; read-only after <code>RunStarted</code>.</li>
+<li><strong><code>per_slot_sprint_pointer</code></strong> — the last
+closed sprint id per slot, updated by a <code>SprintClosed</code>
+observer.</li>
+</ul>
+<h3 id="triggers-and-routes">3.4 Triggers and routes</h3>
+<ul>
+<li><code>SessionSpawned -&gt; embedded_session</code> (per slot).</li>
+<li>Every inner event matching
+<code>{ModelReply, Park, SessionEnded, SessionWarning}</code> per slot
+routes into a staged slot <code>last_turn_boundary</code> and triggers
+<code>watcher</code>.</li>
+<li>Every <code>WatcherVerdict</code> triggers
+<code>dispatcher</code>.</li>
+<li>Every <code>DispatcherReplied</code> routes its
+<code>reply_text</code> into a staged slot the embedded session’s
+<code>user_message_fragment_producer</code> reads via the composition
+boundary (see §5).</li>
+<li>Every inner <code>SessionEnded</code> or outer
+<code>RunGroupHalted</code> decrements a “live slots” counter view; when
+it reaches zero, <code>all_completed()</code> fires.</li>
+</ul>
+<h3 id="termination">3.5 Termination</h3>
+<pre><code>b.termination(api.any_of(
+    api.threshold_count(&quot;RunGroupHalted&quot;, n=N),           # any slot halts for ratification
+    api.all_completed(),                                  # all slots ran to SessionEnded
+    api.quiescence_with_watchdog(seconds=1800),           # nothing has moved in 30 minutes
+))</code></pre>
+<p><code>all_completed</code> is safe here because the outer topology
+never uses <code>pause_await_input</code>. The inner sessions do — that
+pause is what the dispatcher releases each time it fires — but the outer
+topology’s termination compares the outer bus’s counts, and the outer
+bus never sees a pause.</p>
+<h3 id="budget">3.6 Budget</h3>
+<p>Each <code>watcher</code> and <code>dispatcher</code> Producer
+registers a <code>Budget</code> (<code>kernel/topology.py:47</code>)
+with a <code>wall_seconds</code> cap keyed to a per-slot per-turn
+ceiling (say, 10 seconds), so a runaway detector cannot stall the whole
+group.</p>
+<hr />
+<h2 id="what-runs-inside-each-slot">4. What runs inside each slot</h2>
+<p>The embedded Producer is <code>session_topology</code> unchanged. Its
+termination stays <code>pause_await_input</code>. Its
+<code>Responder</code> is whatever the run manifest names — most
+parallel build slots run against <code>OllamaResponder</code> or
+<code>CliResponder</code>, some run against
+<code>DeterministicResponder</code> for deterministic replay in
+convergence experiments. The Responder is picked per slot from the run
+manifest’s <code>bootstrap_variant</code>, allowing three slots to run
+identical everything except for the model choice — which is itself a
+variant experiment.</p>
+<p>Each slot’s inner session emits into its own record root and its own
+JSONL trace exactly as today. The outer topology’s bus additionally
+carries the composed-up events per the export map. Both channels
+persist; the outer channel is what the watcher, dispatcher, and
+convergence monitor read.</p>
+<hr />
+<h2 id="the-user-input-seam">5. The user-input seam</h2>
+<p>This is the one place substrate’s current primitives may not be
+enough. The paper’s honest position: read the following as a proposal
+for one small kernel-adjacent addition, and check the kernel runtime
+before implementing.</p>
+<h3 id="the-gap">5.1 The gap</h3>
+<p><code>session_topology</code>’s pause is released by an external
+<code>UserMessage</code> event being appended to the inner session’s
+bus. In the current shell, the substrate-ui bridge
+(<code>bridge/main.py</code>) constructs that <code>UserMessage</code>
+and calls <code>SessionRegistry.turn_sync</code> which internally
+appends it. From outside a topology this is straightforward — the shell
+owns the registry. From inside a topology composing that session as an
+embedded Producer, appending an event to the embedded substrate’s bus
+requires the composition boundary to support inbound events, not only
+outbound ones.</p>
+<p>Reading <code>kernel/topology.py:370-376</code> and the export-map
+comment, the composition boundary today lifts inner events out. The
+inbound direction is either present in the kernel runtime (not verified
+in this session) or must be added.</p>
+<h3 id="the-proposal">5.2 The proposal</h3>
+<p>Add an <code>import_map</code> mirror to the
+<code>embedded_substrate</code> primitive: a declaration of which
+outer-topology event kinds inject into the inner bus as which inner
+kinds. Concretely, the outer <code>DispatcherReplied</code> event with a
+matching <code>session_slot</code> injects as an inner
+<code>UserMessage</code> into the embedded session whose slot matches.
+The kernel already knows the composition boundary; extending it with the
+inbound direction preserves the single-source principle (the map lives
+on the embedded Producer’s declaration, not in a parallel
+<code>b.import</code>).</p>
+<p>Two constraints follow from substrate’s determinism guarantees:</p>
+<ul>
+<li>The inbound injection must be recorded on the inner bus with
+sufficient provenance that L3a replay (deterministic re-derivation of
+view state) still holds: the outer event id that caused each inner
+append must be traceable.</li>
+<li>The inner bus’s schema for <code>UserMessage</code> must accept a
+<code>slash_source</code> of <code>"dispatcher"</code> or equivalent so
+the transcript can distinguish an operator-typed message from a
+dispatcher-typed one. The <code>UserMessage</code> struct already
+carries <code>slash_source: str | None</code> per
+<code>topologies/session/__init__.py:121</code>; the existing field
+takes the value.</li>
+</ul>
+<h3 id="the-fallback-if-inbound-composition-is-not-accepted">5.3 The
+fallback if inbound composition is not accepted</h3>
+<p>If the kernel maintainer rejects inbound composition on principle,
+the fallback is architectural: each slot runs as a full substrate
+process, not an embedded Producer. The outer topology becomes a process
+supervisor that speaks to each slot over its stdio JSON-lines protocol
+(the same protocol the shell already uses). This loses the single-bus
+determinism and the convergence-monitor view has to correlate across
+process boundaries, but it works with substrate as it exists today. The
+paper’s preference is the composition route; the fallback is here as an
+honest escape hatch.</p>
+<hr />
+<h2 id="the-watcher">6. The watcher</h2>
+<p>The watcher is a Producer per slot, triggered by inner events
+indicating a turn boundary. It reads the <code>slot_transcripts</code>
+view for events since the last verdict, runs the detector bank, and
+emits one <code>WatcherVerdict</code> per turn.</p>
+<h3 id="detector-bank">6.1 Detector bank</h3>
+<p>Five detectors, each a pure function returning a float score in
+<code>[0, 1]</code> and a boolean <code>green/yellow/red</code>
+classification.</p>
+<ul>
+<li><strong>vocabulary_conformance</strong> — reads the slot’s
+<code>signals/0.1.json</code>, greps the sprint’s diff and the trace for
+tag names, computes ratio of ratified to invented. Score 1.0 = all
+emissions match ratified schema; anything less is a hard fail because
+the mouth-side Emitter should have caught it (a non-1.0 score means the
+Emitter has a hole to patch).</li>
+<li><strong>sdd_hygiene</strong> — checks for <code>BLACKBOARD.md</code>
+and <code>KIT_DIARY.md</code> presence, for a Signal Report from the
+latest closed sprint, for proposals filed against any drift.</li>
+<li><strong>coding_canon</strong> — runs the linter suite
+(retyped-literals detector, function-length scanner, unused-code finder,
+discriminated-union coverage) on the slot’s git diff since last
+verdict.</li>
+<li><strong>design_lock</strong> — for UI-touching sprints only.
+Screenshots the shell states the sprint’s card claims to render and
+diffs them against the design-lock PNGs. Skipped on non-UI sprints (a
+<code>sprint_metadata</code> view names the sprint’s kind).</li>
+<li><strong>prose_register</strong> — runs the <code>dellm</code>
+skill’s checks over every committed markdown file changed by the slot’s
+diff. Returns a machine-tell fingerprint score.</li>
+</ul>
+<h3 id="rotation-schedule">6.2 Rotation schedule</h3>
+<p>Running every detector on every turn is wasteful and produces noise
+on sprints where a given detector has nothing to say. The rotation:</p>
+<ul>
+<li><strong>every turn</strong> — <code>vocabulary_conformance</code>
+and <code>sprint_close</code>.</li>
+<li><strong>every second turn</strong> — <code>sdd_hygiene</code>.</li>
+<li><strong>every fifth turn</strong> — <code>coding_canon</code>.</li>
+<li><strong>every UI-touching sprint</strong> —
+<code>design_lock</code>.</li>
+<li><strong>every commit-touching-markdown turn</strong> —
+<code>prose_register</code>.</li>
+</ul>
+<p>The <code>checkpoint_index</code> in the <code>WatcherVerdict</code>
+payload names which detectors ran; a run’s detector coverage is
+reconstructable from the trace.</p>
+<h3 id="verdict-composition">6.3 Verdict composition</h3>
+<p>The verdict is <code>red</code> if any run detector reports
+<code>red</code>; <code>yellow</code> if any reports <code>yellow</code>
+and none report <code>red</code>; <code>green</code> otherwise. The full
+<code>detector_scores</code> dict is carried forward so the dispatcher
+and the convergence monitor can inspect it.</p>
+<hr />
+<h2 id="the-dispatcher">7. The dispatcher</h2>
+<p>The dispatcher is a Producer per slot, triggered by
+<code>WatcherVerdict</code>. It emits one <code>DispatcherReplied</code>
+per verdict, whose <code>reply_text</code> becomes the next inner
+<code>UserMessage</code> through the import map (§5).</p>
+<h3 id="the-corpus-not-the-design">7.1 The corpus, not the design</h3>
+<p>The dispatcher’s reply repertoire is not designed a priori. It is
+derived from a transcript-mining pass over prior successful sessions.
+The pass:</p>
+<ol type="1">
+<li>Load the transcripts from
+<code>~/.claude/projects/-Users-peterlaffey-Documents-Claude-Projects-Agent-Orchestration/*.jsonl</code>
+(the current session’s transcript is one of them; others sit in the same
+directory).</li>
+<li>For each transcript, enumerate every operator turn.</li>
+<li>Classify each operator intervention: what did the prior assistant
+turn contain that made the operator type this? Store
+<code>(signal_shape, reply_text, reply_kind_label)</code>.</li>
+<li>Include silent-continue evidence — every assistant turn the operator
+accepted without correction is a
+<code>(signal_shape, "", "silent_continue")</code> datum.</li>
+<li>Cluster the <code>signal_shape</code> inputs; each cluster becomes a
+dispatcher rule.</li>
+<li>Store the corpus as a keyed lookup:
+<code>verdict → [candidate reply_kinds with template text]</code>.</li>
+</ol>
+<p>The rule table’s cardinality falls out of the corpus. The paper’s
+earlier five-name placeholder (<code>CONTINUE</code>,
+<code>NEXT_SPRINT</code>, <code>HALT_AND_ARTICULATE</code>,
+<code>PROPOSE_AND_HALT</code>, <code>REVERT_AND_TRY_AGAIN</code>) is the
+working guess; the mining pass will confirm, refine, or enlarge it. Two
+properties matter: the corpus must include silent-continue and the
+corpus must include tonal corrections (the operator’s writing-style
+interventions, which shape the prose-register detector’s response
+prompts).</p>
+<h3 id="the-dispatchers-minimum-behaviour">7.2 The dispatcher’s minimum
+behaviour</h3>
+<p>Independent of the corpus, three invariants hold:</p>
+<ul>
+<li>On any green verdict, emit a reply drawn from the
+<code>silent_continue</code> cluster (“continue”, “keep going”, “next”,
+empty prompt where the topology permits).</li>
+<li>On any red verdict flagged
+<code>operator_ratification_required</code> — chiefly a
+<code>NEW_TAG_PROPOSED</code> from the mouth-side Emitter’s refusal —
+emit no reply; instead emit
+<code>RunGroupHalted{reason="operator_ratification_required"}</code>.
+The outer topology’s termination catches it.</li>
+<li>On any yellow verdict, emit a reply from the cluster matched by the
+verdict’s <code>drift_kind</code>. If no cluster matches, emit
+<code>RunGroupHalted{reason="watcher_uncertain"}</code> and wait for the
+operator.</li>
+</ul>
+<p>The dispatcher is deliberately dumb. Its intelligence is in the
+corpus, not the code.</p>
+<h3 id="every-so-often-prompts">7.3 Every-so-often prompts</h3>
+<p>Independent of any verdict, the dispatcher inserts periodic reminders
+keyed to detector staleness. If <code>sdd_hygiene</code> has not been
+checked in the last five turns, the next dispatcher reply prepends
+“before continuing, confirm SDD hygiene.” If <code>design_lock</code>
+has not been checked since the last UI-touching commit, the reply
+prepends the corresponding reminder. These are the topological
+equivalent of the operator’s periodic “remember to use SDD” and “look at
+the designs again” prompts observed in prior sessions.</p>
+<hr />
+<h2 id="convergence-and-divergence-as-measurable-output">8. Convergence
+and divergence as measurable output</h2>
+<p>The interesting scientific claim inside SDD is that a well-designed
+grammar is a genuine attractor — three independent builders working from
+the same design lock, the same substrate, and the same sprint queue
+should produce the same <code>signals/0.1.json</code> layer by layer.
+<code>parallel_build_topology</code> is the instrument that tests
+this.</p>
+<p>The <code>convergence_monitor</code> reads across slots at each
+vocabulary-affecting checkpoint (Layer 0 entity list ratified, Layer 1
+tag list ratified, Layer 2 payload schemas ratified, and so on through
+Layer 10) and computes:</p>
+<ul>
+<li><strong>convergence at layer K</strong> — the set intersection of
+ratified elements at layer K across all N slots, normalised by the
+max-slot cardinality at that layer.</li>
+<li><strong>divergence taxonomy</strong> — for each tag present in fewer
+than N slots, whether the discrepancy is (a) present-versus-absent, (b)
+named-differently-with-same-semantics per the payload schema, or (c)
+present-with-incompatible-payload.</li>
+</ul>
+<p>The topology emits
+<code>RunGroupConverged{layer=k, converged_tag_count=t}</code> when the
+intersection ratio is 1.0;
+<code>RunGroupDiverged{layer=k, diverged_at=tag}</code> otherwise. These
+tags are the research output. Across many run groups against many design
+locks, their statistics are what supports or refutes the compounding
+claim in <code>PRINCIPLES.md</code> commitment 1.</p>
+<p>Two experimental configurations follow immediately:</p>
+<ul>
+<li><strong>Same bootstrap, different Responder.</strong> All N slots
+run with identical bootstrap_variant but different
+<code>Responder</code> (Ollama at one context size, Ollama at another,
+CLI Claude, CLI Gemini). Convergence data isolates the effect of the
+model on the vocabulary.</li>
+<li><strong>Same Responder, different bootstrap_variant.</strong> All N
+slots run with identical Responder but different bootstrap kits
+(mouth-side Emitter present versus absent, Layer 5 enforcement hard
+versus soft, primitive library present versus absent). Convergence data
+isolates the effect of the bootstrap kit — which is the direct evidence
+for the streamlining lessons in
+<code>2026-09-11-bootstrap-streamlining-lessons.md</code>.</li>
+</ul>
+<hr />
+<h2 id="what-substrate-must-ship">9. What substrate must ship</h2>
+<p>Two substantive additions, one minor.</p>
+<h3 id="inbound-composition-import_map">9.1 Inbound composition
+(import_map)</h3>
+<p>Per §5.2. Extends the existing <code>embedded_substrate</code>
+primitive with a declared inbound event mapping so an outer topology can
+inject events into an inner topology’s bus. Single source of truth on
+the embedded Producer’s declaration, mirroring the outbound export map.
+This is the load-bearing change; without it the topology has to fall
+back to per-slot processes.</p>
+<h3 id="a-workspaceshape-per-slot">9.2 A <code>WorkspaceShape</code> per
+slot</h3>
+<p><code>SessionManifest.workspace_shape</code> at
+<code>substrate/src/substrate/session_registry.py</code> already
+supports <code>flat</code>, <code>worktree</code>, <code>isolate</code>.
+The parallel topology’s spawner uses <code>isolate</code> per slot so
+slots do not race on the same working tree. The primitive exists; no
+substrate change required — but the spawner needs to construct N
+isolated workspaces per group, which means the topology’s baseline
+metadata carries the isolation policy.</p>
+<h3 id="a-run_group_id-field-on-sessionmanifest">9.3 A
+<code>run_group_id</code> field on <code>SessionManifest</code></h3>
+<p>A single optional field so a session’s manifest carries the parent
+run-group when it exists. Enables cross-session queries like “show every
+session that was slot 2 of run group X” from the shell. Purely
+additive.</p>
+<h3 id="what-is-deliberately-not-added">9.4 What is deliberately not
+added</h3>
+<ul>
+<li>No new kernel Producer type. <code>Producer</code> at
+<code>protocols.py:24</code> already suffices.</li>
+<li>No new termination-policy primitive. <code>any_of</code> composition
+over the existing recipes covers the run-group case.</li>
+<li>No <code>b.import</code> on <code>TopologyBuilder</code>. Per the
+export-map’s single-source-of-truth principle, the import map lives on
+the embedded Producer’s declaration, not on the outer builder.</li>
+</ul>
+<hr />
+<h2 id="what-the-shell-must-ship">10. What the shell must ship</h2>
+<p>The topology runs entirely inside substrate. The shell need not know
+about it to make it run — a CLI invocation of substrate’s
+<code>--topology parallel_build --manifest run.json</code> is enough. To
+<em>use</em> it interactively, the shell needs:</p>
+<ul>
+<li>A new bridge op <code>op_parallel_build_start(manifest_path)</code>
+that returns a <code>run_group_id</code>.</li>
+<li>A new bridge op <code>op_parallel_build_watch(run_group_id)</code>
+that streams the run-group’s outer bus events.</li>
+<li>A pane kind (<code>RunGroupPane</code>) that visualises N session
+panes side by side with the convergence monitor’s per-layer status bar
+across the top. The existing per-pane vocabulary (<code>Pane</code>,
+<code>PaneHeader</code>, <code>Prompt</code>, <code>Anchor</code> in
+<code>substrate-ui/src/render/</code>) is reused per slot.</li>
+<li>A <code>Layer 1 v0.1</code> addition to
+<code>signals/0.1.json</code> for the shell-side observation of the run
+group (five to eight new tags: <code>RUN_GROUP_OPENED</code>,
+<code>RUN_GROUP_SLOT_FOCUSED</code>,
+<code>RUN_GROUP_CONVERGENCE_BAR_RENDERED</code>, and so on). These are
+shell tags, not substrate events; they observe the visualisation, not
+the underlying run.</li>
+</ul>
+<p>None of this is required to start using
+<code>parallel_build_topology</code> from a CLI; a headless run
+producing a JSONL trace and a set of per-slot records is a complete
+artefact for the convergence experiments.</p>
+<hr />
+<h2 id="the-variant-runs-research-programme">11. The variant-runs
+research programme</h2>
+<p>The topology is a productivity tool if used against a fixed bootstrap
+and Responder — three parallel builds finish in roughly one build’s wall
+clock, at 3× tokens, with the reviewer overhead absorbed by the watcher.
+That is the least-interesting use.</p>
+<p>The more interesting use is as a research instrument. Two programmes
+follow directly.</p>
+<h3 id="the-bootstrap-variant-programme">11.1 The bootstrap-variant
+programme</h3>
+<p>Fix design lock (v7) and Responder (a specific Ollama model at a
+specific context size). Vary <code>bootstrap_variant</code> across
+slots. Read the convergence data at each vocabulary layer. The
+hypothesis under test is the compounding claim: better-bootstrapped
+builds converge higher and faster. The direct output is empirical
+support (or its absence) for the eight streamlining primitives.</p>
+<h3 id="the-responder-variant-programme">11.2 The Responder-variant
+programme</h3>
+<p>Fix bootstrap variant and design lock. Vary Responder across slots
+(different models, different context sizes, different providers).
+Convergence data isolates model dependence. A convergence ratio of 1.0
+at all layers across families would be strong evidence that a
+well-designed grammar is model-invariant — a claim SDD implicitly makes
+but has never tested at scale.</p>
+<h3 id="the-prose-register-programme">11.3 The prose-register
+programme</h3>
+<p>Fix everything except the prose register the dispatcher enforces. One
+slot’s dispatcher enforces plain register aggressively (yellow verdict
+on any machine-tell fingerprint above threshold); one slot’s dispatcher
+enforces it laxly (only red on gross violations); one slot’s dispatcher
+does not enforce it at all. Read the coding-canon and vocabulary-
+conformance scores across slots. The hypothesis: prose-register
+discipline correlates with code discipline. If it does not, the
+connection is decorative and can be dropped from the watcher.</p>
+<hr />
+<h2 id="risks-open-questions-honest-limits">12. Risks, open questions,
+honest limits</h2>
+<h3 id="ratification-bottleneck">12.1 Ratification bottleneck</h3>
+<p>The Architect’s ratification queue is the one place the topology
+cannot mechanise. Every
+<code>RUN_GROUP_HALTED{reason="operator_ratification_required"}</code>
+waits for the operator. If three slots each propose a new tag at similar
+sprint moments, the operator has three proposals to read. Either the
+operator processes them serially (reducing effective parallelism) or the
+topology accepts a <code>unified_ratification</code> mode where the same
+proposal from multiple slots is de-duplicated and ratified once (which
+requires slots’ proposals to be structurally comparable, which is not
+obviously true).</p>
+<h3 id="corpus-quality-dominates-dispatcher-quality">12.2 Corpus quality
+dominates dispatcher quality</h3>
+<p>If the transcript-mining pass produces a rule table with poor
+coverage, the dispatcher either sends the wrong reply (progressing a
+session into deeper drift) or halts too often (killing throughput). The
+mitigation is scale: mine many transcripts, cluster, manually review a
+sample of the clusters, then iterate. The corpus is versioned; the
+topology carries the corpus version in the run manifest so replays are
+exact.</p>
+<h3 id="convergence-measurement-across-incompatible-vocabularies">12.3
+Convergence measurement across incompatible vocabularies</h3>
+<p>Two slots that ratify tags at semantically equivalent points but
+under different names should count as convergent, but the naive set
+intersection reads them as divergent. The divergence taxonomy in §8
+already covers this (<code>named-differently-with-same-semantics</code>)
+but the check requires a semantic equivalence oracle — probably a
+separate small model that reads the two rationales and returns
+<code>{same, different, unclear}</code>. This is the one place a model
+reads model output in the whole topology; it is bounded, offline, and
+audited.</p>
+<h3 id="substrate-composition-inbound-is-unverified">12.4 Substrate
+composition inbound is unverified</h3>
+<p>Per §5.1, the kernel’s support for inbound-composition events was not
+verified in this session. If it does not exist, §5.3’s fallback
+(per-slot processes) is what actually ships. The fallback works but
+costs the single-bus determinism guarantee for cross-slot
+observation.</p>
+<h3
+id="the-topology-is-heavier-than-substrates-other-reference-topologies">12.5
+The topology is heavier than substrate’s other reference topologies</h3>
+<p><code>best_of_n_correction</code> is 214 lines. <code>debate</code>
+is 51 lines. <code>session_topology</code> is 1200 lines and is the
+current heavyweight. <code>parallel_build_topology</code> is going to
+sit between <code>session_topology</code> and
+<code>swebench_solver</code> in complexity — many Producers, many
+schemas, cross-slot views. The mitigation is composition: the watcher
+and dispatcher are each their own module with their own tests, and the
+topology file itself is roughly a graph declaration.</p>
+<hr />
+<h2 id="what-this-replaces-and-what-it-does-not">13. What this replaces
+and what it does not</h2>
+<p><strong>Replaces.</strong> The operator typing “continue” into three
+terminal panes. The reviewer running in a fourth pane, reading three
+transcripts sequentially and hand-writing Signal Reports. The manual
+bookkeeping that today lives in the operator’s head about which slot is
+where in its sprint queue.</p>
+<p><strong>Does not replace.</strong></p>
+<ul>
+<li><em>Architect ratification.</em> <code>NEW_TAG_PROPOSED</code> still
+becomes <code>signals/0.2.json</code> only because the operator says so.
+The topology gathers proposals; the operator ratifies.</li>
+<li><em>Design lock authorship.</em> Prototype v7 was designed by a
+designer. The topology drives builds from a design lock; it does not
+create one.</li>
+<li><em>Sprint card authorship correction.</em> Sprint cards are written
+by the model under the operator’s direction, not by the operator
+directly. This was misstated in v1 of this document and is corrected
+here.</li>
+<li><em>Bootstrap kit authorship.</em> The eight primitives in
+<code>2026-09-11-bootstrap-streamlining-lessons.md</code> are the
+specification of what each slot’s bootstrap_variant contains. The
+topology consumes them; it does not invent them.</li>
+</ul>
+<hr />
+<h2 id="adjacent-work-in-this-repo">14. Adjacent work in this repo</h2>
+<ul>
+<li><strong><code>sdd-kit-2/foundations/02-sdd-practice.md</code></strong>
+— Stage-2 and Stage-3 of the automated loop (subscribers, streaming
+observers). <code>parallel_build_topology</code> is the Stage-3 claim
+made concrete for a specific workload: many concurrent builders,
+mechanised supervision, human at ratification.</li>
+<li><strong><code>substrate/src/substrate/topologies/best_of_n/__init__.py</code></strong>
+— the closest existing pattern; N Producers with a per-verdict path and
+a judge terminal.</li>
+<li><strong><code>substrate/src/substrate/topologies/session/__init__.py</code></strong>
+— the topology being composed inside each slot. Untouched by this
+design.</li>
+<li><strong><code>substrate/src/substrate/session_registry.py</code></strong>
+— the per-session registry the spawner drives when constructing N
+isolated workspaces.</li>
+<li><strong><code>substrate-ui/process/methodology/2026-09-11-bootstrap-streamlining-lessons.md</code></strong>
+— the specification of what each slot’s bootstrap_variant should
+contain.</li>
+</ul>
+<hr />
+<h2 id="concrete-next-steps">15. Concrete next steps</h2>
+<p>Not a promise to execute; a sequenced list.</p>
+<ol type="1">
+<li>Verify or falsify the kernel’s inbound-composition support. Read
+<code>substrate/src/substrate/kernel/runtime.py</code> and
+<code>sequencer.py</code> for how events cross the composition boundary.
+If inbound is supported, §5.2 is a declaration change only. If not,
+decide between §5.3 (per-slot processes) and proposing the kernel
+addition.</li>
+<li>Run the transcript-mining pass on the four to six strongest prior
+sessions. Produce a first-cut corpus with cluster labels. Manually
+review a sample; iterate.</li>
+<li>Implement the watcher’s five detectors as standalone functions under
+<code>substrate-ui/tools/detectors/</code> with unit tests against
+fixture events. The detectors need to be usable from outside the
+topology (a solo operator running one detector over one JSONL) so their
+interface is a plain function.</li>
+<li>Implement <code>parallel_build_topology</code> in
+<code>substrate/src/substrate/topologies/parallel_build/</code> against
+a stub Responder for the initial pass.</li>
+<li>Register the shell tags Layer 1 v0.2 needs for the
+<code>RunGroupPane</code> before writing any pane code (the
+vocabulary-first discipline).</li>
+<li>Run a two-slot convergence experiment against a small design lock (a
+toy grammar of ten tags) as a proof of instrument, not a proof of
+anything about SDD.</li>
+<li>Scale to three slots against v7 and read the convergence data at
+each epic boundary.</li>
+</ol>
+<hr />
+<h2 id="closing-frame">16. Closing frame</h2>
+<p>The topology is a small idea with a large surface. Its smallest
+version is a productivity tool that runs three unattended builds where
+one used to run attended. Its largest version is the experimental
+instrument that turns SDD’s compounding claim into a measurable
+quantity. The two versions share the same code; they differ only in
+whether the run manifest carries variant fields per slot.</p>
+<p>The primitives it needs already exist in substrate, with one
+exception whose resolution is either a small kernel amendment or an
+architectural fallback both of which are named and sized here. The
+corpus that gives the dispatcher its voice is mined from transcripts the
+operator has already produced. The convergence data that turns it into
+an instrument is what falls out of running the topology at N greater
+than one against the same design lock.</p>
+<p>Nothing in this design requires believing anything not already
+visible in the substrate source, the sdd-kit-2 foundations, or the four
+completed epics of substrate-ui. The question is whether it is worth
+building. That question is not answered by this paper.</p>
+<hr />
+<p><em>Round 2 draft. Companion:
+<code>2026-09-11-bootstrap-streamlining-lessons.md</code>. v1 stays on
+disk at <code>2026-09-11-autonomous-build-topology.md</code> per the
+no-in-place-edits discipline.</em></p>
+</body>
+</html>

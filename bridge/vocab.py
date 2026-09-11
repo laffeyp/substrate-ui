@@ -42,6 +42,13 @@ from substrate.topologies.session.vocabulary import (  # type: ignore[import-not
 )
 
 
+# The tool-loop suite's `delegate` tool name. Sprint 020 needs this to
+# route ToolCall envelopes with `payload.tool == "delegate"` through the
+# specialized delegate row instead of the generic transcript row. Kept
+# in the tool_loop tools module — the bridge imports it, no retype.
+from substrate.topologies.tool_loop.tools import TOOL_NAME_DELEGATE  # type: ignore[import-not-found]
+
+
 # --- Envelope kinds without a central substrate export ------------------
 # Tool-loop kinds live in substrate.topologies.tool_loop's Struct decls;
 # authoring-failure kinds live in substrate's kernel constants.
