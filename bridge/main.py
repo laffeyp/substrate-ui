@@ -244,6 +244,17 @@ def op_session_resume(payload: dict) -> dict:
         return {"__error__": True, "reason": "session_ended"}
     # A fresh session (no turns run yet) has no record_root on disk — that is not
     # a tear, that is fresh. Real torn-record detection lives in Sprint 013.
+    from substrate import api  # type: ignore[import-not-found]
+    last_turn_index = -1
+    try:
+        rec_root = Path(manifest.record_root)
+        if rec_root.exists():
+            for env in api.read_record(rec_root):
+                pl = env.get("payload") or {}
+                if env.get("kind") == "UserMessage" and isinstance(pl, dict) and "turn_index" in pl:
+                    last_turn_index = max(last_turn_index, int(pl["turn_index"]))
+    except Exception:  # noqa: BLE001
+        pass
     return {
         "session_id": manifest.session_id,
         "session_name": manifest.name,
@@ -252,7 +263,7 @@ def op_session_resume(payload: dict) -> dict:
         "driver": manifest.driver,
         "status": str(manifest.status),
         "record_root": manifest.record_root,
-        "last_turn_index": 0,  # Sprint 014 wires the real value via record scan.
+        "last_turn_index": last_turn_index,
     }
 
 
@@ -285,20 +296,50 @@ def op_record_read(payload: dict) -> dict:
             producer_kind = producer.get("kind") if isinstance(producer, dict) else None
             pl = env.get("payload") or {}
             summary = ""
+            park_reason = None
+            end_reason = None
+            tokens_before = None
+            tokens_after = None
+            compact_strategy = None
+            retry_index = None
+            retry_max = None
+            retry_after_seconds = None
             if kind == "UserMessage":
                 summary = str(pl.get("assembled_prompt", ""))[:200]
             elif kind == "ModelReply":
                 summary = str(pl.get("text", ""))[:200]
             elif kind == "Park":
-                summary = str(pl.get("reason", ""))
+                # Propagate substrate's ParkReason enum verbatim (final_answer /
+                # model_error / interrupt) rather than fuzzy-match on prose.
+                park_reason = pl.get("reason") if isinstance(pl, dict) else None
+                summary = str(park_reason or "")
             elif kind == "SessionEnded":
-                summary = str(pl.get("reason", ""))
+                end_reason = pl.get("reason") if isinstance(pl, dict) else None
+                summary = str(end_reason or "")
+            elif kind == "TranscriptCompacted":
+                tokens_before = pl.get("tokens_before") if isinstance(pl, dict) else None
+                tokens_after = pl.get("tokens_after") if isinstance(pl, dict) else None
+                compact_strategy = pl.get("strategy") if isinstance(pl, dict) else None
+                summary = f"{tokens_before}→{tokens_after} via {compact_strategy}"
+            elif kind == "RateLimitedWaiting":
+                retry_index = pl.get("retry_index") if isinstance(pl, dict) else None
+                retry_max = pl.get("retry_max") if isinstance(pl, dict) else None
+                retry_after_seconds = pl.get("retry_after_seconds") if isinstance(pl, dict) else None
+                summary = f"retry {retry_index}/{retry_max} in {retry_after_seconds}s"
             out.append({
                 "seq": int(env.get("seq", -1)),
                 "kind": kind,
                 "producer_kind": producer_kind or "?",
                 "summary": summary,
                 "turn_index": pl.get("turn_index") if isinstance(pl, dict) else None,
+                "park_reason": park_reason,
+                "end_reason": end_reason,
+                "tokens_before": tokens_before,
+                "tokens_after": tokens_after,
+                "compact_strategy": compact_strategy,
+                "retry_index": retry_index,
+                "retry_max": retry_max,
+                "retry_after_seconds": retry_after_seconds,
             })
     except Exception as e:  # noqa: BLE001
         return {"__error__": True, "reason": f"read_error:{e}"}

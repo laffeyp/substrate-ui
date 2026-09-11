@@ -27,6 +27,8 @@ function rowColor(kind: string): string {
   if (kind === "ModelReply") return "#a7c893";
   if (kind === "SessionEnded") return "#c26058";
   if (kind === "Park") return "#c89a6b";
+  if (kind === "TranscriptCompacted") return "#6b7ac2";
+  if (kind === "RateLimitedWaiting") return "#c2a86b";
   return "#5f636b";
 }
 
@@ -35,6 +37,8 @@ function rowGlyph(kind: string): string {
   if (kind === "ModelReply") return "<";
   if (kind === "SessionEnded") return "!";
   if (kind === "Park") return "-";
+  if (kind === "TranscriptCompacted") return "=";
+  if (kind === "RateLimitedWaiting") return "~";
   return "*";
 }
 

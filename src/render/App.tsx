@@ -74,6 +74,7 @@ function Shell(): JSX.Element {
         dispatch({ type: "SESSION_CREATE_OK", paneId, requestId,
           sessionId: result.session_id, sessionName: result.session_name, driver,
           workspacePath: result.workspace_path, workspaceShape: result.workspace_shape });
+        refreshTranscript(paneId, result.session_id);
       }).catch((reason) => {
         dispatch({ type: "SESSION_CREATE_ERR", paneId, requestId, reason: String(reason) });
       });
@@ -135,12 +136,14 @@ function Shell(): JSX.Element {
       workspace_path: string; workspace_shape: WorkspaceShape;
       status: string;
     }>("session_resume", { session_id: sessionId }, 5000).then((result) => {
+      const r = result as unknown as { last_turn_index?: number } & typeof result;
       const status = (result.status === "parked" || result.status === "running" ||
         result.status === "interrupted" || result.status === "ended") ? result.status : "parked";
       dispatch({ type: "SESSION_RESUME_OK", paneId, requestId,
         sessionId: result.session_id, sessionName: result.session_name,
         workspacePath: result.workspace_path, workspaceShape: result.workspace_shape,
         status: status as "parked" | "running" | "interrupted" | "ended",
+        lastTurnIndex: typeof r.last_turn_index === "number" ? r.last_turn_index : -1,
       });
       refreshTranscript(paneId, result.session_id);
     }).catch((reason) => {

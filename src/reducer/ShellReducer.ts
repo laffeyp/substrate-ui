@@ -28,7 +28,7 @@ export type Action =
   | { type: "PROBE_DRIVER_OK"; requestId: string; driverName: string; contextTokens: number | null; modelFamilies: string[] }
   | { type: "PROBE_DRIVER_ERR"; requestId: string; driverName: string; reason: string }
   | { type: "SESSION_RESUME_START"; paneId: string; requestId: string; sessionId: string }
-  | { type: "SESSION_RESUME_OK"; paneId: string; requestId: string; sessionId: string; sessionName: string | null; workspacePath: string; workspaceShape: "flat" | "worktree" | "isolate"; status: "unbound" | "parked" | "running" | "interrupted" | "ended" }
+  | { type: "SESSION_RESUME_OK"; paneId: string; requestId: string; sessionId: string; sessionName: string | null; workspacePath: string; workspaceShape: "flat" | "worktree" | "isolate"; status: "unbound" | "parked" | "running" | "interrupted" | "ended"; lastTurnIndex: number }
   | { type: "SESSION_RESUME_ERR"; paneId: string; requestId: string; reason: string }
   | { type: "SESSION_END_START"; paneId: string; requestId: string; sessionId: string; source: "menu" | "slash" | "shortcut" }
   | { type: "SESSION_END_OK"; paneId: string; requestId: string; sessionId: string; endReason: string; recordFinalised: boolean; envelopeSeq: number }
@@ -152,12 +152,30 @@ export function reduce(state: ShellState, action: Action): Step {
       let maxSeq = pane.transcriptLastSeq;
       for (const r of newRows) {
         if (r.kind === "Park") {
+          const parkReason: "final_answer" | "model_error" | "interrupt" =
+            r.park_reason === "final_answer" || r.park_reason === "model_error" || r.park_reason === "interrupt"
+              ? r.park_reason : "final_answer";
           emissions.push({ kind: "TRANSCRIPT_PARK_RENDERED", payload: {
-            pane_id: action.paneId, envelope_seq: r.seq, park_reason: mapParkReason(r.summary),
+            pane_id: action.paneId, envelope_seq: r.seq, park_reason: parkReason,
           }});
         } else if (r.kind === "SessionEnded") {
           emissions.push({ kind: "TRANSCRIPT_SESSION_ENDED_RENDERED", payload: {
-            pane_id: action.paneId, envelope_seq: r.seq, end_reason: r.summary || "user_end",
+            pane_id: action.paneId, envelope_seq: r.seq,
+            end_reason: r.end_reason || "user_end",
+          }});
+        } else if (r.kind === "TranscriptCompacted") {
+          emissions.push({ kind: "TRANSCRIPT_COMPACTED_RENDERED", payload: {
+            pane_id: action.paneId, envelope_seq: r.seq,
+            tokens_before: r.tokens_before ?? 0,
+            tokens_after: r.tokens_after ?? 0,
+            strategy: r.compact_strategy ?? "unknown",
+          }});
+        } else if (r.kind === "RateLimitedWaiting") {
+          emissions.push({ kind: "TRANSCRIPT_RATE_LIMITED_RENDERED", payload: {
+            pane_id: action.paneId, envelope_seq: r.seq,
+            retry_index: r.retry_index ?? 0,
+            retry_max: r.retry_max ?? 0,
+            retry_after_seconds: r.retry_after_seconds ?? 0,
           }});
         } else {
           emissions.push({ kind: "TRANSCRIPT_ROW_RENDERED", payload: {
@@ -269,6 +287,11 @@ function doResumeOk(state: ShellState, a: Extract<Action, { type: "SESSION_RESUM
         pane_id: a.paneId, session_id: a.sessionId,
         workspace_path: a.workspacePath, shape: a.workspaceShape,
       }},
+      ...(a.lastTurnIndex < 0
+        ? [{ kind: "TRANSCRIPT_AWAITING_FIRST_MESSAGE_RENDERED", payload: {
+            pane_id: a.paneId, session_id: a.sessionId,
+          }}]
+        : []),
     ],
   };
 }
@@ -280,13 +303,6 @@ function doResumeErr(state: ShellState, a: Extract<Action, { type: "SESSION_RESU
     state: { ...state, panes: { ...state.panes, [a.paneId]: { ...pane, creating: null } } },
     emissions: [], // Failure surfaces as UI banner; no tag in Layer 1 v0.1 for resume_failed
   };
-}
-
-function mapParkReason(reason: string): "final_answer" | "model_error" | "interrupt" {
-  const r = reason.toLowerCase();
-  if (r.includes("interrupt")) return "interrupt";
-  if (r.includes("error") || r.includes("fail")) return "model_error";
-  return "final_answer";
 }
 
 function stripSecrets(obj: unknown): unknown {
@@ -350,6 +366,9 @@ function doSessionCreateOk(state: ShellState, a: Extract<Action, { type: "SESSIO
       { kind: "PANE_UNBOUND_BOUND", payload: {
         pane_id: a.paneId, session_id: a.sessionId,
         workspace_path: a.workspacePath, shape: a.workspaceShape,
+      }},
+      { kind: "TRANSCRIPT_AWAITING_FIRST_MESSAGE_RENDERED", payload: {
+        pane_id: a.paneId, session_id: a.sessionId,
       }},
     ],
   };
