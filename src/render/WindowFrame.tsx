@@ -23,6 +23,8 @@ export interface PaneCallbacks {
   onStreamDirToggle: (paneId: string) => void;
   onRevealFocusToggle: (paneId: string) => void;
   onDelegateExpandToggle: (paneId: string, toolCallId: string, childRecordRoot: string | null) => void;
+  onDescend: (paneId: string, toolCallId: string, childRecordRoot: string | null) => void;
+  onDescentExit: (paneId: string) => void;
 }
 
 export interface GutterCallbacks {
@@ -61,6 +63,8 @@ function Node({ id, state, gutter, pane }: { id: string; state: ShellState; gutt
         onStreamDirToggle={pane.onStreamDirToggle}
         onRevealFocusToggle={pane.onRevealFocusToggle}
         onDelegateExpandToggle={pane.onDelegateExpandToggle}
+        onDescend={pane.onDescend}
+        onDescentExit={pane.onDescentExit}
       />
     );
   }

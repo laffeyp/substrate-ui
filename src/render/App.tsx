@@ -98,6 +98,29 @@ function Shell(): JSX.Element {
     }).catch(() => { /* transcript fetch is best-effort */ });
   }, [dispatch]);
 
+  const descend = useMemo(() =>
+    (paneId: string, toolCallId: string, childRecordRoot: string | null) => {
+      if (!childRecordRoot) return; // no child record yet; descent has nowhere to go
+      const pane = stateRef.current.panes[paneId];
+      if (!pane) return;
+      const nextDepth = pane.descentStack.length + 1;
+      dispatch({ type: ActionType.DESCENT_ENTER, paneId, toolCallId, childRecordRoot });
+      // Depth may have been capped; only load if the push actually happened.
+      const after = stateRef.current.panes[paneId];
+      if (!after || after.descentStack.length !== nextDepth) return;
+      bridgeRequest<{ session_id: string; envelopes: TranscriptRow[] }>(
+        "record_read", { record_root: childRecordRoot }, 5000,
+      ).then((result) => {
+        dispatch({ type: ActionType.DESCENT_ROWS_LOADED, paneId,
+          depth: nextDepth, rows: result.envelopes });
+      }).catch(() => { /* best-effort */ });
+    }, [dispatch]);
+
+  const exitDescent = useMemo(() =>
+    (paneId: string) => {
+      dispatch({ type: ActionType.DESCENT_EXIT, paneId });
+    }, [dispatch]);
+
   const toggleDelegateExpand = useMemo(() =>
     (paneId: string, toolCallId: string, childRecordRoot: string | null) => {
       const pane = stateRef.current.panes[paneId];
@@ -244,6 +267,9 @@ function Shell(): JSX.Element {
             onRevealFocusToggle: (paneId) => dispatch({ type: ActionType.REVEAL_FOCUS_TOGGLE, paneId }),
             onDelegateExpandToggle: (paneId, toolCallId, childRecordRoot) =>
               toggleDelegateExpand(paneId, toolCallId, childRecordRoot),
+            onDescend: (paneId, toolCallId, childRecordRoot) =>
+              descend(paneId, toolCallId, childRecordRoot),
+            onDescentExit: (paneId) => exitDescent(paneId),
           }}
         />
       )}
@@ -300,6 +326,12 @@ function ShellShortcuts({ dispatch, focusedPaneId, focusedPane, onEnd }: {
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (!focusedPaneId) return;
+      // Esc pops descent one level (Sprint 022). No modifier required.
+      if (e.key === "Escape" && focusedPane && focusedPane.descentStack.length > 0) {
+        e.preventDefault();
+        dispatch({ type: ActionType.DESCENT_EXIT, paneId: focusedPaneId });
+        return;
+      }
       const meta = e.metaKey || e.ctrlKey;
       if (!meta) return;
       if (e.key === "d" || e.key === "D") {

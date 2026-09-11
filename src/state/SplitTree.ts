@@ -47,6 +47,7 @@ export function splitPane(
     streamDir: StreamDir.DOWN,
     revealFocus: RevealFocus.TRANSCRIPT,
     delegateExpansions: {},
+    descentStack: [],
   };
   const updatedParent: Pane = { ...parent, splitParentId: newSplitId, ratio: 0.5 };
   const newSplit: Split = {

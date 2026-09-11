@@ -55,6 +55,9 @@ export const ActionType = {
   DELEGATE_EXPAND_START: "DELEGATE_EXPAND_START",
   DELEGATE_EXPAND_ROWS_LOADED: "DELEGATE_EXPAND_ROWS_LOADED",
   DELEGATE_COLLAPSE: "DELEGATE_COLLAPSE",
+  DESCENT_ENTER: "DESCENT_ENTER",
+  DESCENT_ROWS_LOADED: "DESCENT_ROWS_LOADED",
+  DESCENT_EXIT: "DESCENT_EXIT",
 } as const;
 export type ActionTypeT = typeof ActionType[keyof typeof ActionType];
 
@@ -108,7 +111,15 @@ export type Action =
   | { type: typeof ActionType.DELEGATE_EXPAND_START; paneId: string; toolCallId: string; childRecordRoot: string }
   | { type: typeof ActionType.DELEGATE_EXPAND_ROWS_LOADED; paneId: string; toolCallId: string; rows: TranscriptRow[] }
   | { type: typeof ActionType.DELEGATE_COLLAPSE; paneId: string; toolCallId: string; childRecordRoot: string }
+  | { type: typeof ActionType.DESCENT_ENTER; paneId: string; toolCallId: string; childRecordRoot: string }
+  | { type: typeof ActionType.DESCENT_ROWS_LOADED; paneId: string; depth: number; rows: TranscriptRow[] }
+  | { type: typeof ActionType.DESCENT_EXIT; paneId: string }
   ;
+
+// Layer 5 (delegate.py:353) caps descent at depth 2. The reducer
+// refuses a third push; Sprint 023 wires the DELEGATE_DEPTH_CAP_REFUSED
+// signal at the refusal site.
+export const DESCENT_MAX_DEPTH = 2 as const;
 
 export interface Emission {
   kind: string;
@@ -313,6 +324,50 @@ export function reduce(state: ShellState, action: Action): Step {
         state: { ...state, panes: { ...state.panes, [action.paneId]: { ...pane, delegateExpansions: next } } },
         emissions: [{ kind: "DELEGATE_INLINE_COLLAPSED", payload: {
           pane_id: action.paneId, tool_call_id: action.toolCallId,
+        }}],
+      };
+    }
+    case ActionType.DESCENT_ENTER: {
+      const pane = state.panes[action.paneId];
+      if (!pane) return { state, emissions: [] };
+      if (pane.descentStack.length >= DESCENT_MAX_DEPTH) {
+        // Cap refusal — Sprint 023 emits DELEGATE_DEPTH_CAP_REFUSED here.
+        return { state, emissions: [] };
+      }
+      const nextStack = [
+        ...pane.descentStack,
+        { toolCallId: action.toolCallId, childRecordRoot: action.childRecordRoot, rows: [] },
+      ];
+      return {
+        state: { ...state, panes: { ...state.panes, [action.paneId]: { ...pane, descentStack: nextStack } } },
+        emissions: [{ kind: "DESCENT_ENTERED", payload: {
+          pane_id: action.paneId,
+          child_record_root: action.childRecordRoot,
+          depth: nextStack.length,
+        }}],
+      };
+    }
+    case ActionType.DESCENT_ROWS_LOADED: {
+      const pane = state.panes[action.paneId];
+      if (!pane) return { state, emissions: [] };
+      if (action.depth < 1 || action.depth > pane.descentStack.length) return { state, emissions: [] };
+      const nextStack = pane.descentStack.map((frame, i) =>
+        i === action.depth - 1 ? { ...frame, rows: action.rows } : frame,
+      );
+      return {
+        state: { ...state, panes: { ...state.panes, [action.paneId]: { ...pane, descentStack: nextStack } } },
+        emissions: [],
+      };
+    }
+    case ActionType.DESCENT_EXIT: {
+      const pane = state.panes[action.paneId];
+      if (!pane) return { state, emissions: [] };
+      if (pane.descentStack.length === 0) return { state, emissions: [] };
+      const nextStack = pane.descentStack.slice(0, -1);
+      return {
+        state: { ...state, panes: { ...state.panes, [action.paneId]: { ...pane, descentStack: nextStack } } },
+        emissions: [{ kind: "DESCENT_EXITED", payload: {
+          pane_id: action.paneId, to_depth: nextStack.length,
         }}],
       };
     }
@@ -668,6 +723,7 @@ function boot(): Step {
     streamDir: StreamDir.DOWN,
     revealFocus: RevealFocus.TRANSCRIPT,
     delegateExpansions: {},
+    descentStack: [],
   };
   const window: Window = { id: windowId, rootId: paneId };
   const next: ShellState = {
