@@ -216,6 +216,8 @@ function Shell(): JSX.Element {
             onPromptSubmit: submitTurn,
             onRevealToggle: (paneId) => dispatch({ type: "REVEAL_TOGGLE", paneId }),
             onLensSwitch: (paneId, to) => dispatch({ type: "LENS_SWITCH", paneId, to }),
+            onStreamLevelToggle: (paneId) => dispatch({ type: "STREAM_LEVEL_TOGGLE", paneId }),
+            onStreamDirToggle: (paneId) => dispatch({ type: "STREAM_DIR_TOGGLE", paneId }),
           }}
         />
       )}

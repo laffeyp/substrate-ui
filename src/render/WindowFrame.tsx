@@ -19,6 +19,8 @@ export interface PaneCallbacks {
   onPromptSubmit: (paneId: string, text: string) => void;
   onRevealToggle: (paneId: string) => void;
   onLensSwitch: (paneId: string, to: Lens) => void;
+  onStreamLevelToggle: (paneId: string) => void;
+  onStreamDirToggle: (paneId: string) => void;
 }
 
 export interface GutterCallbacks {
@@ -53,6 +55,8 @@ function Node({ id, state, gutter, pane }: { id: string; state: ShellState; gutt
         onPromptSubmit={pane.onPromptSubmit}
         onRevealToggle={pane.onRevealToggle}
         onLensSwitch={pane.onLensSwitch}
+        onStreamLevelToggle={pane.onStreamLevelToggle}
+        onStreamDirToggle={pane.onStreamDirToggle}
       />
     );
   }

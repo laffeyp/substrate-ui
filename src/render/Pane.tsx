@@ -3,7 +3,7 @@
 // dir, descent, surface, find, inspect, header_popover.
 
 import { Pane as PaneModel, WorkspaceShape, Lens } from "@/state/ShellState";
-import { PaneStatus, RevealState } from "@/observability/reasons";
+import { PaneStatus, RevealState, StreamLevel, StreamDir } from "@/observability/reasons";
 import { PaneHeader } from "./PaneHeader";
 import { Anchor } from "./Anchor";
 import { UnboundPanePicker } from "./UnboundPanePicker";
@@ -28,6 +28,8 @@ interface Props {
   onPromptSubmit?: (paneId: string, text: string) => void;
   onRevealToggle?: (paneId: string) => void;
   onLensSwitch?: (paneId: string, to: Lens) => void;
+  onStreamLevelToggle?: (paneId: string) => void;
+  onStreamDirToggle?: (paneId: string) => void;
 }
 
 const ROW_COLORS: Record<string, string> = {
@@ -84,10 +86,12 @@ function initialByte(slot: string, pane: PaneModel): number {
       case Lens.SCENE:        return 192;
     }
   }
+  if (slot === "level") return pane.streamLevel === StreamLevel.APP ? 255 : 0;
+  if (slot === "dir")   return pane.streamDir === StreamDir.SIDE ? 255 : 0;
   return 0;
 }
 
-export function Pane({ pane, onFocus, onDragStart, onClose, onPickerText, onPickerWalk, onPickerCommit, onResume, onPromptText, onPromptLengthChanged, onPromptSubmit, onRevealToggle, onLensSwitch }: Props): JSX.Element {
+export function Pane({ pane, onFocus, onDragStart, onClose, onPickerText, onPickerWalk, onPickerCommit, onResume, onPromptText, onPromptLengthChanged, onPromptSubmit, onRevealToggle, onLensSwitch, onStreamLevelToggle, onStreamDirToggle }: Props): JSX.Element {
   return (
     <div
       data-testid={`pane-${pane.id}`}
@@ -107,7 +111,12 @@ export function Pane({ pane, onFocus, onDragStart, onClose, onPickerText, onPick
             onResume={onResume}
           />
         ) : pane.boundSessionId && pane.reveal === RevealState.REVEAL ? (
-          <RevealShell pane={pane} onLensSwitch={onLensSwitch} />
+          <RevealShell
+            pane={pane}
+            onLensSwitch={onLensSwitch}
+            onStreamLevelToggle={onStreamLevelToggle}
+            onStreamDirToggle={onStreamDirToggle}
+          />
         ) : pane.boundSessionId && onPromptText && onPromptLengthChanged && onPromptSubmit ? (
           <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
             <div style={{ flex: 1, overflow: "auto", padding: "6px 0" }}>

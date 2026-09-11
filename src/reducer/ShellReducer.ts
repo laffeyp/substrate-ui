@@ -4,7 +4,7 @@
 // and trace stay in lockstep.
 
 import { emptyShellState, ShellState, Pane, Window, TranscriptRow, Lens, WorkspaceShape, PaneStatus } from "@/state/ShellState";
-import { SessionEndReason, ParkReason, isParkReason, SECRET_KEY_PATTERN, isPaneStatus } from "@/observability/reasons";
+import { SessionEndReason, ParkReason, isParkReason, SECRET_KEY_PATTERN, isPaneStatus, StreamLevel, StreamDir } from "@/observability/reasons";
 import { newId } from "@/state/ids";
 import { splitPane, resizeSplit, atCap, movePane, closePane, Zone, Axis } from "@/state/SplitTree";
 import { RevealState } from "@/observability/reasons";
@@ -43,6 +43,8 @@ export type Action =
   | { type: "TRANSCRIPT_ROWS_LOADED"; paneId: string; rows: TranscriptRow[] }
   | { type: "REVEAL_TOGGLE"; paneId: string }
   | { type: "LENS_SWITCH"; paneId: string; to: Lens }
+  | { type: "STREAM_LEVEL_TOGGLE"; paneId: string }
+  | { type: "STREAM_DIR_TOGGLE"; paneId: string }
   ;
 
 export interface Emission {
@@ -165,6 +167,26 @@ export function reduce(state: ShellState, action: Action): Step {
       return {
         state: { ...state, panes: { ...state.panes, [action.paneId]: { ...pane, reveal: to } } },
         emissions: [{ kind: "REVEAL_TOGGLED", payload: { pane_id: action.paneId, from, to } }],
+      };
+    }
+    case "STREAM_LEVEL_TOGGLE": {
+      const pane = state.panes[action.paneId];
+      if (!pane) return { state, emissions: [] };
+      const from = pane.streamLevel;
+      const to = from === StreamLevel.ALL ? StreamLevel.APP : StreamLevel.ALL;
+      return {
+        state: { ...state, panes: { ...state.panes, [action.paneId]: { ...pane, streamLevel: to } } },
+        emissions: [{ kind: "STREAM_LEVEL_TOGGLED", payload: { pane_id: action.paneId, from, to } }],
+      };
+    }
+    case "STREAM_DIR_TOGGLE": {
+      const pane = state.panes[action.paneId];
+      if (!pane) return { state, emissions: [] };
+      const from = pane.streamDir;
+      const to = from === StreamDir.DOWN ? StreamDir.SIDE : StreamDir.DOWN;
+      return {
+        state: { ...state, panes: { ...state.panes, [action.paneId]: { ...pane, streamDir: to } } },
+        emissions: [{ kind: "STREAM_DIR_TOGGLED", payload: { pane_id: action.paneId, from, to } }],
       };
     }
     case "TRANSCRIPT_ROWS_LOADED": {
@@ -491,6 +513,8 @@ function boot(): Step {
     transcriptLastSeq: -1,
     reveal: RevealState.TERMINAL,
     lens: Lens.STREAM_GRAPH,
+    streamLevel: StreamLevel.ALL,
+    streamDir: StreamDir.DOWN,
   };
   const window: Window = { id: windowId, rootId: paneId };
   const next: ShellState = {
