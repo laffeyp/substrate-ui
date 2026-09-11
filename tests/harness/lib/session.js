@@ -51,6 +51,29 @@ async function bindWorkspace(win, paneId, workspace) {
   return created.payload.session_id;
 }
 
+// Bind to a real fixture session if the env asks for one, else bind a
+// fresh workspace. The fixture-real-record harness proves that the
+// resume path can pick up any parked session on disk; this helper wires
+// each sprint harness into the same override so it can grade against a
+// real transcript rather than the deterministic driver's canned echo.
+// Env var: SUBSTRATE_HARNESS_FIXTURE_SESSION_ID (or HARNESS_FIXTURE_SID).
+// Returns { sid, workspace } — workspace is null when resumed from fixture.
+async function bindWorkspaceOrFixture(win, paneId, tag) {
+  const fixtureSid = process.env.SUBSTRATE_HARNESS_FIXTURE_SESSION_ID
+                  || process.env.HARNESS_FIXTURE_SID
+                  || null;
+  if (fixtureSid) {
+    const row = win.locator(`[data-testid="resume-row-${fixtureSid}"]`);
+    await row.waitFor({ state: "attached", timeout: 30000 });
+    await row.click();
+    const resumed = await waitForEmit("SESSION_RESUMED", { timeoutMs: 30000 });
+    return { sid: resumed.payload.session_id, workspace: null };
+  }
+  const workspace = mkWorkspace(tag);
+  const sid = await bindWorkspace(win, paneId, workspace);
+  return { sid, workspace };
+}
+
 // Type text into the pane's prompt + ⌘⏎; wait for TURN_SUBMITTED or TURN_SUBMIT_FAILED.
 async function submitPrompt(win, paneId, text, { timeoutMs = 65000 } = {}) {
   const prompt = win.locator(`[data-testid="prompt-${paneId}"]`);
@@ -78,5 +101,5 @@ async function endSession(win) {
 module.exports = {
   SESSIONS_ROOT,
   mkWorkspace, rmWorkspace, cleanupSession,
-  waitForFirstPane, bindWorkspace, submitPrompt, endSession,
+  waitForFirstPane, bindWorkspace, bindWorkspaceOrFixture, submitPrompt, endSession,
 };
