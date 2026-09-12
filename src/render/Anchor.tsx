@@ -24,6 +24,17 @@ export type { AppSlotName, PaneSlotName };
 export const AnchorScope = { APP: "app", PANE: "pane" } as const;
 export type AnchorScopeT = typeof AnchorScope[keyof typeof AnchorScope];
 
+// Layer 7 § pixel_anchor testid format — `anchor-pane-{pane_id}-<slot>`
+// for pane-scoped anchors, `anchor-<slot>` for app-scoped. Both call
+// sites (Anchor.tsx mounting the canvas, Pane.tsx mounting the id)
+// need identical strings; centralise here so the format lives once.
+export function paneAnchorId(paneId: string, slot: PaneSlotName): string {
+  return `anchor-pane-${paneId}-${slot}`;
+}
+export function appAnchorId(slot: AppSlotName): string {
+  return `anchor-${slot}`;
+}
+
 interface Props {
   id: string;
   byte: number;
@@ -61,7 +72,9 @@ export function Anchor(props: Props): JSX.Element {
   }, [id]);
   useEffect(() => { setByte(id, byte); }, [id, byte]);
 
-  const testid = scope === AnchorScope.PANE ? `anchor-pane-${paneId}-${slot}` : `anchor-${slot}`;
+  const testid = scope === AnchorScope.PANE
+    ? paneAnchorId(paneId as string, slot as PaneSlotName)
+    : appAnchorId(slot as AppSlotName);
   return (
     <canvas
       ref={ref}

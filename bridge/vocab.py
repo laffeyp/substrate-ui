@@ -183,6 +183,28 @@ def _reasons_json() -> dict:
 _SECRET_KEY_RX: re.Pattern[str] | None = None
 
 
+def _assert_bridge_ops_match_json() -> None:
+    """Import-time drift guard — BridgeOp members must equal the
+    bridge_ops table in signals/bridge-reasons.json (the JSON is the
+    single source read by both TS and Python). A rename in one place
+    fails loud here."""
+    raw = dict(_reasons_json().get("bridge_ops", {}))
+    raw.pop("note", None)
+    json_ops = set(raw.values())
+    enum_ops = {m.value for m in BridgeOp}
+    if enum_ops != json_ops:
+        missing_from_enum = json_ops - enum_ops
+        missing_from_json = enum_ops - json_ops
+        raise RuntimeError(
+            "bridge-ops drift: bridge-reasons.json § bridge_ops disagrees with "
+            f"bridge/vocab.py's BridgeOp. In JSON only: {sorted(missing_from_enum)}; "
+            f"in enum only: {sorted(missing_from_json)}."
+        )
+
+
+_assert_bridge_ops_match_json()
+
+
 def strip_secrets(obj: object) -> object:
     """Strip any key at any depth matching the shared secret-key pattern
     from a nested dict; replace values with `"<stripped>"`."""

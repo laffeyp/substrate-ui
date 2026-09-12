@@ -1,6 +1,7 @@
 // Sessions.ts — list_sessions bridge wrapper.
 
 import { bridgeRequest } from "@/observability/BridgeClient";
+import { BridgeOp } from "@/observability/bridge-ops";
 import { WorkspaceShape } from "./ShellState";
 
 export interface ManifestRow {
@@ -16,7 +17,7 @@ export interface ManifestRow {
 
 export async function listSessions(): Promise<ManifestRow[]> {
   try {
-    const rows = await bridgeRequest<unknown>("list_sessions", {});
+    const rows = await bridgeRequest<unknown>(BridgeOp.list_sessions, {});
     if (!Array.isArray(rows)) return [];
     return rows as ManifestRow[];
   } catch {

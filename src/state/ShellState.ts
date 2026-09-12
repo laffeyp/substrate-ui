@@ -10,7 +10,7 @@ export { PaneStatus, WorkspaceShape, isPaneStatus, isWorkspaceShape,
   SurfaceKind, isSurfaceKind, SURFACE_KIND_BYTES,
   StudioView, isStudioView,
   FindScope, isFindScope } from "@/observability/reasons";
-import type { PaneStatus, WorkspaceShape, StreamLevel, StreamDir, RevealFocus, SurfaceKind, StudioView, FindScope } from "@/observability/reasons";
+import type { PaneStatus, WorkspaceShape, StreamLevel, StreamDir, RevealFocus, SurfaceKind, StudioView, FindScope, ParkReason } from "@/observability/reasons";
 
 export type Lens = "stream+graph" | "i/o" | "structure" | "scene";
 export const LENSES: readonly Lens[] = ["stream+graph", "i/o", "structure", "scene"] as const;
@@ -25,7 +25,7 @@ export interface TranscriptRow {
   summary: string;
   turn_index: number | null;
   // Kind-specific fields populated by the bridge from the envelope payload:
-  park_reason?: "final_answer" | "model_error" | "interrupt" | null;
+  park_reason?: ParkReason | null;
   end_reason?: string | null;
   tokens_before?: number | null;
   tokens_after?: number | null;

@@ -9,7 +9,6 @@
 
 import { useEffect, useRef } from "react";
 import type { Pane as PaneModel } from "@/state/ShellState";
-import { FindScope } from "@/observability/reasons";
 
 interface Props {
   pane: PaneModel;
@@ -38,7 +37,10 @@ const inputStyle: React.CSSProperties = {
 export function FindBar({ pane, onQueryType, onScopeTab, onStep, onClose }: Props): JSX.Element {
   const ref = useRef<HTMLInputElement | null>(null);
   useEffect(() => { ref.current?.focus(); }, []);
-  const scopeLabel = pane.find.scope === FindScope.STREAM ? "stream" : "transcript";
+  // The FindScope enum values are the display strings — Layer 2's
+  // ratified {transcript, stream} enum doubles as the label copy, so
+  // reading the reducer state avoids a shadow of the enum.
+  const scopeLabel = pane.find.scope;
   return (
     <div
       data-testid={`find-bar-${pane.id}`}

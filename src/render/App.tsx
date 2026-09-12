@@ -10,12 +10,13 @@ import { ShellState, TranscriptRow } from "@/state/ShellState";
 import { emit } from "@/observability/Emitter";
 import { Tag } from "@/observability/tags";
 import { WindowFrame } from "./WindowFrame";
-import { Anchor, AnchorScope, AppSlot } from "./Anchor";
+import { Anchor, AnchorScope, AppSlot, appAnchorId } from "./Anchor";
 import { DragLayer } from "./DragLayer";
 import { Zone, Axis } from "@/state/SplitTree";
 import { WorkspaceShape } from "@/state/ShellState";
 import { newId } from "@/state/ids";
 import { bridgeRequest } from "@/observability/BridgeClient";
+import { BridgeOp } from "@/observability/bridge-ops";
 import { computeMatches } from "@/lib/findMatches";
 import type { Pane as PaneModel } from "@/state/ShellState";
 import {
@@ -64,7 +65,7 @@ function Shell(): JSX.Element {
     const probeReq = newId();
     dispatch({ type: ActionType.PROBE_DRIVER_START, paneId, requestId: probeReq, driverName: driver, driverParams });
     bridgeRequest<{ available: boolean; context_tokens: number | null; model_families: string[] }>(
-      "probe_driver", { driver_name: driver, driver_params: driverParams }, 10000,
+      BridgeOp.probe_driver, { driver_name: driver, driver_params: driverParams }, 10000,
     ).then((probe) => {
       dispatch({ type: ActionType.PROBE_DRIVER_OK, requestId: probeReq, driverName: driver,
         contextTokens: probe.context_tokens ?? null, modelFamilies: probe.model_families ?? [] });
@@ -76,7 +77,7 @@ function Shell(): JSX.Element {
       dispatch({ type: ActionType.SESSION_CREATE_START, paneId, requestId, sessionId, sessionName, driver });
       bridgeRequest<{
         session_id: string; session_name: string; workspace_path: string; workspace_shape: WorkspaceShape;
-      }>("session_create", {
+      }>(BridgeOp.session_create, {
         session_id: sessionId, name: sessionName, driver,
         workspace_path: path, workspace_shape: shape, bundle: "", seed: "",
       }, 5000).then((result) => {
@@ -96,7 +97,7 @@ function Shell(): JSX.Element {
   const refreshTranscript = useMemo(() => (paneId: string, sessionId: string) => {
     bridgeRequest<{ session_id: string; envelopes: Array<{
       seq: number; kind: string; producer_kind: string; summary: string; turn_index: number | null;
-    }> }>("record_read", { session_id: sessionId }, 5000).then((result) => {
+    }> }>(BridgeOp.record_read, { session_id: sessionId }, 5000).then((result) => {
       dispatch({ type: ActionType.TRANSCRIPT_ROWS_LOADED, paneId, rows: result.envelopes });
     }).catch(() => { /* transcript fetch is best-effort */ });
   }, [dispatch]);
@@ -112,7 +113,7 @@ function Shell(): JSX.Element {
       const after = stateRef.current.panes[paneId];
       if (!after || after.descentStack.length !== nextDepth) return;
       bridgeRequest<{ session_id: string; envelopes: TranscriptRow[] }>(
-        "record_read", { record_root: childRecordRoot }, 5000,
+        BridgeOp.record_read, { record_root: childRecordRoot }, 5000,
       ).then((result) => {
         dispatch({ type: ActionType.DESCENT_ROWS_LOADED, paneId,
           depth: nextDepth, rows: result.envelopes });
@@ -138,7 +139,7 @@ function Shell(): JSX.Element {
         childRecordRoot: childRecordRoot ?? "" });
       if (!childRecordRoot) return; // no child transcript to load (ToolResult not yet on record)
       bridgeRequest<{ session_id: string; envelopes: TranscriptRow[] }>(
-        "record_read", { record_root: childRecordRoot }, 5000,
+        BridgeOp.record_read, { record_root: childRecordRoot }, 5000,
       ).then((result) => {
         dispatch({
           type: ActionType.DELEGATE_EXPAND_ROWS_LOADED,
@@ -155,7 +156,7 @@ function Shell(): JSX.Element {
     dispatch({ type: ActionType.TURN_SUBMIT_START, paneId, requestId,
       sessionId: pane.boundSessionId, textLength: text.length, timeoutSeconds });
     bridgeRequest<{ session_id: string; turn_index: number }>(
-      "turn_submit",
+      BridgeOp.turn_submit,
       { session_id: pane.boundSessionId, text, timeout_seconds: timeoutSeconds },
       (timeoutSeconds + 5) * 1000,
     ).then((result) => {
@@ -173,7 +174,7 @@ function Shell(): JSX.Element {
     dispatch({ type: ActionType.SESSION_END_START, paneId, requestId, sessionId, source });
     bridgeRequest<{
       session_id: string; end_reason: string; record_finalised: boolean; envelope_seq: number;
-    }>("session_end", { session_id: sessionId }, 30000).then((result) => {
+    }>(BridgeOp.session_end, { session_id: sessionId }, 30000).then((result) => {
       dispatch({ type: ActionType.SESSION_END_OK, paneId, requestId,
         sessionId: result.session_id, endReason: result.end_reason,
         recordFinalised: result.record_finalised, envelopeSeq: result.envelope_seq,
@@ -190,7 +191,7 @@ function Shell(): JSX.Element {
       session_id: string; session_name: string | null;
       workspace_path: string; workspace_shape: WorkspaceShape;
       status: string;
-    }>("session_resume", { session_id: sessionId }, 5000).then((result) => {
+    }>(BridgeOp.session_resume, { session_id: sessionId }, 5000).then((result) => {
       const r = result as unknown as { last_turn_index?: number } & typeof result;
       const status: PaneStatus = isPaneStatus(result.status) ? result.status : PaneStatus.PARKED;
       dispatch({ type: ActionType.SESSION_RESUME_OK, paneId, requestId,
@@ -211,7 +212,7 @@ function Shell(): JSX.Element {
     bridgeRequest<{
       topo_name: string; producer_count: number; view_count: number;
       trigger_count: number; route_count: number;
-    }>("topology_validate", {
+    }>(BridgeOp.topology_validate, {
       topo_name: draft.topoName,
       producer_count: draft.producerCount, view_count: draft.viewCount,
       trigger_count: draft.triggerCount, route_count: draft.routeCount,
@@ -247,7 +248,7 @@ function Shell(): JSX.Element {
   const studioBuild = useMemo(() => (paneId: string, topoName: string) => {
     dispatch({ type: ActionType.STUDIO_BUILD_START, paneId, topoName });
     bridgeRequest<{ topo_name: string; record_root: string }>(
-      "topology_build", { topo_name: topoName }, 10000,
+      BridgeOp.topology_build, { topo_name: topoName }, 10000,
     ).then((result) => {
       dispatch({ type: ActionType.STUDIO_BUILD_OK, paneId,
         topoName: result.topo_name, recordRoot: result.record_root });
@@ -396,12 +397,12 @@ function Shell(): JSX.Element {
           onEnd={startSessionEnd}
         />
       )}
-      <Anchor id={`anchor-${AppSlot.DIALOG}`}       scope={AnchorScope.APP} slot={AppSlot.DIALOG}        byte={0} />
-      <Anchor id={`anchor-${AppSlot.WINDOW_STRIP}`} scope={AnchorScope.APP} slot={AppSlot.WINDOW_STRIP}  byte={0} />
-      <Anchor id={`anchor-${AppSlot.BRIDGE}`}       scope={AnchorScope.APP} slot={AppSlot.BRIDGE}        byte={bridgeByte} />
+      <Anchor id={appAnchorId(AppSlot.DIALOG)}       scope={AnchorScope.APP} slot={AppSlot.DIALOG}        byte={0} />
+      <Anchor id={appAnchorId(AppSlot.WINDOW_STRIP)} scope={AnchorScope.APP} slot={AppSlot.WINDOW_STRIP}  byte={0} />
+      <Anchor id={appAnchorId(AppSlot.BRIDGE)}       scope={AnchorScope.APP} slot={AppSlot.BRIDGE}        byte={bridgeByte} />
       {substrateVersion && <span data-testid="substrate-version" style={{ display: "none" }}>{substrateVersion}</span>}
-      <Anchor id={`anchor-${AppSlot.LAST_TAG}`}     scope={AnchorScope.APP} slot={AppSlot.LAST_TAG}      byte={0} />
-      <Anchor id={`anchor-${AppSlot.HEARTBEAT}`}    scope={AnchorScope.APP} slot={AppSlot.HEARTBEAT}     byte={0} />
+      <Anchor id={appAnchorId(AppSlot.LAST_TAG)}     scope={AnchorScope.APP} slot={AppSlot.LAST_TAG}      byte={0} />
+      <Anchor id={appAnchorId(AppSlot.HEARTBEAT)}    scope={AnchorScope.APP} slot={AppSlot.HEARTBEAT}     byte={0} />
     </>
   );
 }
