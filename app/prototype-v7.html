@@ -661,6 +661,20 @@ class Component extends DCLogic {
       this.setState({ sessionsFromRegistry: [] });
     }
   }
+  async _loadDrivers() {
+    // Bridge op list_drivers walks ollama /api/tags for installed
+    // models, tests each CLI candidate on PATH, and always returns
+    // deterministic. state.driverRoster feeds every driver picker in
+    // the shell.
+    try {
+      const rows = await this._bridge('list_drivers', {});
+      this.setState({ driverRoster: rows || [] });
+    } catch (err) {
+      // No bridge, or bridge unreachable — fall back to just
+      // deterministic so the picker still opens.
+      this.setState({ driverRoster: [{ name: 'deterministic', kind: 'deterministic', available: true }] });
+    }
+  }
   _deriveTranscriptRows(envelopes) {
     // One display row per user-visible envelope in the record. A run of
     // adjacent delegate ToolCalls at the same turn_index collapses into
@@ -844,6 +858,9 @@ class Component extends DCLogic {
     });
   }
   componentDidMount() {
+    // Load the real driver roster once at mount. Bridge list_drivers
+    // walks ollama + PATH; the picker uses state.driverRoster.
+    this._loadDrivers();
     this._kd = (e) => {
       if (e.ctrlKey && e.key === '\u0060') { e.preventDefault(); this.setState(s => ({ revealed: !s.revealed, surface: null })); }
       if (e.metaKey && (e.key === 'd' || e.key === 'D')) { e.preventDefault(); this._split(e.shiftKey ? 'down' : 'right'); }
@@ -1093,7 +1110,7 @@ class Component extends DCLogic {
       ddOpen: state.ddFor === p.id, wsOpenP: state.wsFor === p.id,
       toggleDd: () => this.setState(s => ({ focused: p.id, ddFor: s.ddFor === p.id ? null : p.id, wsFor: null })),
       toggleWsP: () => this.setState(s => ({ focused: p.id, wsFor: s.wsFor === p.id ? null : p.id, ddFor: null })),
-      driverOpts: ['kimi-k2', 'deepseek-r1:8b', 'qwen3-coder:480b-cloud', 'nemotron-3-super', 'claude (cli)', 'gemini (cli)', 'deterministic'].map(m => ({
+      driverOpts: ((this.state.driverRoster && this.state.driverRoster.map(row => row.name)) || ['deterministic']).map(m => ({
         label: m, color: m === p.driver ? '#e2e5e9' : '#9aa0a8',
         pick: () => {
           this.setState(s => ({
@@ -1376,7 +1393,7 @@ class Component extends DCLogic {
       }),
       fpDdOpen: state.ddFor === focusedPane.id && state.revealed, fpToggleDd: () => this.setState(s => ({ ddFor: s.ddFor === focusedPane.id ? null : focusedPane.id, wsFor: null })),
       fpWsOpen: state.wsFor === focusedPane.id && state.revealed, fpToggleWs: () => this.setState(s => ({ wsFor: s.wsFor === focusedPane.id ? null : focusedPane.id, ddFor: null })),
-      fpDriverOpts: ['kimi-k2', 'deepseek-r1:8b', 'qwen3-coder:480b-cloud', 'nemotron-3-super', 'claude (cli)', 'gemini (cli)', 'deterministic'].map(m => ({ label: m, color: m === focusedPane.driver ? '#e2e5e9' : '#9aa0a8', pick: () => this.setState(s => ({ ddFor: null, panes: s.panes.map(x => x.id === focusedPane.id ? Object.assign({}, x, { driver: m }) : x) })) })),
+      fpDriverOpts: ((this.state.driverRoster && this.state.driverRoster.map(row => row.name)) || ['deterministic']).map(m => ({ label: m, color: m === focusedPane.driver ? '#e2e5e9' : '#9aa0a8', pick: () => this.setState(s => ({ ddFor: null, panes: s.panes.map(x => x.id === focusedPane.id ? Object.assign({}, x, { driver: m }) : x) })) })),
       recordsColor: surf === 'records' ? '#e2e5e9' : '#9aa0a8',
       studioColor: surf === 'studio' ? '#e2e5e9' : '#9aa0a8',
       showTerminal: !surf && !state.revealed, showRevealed: !surf && state.revealed,
@@ -1594,7 +1611,7 @@ class Component extends DCLogic {
       splitRight: () => this._split('right'),
       driverName: focusedPane.driver, driverOpen: state.driverOpen,
       toggleDriverMenu: () => this.setState(s => ({ driverOpen: !s.driverOpen, wsOpen: false })),
-      driverOptions: ['kimi-k2', 'deepseek-r1:8b', 'qwen3-coder:480b-cloud', 'nemotron-3-super', 'claude (cli)', 'gemini (cli)', 'deterministic'].map(m => ({
+      driverOptions: ((this.state.driverRoster && this.state.driverRoster.map(row => row.name)) || ['deterministic']).map(m => ({
         label: m, color: m === focusedPane.driver ? '#e2e5e9' : '#9aa0a8',
         pick: () => this.setState(s => ({ driverOpen: false, panes: s.panes.map(x => x.id === s.focused ? Object.assign({}, x, { driver: m }) : x) })),
       })),
@@ -1677,17 +1694,21 @@ class Component extends DCLogic {
       },
       isEnded: state.ended,
       simRL: this.props.simulateRateLimit ?? false,
-      // ── first run (19m) ──
+      // First-run driver picker — bridge list_drivers roster.
       showFirstRun: (this.props.firstRun ?? false) && !state.frDone,
-      frRows: [
-        { name: 'ollama · llama3.2', meta: 'localhost:11434 · 3.2 GB · preselected', c: '#e2e5e9', bg: '#2e3138', key: '↵' },
-        { name: 'ollama · qwen3:8b', meta: 'localhost:11434 · 5.2 GB', c: '#b9bec5', bg: 'transparent', key: '' },
-        { name: 'ollama · cloud', meta: 'not signed in — ollama signin', c: '#62676f', bg: 'transparent', key: '' },
-        { name: 'claude (cli)', meta: 'found on PATH', c: '#b9bec5', bg: 'transparent', key: '' },
-        { name: 'claude (api) · openai (api)', meta: 'no keys in env — add in settings ⌘,', c: '#62676f', bg: 'transparent', key: '' },
-        { name: 'deterministic', meta: 'built in · replay-stable · no network', c: '#b9bec5', bg: 'transparent', key: '' },
-      ].map(r => Object.assign(r, { pick: () => { const d = r.name.startsWith('ollama · llama') ? 'llama3.2' : r.name.startsWith('ollama · qwen') ? 'qwen3:8b' : r.name.startsWith('claude (cli)') ? 'claude (cli)' : r.name === 'deterministic' ? 'deterministic' : null;
-        if (!d) return; this.setState(st => ({ frDone: true, panes: st.panes.map(p => p.id === 1 ? Object.assign({}, p, { driver: d }) : p) })); } })),
+      frRows: (state.driverRoster || [{ name: 'deterministic', kind: 'deterministic', available: true }]).map((driver, driverIndex) => ({
+        name: driver.name,
+        meta: driver.kind + (driver.available ? '' : ' · not available')
+          + (driver.size_bytes ? ' · ' + (driver.size_bytes / 1e9).toFixed(1) + ' GB' : ''),
+        c: driver.available ? '#b9bec5' : '#62676f',
+        bg: driverIndex === 0 ? '#2e3138' : 'transparent',
+        key: driverIndex === 0 ? '↵' : '',
+        pick: () => this.setState(pickState => ({
+          frDone: true,
+          panes: pickState.panes.map(pane =>
+            pane.id === 1 ? Object.assign({}, pane, { driver: driver.name }) : pane),
+        })),
+      })),
     };
   }
 }

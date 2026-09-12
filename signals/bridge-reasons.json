@@ -65,7 +65,8 @@
     "list_assays": "list_assays",
     "topology_validate": "topology_validate",
     "topology_build": "topology_build",
-    "driver_change": "driver_change"
+    "driver_change": "driver_change",
+    "list_drivers": "list_drivers"
   },
 
   "delegate_error_prefixes": {

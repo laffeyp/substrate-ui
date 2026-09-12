@@ -224,6 +224,58 @@ def op_probe_driver(payload: dict) -> dict:
             "detail": f"unknown driver kind: {driver_name}"}
 
 
+def op_list_drivers(_payload: dict | None = None) -> list[dict]:
+    """Enumerate every driver the current machine can run right now.
+
+    Deterministic is always available. Ollama's installed models come
+    from GET localhost:11434/api/tags; each row is returned as
+    `ollama:<model>`. CLI drivers appear when their binary is on PATH.
+    Each row carries {name, kind, available, context_tokens?}.
+    """
+    out: list[dict] = [{
+        "name": DriverKind.DETERMINISTIC.value,
+        "kind": DriverKind.DETERMINISTIC.value,
+        "available": True,
+    }]
+    # Ollama models — /api/tags returns {"models": [{"name": "llama3.2:1b", ...}, ...]}
+    try:
+        import urllib.request
+        import urllib.error
+        request = urllib.request.Request("http://127.0.0.1:11434/api/tags")
+        with urllib.request.urlopen(request, timeout=2) as response:  # noqa: S310
+            data = json.loads(response.read().decode("utf-8"))
+        for model in data.get("models", []) or []:
+            model_name = model.get("name")
+            if not isinstance(model_name, str):
+                continue
+            out.append({
+                "name": f"ollama:{model_name}",
+                "kind": DriverKind.OLLAMA.value,
+                "available": True,
+                "size_bytes": model.get("size"),
+            })
+    except Exception:  # noqa: BLE001
+        # Ollama not up — nothing to add.
+        pass
+    # CLI drivers — probe `<name> --version` for each candidate on PATH.
+    import subprocess
+    for cli_name in ("claude", "gemini"):
+        try:
+            probe = subprocess.run(  # noqa: S603
+                [cli_name, "--version"], capture_output=True, timeout=3, text=True,
+            )
+            out.append({
+                "name": cli_name,
+                "kind": DriverKind.CLI.value,
+                "available": probe.returncode == 0,
+            })
+        except FileNotFoundError:
+            pass
+        except (subprocess.TimeoutExpired, OSError):
+            out.append({"name": cli_name, "kind": DriverKind.CLI.value, "available": False})
+    return out
+
+
 def op_driver_change(payload: dict) -> dict:
     """Change a session's driver. Probes the driver first (Sprint 031
     fail-fast); if the probe fails, replies with
@@ -684,6 +736,12 @@ def _handle_short_op(op: BridgeOp, msg: dict, rid: str) -> None:
     if op is BridgeOp.READ_RECENT_WORKSPACES:
         try:
             reply_ok(rid, op_read_recent_workspaces())
+        except Exception as e:  # noqa: BLE001
+            reply_err(rid, f"{SCR.REGISTRY_ERROR.value}:{e}")
+        return
+    if op is BridgeOp.LIST_DRIVERS:
+        try:
+            reply_ok(rid, op_list_drivers(msg))
         except Exception as e:  # noqa: BLE001
             reply_err(rid, f"{SCR.REGISTRY_ERROR.value}:{e}")
         return
