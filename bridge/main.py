@@ -224,6 +224,96 @@ def op_probe_driver(payload: dict) -> dict:
             "detail": f"unknown driver kind: {driver_name}"}
 
 
+def op_session_rename(payload: dict) -> dict:
+    """Rename a bound session via SessionRegistry.set_name."""
+    from substrate.session_registry import NameCollision  # type: ignore[import-not-found]
+    reg = _registry()
+    session_id = payload.get("session_id", "")
+    new_name = payload.get("name", "").strip()
+    if not new_name:
+        return {"__error__": True, "reason": "name_empty"}
+    try:
+        updated = reg.set_name(session_id, new_name)  # type: ignore[attr-defined]
+    except NameCollision as e:
+        return {"__error__": True, "reason": "name_collision", "detail": str(e)}
+    except KeyError as e:
+        return {"__error__": True, "reason": SRR.NOT_FOUND.value, "detail": str(e)}
+    return {"session_id": updated.session_id, "name": updated.name}
+
+
+def op_turn_interrupt(payload: dict) -> dict:
+    """Fire SessionRegistry.interrupt for a running session. Returns
+    {interrupted: bool, detail?} — the interrupt flag flips even if
+    no turn is in flight (the next in-flight turn drains next tick)."""
+    reg = _registry()
+    session_id = payload.get("session_id", "")
+    try:
+        info = reg.interrupt(session_id)  # type: ignore[attr-defined]
+    except KeyError as e:
+        return {"__error__": True, "reason": SRR.NOT_FOUND.value, "detail": str(e)}
+    return {
+        "session_id": session_id,
+        "interrupted": info is not None,
+        "detail": (info or {}) if isinstance(info, dict) else None,
+    }
+
+
+def op_bundle_attach(payload: dict) -> dict:
+    """Set a session's bundle via SessionRegistry.set_bundle."""
+    reg = _registry()
+    session_id = payload.get("session_id", "")
+    bundle = payload.get("bundle") or None
+    try:
+        updated = reg.set_bundle(session_id, bundle)  # type: ignore[attr-defined]
+    except KeyError as e:
+        return {"__error__": True, "reason": SRR.NOT_FOUND.value, "detail": str(e)}
+    return {"session_id": updated.session_id, "bundle": updated.bundle}
+
+
+def op_tools_restrict(payload: dict) -> dict:
+    """Restrict a session's tools via SessionRegistry.set_tools."""
+    reg = _registry()
+    session_id = payload.get("session_id", "")
+    tools_field = payload.get("tools")
+    if tools_field is None:
+        tools_tuple = None
+    else:
+        tools_tuple = tuple(str(name) for name in tools_field)
+    try:
+        updated = reg.set_tools(session_id, tools_tuple)  # type: ignore[attr-defined]
+    except KeyError as e:
+        return {"__error__": True, "reason": SRR.NOT_FOUND.value, "detail": str(e)}
+    return {"session_id": updated.session_id, "tools": list(updated.tools or [])}
+
+
+def op_workspace_diff(payload: dict) -> dict:
+    """Return the workspace diff for a bound session. Runs `git diff`
+    when the manifest's workspace_shape is a git repo (`worktree`),
+    else reports the workspace shape as `flat` with no diff surface."""
+    import subprocess
+    reg = _registry()
+    session_id = payload.get("session_id", "")
+    manifest = reg.get(session_id)  # type: ignore[attr-defined]
+    if manifest is None:
+        return {"__error__": True, "reason": SRR.NOT_FOUND.value}
+    workspace = manifest.workspace
+    if manifest.workspace_shape not in ("worktree", "isolate"):
+        return {"session_id": session_id, "shape": manifest.workspace_shape, "patch": ""}
+    try:
+        result = subprocess.run(  # noqa: S603
+            ["git", "-C", workspace, "diff"],
+            capture_output=True, timeout=15, text=True,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired) as e:
+        return {"__error__": True, "reason": "git_unavailable", "detail": str(e)}
+    return {
+        "session_id": session_id,
+        "shape": manifest.workspace_shape,
+        "patch": result.stdout,
+        "stderr": result.stderr,
+    }
+
+
 def op_scene_project(payload: dict) -> dict:
     """Walk a record backwards for the latest envelope whose payload
     carries a `cells` array (a game_of_life or similar scene). Return
@@ -805,6 +895,56 @@ def _handle_short_op(op: BridgeOp, msg: dict, rid: str) -> None:
     if op is BridgeOp.READ_RECENT_WORKSPACES:
         try:
             reply_ok(rid, op_read_recent_workspaces())
+        except Exception as e:  # noqa: BLE001
+            reply_err(rid, f"{SCR.REGISTRY_ERROR.value}:{e}")
+        return
+    if op is BridgeOp.SESSION_RENAME:
+        try:
+            result = op_session_rename(msg)
+            if result.get("__error__"):
+                reply_err(rid, result.get("reason", SCR.REGISTRY_ERROR.value))
+            else:
+                reply_ok(rid, result)
+        except Exception as e:  # noqa: BLE001
+            reply_err(rid, f"{SCR.REGISTRY_ERROR.value}:{e}")
+        return
+    if op is BridgeOp.TURN_INTERRUPT:
+        try:
+            result = op_turn_interrupt(msg)
+            if result.get("__error__"):
+                reply_err(rid, result.get("reason", SCR.REGISTRY_ERROR.value))
+            else:
+                reply_ok(rid, result)
+        except Exception as e:  # noqa: BLE001
+            reply_err(rid, f"{SCR.REGISTRY_ERROR.value}:{e}")
+        return
+    if op is BridgeOp.BUNDLE_ATTACH:
+        try:
+            result = op_bundle_attach(msg)
+            if result.get("__error__"):
+                reply_err(rid, result.get("reason", SCR.REGISTRY_ERROR.value))
+            else:
+                reply_ok(rid, result)
+        except Exception as e:  # noqa: BLE001
+            reply_err(rid, f"{SCR.REGISTRY_ERROR.value}:{e}")
+        return
+    if op is BridgeOp.TOOLS_RESTRICT:
+        try:
+            result = op_tools_restrict(msg)
+            if result.get("__error__"):
+                reply_err(rid, result.get("reason", SCR.REGISTRY_ERROR.value))
+            else:
+                reply_ok(rid, result)
+        except Exception as e:  # noqa: BLE001
+            reply_err(rid, f"{SCR.REGISTRY_ERROR.value}:{e}")
+        return
+    if op is BridgeOp.WORKSPACE_DIFF:
+        try:
+            result = op_workspace_diff(msg)
+            if result.get("__error__"):
+                reply_err(rid, result.get("reason", RRR.READ_ERROR.value))
+            else:
+                reply_ok(rid, result)
         except Exception as e:  # noqa: BLE001
             reply_err(rid, f"{SCR.REGISTRY_ERROR.value}:{e}")
         return
