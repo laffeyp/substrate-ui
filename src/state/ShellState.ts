@@ -6,8 +6,9 @@
 // ShellState — no drift.
 export { PaneStatus, WorkspaceShape, isPaneStatus, isWorkspaceShape,
   StreamLevel, StreamDir, isStreamLevel, isStreamDir,
-  RevealFocus, isRevealFocus } from "@/observability/reasons";
-import type { PaneStatus, WorkspaceShape, StreamLevel, StreamDir, RevealFocus } from "@/observability/reasons";
+  RevealFocus, isRevealFocus,
+  SurfaceKind, isSurfaceKind, SURFACE_KIND_BYTES } from "@/observability/reasons";
+import type { PaneStatus, WorkspaceShape, StreamLevel, StreamDir, RevealFocus, SurfaceKind } from "@/observability/reasons";
 
 export type Lens = "stream+graph" | "i/o" | "structure" | "scene";
 export const LENSES: readonly Lens[] = ["stream+graph", "i/o", "structure", "scene"] as const;
@@ -97,6 +98,12 @@ export interface Pane {
   // it (D22): the reducer sees the incoming seq equal the current one
   // and fires INSPECTOR_CLOSED.
   inspectorSeq: number | null;
+  // Sprint 025 — pane-scoped summoned surface (records/studio/assay).
+  // Layer 5 mutex: opening a new surface while one is already open
+  // fires SURFACE_CLOSED{kind: prior} then SURFACE_OPENED{kind: new,
+  // prior_kind: prior} same-step. Distinct from the inspector slot —
+  // both may sit open on the same pane simultaneously.
+  surface: { kind: SurfaceKind } | null;
   // Later sprints extend: surface (records/assay/studio),
   // find, header_popover, etc.
 }

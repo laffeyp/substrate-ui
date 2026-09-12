@@ -3,7 +3,7 @@
 // dir, descent, surface, find, inspect, header_popover.
 
 import { Pane as PaneModel, WorkspaceShape, Lens, TranscriptRow } from "@/state/ShellState";
-import { PaneStatus, RevealState, StreamLevel, StreamDir } from "@/observability/reasons";
+import { PaneStatus, RevealState, StreamLevel, StreamDir, SURFACE_KIND_BYTES, SurfaceKind } from "@/observability/reasons";
 import { PaneHeader } from "./PaneHeader";
 import { Anchor, AnchorScope, PaneSlot, PANE_SLOT_ORDER } from "./Anchor";
 import { UnboundPanePicker } from "./UnboundPanePicker";
@@ -19,6 +19,7 @@ import { TranscriptDelegateExpanded } from "./TranscriptDelegateExpanded";
 import { TranscriptDelegateRefused } from "./TranscriptDelegateRefused";
 import { TranscriptFanOutList } from "./TranscriptFanOutList";
 import { Inspector } from "./Inspector";
+import { RecordsSurface } from "./RecordsSurface";
 import { detectFanoutGroups } from "@/reducer/ShellReducer";
 
 interface Props {
@@ -45,6 +46,8 @@ interface Props {
   onFanoutWalk?: (paneId: string, leaderToolCallId: string, toIndex: number, siblingCount: number) => void;
   onFanoutCollapse?: (paneId: string, leaderToolCallId: string) => void;
   onInspectorToggle?: (paneId: string, envelopeSeq: number, envelopeKind: string, sourceIsStream: boolean) => void;
+  onSurfaceClose?: (paneId: string) => void;
+  onResumeFromSurface?: (paneId: string, sessionId: string) => void;
 }
 
 const ROW_COLORS: Record<string, string> = {
@@ -107,10 +110,14 @@ function initialByte(slot: (typeof PANE_SLOT_ORDER)[number], pane: PaneModel): n
     // Layer 7: low byte of selected seq (0..255) · byte 0 when closed.
     return pane.inspectorSeq === null ? 0 : pane.inspectorSeq & 0xff;
   }
+  if (slot === PaneSlot.SURFACE) {
+    // Layer 7: 0 none · 1 records · 2 studio · 3 assay.
+    return pane.surface === null ? 0 : SURFACE_KIND_BYTES[pane.surface.kind];
+  }
   return 0;
 }
 
-export function Pane({ pane, onFocus, onDragStart, onClose, onPickerText, onPickerWalk, onPickerCommit, onResume, onPromptText, onPromptLengthChanged, onPromptSubmit, onRevealToggle, onLensSwitch, onStreamLevelToggle, onStreamDirToggle, onRevealFocusToggle, onDelegateExpandToggle, onDescend, onDescentExit, onFanoutExpand, onFanoutWalk, onFanoutCollapse, onInspectorToggle }: Props): JSX.Element {
+export function Pane({ pane, onFocus, onDragStart, onClose, onPickerText, onPickerWalk, onPickerCommit, onResume, onPromptText, onPromptLengthChanged, onPromptSubmit, onRevealToggle, onLensSwitch, onStreamLevelToggle, onStreamDirToggle, onRevealFocusToggle, onDelegateExpandToggle, onDescend, onDescentExit, onFanoutExpand, onFanoutWalk, onFanoutCollapse, onInspectorToggle, onSurfaceClose, onResumeFromSurface }: Props): JSX.Element {
   const depth = pane.descentStack.length;
   const inDescent = depth > 0;
   const activeRows: TranscriptRow[] = inDescent
@@ -133,6 +140,13 @@ export function Pane({ pane, onFocus, onDragStart, onClose, onPickerText, onPick
     >
       <PaneHeader pane={pane} onDragStart={onDragStart} onClose={onClose} onRevealToggle={onRevealToggle} />
       <Inspector pane={pane} />
+      {pane.surface?.kind === SurfaceKind.RECORDS && onSurfaceClose && onResumeFromSurface ? (
+        <RecordsSurface
+          paneId={pane.id}
+          onResume={(sid) => onResumeFromSurface(pane.id, sid)}
+          onClose={() => onSurfaceClose(pane.id)}
+        />
+      ) : null}
       <div style={S.body}>
         {pane.status === PaneStatus.UNBOUND && onPickerText && onPickerWalk && onPickerCommit && onResume ? (
           <UnboundPanePicker

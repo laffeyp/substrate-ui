@@ -4,7 +4,7 @@
 // and trace stay in lockstep.
 
 import { emptyShellState, ShellState, Pane, Window, TranscriptRow, Lens, WorkspaceShape, PaneStatus } from "@/state/ShellState";
-import { SessionEndReason, ParkReason, isParkReason, SECRET_KEY_PATTERN, isPaneStatus, StreamLevel, StreamDir, RevealFocus, TurnSubmitFailedReason } from "@/observability/reasons";
+import { SessionEndReason, ParkReason, isParkReason, SECRET_KEY_PATTERN, isPaneStatus, StreamLevel, StreamDir, RevealFocus, TurnSubmitFailedReason, type SurfaceKind } from "@/observability/reasons";
 import {
   TOOL_CALL, TOOL_RESULT, TOOL_NAME_DELEGATE, DELEGATE_ERROR_MAX_DEPTH,
   PARK, SESSION_ENDED, TRANSCRIPT_COMPACTED, RATE_LIMITED_WAITING,
@@ -66,6 +66,8 @@ export const ActionType = {
   FANOUT_WALK: "FANOUT_WALK",
   FANOUT_COLLAPSE: "FANOUT_COLLAPSE",
   INSPECTOR_TOGGLE: "INSPECTOR_TOGGLE",
+  SURFACE_OPEN: "SURFACE_OPEN",
+  SURFACE_CLOSE: "SURFACE_CLOSE",
 } as const;
 export type ActionTypeT = typeof ActionType[keyof typeof ActionType];
 
@@ -126,6 +128,8 @@ export type Action =
   | { type: typeof ActionType.FANOUT_WALK; paneId: string; leaderToolCallId: string; toIndex: number; siblingCount: number }
   | { type: typeof ActionType.FANOUT_COLLAPSE; paneId: string; leaderToolCallId: string }
   | { type: typeof ActionType.INSPECTOR_TOGGLE; paneId: string; envelopeSeq: number; envelopeKind: string; sourceIsStream: boolean }
+  | { type: typeof ActionType.SURFACE_OPEN; paneId: string; kind: SurfaceKind }
+  | { type: typeof ActionType.SURFACE_CLOSE; paneId: string }
   ;
 
 // Layer 5 (delegate.py:353) caps descent at depth 2. The reducer
@@ -484,6 +488,45 @@ export function reduce(state: ShellState, action: Action): Step {
         state: { ...state, panes: { ...state.panes, [action.paneId]: { ...pane, fanoutExpansions: next } } },
         emissions: [{ kind: Tag.FAN_OUT_INLINE_COLLAPSED, payload: {
           pane_id: action.paneId, tool_call_id: action.leaderToolCallId,
+        }}],
+      };
+    }
+    case ActionType.SURFACE_OPEN: {
+      const pane = state.panes[action.paneId];
+      if (!pane) return { state, emissions: [] };
+      const prior = pane.surface;
+      // Opening the same surface a second time is a no-op — the
+      // caller's key binding is idempotent. Distinct-kind switch
+      // fires CLOSED{prior} then OPENED{new, prior_kind} same-step
+      // per Layer 5 mutex.
+      if (prior && prior.kind === action.kind) return { state, emissions: [] };
+      const emissions: Emission[] = [];
+      if (prior) {
+        emissions.push({ kind: Tag.SURFACE_CLOSED, payload: {
+          pane_id: action.paneId, kind: prior.kind,
+        }});
+      }
+      emissions.push({ kind: Tag.SURFACE_OPENED, payload: {
+        pane_id: action.paneId, kind: action.kind,
+        prior_kind: prior ? prior.kind : null,
+      }});
+      return {
+        state: { ...state, panes: { ...state.panes, [action.paneId]: {
+          ...pane, surface: { kind: action.kind },
+        } } },
+        emissions,
+      };
+    }
+    case ActionType.SURFACE_CLOSE: {
+      const pane = state.panes[action.paneId];
+      if (!pane || !pane.surface) return { state, emissions: [] };
+      const prior = pane.surface;
+      return {
+        state: { ...state, panes: { ...state.panes, [action.paneId]: {
+          ...pane, surface: null,
+        } } },
+        emissions: [{ kind: Tag.SURFACE_CLOSED, payload: {
+          pane_id: action.paneId, kind: prior.kind,
         }}],
       };
     }
@@ -934,6 +977,7 @@ function boot(): Step {
     refusedToolCallIds: new Set(),
     fanoutExpansions: {},
     inspectorSeq: null,
+    surface: null,
   };
   const window: Window = { id: windowId, rootId: paneId };
   const next: ShellState = {
