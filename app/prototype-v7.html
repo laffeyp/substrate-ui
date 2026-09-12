@@ -305,23 +305,22 @@
   <div style="flex:1;overflow:auto;background:#212327;padding:22px 40px">
    <div style="max-width:760px">
     <div style="font-size:10px;letter-spacing:.14em;color:#62676f;margin-bottom:10px">WORKSPACES</div>
-    <div style="color:#d7dade;font-size:13px">~/code/substrate <span style="color:#62676f;font-size:11px">git · sessions get worktrees</span></div>
-    <div style="margin:8px 0 0 16px;padding:10px 14px;background:#2e3138;border-radius:6px;cursor:pointer" onClick="{{ backToSession }}">
-     <div style="display:flex;gap:9px;align-items:center"><span style="width:7px;height:7px;border-radius:50%;background:#82a5c8"></span><span style="color:#e2e5e9">fix-race-in-metering</span><span style="color:#62676f;font-size:11px">◐ parked · turn 9</span><span style="margin-left:auto;color:#62676f;font-size:11px">substrate/fix-race · kimi-k2 · open ▸</span></div>
-     <div style="font-size:11px;color:#9aa0a8;margin:4px 0 0 16px">⑂ reviewer-a <span style="color:#62676f">standing · 3 calls</span> &nbsp;·&nbsp; <span style="color:#62676f">⑂ 2 one-shot children · folded under their turns</span></div>
-    </div>
-    <sc-for list="{{ extraSessions }}" as="x" hint-placeholder-count="0">
-     <div onClick="{{ x.pick }}" style="margin:6px 0 0 16px;padding:8px 14px;font-size:12px;color:#9aa0a8;display:flex;gap:9px;align-items:center;cursor:pointer;border-radius:6px" style-hover="background:#2e3138"><span style="width:7px;height:7px;border-radius:50%;background:#82a5c8;opacity:.55;flex:none"></span><span style="color:#e2e5e9">{{ x.name }}</span><span style="color:#62676f;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ x.statusGlyph }} · {{ x.meta }}</span><span style="margin-left:auto;color:#62676f;font-size:11px;flex:none">{{ x.where }}</span></div>
+    <sc-for list="{{ workspaceGroups }}" as="group" hint-placeholder-count="1">
+     <div style="color:#d7dade;font-size:13px;margin-top:16px">{{ group.path }} <span style="color:#62676f;font-size:11px">{{ group.shape }}</span></div>
+     <sc-for list="{{ group.sessions }}" as="session" hint-placeholder-count="1">
+      <div onClick="{{ session.pick }}" style="margin:6px 0 0 16px;padding:8px 14px;font-size:12px;color:#9aa0a8;display:flex;gap:9px;align-items:center;cursor:pointer;border-radius:6px" style-hover="background:#2e3138"><span style="width:7px;height:7px;border-radius:50%;background:{{ session.dotColor }};flex:none"></span><span style="color:#e2e5e9">{{ session.name }}</span><span style="color:#62676f;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ session.statusGlyph }} · {{ session.driver }}</span><span style="margin-left:auto;color:#62676f;font-size:11px;flex:none">{{ session.where }}</span></div>
+     </sc-for>
     </sc-for>
-    <div style="margin:6px 0 0 16px;padding:8px 14px;color:#62676f;font-size:12px"><span style="color:#4a4e55">●</span> swebench-repro <span style="font-size:11px">finalised tue · ✓ clean</span></div>
-    <div style="color:#d7dade;font-size:13px;margin-top:16px">~/notes/substrate-docs <span style="color:#62676f;font-size:11px">flat</span></div>
-    <div style="margin:6px 0 0 16px;padding:8px 14px;font-size:12px;color:#9aa0a8"><span style="color:#82a5c8;opacity:.55">●</span> docs-pass <span style="color:#62676f;font-size:11px">◐ parked 41m · claude-cli</span></div>
-    <div style="color:#d7dade;font-size:13px;margin-top:16px">~/.substrate <span style="color:#62676f;font-size:11px">sandbox</span></div>
-    <div style="margin:6px 0 0 16px;padding:8px 14px;font-size:12px;color:#9aa0a8"><span style="color:#82a5c8">●</span> scratch <span style="color:#62676f;font-size:11px">● running · deepseek-r1:8b · ~/.substrate/sessions/s_9b2…/workspace</span></div>
+    <sc-if value="{{ hasNoWorkspaces }}" hint-placeholder-val="{{ false }}">
+     <div style="margin:16px 0 0 0;padding:16px;background:#1a1c20;border-radius:6px;color:#62676f;font-size:12px">no sessions yet — bind a workspace in the first pane above to start one</div>
+    </sc-if>
     <div style="font-size:10px;letter-spacing:.14em;color:#62676f;margin:22px 0 8px;border-top:1px solid rgba(255,255,255,.055);padding-top:14px">ASSAYS</div>
-    <div style="padding:8px 14px;background:#1a1c20;border-radius:6px;cursor:pointer;display:flex;gap:12px" style-hover="background:#26292e" onClick="{{ openAssay }}"><span style="color:#e2e5e9">rev_kimi_vs_glm</span><span style="color:#62676f;font-size:11px">4 arms × 32 cases × 3 trials · 384 cells · finding ready · open ▸</span></div>
-    <div style="padding:8px 14px;margin-top:4px;display:flex;gap:12px;color:#9aa0a8"><span>coding_cells</span><span style="color:#62676f;font-size:11px">4 arms · 2840 cells</span></div>
-    <div style="font-size:11px;color:#62676f;margin-top:22px;border-top:1px solid rgba(255,255,255,.055);padding-top:12px">raw records — the debug pile, collapsed ▸ &nbsp;&nbsp;·&nbsp;&nbsp; + session prompts for a workspace (default: where you opened substrate)</div>
+    <sc-for list="{{ assayList }}" as="assay" hint-placeholder-count="0">
+     <div style="padding:8px 14px;background:#1a1c20;border-radius:6px;cursor:pointer;display:flex;gap:12px;margin-top:4px" style-hover="background:#26292e" onClick="{{ assay.open }}"><span style="color:#e2e5e9">{{ assay.name }}</span><span style="color:#62676f;font-size:11px">{{ assay.summary }}</span></div>
+    </sc-for>
+    <sc-if value="{{ hasNoAssays }}" hint-placeholder-val="{{ true }}">
+     <div style="padding:8px 14px;color:#62676f;font-size:11px">no assays — bridge list_assays returns [] until the assay projection lands</div>
+    </sc-if>
    </div>
   </div>
  </sc-if>
@@ -329,19 +328,28 @@
  <!-- ══ SURFACE · assay ══ -->
  <sc-if value="{{ showAssay }}" hint-placeholder-val="{{ false }}">
   <div style="flex:1;overflow:auto;background:#212327;padding:20px 40px">
-   <div style="display:flex;align-items:baseline;gap:14px"><span style="color:#e2e5e9;font-weight:600;font-size:15px">rev_kimi_vs_glm</span><span style="color:#62676f;font-size:11px">4 arms × 32 cases × 3 trials · 384 cells · preregistered · arms_hash ✓</span></div>
-   <div style="margin-top:12px;padding:10px 14px;background:rgba(130,165,200,.09);border-left:3px solid #82a5c8;border-radius:0 5px 5px 0;font-size:12.5px"><span style="color:#e2e5e9;font-weight:600">FINDING</span> &nbsp;<span style="color:#d7dade">kimi + reviewer-glm beats control kimi_solo</span> &nbsp;<span style="color:#9aa0a8">Δ-pass¹ +.17 · paired bootstrap p=.008 · BH-FDR significant</span></div>
-   <div style="margin-top:8px;padding:10px 14px;background:rgba(194,96,88,.1);border-left:3px solid #c26058;border-radius:0 5px 5px 0;font-size:12.5px"><span style="color:#c26058;font-weight:600">UNDERPOWERED</span> &nbsp;<span style="color:#d7dade">glm + reviewer-kimi on adversarial: 4 cases × 3 trials cannot answer this question</span> &nbsp;<span style="color:#9aa0a8">verdict withheld</span></div>
-   <div style="display:grid;grid-template-columns:180px 1.3fr .6fr .6fr .6fr .7fr 140px 120px;gap:0 16px;font-size:12px;align-items:center;margin-top:14px;max-width:1060px">
-    <div style="color:#62676f;font-size:10px;letter-spacing:.1em;padding:6px 0">ARM</div><div style="color:#62676f;font-size:10px;letter-spacing:.1em">OVERALL PASS¹</div><div style="color:#62676f;font-size:10px;letter-spacing:.1em">EASY·8</div><div style="color:#62676f;font-size:10px;letter-spacing:.1em">MED·12</div><div style="color:#62676f;font-size:10px;letter-spacing:.1em">HARD·8</div><div style="color:#62676f;font-size:10px;letter-spacing:.1em">ADV·4</div><div style="color:#62676f;font-size:10px;letter-spacing:.1em">Δ VS CONTROL·P</div><div style="color:#62676f;font-size:10px;letter-spacing:.1em">VERDICT</div>
-    <sc-for list="{{ arms }}" as="a" hint-placeholder-count="4">
-     <div style="padding:10px 0;color:{{ a.nameColor }}">{{ a.name }}</div>
-     <div><div style="display:flex;align-items:center;gap:8px"><div style="flex:1;height:9px;border-radius:2px;background:#2e3138"><div style="width:{{ a.barW }};height:9px;border-radius:2px;background:{{ a.barColor }}"></div></div><span style="color:#d7dade;width:28px;text-align:right">{{ a.overall }}</span></div></div>
-     <div style="color:#9aa0a8">{{ a.easy }}</div><div style="color:#9aa0a8">{{ a.med }}</div><div style="color:#9aa0a8">{{ a.hard }}</div><div style="color:{{ a.advColor }}">{{ a.adv }}</div>
-     <div style="color:{{ a.deltaColor }}">{{ a.delta }}</div><div style="color:{{ a.verdictColor }};font-weight:600">{{ a.verdict }}</div>
-    </sc-for>
-   </div>
-   <div style="margin-top:16px;max-width:1060px;padding:12px 14px;background:#1a1c20;border-left:2px solid #665f7d;border-radius:0 5px 5px 0;font-size:11.5px;line-height:1.7;color:#9aa0a8">what this run can say: adding a glm reviewer to kimi helps, and the effect survives multiplicity correction. What it can't: whether the reverse pairing helps on adversarial cases — 4×3 cells is below power. Cells are write-gated by the preregistration on disk; click a cell for its 3 trial records.</div>
+   <sc-if value="{{ assayReportReady }}" hint-placeholder-val="{{ false }}">
+    <div style="display:flex;align-items:baseline;gap:14px"><span style="color:#e2e5e9;font-weight:600;font-size:15px">{{ assayReportName }}</span><span style="color:#62676f;font-size:11px">{{ assayReportSummary }}</span></div>
+    <sc-if value="{{ assayFindingText }}" hint-placeholder-val="{{ false }}">
+     <div style="margin-top:12px;padding:10px 14px;background:rgba(130,165,200,.09);border-left:3px solid #82a5c8;border-radius:0 5px 5px 0;font-size:12.5px"><span style="color:#e2e5e9;font-weight:600">FINDING</span> &nbsp;<span style="color:#d7dade">{{ assayFindingText }}</span> &nbsp;<span style="color:#9aa0a8">{{ assayFindingStats }}</span></div>
+    </sc-if>
+    <sc-if value="{{ assayUnderpoweredText }}" hint-placeholder-val="{{ false }}">
+     <div style="margin-top:8px;padding:10px 14px;background:rgba(194,96,88,.1);border-left:3px solid #c26058;border-radius:0 5px 5px 0;font-size:12.5px"><span style="color:#c26058;font-weight:600">UNDERPOWERED</span> &nbsp;<span style="color:#d7dade">{{ assayUnderpoweredText }}</span></div>
+    </sc-if>
+    <div style="display:grid;grid-template-columns:180px 1.3fr 140px 120px;gap:0 16px;font-size:12px;align-items:center;margin-top:14px;max-width:1060px">
+     <div style="color:#62676f;font-size:10px;letter-spacing:.1em;padding:6px 0">ARM</div><div style="color:#62676f;font-size:10px;letter-spacing:.1em">OVERALL PASS¹</div><div style="color:#62676f;font-size:10px;letter-spacing:.1em">Δ VS CONTROL · P</div><div style="color:#62676f;font-size:10px;letter-spacing:.1em">VERDICT</div>
+     <sc-for list="{{ armRows }}" as="armRow" hint-placeholder-count="4">
+      <div style="padding:10px 0;color:{{ armRow.nameColor }}">{{ armRow.name }}</div>
+      <div><div style="display:flex;align-items:center;gap:8px"><div style="flex:1;height:9px;border-radius:2px;background:#2e3138"><div style="width:{{ armRow.barWidth }};height:9px;border-radius:2px;background:{{ armRow.barColor }}"></div></div><span style="color:#d7dade;width:28px;text-align:right">{{ armRow.overall }}</span></div></div>
+      <div style="color:{{ armRow.deltaColor }}">{{ armRow.delta }}</div>
+      <div style="color:{{ armRow.verdictColor }};font-weight:600">{{ armRow.verdict }}</div>
+     </sc-for>
+    </div>
+    <div style="margin-top:16px;max-width:1060px;padding:12px 14px;background:#1a1c20;border-left:2px solid #665f7d;border-radius:0 5px 5px 0;font-size:11.5px;line-height:1.7;color:#9aa0a8">easy/med/hard/adv column split needs an extension to substrate.assay.report.build_report — deferred to Round 4. Cells and trial records land there.</div>
+   </sc-if>
+   <sc-if value="{{ assayReportEmpty }}" hint-placeholder-val="{{ true }}">
+    <div style="padding:16px;background:#1a1c20;border-radius:6px;color:#62676f;font-size:12px">no assay report loaded — bridge list_assays returns [] until the assay projection lands (Round 4)</div>
+   </sc-if>
   </div>
  </sc-if>
 
@@ -1240,12 +1248,40 @@ class Component extends DCLogic {
     const routerRows = q.startsWith('/') ? CMDS.filter(c => c[0].startsWith(q) || q === '/').map(c => ({ cmd: c[0], desc: c[1], pick: c[2] || (() => this.setState({ promptVal: c[0] + ' ' })) })) : [];
     const G = [[0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,1,0,0,0,0,0,0,0,0],[0,0,0,0,1,0,0,0,0,0,0,0],[0,0,1,1,1,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,1,1,0,0,0],[0,0,0,0,0,0,0,1,1,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0]];
     const surf = state.surface;
-    const arms = [
-      { name: 'kimi_solo ⌂ control', nameColor: '#9aa0a8', overall: '.64', barW: '64%', barColor: '#62676f', easy: '.96', med: '.81', hard: '.54', adv: '.25', advColor: '#9aa0a8', delta: '—', deltaColor: '#62676f', verdict: 'the bar', verdictColor: '#62676f' },
-      { name: 'kimi + reviewer-glm', nameColor: '#e2e5e9', overall: '.81', barW: '81%', barColor: '#82a5c8', easy: '.98', med: '.90', hard: '.71', adv: '.42', advColor: '#9aa0a8', delta: '+.17 · p=.008 ✓FDR', deltaColor: '#e2e5e9', verdict: 'superior', verdictColor: '#82a5c8' },
-      { name: 'glm_solo', nameColor: '#9aa0a8', overall: '.59', barW: '59%', barColor: '#62676f', easy: '.94', med: '.73', hard: '.50', adv: '.17', advColor: '#9aa0a8', delta: '−.05 · p=.41', deltaColor: '#9aa0a8', verdict: 'inconclusive', verdictColor: '#9aa0a8' },
-      { name: 'glm + reviewer-kimi', nameColor: '#9aa0a8', overall: '.76', barW: '76%', barColor: '#62676f', easy: '.95', med: '.85', hard: '.58', adv: 'n/a', advColor: '#c26058', delta: '+.12', deltaColor: '#9aa0a8', verdict: 'underpowered', verdictColor: '#c26058' },
-    ];
+    // Assay report — state.assayReport is populated by the future
+    // assay_report bridge op (Round 4). Until then, no report → empty
+    // state on the assay surface.
+    const assayReport = state.assayReport || null;
+    const armRows = assayReport && Array.isArray(assayReport.arms)
+      ? assayReport.arms.map(arm => {
+          const overall = typeof arm.pass_rate === 'number' ? arm.pass_rate.toFixed(2) : '—';
+          const overallPercent = typeof arm.pass_rate === 'number'
+            ? Math.round(arm.pass_rate * 100) + '%' : '0%';
+          const deltaSigned = typeof arm.delta_vs_control === 'number'
+            ? (arm.delta_vs_control > 0 ? '+' : '') + arm.delta_vs_control.toFixed(2)
+            : '—';
+          const deltaText = arm.p_value != null
+            ? deltaSigned + ' · p=' + Number(arm.p_value).toFixed(3)
+              + (arm.fdr_significant ? ' ✓FDR' : '')
+            : deltaSigned;
+          const verdict = arm.equivalence || (arm.fdr_significant ? 'superior' : 'inconclusive');
+          const verdictColor = verdict === 'superior' ? '#82a5c8'
+            : verdict === 'inferior' ? '#c26058'
+            : verdict === 'underpowered' ? '#c26058'
+            : '#9aa0a8';
+          return {
+            name: arm.name || arm.arm_name || '?',
+            nameColor: arm.is_control ? '#9aa0a8' : '#e2e5e9',
+            overall,
+            barWidth: overallPercent,
+            barColor: arm.fdr_significant ? '#82a5c8' : '#62676f',
+            delta: deltaText,
+            deltaColor: arm.fdr_significant ? '#e2e5e9' : '#9aa0a8',
+            verdict,
+            verdictColor,
+          };
+        })
+      : [];
     return {
       crumb:
         surf === 'records' ? focusedPane.name + ' › records'
@@ -1259,6 +1295,43 @@ class Component extends DCLogic {
       openStudio: () => this._toggleSurface('studio'),
       openAssay: () => this.setState({ surface: 'assay' }),
       backToSession: () => this.setState({ surface: null }),
+      // Records surface — workspace-grouped session listing.
+      // sessionsFromRegistry is populated by _loadSessions when the
+      // records surface opens; each SessionManifest carries workspace,
+      // workspace_shape, driver, and status. Group by workspace path.
+      workspaceGroups: (() => {
+        const grouped = new Map();
+        for (const row of state.sessionsFromRegistry || []) {
+          const workspace = row.workspace || '(no workspace)';
+          if (!grouped.has(workspace)) {
+            grouped.set(workspace, { path: workspace, shape: row.workspace_shape || '', sessions: [] });
+          }
+          const focusedPaneId = this.state.focused;
+          const openInPane = state.panes.find(p => p.boundSessionId === row.session_id);
+          const paneIdForResume = openInPane ? openInPane.id : focusedPaneId;
+          const ended = row.status === 'ended';
+          grouped.get(workspace).sessions.push({
+            name: row.name || row.session_id.slice(0, 12),
+            driver: row.driver || '?',
+            statusGlyph: ended ? '◇ ended' : '◐ parked',
+            dotColor: ended ? '#4a4e55' : '#82a5c8',
+            where: openInPane
+              ? 'open in a pane ▸'
+              : ended ? 'finalised' : 'click to resume',
+            pick: () => this._resumeSession(paneIdForResume, row.session_id),
+          });
+        }
+        return Array.from(grouped.values());
+      })(),
+      hasNoWorkspaces: !(state.sessionsFromRegistry && state.sessionsFromRegistry.length > 0),
+      // Assay list — the bridge's list_assays returns [] until the
+      // assay projection lands (Round 4). Surface an empty state.
+      assayList: (state.assays || []).map(assay => ({
+        name: assay.name,
+        summary: assay.arms + ' arms × ' + assay.cases + ' cases · ' + (assay.finding_ready ? 'finding ready' : 'in progress'),
+        open: () => this.setState({ surface: 'assay', assayInView: assay.name }),
+      })),
+      hasNoAssays: !(state.assays && state.assays.length > 0),
       // Records surface roster — reads state.sessionsFromRegistry
       // populated by _loadSessions on surface open. Each row lands
       // as {name, statusGlyph, meta, where, pick} for the template.
@@ -1346,7 +1419,19 @@ class Component extends DCLogic {
         { seq: 242, title: 'FinalAnswer · output', text: 'The race was in _emit_log — an unlocked deque shared by two producers. Wrapped it in the kernel lock; reviewer-a signed off. 24/24 green under -n 8.' },
       ],
       sceneCells: G.flat().map(v => ({ bg: v ? '#82a5c8' : '#1a1c20' })),
-      arms,
+      armRows,
+      assayReportReady: !!assayReport,
+      assayReportEmpty: !assayReport,
+      assayReportName: assayReport ? (assayReport.name || state.assayInView || '') : '',
+      assayReportSummary: assayReport
+        ? (assayReport.arms_count || (assayReport.arms || []).length) + ' arms · '
+          + (assayReport.cases_count || 0) + ' cases · '
+          + (assayReport.trials_per_cell || 1) + ' trials'
+          + (assayReport.preregistered ? ' · preregistered · arms_hash ✓' : '')
+        : '',
+      assayFindingText: assayReport && assayReport.finding_text ? assayReport.finding_text : '',
+      assayFindingStats: assayReport && assayReport.finding_stats ? assayReport.finding_stats : '',
+      assayUnderpoweredText: assayReport && assayReport.underpowered_text ? assayReport.underpowered_text : '',
       topoName: state.topoName, updTopoName: (ev) => this.setState({ topoName: ev.target.value }),
       prodRows: state.prods.map((p, i) => ({
         name: p.name, emits: p.emits, updName: this._upd('prods', i, 'name'), updEmits: this._upd('prods', i, 'emits'), rm: this._rm('prods', i),
