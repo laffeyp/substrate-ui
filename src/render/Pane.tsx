@@ -20,6 +20,7 @@ import { TranscriptDelegateRefused } from "./TranscriptDelegateRefused";
 import { TranscriptFanOutList } from "./TranscriptFanOutList";
 import { Inspector } from "./Inspector";
 import { RecordsSurface } from "./RecordsSurface";
+import { AssaySurface } from "./AssaySurface";
 import { detectFanoutGroups } from "@/reducer/ShellReducer";
 
 interface Props {
@@ -146,6 +147,9 @@ export function Pane({ pane, onFocus, onDragStart, onClose, onPickerText, onPick
           onResume={(sid) => onResumeFromSurface(pane.id, sid)}
           onClose={() => onSurfaceClose(pane.id)}
         />
+      ) : null}
+      {pane.surface?.kind === SurfaceKind.ASSAY && onSurfaceClose ? (
+        <AssaySurface paneId={pane.id} onClose={() => onSurfaceClose(pane.id)} />
       ) : null}
       <div style={S.body}>
         {pane.status === PaneStatus.UNBOUND && onPickerText && onPickerWalk && onPickerCommit && onResume ? (

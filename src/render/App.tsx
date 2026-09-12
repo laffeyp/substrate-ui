@@ -371,6 +371,15 @@ function ShellShortcuts({ dispatch, focusedPaneId, focusedPane, onEnd }: {
         } else {
           dispatch({ type: ActionType.SURFACE_OPEN, paneId: focusedPaneId, kind: SurfaceKind.RECORDS });
         }
+      } else if (e.key === "a" || e.key === "A") {
+        // Sprint 026 — Cmd-A opens the Assay surface. Same
+        // idempotency rule as Cmd-R.
+        e.preventDefault();
+        if (focusedPane?.surface?.kind === SurfaceKind.ASSAY) {
+          dispatch({ type: ActionType.SURFACE_CLOSE, paneId: focusedPaneId });
+        } else {
+          dispatch({ type: ActionType.SURFACE_OPEN, paneId: focusedPaneId, kind: SurfaceKind.ASSAY });
+        }
       }
     };
     window.addEventListener("keydown", onKey);
