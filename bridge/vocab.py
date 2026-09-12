@@ -150,6 +150,8 @@ class BridgeOp(StrEnum):
     SESSION_END = "session_end"
     SESSION_CREATE = "session_create"
     LIST_ASSAYS = "list_assays"
+    TOPOLOGY_VALIDATE = "topology_validate"
+    TOPOLOGY_BUILD = "topology_build"
 
 
 class ReplyOp(StrEnum):

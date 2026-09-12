@@ -133,6 +133,18 @@ export const SURFACE_KIND_BYTES: Record<SurfaceKind, number> = {
   records: 1, studio: 2, assay: 3,
 };
 
+// Sprint 027 — Studio view mode (form vs canvas). Enum sourced from
+// Layer 2's ratified `to.enum` on STUDIO_VIEW_TOGGLED.
+export const STUDIO_VIEWS = enumOf(Tag.STUDIO_VIEW_TOGGLED, "to") as
+  readonly ["form", "canvas"];
+export type StudioView = typeof STUDIO_VIEWS[number];
+export const StudioView = {
+  FORM: "form", CANVAS: "canvas",
+} as const satisfies Record<string, StudioView>;
+export function isStudioView(x: unknown): x is StudioView {
+  return typeof x === "string" && (STUDIO_VIEWS as readonly string[]).includes(x);
+}
+
 // Sprint 019 — reveal focus. Inside a revealed pane, focus toggles
 // between transcript-side and stream-side. Find (Epic H) scopes by
 // this focus. Enum from Layer 2's ratified `to` enum on

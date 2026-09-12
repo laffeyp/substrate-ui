@@ -1,7 +1,7 @@
 // WindowFrame.tsx — renders one window's split tree as a nested grid.
 
 import { useRef } from "react";
-import { ShellState, Window, WorkspaceShape, Lens } from "@/state/ShellState";
+import { ShellState, Window, WorkspaceShape, Lens, type Pane as PaneModel } from "@/state/ShellState";
 import { Axis } from "@/state/SplitTree";
 import { Pane } from "./Pane";
 import { Gutter } from "./Gutter";
@@ -31,6 +31,10 @@ export interface PaneCallbacks {
   onInspectorToggle: (paneId: string, envelopeSeq: number, envelopeKind: string, sourceIsStream: boolean) => void;
   onSurfaceClose: (paneId: string) => void;
   onResumeFromSurface: (paneId: string, sessionId: string) => void;
+  onStudioDraftSet: (paneId: string, draft: Partial<PaneModel["studioDraft"]>) => void;
+  onStudioViewToggle: (paneId: string) => void;
+  onStudioValidate: (paneId: string, draft: PaneModel["studioDraft"]) => void;
+  onStudioBuild: (paneId: string, topoName: string) => void;
 }
 
 export interface GutterCallbacks {
@@ -77,6 +81,10 @@ function Node({ id, state, gutter, pane }: { id: string; state: ShellState; gutt
         onInspectorToggle={pane.onInspectorToggle}
         onSurfaceClose={pane.onSurfaceClose}
         onResumeFromSurface={pane.onResumeFromSurface}
+        onStudioDraftSet={pane.onStudioDraftSet}
+        onStudioViewToggle={pane.onStudioViewToggle}
+        onStudioValidate={pane.onStudioValidate}
+        onStudioBuild={pane.onStudioBuild}
       />
     );
   }

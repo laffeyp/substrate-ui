@@ -16,6 +16,7 @@ import { Zone, Axis } from "@/state/SplitTree";
 import { WorkspaceShape } from "@/state/ShellState";
 import { newId } from "@/state/ids";
 import { bridgeRequest } from "@/observability/BridgeClient";
+import type { Pane as PaneModel } from "@/state/ShellState";
 import {
   BridgeStatus, PaneStatus, isPaneStatus, DriverKind, SurfaceKind,
 } from "@/observability/reasons";
@@ -203,6 +204,49 @@ function Shell(): JSX.Element {
     });
   }, [dispatch]);
 
+  const studioValidate = useMemo(() => (paneId: string, draft: PaneModel["studioDraft"]) => {
+    dispatch({ type: ActionType.STUDIO_VALIDATE_START, paneId,
+      topoName: draft.topoName });
+    bridgeRequest<{
+      topo_name: string; producer_count: number; view_count: number;
+      trigger_count: number; route_count: number;
+    }>("topology_validate", {
+      topo_name: draft.topoName,
+      producer_count: draft.producerCount, view_count: draft.viewCount,
+      trigger_count: draft.triggerCount, route_count: draft.routeCount,
+    }, 5000).then((result) => {
+      dispatch({ type: ActionType.STUDIO_VALIDATE_OK, paneId,
+        topoName: result.topo_name,
+        producerCount: result.producer_count, viewCount: result.view_count,
+        triggerCount: result.trigger_count, routeCount: result.route_count });
+    }).catch((reason) => {
+      let errors: string[];
+      try {
+        const parsed = JSON.parse(String(reason));
+        errors = Array.isArray(parsed.errors) ? parsed.errors : [String(reason)];
+      } catch { errors = [String(reason)]; }
+      dispatch({ type: ActionType.STUDIO_VALIDATE_ERR, paneId,
+        topoName: draft.topoName, errors });
+    });
+  }, [dispatch]);
+
+  const studioBuild = useMemo(() => (paneId: string, topoName: string) => {
+    dispatch({ type: ActionType.STUDIO_BUILD_START, paneId, topoName });
+    bridgeRequest<{ topo_name: string; record_root: string }>(
+      "topology_build", { topo_name: topoName }, 10000,
+    ).then((result) => {
+      dispatch({ type: ActionType.STUDIO_BUILD_OK, paneId,
+        topoName: result.topo_name, recordRoot: result.record_root });
+    }).catch((reason) => {
+      let errors: string[];
+      try {
+        const parsed = JSON.parse(String(reason));
+        errors = Array.isArray(parsed.errors) ? parsed.errors : [String(reason)];
+      } catch { errors = [String(reason)]; }
+      dispatch({ type: ActionType.STUDIO_BUILD_ERR, paneId, topoName, errors });
+    });
+  }, [dispatch]);
+
   useEffect(() => {
     if (bootedRef.current) return;
     bootedRef.current = true;
@@ -284,6 +328,12 @@ function Shell(): JSX.Element {
               dispatch({ type: ActionType.SURFACE_CLOSE, paneId });
               startSessionResume(paneId, sessionId);
             },
+            onStudioDraftSet: (paneId, draft) =>
+              dispatch({ type: ActionType.STUDIO_DRAFT_SET, paneId, draft }),
+            onStudioViewToggle: (paneId) =>
+              dispatch({ type: ActionType.STUDIO_VIEW_TOGGLE, paneId }),
+            onStudioValidate: (paneId, draft) => studioValidate(paneId, draft),
+            onStudioBuild: (paneId, topoName) => studioBuild(paneId, topoName),
           }}
         />
       )}
@@ -328,8 +378,6 @@ function Shell(): JSX.Element {
     </>
   );
 }
-
-import type { Pane as PaneModel } from "@/state/ShellState";
 
 function ShellShortcuts({ dispatch, focusedPaneId, focusedPane, onEnd }: {
   dispatch: (a: Action) => void;
@@ -379,6 +427,15 @@ function ShellShortcuts({ dispatch, focusedPaneId, focusedPane, onEnd }: {
           dispatch({ type: ActionType.SURFACE_CLOSE, paneId: focusedPaneId });
         } else {
           dispatch({ type: ActionType.SURFACE_OPEN, paneId: focusedPaneId, kind: SurfaceKind.ASSAY });
+        }
+      } else if (e.key === "s" || e.key === "S") {
+        // Sprint 027 — Cmd-S opens the Studio surface. Same
+        // idempotency rule as Cmd-R / Cmd-A.
+        e.preventDefault();
+        if (focusedPane?.surface?.kind === SurfaceKind.STUDIO) {
+          dispatch({ type: ActionType.SURFACE_CLOSE, paneId: focusedPaneId });
+        } else {
+          dispatch({ type: ActionType.SURFACE_OPEN, paneId: focusedPaneId, kind: SurfaceKind.STUDIO });
         }
       }
     };
