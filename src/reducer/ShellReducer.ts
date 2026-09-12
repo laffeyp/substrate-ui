@@ -92,6 +92,8 @@ export const ActionType = {
   DRIVER_PICK_START: "DRIVER_PICK_START",
   DRIVER_PICK_OK: "DRIVER_PICK_OK",
   DRIVER_PICK_ERR: "DRIVER_PICK_ERR",
+  WORKSPACE_POPOVER_OPEN: "WORKSPACE_POPOVER_OPEN",
+  WORKSPACE_POPOVER_CLOSE: "WORKSPACE_POPOVER_CLOSE",
 } as const;
 export type ActionTypeT = typeof ActionType[keyof typeof ActionType];
 
@@ -177,6 +179,8 @@ export type Action =
   | { type: typeof ActionType.DRIVER_PICK_START; paneId: string; requestId: string; sessionId: string; fromDriver: string; toDriver: string }
   | { type: typeof ActionType.DRIVER_PICK_OK; paneId: string; requestId: string; sessionId: string; fromDriver: string; toDriver: string }
   | { type: typeof ActionType.DRIVER_PICK_ERR; paneId: string; requestId: string; sessionId: string; reason: string }
+  | { type: typeof ActionType.WORKSPACE_POPOVER_OPEN; paneId: string }
+  | { type: typeof ActionType.WORKSPACE_POPOVER_CLOSE; paneId: string }
   ;
 
 // Layer 5 (delegate.py:353) caps descent at depth 2. The reducer
@@ -831,6 +835,26 @@ export function reduce(state: ShellState, action: Action): Step {
         } }],
       };
     }
+    case ActionType.WORKSPACE_POPOVER_OPEN: {
+      const pane = state.panes[action.paneId];
+      if (!pane || pane.workspacePopover.open) return { state, emissions: [] };
+      return {
+        state: { ...state, panes: { ...state.panes, [action.paneId]: {
+          ...pane, workspacePopover: { open: true },
+        } } },
+        emissions: [{ kind: Tag.WORKSPACE_POPOVER_OPENED, payload: { pane_id: action.paneId } }],
+      };
+    }
+    case ActionType.WORKSPACE_POPOVER_CLOSE: {
+      const pane = state.panes[action.paneId];
+      if (!pane || !pane.workspacePopover.open) return { state, emissions: [] };
+      return {
+        state: { ...state, panes: { ...state.panes, [action.paneId]: {
+          ...pane, workspacePopover: { open: false },
+        } } },
+        emissions: [{ kind: Tag.WORKSPACE_POPOVER_CLOSED, payload: { pane_id: action.paneId } }],
+      };
+    }
     case ActionType.FIND_STEP: {
       const pane = state.panes[action.paneId];
       if (!pane || !pane.find.open || pane.find.count === 0) return { state, emissions: [] };
@@ -1299,6 +1323,7 @@ function boot(): Step {
     slashRouter: { open: false, index: 0 },
     driver: null,
     driverPopover: { open: false, options: [], index: 0 },
+    workspacePopover: { open: false },
   };
   const window: Window = { id: windowId, rootId: paneId };
   const next: ShellState = {

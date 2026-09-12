@@ -46,6 +46,8 @@ export interface PaneCallbacks {
   onDriverDropdownClose: (paneId: string) => void;
   onDriverDropdownWalk: (paneId: string, delta: 1 | -1) => void;
   onDriverPick: (paneId: string, sessionId: string, fromDriver: string, toDriver: string) => void;
+  onWorkspacePopoverOpen: (paneId: string) => void;
+  onWorkspacePopoverClose: (paneId: string) => void;
 }
 
 export interface GutterCallbacks {
@@ -107,6 +109,8 @@ function Node({ id, state, gutter, pane }: { id: string; state: ShellState; gutt
         onDriverDropdownClose={pane.onDriverDropdownClose}
         onDriverDropdownWalk={pane.onDriverDropdownWalk}
         onDriverPick={pane.onDriverPick}
+        onWorkspacePopoverOpen={pane.onWorkspacePopoverOpen}
+        onWorkspacePopoverClose={pane.onWorkspacePopoverClose}
       />
     );
   }

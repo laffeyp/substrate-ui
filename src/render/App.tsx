@@ -390,6 +390,10 @@ function Shell(): JSX.Element {
               dispatch({ type: ActionType.DRIVER_DROPDOWN_WALK, paneId, delta }),
             onDriverPick: (paneId, sessionId, fromDriver, toDriver) =>
               startDriverChange(paneId, sessionId, fromDriver, toDriver),
+            onWorkspacePopoverOpen: (paneId) =>
+              dispatch({ type: ActionType.WORKSPACE_POPOVER_OPEN, paneId }),
+            onWorkspacePopoverClose: (paneId) =>
+              dispatch({ type: ActionType.WORKSPACE_POPOVER_CLOSE, paneId }),
           }}
         />
       )}

@@ -141,6 +141,11 @@ export interface Pane {
   // state and the walked cursor while it is open.
   driver: string | null;
   driverPopover: { open: boolean; options: readonly string[]; index: number };
+  // Sprint 032 — workspace popover state. The chip label reads
+  // pane.workspaceShape; the popover renders `pane.workspacePath` +
+  // shape read-only (workspace is immutable on a bound session per
+  // D9c). Layer 2 ships {pane_id} only on both open and close.
+  workspacePopover: { open: boolean };
   // Later sprints extend: surface (records/assay/studio),
   // find, header_popover, etc.
 }
