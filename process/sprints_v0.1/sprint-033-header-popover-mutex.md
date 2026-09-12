@@ -3,7 +3,7 @@
 ---
 id: 033
 epic: I — Header & driver
-status: pending
+status: closed
 phase: 3
 pass_kind: widening
 spec_reference: signals/0.1.json § header_popover kind enum; Layer 5 exclusivity — Layer 1 v0.1 carries per-kind pairs (DRIVER_DROPDOWN_OPENED/CLOSED, WORKSPACE_POPOVER_OPENED/CLOSED) but no generic HEADER_POPOVER_*

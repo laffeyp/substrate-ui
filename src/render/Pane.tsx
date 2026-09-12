@@ -136,6 +136,14 @@ function initialByte(slot: (typeof PANE_SLOT_ORDER)[number], pane: PaneModel): n
     // Layer 7: 0 none · 1 records · 2 studio · 3 assay.
     return pane.surface === null ? 0 : SURFACE_KIND_BYTES[pane.surface.kind];
   }
+  if (slot === PaneSlot.HEADER_POPOVER) {
+    // Layer 7: 0 none · 128 driver_dropdown · 255 workspace_popover.
+    // The mutex the reducer enforces guarantees at most one branch is
+    // true at any time; the byte encodes which one.
+    if (pane.driverPopover.open) return 128;
+    if (pane.workspacePopover.open) return 255;
+    return 0;
+  }
   if (slot === PaneSlot.FIND) {
     // Layer 7: 0 closed · 128 transcript-scope · 255 stream-scope.
     if (!pane.find.open) return 0;
