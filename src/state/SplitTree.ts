@@ -51,6 +51,7 @@ export function splitPane(
     refusedToolCallIds: new Set(),
     fanoutExpansions: {},
     inspectorSeq: null,
+    surface: null,
   };
   const updatedParent: Pane = { ...parent, splitParentId: newSplitId, ratio: 0.5 };
   const newSplit: Split = {

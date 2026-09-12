@@ -17,7 +17,7 @@ import { WorkspaceShape } from "@/state/ShellState";
 import { newId } from "@/state/ids";
 import { bridgeRequest } from "@/observability/BridgeClient";
 import {
-  BridgeStatus, PaneStatus, isPaneStatus, DriverKind,
+  BridgeStatus, PaneStatus, isPaneStatus, DriverKind, SurfaceKind,
 } from "@/observability/reasons";
 
 interface SubstrateBridge {
@@ -279,6 +279,11 @@ function Shell(): JSX.Element {
               dispatch({ type: ActionType.FANOUT_COLLAPSE, paneId, leaderToolCallId }),
             onInspectorToggle: (paneId, envelopeSeq, envelopeKind, sourceIsStream) =>
               dispatch({ type: ActionType.INSPECTOR_TOGGLE, paneId, envelopeSeq, envelopeKind, sourceIsStream }),
+            onSurfaceClose: (paneId) => dispatch({ type: ActionType.SURFACE_CLOSE, paneId }),
+            onResumeFromSurface: (paneId, sessionId) => {
+              dispatch({ type: ActionType.SURFACE_CLOSE, paneId });
+              startSessionResume(paneId, sessionId);
+            },
           }}
         />
       )}
@@ -354,6 +359,18 @@ function ShellShortcuts({ dispatch, focusedPaneId, focusedPane, onEnd }: {
         if (!focusedPane?.boundSessionId) return;
         e.preventDefault();
         onEnd(focusedPaneId, focusedPane.boundSessionId, EndSource.SHORTCUT);
+      } else if (e.key === "r" || e.key === "R") {
+        // Sprint 025 — Cmd-R opens the Records surface on the
+        // focused pane. Second press on an already-open records
+        // surface closes it (SURFACE_OPEN is idempotent, so we
+        // dispatch SURFACE_CLOSE when the current surface already
+        // matches).
+        e.preventDefault();
+        if (focusedPane?.surface?.kind === SurfaceKind.RECORDS) {
+          dispatch({ type: ActionType.SURFACE_CLOSE, paneId: focusedPaneId });
+        } else {
+          dispatch({ type: ActionType.SURFACE_OPEN, paneId: focusedPaneId, kind: SurfaceKind.RECORDS });
+        }
       }
     };
     window.addEventListener("keydown", onKey);

@@ -116,6 +116,23 @@ export function isStreamDir(x: unknown): x is StreamDir {
   return typeof x === "string" && (STREAM_DIRS as readonly string[]).includes(x);
 }
 
+// Sprint 025 — pane-scoped surfaces (records, studio, assay). Layer 2's
+// SURFACE_OPENED.kind is a closed enum; the anchor byte per Layer 7
+// encodes 0 none · 1 records · 2 studio · 3 assay.
+export const SURFACE_KINDS = enumOf(Tag.SURFACE_OPENED, "kind") as
+  readonly ["records", "studio", "assay"];
+export type SurfaceKind = typeof SURFACE_KINDS[number];
+export const SurfaceKind = {
+  RECORDS: "records", STUDIO: "studio", ASSAY: "assay",
+} as const satisfies Record<string, SurfaceKind>;
+export function isSurfaceKind(x: unknown): x is SurfaceKind {
+  return typeof x === "string" && (SURFACE_KINDS as readonly string[]).includes(x);
+}
+// Byte ordinal per Layer 7 anchor-pane-{id}-surface encoding.
+export const SURFACE_KIND_BYTES: Record<SurfaceKind, number> = {
+  records: 1, studio: 2, assay: 3,
+};
+
 // Sprint 019 — reveal focus. Inside a revealed pane, focus toggles
 // between transcript-side and stream-side. Find (Epic H) scopes by
 // this focus. Enum from Layer 2's ratified `to` enum on
