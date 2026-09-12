@@ -224,6 +224,37 @@ def op_probe_driver(payload: dict) -> dict:
             "detail": f"unknown driver kind: {driver_name}"}
 
 
+def op_scene_project(payload: dict) -> dict:
+    """Walk a record backwards for the latest envelope whose payload
+    carries a `cells` array (a game_of_life or similar scene). Return
+    the frame as {seq, kind, cells} or {seq: -1, cells: []} when the
+    record has no renderable scene."""
+    from substrate import api  # type: ignore[import-not-found]
+    reg = _registry()
+    session_id = payload.get("session_id", "")
+    manifest = reg.get(session_id)  # type: ignore[attr-defined]
+    if manifest is None:
+        return {"__error__": True, "reason": SRR.NOT_FOUND.value}
+    record_root = Path(manifest.record_root)
+    try:
+        record = list(api.read_record(record_root))
+    except Exception as e:  # noqa: BLE001
+        return {"__error__": True, "reason": f"{RRR.READ_ERROR.value}:{e}"}
+    for env in reversed(record):
+        payload_field = env.get("payload") or {}
+        if not isinstance(payload_field, dict):
+            continue
+        cells = payload_field.get("cells")
+        if isinstance(cells, list) and cells:
+            return {
+                "session_id": session_id,
+                "seq": int(env.get("seq", -1)),
+                "kind": str(env.get("kind", "")),
+                "cells": cells,
+            }
+    return {"session_id": session_id, "seq": -1, "kind": "", "cells": []}
+
+
 def op_topology_introspect(payload: dict) -> dict:
     """Wrap substrate.api.topology_graph — return the Producer nodes,
     Trigger edges, Route edges, Views, and Termination policy of a
@@ -774,6 +805,16 @@ def _handle_short_op(op: BridgeOp, msg: dict, rid: str) -> None:
     if op is BridgeOp.READ_RECENT_WORKSPACES:
         try:
             reply_ok(rid, op_read_recent_workspaces())
+        except Exception as e:  # noqa: BLE001
+            reply_err(rid, f"{SCR.REGISTRY_ERROR.value}:{e}")
+        return
+    if op is BridgeOp.SCENE_PROJECT:
+        try:
+            result = op_scene_project(msg)
+            if result.get("__error__"):
+                reply_err(rid, result.get("reason", RRR.READ_ERROR.value))
+            else:
+                reply_ok(rid, result)
         except Exception as e:  # noqa: BLE001
             reply_err(rid, f"{SCR.REGISTRY_ERROR.value}:{e}")
         return

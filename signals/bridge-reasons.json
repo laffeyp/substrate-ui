@@ -67,7 +67,8 @@
     "topology_build": "topology_build",
     "driver_change": "driver_change",
     "list_drivers": "list_drivers",
-    "topology_introspect": "topology_introspect"
+    "topology_introspect": "topology_introspect",
+    "scene_project": "scene_project"
   },
 
   "delegate_error_prefixes": {
