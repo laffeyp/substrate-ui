@@ -339,7 +339,7 @@
      <div style="font-size:11px;color:#9aa0a8;margin:4px 0 0 16px">⑂ reviewer-a <span style="color:#62676f">standing · 3 calls</span> &nbsp;·&nbsp; <span style="color:#62676f">⑂ 2 one-shot children · folded under their turns</span></div>
     </div>
     <sc-for list="{{ extraSessions }}" as="x" hint-placeholder-count="0">
-     <div style="margin:6px 0 0 16px;padding:8px 14px;font-size:12px;color:#9aa0a8;display:flex;gap:9px;align-items:center"><span style="width:7px;height:7px;border-radius:50%;background:#82a5c8;opacity:.55;flex:none"></span><span style="color:#e2e5e9">{{ x.name }}</span><span style="color:#62676f;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">◐ parked · {{ x.meta }}</span><span style="margin-left:auto;color:#62676f;font-size:11px;flex:none">{{ x.where }}</span></div>
+     <div onClick="{{ x.pick }}" style="margin:6px 0 0 16px;padding:8px 14px;font-size:12px;color:#9aa0a8;display:flex;gap:9px;align-items:center;cursor:pointer;border-radius:6px" style-hover="background:#2e3138"><span style="width:7px;height:7px;border-radius:50%;background:#82a5c8;opacity:.55;flex:none"></span><span style="color:#e2e5e9">{{ x.name }}</span><span style="color:#62676f;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ x.statusGlyph }} · {{ x.meta }}</span><span style="margin-left:auto;color:#62676f;font-size:11px;flex:none">{{ x.where }}</span></div>
     </sc-for>
     <div style="margin:6px 0 0 16px;padding:8px 14px;color:#62676f;font-size:12px"><span style="color:#4a4e55">●</span> swebench-repro <span style="font-size:11px">finalised tue · ✓ clean</span></div>
     <div style="color:#d7dade;font-size:13px;margin-top:16px">~/notes/substrate-docs <span style="color:#62676f;font-size:11px">flat</span></div>
@@ -615,6 +615,100 @@ class Component extends DCLogic {
       // Silent — a failed refresh does not clobber the last-good record.
     }
   }
+  async _submitTurn(paneId, session_id, text) {
+    if (!session_id || !text.trim()) return;
+    // Start a polling loop so envelopes surface as the turn produces
+    // them. turn_submit is a long op; the ack lands when the run
+    // parks. Poll every 500ms until then.
+    let stop = false;
+    const poll = async () => {
+      while (!stop) {
+        await new Promise(r => setTimeout(r, 500));
+        if (stop) return;
+        await this._refreshRecord(session_id);
+      }
+    };
+    const polling = poll();
+    try {
+      await this._bridge('turn_submit', {
+        session_id, text, timeout_seconds: 120,
+      }, 130000);
+      stop = true;
+      await this._refreshRecord(session_id);
+    } catch (err) {
+      stop = true;
+      this.setState(s => ({
+        panes: s.panes.map(p => p.id === paneId ? Object.assign({}, p, {
+          lines: (p.lines || []).concat([
+            { t: 'turn_submit failed: ' + (err.message || String(err)), c: '#c26058' },
+          ]),
+        }) : p),
+      }));
+    }
+    await polling;
+  }
+  async _endSession(paneId, session_id) {
+    if (!session_id) return;
+    try {
+      await this._bridge('session_end', { session_id }, 45000);
+      await this._refreshRecord(session_id);
+      this.setState(s => ({
+        panes: s.panes.map(p => p.id === paneId ? Object.assign({}, p, {
+          ended: true,
+        }) : p),
+        ended: true, showEndConfirm: false, descent: [],
+      }));
+    } catch (err) {
+      this.setState(s => ({
+        panes: s.panes.map(p => p.id === paneId ? Object.assign({}, p, {
+          lines: (p.lines || []).concat([
+            { t: 'session_end failed: ' + (err.message || String(err)), c: '#c26058' },
+          ]),
+        }) : p),
+        showEndConfirm: false,
+      }));
+    }
+  }
+  async _loadSessions() {
+    try {
+      const rows = await this._bridge('list_sessions', {});
+      this.setState({ sessionsFromRegistry: rows || [] });
+    } catch (err) {
+      this.setState({ sessionsFromRegistry: [] });
+    }
+  }
+  async _resumeSession(paneId, session_id) {
+    // Load the manifest fields the shell needs to bind the pane,
+    // then load the record. Close the records surface on success.
+    try {
+      const manifest = await this._bridge('session_resume', { session_id }, 30000);
+      const envelopes = await this._bridge('record_read', { session_id });
+      this.setState(s => ({
+        surface: null,
+        panes: s.panes.map(p => p.id === paneId ? Object.assign({}, p, {
+          unbound: false, connecting: false,
+          boundSessionId: manifest.session_id,
+          name: manifest.session_name || p.name,
+          ws: manifest.workspace_path,
+          shape: manifest.workspace_shape,
+          driver: manifest.driver,
+          lines: [],
+        }) : p),
+        focused: paneId,
+        records: Object.assign({}, s.records, {
+          [manifest.session_id]: envelopes.envelopes || [],
+        }),
+      }));
+    } catch (err) {
+      this.setState(s => ({
+        panes: s.panes.map(p => p.id === paneId ? Object.assign({}, p, {
+          lines: (p.lines || []).concat([
+            { t: 'session_resume failed: ' + (err.message || String(err)), c: '#c26058' },
+          ]),
+        }) : p),
+      }));
+    }
+  }
   _split(dir) {
     this.setState(s => {
       let { cols, rows } = s;
@@ -714,7 +808,12 @@ class Component extends DCLogic {
     emitted.forEach(k => { if (!consumed.has(k)) errs.push('emitted kind ' + k + ' is neither consumed nor terminal'); });
     return errs;
   }
-  _toggleSurface(name) { this.setState(s => ({ surface: s.surface === name ? null : name })); }
+  _toggleSurface(name) {
+    this.setState(s => ({ surface: s.surface === name ? null : name }));
+    // When the records surface opens, pull the real session roster
+    // off SessionRegistry so the extraSessions grid renders live rows.
+    if (name === 'records' && this.state.surface !== 'records') this._loadSessions();
+  }
   renderVals() {
     const state = this.state;
     const focusedPane = state.panes.find(p => p.id === state.focused) || state.panes[0];
@@ -820,7 +919,17 @@ class Component extends DCLogic {
       isMain: p.id === 1 && !p.unbound, notMain: p.id !== 1 || p.unbound,
       lines: p.lines || [], pv: p.pv || '',
       onPv: (ev) => this.setState(s => ({ panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, { pv: ev.target.value }) : x) })),
-      onPvKey: (ev) => { if (ev.key !== 'Enter') return; const v = (p.pv || '').trim(); if (!v || v.startsWith('/')) return; this.setState(s => ({ panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, { pv: '', lines: [...x.lines, { t: '› ' + v, c: '#e2e5e9' }, { t: 'queued — prototype only; the real app resumes the parked run in-process (registry turn)', c: '#4a4e55' }] }) : x) })); },
+      onPvKey: (ev) => {
+        if (ev.key !== 'Enter') return;
+        const v = (p.pv || '').trim();
+        if (!v || v.startsWith('/')) return;
+        // Optimistically clear the prompt; the real UserMessage
+        // envelope will appear on the next record_read.
+        this.setState(s => ({
+          panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, { pv: '' }) : x),
+        }));
+        this._submitTurn(p.id, p.boundSessionId, v);
+      },
       editing: p.editing, notEditing: !p.editing, nameVal: p.nameVal,
       nameColor: p.id === state.focused ? '#e2e5e9' : '#9aa0a8',
       dot: (p.id === 1 && (this.props.simulateRateLimit ?? false)) ? '#7fb3b8' : '#62676f', // session status (D31); teal while the driver is rate-limit waiting (19i)
@@ -836,7 +945,29 @@ class Component extends DCLogic {
       toggleWsP: () => this.setState(s => ({ focused: p.id, wsFor: s.wsFor === p.id ? null : p.id, ddFor: null })),
       driverOpts: ['kimi-k2', 'deepseek-r1:8b', 'qwen3-coder:480b-cloud', 'nemotron-3-super', 'claude (cli)', 'gemini (cli)', 'deterministic'].map(m => ({
         label: m, color: m === p.driver ? '#e2e5e9' : '#9aa0a8',
-        pick: () => this.setState(s => ({ ddFor: null, panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, { driver: m }) : x) })),
+        pick: () => {
+          this.setState(s => ({
+            ddFor: null,
+            panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, { driver: m }) : x),
+          }));
+          // Bound pane → hit the bridge to actually swap substrate's
+          // driver. Unbound → local state only; session_create will
+          // pick it up.
+          if (p.boundSessionId) {
+            this._bridge('driver_change', {
+              session_id: p.boundSessionId, driver: m, driver_params: {},
+            }, 30000).catch(err => {
+              this.setState(s => ({
+                panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, {
+                  driver: p.driver,  // revert on failure
+                  lines: (x.lines || []).concat([
+                    { t: 'driver_change failed: ' + (err.message || String(err)), c: '#c26058' },
+                  ]),
+                }) : x),
+              }));
+            });
+          }
+        },
       })),
       caretColor: p.id === state.focused ? '#82a5c8' : '#4a4e55',
       promptHint: p.id === state.focused ? 'type to talk · / for commands' : 'click to focus',
@@ -1006,7 +1137,27 @@ class Component extends DCLogic {
       openStudio: () => this._toggleSurface('studio'),
       openAssay: () => this.setState({ surface: 'assay' }),
       backToSession: () => this.setState({ surface: null }),
-      extraSessions: (state.allSessions || []).map(x => { const open = state.panes.some(pp => pp.id === x.id); const nm = (state.panes.find(pp => pp.id === x.id) || x).name; return { name: nm, meta: x.driver + ' · worktree substrate/' + nm, where: open ? 'open in a pane ▸' : 'no pane — still yours' }; }),
+      // Records surface roster — reads state.sessionsFromRegistry
+      // populated by _loadSessions on surface open. Each row lands
+      // as {name, statusGlyph, meta, where, pick} for the template.
+      extraSessions: (state.sessionsFromRegistry || []).map(row => {
+        const openInPane = state.panes.find(p => p.boundSessionId === row.session_id);
+        const shape = row.workspace_shape || '';
+        const ended = row.status === 'ended';
+        const paneId = openInPane ? openInPane.id : this.state.focused;
+        return {
+          name: row.name || row.session_id.slice(0, 12),
+          statusGlyph: ended ? '◇ ended' : '◐ parked',
+          meta: (row.driver || '?') + ' · ' + shape + ' · ' + (row.workspace || ''),
+          where: openInPane
+            ? 'open in a pane ▸'
+            : ended ? 'finalised'
+            : 'click to resume',
+          session_id: row.session_id,
+          status: row.status,
+          pick: () => this._resumeSession(paneId, row.session_id),
+        };
+      }),
       fpDdOpen: state.ddFor === focusedPane.id && state.revealed, fpToggleDd: () => this.setState(s => ({ ddFor: s.ddFor === focusedPane.id ? null : focusedPane.id, wsFor: null })),
       fpWsOpen: state.wsFor === focusedPane.id && state.revealed, fpToggleWs: () => this.setState(s => ({ wsFor: s.wsFor === focusedPane.id ? null : focusedPane.id, ddFor: null })),
       fpDriverOpts: ['kimi-k2', 'deepseek-r1:8b', 'qwen3-coder:480b-cloud', 'nemotron-3-super', 'claude (cli)', 'gemini (cli)', 'deterministic'].map(m => ({ label: m, color: m === focusedPane.driver ? '#e2e5e9' : '#9aa0a8', pick: () => this.setState(s => ({ ddFor: null, panes: s.panes.map(x => x.id === focusedPane.id ? Object.assign({}, x, { driver: m }) : x) })) })),
@@ -1135,7 +1286,18 @@ class Component extends DCLogic {
       doBuild: () => { const errs = this._validate(); this.setState(errs.length ? { studioOut: 'build refused — ' + errs.join(' · '), studioOutColor: '#c26058' } : { studioOut: 'built — registered ' + this.state.topoName + ' (' + this.state.responder + (this.state.responder === 'deterministic' ? ' seed ' + this.state.seed : ' model ' + this.state.model) + ') · launched build_authored_demo_72eb8f85fcab ▸', studioOutColor: '#82a5c8' }); },
       studioOut: state.studioOut, studioOutColor: state.studioOutColor,
       sentLines: state.sent.map(t => ({ text: t })),
-      onPromptKey: (ev) => { if (ev.key === 'Enter') { const v = this.state.promptVal.trim(); if (v && !v.startsWith('/')) this.setState(s => ({ sent: [...s.sent, v], promptVal: '' })); } },
+      onPromptKey: (ev) => {
+        if (ev.key !== 'Enter') return;
+        const v = this.state.promptVal.trim();
+        if (!v || v.startsWith('/')) return;
+        this.setState({ promptVal: '' });
+        // The main-pane prompt fires against the focused pane's
+        // bound session. focusedPane resolves at the top of
+        // renderVals; grab it here off the current state.
+        const currentFocus = this.state.panes.find(p => p.id === this.state.focused);
+        if (!currentFocus || !currentFocus.boundSessionId) return;
+        this._submitTurn(currentFocus.id, currentFocus.boundSessionId, v);
+      },
       panes, paneCols: state.colW.map(w => w.toFixed(3) + 'fr').join(' '), paneRows: state.rowW.map(w => w.toFixed(3) + 'fr').join(' '), focusedName: focusedPane.name, fpLines: focusedPane.lines || [],
       revealFlexL: state.revealL.toFixed(3) + ' 1 0%',
       revealGutterLeft: (state.revealL / (state.revealL + 1) * 100).toFixed(2) + '%',
@@ -1199,7 +1361,14 @@ class Component extends DCLogic {
       toggleNested: () => this.setState(st => ({ nestedDescent: !st.nestedDescent })),
       showExport: state.showExport, closeExport: () => this.setState({ showExport: false }), doExport: () => this.setState({ showExport: false }),
       showEndConfirm: state.showEndConfirm, closeEndConfirm: () => this.setState({ showEndConfirm: false }),
-      doEndSession: () => this.setState({ showEndConfirm: false, ended: true, descent: [] }),
+      doEndSession: () => {
+        const currentFocus = this.state.panes.find(p => p.id === this.state.focused);
+        if (!currentFocus || !currentFocus.boundSessionId) {
+          this.setState({ showEndConfirm: false });
+          return;
+        }
+        this._endSession(currentFocus.id, currentFocus.boundSessionId);
+      },
       isEnded: state.ended,
       simRL: this.props.simulateRateLimit ?? false,
       // ── first run (19m) ──
