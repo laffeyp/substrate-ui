@@ -159,6 +159,7 @@ class BridgeOp(StrEnum):
     TOPOLOGY_VALIDATE = "topology_validate"
     TOPOLOGY_BUILD = "topology_build"
     DRIVER_CHANGE = "driver_change"
+    LIST_DRIVERS = "list_drivers"
 
 
 class ReplyOp(StrEnum):
