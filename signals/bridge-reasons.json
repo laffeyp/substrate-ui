@@ -73,7 +73,8 @@
     "turn_interrupt": "turn_interrupt",
     "bundle_attach": "bundle_attach",
     "tools_restrict": "tools_restrict",
-    "workspace_diff": "workspace_diff"
+    "workspace_diff": "workspace_diff",
+    "record_export": "record_export"
   },
 
   "delegate_error_prefixes": {

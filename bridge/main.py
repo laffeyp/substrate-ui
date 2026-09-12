@@ -286,6 +286,48 @@ def op_tools_restrict(payload: dict) -> dict:
     return {"session_id": updated.session_id, "tools": list(updated.tools or [])}
 
 
+def op_record_export(payload: dict) -> dict:
+    """Copy a session's manifest + record segments to a target
+    directory (format='record_dir'), or concatenate every envelope
+    into one events.jsonl file (format='flat_events_jsonl'). Returns
+    {path, bytes}."""
+    import shutil
+    from substrate import api  # type: ignore[import-not-found]
+    reg = _registry()
+    session_id = payload.get("session_id", "")
+    manifest = reg.get(session_id)  # type: ignore[attr-defined]
+    if manifest is None:
+        return {"__error__": True, "reason": SRR.NOT_FOUND.value}
+    target = payload.get("target", "")
+    export_format = payload.get("format", "record_dir")
+    if not target:
+        return {"__error__": True, "reason": "target_missing"}
+    target_path = Path(target).expanduser()
+    if export_format == "flat_events_jsonl":
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        bytes_written = 0
+        with target_path.open("w", encoding="utf-8") as out_file:
+            for envelope in api.read_record(Path(manifest.record_root)):
+                line = json.dumps(envelope) + "\n"
+                bytes_written += len(line.encode("utf-8"))
+                out_file.write(line)
+        return {"path": str(target_path), "bytes": bytes_written, "format": export_format}
+    if export_format == "record_dir":
+        session_root = Path(manifest.record_root).parent
+        target_path.mkdir(parents=True, exist_ok=True)
+        total_bytes = 0
+        for source in session_root.rglob("*"):
+            if source.is_dir():
+                continue
+            relative = source.relative_to(session_root)
+            destination = target_path / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, destination)
+            total_bytes += destination.stat().st_size
+        return {"path": str(target_path), "bytes": total_bytes, "format": export_format}
+    return {"__error__": True, "reason": "unknown_format", "detail": export_format}
+
+
 def op_workspace_diff(payload: dict) -> dict:
     """Return the workspace diff for a bound session. Runs `git diff`
     when the manifest's workspace_shape is a git repo (`worktree`),
@@ -933,6 +975,16 @@ def _handle_short_op(op: BridgeOp, msg: dict, rid: str) -> None:
             result = op_tools_restrict(msg)
             if result.get("__error__"):
                 reply_err(rid, result.get("reason", SCR.REGISTRY_ERROR.value))
+            else:
+                reply_ok(rid, result)
+        except Exception as e:  # noqa: BLE001
+            reply_err(rid, f"{SCR.REGISTRY_ERROR.value}:{e}")
+        return
+    if op is BridgeOp.RECORD_EXPORT:
+        try:
+            result = op_record_export(msg)
+            if result.get("__error__"):
+                reply_err(rid, result.get("reason", RRR.READ_ERROR.value))
             else:
                 reply_ok(rid, result)
         except Exception as e:  # noqa: BLE001
