@@ -72,7 +72,10 @@ const shellStyle: React.CSSProperties = {
 };
 
 const headerStyle: React.CSSProperties = {
-  display: "flex", alignItems: "center", gap: 10, padding: "8px 16px",
+  // hiddenInset macOS traffic lights overlay the top-left ~78px.
+  // Reserve that space with left padding so the wordmark clears them.
+  display: "flex", alignItems: "center", gap: 10,
+  padding: "8px 16px 8px 88px",
   background: C.chrome, flex: "none", whiteSpace: "nowrap", minWidth: 0,
 };
 
@@ -80,17 +83,6 @@ const bottomBarStyle: React.CSSProperties = {
   display: "flex", gap: 16, padding: "7px 16px",
   background: C.chromeAlt, fontSize: 11, color: C.textFaint, flex: "none",
 };
-
-function TrafficLights(): JSX.Element {
-  const dot: React.CSSProperties = {
-    width: 12, height: 12, borderRadius: "50%", background: C.textFaintest,
-  };
-  return (
-    <div style={{ display: "flex", gap: 6, flex: "none" }}>
-      <span style={dot} /><span style={dot} /><span style={dot} />
-    </div>
-  );
-}
 
 function Wordmark({ dotColor }: { dotColor: string }): JSX.Element {
   return (
@@ -299,19 +291,13 @@ function Shell(): JSX.Element {
     <div style={shellStyle}>
       {showStrip && (
         <div style={{
-          display: "flex", alignItems: "center", gap: 6,
-          padding: "7px 16px", background: C.chrome, flex: "none",
-        }}>
-          <div style={{ display: "flex", gap: 6, flex: "none" }}>
-            <span style={{ width: 12, height: 12, borderRadius: "50%", background: C.textFaintest }} />
-            <span style={{ width: 12, height: 12, borderRadius: "50%", background: C.textFaintest }} />
-            <span style={{ width: 12, height: 12, borderRadius: "50%", background: C.textFaintest }} />
-          </div>
-        </div>
+          display: "flex", alignItems: "center",
+          padding: "7px 16px 7px 88px", background: C.chrome, flex: "none",
+          height: 12,
+        }} />
       )}
       {showFullHeader && (
       <div style={headerStyle}>
-        <TrafficLights />
         <Wordmark dotColor={logoDot} />
         <span
           title={crumb}
@@ -375,6 +361,36 @@ function Shell(): JSX.Element {
       )}
 
       <div style={{ flex: 1, position: "relative", minHeight: 0, display: "flex" }}>
+        {revealed ? (
+          <div style={{
+            flex: 1, display: "flex", flexDirection: "column",
+            minWidth: 0, background: C.ground,
+            padding: "20px 26px", color: C.textFaint, fontSize: 11,
+          }}>
+            <span className="label">revealed · left transcript + right machinery panel land in Q5</span>
+          </div>
+        ) : surfaceKind === SurfaceKind.RECORDS ? (
+          <div style={{
+            flex: 1, background: C.ground, padding: "22px 40px",
+            color: C.textFaint, fontSize: 11,
+          }}>
+            <span className="label">records surface — port lands in Q7</span>
+          </div>
+        ) : surfaceKind === SurfaceKind.STUDIO ? (
+          <div style={{
+            flex: 1, background: C.ground, padding: "22px 40px",
+            color: C.textFaint, fontSize: 11,
+          }}>
+            <span className="label">studio surface — port lands in Q9</span>
+          </div>
+        ) : surfaceKind === SurfaceKind.ASSAY ? (
+          <div style={{
+            flex: 1, background: C.ground, padding: "22px 40px",
+            color: C.textFaint, fontSize: 11,
+          }}>
+            <span className="label">assay surface — port lands in Q8</span>
+          </div>
+        ) : (
         <div style={{
           flex: 1, display: "grid",
           gridTemplateColumns: "1fr", gridTemplateRows: "1fr",
@@ -422,6 +438,7 @@ function Shell(): JSX.Element {
             />
           ))}
         </div>
+        )}
       </div>
 
       <div style={bottomBarStyle}>

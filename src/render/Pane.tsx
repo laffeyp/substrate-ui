@@ -79,7 +79,12 @@ export function Pane({
     minWidth: 0, minHeight: 0, opacity: focused ? 1 : 0.55, position: "relative",
   };
   const headerRowStyle: React.CSSProperties = {
-    display: "flex", gap: 8, padding: "6px 10px", background: C.chrome,
+    // On a single pane the OS traffic lights overlay the top-left
+    // ~78px (electron titleBarStyle: "hiddenInset"). Reserve the
+    // space with left padding so the wordmark clears them.
+    display: "flex", gap: 8,
+    padding: singlePane ? "6px 10px 6px 88px" : "6px 10px",
+    background: C.chrome,
     fontSize: 10, alignItems: "center", whiteSpace: "nowrap",
     flex: "none", minWidth: 0, overflow: "hidden", cursor: "default",
   };
@@ -100,13 +105,7 @@ export function Pane({
       onClick={() => onFocus(pane.id)}
     >
       <div style={headerRowStyle}>
-        {singlePane ? (
-          <div style={{ display: "flex", gap: 6, flex: "none" }}>
-            <span style={{ width: 11, height: 11, borderRadius: "50%", background: C.textFaintest }} />
-            <span style={{ width: 11, height: 11, borderRadius: "50%", background: C.textFaintest }} />
-            <span style={{ width: 11, height: 11, borderRadius: "50%", background: C.textFaintest }} />
-          </div>
-        ) : (
+        {!singlePane && (
           <span
             data-testid={`pane-drag-handle-${pane.id}`}
             title="drag to rearrange"
