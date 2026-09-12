@@ -401,7 +401,7 @@
      <div style="font-size:11px;color:#62676f;margin-bottom:8px">node-graph — drag the Producer cards; solid edges are Triggers; dashed edges feed a Route's named slot</div>
      <div style="position:relative;height:420px;border:1px solid rgba(255,255,255,.07);border-radius:8px;background:#1a1c20;overflow:hidden;width:960px">
       <svg viewBox="0 0 960 420" preserveAspectRatio="none" style="position:absolute;inset:0;width:960px;height:420px;pointer-events:none">
-       <sc-for list="{{ canvasEdges }}" as="ed" hint-placeholder-count="2"><path d="{{ ed.d }}" stroke="{{ ed.stroke }}" stroke-width="1.5" fill="none" stroke-dasharray="{{ ed.dash }}"></path></sc-for>
+       <sc-for list="{{ canvasEdges }}" as="edge" hint-placeholder-count="0"><path d="{{ edge.d }}" stroke="{{ edge.stroke }}" stroke-width="1.5" fill="none" stroke-dasharray="{{ edge.dash }}"></path></sc-for>
       </svg>
       <sc-for list="{{ canvasLabels }}" as="cl" hint-placeholder-count="2"><div style="position:absolute;left:{{ cl.x }}px;top:{{ cl.y }}px;color:{{ cl.fill }};font-size:10px;background:rgba(26,28,32,.88);border-radius:4px;padding:1px 6px;pointer-events:none;white-space:nowrap">{{ cl.text }}</div></sc-for>
       <sc-for list="{{ canvasCards }}" as="cc" hint-placeholder-count="3">
@@ -936,6 +936,24 @@ class Component extends DCLogic {
     const state = this.state;
     const focusedPane = state.panes.find(p => p.id === state.focused) || state.panes[0];
     const mainFocused = focusedPane.id === 1;
+    // Hoisted — the descent + fanout blocks below reference
+    // envelopesLive; the swim-lane / find / inspector blocks farther
+    // down also reference envelopeList. Declaring them here keeps a
+    // TDZ from firing when a downstream lambda closes over them.
+    const recordEnvelopes = focusedPane.boundSessionId
+      ? (state.records && state.records[focusedPane.boundSessionId]) : null;
+    const envelopesLive = Array.isArray(recordEnvelopes) ? recordEnvelopes.map(envelope => ({
+      seq: envelope.seq, kind: envelope.kind, schema: envelope.schema || '',
+      prod: envelope.producer_kind || 'runtime',
+      gist: envelope.summary || '',
+      lanes: '',
+      payload: envelope.payload || {},
+      content: envelope.content || [],
+      tool_name: envelope.tool_name,
+      tool_call_id: envelope.tool_call_id,
+      child_record_root: envelope.child_record_root,
+      turn_index: envelope.turn_index,
+    })) : null;
     // Delegate descent — state.descent holds a stack of frames
     // {recordRoot, name, toolCallId}. state.descentRecords[recordRoot]
     // holds the envelope list loaded by _descend via bridge
@@ -1157,19 +1175,8 @@ class Component extends DCLogic {
       { seq: 0, kind: 'SessionStarted', schema: 'session.SessionStarted', prod: 'runtime', gist: 'seed · driver ' + focusedPane.driver + ' · worktree substrate/' + focusedPane.name, lanes: '', payload: { session_id: focusedPane.name, driver_model: focusedPane.driver, workspace_shape: 'worktree', bundle: null, parent_session_id: null }, content: [] },
       { seq: 1, kind: 'Park', schema: 'session.Park', prod: 'park', gist: 'await UserMessage', lanes: '', payload: { awaiting: 'UserMessage', turn_index: 0, reason: 'session_open' }, content: [] },
     ];
-    // Prefer the real record if this pane is bound to a session.
-    // Round 1: env shape from bridge/main.py's op_record_read maps
-    // producer_kind → prod, summary → gist. Layer for the swim-lane
-    // graph (`lanes`) is rebuilt from the envelope stream at :911.
-    const recordEnvelopes = focusedPane.boundSessionId ? (state.records && state.records[focusedPane.boundSessionId]) : null;
-    const envelopesLive = Array.isArray(recordEnvelopes) ? recordEnvelopes.map(env => ({
-      seq: env.seq, kind: env.kind, schema: env.schema || '',
-      prod: env.producer_kind || 'runtime',
-      gist: env.summary || '',
-      lanes: '',
-      payload: env.payload || {},
-      content: env.content || [],
-    })) : null;
+    // envelopesLive was hoisted to the top of renderVals so descent
+    // and fanout blocks can close over it without triggering a TDZ.
     const envelopeList = envelopesLive ? envelopesLive : (mainFocused ? demoEnvelopesFull : demoEnvelopesLite);
     const envelopeSearchText = envelopeList.map(e => (e.kind + ' ' + e.prod + ' ' + e.gist).toLowerCase());
     const findCount = !FQ ? 'scope: ' + state.findScope + ' — click a lens to move it' : (FSTREAM ? envelopeSearchText.filter(t => t.includes(FQ)).length + ' matching events · scope: stream' : Object.keys(FTXT).filter(k => FTXT[k].toLowerCase().includes(FQ)).length + ' matching lines · scope: transcript');

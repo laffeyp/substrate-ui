@@ -69,6 +69,41 @@ contextBridge.exposeInMainWorld("bridge", {
   }),
 });
 
+// Forward renderer errors + unhandled rejections + console.error to
+// the main process so they land in the main-process stderr and
+// bridge.log. Without this the only way to see a renderer error is
+// to open devtools by hand.
+window.addEventListener("error", (ev) => {
+  const err = ev.error || {};
+  ipcRenderer.send("renderer:error", {
+    message: ev.message || String(err),
+    stack: err && err.stack ? err.stack : "",
+    source: ev.filename || "",
+    line: ev.lineno || 0,
+    col: ev.colno || 0,
+  });
+});
+window.addEventListener("unhandledrejection", (ev) => {
+  const reason = ev.reason || {};
+  ipcRenderer.send("renderer:error", {
+    message: "unhandledrejection: " + (reason.message || String(reason)),
+    stack: reason.stack || "",
+  });
+});
+// Console errors — hook only console.error/warn to avoid noise.
+const originalConsoleError = console.error.bind(console);
+console.error = (...args) => {
+  originalConsoleError(...args);
+  try {
+    ipcRenderer.send("renderer:error", {
+      message: "console.error: " + args.map((v) => {
+        try { return typeof v === "string" ? v : JSON.stringify(v); }
+        catch (_) { return String(v); }
+      }).join(" "),
+    });
+  } catch (_) { /* best-effort */ }
+};
+
 // SUBSTRATE_HARNESS=1 → expose the JSONL sink to the renderer's Emitter,
 // plus an optional default-driver override for real-model harnesses.
 if (process.env.SUBSTRATE_HARNESS === "1") {
