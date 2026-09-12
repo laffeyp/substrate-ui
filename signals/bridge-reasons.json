@@ -9,6 +9,7 @@
     "session_rename_failed": ["name_collision", "invalid_name", "timeout", "registry_error"],
     "bundle_attach_failed":  ["bundle_not_found", "registry_error", "timeout"],
     "record_read_failed":    ["not_found", "read_error", "registry_error"],
+    "driver_change_failed":  ["driver_unavailable", "registry_error", "timeout"],
     "generic":               ["unknown_op", "bridge_unavailable"]
   },
 
@@ -63,7 +64,8 @@
     "session_create": "session_create",
     "list_assays": "list_assays",
     "topology_validate": "topology_validate",
-    "topology_build": "topology_build"
+    "topology_build": "topology_build",
+    "driver_change": "driver_change"
   },
 
   "delegate_error_prefixes": {

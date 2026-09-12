@@ -133,6 +133,12 @@ class RecordReadFailedReason(StrEnum):
     REGISTRY_ERROR = "registry_error"
 
 
+class DriverChangeFailedReason(StrEnum):
+    DRIVER_UNAVAILABLE = "driver_unavailable"
+    REGISTRY_ERROR = "registry_error"
+    TIMEOUT = "timeout"
+
+
 class BridgeOp(StrEnum):
     """Every op name the bridge accepts on stdin. `handle_msg` dispatches
     on the enum; unknown ops surface a typed reason."""
@@ -152,6 +158,7 @@ class BridgeOp(StrEnum):
     LIST_ASSAYS = "list_assays"
     TOPOLOGY_VALIDATE = "topology_validate"
     TOPOLOGY_BUILD = "topology_build"
+    DRIVER_CHANGE = "driver_change"
 
 
 class ReplyOp(StrEnum):

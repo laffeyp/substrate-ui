@@ -190,14 +190,14 @@ function Shell(): JSX.Element {
     bridgeRequest<{
       session_id: string; session_name: string | null;
       workspace_path: string; workspace_shape: WorkspaceShape;
-      status: string;
+      status: string; driver: string;
     }>(BridgeOp.session_resume, { session_id: sessionId }, 5000).then((result) => {
       const r = result as unknown as { last_turn_index?: number } & typeof result;
       const status: PaneStatus = isPaneStatus(result.status) ? result.status : PaneStatus.PARKED;
       dispatch({ type: ActionType.SESSION_RESUME_OK, paneId, requestId,
         sessionId: result.session_id, sessionName: result.session_name,
         workspacePath: result.workspace_path, workspaceShape: result.workspace_shape,
-        status,
+        status, driver: result.driver,
         lastTurnIndex: typeof r.last_turn_index === "number" ? r.last_turn_index : -1,
       });
       refreshTranscript(paneId, result.session_id);
@@ -229,6 +229,26 @@ function Shell(): JSX.Element {
       } catch { errors = [String(reason)]; }
       dispatch({ type: ActionType.STUDIO_VALIDATE_ERR, paneId,
         topoName: draft.topoName, errors });
+    });
+  }, [dispatch]);
+
+  const startDriverChange = useMemo(() => (
+    paneId: string, sessionId: string, fromDriver: string, toDriver: string,
+  ) => {
+    const requestId = newId();
+    dispatch({ type: ActionType.DRIVER_PICK_START, paneId, requestId,
+      sessionId, fromDriver, toDriver });
+    bridgeRequest<{ session_id: string; from_driver: string; to_driver: string }>(
+      BridgeOp.driver_change,
+      { session_id: sessionId, driver: toDriver, driver_params: {} },
+      15000,
+    ).then((result) => {
+      dispatch({ type: ActionType.DRIVER_PICK_OK, paneId, requestId,
+        sessionId: result.session_id,
+        fromDriver: result.from_driver, toDriver: result.to_driver });
+    }).catch((reason) => {
+      dispatch({ type: ActionType.DRIVER_PICK_ERR, paneId, requestId,
+        sessionId, reason: String(reason) });
     });
   }, [dispatch]);
 
@@ -362,6 +382,14 @@ function Shell(): JSX.Element {
               dispatch({ type: ActionType.SLASH_ROUTER_CANCEL, paneId }),
             onSlashCommandRoute: (paneId, command, arg) =>
               dispatch({ type: ActionType.SLASH_COMMAND_ROUTE, paneId, command, arg }),
+            onDriverDropdownOpen: (paneId, options) =>
+              dispatch({ type: ActionType.DRIVER_DROPDOWN_OPEN, paneId, options }),
+            onDriverDropdownClose: (paneId) =>
+              dispatch({ type: ActionType.DRIVER_DROPDOWN_CLOSE, paneId }),
+            onDriverDropdownWalk: (paneId, delta) =>
+              dispatch({ type: ActionType.DRIVER_DROPDOWN_WALK, paneId, delta }),
+            onDriverPick: (paneId, sessionId, fromDriver, toDriver) =>
+              startDriverChange(paneId, sessionId, fromDriver, toDriver),
           }}
         />
       )}

@@ -64,6 +64,10 @@ interface Props {
   onSlashRouterWalk?: (paneId: string, delta: 1 | -1) => void;
   onSlashRouterCancel?: (paneId: string) => void;
   onSlashCommandRoute?: (paneId: string, command: string, arg: string) => void;
+  onDriverDropdownOpen?: (paneId: string, options: readonly string[]) => void;
+  onDriverDropdownClose?: (paneId: string) => void;
+  onDriverDropdownWalk?: (paneId: string, delta: 1 | -1) => void;
+  onDriverPick?: (paneId: string, sessionId: string, fromDriver: string, toDriver: string) => void;
 }
 
 const ROW_COLORS: Record<string, string> = {
@@ -138,7 +142,7 @@ function initialByte(slot: (typeof PANE_SLOT_ORDER)[number], pane: PaneModel): n
   return 0;
 }
 
-export function Pane({ pane, onFocus, onDragStart, onClose, onPickerText, onPickerWalk, onPickerCommit, onResume, onPromptText, onPromptLengthChanged, onPromptSubmit, onRevealToggle, onLensSwitch, onStreamLevelToggle, onStreamDirToggle, onRevealFocusToggle, onDelegateExpandToggle, onDescend, onDescentExit, onFanoutExpand, onFanoutWalk, onFanoutCollapse, onInspectorToggle, onSurfaceClose, onResumeFromSurface, onStudioDraftSet, onStudioViewToggle, onStudioValidate, onStudioBuild, onFindQueryType, onFindScopeTab, onFindStep, onFindClose, onSlashRouterWalk, onSlashRouterCancel, onSlashCommandRoute }: Props): JSX.Element {
+export function Pane({ pane, onFocus, onDragStart, onClose, onPickerText, onPickerWalk, onPickerCommit, onResume, onPromptText, onPromptLengthChanged, onPromptSubmit, onRevealToggle, onLensSwitch, onStreamLevelToggle, onStreamDirToggle, onRevealFocusToggle, onDelegateExpandToggle, onDescend, onDescentExit, onFanoutExpand, onFanoutWalk, onFanoutCollapse, onInspectorToggle, onSurfaceClose, onResumeFromSurface, onStudioDraftSet, onStudioViewToggle, onStudioValidate, onStudioBuild, onFindQueryType, onFindScopeTab, onFindStep, onFindClose, onSlashRouterWalk, onSlashRouterCancel, onSlashCommandRoute, onDriverDropdownOpen, onDriverDropdownClose, onDriverDropdownWalk, onDriverPick }: Props): JSX.Element {
   const depth = pane.descentStack.length;
   const inDescent = depth > 0;
   const activeRows: TranscriptRow[] = inDescent
@@ -163,7 +167,16 @@ export function Pane({ pane, onFocus, onDragStart, onClose, onPickerText, onPick
       onMouseDown={onFocus ? () => onFocus(pane.id) : undefined}
       style={S.frame}
     >
-      <PaneHeader pane={pane} onDragStart={onDragStart} onClose={onClose} onRevealToggle={onRevealToggle} />
+      <PaneHeader
+        pane={pane}
+        onDragStart={onDragStart}
+        onClose={onClose}
+        onRevealToggle={onRevealToggle}
+        onDriverDropdownOpen={onDriverDropdownOpen}
+        onDriverDropdownClose={onDriverDropdownClose}
+        onDriverDropdownWalk={onDriverDropdownWalk}
+        onDriverPick={onDriverPick}
+      />
       <Inspector pane={pane} />
       {pane.surface?.kind === SurfaceKind.RECORDS && onSurfaceClose && onResumeFromSurface ? (
         <RecordsSurface

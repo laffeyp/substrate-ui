@@ -54,6 +54,7 @@ from vocab import (  # noqa: E402
     SessionEndFailedReason as SEF,
     TurnSubmitFailedReason as TSF,
     RecordReadFailedReason as RRR,
+    DriverChangeFailedReason as DCF,
     BridgeOp, ReplyOp,
 )
 
@@ -221,6 +222,37 @@ def op_probe_driver(payload: dict) -> dict:
 
     return {"__error__": True, "reason": PDR.NOT_INSTALLED.value,
             "detail": f"unknown driver kind: {driver_name}"}
+
+
+def op_driver_change(payload: dict) -> dict:
+    """Change a session's driver. Probes the driver first (Sprint 031
+    fail-fast); if the probe fails, replies with
+    driver_unavailable and does NOT mutate the session. On probe
+    success calls SessionRegistry.set_driver and returns the manifest's
+    from_driver + to_driver so the shell's DRIVER_CHANGED payload
+    carries both."""
+    session_id = payload.get("session_id", "")
+    to_driver = payload.get("driver", "")
+    driver_params = payload.get("driver_params", {})
+    reg = _registry()
+    manifest = reg.get(session_id)  # type: ignore[attr-defined]
+    if manifest is None:
+        return {"__error__": True, "reason": DCF.REGISTRY_ERROR.value,
+                "detail": f"unknown session_id {session_id!r}"}
+    from_driver = manifest.driver
+    probe = op_probe_driver({"driver_name": to_driver, "driver_params": driver_params})
+    if probe.get("__error__"):
+        return {"__error__": True, "reason": DCF.DRIVER_UNAVAILABLE.value,
+                "detail": probe.get("detail") or probe.get("reason") or ""}
+    try:
+        updated = reg.set_driver(session_id, to_driver)  # type: ignore[attr-defined]
+    except KeyError as e:
+        return {"__error__": True, "reason": DCF.REGISTRY_ERROR.value, "detail": str(e)}
+    return {
+        "session_id": updated.session_id,
+        "from_driver": from_driver,
+        "to_driver": updated.driver,
+    }
 
 
 def op_list_sessions() -> list[dict]:
@@ -689,6 +721,16 @@ def _handle_short_op(op: BridgeOp, msg: dict, rid: str) -> None:
                 reply_ok(rid, result)
         except Exception as e:  # noqa: BLE001
             reply_err(rid, f"{SCR.REGISTRY_ERROR.value}:{e}")
+        return
+    if op is BridgeOp.DRIVER_CHANGE:
+        try:
+            result = op_driver_change(msg)
+            if result.get("__error__"):
+                reply_err(rid, result.get("reason", DCF.REGISTRY_ERROR.value))
+            else:
+                reply_ok(rid, result)
+        except Exception as e:  # noqa: BLE001
+            reply_err(rid, f"{DCF.REGISTRY_ERROR.value}:{e}")
         return
     if op is BridgeOp.SESSION_CREATE:
         try:
