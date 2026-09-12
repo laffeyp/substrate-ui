@@ -135,7 +135,10 @@ export function Pane({
         <span style={{ marginLeft: "auto", flex: "none" }} />
 
         {/* driver chip */}
-        <span style={{ flex: "none", position: "relative", display: "inline-block" }}>
+        <span style={{
+          flex: "none", position: "relative",
+          display: "inline-flex", alignItems: "center",
+        }}>
           <span
             data-testid={`pane-driver-chip-${pane.id}`}
             data-driver={driver}
@@ -182,7 +185,7 @@ export function Pane({
         {/* workspace popover chip */}
         <span style={{
           flex: "0 4 auto", minWidth: 34, position: "relative",
-          display: "inline-block", overflow: "visible",
+          display: "inline-flex", alignItems: "center", overflow: "visible",
         }}>
           <span
             data-testid={`pane-workspace-chip-${pane.id}`}

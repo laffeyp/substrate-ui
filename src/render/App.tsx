@@ -114,7 +114,10 @@ function DriverPicker({
     userSelect: "none",
   };
   return (
-    <span style={{ position: "relative", flex: "none", display: "inline-block" }}>
+    <span style={{
+      position: "relative", flex: "none",
+      display: "inline-flex", alignItems: "center",
+    }}>
       <span
         data-testid="app-driver-chip"
         data-driver={from}
@@ -168,7 +171,8 @@ function WorkspacePopoverChip({
   };
   return (
     <span style={{
-      position: "relative", flex: "0 4 auto", minWidth: 34, display: "inline-block",
+      position: "relative", flex: "0 4 auto", minWidth: 34,
+      display: "inline-flex", alignItems: "center",
     }}>
       <span
         data-testid="app-workspace-chip"
