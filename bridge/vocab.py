@@ -167,6 +167,7 @@ class BridgeOp(StrEnum):
     BUNDLE_ATTACH = "bundle_attach"
     TOOLS_RESTRICT = "tools_restrict"
     WORKSPACE_DIFF = "workspace_diff"
+    RECORD_EXPORT = "record_export"
 
 
 class ReplyOp(StrEnum):
