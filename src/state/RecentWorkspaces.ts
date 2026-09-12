@@ -1,6 +1,7 @@
 // RecentWorkspaces — read the recent-workspaces roster via the bridge.
 
 import { bridgeRequest } from "@/observability/BridgeClient";
+import { BridgeOp } from "@/observability/bridge-ops";
 import { WorkspaceShape } from "./ShellState";
 import { isWorkspaceShape } from "@/observability/reasons";
 
@@ -12,7 +13,7 @@ export interface RecentWorkspace {
 
 export async function readRecentWorkspaces(): Promise<RecentWorkspace[]> {
   try {
-    const rows = await bridgeRequest<unknown>("read_recent_workspaces", {});
+    const rows = await bridgeRequest<unknown>(BridgeOp.read_recent_workspaces, {});
     if (!Array.isArray(rows)) return [];
     const out: RecentWorkspace[] = [];
     for (const row of rows) {

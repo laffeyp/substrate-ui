@@ -47,6 +47,25 @@
     "delegate": "delegate"
   },
 
+  "bridge_ops": {
+    "note": "Every op name the bridge accepts on stdin. bridge/vocab.py's BridgeOp StrEnum asserts on import that its member values equal this object's values; src/observability/bridge-ops.ts derives a mirror BridgeOp const the TS caller uses in place of raw strings. Added 2026-09-12 per REVIEW-2026-09-11-checkpoint extension (H23 class — hand-maintained op strings drift).",
+    "ping": "ping",
+    "hello": "hello",
+    "halt": "halt",
+    "reply": "reply",
+    "read_recent_workspaces": "read_recent_workspaces",
+    "list_sessions": "list_sessions",
+    "session_resume": "session_resume",
+    "probe_driver": "probe_driver",
+    "record_read": "record_read",
+    "turn_submit": "turn_submit",
+    "session_end": "session_end",
+    "session_create": "session_create",
+    "list_assays": "list_assays",
+    "topology_validate": "topology_validate",
+    "topology_build": "topology_build"
+  },
+
   "delegate_error_prefixes": {
     "note": "Error-text substrings substrate.topologies.tool_loop.delegate.py raises for named terminal cases. Mirrored here so the reducer picks the correct Layer 5 terminal on a ToolResult(ok=false); the harness greps delegate.py at run time to fail loudly on substrate rename.",
     "max_depth": "max delegation depth",

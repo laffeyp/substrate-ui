@@ -5,7 +5,7 @@
 import { Pane as PaneModel, WorkspaceShape, Lens, TranscriptRow } from "@/state/ShellState";
 import { PaneStatus, RevealState, StreamLevel, StreamDir, SURFACE_KIND_BYTES, SurfaceKind, FindScope } from "@/observability/reasons";
 import { PaneHeader } from "./PaneHeader";
-import { Anchor, AnchorScope, PaneSlot, PANE_SLOT_ORDER } from "./Anchor";
+import { Anchor, AnchorScope, PaneSlot, PANE_SLOT_ORDER, paneAnchorId } from "./Anchor";
 import { UnboundPanePicker } from "./UnboundPanePicker";
 import { Prompt } from "./Prompt";
 import { RevealShell } from "./RevealShell";
@@ -328,7 +328,7 @@ export function Pane({ pane, onFocus, onDragStart, onClose, onPickerText, onPick
       {PER_PANE_SLOTS.map((slot: (typeof PANE_SLOT_ORDER)[number]) => (
         <Anchor
           key={slot}
-          id={`anchor-pane-${pane.id}-${slot}`}
+          id={paneAnchorId(pane.id, slot)}
           scope={AnchorScope.PANE}
           paneId={pane.id}
           slot={slot}
