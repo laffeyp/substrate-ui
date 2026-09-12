@@ -42,6 +42,10 @@ export interface PaneCallbacks {
   onSlashRouterWalk: (paneId: string, delta: 1 | -1) => void;
   onSlashRouterCancel: (paneId: string) => void;
   onSlashCommandRoute: (paneId: string, command: string, arg: string) => void;
+  onDriverDropdownOpen: (paneId: string, options: readonly string[]) => void;
+  onDriverDropdownClose: (paneId: string) => void;
+  onDriverDropdownWalk: (paneId: string, delta: 1 | -1) => void;
+  onDriverPick: (paneId: string, sessionId: string, fromDriver: string, toDriver: string) => void;
 }
 
 export interface GutterCallbacks {
@@ -99,6 +103,10 @@ function Node({ id, state, gutter, pane }: { id: string; state: ShellState; gutt
         onSlashRouterWalk={pane.onSlashRouterWalk}
         onSlashRouterCancel={pane.onSlashRouterCancel}
         onSlashCommandRoute={pane.onSlashCommandRoute}
+        onDriverDropdownOpen={pane.onDriverDropdownOpen}
+        onDriverDropdownClose={pane.onDriverDropdownClose}
+        onDriverDropdownWalk={pane.onDriverDropdownWalk}
+        onDriverPick={pane.onDriverPick}
       />
     );
   }

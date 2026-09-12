@@ -34,6 +34,7 @@ export const BridgeOp = raw as Readonly<{
   list_assays: "list_assays";
   topology_validate: "topology_validate";
   topology_build: "topology_build";
+  driver_change: "driver_change";
 }>;
 
 export type BridgeOpName = keyof typeof BridgeOp;
@@ -44,7 +45,7 @@ const KEYS: readonly string[] = Object.keys(BridgeOp);
 // key count. bridge/vocab.py runs its own equality check against the
 // same JSON at Python import time. A rename in one place fails loud
 // in both.
-const EXPECTED_KEYS = 15;
+const EXPECTED_KEYS = 16;
 if (KEYS.length !== EXPECTED_KEYS) {
   throw new Error(
     `bridge-ops drift: bridge-reasons.json § bridge_ops holds ${KEYS.length} entries, ` +

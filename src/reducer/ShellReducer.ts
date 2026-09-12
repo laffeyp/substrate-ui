@@ -86,6 +86,12 @@ export const ActionType = {
   SLASH_ROUTER_WALK: "SLASH_ROUTER_WALK",
   SLASH_ROUTER_CANCEL: "SLASH_ROUTER_CANCEL",
   SLASH_COMMAND_ROUTE: "SLASH_COMMAND_ROUTE",
+  DRIVER_DROPDOWN_OPEN: "DRIVER_DROPDOWN_OPEN",
+  DRIVER_DROPDOWN_CLOSE: "DRIVER_DROPDOWN_CLOSE",
+  DRIVER_DROPDOWN_WALK: "DRIVER_DROPDOWN_WALK",
+  DRIVER_PICK_START: "DRIVER_PICK_START",
+  DRIVER_PICK_OK: "DRIVER_PICK_OK",
+  DRIVER_PICK_ERR: "DRIVER_PICK_ERR",
 } as const;
 export type ActionTypeT = typeof ActionType[keyof typeof ActionType];
 
@@ -120,7 +126,7 @@ export type Action =
   | { type: typeof ActionType.PROBE_DRIVER_OK; requestId: string; driverName: string; contextTokens: number | null; modelFamilies: string[] }
   | { type: typeof ActionType.PROBE_DRIVER_ERR; requestId: string; driverName: string; reason: string }
   | { type: typeof ActionType.SESSION_RESUME_START; paneId: string; requestId: string; sessionId: string }
-  | { type: typeof ActionType.SESSION_RESUME_OK; paneId: string; requestId: string; sessionId: string; sessionName: string | null; workspacePath: string; workspaceShape: WorkspaceShape; status: PaneStatus; lastTurnIndex: number }
+  | { type: typeof ActionType.SESSION_RESUME_OK; paneId: string; requestId: string; sessionId: string; sessionName: string | null; workspacePath: string; workspaceShape: WorkspaceShape; status: PaneStatus; lastTurnIndex: number; driver: string }
   | { type: typeof ActionType.SESSION_RESUME_ERR; paneId: string; requestId: string; reason: string }
   | { type: typeof ActionType.SESSION_END_START; paneId: string; requestId: string; sessionId: string; source: EndSourceT }
   | { type: typeof ActionType.SESSION_END_OK; paneId: string; requestId: string; sessionId: string; endReason: string; recordFinalised: boolean; envelopeSeq: number }
@@ -165,6 +171,12 @@ export type Action =
   | { type: typeof ActionType.SLASH_ROUTER_WALK; paneId: string; delta: 1 | -1 }
   | { type: typeof ActionType.SLASH_ROUTER_CANCEL; paneId: string }
   | { type: typeof ActionType.SLASH_COMMAND_ROUTE; paneId: string; command: string; arg: string }
+  | { type: typeof ActionType.DRIVER_DROPDOWN_OPEN; paneId: string; options: readonly string[] }
+  | { type: typeof ActionType.DRIVER_DROPDOWN_CLOSE; paneId: string }
+  | { type: typeof ActionType.DRIVER_DROPDOWN_WALK; paneId: string; delta: 1 | -1 }
+  | { type: typeof ActionType.DRIVER_PICK_START; paneId: string; requestId: string; sessionId: string; fromDriver: string; toDriver: string }
+  | { type: typeof ActionType.DRIVER_PICK_OK; paneId: string; requestId: string; sessionId: string; fromDriver: string; toDriver: string }
+  | { type: typeof ActionType.DRIVER_PICK_ERR; paneId: string; requestId: string; sessionId: string; reason: string }
   ;
 
 // Layer 5 (delegate.py:353) caps descent at depth 2. The reducer
@@ -745,6 +757,80 @@ export function reduce(state: ShellState, action: Action): Step {
         } }],
       };
     }
+    case ActionType.DRIVER_DROPDOWN_OPEN: {
+      const pane = state.panes[action.paneId];
+      if (!pane || pane.driverPopover.open) return { state, emissions: [] };
+      return {
+        state: { ...state, panes: { ...state.panes, [action.paneId]: {
+          ...pane, driverPopover: { open: true, options: action.options, index: 0 },
+        } } },
+        emissions: [{ kind: Tag.DRIVER_DROPDOWN_OPENED, payload: { pane_id: action.paneId } }],
+      };
+    }
+    case ActionType.DRIVER_DROPDOWN_CLOSE: {
+      const pane = state.panes[action.paneId];
+      if (!pane || !pane.driverPopover.open) return { state, emissions: [] };
+      return {
+        state: { ...state, panes: { ...state.panes, [action.paneId]: {
+          ...pane, driverPopover: { open: false, options: [], index: 0 },
+        } } },
+        emissions: [{ kind: Tag.DRIVER_DROPDOWN_CLOSED, payload: { pane_id: action.paneId } }],
+      };
+    }
+    case ActionType.DRIVER_DROPDOWN_WALK: {
+      const pane = state.panes[action.paneId];
+      if (!pane || !pane.driverPopover.open) return { state, emissions: [] };
+      const n = pane.driverPopover.options.length;
+      if (n === 0) return { state, emissions: [] };
+      const from = pane.driverPopover.index;
+      const to = ((from + action.delta) % n + n) % n;
+      if (to === from) return { state, emissions: [] };
+      return {
+        state: { ...state, panes: { ...state.panes, [action.paneId]: {
+          ...pane, driverPopover: { ...pane.driverPopover, index: to },
+        } } },
+        emissions: [], // Layer 1 v0.1 has no DRIVER_DROPDOWN_WALKED tag.
+      };
+    }
+    case ActionType.DRIVER_PICK_START: {
+      const pane = state.panes[action.paneId];
+      if (!pane) return { state, emissions: [] };
+      return {
+        state: { ...state, panes: { ...state.panes, [action.paneId]: {
+          ...pane, driverPopover: { open: false, options: [], index: 0 },
+        } } },
+        emissions: [
+          { kind: Tag.DRIVER_PICKED, payload: {
+            pane_id: action.paneId, from_driver: action.fromDriver, to_driver: action.toDriver,
+          } },
+          { kind: Tag.DRIVER_DROPDOWN_CLOSED, payload: { pane_id: action.paneId } },
+          { kind: Tag.DRIVER_CHANGE_REQUESTED, payload: {
+            request_id: action.requestId, session_id: action.sessionId, to_driver: action.toDriver,
+          } },
+        ],
+      };
+    }
+    case ActionType.DRIVER_PICK_OK: {
+      const pane = state.panes[action.paneId];
+      if (!pane) return { state, emissions: [] };
+      return {
+        state: { ...state, panes: { ...state.panes, [action.paneId]: {
+          ...pane, driver: action.toDriver,
+        } } },
+        emissions: [{ kind: Tag.DRIVER_CHANGED, payload: {
+          request_id: action.requestId, session_id: action.sessionId,
+          from_driver: action.fromDriver, to_driver: action.toDriver,
+        } }],
+      };
+    }
+    case ActionType.DRIVER_PICK_ERR: {
+      return {
+        state,
+        emissions: [{ kind: Tag.DRIVER_CHANGE_FAILED, payload: {
+          request_id: action.requestId, session_id: action.sessionId, reason: action.reason,
+        } }],
+      };
+    }
     case ActionType.FIND_STEP: {
       const pane = state.panes[action.paneId];
       if (!pane || !pane.find.open || pane.find.count === 0) return { state, emissions: [] };
@@ -1003,6 +1089,7 @@ function doResumeOk(state: ShellState, a: Extract<Action, { type: typeof ActionT
     boundSessionId: a.sessionId, sessionName: a.sessionName,
     workspacePath: a.workspacePath, workspaceShape: a.workspaceShape,
     status: isPaneStatus(a.status) ? a.status : PaneStatus.PARKED,
+    driver: a.driver,
   };
   return {
     state: { ...state, panes: { ...state.panes, [a.paneId]: nextPane } },
@@ -1077,6 +1164,7 @@ function doSessionCreateOk(state: ShellState, a: Extract<Action, { type: typeof 
     workspacePath: a.workspacePath,
     workspaceShape: a.workspaceShape,
     status: PaneStatus.PARKED,
+    driver: a.driver,
   };
   return {
     state: { ...state, panes: { ...state.panes, [a.paneId]: nextPane } },
@@ -1209,6 +1297,8 @@ function boot(): Step {
     studioDraft: { topoName: "", producerCount: 1, viewCount: 0, triggerCount: 0, routeCount: 0 },
     find: { open: false, scope: FindScope.TRANSCRIPT, q: "", count: 0, activeIndex: 0 },
     slashRouter: { open: false, index: 0 },
+    driver: null,
+    driverPopover: { open: false, options: [], index: 0 },
   };
   const window: Window = { id: windowId, rootId: paneId };
   const next: ShellState = {

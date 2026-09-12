@@ -135,6 +135,12 @@ export interface Pane {
   // SLASH_ROUTER_WALKED carries {from_index, to_index} — the reducer
   // holds `index` state, WALKED payloads derive from adjacent values.
   slashRouter: { open: boolean; index: number };
+  // Sprint 031 — driver chip + driver popover state. `driver` is the
+  // pane's currently bound driver name (populated on SESSION_CREATE_OK
+  // and SESSION_RESUME_OK). `driverPopover` holds the popover's mount
+  // state and the walked cursor while it is open.
+  driver: string | null;
+  driverPopover: { open: boolean; options: readonly string[]; index: number };
   // Later sprints extend: surface (records/assay/studio),
   // find, header_popover, etc.
 }

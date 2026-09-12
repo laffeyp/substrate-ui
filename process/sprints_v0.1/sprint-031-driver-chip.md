@@ -3,7 +3,7 @@
 ---
 id: 031
 epic: I — Header & driver
-status: pending
+status: closed
 phase: 3
 pass_kind: architecture
 spec_reference: signals/0.1.json § header DRIVER_PICKED + bridge DRIVER_CHANGE_*; session_registry.py set_driver at 693

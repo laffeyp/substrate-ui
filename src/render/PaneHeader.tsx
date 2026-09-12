@@ -6,12 +6,17 @@
 
 import { Pane } from "@/state/ShellState";
 import { RevealState } from "@/observability/reasons";
+import { DriverChip } from "./DriverChip";
 
 interface Props {
   pane: Pane;
   onDragStart?: (paneId: string, ev: React.PointerEvent) => void;
   onClose?: (paneId: string) => void;
   onRevealToggle?: (paneId: string) => void;
+  onDriverDropdownOpen?: (paneId: string, options: readonly string[]) => void;
+  onDriverDropdownClose?: (paneId: string) => void;
+  onDriverDropdownWalk?: (paneId: string, delta: 1 | -1) => void;
+  onDriverPick?: (paneId: string, sessionId: string, fromDriver: string, toDriver: string) => void;
 }
 
 const S = {
@@ -27,7 +32,10 @@ const S = {
   handle: { color: "#5f636b", cursor: "pointer", padding: "0 2px" },
 };
 
-export function PaneHeader({ pane, onDragStart, onClose, onRevealToggle }: Props): JSX.Element {
+export function PaneHeader({
+  pane, onDragStart, onClose, onRevealToggle,
+  onDriverDropdownOpen, onDriverDropdownClose, onDriverDropdownWalk, onDriverPick,
+}: Props): JSX.Element {
   return (
     <div data-testid="pane-header" style={S.wrap}>
       <span
@@ -37,7 +45,17 @@ export function PaneHeader({ pane, onDragStart, onClose, onRevealToggle }: Props
         title="drag to rearrange"
         style={{ cursor: "grab", color: "#5f636b", padding: "0 4px", userSelect: "none" }}
       >⋮⋮</span>
-      <span className="label" style={S.chip}>driver</span>
+      {onDriverDropdownOpen && onDriverDropdownClose && onDriverDropdownWalk && onDriverPick ? (
+        <DriverChip
+          pane={pane}
+          onOpen={onDriverDropdownOpen}
+          onClose={onDriverDropdownClose}
+          onWalk={onDriverDropdownWalk}
+          onPick={onDriverPick}
+        />
+      ) : (
+        <span className="label" style={S.chip}>driver</span>
+      )}
       <span className="label" style={S.chip}>workspace</span>
       <span className="label" style={S.slot}>{pane.boundSessionId ? "session" : "(unbound)"}</span>
       <span style={S.spacer} />

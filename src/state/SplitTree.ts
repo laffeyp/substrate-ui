@@ -56,6 +56,8 @@ export function splitPane(
     studioDraft: { topoName: "", producerCount: 1, viewCount: 0, triggerCount: 0, routeCount: 0 },
     find: { open: false, scope: FindScope.TRANSCRIPT, q: "", count: 0, activeIndex: 0 },
     slashRouter: { open: false, index: 0 },
+    driver: null,
+    driverPopover: { open: false, options: [], index: 0 },
   };
   const updatedParent: Pane = { ...parent, splitParentId: newSplitId, ratio: 0.5 };
   const newSplit: Split = {
