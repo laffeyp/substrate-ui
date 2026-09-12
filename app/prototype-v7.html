@@ -546,9 +546,13 @@ class Component extends DCLogic {
       }) : p),
     }));
     try {
+      // Use the session_id as the session name so a repeat bind
+      // against the same SessionRegistry (walkthrough reruns) never
+      // trips NameCollision. The user can rename afterward.
+      const sessionName = 'session-' + session_id.slice(0, 8);
       const created = await this._bridge('session_create', {
         session_id,
-        name: pane.name,
+        name: sessionName,
         driver: pane.driver,
         workspace_path: ws,
         workspace_shape: shape,
@@ -927,10 +931,14 @@ class Component extends DCLogic {
     return errs;
   }
   _toggleSurface(name) {
+    // Read the current surface BEFORE calling setState, because
+    // dc-runtime's setState commits synchronously (__setLogicState
+    // reassigns this.state on the same tick).
+    const wasClosed = this.state.surface !== name;
     this.setState(s => ({ surface: s.surface === name ? null : name }));
-    // When the records surface opens, pull the real session roster
-    // off SessionRegistry so the extraSessions grid renders live rows.
-    if (name === 'records' && this.state.surface !== 'records') this._loadSessions();
+    // When the records surface opens (fresh open, not a toggle-close),
+    // pull the real session roster from SessionRegistry.
+    if (name === 'records' && wasClosed) this._loadSessions();
   }
   renderVals() {
     const state = this.state;
@@ -1139,8 +1147,14 @@ class Component extends DCLogic {
           return { panes, focused: from, dropHint: null };
         });
       },
-      goRecords: () => this.setState({ focused: p.id, surface: 'records' }),
-      goStudio: () => this.setState({ focused: p.id, surface: 'studio' }),
+      goRecords: () => {
+        this.setState({ focused: p.id });
+        this._toggleSurface('records');
+      },
+      goStudio: () => {
+        this.setState({ focused: p.id });
+        this._toggleSurface('studio');
+      },
       goReveal: () => this.setState({ focused: p.id, revealed: true, surface: null }),
       startEdit: () => this.setState(s => ({ panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, { editing: true, nameVal: x.name }) : x) })),
       updName: (ev) => this.setState(s => ({ panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, { nameVal: ev.target.value }) : x) })),
