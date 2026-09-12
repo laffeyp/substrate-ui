@@ -8,7 +8,7 @@
 // unbound workspace picker lands in Q4.
 
 import type { Pane as PaneModel } from "@/state/ShellState";
-import { PaneStatus, SurfaceKind } from "@/observability/reasons";
+import { PaneStatus, SurfaceKind, RevealState } from "@/observability/reasons";
 
 const C = {
   ground: "#212327",
@@ -255,7 +255,9 @@ export function Pane({
           color: C.textFaintest, fontSize: 11,
         }}>
           <span className="label">
-            {pane.boundSessionId
+            {pane.reveal === RevealState.REVEAL
+              ? "revealed · machinery panel lands in Q5"
+              : pane.boundSessionId
               ? "bound · transcript body lands in Q3"
               : "unbound · workspace picker lands in Q4"}
           </span>
