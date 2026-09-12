@@ -764,11 +764,19 @@ export function reduce(state: ShellState, action: Action): Step {
     case ActionType.DRIVER_DROPDOWN_OPEN: {
       const pane = state.panes[action.paneId];
       if (!pane || pane.driverPopover.open) return { state, emissions: [] };
+      // Sprint 033 header-popover mutex — Layer 7's slot holds at most
+      // one of {driver_dropdown, workspace_popover} open per pane. If
+      // the workspace popover is open, close it same-step.
+      const emissions: Emission[] = [];
+      let next = { ...pane, driverPopover: { open: true, options: action.options, index: 0 } };
+      if (pane.workspacePopover.open) {
+        next = { ...next, workspacePopover: { open: false } };
+        emissions.push({ kind: Tag.WORKSPACE_POPOVER_CLOSED, payload: { pane_id: action.paneId } });
+      }
+      emissions.push({ kind: Tag.DRIVER_DROPDOWN_OPENED, payload: { pane_id: action.paneId } });
       return {
-        state: { ...state, panes: { ...state.panes, [action.paneId]: {
-          ...pane, driverPopover: { open: true, options: action.options, index: 0 },
-        } } },
-        emissions: [{ kind: Tag.DRIVER_DROPDOWN_OPENED, payload: { pane_id: action.paneId } }],
+        state: { ...state, panes: { ...state.panes, [action.paneId]: next } },
+        emissions,
       };
     }
     case ActionType.DRIVER_DROPDOWN_CLOSE: {
@@ -838,11 +846,18 @@ export function reduce(state: ShellState, action: Action): Step {
     case ActionType.WORKSPACE_POPOVER_OPEN: {
       const pane = state.panes[action.paneId];
       if (!pane || pane.workspacePopover.open) return { state, emissions: [] };
+      // Sprint 033 header-popover mutex — close the driver dropdown
+      // same-step if it is open.
+      const emissions: Emission[] = [];
+      let next = { ...pane, workspacePopover: { open: true } };
+      if (pane.driverPopover.open) {
+        next = { ...next, driverPopover: { open: false, options: [], index: 0 } };
+        emissions.push({ kind: Tag.DRIVER_DROPDOWN_CLOSED, payload: { pane_id: action.paneId } });
+      }
+      emissions.push({ kind: Tag.WORKSPACE_POPOVER_OPENED, payload: { pane_id: action.paneId } });
       return {
-        state: { ...state, panes: { ...state.panes, [action.paneId]: {
-          ...pane, workspacePopover: { open: true },
-        } } },
-        emissions: [{ kind: Tag.WORKSPACE_POPOVER_OPENED, payload: { pane_id: action.paneId } }],
+        state: { ...state, panes: { ...state.panes, [action.paneId]: next } },
+        emissions,
       };
     }
     case ActionType.WORKSPACE_POPOVER_CLOSE: {
