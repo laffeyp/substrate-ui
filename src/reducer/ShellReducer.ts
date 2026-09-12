@@ -4,7 +4,7 @@
 // and trace stay in lockstep.
 
 import { emptyShellState, ShellState, Pane, Window, TranscriptRow, Lens, WorkspaceShape, PaneStatus } from "@/state/ShellState";
-import { SessionEndReason, ParkReason, isParkReason, SECRET_KEY_PATTERN, isPaneStatus, StreamLevel, StreamDir, RevealFocus, TurnSubmitFailedReason, type SurfaceKind } from "@/observability/reasons";
+import { SessionEndReason, ParkReason, isParkReason, SECRET_KEY_PATTERN, isPaneStatus, StreamLevel, StreamDir, RevealFocus, TurnSubmitFailedReason, StudioView, type SurfaceKind } from "@/observability/reasons";
 import {
   TOOL_CALL, TOOL_RESULT, TOOL_NAME_DELEGATE, DELEGATE_ERROR_MAX_DEPTH,
   PARK, SESSION_ENDED, TRANSCRIPT_COMPACTED, RATE_LIMITED_WAITING,
@@ -68,6 +68,14 @@ export const ActionType = {
   INSPECTOR_TOGGLE: "INSPECTOR_TOGGLE",
   SURFACE_OPEN: "SURFACE_OPEN",
   SURFACE_CLOSE: "SURFACE_CLOSE",
+  STUDIO_VIEW_TOGGLE: "STUDIO_VIEW_TOGGLE",
+  STUDIO_DRAFT_SET: "STUDIO_DRAFT_SET",
+  STUDIO_VALIDATE_START: "STUDIO_VALIDATE_START",
+  STUDIO_VALIDATE_OK: "STUDIO_VALIDATE_OK",
+  STUDIO_VALIDATE_ERR: "STUDIO_VALIDATE_ERR",
+  STUDIO_BUILD_START: "STUDIO_BUILD_START",
+  STUDIO_BUILD_OK: "STUDIO_BUILD_OK",
+  STUDIO_BUILD_ERR: "STUDIO_BUILD_ERR",
 } as const;
 export type ActionTypeT = typeof ActionType[keyof typeof ActionType];
 
@@ -130,6 +138,14 @@ export type Action =
   | { type: typeof ActionType.INSPECTOR_TOGGLE; paneId: string; envelopeSeq: number; envelopeKind: string; sourceIsStream: boolean }
   | { type: typeof ActionType.SURFACE_OPEN; paneId: string; kind: SurfaceKind }
   | { type: typeof ActionType.SURFACE_CLOSE; paneId: string }
+  | { type: typeof ActionType.STUDIO_VIEW_TOGGLE; paneId: string }
+  | { type: typeof ActionType.STUDIO_DRAFT_SET; paneId: string; draft: Partial<Pane["studioDraft"]> }
+  | { type: typeof ActionType.STUDIO_VALIDATE_START; paneId: string; topoName: string }
+  | { type: typeof ActionType.STUDIO_VALIDATE_OK; paneId: string; topoName: string; producerCount: number; viewCount: number; triggerCount: number; routeCount: number }
+  | { type: typeof ActionType.STUDIO_VALIDATE_ERR; paneId: string; topoName: string; errors: string[] }
+  | { type: typeof ActionType.STUDIO_BUILD_START; paneId: string; topoName: string }
+  | { type: typeof ActionType.STUDIO_BUILD_OK; paneId: string; topoName: string; recordRoot: string }
+  | { type: typeof ActionType.STUDIO_BUILD_ERR; paneId: string; topoName: string; errors: string[] }
   ;
 
 // Layer 5 (delegate.py:353) caps descent at depth 2. The reducer
@@ -527,6 +543,77 @@ export function reduce(state: ShellState, action: Action): Step {
         } } },
         emissions: [{ kind: Tag.SURFACE_CLOSED, payload: {
           pane_id: action.paneId, kind: prior.kind,
+        }}],
+      };
+    }
+    case ActionType.STUDIO_VIEW_TOGGLE: {
+      const pane = state.panes[action.paneId];
+      if (!pane) return { state, emissions: [] };
+      const from = pane.studioView;
+      const to = from === StudioView.FORM ? StudioView.CANVAS : StudioView.FORM;
+      return {
+        state: { ...state, panes: { ...state.panes, [action.paneId]: { ...pane, studioView: to } } },
+        emissions: [{ kind: Tag.STUDIO_VIEW_TOGGLED, payload: { from, to } }],
+      };
+    }
+    case ActionType.STUDIO_DRAFT_SET: {
+      const pane = state.panes[action.paneId];
+      if (!pane) return { state, emissions: [] };
+      // Silent by design — Layer 1 review §Studio-decomposition: edits
+      // within the form are not observation-worthy; the observation is
+      // the validate/build round-trip that ratifies the draft.
+      return {
+        state: { ...state, panes: { ...state.panes, [action.paneId]: {
+          ...pane, studioDraft: { ...pane.studioDraft, ...action.draft },
+        } } },
+        emissions: [],
+      };
+    }
+    case ActionType.STUDIO_VALIDATE_START: {
+      return {
+        state,
+        emissions: [{ kind: Tag.STUDIO_VALIDATE_REQUESTED, payload: { topo_name: action.topoName } }],
+      };
+    }
+    case ActionType.STUDIO_VALIDATE_OK: {
+      return {
+        state,
+        emissions: [{ kind: Tag.STUDIO_VALIDATED, payload: {
+          topo_name: action.topoName,
+          producer_count: action.producerCount,
+          view_count: action.viewCount,
+          trigger_count: action.triggerCount,
+          route_count: action.routeCount,
+        }}],
+      };
+    }
+    case ActionType.STUDIO_VALIDATE_ERR: {
+      return {
+        state,
+        emissions: [{ kind: Tag.STUDIO_VALIDATE_FAILED, payload: {
+          topo_name: action.topoName, errors: action.errors,
+        }}],
+      };
+    }
+    case ActionType.STUDIO_BUILD_START: {
+      return {
+        state,
+        emissions: [{ kind: Tag.STUDIO_BUILD_REQUESTED, payload: { topo_name: action.topoName } }],
+      };
+    }
+    case ActionType.STUDIO_BUILD_OK: {
+      return {
+        state,
+        emissions: [{ kind: Tag.STUDIO_BUILT, payload: {
+          topo_name: action.topoName, record_root: action.recordRoot,
+        }}],
+      };
+    }
+    case ActionType.STUDIO_BUILD_ERR: {
+      return {
+        state,
+        emissions: [{ kind: Tag.STUDIO_BUILD_REJECTED, payload: {
+          topo_name: action.topoName, errors: action.errors,
         }}],
       };
     }
@@ -978,6 +1065,8 @@ function boot(): Step {
     fanoutExpansions: {},
     inspectorSeq: null,
     surface: null,
+    studioView: StudioView.FORM,
+    studioDraft: { topoName: "", producerCount: 1, viewCount: 0, triggerCount: 0, routeCount: 0 },
   };
   const window: Window = { id: windowId, rootId: paneId };
   const next: ShellState = {

@@ -7,8 +7,9 @@
 export { PaneStatus, WorkspaceShape, isPaneStatus, isWorkspaceShape,
   StreamLevel, StreamDir, isStreamLevel, isStreamDir,
   RevealFocus, isRevealFocus,
-  SurfaceKind, isSurfaceKind, SURFACE_KIND_BYTES } from "@/observability/reasons";
-import type { PaneStatus, WorkspaceShape, StreamLevel, StreamDir, RevealFocus, SurfaceKind } from "@/observability/reasons";
+  SurfaceKind, isSurfaceKind, SURFACE_KIND_BYTES,
+  StudioView, isStudioView } from "@/observability/reasons";
+import type { PaneStatus, WorkspaceShape, StreamLevel, StreamDir, RevealFocus, SurfaceKind, StudioView } from "@/observability/reasons";
 
 export type Lens = "stream+graph" | "i/o" | "structure" | "scene";
 export const LENSES: readonly Lens[] = ["stream+graph", "i/o", "structure", "scene"] as const;
@@ -104,6 +105,18 @@ export interface Pane {
   // prior_kind: prior} same-step. Distinct from the inspector slot —
   // both may sit open on the same pane simultaneously.
   surface: { kind: SurfaceKind } | null;
+  // Sprint 027 — Studio state. Only meaningful when
+  // surface.kind === SurfaceKind.STUDIO. Layer 2 constrains the
+  // studio view enum to {form, canvas}; anything else stays local
+  // to the form editor (topo_name draft, counts) with no signal.
+  studioView: StudioView;
+  studioDraft: {
+    topoName: string;
+    producerCount: number;
+    viewCount: number;
+    triggerCount: number;
+    routeCount: number;
+  };
   // Later sprints extend: surface (records/assay/studio),
   // find, header_popover, etc.
 }

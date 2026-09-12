@@ -21,6 +21,7 @@ import { TranscriptFanOutList } from "./TranscriptFanOutList";
 import { Inspector } from "./Inspector";
 import { RecordsSurface } from "./RecordsSurface";
 import { AssaySurface } from "./AssaySurface";
+import { StudioSurface } from "./StudioSurface";
 import { detectFanoutGroups } from "@/reducer/ShellReducer";
 
 interface Props {
@@ -49,6 +50,10 @@ interface Props {
   onInspectorToggle?: (paneId: string, envelopeSeq: number, envelopeKind: string, sourceIsStream: boolean) => void;
   onSurfaceClose?: (paneId: string) => void;
   onResumeFromSurface?: (paneId: string, sessionId: string) => void;
+  onStudioDraftSet?: (paneId: string, draft: Partial<PaneModel["studioDraft"]>) => void;
+  onStudioViewToggle?: (paneId: string) => void;
+  onStudioValidate?: (paneId: string, draft: PaneModel["studioDraft"]) => void;
+  onStudioBuild?: (paneId: string, topoName: string) => void;
 }
 
 const ROW_COLORS: Record<string, string> = {
@@ -118,7 +123,7 @@ function initialByte(slot: (typeof PANE_SLOT_ORDER)[number], pane: PaneModel): n
   return 0;
 }
 
-export function Pane({ pane, onFocus, onDragStart, onClose, onPickerText, onPickerWalk, onPickerCommit, onResume, onPromptText, onPromptLengthChanged, onPromptSubmit, onRevealToggle, onLensSwitch, onStreamLevelToggle, onStreamDirToggle, onRevealFocusToggle, onDelegateExpandToggle, onDescend, onDescentExit, onFanoutExpand, onFanoutWalk, onFanoutCollapse, onInspectorToggle, onSurfaceClose, onResumeFromSurface }: Props): JSX.Element {
+export function Pane({ pane, onFocus, onDragStart, onClose, onPickerText, onPickerWalk, onPickerCommit, onResume, onPromptText, onPromptLengthChanged, onPromptSubmit, onRevealToggle, onLensSwitch, onStreamLevelToggle, onStreamDirToggle, onRevealFocusToggle, onDelegateExpandToggle, onDescend, onDescentExit, onFanoutExpand, onFanoutWalk, onFanoutCollapse, onInspectorToggle, onSurfaceClose, onResumeFromSurface, onStudioDraftSet, onStudioViewToggle, onStudioValidate, onStudioBuild }: Props): JSX.Element {
   const depth = pane.descentStack.length;
   const inDescent = depth > 0;
   const activeRows: TranscriptRow[] = inDescent
@@ -150,6 +155,17 @@ export function Pane({ pane, onFocus, onDragStart, onClose, onPickerText, onPick
       ) : null}
       {pane.surface?.kind === SurfaceKind.ASSAY && onSurfaceClose ? (
         <AssaySurface paneId={pane.id} onClose={() => onSurfaceClose(pane.id)} />
+      ) : null}
+      {pane.surface?.kind === SurfaceKind.STUDIO && onSurfaceClose
+        && onStudioDraftSet && onStudioViewToggle && onStudioValidate && onStudioBuild ? (
+          <StudioSurface
+            pane={pane}
+            onDraftSet={onStudioDraftSet}
+            onViewToggle={onStudioViewToggle}
+            onValidate={onStudioValidate}
+            onBuild={onStudioBuild}
+            onClose={onSurfaceClose}
+          />
       ) : null}
       <div style={S.body}>
         {pane.status === PaneStatus.UNBOUND && onPickerText && onPickerWalk && onPickerCommit && onResume ? (
