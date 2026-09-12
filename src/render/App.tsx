@@ -16,6 +16,7 @@ import { Zone, Axis } from "@/state/SplitTree";
 import { WorkspaceShape } from "@/state/ShellState";
 import { newId } from "@/state/ids";
 import { bridgeRequest } from "@/observability/BridgeClient";
+import { computeMatches } from "@/lib/findMatches";
 import type { Pane as PaneModel } from "@/state/ShellState";
 import {
   BridgeStatus, PaneStatus, isPaneStatus, DriverKind, SurfaceKind,
@@ -230,6 +231,19 @@ function Shell(): JSX.Element {
     });
   }, [dispatch]);
 
+  const findDebounceRef = useRef<Record<string, ReturnType<typeof setTimeout> | undefined>>({});
+  const findQueryType = useMemo(() => (paneId: string, q: string) => {
+    dispatch({ type: ActionType.FIND_QUERY_TYPE, paneId, q });
+    const prev = findDebounceRef.current[paneId];
+    if (prev) clearTimeout(prev);
+    findDebounceRef.current[paneId] = setTimeout(() => {
+      const pane = stateRef.current.panes[paneId];
+      if (!pane || !pane.find.open) return;
+      const matches = computeMatches(pane.transcriptRows, q);
+      dispatch({ type: ActionType.FIND_QUERY_COMMIT, paneId, q, count: matches.length });
+    }, 100);
+  }, [dispatch]);
+
   const studioBuild = useMemo(() => (paneId: string, topoName: string) => {
     dispatch({ type: ActionType.STUDIO_BUILD_START, paneId, topoName });
     bridgeRequest<{ topo_name: string; record_root: string }>(
@@ -334,6 +348,13 @@ function Shell(): JSX.Element {
               dispatch({ type: ActionType.STUDIO_VIEW_TOGGLE, paneId }),
             onStudioValidate: (paneId, draft) => studioValidate(paneId, draft),
             onStudioBuild: (paneId, topoName) => studioBuild(paneId, topoName),
+            onFindQueryType: (paneId, q) => findQueryType(paneId, q),
+            onFindScopeTab: (paneId) => {
+              dispatch({ type: ActionType.REVEAL_FOCUS_TOGGLE, paneId });
+              dispatch({ type: ActionType.FIND_SCOPE_TOGGLE, paneId });
+            },
+            onFindStep: (paneId, delta) => dispatch({ type: ActionType.FIND_STEP, paneId, delta }),
+            onFindClose: (paneId) => dispatch({ type: ActionType.FIND_CLOSE, paneId }),
           }}
         />
       )}
@@ -427,6 +448,15 @@ function ShellShortcuts({ dispatch, focusedPaneId, focusedPane, onEnd }: {
           dispatch({ type: ActionType.SURFACE_CLOSE, paneId: focusedPaneId });
         } else {
           dispatch({ type: ActionType.SURFACE_OPEN, paneId: focusedPaneId, kind: SurfaceKind.ASSAY });
+        }
+      } else if (e.key === "f" || e.key === "F") {
+        // Sprint 028 — Cmd-F opens the find bar on the focused pane.
+        // Second Cmd-F closes (same idempotency as Cmd-R/A/S).
+        e.preventDefault();
+        if (focusedPane?.find.open) {
+          dispatch({ type: ActionType.FIND_CLOSE, paneId: focusedPaneId });
+        } else {
+          dispatch({ type: ActionType.FIND_OPEN, paneId: focusedPaneId });
         }
       } else if (e.key === "s" || e.key === "S") {
         // Sprint 027 — Cmd-S opens the Studio surface. Same

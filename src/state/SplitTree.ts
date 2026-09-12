@@ -1,7 +1,7 @@
 // SplitTree.ts — pure operations over the split tree in ShellState.
 
 import { Pane, Split, ShellState, isSplit, paneCount, PANE_CAP_PER_WINDOW, Lens } from "./ShellState";
-import { RevealState, StreamLevel, StreamDir, RevealFocus, PaneStatus, StudioView } from "@/observability/reasons";
+import { RevealState, StreamLevel, StreamDir, RevealFocus, PaneStatus, StudioView, FindScope } from "@/observability/reasons";
 import { newId } from "./ids";
 
 export interface SplitResult {
@@ -54,6 +54,7 @@ export function splitPane(
     surface: null,
     studioView: StudioView.FORM,
     studioDraft: { topoName: "", producerCount: 1, viewCount: 0, triggerCount: 0, routeCount: 0 },
+    find: { open: false, scope: FindScope.TRANSCRIPT, q: "", count: 0, activeIndex: 0 },
   };
   const updatedParent: Pane = { ...parent, splitParentId: newSplitId, ratio: 0.5 };
   const newSplit: Split = {

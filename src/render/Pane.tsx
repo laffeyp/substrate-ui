@@ -3,7 +3,7 @@
 // dir, descent, surface, find, inspect, header_popover.
 
 import { Pane as PaneModel, WorkspaceShape, Lens, TranscriptRow } from "@/state/ShellState";
-import { PaneStatus, RevealState, StreamLevel, StreamDir, SURFACE_KIND_BYTES, SurfaceKind } from "@/observability/reasons";
+import { PaneStatus, RevealState, StreamLevel, StreamDir, SURFACE_KIND_BYTES, SurfaceKind, FindScope } from "@/observability/reasons";
 import { PaneHeader } from "./PaneHeader";
 import { Anchor, AnchorScope, PaneSlot, PANE_SLOT_ORDER } from "./Anchor";
 import { UnboundPanePicker } from "./UnboundPanePicker";
@@ -22,7 +22,9 @@ import { Inspector } from "./Inspector";
 import { RecordsSurface } from "./RecordsSurface";
 import { AssaySurface } from "./AssaySurface";
 import { StudioSurface } from "./StudioSurface";
+import { FindBar } from "./FindBar";
 import { detectFanoutGroups } from "@/reducer/ShellReducer";
+import { computeMatches } from "@/lib/findMatches";
 
 interface Props {
   pane: PaneModel;
@@ -54,6 +56,10 @@ interface Props {
   onStudioViewToggle?: (paneId: string) => void;
   onStudioValidate?: (paneId: string, draft: PaneModel["studioDraft"]) => void;
   onStudioBuild?: (paneId: string, topoName: string) => void;
+  onFindQueryType?: (paneId: string, q: string) => void;
+  onFindScopeTab?: (paneId: string) => void;
+  onFindStep?: (paneId: string, delta: 1 | -1) => void;
+  onFindClose?: (paneId: string) => void;
 }
 
 const ROW_COLORS: Record<string, string> = {
@@ -120,16 +126,25 @@ function initialByte(slot: (typeof PANE_SLOT_ORDER)[number], pane: PaneModel): n
     // Layer 7: 0 none · 1 records · 2 studio · 3 assay.
     return pane.surface === null ? 0 : SURFACE_KIND_BYTES[pane.surface.kind];
   }
+  if (slot === PaneSlot.FIND) {
+    // Layer 7: 0 closed · 128 transcript-scope · 255 stream-scope.
+    if (!pane.find.open) return 0;
+    return pane.find.scope === FindScope.STREAM ? 255 : 128;
+  }
   return 0;
 }
 
-export function Pane({ pane, onFocus, onDragStart, onClose, onPickerText, onPickerWalk, onPickerCommit, onResume, onPromptText, onPromptLengthChanged, onPromptSubmit, onRevealToggle, onLensSwitch, onStreamLevelToggle, onStreamDirToggle, onRevealFocusToggle, onDelegateExpandToggle, onDescend, onDescentExit, onFanoutExpand, onFanoutWalk, onFanoutCollapse, onInspectorToggle, onSurfaceClose, onResumeFromSurface, onStudioDraftSet, onStudioViewToggle, onStudioValidate, onStudioBuild }: Props): JSX.Element {
+export function Pane({ pane, onFocus, onDragStart, onClose, onPickerText, onPickerWalk, onPickerCommit, onResume, onPromptText, onPromptLengthChanged, onPromptSubmit, onRevealToggle, onLensSwitch, onStreamLevelToggle, onStreamDirToggle, onRevealFocusToggle, onDelegateExpandToggle, onDescend, onDescentExit, onFanoutExpand, onFanoutWalk, onFanoutCollapse, onInspectorToggle, onSurfaceClose, onResumeFromSurface, onStudioDraftSet, onStudioViewToggle, onStudioValidate, onStudioBuild, onFindQueryType, onFindScopeTab, onFindStep, onFindClose }: Props): JSX.Element {
   const depth = pane.descentStack.length;
   const inDescent = depth > 0;
   const activeRows: TranscriptRow[] = inDescent
     ? pane.descentStack[depth - 1].rows
     : pane.transcriptRows;
   const fanoutGroups = detectFanoutGroups(activeRows);
+  const findMatches = pane.find.open && pane.find.q.length > 0
+    ? computeMatches(activeRows, pane.find.q) : [];
+  const findActiveSeq = findMatches.length > 0
+    ? findMatches[pane.find.activeIndex % findMatches.length].seq : null;
   const fanoutLeaderSeq = new Map<number, typeof fanoutGroups[number]>();
   const suppressedSeqs = new Set<number>();
   for (const g of fanoutGroups) {
@@ -155,6 +170,15 @@ export function Pane({ pane, onFocus, onDragStart, onClose, onPickerText, onPick
       ) : null}
       {pane.surface?.kind === SurfaceKind.ASSAY && onSurfaceClose ? (
         <AssaySurface paneId={pane.id} onClose={() => onSurfaceClose(pane.id)} />
+      ) : null}
+      {pane.find.open && onFindQueryType && onFindScopeTab && onFindStep && onFindClose ? (
+        <FindBar
+          pane={pane}
+          onQueryType={onFindQueryType}
+          onScopeTab={onFindScopeTab}
+          onStep={onFindStep}
+          onClose={onFindClose}
+        />
       ) : null}
       {pane.surface?.kind === SurfaceKind.STUDIO && onSurfaceClose
         && onStudioDraftSet && onStudioViewToggle && onStudioValidate && onStudioBuild ? (
@@ -263,6 +287,7 @@ export function Pane({ pane, onFocus, onDragStart, onClose, onPickerText, onPick
                       key={row.seq}
                       data-testid={`transcript-row-${pane.id}-${row.seq}`}
                       data-kind={row.kind}
+                      className={row.seq === findActiveSeq ? "find-active" : undefined}
                       onClick={onInspectorToggle
                         ? () => onInspectorToggle(pane.id, row.seq, row.kind, false)
                         : undefined}

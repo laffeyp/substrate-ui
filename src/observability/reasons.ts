@@ -159,6 +159,19 @@ export function isRevealFocus(x: unknown): x is RevealFocus {
   return typeof x === "string" && (REVEAL_FOCI as readonly string[]).includes(x);
 }
 
+// Sprint 028 — find scope. ⌘F opens the find bar over the currently
+// focused half of a revealed pane. Layer 2 ratifies the enum on
+// FIND_OPENED.scope; enumOf lifts it directly.
+export const FIND_SCOPES = enumOf(Tag.FIND_OPENED, "scope") as
+  readonly ["transcript", "stream"];
+export type FindScope = typeof FIND_SCOPES[number];
+export const FindScope = {
+  TRANSCRIPT: "transcript", STREAM: "stream",
+} as const satisfies Record<string, FindScope>;
+export function isFindScope(x: unknown): x is FindScope {
+  return typeof x === "string" && (FIND_SCOPES as readonly string[]).includes(x);
+}
+
 // --- Bridge-invented reason enums (from bridge-reasons.json) ------------
 
 interface BridgeReasons {
