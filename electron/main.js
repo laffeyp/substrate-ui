@@ -23,6 +23,17 @@ function harnessLastJsonl() {
   return path.join(app.getPath("userData"), "harness", "last.jsonl");
 }
 
+// Catch renderer errors forwarded from preload; write them to stderr
+// and append them to bridge.log so anyone tailing the log sees them.
+ipcMain.on("renderer:error", (_event, info) => {
+  const line = `[renderer] ${info.message}${info.stack ? "\n" + info.stack : ""}` +
+    (info.source ? ` at ${info.source}:${info.line}:${info.col}` : "");
+  process.stderr.write(line + "\n");
+  try {
+    if (bridgeLogPath) require("node:fs").appendFileSync(bridgeLogPath, line + "\n");
+  } catch (_) { /* best-effort */ }
+});
+
 function ensureHarnessSink() {
   if (!harnessOn()) return;
   const p = harnessLastJsonl();
@@ -59,6 +70,30 @@ function createWindow() {
     for (const p of pending) mainWindow.webContents.send(p.channel, p.payload);
     pending.length = 0;
   });
+  // Any renderer paint failure (script eval error, template resolve
+  // failure, load failure) lands here.
+  mainWindow.webContents.on("render-process-gone", (_e, details) => {
+    process.stderr.write(`[renderer] render-process-gone: ${JSON.stringify(details)}\n`);
+  });
+  mainWindow.webContents.on("did-fail-load", (_e, code, description, url) => {
+    process.stderr.write(`[renderer] did-fail-load ${code} ${description} ${url}\n`);
+  });
+  // Also mirror the renderer's console output for anything the preload
+  // hook misses (native prints, dc-runtime warnings that bypass
+  // console.error).
+  mainWindow.webContents.on("console-message", (_e, level, message, line, sourceId) => {
+    // level: 0 verbose, 1 info, 2 warning, 3 error
+    if (level >= 2) {
+      process.stderr.write(`[renderer console ${level}] ${message} @ ${sourceId}:${line}\n`);
+      try {
+        if (bridgeLogPath) require("node:fs").appendFileSync(bridgeLogPath,
+          `[renderer console ${level}] ${message} @ ${sourceId}:${line}\n`);
+      } catch (_) { /* best-effort */ }
+    }
+  });
+  if (process.env.SUBSTRATE_UI_DEBUG === "1") {
+    mainWindow.webContents.openDevTools({ mode: "detach" });
+  }
   // Load the prototype by default — it IS the shell. Set
   // SUBSTRATE_UI_LOAD=react to bring back the (deprecated) React stub.
   const target = process.env.SUBSTRATE_UI_LOAD === "react"
