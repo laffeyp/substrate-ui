@@ -8,8 +8,9 @@ export { PaneStatus, WorkspaceShape, isPaneStatus, isWorkspaceShape,
   StreamLevel, StreamDir, isStreamLevel, isStreamDir,
   RevealFocus, isRevealFocus,
   SurfaceKind, isSurfaceKind, SURFACE_KIND_BYTES,
-  StudioView, isStudioView } from "@/observability/reasons";
-import type { PaneStatus, WorkspaceShape, StreamLevel, StreamDir, RevealFocus, SurfaceKind, StudioView } from "@/observability/reasons";
+  StudioView, isStudioView,
+  FindScope, isFindScope } from "@/observability/reasons";
+import type { PaneStatus, WorkspaceShape, StreamLevel, StreamDir, RevealFocus, SurfaceKind, StudioView, FindScope } from "@/observability/reasons";
 
 export type Lens = "stream+graph" | "i/o" | "structure" | "scene";
 export const LENSES: readonly Lens[] = ["stream+graph", "i/o", "structure", "scene"] as const;
@@ -116,6 +117,18 @@ export interface Pane {
     viewCount: number;
     triggerCount: number;
     routeCount: number;
+  };
+  // Sprint 028 — find bar. `q` is state-local, never emitted (Layer 2
+  // ships q_length + count only, per the ratified privacy contract).
+  // scope tracks the FIND_OPENED enum; count and activeIndex feed
+  // Sprint 029's silent walk. `open === false` clears the row-level
+  // highlight; `q === ""` renders the bar empty with no matches.
+  find: {
+    open: boolean;
+    scope: FindScope;
+    q: string;
+    count: number;
+    activeIndex: number;
   };
   // Later sprints extend: surface (records/assay/studio),
   // find, header_popover, etc.

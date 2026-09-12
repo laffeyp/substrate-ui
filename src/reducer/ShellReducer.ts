@@ -4,7 +4,7 @@
 // and trace stay in lockstep.
 
 import { emptyShellState, ShellState, Pane, Window, TranscriptRow, Lens, WorkspaceShape, PaneStatus } from "@/state/ShellState";
-import { SessionEndReason, ParkReason, isParkReason, SECRET_KEY_PATTERN, isPaneStatus, StreamLevel, StreamDir, RevealFocus, TurnSubmitFailedReason, StudioView, type SurfaceKind } from "@/observability/reasons";
+import { SessionEndReason, ParkReason, isParkReason, SECRET_KEY_PATTERN, isPaneStatus, StreamLevel, StreamDir, RevealFocus, TurnSubmitFailedReason, StudioView, FindScope, type SurfaceKind } from "@/observability/reasons";
 import {
   TOOL_CALL, TOOL_RESULT, TOOL_NAME_DELEGATE, DELEGATE_ERROR_MAX_DEPTH,
   PARK, SESSION_ENDED, TRANSCRIPT_COMPACTED, RATE_LIMITED_WAITING,
@@ -76,6 +76,12 @@ export const ActionType = {
   STUDIO_BUILD_START: "STUDIO_BUILD_START",
   STUDIO_BUILD_OK: "STUDIO_BUILD_OK",
   STUDIO_BUILD_ERR: "STUDIO_BUILD_ERR",
+  FIND_OPEN: "FIND_OPEN",
+  FIND_CLOSE: "FIND_CLOSE",
+  FIND_SCOPE_TOGGLE: "FIND_SCOPE_TOGGLE",
+  FIND_QUERY_COMMIT: "FIND_QUERY_COMMIT",
+  FIND_QUERY_TYPE: "FIND_QUERY_TYPE",
+  FIND_STEP: "FIND_STEP",
 } as const;
 export type ActionTypeT = typeof ActionType[keyof typeof ActionType];
 
@@ -146,6 +152,12 @@ export type Action =
   | { type: typeof ActionType.STUDIO_BUILD_START; paneId: string; topoName: string }
   | { type: typeof ActionType.STUDIO_BUILD_OK; paneId: string; topoName: string; recordRoot: string }
   | { type: typeof ActionType.STUDIO_BUILD_ERR; paneId: string; topoName: string; errors: string[] }
+  | { type: typeof ActionType.FIND_OPEN; paneId: string }
+  | { type: typeof ActionType.FIND_CLOSE; paneId: string }
+  | { type: typeof ActionType.FIND_SCOPE_TOGGLE; paneId: string }
+  | { type: typeof ActionType.FIND_QUERY_TYPE; paneId: string; q: string }
+  | { type: typeof ActionType.FIND_QUERY_COMMIT; paneId: string; q: string; count: number }
+  | { type: typeof ActionType.FIND_STEP; paneId: string; delta: 1 | -1 }
   ;
 
 // Layer 5 (delegate.py:353) caps descent at depth 2. The reducer
@@ -617,6 +629,76 @@ export function reduce(state: ShellState, action: Action): Step {
         }}],
       };
     }
+    case ActionType.FIND_OPEN: {
+      const pane = state.panes[action.paneId];
+      if (!pane || pane.find.open) return { state, emissions: [] };
+      const scope: FindScope = pane.revealFocus === RevealFocus.STREAM
+        ? FindScope.STREAM : FindScope.TRANSCRIPT;
+      return {
+        state: { ...state, panes: { ...state.panes, [action.paneId]: {
+          ...pane, find: { ...pane.find, open: true, scope, q: "", count: 0, activeIndex: 0 },
+        } } },
+        emissions: [{ kind: Tag.FIND_OPENED, payload: { pane_id: action.paneId, scope } }],
+      };
+    }
+    case ActionType.FIND_CLOSE: {
+      const pane = state.panes[action.paneId];
+      if (!pane || !pane.find.open) return { state, emissions: [] };
+      return {
+        state: { ...state, panes: { ...state.panes, [action.paneId]: {
+          ...pane, find: { ...pane.find, open: false, q: "", count: 0, activeIndex: 0 },
+        } } },
+        emissions: [{ kind: Tag.FIND_CLOSED, payload: { pane_id: action.paneId } }],
+      };
+    }
+    case ActionType.FIND_SCOPE_TOGGLE: {
+      const pane = state.panes[action.paneId];
+      if (!pane || !pane.find.open) return { state, emissions: [] };
+      const from = pane.find.scope;
+      const to: FindScope = from === FindScope.TRANSCRIPT ? FindScope.STREAM : FindScope.TRANSCRIPT;
+      return {
+        state: { ...state, panes: { ...state.panes, [action.paneId]: {
+          ...pane, find: { ...pane.find, scope: to, count: 0, activeIndex: 0 },
+        } } },
+        emissions: [{ kind: Tag.FIND_SCOPE_CHANGED, payload: {
+          pane_id: action.paneId, from, to,
+        } }],
+      };
+    }
+    case ActionType.FIND_QUERY_TYPE: {
+      const pane = state.panes[action.paneId];
+      if (!pane || !pane.find.open) return { state, emissions: [] };
+      return {
+        state: { ...state, panes: { ...state.panes, [action.paneId]: {
+          ...pane, find: { ...pane.find, q: action.q },
+        } } },
+        emissions: [],
+      };
+    }
+    case ActionType.FIND_QUERY_COMMIT: {
+      const pane = state.panes[action.paneId];
+      if (!pane || !pane.find.open) return { state, emissions: [] };
+      return {
+        state: { ...state, panes: { ...state.panes, [action.paneId]: {
+          ...pane, find: { ...pane.find, q: action.q, count: action.count, activeIndex: 0 },
+        } } },
+        emissions: [{ kind: Tag.FIND_QUERY_CHANGED, payload: {
+          pane_id: action.paneId, q_length: action.q.length, count: action.count,
+        } }],
+      };
+    }
+    case ActionType.FIND_STEP: {
+      const pane = state.panes[action.paneId];
+      if (!pane || !pane.find.open || pane.find.count === 0) return { state, emissions: [] };
+      const next = ((pane.find.activeIndex + action.delta) % pane.find.count + pane.find.count)
+        % pane.find.count;
+      return {
+        state: { ...state, panes: { ...state.panes, [action.paneId]: {
+          ...pane, find: { ...pane.find, activeIndex: next },
+        } } },
+        emissions: [],
+      };
+    }
     case ActionType.INSPECTOR_TOGGLE: {
       const pane = state.panes[action.paneId];
       if (!pane) return { state, emissions: [] };
@@ -1067,6 +1149,7 @@ function boot(): Step {
     surface: null,
     studioView: StudioView.FORM,
     studioDraft: { topoName: "", producerCount: 1, viewCount: 0, triggerCount: 0, routeCount: 0 },
+    find: { open: false, scope: FindScope.TRANSCRIPT, q: "", count: 0, activeIndex: 0 },
   };
   const window: Window = { id: windowId, rootId: paneId };
   const next: ShellState = {

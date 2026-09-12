@@ -3,7 +3,7 @@
 ---
 id: 029
 epic: H — Find
-status: pending
+status: closed
 phase: 3
 pass_kind: architecture
 spec_reference: signals/0.1.json § find — Layer 1 v0.1 carries FIND_OPENED / FIND_SCOPE_CHANGED / FIND_QUERY_CHANGED / FIND_CLOSED (no per-step tag; the step is UI-only)

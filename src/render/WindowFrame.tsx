@@ -35,6 +35,10 @@ export interface PaneCallbacks {
   onStudioViewToggle: (paneId: string) => void;
   onStudioValidate: (paneId: string, draft: PaneModel["studioDraft"]) => void;
   onStudioBuild: (paneId: string, topoName: string) => void;
+  onFindQueryType: (paneId: string, q: string) => void;
+  onFindScopeTab: (paneId: string) => void;
+  onFindStep: (paneId: string, delta: 1 | -1) => void;
+  onFindClose: (paneId: string) => void;
 }
 
 export interface GutterCallbacks {
@@ -85,6 +89,10 @@ function Node({ id, state, gutter, pane }: { id: string; state: ShellState; gutt
         onStudioViewToggle={pane.onStudioViewToggle}
         onStudioValidate={pane.onStudioValidate}
         onStudioBuild={pane.onStudioBuild}
+        onFindQueryType={pane.onFindQueryType}
+        onFindScopeTab={pane.onFindScopeTab}
+        onFindStep={pane.onFindStep}
+        onFindClose={pane.onFindClose}
       />
     );
   }

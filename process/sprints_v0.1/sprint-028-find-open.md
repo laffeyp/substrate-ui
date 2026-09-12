@@ -3,7 +3,7 @@
 ---
 id: 028
 epic: H — Find
-status: pending
+status: closed
 phase: 3
 pass_kind: architecture
 spec_reference: signals/0.1.json § find FIND_OPENED/CLOSED + FIND_QUERY_CHANGED; Layer 4 100ms debounce
