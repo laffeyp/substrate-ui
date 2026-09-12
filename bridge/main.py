@@ -283,9 +283,9 @@ def _max_user_turn_index(record_root: Path) -> int:
         if not record_root.exists():
             return -1
         for env in api.read_record(record_root):
-            pl = env.get("payload") or {}
-            if env.get("kind") == USER_MESSAGE and isinstance(pl, dict) and "turn_index" in pl:
-                max_ti = max(max_ti, int(pl["turn_index"]))
+            payload_dict = env.get("payload") or {}
+            if env.get("kind") == USER_MESSAGE and isinstance(payload_dict, dict) and "turn_index" in payload_dict:
+                max_ti = max(max_ti, int(payload_dict["turn_index"]))
     except Exception:  # noqa: BLE001
         pass
     return max_ti
@@ -347,10 +347,10 @@ def op_record_read(payload: dict) -> dict:
     try:
         for env in api.read_record(root):
             if env.get("kind") == TOOL_RESULT:
-                pl = env.get("payload") or {}
-                if isinstance(pl, dict):
-                    call_id = pl.get("call_id")
-                    output = pl.get("output")
+                payload_dict = env.get("payload") or {}
+                if isinstance(payload_dict, dict):
+                    call_id = payload_dict.get("call_id")
+                    output = payload_dict.get("output")
                     if isinstance(call_id, str) and isinstance(output, dict):
                         child_root = output.get("child_root")
                         if isinstance(child_root, str):
@@ -361,7 +361,7 @@ def op_record_read(payload: dict) -> dict:
                 continue
             producer = env.get("producer") or {}
             producer_kind = producer.get("kind") if isinstance(producer, dict) else None
-            pl = env.get("payload") or {}
+            payload_dict = env.get("payload") or {}
             summary = ""
             park_reason = None
             end_reason = None
@@ -376,29 +376,29 @@ def op_record_read(payload: dict) -> dict:
             tool_ok = None
             tool_error = None
             if kind == USER_MESSAGE:
-                summary = str(pl.get("assembled_prompt", ""))[:200]
+                summary = str(payload_dict.get("assembled_prompt", ""))[:200]
             elif kind == MODEL_REPLY:
-                summary = str(pl.get("text", ""))[:200]
+                summary = str(payload_dict.get("text", ""))[:200]
             elif kind == PARK:
                 # Propagate substrate's ParkReason enum verbatim.
-                park_reason = pl.get("reason") if isinstance(pl, dict) else None
+                park_reason = payload_dict.get("reason") if isinstance(payload_dict, dict) else None
                 summary = str(park_reason or "")
             elif kind == SESSION_ENDED:
-                end_reason = pl.get("reason") if isinstance(pl, dict) else None
+                end_reason = payload_dict.get("reason") if isinstance(payload_dict, dict) else None
                 summary = str(end_reason or "")
             elif kind == TRANSCRIPT_COMPACTED:
-                tokens_before = pl.get("tokens_before") if isinstance(pl, dict) else None
-                tokens_after = pl.get("tokens_after") if isinstance(pl, dict) else None
-                compact_strategy = pl.get("strategy") if isinstance(pl, dict) else None
+                tokens_before = payload_dict.get("tokens_before") if isinstance(payload_dict, dict) else None
+                tokens_after = payload_dict.get("tokens_after") if isinstance(payload_dict, dict) else None
+                compact_strategy = payload_dict.get("strategy") if isinstance(payload_dict, dict) else None
                 summary = f"{tokens_before}→{tokens_after} via {compact_strategy}"
             elif kind == RATE_LIMITED_WAITING:
-                retry_index = pl.get("retry_index") if isinstance(pl, dict) else None
-                retry_max = pl.get("retry_max") if isinstance(pl, dict) else None
-                retry_after_seconds = pl.get("retry_after_seconds") if isinstance(pl, dict) else None
+                retry_index = payload_dict.get("retry_index") if isinstance(payload_dict, dict) else None
+                retry_max = payload_dict.get("retry_max") if isinstance(payload_dict, dict) else None
+                retry_after_seconds = payload_dict.get("retry_after_seconds") if isinstance(payload_dict, dict) else None
                 summary = f"retry {retry_index}/{retry_max} in {retry_after_seconds}s"
             elif kind == TOOL_CALL:
-                tool_name = pl.get("tool") if isinstance(pl, dict) else None
-                tool_call_id = pl.get("call_id") if isinstance(pl, dict) else None
+                tool_name = payload_dict.get("tool") if isinstance(payload_dict, dict) else None
+                tool_call_id = payload_dict.get("call_id") if isinstance(payload_dict, dict) else None
                 summary = str(tool_name or "")
             elif kind == TOOL_RESULT:
                 # Sprint 021 — a delegate ToolResult carries the child
@@ -407,20 +407,44 @@ def op_record_read(payload: dict) -> dict:
                 # — a delegate raise (depth cap, etc.) lands as ok=false
                 # with the error text; the shell reads that to fire the
                 # correct terminal (DEPTH_CAP_REFUSED or FOLDED).
-                tool_name = pl.get("tool") if isinstance(pl, dict) else None
-                tool_call_id = pl.get("call_id") if isinstance(pl, dict) else None
-                tool_ok = bool(pl.get("ok", True)) if isinstance(pl, dict) else None
-                tool_error = pl.get("error") if isinstance(pl, dict) else None
+                tool_name = payload_dict.get("tool") if isinstance(payload_dict, dict) else None
+                tool_call_id = payload_dict.get("call_id") if isinstance(payload_dict, dict) else None
+                tool_ok = bool(payload_dict.get("ok", True)) if isinstance(payload_dict, dict) else None
+                tool_error = payload_dict.get("error") if isinstance(payload_dict, dict) else None
                 summary = f"{tool_name} → ok" if tool_ok else f"{tool_name} → err"
             child_record_root = (
                 tool_call_id_to_child_root.get(tool_call_id) if tool_call_id else None
             )
+            # Sprint-port-Round-0 — the inspect drawer (prototype
+            # :277, :280) renders SCHEMA / TIME / PRODUCER / CONTENT /
+            # PAYLOAD off each envelope. Passing raw payload + a
+            # per-kind content block set surfaces those to the shell
+            # without a second bridge op.
+            content_blocks = []
+            if isinstance(payload_dict, dict):
+                if kind == USER_MESSAGE and payload_dict.get("assembled_prompt"):
+                    content_blocks.append({"k": "ASSEMBLED_PROMPT", "v": str(payload_dict.get("assembled_prompt", ""))})
+                elif kind == MODEL_REPLY and payload_dict.get("text"):
+                    content_blocks.append({"k": "TEXT", "v": str(payload_dict.get("text", ""))})
+                elif kind == TOOL_RESULT:
+                    output = payload_dict.get("output")
+                    if isinstance(output, dict):
+                        for k_ in ("stdout", "text", "child_root"):
+                            v_ = output.get(k_)
+                            if v_ is not None:
+                                content_blocks.append({"k": f"OUTPUT.{k_.upper()}", "v": str(v_)})
+                    elif output is not None:
+                        content_blocks.append({"k": "OUTPUT", "v": str(output)})
+            schema = str(env.get("schema", ""))
+            timestamp = env.get("t") or env.get("timestamp") or env.get("ts")
             out.append({
                 "seq": int(env.get("seq", -1)),
                 "kind": kind,
+                "schema": schema,
+                "timestamp": timestamp,
                 "producer_kind": producer_kind or "?",
                 "summary": summary,
-                "turn_index": pl.get("turn_index") if isinstance(pl, dict) else None,
+                "turn_index": payload_dict.get("turn_index") if isinstance(payload_dict, dict) else None,
                 "park_reason": park_reason,
                 "end_reason": end_reason,
                 "tokens_before": tokens_before,
@@ -434,6 +458,9 @@ def op_record_read(payload: dict) -> dict:
                 "tool_ok": tool_ok,
                 "tool_error": tool_error,
                 "child_record_root": child_record_root,
+                # Raw payload + content blocks — the inspect drawer reads these.
+                "payload": payload_dict if isinstance(payload_dict, (dict, list)) else {},
+                "content": content_blocks,
             })
     except Exception as e:  # noqa: BLE001
         return {"__error__": True, "reason": f"{RRR.READ_ERROR.value}:{e}"}
@@ -531,9 +558,9 @@ def op_session_end(payload: dict) -> dict:
         for env in api.read_record(record_root):
             if env.get("kind") == SESSION_ENDED:
                 envelope_seq = int(env.get("seq", -1))
-                pl = env.get("payload") or {}
-                if isinstance(pl, dict) and "reason" in pl:
-                    end_reason = str(pl["reason"])
+                payload_dict = env.get("payload") or {}
+                if isinstance(payload_dict, dict) and "reason" in payload_dict:
+                    end_reason = str(payload_dict["reason"])
                 break
     except Exception:  # noqa: BLE001
         pass
