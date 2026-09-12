@@ -1754,15 +1754,28 @@ class Component extends DCLogic {
           return;
         }
         try {
-          const result = await this._bridge('topology_build', { topo_name: this.state.topoName });
-          this.setState({
-            studioOut: 'built ' + result.topo_name + ' · stub written to ' + result.record_root,
+          const result = await this._bridge('topology_build_and_launch', {
+            topo_name: this.state.topoName,
+          }, 15000);
+          // The topology is running in a daemon thread on the bridge.
+          // Follow its record — the launchedRuns list surfaces the
+          // record root and the live envelope count.
+          this.setState(s => ({
+            studioOut: 'launched ' + result.topo_name
+              + ' · run ' + result.run_id
+              + ' · record ' + result.record_root,
             studioOutColor: '#82a5c8',
-          });
+            launchedRuns: [{
+              topo_name: result.topo_name,
+              run_id: result.run_id,
+              record_root: result.record_root,
+              started_at: Date.now(),
+            }].concat(s.launchedRuns || []).slice(0, 12),
+          }));
         } catch (err) {
           let errorMessage = err.message || String(err);
           try { errorMessage = JSON.parse(errorMessage).errors.join(' · '); } catch (_parseErr) { /* keep raw */ }
-          this.setState({ studioOut: 'build failed — ' + errorMessage, studioOutColor: '#c26058' });
+          this.setState({ studioOut: 'launch failed — ' + errorMessage, studioOutColor: '#c26058' });
         }
       },
       studioOut: state.studioOut, studioOutColor: state.studioOutColor,

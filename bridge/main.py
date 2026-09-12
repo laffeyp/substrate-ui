@@ -975,6 +975,56 @@ def op_topology_build(payload: dict) -> dict:
     return {"topo_name": topo_name, "record_root": str(path)}
 
 
+def op_topology_build_and_launch(payload: dict) -> dict:
+    """Launch a named bundled topology to a fresh record and return the
+    record_root immediately. The topology runs in a daemon thread with
+    its own asyncio loop; the shell subscribes to the record via
+    `record_subscribe` and watches envelopes stream in.
+
+    Payload: {topo_name} — must be a key of
+    `substrate.topologies.bundled.BUNDLED`. Any other name returns
+    STUDIO_BUILD_REJECTED with a typed errors list."""
+    import asyncio
+    import uuid
+    topo_name = payload.get("topo_name", "")
+    if not isinstance(topo_name, str) or not _TOPO_NAME_RX.fullmatch(topo_name):
+        return {"__error__": True, "errors": [
+            f"topo_name '{topo_name}' does not match ^[a-z0-9_]+$",
+        ]}
+    from substrate.topologies.bundled import BUNDLED  # type: ignore[import-not-found]
+    factory = BUNDLED.get(topo_name)
+    if factory is None:
+        return {"__error__": True, "errors": [
+            f"topo_name '{topo_name}' is not in the bundled registry; known: "
+            + ", ".join(sorted(BUNDLED.keys())),
+        ]}
+    from substrate.kernel.runtime import Runtime  # type: ignore[import-not-found]
+    run_id = uuid.uuid4().hex[:12]
+    record_root = Path.home() / ".substrate" / "runs" / topo_name / run_id
+    record_root.mkdir(parents=True, exist_ok=True)
+    try:
+        topology_callable = factory()
+    except Exception as e:  # noqa: BLE001
+        return {"__error__": True, "errors": [f"factory failed: {e}"]}
+
+    def _run_topology() -> None:
+        try:
+            asyncio.run(Runtime(record_root).run(topology_callable))
+        except Exception:  # noqa: BLE001
+            pass
+
+    threading.Thread(
+        target=_run_topology,
+        name=f"topo-{topo_name}-{run_id}",
+        daemon=True,
+    ).start()
+    return {
+        "topo_name": topo_name,
+        "run_id": run_id,
+        "record_root": str(record_root),
+    }
+
+
 def op_read_recent_workspaces() -> list[dict]:
     """Return the recent-workspaces roster; empty list on absence or read error."""
     path = Path.home() / ".substrate" / "recent-workspaces.json"
@@ -1045,6 +1095,16 @@ def _handle_short_op(op: BridgeOp, msg: dict, rid: str) -> None:
             result = op_tools_restrict(msg)
             if result.get("__error__"):
                 reply_err(rid, result.get("reason", SCR.REGISTRY_ERROR.value))
+            else:
+                reply_ok(rid, result)
+        except Exception as e:  # noqa: BLE001
+            reply_err(rid, f"{SCR.REGISTRY_ERROR.value}:{e}")
+        return
+    if op is BridgeOp.TOPOLOGY_BUILD_AND_LAUNCH:
+        try:
+            result = op_topology_build_and_launch(msg)
+            if result.get("__error__"):
+                reply_err(rid, json.dumps({"errors": result.get("errors", [])}))
             else:
                 reply_ok(rid, result)
         except Exception as e:  # noqa: BLE001

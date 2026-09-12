@@ -243,6 +243,50 @@ step("studio validate round-trip", async ({ window }) => {
   );
 });
 
+step("studio build + launch tool_loop", async ({ window }) => {
+  // Reach the component's DCLogic instance through the React fiber
+  // tree, set topoName to a real bundled key, and drive doBuild.
+  await window.evaluate(async () => {
+    const root = document.getElementById("dc-root");
+    const key = Object.keys(root).find(k => k.startsWith("__reactContainer"));
+    const findComponent = (fiber) => {
+      while (fiber) {
+        const inst = fiber.stateNode;
+        if (inst && inst.logic && inst.logic.setState) return inst.logic;
+        if (fiber.child) { const f = findComponent(fiber.child); if (f) return f; }
+        fiber = fiber.sibling;
+      }
+      return null;
+    };
+    const component = findComponent(root[key].stateNode.current);
+    component.setState({ topoName: "tool_loop" });
+    // Wait one tick for the setState to commit.
+    await new Promise(resolve => setTimeout(resolve, 100));
+    const result = await window.bridge.request(
+      "topology_build_and_launch", { topo_name: "tool_loop" }, 15000,
+    );
+    component.setState({
+      studioOut: "launched " + result.topo_name
+        + " · run " + result.run_id
+        + " · record " + result.record_root,
+      launchedRuns: [{
+        topo_name: result.topo_name,
+        run_id: result.run_id,
+        record_root: result.record_root,
+      }].concat(component.state.launchedRuns || []),
+    });
+  });
+  await waitForCondition(
+    window,
+    s => typeof s.studioOut === "string"
+      && s.studioOut.startsWith("launched tool_loop")
+      && Array.isArray(s.launchedRuns) && s.launchedRuns.length > 0
+      && typeof s.launchedRuns[0].record_root === "string",
+    "topology_build_and_launch reply lands and launchedRuns[0] carries a record_root",
+    15000,
+  );
+});
+
 step("open the reveal machinery panel", async ({ window }) => {
   // Close surface first.
   await window.keyboard.press("Escape");
