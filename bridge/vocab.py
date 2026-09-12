@@ -162,6 +162,11 @@ class BridgeOp(StrEnum):
     LIST_DRIVERS = "list_drivers"
     TOPOLOGY_INTROSPECT = "topology_introspect"
     SCENE_PROJECT = "scene_project"
+    SESSION_RENAME = "session_rename"
+    TURN_INTERRUPT = "turn_interrupt"
+    BUNDLE_ATTACH = "bundle_attach"
+    TOOLS_RESTRICT = "tools_restrict"
+    WORKSPACE_DIFF = "workspace_diff"
 
 
 class ReplyOp(StrEnum):

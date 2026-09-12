@@ -1220,7 +1220,38 @@ class Component extends DCLogic {
       goReveal: () => this.setState({ focused: p.id, revealed: true, surface: null }),
       startEdit: () => this.setState(s => ({ panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, { editing: true, nameVal: x.name }) : x) })),
       updName: (ev) => this.setState(s => ({ panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, { nameVal: ev.target.value }) : x) })),
-      nameKey: (ev) => { if (ev.key === 'Enter') this.setState(s => ({ panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, { editing: false, name: x.nameVal.trim() || x.name }) : x), allSessions: (s.allSessions || []).map(x => x.id === p.id ? Object.assign({}, x, { name: (s.panes.find(pp => pp.id === p.id) || {}).nameVal || x.name }) : x) })); if (ev.key === 'Escape') this.setState(s => ({ panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, { editing: false }) : x) })); },
+      nameKey: (event) => {
+        if (event.key === 'Escape') {
+          this.setState(s => ({ panes: s.panes.map(paneRow =>
+            paneRow.id === p.id ? Object.assign({}, paneRow, { editing: false }) : paneRow) }));
+          return;
+        }
+        if (event.key !== 'Enter') return;
+        const newName = (p.nameVal || '').trim() || p.name;
+        // Optimistically close the editor. On a bound pane, send the
+        // rename through session_rename; on a name_collision the
+        // bridge reports it and the UI reverts to the manifest name.
+        this.setState(s => ({
+          panes: s.panes.map(paneRow => paneRow.id === p.id
+            ? Object.assign({}, paneRow, { editing: false, name: newName })
+            : paneRow),
+        }));
+        if (p.boundSessionId) {
+          this._bridge('session_rename', { session_id: p.boundSessionId, name: newName }, 5000)
+            .catch(err => {
+              this.setState(s => ({
+                panes: s.panes.map(paneRow => paneRow.id === p.id
+                  ? Object.assign({}, paneRow, {
+                      name: p.name,
+                      lines: (paneRow.lines || []).concat([
+                        { t: 'rename failed: ' + (err.message || String(err)), c: '#c26058' },
+                      ]),
+                    })
+                  : paneRow),
+              }));
+            });
+        }
+      },
     }));
     const KC = { ToolCall: '#a08fc9', ToolResult: '#7fb3b8', FinalAnswer: '#88b0d0', UserMessage: '#88b0d0', TriggerFired: '#c9a0b8', Park: '#82a5c8', ModelReply: '#88b0d0', ProducerStarted: '#62676f', ProducerCompleted: '#62676f' };
     // full-granularity turn slice — every tool cycle is ToolCall · TriggerFired · ProducerStarted · ToolResult · ProducerCompleted, as on a real record

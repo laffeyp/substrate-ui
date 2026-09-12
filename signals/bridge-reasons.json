@@ -68,7 +68,12 @@
     "driver_change": "driver_change",
     "list_drivers": "list_drivers",
     "topology_introspect": "topology_introspect",
-    "scene_project": "scene_project"
+    "scene_project": "scene_project",
+    "session_rename": "session_rename",
+    "turn_interrupt": "turn_interrupt",
+    "bundle_attach": "bundle_attach",
+    "tools_restrict": "tools_restrict",
+    "workspace_diff": "workspace_diff"
   },
 
   "delegate_error_prefixes": {
