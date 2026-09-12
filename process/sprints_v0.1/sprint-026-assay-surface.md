@@ -3,7 +3,7 @@
 ---
 id: 026
 epic: G — Surfaces
-status: pending
+status: closed
 phase: 3
 pass_kind: architecture
 spec_reference: signals/0.1.json § surface kind=assay; D5

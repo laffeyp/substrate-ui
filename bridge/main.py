@@ -513,6 +513,20 @@ def op_session_end(payload: dict) -> dict:
     }
 
 
+def op_list_assays() -> list[dict]:
+    """Return the assay grid rows across records.
+
+    Sprint 026 defer note: signals/0.1.json § Layer 1 review §6 explicitly
+    defers the assay drill-in path (ASSAY_ARM_INSPECTED / ASSAY_CELL_OPENED
+    to v0.2). This op returns an empty list under v0.1 so the AssaySurface
+    mounts and renders its "no assays yet" empty state without a substrate
+    dependency the assay module isn't ready to expose over the bridge.
+    A later widening sprint wires substrate.assay.report against
+    session_registry to project real rows here.
+    """
+    return []
+
+
 def op_read_recent_workspaces() -> list[dict]:
     """Return the recent-workspaces roster; empty list on absence or read error."""
     path = Path.home() / ".substrate" / "recent-workspaces.json"
@@ -545,6 +559,12 @@ def _handle_short_op(op: BridgeOp, msg: dict, rid: str) -> None:
     if op is BridgeOp.READ_RECENT_WORKSPACES:
         try:
             reply_ok(rid, op_read_recent_workspaces())
+        except Exception as e:  # noqa: BLE001
+            reply_err(rid, f"{SCR.REGISTRY_ERROR.value}:{e}")
+        return
+    if op is BridgeOp.LIST_ASSAYS:
+        try:
+            reply_ok(rid, op_list_assays())
         except Exception as e:  # noqa: BLE001
             reply_err(rid, f"{SCR.REGISTRY_ERROR.value}:{e}")
         return

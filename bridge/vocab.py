@@ -149,6 +149,7 @@ class BridgeOp(StrEnum):
     TURN_SUBMIT = "turn_submit"
     SESSION_END = "session_end"
     SESSION_CREATE = "session_create"
+    LIST_ASSAYS = "list_assays"
 
 
 class ReplyOp(StrEnum):
