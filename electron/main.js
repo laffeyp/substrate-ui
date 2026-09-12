@@ -59,7 +59,11 @@ function createWindow() {
     for (const p of pending) mainWindow.webContents.send(p.channel, p.payload);
     pending.length = 0;
   });
-  mainWindow.loadFile(path.join(__dirname, "..", "app", "index.html"));
+  // Load the prototype by default — it IS the shell. Set
+  // SUBSTRATE_UI_LOAD=react to bring back the (deprecated) React stub.
+  const target = process.env.SUBSTRATE_UI_LOAD === "react"
+    ? "index.html" : "prototype-v7.html";
+  mainWindow.loadFile(path.join(__dirname, "..", "app", target));
 }
 
 function startBridge() {

@@ -33,24 +33,24 @@
  <sc-if value="{{ showTerminal }}" hint-placeholder-val="{{ true }}">
   <div style="flex:1;position:relative;min-height:0;display:flex">
   <div style="flex:1;display:grid;grid-template-columns:{{ paneCols }};grid-template-rows:{{ paneRows }};gap:1px;background:rgba(255,255,255,.055);min-height:0">
-   <sc-for list="{{ panes }}" as="pn" hint-placeholder-count="1">
-    <div onClick="{{ pn.focus }}" onDragOver="{{ pn.dragOver }}" onDragLeave="{{ pn.dragLeave }}" onDrop="{{ pn.dropSwap }}" style="background:#212327;display:flex;flex-direction:column;min-width:0;min-height:0;opacity:{{ pn.dim }};position:relative">
-     <sc-if value="{{ pn.hintOn }}" hint-placeholder-val="{{ false }}"><div style="position:absolute;left:{{ pn.hintL }};top:{{ pn.hintT }};width:{{ pn.hintW }};height:{{ pn.hintH }};background:rgba(130,165,200,.13);border:1px solid rgba(130,165,200,.4);z-index:20;pointer-events:none"></div></sc-if>
-     <div draggable="true" onDragStart="{{ pn.gripStart }}" style="display:flex;gap:{{ pn.hdrGap }};padding:6px 10px;background:#26292e;font-size:10px;align-items:center;white-space:nowrap;flex:none;min-width:0;overflow:hidden;cursor:default">
+   <sc-for list="{{ panes }}" as="paneEntry" hint-placeholder-count="1">
+    <div onClick="{{ paneEntry.focus }}" onDragOver="{{ paneEntry.dragOver }}" onDragLeave="{{ paneEntry.dragLeave }}" onDrop="{{ paneEntry.dropSwap }}" style="background:#212327;display:flex;flex-direction:column;min-width:0;min-height:0;opacity:{{ paneEntry.dim }};position:relative">
+     <sc-if value="{{ paneEntry.hintOn }}" hint-placeholder-val="{{ false }}"><div style="position:absolute;left:{{ paneEntry.hintL }};top:{{ paneEntry.hintT }};width:{{ paneEntry.hintW }};height:{{ paneEntry.hintH }};background:rgba(130,165,200,.13);border:1px solid rgba(130,165,200,.4);z-index:20;pointer-events:none"></div></sc-if>
+     <div draggable="true" onDragStart="{{ paneEntry.gripStart }}" style="display:flex;gap:{{ paneEntry.hdrGap }};padding:6px 10px;background:#26292e;font-size:10px;align-items:center;white-space:nowrap;flex:none;min-width:0;overflow:hidden;cursor:default">
       <sc-if value="{{ singlePane }}" hint-placeholder-val="{{ true }}"><div style="display:flex;gap:6px;flex:none"><span style="width:11px;height:11px;border-radius:50%;background:#4a4e55"></span><span style="width:11px;height:11px;border-radius:50%;background:#4a4e55"></span><span style="width:11px;height:11px;border-radius:50%;background:#4a4e55"></span></div></sc-if>
-      <span style="display:inline-flex;align-items:baseline;flex:none"><span style="color:#e2e5e9;font-weight:600;font-size:11px">substrate</span><span title="the dot is this session's status" style="width:4px;height:4px;border-radius:50%;background:{{ pn.dot }};display:inline-block;margin-left:3px"></span></span>
-      <sc-if value="{{ pn.editing }}" hint-placeholder-val="{{ false }}"><input value="{{ pn.nameVal }}" onChange="{{ pn.updName }}" onKeyDown="{{ pn.nameKey }}" style="background:#1a1c20;border:1px solid #82a5c8;border-radius:4px;color:#e2e5e9;font-family:inherit;font-size:10px;padding:1px 6px;outline:none;width:160px"></input></sc-if>
-      <sc-if value="{{ pn.notEditing }}" hint-placeholder-val="{{ true }}"><span onDoubleClick="{{ pn.startEdit }}" title="double-click to rename (needs a rename endpoint daemon-side — FD-1)" style="color:{{ pn.nameColor }};cursor:text;overflow:hidden;text-overflow:ellipsis;flex:0 1 auto;min-width:{{ pn.nameMin }}">{{ pn.name }}</span></sc-if>
+      <span style="display:inline-flex;align-items:baseline;flex:none"><span style="color:#e2e5e9;font-weight:600;font-size:11px">substrate</span><span title="the dot is this session's status" style="width:4px;height:4px;border-radius:50%;background:{{ paneEntry.dot }};display:inline-block;margin-left:3px"></span></span>
+      <sc-if value="{{ paneEntry.editing }}" hint-placeholder-val="{{ false }}"><input value="{{ paneEntry.nameVal }}" onChange="{{ paneEntry.updName }}" onKeyDown="{{ paneEntry.nameKey }}" style="background:#1a1c20;border:1px solid #82a5c8;border-radius:4px;color:#e2e5e9;font-family:inherit;font-size:10px;padding:1px 6px;outline:none;width:160px"></input></sc-if>
+      <sc-if value="{{ paneEntry.notEditing }}" hint-placeholder-val="{{ true }}"><span onDoubleClick="{{ paneEntry.startEdit }}" title="double-click to rename (needs a rename endpoint daemon-side — FD-1)" style="color:{{ paneEntry.nameColor }};cursor:text;overflow:hidden;text-overflow:ellipsis;flex:0 1 auto;min-width:{{ paneEntry.nameMin }}">{{ paneEntry.name }}</span></sc-if>
       <span style="margin-left:auto;flex:none"></span>
-      <sc-if value="{{ pn.showChips }}" hint-placeholder-val="{{ true }}"><span style="flex:none;position:relative;display:inline-block"><span onClick="{{ pn.toggleDd }}" style="color:#9aa0a8;border:1px solid rgba(255,255,255,.08);border-radius:4px;padding:0 6px;cursor:pointer;display:inline-block" style-hover="color:#d7dade">{{ pn.driver }} ▾</span>
-       <sc-if value="{{ pn.ddOpen }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;right:0;top:20px;z-index:30;background:#26292e;border:1px solid rgba(255,255,255,.12);border-radius:6px;padding:5px 0;display:flex;flex-direction:column;min-width:180px;box-shadow:0 8px 24px rgba(0,0,0,.4)"><sc-for list="{{ pn.driverOpts }}" as="d" hint-placeholder-count="5"><span onClick="{{ d.pick }}" style="padding:4px 12px;cursor:pointer;font-size:10.5px;color:{{ d.color }};white-space:nowrap" style-hover="background:#2e3138">{{ d.label }}</span></sc-for></span></sc-if></span>
-      <span style="flex:0 4 auto;min-width:34px;position:relative;display:inline-block;overflow:visible"><span onClick="{{ pn.toggleWsP }}" style="color:#62676f;border:1px solid rgba(255,255,255,.08);border-radius:4px;padding:0 6px;cursor:pointer;display:inline-block;max-width:100%;box-sizing:border-box;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" style-hover="color:#9aa0a8" title="⌥ {{ pn.branch }}">{{ pn.wsLabel }}</span>
-       <sc-if value="{{ pn.wsOpenP }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;right:0;top:20px;z-index:30;background:#26292e;border:1px solid rgba(255,255,255,.12);border-radius:6px;padding:9px 13px;display:block;min-width:270px;box-shadow:0 8px 24px rgba(0,0,0,.4);font-size:10.5px;line-height:1.8;color:#9aa0a8;white-space:nowrap">workspace <span style="color:#e2e5e9">~/code/substrate</span><br>shape <span style="color:#e2e5e9">worktree</span> · branch <span style="color:#e2e5e9">{{ pn.branch }}</span><br><span style="color:#62676f">frozen at seq 1</span></span></sc-if></span></sc-if>
-      <span style="cursor:pointer;flex:none;color:#9aa0a8" style-hover="color:#d7dade" onClick="{{ pn.goRecords }}">records</span>
-      <span style="cursor:pointer;flex:none;color:#9aa0a8" style-hover="color:#d7dade" onClick="{{ pn.goStudio }}">studio</span>
-      <span onClick="{{ pn.goReveal }}" style="cursor:pointer;flex:none;color:#9aa0a8;background:#3d434c;border-radius:4px;padding:1px 6px;font-weight:600" title="⌃` reveal — expand this session over the window" style-hover="color:#d7dade">{{ pn.revealText }}</span>
+      <sc-if value="{{ paneEntry.showChips }}" hint-placeholder-val="{{ true }}"><span style="flex:none;position:relative;display:inline-block"><span onClick="{{ paneEntry.toggleDd }}" style="color:#9aa0a8;border:1px solid rgba(255,255,255,.08);border-radius:4px;padding:0 6px;cursor:pointer;display:inline-block" style-hover="color:#d7dade">{{ paneEntry.driver }} ▾</span>
+       <sc-if value="{{ paneEntry.ddOpen }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;right:0;top:20px;z-index:30;background:#26292e;border:1px solid rgba(255,255,255,.12);border-radius:6px;padding:5px 0;display:flex;flex-direction:column;min-width:180px;box-shadow:0 8px 24px rgba(0,0,0,.4)"><sc-for list="{{ paneEntry.driverOpts }}" as="d" hint-placeholder-count="5"><span onClick="{{ d.pick }}" style="padding:4px 12px;cursor:pointer;font-size:10.5px;color:{{ d.color }};white-space:nowrap" style-hover="background:#2e3138">{{ d.label }}</span></sc-for></span></sc-if></span>
+      <span style="flex:0 4 auto;min-width:34px;position:relative;display:inline-block;overflow:visible"><span onClick="{{ paneEntry.toggleWsP }}" style="color:#62676f;border:1px solid rgba(255,255,255,.08);border-radius:4px;padding:0 6px;cursor:pointer;display:inline-block;max-width:100%;box-sizing:border-box;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" style-hover="color:#9aa0a8" title="⌥ {{ paneEntry.branch }}">{{ paneEntry.wsLabel }}</span>
+       <sc-if value="{{ paneEntry.wsOpenP }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;right:0;top:20px;z-index:30;background:#26292e;border:1px solid rgba(255,255,255,.12);border-radius:6px;padding:9px 13px;display:block;min-width:270px;box-shadow:0 8px 24px rgba(0,0,0,.4);font-size:10.5px;line-height:1.8;color:#9aa0a8;white-space:nowrap">workspace <span style="color:#e2e5e9">~/code/substrate</span><br>shape <span style="color:#e2e5e9">worktree</span> · branch <span style="color:#e2e5e9">{{ paneEntry.branch }}</span><br><span style="color:#62676f">frozen at seq 1</span></span></sc-if></span></sc-if>
+      <span style="cursor:pointer;flex:none;color:#9aa0a8" style-hover="color:#d7dade" onClick="{{ paneEntry.goRecords }}">records</span>
+      <span style="cursor:pointer;flex:none;color:#9aa0a8" style-hover="color:#d7dade" onClick="{{ paneEntry.goStudio }}">studio</span>
+      <span onClick="{{ paneEntry.goReveal }}" style="cursor:pointer;flex:none;color:#9aa0a8;background:#3d434c;border-radius:4px;padding:1px 6px;font-weight:600" title="⌃` reveal — expand this session over the window" style-hover="color:#d7dade">{{ paneEntry.revealText }}</span>
      </div>
-     <sc-if value="{{ pn.isMain }}" hint-placeholder-val="{{ true }}">
+     <sc-if value="{{ paneEntry.isMain }}" hint-placeholder-val="{{ true }}">
    <sc-if value="{{ findOpen }}" hint-placeholder-val="{{ false }}">
     <div style="display:flex;gap:10px;align-items:center;padding:8px 22px;border-bottom:1px solid rgba(255,255,255,.055);flex:none"><span style="color:#62676f;font-size:11px">find</span><div style="display:flex;gap:8px;border:1px solid rgba(255,255,255,.13);border-radius:5px;padding:4px 10px;background:#1a1c20;width:230px"><input value="{{ findQ }}" onChange="{{ onFindQ }}" placeholder="find in transcript" style="flex:1;background:none;border:none;outline:none;color:#e2e5e9;font-family:inherit;font-size:12px"></input></div><span style="color:#62676f;font-size:10.5px">{{ findCount }}</span><span onClick="{{ closeFind }}" style="margin-left:auto;color:#62676f;font-size:10.5px;cursor:pointer">esc</span></div>
    </sc-if>
@@ -121,27 +121,27 @@
    </div>
    </sc-if>
      </sc-if>
-     <sc-if value="{{ pn.notMain }}" hint-placeholder-val="{{ false }}">
-      <sc-if value="{{ pn.unbound }}" hint-placeholder-val="{{ false }}">
+     <sc-if value="{{ paneEntry.notMain }}" hint-placeholder-val="{{ false }}">
+      <sc-if value="{{ paneEntry.unbound }}" hint-placeholder-val="{{ false }}">
        <div style="flex:1"></div>
        <div style="flex:none;padding:0 22px 16px">
         <div style="border:1px solid rgba(255,255,255,.13);border-radius:6px;background:#1a1c20;overflow:hidden">
          <div style="padding:6px 0;font-size:11.5px;line-height:2.1">
           <div style="padding:0 14px;font-size:9.5px;letter-spacing:.14em;color:#62676f">WORKSPACE</div>
-          <sc-for list="{{ pn.wsRows }}" as="wr" hint-placeholder-count="4">
+          <sc-for list="{{ paneEntry.wsRows }}" as="wr" hint-placeholder-count="4">
            <div onClick="{{ wr.pick }}" style="padding:0 14px;display:flex;gap:12px;cursor:pointer;background:{{ wr.bg }};white-space:nowrap;overflow:hidden" style-hover="background:#2e3138"><span style="color:{{ wr.c }};width:230px;flex:none;overflow:hidden;text-overflow:ellipsis">{{ wr.path }}</span><span style="color:#4a4e55;overflow:hidden;text-overflow:ellipsis">{{ wr.meta }}</span><span style="margin-left:auto;color:#62676f;flex:none">{{ wr.key }}</span></div>
           </sc-for>
          </div>
-         <div style="display:flex;gap:10px;padding:9px 13px;border-top:1px solid rgba(255,255,255,.08)"><span style="color:#82a5c8">›</span><input value="{{ pn.wsQ }}" onChange="{{ pn.onWsQ }}" onKeyDown="{{ pn.onWsKey }}" placeholder="type a path — ↵ binds + starts · repo gets a worktree, plain folder works flat" style="flex:1;background:none;border:none;outline:none;color:#e2e5e9;font-family:inherit;font-size:12px"></input></div>
+         <div style="display:flex;gap:10px;padding:9px 13px;border-top:1px solid rgba(255,255,255,.08)"><span style="color:#82a5c8">›</span><input value="{{ paneEntry.wsQ }}" onChange="{{ paneEntry.onWsQ }}" onKeyDown="{{ paneEntry.onWsKey }}" placeholder="type a path — ↵ binds + starts · repo gets a worktree, plain folder works flat" style="flex:1;background:none;border:none;outline:none;color:#e2e5e9;font-family:inherit;font-size:12px"></input></div>
         </div>
        </div>
       </sc-if>
-      <sc-if value="{{ pn.bound }}" hint-placeholder-val="{{ true }}">
+      <sc-if value="{{ paneEntry.bound }}" hint-placeholder-val="{{ true }}">
       <div style="flex:1;overflow:auto;padding:16px 22px;line-height:2;font-size:{{ fontSize }}px;color:#62676f">
-       <sc-for list="{{ pn.lines }}" as="L" hint-placeholder-count="3"><div style="color:{{ L.c }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ L.t }}</div></sc-for>
+       <sc-for list="{{ paneEntry.lines }}" as="L" hint-placeholder-count="3"><div style="color:{{ L.c }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ L.t }}</div></sc-for>
  
       </div>
-      <div style="flex:none;padding:0 22px 16px"><div style="display:flex;gap:12px;align-items:center;border-radius:6px;padding:11px 16px;background:#1a1c20"><span style="color:{{ pn.caretColor }}">›</span><input value="{{ pn.pv }}" onChange="{{ pn.onPv }}" onKeyDown="{{ pn.onPvKey }}" placeholder="type to talk · ↵ to send" style="flex:1;background:none;border:none;outline:none;color:#e2e5e9;font-family:inherit;font-size:13px"></input></div></div>
+      <div style="flex:none;padding:0 22px 16px"><div style="display:flex;gap:12px;align-items:center;border-radius:6px;padding:11px 16px;background:#1a1c20"><span style="color:{{ paneEntry.caretColor }}">›</span><input value="{{ paneEntry.pv }}" onChange="{{ paneEntry.onPv }}" onKeyDown="{{ paneEntry.onPvKey }}" placeholder="type to talk · ↵ to send" style="flex:1;background:none;border:none;outline:none;color:#e2e5e9;font-family:inherit;font-size:13px"></input></div></div>
       </sc-if>
      </sc-if>
     </div>
@@ -262,7 +262,7 @@
          <span style="color:#4a4e55;width:34px;flex:none;text-align:right">{{ e.seq }}</span>
          <span style="color:#4a4e55;width:50px;flex:none;font-size:11px">{{ e.t }}</span>
          <span style="color:{{ e.kindColor }};width:132px;flex:none">{{ e.kind }}</span>
-         <span style="color:#62676f;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ e.pl }}</span>
+         <span style="color:#62676f;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ e.producerLabel }}</span>
         </div>
         <sc-if value="{{ e.sel }}" hint-placeholder-val="{{ false }}">
          <div style="display:flex;gap:10px;padding:2px 16px 8px;align-items:stretch">
@@ -295,7 +295,7 @@
      </sc-if>
      <sc-if value="{{ isStructure }}" hint-placeholder-val="{{ false }}">
       <div style="padding:10px 16px 16px;font-size:12.5px;line-height:1.9">
-       <div style="color:#62676f;font-size:10px;letter-spacing:.12em;margin:6px 0 4px">PRODUCERS (4) · ▸ INITIAL = ON THE RUN'S OPENING COHORT</div>
+       <div style="color:#62676f;font-size:10px;letter-spacing:.12em;margin:6px 0 4px">PRODUCERS (4) · ▸ INITIAL = ON THE RUN'state OPENING COHORT</div>
        <div style="display:flex;gap:10px"><span style="color:#e2e5e9;width:120px;flex:none">model <span style="color:#82a5c8;font-size:10px">▸ initial</span></span><span style="color:#9aa0a8">emits ToolCall, ModelReply, FinalAnswer</span></div>
        <div style="display:flex;gap:10px"><span style="color:#e2e5e9;width:120px;flex:none">tool</span><span style="color:#9aa0a8">emits ToolResult</span></div>
        <div style="display:flex;gap:10px"><span style="color:#e2e5e9;width:120px;flex:none">park</span><span style="color:#9aa0a8">emits Park</span></div>
@@ -524,7 +524,11 @@ class Component extends DCLogic {
     cardPos: { builder: { x: 80, y: 80 }, attacker: { x: 390, y: 190 }, judge: { x: 700, y: 86 } },
     driverName: 'kimi-k2', driverOpen: false, wsOpen: false,
     nsOpen: false, nsName: '', nsWorkspace: '~/code/substrate', nsIsolate: false, nsStatus: '',
-    panes: [{ id: 1, name: 'fix-race-in-metering', driver: 'kimi-k2', editing: false, nameVal: '' }],
+    // First pane boots UNBOUND. The workspace picker mounts inside
+    // the pane body; ↵ on a path fires session_create through the
+    // bridge (Round 1).
+    panes: [{ id: 1, name: 's-1a04', driver: 'deterministic', editing: false, nameVal: '', unbound: true, wsQ: '', pv: '', lines: [] }],
+    records: {},  // {session_id: [envelope, envelope, ...]} — loaded via record_read
     focused: 1, cols: 1, rows: 1, colW: [1], rowW: [1], revealL: 1.15, ddFor: null, wsFor: null, allSessions: [], dropHint: null,
     descent: [], descPv: '', descExtra: {}, fanOpen: false, fanSel: 0, findOpen: false, findQ: '', findScope: 'transcript', nestedDescent: false,
     showSettings: false, showExport: false, showEndConfirm: false, ended: false, frDone: false, theme: 'dark', fontOverride: null, settingsNote: '' };
@@ -533,17 +537,83 @@ class Component extends DCLogic {
     // D66f: a fresh pane IS the workspace picker — unbound until ↵ binds and starts the session
     return { id, name: 's-' + (4096 + (id * 731) % 61439).toString(16), driver: 'kimi-k2', unbound: true, wsQ: '', editing: false, nameVal: '', pv: '', lines: [] };
   }
-  _bindPane(id, ws) {
-    this.setState(s => {
-      const pane = s.panes.find(p => p.id === id); if (!pane || !pane.unbound) return {};
-      // ONE rule (D68 corollary): bind a folder — git repo ⇒ worktree, else flat; sandbox for ~/.substrate
-      const shape = (ws === '~/code/substrate' || ws === '~/code/swebench-repro') ? 'worktree' : ws === '~/.substrate/sandbox' ? 'sandbox' : 'flat';
-      const lines = [
-        { t: 'session ' + pane.name + ' started · driver ' + pane.driver + ' · ' + ws + (shape === 'worktree' ? ' · worktree substrate/' + pane.name : ' · ' + shape), c: '#62676f' },
-        { t: '◐ parked — awaiting your first message', c: '#82a5c8' }];
-      return { panes: s.panes.map(p => p.id === id ? Object.assign({}, p, { unbound: false, ws, shape, lines }) : p),
-        allSessions: [...(s.allSessions || []), { id, name: pane.name, driver: pane.driver, ws }] };
-    });
+  _bridge(op, payload = {}, timeoutMs = 60000) {
+    // The preload exposes window.bridge.request; in raw-browser mode
+    // this returns a rejected promise the caller can catch. Round 1.
+    if (!(typeof window !== 'undefined' && window.bridge && typeof window.bridge.request === 'function')) {
+      return Promise.reject(new Error('bridge_unavailable'));
+    }
+    return window.bridge.request(op, payload, timeoutMs);
+  }
+  _mintSessionId() {
+    const buf = new Uint8Array(6);
+    (crypto).getRandomValues(buf);
+    return Array.from(buf).map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+  async _bindPane(id, ws) {
+    const pane = this.state.panes.find(p => p.id === id);
+    if (!pane || !pane.unbound) return;
+    // Shape rule (D68 corollary): git repo ⇒ worktree, else flat;
+    // sandbox for ~/.substrate. The bridge accepts what we send; the
+    // manifest holds it.
+    const shape = (ws === '~/code/substrate' || ws === '~/code/swebench-repro')
+      ? 'worktree' : ws === '~/.substrate/sandbox' ? 'sandbox' : 'flat';
+    const session_id = this._mintSessionId();
+    // Optimistic UI — mark the pane connecting.
+    this.setState(s => ({
+      panes: s.panes.map(p => p.id === id ? Object.assign({}, p, {
+        connecting: true, ws, shape, lines: [{ t: 'connecting…', c: '#62676f' }],
+      }) : p),
+    }));
+    try {
+      const created = await this._bridge('session_create', {
+        session_id,
+        name: pane.name,
+        driver: pane.driver,
+        workspace_path: ws,
+        workspace_shape: shape,
+        bundle: '',
+        seed: '',
+      });
+      const envelopes = await this._bridge('record_read', {
+        session_id: created.session_id,
+      });
+      this.setState(s => ({
+        panes: s.panes.map(p => p.id === id ? Object.assign({}, p, {
+          unbound: false, connecting: false,
+          boundSessionId: created.session_id,
+          name: created.session_name || p.name,
+          ws: created.workspace_path,
+          shape: created.workspace_shape,
+          lines: [],
+        }) : p),
+        records: Object.assign({}, s.records, {
+          [created.session_id]: envelopes.envelopes || [],
+        }),
+        allSessions: [...(s.allSessions || []), {
+          id, name: created.session_name || pane.name,
+          driver: pane.driver, ws: created.workspace_path,
+          session_id: created.session_id,
+        }],
+      }));
+    } catch (err) {
+      this.setState(s => ({
+        panes: s.panes.map(p => p.id === id ? Object.assign({}, p, {
+          connecting: false,
+          lines: [{ t: 'session_create failed: ' + (err.message || String(err)), c: '#c26058' }],
+        }) : p),
+      }));
+    }
+  }
+  async _refreshRecord(session_id) {
+    try {
+      const r = await this._bridge('record_read', { session_id });
+      this.setState(s => ({
+        records: Object.assign({}, s.records, { [session_id]: r.envelopes || [] }),
+      }));
+    } catch (err) {
+      // Silent — a failed refresh does not clobber the last-good record.
+    }
   }
   _split(dir) {
     this.setState(s => {
@@ -612,17 +682,17 @@ class Component extends DCLogic {
     const pc = this.props.columns, pr = this.props.rows, pv = this.props.view;
     const changed = (k) => prevProps && this.props[k] !== prevProps[k];
     if (!changed('columns') && !changed('rows') && !changed('view')) return;
-    const S = this.state;
-    if ((changed('columns') && pc && pc !== S.cols) || (changed('rows') && pr && pr !== S.rows)) {
-      const cols = pc || S.cols, rows = pr || S.rows;
+    const state = this.state;
+    if ((changed('columns') && pc && pc !== state.cols) || (changed('rows') && pr && pr !== state.rows)) {
+      const cols = pc || state.cols, rows = pr || state.rows;
       const need = cols * rows;
-      const panes = S.panes.slice(0, Math.max(1, need));
+      const panes = state.panes.slice(0, Math.max(1, need));
       while (panes.length < need) panes.push(this._newPane());
-      const colW = Array.from({ length: cols }, (_, i) => S.colW[i] || 1);
-      const rowW = Array.from({ length: rows }, (_, i) => S.rowW[i] || 1);
+      const colW = Array.from({ length: cols }, (_, i) => state.colW[i] || 1);
+      const rowW = Array.from({ length: rows }, (_, i) => state.rowW[i] || 1);
       this.setState({ cols, rows, colW, rowW, panes });
     }
-    if (changed('view') && pv && (pv === 'revealed') !== S.revealed) this.setState({ revealed: pv === 'revealed', surface: null });
+    if (changed('view') && pv && (pv === 'revealed') !== state.revealed) this.setState({ revealed: pv === 'revealed', surface: null });
   }
   componentWillUnmount() { window.removeEventListener('keydown', this._kd); window.removeEventListener('mousemove', this._mm); window.removeEventListener('mouseup', this._mu); window.removeEventListener('resize', this._rs); }
   _upd(arrKey, i, field) { return (ev) => this.setState(s => { const arr = s[arrKey].map((x, j) => j === i ? Object.assign({}, x, { [field]: ev.target.value }) : x); return { [arrKey]: arr }; }); }
@@ -646,9 +716,9 @@ class Component extends DCLogic {
   }
   _toggleSurface(name) { this.setState(s => ({ surface: s.surface === name ? null : name })); }
   renderVals() {
-    const S = this.state;
-    const fp = S.panes.find(p => p.id === S.focused) || S.panes[0];
-    const mainFocused = fp.id === 1;
+    const state = this.state;
+    const focusedPane = state.panes.find(p => p.id === state.focused) || state.panes[0];
+    const mainFocused = focusedPane.id === 1;
     // ── turn 20: delegate descent ──
     const DEPTHC = ['#a08fc9', '#b88fd9'];
     const CH = {
@@ -691,30 +761,30 @@ class Component extends DCLogic {
           { t: '  ⚙ bash python queueing_model.py ·· running 3s', c: '#62676f' },
           { t: '◌ running — this topology takes no messages', c: '#4a4e55' }] },
     };
-    const descTop = S.descent[S.descent.length - 1] || null;
+    const descTop = state.descent[state.descent.length - 1] || null;
     const dChild = descTop ? CH[descTop] : null;
     const descended = !!dChild && mainFocused;
-    const dColor = DEPTHC[Math.min(Math.max(S.descent.length - 1, 0), DEPTHC.length - 1)];
-    const descLines = !dChild ? [] : dChild.lines.concat((S.descExtra[descTop] || [])).map(L => ({
+    const dColor = DEPTHC[Math.min(Math.max(state.descent.length - 1, 0), DEPTHC.length - 1)];
+    const descLines = !dChild ? [] : dChild.lines.concat((state.descExtra[descTop] || [])).map(L => ({
       t: L.t, c: L.c, mt: L.wrap ? '6px' : '0', ws: L.wrap ? 'normal' : 'nowrap', cur: L.go ? 'pointer' : 'default',
       click: L.go ? (() => this.setState(st => ({ descent: [...st.descent, L.go], descPv: '' }))) : (() => {}),
     }));
     const descCrumbs = [{ t: 'fix-race-in-metering', c: '#4a4e55', jump: () => this.setState({ descent: [], descPv: '' }) }]
-      .concat(S.descent.map((k, i) => ({ t: '› ⑂ ' + CH[k].name, c: i === S.descent.length - 1 ? DEPTHC[Math.min(i, 1)] : '#4a4e55', jump: () => this.setState({ descent: this.state.descent.slice(0, i + 1), descPv: '' }) })));
-    const descAncestors = !S.nestedDescent || !dChild ? [] : (() => {
+      .concat(state.descent.map((k, i) => ({ t: '› ⑂ ' + CH[k].name, c: i === state.descent.length - 1 ? DEPTHC[Math.min(i, 1)] : '#4a4e55', jump: () => this.setState({ descent: this.state.descent.slice(0, i + 1), descPv: '' }) })));
+    const descAncestors = !state.nestedDescent || !dChild ? [] : (() => {
       const rows = [{ t: '› have someone review the locking change before we land it', c: '#62676f' }];
-      S.descent.slice(0, -1).forEach(k => rows.push({ t: '  ⑂ delegate → ' + CH[k].name + ' · running', c: '#a08fc9' }));
+      state.descent.slice(0, -1).forEach(k => rows.push({ t: '  ⑂ delegate → ' + CH[k].name + ' · running', c: '#a08fc9' }));
       return rows;
     })();
     // ── 20g: fan-out ──
     const fanRows = ['floor_a', 'floor_b', 'floor_c'].map((k, ki) => { const c = CH[k]; const parked = c.talkable; return {
       name: c.name, driver: c.driver, meta: c.rec.replace('delegate_child_', '') + ' · ' + c.head.match(/(\d+) events/)[1] + ' ev',
       st: parked ? '◐ parked — floor(N)=4' : '◌ running', stC: parked ? '#7fb3b8' : '#4a4e55',
-      bg: S.fanOpen && S.fanSel === ki ? '#2e3138' : 'transparent', go: () => this.setState({ descent: [k], descPv: '', fanSel: ki }) }; });
+      bg: state.fanOpen && state.fanSel === ki ? '#2e3138' : 'transparent', go: () => this.setState({ descent: [k], descPv: '', fanSel: ki }) }; });
     // ── 19h/k/l: find (transcript scope — the focused pane) ──
-    const FQ = S.findOpen ? S.findQ.trim().toLowerCase() : '';
-    const FSTREAM = S.findOpen && S.findScope === 'stream';
-    const FTRANS = S.findOpen && S.findScope === 'transcript';
+    const FQ = state.findOpen ? state.findQ.trim().toLowerCase() : '';
+    const FSTREAM = state.findOpen && state.findScope === 'stream';
+    const FTRANS = state.findOpen && state.findScope === 'transcript';
     const FTXT = {
       fdIntro: 'session fix-race-in-metering resumed turn 9 record 01M1684 244 events',
       fdU1: 'the metering test flakes under load — find and fix the race',
@@ -725,9 +795,9 @@ class Component extends DCLogic {
       fdAns: 'the race was in _emit_log — an unlocked deque shared by two producers. wrapped it in the kernel lock; reviewer-a signed off. 24 24 green under -n 8.',
       fdPark: 'parked' };
     const fdOf = (k) => (!FQ || !FTRANS ? 1 : (FTXT[k].toLowerCase().includes(FQ) ? 1 : 0.3));
-    const paneW = (S.winW || window.innerWidth) / S.cols;
+    const paneW = (state.winW || window.innerWidth) / state.cols;
     const compact = paneW < 480;
-    const panes = S.panes.map(p => ({
+    const panes = state.panes.map(p => ({
       unbound: !!p.unbound, bound: !p.unbound,
       wsRows: !p.unbound ? [] : ((p.wsQ ? [{ path: p.wsQ, meta: 'typed — ↵ binds + starts', c: '#e2e5e9', bg: '#2e3138', key: '↵' }] : []).concat([
         { path: '~/code/substrate', meta: p.wsQ ? 'inherit' : 'inherit · worktree on bind', c: p.wsQ ? '#b9bec5' : '#e2e5e9', bg: p.wsQ ? 'transparent' : '#2e3138', key: p.wsQ ? '' : '↵' },
@@ -742,28 +812,34 @@ class Component extends DCLogic {
       nameMin: compact ? '44px' : '64px',
       wsLabel: p.unbound ? '⌥ —' : compact ? '⌥' : '⌥ ' + (p.id === 1 ? 'substrate/fix-race' : (p.shape === 'worktree' ? 'substrate/' + p.name : (p.ws || p.name))),
       revealText: compact ? '⌃`' : '⌃` reveal',
-      name: p.name, driver: p.driver, isMain: p.id === 1, notMain: p.id !== 1, lines: p.lines || [], pv: p.pv || '',
+      name: p.name, driver: p.driver,
+      // The main-pane transcript render assumes a bound session. When
+      // pane 1 is unbound, route through notMain's unbound-picker
+      // branch instead. Once session_create lands, isMain becomes
+      // true and the transcript body takes over.
+      isMain: p.id === 1 && !p.unbound, notMain: p.id !== 1 || p.unbound,
+      lines: p.lines || [], pv: p.pv || '',
       onPv: (ev) => this.setState(s => ({ panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, { pv: ev.target.value }) : x) })),
       onPvKey: (ev) => { if (ev.key !== 'Enter') return; const v = (p.pv || '').trim(); if (!v || v.startsWith('/')) return; this.setState(s => ({ panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, { pv: '', lines: [...x.lines, { t: '› ' + v, c: '#e2e5e9' }, { t: 'queued — prototype only; the real app resumes the parked run in-process (registry turn)', c: '#4a4e55' }] }) : x) })); },
       editing: p.editing, notEditing: !p.editing, nameVal: p.nameVal,
-      nameColor: p.id === S.focused ? '#e2e5e9' : '#9aa0a8',
+      nameColor: p.id === state.focused ? '#e2e5e9' : '#9aa0a8',
       dot: (p.id === 1 && (this.props.simulateRateLimit ?? false)) ? '#7fb3b8' : '#62676f', // session status (D31); teal while the driver is rate-limit waiting (19i)
       outline: 'none',
-      dim: (S.panes.length > 1 && p.id !== S.focused) ? '.55' : '1',
-      hintOn: !!(S.dropHint && S.dropHint.id === p.id),
-      hintL: S.dropHint && S.dropHint.zone === 'e' ? '50%' : '0', hintT: S.dropHint && S.dropHint.zone === 's' ? '50%' : '0',
-      hintW: S.dropHint && (S.dropHint.zone === 'w' || S.dropHint.zone === 'e') ? '50%' : '100%',
-      hintH: S.dropHint && (S.dropHint.zone === 'n' || S.dropHint.zone === 's') ? '50%' : (S.dropHint && (S.dropHint.zone === 'w' || S.dropHint.zone === 'e') ? '100%' : '100%'),
+      dim: (state.panes.length > 1 && p.id !== state.focused) ? '.55' : '1',
+      hintOn: !!(state.dropHint && state.dropHint.id === p.id),
+      hintL: state.dropHint && state.dropHint.zone === 'e' ? '50%' : '0', hintT: state.dropHint && state.dropHint.zone === 's' ? '50%' : '0',
+      hintW: state.dropHint && (state.dropHint.zone === 'w' || state.dropHint.zone === 'e') ? '50%' : '100%',
+      hintH: state.dropHint && (state.dropHint.zone === 'n' || state.dropHint.zone === 's') ? '50%' : (state.dropHint && (state.dropHint.zone === 'w' || state.dropHint.zone === 'e') ? '100%' : '100%'),
       branch: p.id === 1 ? 'substrate/fix-race' : 'substrate/' + p.name,
-      ddOpen: S.ddFor === p.id, wsOpenP: S.wsFor === p.id,
+      ddOpen: state.ddFor === p.id, wsOpenP: state.wsFor === p.id,
       toggleDd: () => this.setState(s => ({ focused: p.id, ddFor: s.ddFor === p.id ? null : p.id, wsFor: null })),
       toggleWsP: () => this.setState(s => ({ focused: p.id, wsFor: s.wsFor === p.id ? null : p.id, ddFor: null })),
       driverOpts: ['kimi-k2', 'deepseek-r1:8b', 'qwen3-coder:480b-cloud', 'nemotron-3-super', 'claude (cli)', 'gemini (cli)', 'deterministic'].map(m => ({
         label: m, color: m === p.driver ? '#e2e5e9' : '#9aa0a8',
         pick: () => this.setState(s => ({ ddFor: null, panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, { driver: m }) : x) })),
       })),
-      caretColor: p.id === S.focused ? '#82a5c8' : '#4a4e55',
-      promptHint: p.id === S.focused ? 'type to talk · / for commands' : 'click to focus',
+      caretColor: p.id === state.focused ? '#82a5c8' : '#4a4e55',
+      promptHint: p.id === state.focused ? 'type to talk · / for commands' : 'click to focus',
       focus: () => this.setState({ focused: p.id }),
       gripStart: (ev) => { ev.stopPropagation(); this._dragPaneId = p.id; if (ev.dataTransfer) { ev.dataTransfer.setData('text/plain', String(p.id)); const pane = ev.currentTarget.parentElement; if (pane && ev.dataTransfer.setDragImage) ev.dataTransfer.setDragImage(pane, 60, 14); } },
       splitR: (ev) => { ev.stopPropagation(); this.setState({ focused: p.id }); this._split('right'); },
@@ -806,7 +882,7 @@ class Component extends DCLogic {
       { seq: base + 3, kind: 'ToolResult', schema: 'tool_loop.ToolResult', prod: 'tool · ' + tool, gist: resultGist, lanes: child ? 'mc' : 'mt', payload: Object.assign({ call_id: callId, tool, step, ok: true, error: '' }, resultPayload), content: resultContent },
       { seq: base + 4, kind: 'ProducerCompleted', schema: 'substrate.ProducerCompleted', prod: 'runtime', gist: 'tool · ' + tool, lanes: child ? 'mc' : 'mt', payload: { kind: 'tool', instance: 'tool_' + callId }, content: [] },
     ]);
-    const EVFULL = [
+    const demoEnvelopesFull = [
       { seq: 214, kind: 'UserMessage', schema: 'session.UserMessage', prod: 'runtime', gist: 'the metering test flakes…', lanes: 'm',
         payload: { text: 'the metering test flakes under load — find and fix the race', turn_index: 9, slash_source: null },
         content: [{ k: 'ASSEMBLED_PROMPT', v: '[system] You are the session driver…\n[turn 8] …compacted…\n[user] the metering test flakes under load — find and fix the race' }] },
@@ -822,25 +898,38 @@ class Component extends DCLogic {
       { seq: 243, kind: 'TriggerFired', schema: 'substrate.TriggerFired', prod: 'runtime', gist: 'park-on-final-answer → park', lanes: '', payload: { trigger_id: 'park-on-final-answer', starts: 'park' }, content: [] },
       { seq: 244, kind: 'Park', schema: 'session.Park', prod: 'park', gist: 'await UserMessage', lanes: '', payload: { awaiting: 'UserMessage', turn_index: 9, reason: 'final_answer' }, content: [] },
     ];
-    const EVLITE = [
-      { seq: 0, kind: 'SessionStarted', schema: 'session.SessionStarted', prod: 'runtime', gist: 'seed · driver ' + fp.driver + ' · worktree substrate/' + fp.name, lanes: '', payload: { session_id: fp.name, driver_model: fp.driver, workspace_shape: 'worktree', bundle: null, parent_session_id: null }, content: [] },
+    const demoEnvelopesLite = [
+      { seq: 0, kind: 'SessionStarted', schema: 'session.SessionStarted', prod: 'runtime', gist: 'seed · driver ' + focusedPane.driver + ' · worktree substrate/' + focusedPane.name, lanes: '', payload: { session_id: focusedPane.name, driver_model: focusedPane.driver, workspace_shape: 'worktree', bundle: null, parent_session_id: null }, content: [] },
       { seq: 1, kind: 'Park', schema: 'session.Park', prod: 'park', gist: 'await UserMessage', lanes: '', payload: { awaiting: 'UserMessage', turn_index: 0, reason: 'session_open' }, content: [] },
     ];
-    const EV = mainFocused ? EVFULL : EVLITE;
-    const _evTexts = EV.map(e => (e.kind + ' ' + e.prod + ' ' + e.gist).toLowerCase());
-    const findCount = !FQ ? 'scope: ' + S.findScope + ' — click a lens to move it' : (FSTREAM ? _evTexts.filter(t => t.includes(FQ)).length + ' matching events · scope: stream' : Object.keys(FTXT).filter(k => FTXT[k].toLowerCase().includes(FQ)).length + ' matching lines · scope: transcript');
+    // Prefer the real record if this pane is bound to a session.
+    // Round 1: env shape from bridge/main.py's op_record_read maps
+    // producer_kind → prod, summary → gist. Layer for the swim-lane
+    // graph (`lanes`) is rebuilt from the envelope stream at :911.
+    const recordEnvelopes = focusedPane.boundSessionId ? (state.records && state.records[focusedPane.boundSessionId]) : null;
+    const envelopesLive = Array.isArray(recordEnvelopes) ? recordEnvelopes.map(env => ({
+      seq: env.seq, kind: env.kind, schema: env.schema || '',
+      prod: env.producer_kind || 'runtime',
+      gist: env.summary || '',
+      lanes: '',
+      payload: env.payload || {},
+      content: env.content || [],
+    })) : null;
+    const envelopeList = envelopesLive ? envelopesLive : (mainFocused ? demoEnvelopesFull : demoEnvelopesLite);
+    const envelopeSearchText = envelopeList.map(e => (e.kind + ' ' + e.prod + ' ' + e.gist).toLowerCase());
+    const findCount = !FQ ? 'scope: ' + state.findScope + ' — click a lens to move it' : (FSTREAM ? envelopeSearchText.filter(t => t.includes(FQ)).length + ' matching events · scope: stream' : Object.keys(FTXT).filter(k => FTXT[k].toLowerCase().includes(FQ)).length + ' matching lines · scope: transcript');
     const T = { 0: 't+0.0s', 1: 't+0.0s', 214: 't+0.0s', 215: 't+0.0s', 216: 't+0.0s', 242: 't+49s', 243: 't+49s', 244: 't+49s' };
     const tFor = (seq) => T[seq] || ('t+' + (seq < 222 ? '2' : seq < 227 ? '4' : seq < 232 ? '8' : seq < 237 ? '10' : '43') + 's');
-    const LOW = { TriggerFired: 1, ProducerStarted: 1, ProducerCompleted: 1 };
-    const shownEV = S.level === 'app' ? EV.filter(e => !LOW[e.kind]) : EV;
-    const selE = EV.find(e => e.seq === S.sel);
+    const bracketKinds = { TriggerFired: 1, ProducerStarted: 1, ProducerCompleted: 1 };
+    const envelopesShown = state.level === 'app' ? envelopeList.filter(e => !bracketKinds[e.kind]) : envelopeList;
+    const selectedEnvelope = envelopeList.find(e => e.seq === state.sel);
     // lanes: one per producer KIND (fixed width). A lane's bars are SPANS — a tool span runs
     // ToolCall → ToolResult; the model span runs its ProducerStarted → FinalAnswer; park spans
     // TriggerFired → Park. Concurrent spans of one kind pack into sub-tracks that appear ONLY
     // when real overlap exists, so the graph never widens for a merely long run.
     const spansByKind = { model: [], tool: [], park: [] };
     const _calls = {};
-    EV.forEach(e => {
+    envelopeList.forEach(e => {
       if (e.kind === 'ProducerStarted' && e.payload.kind === 'model') spansByKind.model.push({ start: e.seq, end: 242, color: '#3d5166', bright: '#82a5c8' });
       if (e.kind === 'ToolCall') _calls[e.payload.call_id] = { start: e.seq, tool: e.payload.tool };
       if (e.kind === 'ToolResult') { const c = _calls[e.payload.call_id]; if (c) spansByKind.tool.push({ start: c.start, end: e.seq, color: c.tool === 'delegate' ? '#665f7d' : '#4d6b6e', bright: c.tool === 'delegate' ? '#a08fc9' : '#7fb3b8' }); }
@@ -866,14 +955,14 @@ class Component extends DCLogic {
       if (e.kind === 'UserMessage') { const b = cx(laneIdx.model); return { c: '#88b0d0', l: 0, w: b, dot: b }; }
       return null;
     };
-    const events = shownEV.map(e => {
+    const events = envelopesShown.map(e => {
       const ownKind = kindOf(e);
       const conn = connFor(e);
       return {
         hasConn: !!conn, connL: conn ? conn.l : 0, connW: conn ? Math.max(conn.w, 2) : 0, connC: conn ? conn.c : 'transparent', dotL: conn ? conn.dot : 0,
-        seq: e.seq, t: tFor(e.seq), kind: e.kind, pl: e.prod + ' · ' + e.gist, kindColor: KC[e.kind] || '#9aa0a8',
+        seq: e.seq, t: tFor(e.seq), kind: e.kind, producerLabel: e.prod + ' · ' + e.gist, kindColor: KC[e.kind] || '#9aa0a8',
         rowOp: (FSTREAM && FQ) ? ((e.kind + ' ' + e.prod + ' ' + e.gist).toLowerCase().includes(FQ) ? 1 : 0.3) : 1,
-        sel: e.seq === S.sel, rowBg: e.seq === S.sel ? '#2e3138' : ((FSTREAM && FQ && (e.kind + ' ' + e.prod + ' ' + e.gist).toLowerCase().includes(FQ)) ? '#26292e' : 'transparent'),
+        sel: e.seq === state.sel, rowBg: e.seq === state.sel ? '#2e3138' : ((FSTREAM && FQ && (e.kind + ' ' + e.prod + ' ' + e.gist).toLowerCase().includes(FQ)) ? '#26292e' : 'transparent'),
         laneCells: laneDefs.map(ld => {
           const sp = ld.spans.find(s => s.start <= e.seq && e.seq <= s.end);
           return { bg: sp ? (ld.kind === ownKind ? sp.bright : sp.color) : 'transparent' };
@@ -884,7 +973,7 @@ class Component extends DCLogic {
     const laneW = laneDefs.length * 12 - 4;
     const laneLegend = laneDefs.map(ld => ({ label: ld.label, color: ld.kind === 'tool' ? '#7fb3b8' : '#82a5c8' }));
     const A = 214, B = 244, pct = (x) => (((x - A) / (B - A)) * 100).toFixed(1) + '%';
-    const span = (s0, s1, base, seq) => ({ l: pct(s0), w: (((s1 - s0) / (B - A)) * 100).toFixed(1) + '%', title: 'seq ' + seq + ' — click to inspect', bg: S.sel === seq ? '#9db8d6' : base, pick: () => this.setState(st => ({ sel: st.sel === seq ? null : seq })) });
+    const span = (s0, s1, base, seq) => ({ l: pct(s0), w: (((s1 - s0) / (B - A)) * 100).toFixed(1) + '%', title: 'seq ' + seq + ' — click to inspect', bg: state.sel === seq ? '#9db8d6' : base, pick: () => this.setState(st => ({ sel: st.sel === seq ? null : seq })) });
     const sideLanes = !mainFocused ? [] : [
       { label: 'model', color: '#82a5c8', segs: [span(216, 241, '#3d5166', 216), span(241, 242.6, '#82a5c8', 242)] },
       { label: 'grep', color: '#7fb3b8', segs: [span(219, 221.4, '#4d6b6e', 220)] },
@@ -897,13 +986,13 @@ class Component extends DCLogic {
     const modes = [['stream', 'stream+graph'], ['io', 'i/o'], ['structure', 'structure'], ['scene', 'scene']];
     const modeChips = modes.map(([id, label]) => ({
       label, pick: () => this.setState({ mode: id }),
-      color: S.mode === id ? '#d7dade' : '#62676f', bg: S.mode === id ? '#2e3138' : 'transparent',
+      color: state.mode === id ? '#d7dade' : '#62676f', bg: state.mode === id ? '#2e3138' : 'transparent',
     }));
     const CMDS = [['/list', 'records · topologies · sessions · applications · bundles', () => this.setState({ surface: 'records', promptVal: '' })], ['/run', 'launch an application as a delegate child', null], ['/inspect', "narrate a record's causal beats", null], ['/diff', "worktree diff for this session's workspace", null], ['/context', 'inject a record slice into the next turn', null], ['/model', 'swap driver mid-session', null], ['/studio', 'open the topology-authoring studio', () => this.setState({ surface: 'studio', promptVal: '' })], ['/export', 'export this record — .record dir or flat events.jsonl', () => this.setState({ showExport: true, promptVal: '' })], ['/exit', 'end this session cleanly', () => this.setState({ showEndConfirm: true, promptVal: '' })]];
-    const q = S.promptVal.trim();
+    const q = state.promptVal.trim();
     const routerRows = q.startsWith('/') ? CMDS.filter(c => c[0].startsWith(q) || q === '/').map(c => ({ cmd: c[0], desc: c[1], pick: c[2] || (() => this.setState({ promptVal: c[0] + ' ' })) })) : [];
     const G = [[0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,1,0,0,0,0,0,0,0,0],[0,0,0,0,1,0,0,0,0,0,0,0],[0,0,1,1,1,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,1,1,0,0,0],[0,0,0,0,0,0,0,1,1,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0]];
-    const surf = S.surface;
+    const surf = state.surface;
     const arms = [
       { name: 'kimi_solo ⌂ control', nameColor: '#9aa0a8', overall: '.64', barW: '64%', barColor: '#62676f', easy: '.96', med: '.81', hard: '.54', adv: '.25', advColor: '#9aa0a8', delta: '—', deltaColor: '#62676f', verdict: 'the bar', verdictColor: '#62676f' },
       { name: 'kimi + reviewer-glm', nameColor: '#e2e5e9', overall: '.81', barW: '81%', barColor: '#82a5c8', easy: '.98', med: '.90', hard: '.71', adv: '.42', advColor: '#9aa0a8', delta: '+.17 · p=.008 ✓FDR', deltaColor: '#e2e5e9', verdict: 'superior', verdictColor: '#82a5c8' },
@@ -911,29 +1000,29 @@ class Component extends DCLogic {
       { name: 'glm + reviewer-kimi', nameColor: '#9aa0a8', overall: '.76', barW: '76%', barColor: '#62676f', easy: '.95', med: '.85', hard: '.58', adv: 'n/a', advColor: '#c26058', delta: '+.12', deltaColor: '#9aa0a8', verdict: 'underpowered', verdictColor: '#c26058' },
     ];
     return {
-      crumb: surf === 'records' ? fp.name + ' › records' : surf === 'assay' ? fp.name + ' › assays › rev_kimi_vs_glm' : surf === 'studio' ? fp.name + ' › studio' : descended ? fp.name + S.descent.map(k => ' › ⑂ ' + CH[k].name).join('') : fp.name,
+      crumb: surf === 'records' ? focusedPane.name + ' › records' : surf === 'assay' ? focusedPane.name + ' › assays › rev_kimi_vs_glm' : surf === 'studio' ? focusedPane.name + ' › studio' : descended ? focusedPane.name + state.descent.map(k => ' › ⑂ ' + CH[k].name).join('') : focusedPane.name,
       escHint: surf ? 'esc — back' : descended ? 'esc — up one level' : '',
       openRecords: () => this._toggleSurface('records'),
       openStudio: () => this._toggleSurface('studio'),
       openAssay: () => this.setState({ surface: 'assay' }),
       backToSession: () => this.setState({ surface: null }),
-      extraSessions: (S.allSessions || []).map(x => { const open = S.panes.some(pp => pp.id === x.id); const nm = (S.panes.find(pp => pp.id === x.id) || x).name; return { name: nm, meta: x.driver + ' · worktree substrate/' + nm, where: open ? 'open in a pane ▸' : 'no pane — still yours' }; }),
-      fpDdOpen: S.ddFor === fp.id && S.revealed, fpToggleDd: () => this.setState(s => ({ ddFor: s.ddFor === fp.id ? null : fp.id, wsFor: null })),
-      fpWsOpen: S.wsFor === fp.id && S.revealed, fpToggleWs: () => this.setState(s => ({ wsFor: s.wsFor === fp.id ? null : fp.id, ddFor: null })),
-      fpDriverOpts: ['kimi-k2', 'deepseek-r1:8b', 'qwen3-coder:480b-cloud', 'nemotron-3-super', 'claude (cli)', 'gemini (cli)', 'deterministic'].map(m => ({ label: m, color: m === fp.driver ? '#e2e5e9' : '#9aa0a8', pick: () => this.setState(s => ({ ddFor: null, panes: s.panes.map(x => x.id === fp.id ? Object.assign({}, x, { driver: m }) : x) })) })),
+      extraSessions: (state.allSessions || []).map(x => { const open = state.panes.some(pp => pp.id === x.id); const nm = (state.panes.find(pp => pp.id === x.id) || x).name; return { name: nm, meta: x.driver + ' · worktree substrate/' + nm, where: open ? 'open in a pane ▸' : 'no pane — still yours' }; }),
+      fpDdOpen: state.ddFor === focusedPane.id && state.revealed, fpToggleDd: () => this.setState(s => ({ ddFor: s.ddFor === focusedPane.id ? null : focusedPane.id, wsFor: null })),
+      fpWsOpen: state.wsFor === focusedPane.id && state.revealed, fpToggleWs: () => this.setState(s => ({ wsFor: s.wsFor === focusedPane.id ? null : focusedPane.id, ddFor: null })),
+      fpDriverOpts: ['kimi-k2', 'deepseek-r1:8b', 'qwen3-coder:480b-cloud', 'nemotron-3-super', 'claude (cli)', 'gemini (cli)', 'deterministic'].map(m => ({ label: m, color: m === focusedPane.driver ? '#e2e5e9' : '#9aa0a8', pick: () => this.setState(s => ({ ddFor: null, panes: s.panes.map(x => x.id === focusedPane.id ? Object.assign({}, x, { driver: m }) : x) })) })),
       recordsColor: surf === 'records' ? '#e2e5e9' : '#9aa0a8',
       studioColor: surf === 'studio' ? '#e2e5e9' : '#9aa0a8',
-      showTerminal: !surf && !S.revealed, showRevealed: !surf && S.revealed,
+      showTerminal: !surf && !state.revealed, showRevealed: !surf && state.revealed,
       showRecords: surf === 'records', showAssay: surf === 'assay', showStudio: surf === 'studio',
       toggleReveal: () => this.setState(s => ({ revealed: !s.revealed, surface: null })),
-      revealLabel: S.revealed ? '⌃` terminal' : '⌃` reveal',
-      revealBtnColor: S.revealed && !surf ? '#212327' : '#9aa0a8', revealBtnBg: S.revealed && !surf ? '#82a5c8' : '#3d434c',
-      fontSize: S.fontOverride ?? this.props.transcriptFontSize ?? 13,
-      childOpen: S.childOpen, toggleChild: () => this.setState(s => ({ childOpen: !s.childOpen })),
+      revealLabel: state.revealed ? '⌃` terminal' : '⌃` reveal',
+      revealBtnColor: state.revealed && !surf ? '#212327' : '#9aa0a8', revealBtnBg: state.revealed && !surf ? '#82a5c8' : '#3d434c',
+      fontSize: state.fontOverride ?? this.props.transcriptFontSize ?? 13,
+      childOpen: state.childOpen, toggleChild: () => this.setState(s => ({ childOpen: !s.childOpen })),
       descendReviewer: (ev) => { ev.stopPropagation(); this.setState({ descent: ['reviewer-a'], descPv: '', surface: null }); },
       swallow: (ev) => ev.stopPropagation(),
-      childHint: S.childOpen ? '▾' : '· answered ▸',
-      promptVal: S.promptVal, onPrompt: (ev) => this.setState({ promptVal: ev.target.value }),
+      childHint: state.childOpen ? '▾' : '· answered ▸',
+      promptVal: state.promptVal, onPrompt: (ev) => this.setState({ promptVal: ev.target.value }),
       routerOpen: routerRows.length > 0, routerRows,
       promptRadius: routerRows.length > 0 ? '0 0 6px 6px' : '6px',
       streamRef: (el) => { this._streamEl = el; },
@@ -953,18 +1042,18 @@ class Component extends DCLogic {
         requestAnimationFrame(() => { this._syncing = false; });
       },
       events, modeChips, sideLanes, laneDefs, laneW, laneLegend,
-      isStream: S.mode === 'stream', isIo: S.mode === 'io', isStructure: S.mode === 'structure', isScene: S.mode === 'scene',
-      isDown: S.dir === 'down', isSide: S.dir === 'side',
+      isStream: state.mode === 'stream', isIo: state.mode === 'io', isStructure: state.mode === 'structure', isScene: state.mode === 'scene',
+      isDown: state.dir === 'down', isSide: state.dir === 'side',
       setAll: () => this.setState({ level: 'all' }), setApp: () => this.setState({ level: 'app' }),
-      allColor: S.level === 'all' ? '#d7dade' : '#62676f', allBg: S.level === 'all' ? '#2e3138' : 'transparent',
-      appColor: S.level === 'app' ? '#d7dade' : '#62676f', appBg: S.level === 'app' ? '#2e3138' : 'transparent',
+      allColor: state.level === 'all' ? '#d7dade' : '#62676f', allBg: state.level === 'all' ? '#2e3138' : 'transparent',
+      appColor: state.level === 'app' ? '#d7dade' : '#62676f', appBg: state.level === 'app' ? '#2e3138' : 'transparent',
       setDown: () => this.setState({ dir: 'down' }), setSide: () => this.setState({ dir: 'side' }),
-      downColor: S.dir === 'down' ? '#d7dade' : '#62676f', downBg: S.dir === 'down' ? '#2e3138' : 'transparent',
-      sideColor: S.dir === 'side' ? '#d7dade' : '#62676f', sideBg: S.dir === 'side' ? '#2e3138' : 'transparent',
-      selSeq: selE ? selE.seq : 0, selKind: selE ? selE.kind : '', selSchema: selE ? selE.schema : '',
-      selTime: selE ? tFor(selE.seq) + ' into turn 9' : '', selProducer: selE ? selE.prod : '',
-      selColor: selE ? (KC[selE.kind] || '#9aa0a8') : '#9aa0a8',
-      selContent: selE ? selE.content : [], selPayload: selE ? JSON.stringify(selE.payload, null, 1) : '',
+      downColor: state.dir === 'down' ? '#d7dade' : '#62676f', downBg: state.dir === 'down' ? '#2e3138' : 'transparent',
+      sideColor: state.dir === 'side' ? '#d7dade' : '#62676f', sideBg: state.dir === 'side' ? '#2e3138' : 'transparent',
+      selSeq: selectedEnvelope ? selectedEnvelope.seq : 0, selKind: selectedEnvelope ? selectedEnvelope.kind : '', selSchema: selectedEnvelope ? selectedEnvelope.schema : '',
+      selTime: selectedEnvelope ? tFor(selectedEnvelope.seq) + ' into turn 9' : '', selProducer: selectedEnvelope ? selectedEnvelope.prod : '',
+      selColor: selectedEnvelope ? (KC[selectedEnvelope.kind] || '#9aa0a8') : '#9aa0a8',
+      selContent: selectedEnvelope ? selectedEnvelope.content : [], selPayload: selectedEnvelope ? JSON.stringify(selectedEnvelope.payload, null, 1) : '',
       ioDocs: [
         { seq: 214, title: 'UserMessage · input', text: 'the metering test flakes under load — find and fix the race' },
         { seq: 235, title: 'ToolResult · delegate output', text: 'lock scope is right — add a comment on why the deque needs the kernel lock' },
@@ -972,52 +1061,52 @@ class Component extends DCLogic {
       ],
       sceneCells: G.flat().map(v => ({ bg: v ? '#82a5c8' : '#1a1c20' })),
       arms,
-      topoName: S.topoName, updTopoName: (ev) => this.setState({ topoName: ev.target.value }),
-      prodRows: S.prods.map((p, i) => ({
+      topoName: state.topoName, updTopoName: (ev) => this.setState({ topoName: ev.target.value }),
+      prodRows: state.prods.map((p, i) => ({
         name: p.name, emits: p.emits, updName: this._upd('prods', i, 'name'), updEmits: this._upd('prods', i, 'emits'), rm: this._rm('prods', i),
         initBox: p.initial ? '#82a5c8' : 'transparent', initBorder: p.initial ? '#82a5c8' : '#4a4e55',
         toggleInit: () => this.setState(s => ({ prods: s.prods.map((x, j) => j === i ? Object.assign({}, x, { initial: !x.initial }) : x) })),
       })),
       addProd: () => this.setState(s => ({ prods: [...s.prods, { name: 'producer_' + (s.prods.length + 1), initial: false, emits: '' }] })),
-      viewRows: S.sviews.map((v, i) => ({ name: v.name, def: v.def, updName: this._upd('sviews', i, 'name'), updDef: this._upd('sviews', i, 'def'), rm: this._rm('sviews', i) })),
+      viewRows: state.sviews.map((v, i) => ({ name: v.name, def: v.def, updName: this._upd('sviews', i, 'name'), updDef: this._upd('sviews', i, 'def'), rm: this._rm('sviews', i) })),
       addView: () => this.setState(s => ({ sviews: [...s.sviews, { name: 'view_' + (s.sviews.length + 1), def: 'KindCount(of )' }] })),
-      trigRows: S.trigs.map((t, i) => ({ id: t.id, view: t.view, n: t.n, starts: t.starts, updId: this._upd('trigs', i, 'id'), updView: this._upd('trigs', i, 'view'), updN: this._upd('trigs', i, 'n'), updStarts: this._upd('trigs', i, 'starts'), rm: this._rm('trigs', i) })),
+      trigRows: state.trigs.map((t, i) => ({ id: t.id, view: t.view, n: t.n, starts: t.starts, updId: this._upd('trigs', i, 'id'), updView: this._upd('trigs', i, 'view'), updN: this._upd('trigs', i, 'n'), updStarts: this._upd('trigs', i, 'starts'), rm: this._rm('trigs', i) })),
       addTrig: () => this.setState(s => ({ trigs: [...s.trigs, { id: 'trigger_' + (s.trigs.length + 1), view: '', op: '≥', n: '1', starts: '' }] })),
-      routeRows: S.sroutes.map((r, i) => ({ id: r.id, kind: r.kind, slot: r.slot, updId: this._upd('sroutes', i, 'id'), updKind: this._upd('sroutes', i, 'kind'), updSlot: this._upd('sroutes', i, 'slot'), rm: this._rm('sroutes', i) })),
+      routeRows: state.sroutes.map((r, i) => ({ id: r.id, kind: r.kind, slot: r.slot, updId: this._upd('sroutes', i, 'id'), updKind: this._upd('sroutes', i, 'kind'), updSlot: this._upd('sroutes', i, 'slot'), rm: this._rm('sroutes', i) })),
       addRoute: () => this.setState(s => ({ sroutes: [...s.sroutes, { id: 'route_' + (s.sroutes.length + 1), kind: '', slot: '' }] })),
       termChips: ['quiescence_with_watchdog', 'all_completed', 'threshold_count', 'cancel_all_others', 'any_of', 'all_of'].map(k => ({
         label: k, pick: () => this.setState({ termKind: k }),
-        color: S.termKind === k ? '#a08fc9' : '#62676f', bg: S.termKind === k ? '#2e3138' : 'transparent',
+        color: state.termKind === k ? '#a08fc9' : '#62676f', bg: state.termKind === k ? '#2e3138' : 'transparent',
       })),
-      isThreshold: S.termKind === 'threshold_count',
-      termOf: S.termOf, updTermOf: (ev) => this.setState({ termOf: ev.target.value }),
-      termN: S.termN, updTermN: (ev) => this.setState({ termN: ev.target.value }),
-      respDColor: S.responder === 'deterministic' ? '#d7dade' : '#62676f', respDBg: S.responder === 'deterministic' ? '#2e3138' : 'transparent',
-      respOColor: S.responder === 'ollama' ? '#d7dade' : '#62676f', respOBg: S.responder === 'ollama' ? '#2e3138' : 'transparent',
+      isThreshold: state.termKind === 'threshold_count',
+      termOf: state.termOf, updTermOf: (ev) => this.setState({ termOf: ev.target.value }),
+      termN: state.termN, updTermN: (ev) => this.setState({ termN: ev.target.value }),
+      respDColor: state.responder === 'deterministic' ? '#d7dade' : '#62676f', respDBg: state.responder === 'deterministic' ? '#2e3138' : 'transparent',
+      respOColor: state.responder === 'ollama' ? '#d7dade' : '#62676f', respOBg: state.responder === 'ollama' ? '#2e3138' : 'transparent',
       setRespD: () => this.setState({ responder: 'deterministic' }), setRespO: () => this.setState({ responder: 'ollama' }),
-      seed: S.seed, updSeed: (ev) => this.setState({ seed: ev.target.value }),
-      model: S.model, updModel: (ev) => this.setState({ model: ev.target.value }),
-      isStudioForm: S.studioView === 'form', isStudioCanvas: S.studioView === 'canvas',
+      seed: state.seed, updSeed: (ev) => this.setState({ seed: ev.target.value }),
+      model: state.model, updModel: (ev) => this.setState({ model: ev.target.value }),
+      isStudioForm: state.studioView === 'form', isStudioCanvas: state.studioView === 'canvas',
       setStudioForm: () => this.setState({ studioView: 'form' }), setStudioCanvas: () => this.setState({ studioView: 'canvas' }),
-      sFormColor: S.studioView === 'form' ? '#d7dade' : '#62676f', sFormBg: S.studioView === 'form' ? '#2e3138' : 'transparent',
-      sCanvasColor: S.studioView === 'canvas' ? '#d7dade' : '#62676f', sCanvasBg: S.studioView === 'canvas' ? '#2e3138' : 'transparent',
-      canvasCards: S.prods.map((p, i) => {
-        const pos = S.cardPos[p.name] || { x: 120 + (i % 3) * 260, y: 300 };
+      sFormColor: state.studioView === 'form' ? '#d7dade' : '#62676f', sFormBg: state.studioView === 'form' ? '#2e3138' : 'transparent',
+      sCanvasColor: state.studioView === 'canvas' ? '#d7dade' : '#62676f', sCanvasBg: state.studioView === 'canvas' ? '#2e3138' : 'transparent',
+      canvasCards: state.prods.map((p, i) => {
+        const pos = state.cardPos[p.name] || { x: 120 + (i % 3) * 260, y: 300 };
         return { name: p.name, emits: p.emits || '—', initial: p.initial, x: pos.x, y: pos.y, border: p.initial ? '#82a5c8' : 'rgba(255,255,255,.12)', dragStart: (ev) => { ev.preventDefault(); this._drag = p.name; } };
       }),
       canvasEdges: (() => {
-        const posOf = (n) => { const i = S.prods.findIndex(p => p.name === n); return S.cardPos[n] || { x: 120 + (Math.max(i, 0) % 3) * 260, y: 300 }; };
-        const srcOfKind = (k) => { const p = S.prods.find(p => String(p.emits).split(',').map(x => x.trim()).includes(k)); return p ? p.name : null; };
+        const posOf = (n) => { const i = state.prods.findIndex(p => p.name === n); return state.cardPos[n] || { x: 120 + (Math.max(i, 0) % 3) * 260, y: 300 }; };
+        const srcOfKind = (k) => { const p = state.prods.find(p => String(p.emits).split(',').map(x => x.trim()).includes(k)); return p ? p.name : null; };
         const edges = []; const labels = [];
-        S.trigs.forEach(t => {
-          const v = S.sviews.find(v => v.name === t.view); const m = v ? String(v.def).match(/of\s+(\w+)/) : null;
-          const src = m ? srcOfKind(m[1]) : null; if (!src || !S.prods.find(p => p.name === t.starts)) return;
+        state.trigs.forEach(t => {
+          const v = state.sviews.find(v => v.name === t.view); const m = v ? String(v.def).match(/of\s+(\w+)/) : null;
+          const src = m ? srcOfKind(m[1]) : null; if (!src || !state.prods.find(p => p.name === t.starts)) return;
           const a = posOf(src), b = posOf(t.starts);
           edges.push({ d: 'M ' + (a.x + 140) + ' ' + (a.y + 26) + ' C ' + (a.x + 210) + ' ' + (a.y + 26) + ' ' + (b.x - 70) + ' ' + (b.y + 26) + ' ' + b.x + ' ' + (b.y + 26), stroke: '#62676f', dash: '' });
           labels.push({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 + 14, fill: '#c9a0b8', text: t.id + ' · ' + t.view + ' ≥ ' + t.n });
         });
-        S.sroutes.forEach(r => {
-          const src = srcOfKind(r.kind); const tgt = String(r.slot).split('.')[0]; if (!src || !S.prods.find(p => p.name === tgt)) return;
+        state.sroutes.forEach(r => {
+          const src = srcOfKind(r.kind); const tgt = String(r.slot).split('.')[0]; if (!src || !state.prods.find(p => p.name === tgt)) return;
           const a = posOf(src), b = posOf(tgt);
           edges.push({ d: 'M ' + (a.x + 140) + ' ' + (a.y + 10) + ' C ' + (a.x + 240) + ' ' + (a.y - 40) + ' ' + (b.x - 60) + ' ' + (b.y - 30) + ' ' + (b.x + 150) + ' ' + (b.y + 4), stroke: '#a08fc9', dash: '4 3' });
           labels.push({ x: (a.x + b.x) / 2, y: Math.min(a.y, b.y) - 18, fill: '#a08fc9', text: r.id + ' · ' + r.kind + ' → ' + r.slot });
@@ -1025,96 +1114,96 @@ class Component extends DCLogic {
         return { edges, labels };
       })().edges,
       canvasLabels: (() => {
-        const posOf = (n) => { const i = S.prods.findIndex(p => p.name === n); return S.cardPos[n] || { x: 120 + (Math.max(i, 0) % 3) * 260, y: 300 }; };
-        const srcOfKind = (k) => { const p = S.prods.find(p => String(p.emits).split(',').map(x => x.trim()).includes(k)); return p ? p.name : null; };
+        const posOf = (n) => { const i = state.prods.findIndex(p => p.name === n); return state.cardPos[n] || { x: 120 + (Math.max(i, 0) % 3) * 260, y: 300 }; };
+        const srcOfKind = (k) => { const p = state.prods.find(p => String(p.emits).split(',').map(x => x.trim()).includes(k)); return p ? p.name : null; };
         const labels = [];
-        S.trigs.forEach(t => {
-          const v = S.sviews.find(v => v.name === t.view); const m = v ? String(v.def).match(/of\s+(\w+)/) : null;
-          const src = m ? srcOfKind(m[1]) : null; if (!src || !S.prods.find(p => p.name === t.starts)) return;
+        state.trigs.forEach(t => {
+          const v = state.sviews.find(v => v.name === t.view); const m = v ? String(v.def).match(/of\s+(\w+)/) : null;
+          const src = m ? srcOfKind(m[1]) : null; if (!src || !state.prods.find(p => p.name === t.starts)) return;
           const a = posOf(src), b = posOf(t.starts);
           labels.push({ x: (a.x + b.x) / 2 - 55, y: (a.y + b.y) / 2 + 16, fill: '#c9a0b8', text: t.id + ' · ' + t.view + ' ≥ ' + t.n });
         });
-        S.sroutes.forEach(r => {
-          const src = srcOfKind(r.kind); const tgt = String(r.slot).split('.')[0]; if (!src || !S.prods.find(p => p.name === tgt)) return;
+        state.sroutes.forEach(r => {
+          const src = srcOfKind(r.kind); const tgt = String(r.slot).split('.')[0]; if (!src || !state.prods.find(p => p.name === tgt)) return;
           const a = posOf(src), b = posOf(tgt);
           labels.push({ x: (a.x + b.x) / 2 - 55, y: Math.max(6, Math.min(a.y, b.y) - 42), fill: '#a08fc9', text: r.id + ' · ' + r.kind + ' → ' + r.slot });
         });
         return labels;
       })(),
-      slotNodes: S.sroutes.map(r => { const tgt = String(r.slot).split('.')[0]; const i = S.prods.findIndex(p => p.name === tgt); if (i < 0) return null; const pos = S.cardPos[tgt] || { x: 120 + (i % 3) * 260, y: 300 }; return { slot: String(r.slot).split('.')[1] || r.slot, x: pos.x + 150, y: pos.y - 2 }; }).filter(Boolean),
+      slotNodes: state.sroutes.map(r => { const tgt = String(r.slot).split('.')[0]; const i = state.prods.findIndex(p => p.name === tgt); if (i < 0) return null; const pos = state.cardPos[tgt] || { x: 120 + (i % 3) * 260, y: 300 }; return { slot: String(r.slot).split('.')[1] || r.slot, x: pos.x + 150, y: pos.y - 2 }; }).filter(Boolean),
       doValidate: () => { const errs = this._validate(); this.setState(errs.length ? { studioOut: 'invalid — ' + errs.join(' · '), studioOutColor: '#c26058' } : { studioOut: 'ok — ' + this.state.prods.length + ' producers · ' + this.state.sviews.length + ' views · ' + this.state.trigs.length + ' triggers · ' + this.state.sroutes.length + ' routes · every emitted kind consumed or terminal', studioOutColor: '#9aa0a8' }); },
       doBuild: () => { const errs = this._validate(); this.setState(errs.length ? { studioOut: 'build refused — ' + errs.join(' · '), studioOutColor: '#c26058' } : { studioOut: 'built — registered ' + this.state.topoName + ' (' + this.state.responder + (this.state.responder === 'deterministic' ? ' seed ' + this.state.seed : ' model ' + this.state.model) + ') · launched build_authored_demo_72eb8f85fcab ▸', studioOutColor: '#82a5c8' }); },
-      studioOut: S.studioOut, studioOutColor: S.studioOutColor,
-      sentLines: S.sent.map(t => ({ text: t })),
+      studioOut: state.studioOut, studioOutColor: state.studioOutColor,
+      sentLines: state.sent.map(t => ({ text: t })),
       onPromptKey: (ev) => { if (ev.key === 'Enter') { const v = this.state.promptVal.trim(); if (v && !v.startsWith('/')) this.setState(s => ({ sent: [...s.sent, v], promptVal: '' })); } },
-      panes, paneCols: S.colW.map(w => w.toFixed(3) + 'fr').join(' '), paneRows: S.rowW.map(w => w.toFixed(3) + 'fr').join(' '), focusedName: fp.name, fpLines: fp.lines || [],
-      revealFlexL: S.revealL.toFixed(3) + ' 1 0%',
-      revealGutterLeft: (S.revealL / (S.revealL + 1) * 100).toFixed(2) + '%',
+      panes, paneCols: state.colW.map(w => w.toFixed(3) + 'fr').join(' '), paneRows: state.rowW.map(w => w.toFixed(3) + 'fr').join(' '), focusedName: focusedPane.name, fpLines: focusedPane.lines || [],
+      revealFlexL: state.revealL.toFixed(3) + ' 1 0%',
+      revealGutterLeft: (state.revealL / (state.revealL + 1) * 100).toFixed(2) + '%',
       revealGrab: (ev) => { ev.preventDefault(); this._gut = { type: 'reveal' }; },
-      colGutters: S.colW.slice(0, -1).map((_, i) => { const total = S.colW.reduce((a, b) => a + b, 0); const left = S.colW.slice(0, i + 1).reduce((a, b) => a + b, 0) / total * 100; return { left: left.toFixed(2) + '%', grab: (ev) => { ev.preventDefault(); this._gut = { type: 'col', i: i + 1 }; } }; }),
-      rowGutters: S.rowW.slice(0, -1).map((_, i) => { const total = S.rowW.reduce((a, b) => a + b, 0); const top = S.rowW.slice(0, i + 1).reduce((a, b) => a + b, 0) / total * 100; return { top: top.toFixed(2) + '%', grab: (ev) => { ev.preventDefault(); this._gut = { type: 'row', i: i + 1 }; } }; }), focusedBranch: fp.id === 1 ? 'substrate/fix-race' : 'substrate/' + fp.name, isMainFocused: mainFocused, notMainFocused: !mainFocused,
-      singlePane: S.panes.length === 1,
-      showStrip: !surf && !S.revealed && S.panes.length > 1,
-      showFullHeader: !!surf || S.revealed,
+      colGutters: state.colW.slice(0, -1).map((_, i) => { const total = state.colW.reduce((a, b) => a + b, 0); const left = state.colW.slice(0, i + 1).reduce((a, b) => a + b, 0) / total * 100; return { left: left.toFixed(2) + '%', grab: (ev) => { ev.preventDefault(); this._gut = { type: 'col', i: i + 1 }; } }; }),
+      rowGutters: state.rowW.slice(0, -1).map((_, i) => { const total = state.rowW.reduce((a, b) => a + b, 0); const top = state.rowW.slice(0, i + 1).reduce((a, b) => a + b, 0) / total * 100; return { top: top.toFixed(2) + '%', grab: (ev) => { ev.preventDefault(); this._gut = { type: 'row', i: i + 1 }; } }; }), focusedBranch: focusedPane.id === 1 ? 'substrate/fix-race' : 'substrate/' + focusedPane.name, isMainFocused: mainFocused, notMainFocused: !mainFocused,
+      singlePane: state.panes.length === 1,
+      showStrip: !surf && !state.revealed && state.panes.length > 1,
+      showFullHeader: !!surf || state.revealed,
       splitRight: () => this._split('right'),
-      driverName: fp.driver, driverOpen: S.driverOpen,
+      driverName: focusedPane.driver, driverOpen: state.driverOpen,
       toggleDriverMenu: () => this.setState(s => ({ driverOpen: !s.driverOpen, wsOpen: false })),
       driverOptions: ['kimi-k2', 'deepseek-r1:8b', 'qwen3-coder:480b-cloud', 'nemotron-3-super', 'claude (cli)', 'gemini (cli)', 'deterministic'].map(m => ({
-        label: m, color: m === fp.driver ? '#e2e5e9' : '#9aa0a8',
+        label: m, color: m === focusedPane.driver ? '#e2e5e9' : '#9aa0a8',
         pick: () => this.setState(s => ({ driverOpen: false, panes: s.panes.map(x => x.id === s.focused ? Object.assign({}, x, { driver: m }) : x) })),
       })),
-      wsOpen: S.wsOpen, toggleWs: () => this.setState(s => ({ wsOpen: !s.wsOpen, driverOpen: false })),
-      nsOpen: S.nsOpen, openNs: () => this.setState({ nsOpen: true, driverOpen: false, wsOpen: false }),
+      wsOpen: state.wsOpen, toggleWs: () => this.setState(s => ({ wsOpen: !s.wsOpen, driverOpen: false })),
+      nsOpen: state.nsOpen, openNs: () => this.setState({ nsOpen: true, driverOpen: false, wsOpen: false }),
       closeNs: () => this.setState({ nsOpen: false, nsStatus: '' }),
-      nsName: S.nsName, updNsName: (ev) => this.setState({ nsName: ev.target.value }),
-      nsWorkspace: S.nsWorkspace, updNsWorkspace: (ev) => this.setState({ nsWorkspace: ev.target.value }),
-      nsShape: (() => { const w = S.nsWorkspace.trim(); if (!w) return 'sandbox — ~/.substrate/sessions/<id>/workspace/'; if (w === '~/code/substrate') return 'git repo → worktree on branch substrate/<session-name>'; return 'plain directory → flat (same tree, same reflexes)'; })(),
-      nsIsolate: S.nsIsolate, toggleNsIsolate: () => this.setState(s => ({ nsIsolate: !s.nsIsolate })),
-      nsIsoBox: S.nsIsolate ? '#82a5c8' : 'transparent', nsIsoBorder: S.nsIsolate ? '#82a5c8' : '#4a4e55',
-      nsStatus: S.nsStatus, nsStatusColor: S.nsStatus.startsWith('created') ? '#82a5c8' : '#9aa0a8',
+      nsName: state.nsName, updNsName: (ev) => this.setState({ nsName: ev.target.value }),
+      nsWorkspace: state.nsWorkspace, updNsWorkspace: (ev) => this.setState({ nsWorkspace: ev.target.value }),
+      nsShape: (() => { const w = state.nsWorkspace.trim(); if (!w) return 'sandbox — ~/.substrate/sessions/<id>/workspace/'; if (w === '~/code/substrate') return 'git repo → worktree on branch substrate/<session-name>'; return 'plain directory → flat (same tree, same reflexes)'; })(),
+      nsIsolate: state.nsIsolate, toggleNsIsolate: () => this.setState(s => ({ nsIsolate: !s.nsIsolate })),
+      nsIsoBox: state.nsIsolate ? '#82a5c8' : 'transparent', nsIsoBorder: state.nsIsolate ? '#82a5c8' : '#4a4e55',
+      nsStatus: state.nsStatus, nsStatusColor: state.nsStatus.startsWith('created') ? '#82a5c8' : '#9aa0a8',
       createNs: () => { const w = this.state.nsWorkspace.trim(); if (w && !w.startsWith('/') && !w.startsWith('~')) { this.setState({ nsStatus: 'workspace must be an absolute path (or blank for the sandbox)' }); return; } this.setState({ nsStatus: 'created (prototype — the real app POSTs /api/session and the rail picks it up)' }); },
-      logoDot: S.ended ? '#4a4e55' : '#62676f', // session status (D31); gray once finalised
-      footRecord: descended ? 'record ' + dChild.rec + ' · ⑂ depth ' + S.descent.length + '/2' : mainFocused ? (S.ended ? 'record 01M1684 · 246 events · finalised' : 'record 01M1684 · 244 events') : fp.unbound ? 'unbound — pick a workspace' : 'record ' + fp.name + ' · 2 events',
+      logoDot: state.ended ? '#4a4e55' : '#62676f', // session status (D31); gray once finalised
+      footRecord: descended ? 'record ' + dChild.rec + ' · ⑂ depth ' + state.descent.length + '/2' : mainFocused ? (state.ended ? 'record 01M1684 · 246 events · finalised' : 'record 01M1684 · 244 events') : focusedPane.unbound ? 'unbound — pick a workspace' : 'record ' + focusedPane.name + ' · 2 events',
       footHint: surf ? 'esc back to session' : descended ? 'esc climbs one level' : '⌃` toggles the reveal',
-      footStatus: (this.props.simulateRateLimit ?? false) ? '◌ rate-limited · retry 3/6 in 14s' : S.ended ? '● finalised · ✓ clean' : '● live · clean',
-      footStatusColor: (this.props.simulateRateLimit ?? false) ? '#7fb3b8' : S.ended ? '#62676f' : '#82a5c8',
+      footStatus: (this.props.simulateRateLimit ?? false) ? '◌ rate-limited · retry 3/6 in 14s' : state.ended ? '● finalised · ✓ clean' : '● live · clean',
+      footStatusColor: (this.props.simulateRateLimit ?? false) ? '#7fb3b8' : state.ended ? '#62676f' : '#82a5c8',
       // ── descend (turn 20) ──
       descended, notDescended: !descended, descLines, descCrumbs, descAncestors,
       descHead: dChild ? dChild.head : '', descColor: dColor,
       descTalkable: descended && dChild.talkable, descNotTalkable: descended && !dChild.talkable,
       descWatchNote: dChild && !dChild.talkable ? '· watching' : '',
-      nestedOn: S.nestedDescent && descended, descBorder: S.nestedDescent && descended ? '2px solid ' + dColor : 'none', descPad: S.nestedDescent && descended ? '16px' : '0',
-      descEscHint: 'esc back to ' + (S.descent.length > 1 ? '⑂ ' + CH[S.descent[S.descent.length - 2]].name : 'session'),
+      nestedOn: state.nestedDescent && descended, descBorder: state.nestedDescent && descended ? '2px solid ' + dColor : 'none', descPad: state.nestedDescent && descended ? '16px' : '0',
+      descEscHint: 'esc back to ' + (state.descent.length > 1 ? '⑂ ' + CH[state.descent[state.descent.length - 2]].name : 'session'),
       descPlaceholder: dChild ? 'message ' + dChild.name + (dChild.talkable ? ' — delivers at its next park · / commands' : '') : '',
-      descPv: S.descPv, onDescPv: (ev) => this.setState({ descPv: ev.target.value }),
+      descPv: state.descPv, onDescPv: (ev) => this.setState({ descPv: ev.target.value }),
       onDescPvKey: (ev) => { if (ev.key !== 'Enter') return; const v = this.state.descPv.trim(); if (!v) return; const k = descTop;
         this.setState(st => ({ descPv: '', descExtra: Object.assign({}, st.descExtra, { [k]: [...(st.descExtra[k] || []), { t: '› ' + v, c: '#e2e5e9' }, { t: 'queued — delivers at the child\u2019s next park (prototype; needs park/resume wiring in the child topology, D70)', c: '#4a4e55' }] }) })); },
       // ── fan-out (20g) ──
-      fanOpen: S.fanOpen, toggleFan: () => this.setState(st => ({ fanOpen: !st.fanOpen })),
-      fanHint: S.fanOpen ? '▾' : '· expand ▸', fanRows,
+      fanOpen: state.fanOpen, toggleFan: () => this.setState(st => ({ fanOpen: !st.fanOpen })),
+      fanHint: state.fanOpen ? '▾' : '· expand ▸', fanRows,
       // ── find (19k/19l) ──
-      findOpen: S.findOpen, findQ: S.findQ, onFindQ: (ev) => this.setState({ findQ: ev.target.value }), findCount,
+      findOpen: state.findOpen, findQ: state.findQ, onFindQ: (ev) => this.setState({ findQ: ev.target.value }), findCount,
       focusTranscript: () => { if (this.state.findScope !== 'transcript') this.setState({ findScope: 'transcript' }); },
       focusStream: () => { if (this.state.findScope !== 'stream') this.setState({ findScope: 'stream' }); },
       closeFind: () => this.setState({ findOpen: false, findQ: '' }),
       fdIntro: fdOf('fdIntro'), fdU1: fdOf('fdU1'), fdGrep: fdOf('fdGrep'), fdRead: fdOf('fdRead'), fdEdit: fdOf('fdEdit'), fdU2: fdOf('fdU2'), fdDel: fdOf('fdDel'), fdBash: fdOf('fdBash'), fdAns: fdOf('fdAns'), fdPark: fdOf('fdPark'),
       // ── dialogs (19c/19f/19g) ──
-      showSettings: S.showSettings, closeSettings: () => this.setState({ showSettings: false, settingsNote: '' }),
-      themeChips: ['dark', 'light', 'system'].map(t => ({ label: t, color: S.theme === t ? '#e2e5e9' : '#62676f', bg: S.theme === t ? '#2e3138' : 'transparent',
+      showSettings: state.showSettings, closeSettings: () => this.setState({ showSettings: false, settingsNote: '' }),
+      themeChips: ['dark', 'light', 'system'].map(t => ({ label: t, color: state.theme === t ? '#e2e5e9' : '#62676f', bg: state.theme === t ? '#2e3138' : 'transparent',
         pick: () => this.setState({ theme: t, settingsNote: t === 'dark' ? '' : 'noted — the light theme ships with the build; the prototype renders dark' }) })),
-      settingsNote: S.settingsNote,
-      fontLabel: (S.fontOverride ?? this.props.transcriptFontSize ?? 13) + 'px',
+      settingsNote: state.settingsNote,
+      fontLabel: (state.fontOverride ?? this.props.transcriptFontSize ?? 13) + 'px',
       fontMinus: () => this.setState(st => ({ fontOverride: Math.max(9, (st.fontOverride ?? this.props.transcriptFontSize ?? 13) - 1) })),
       fontPlus: () => this.setState(st => ({ fontOverride: Math.min(19, (st.fontOverride ?? this.props.transcriptFontSize ?? 13) + 1) })),
-      nestedBox: S.nestedDescent ? '#82a5c8' : 'transparent', nestedBorder: S.nestedDescent ? '#82a5c8' : '#4a4e55',
+      nestedBox: state.nestedDescent ? '#82a5c8' : 'transparent', nestedBorder: state.nestedDescent ? '#82a5c8' : '#4a4e55',
       toggleNested: () => this.setState(st => ({ nestedDescent: !st.nestedDescent })),
-      showExport: S.showExport, closeExport: () => this.setState({ showExport: false }), doExport: () => this.setState({ showExport: false }),
-      showEndConfirm: S.showEndConfirm, closeEndConfirm: () => this.setState({ showEndConfirm: false }),
+      showExport: state.showExport, closeExport: () => this.setState({ showExport: false }), doExport: () => this.setState({ showExport: false }),
+      showEndConfirm: state.showEndConfirm, closeEndConfirm: () => this.setState({ showEndConfirm: false }),
       doEndSession: () => this.setState({ showEndConfirm: false, ended: true, descent: [] }),
-      isEnded: S.ended,
+      isEnded: state.ended,
       simRL: this.props.simulateRateLimit ?? false,
       // ── first run (19m) ──
-      showFirstRun: (this.props.firstRun ?? false) && !S.frDone,
+      showFirstRun: (this.props.firstRun ?? false) && !state.frDone,
       frRows: [
         { name: 'ollama · llama3.2', meta: 'localhost:11434 · 3.2 GB · preselected', c: '#e2e5e9', bg: '#2e3138', key: '↵' },
         { name: 'ollama · qwen3:8b', meta: 'localhost:11434 · 5.2 GB', c: '#b9bec5', bg: 'transparent', key: '' },
