@@ -256,6 +256,14 @@ function Shell(): JSX.Element {
 
   const surfaceKind = focused?.surface?.kind ?? null;
   const revealed = focused?.reveal === RevealState.REVEAL;
+  const paneCount = Object.keys(state.panes).length;
+  // v7 lines 1057-1058: the app-scoped full header shows ONLY when a
+  // surface is open or the focused pane is revealed. Otherwise a thin
+  // multi-pane strip shows when there is more than one pane, and a
+  // single pane draws nothing app-scoped — its own header is the
+  // only chrome.
+  const showFullHeader = !!surfaceKind || revealed;
+  const showStrip = !surfaceKind && !revealed && paneCount > 1;
   const crumb = surfaceKind === SurfaceKind.RECORDS ? `${focused?.sessionName ?? ""} › records`
               : surfaceKind === SurfaceKind.STUDIO ? `${focused?.sessionName ?? ""} › studio`
               : surfaceKind === SurfaceKind.ASSAY ? `${focused?.sessionName ?? ""} › assays`
@@ -289,6 +297,19 @@ function Shell(): JSX.Element {
 
   return (
     <div style={shellStyle}>
+      {showStrip && (
+        <div style={{
+          display: "flex", alignItems: "center", gap: 6,
+          padding: "7px 16px", background: C.chrome, flex: "none",
+        }}>
+          <div style={{ display: "flex", gap: 6, flex: "none" }}>
+            <span style={{ width: 12, height: 12, borderRadius: "50%", background: C.textFaintest }} />
+            <span style={{ width: 12, height: 12, borderRadius: "50%", background: C.textFaintest }} />
+            <span style={{ width: 12, height: 12, borderRadius: "50%", background: C.textFaintest }} />
+          </div>
+        </div>
+      )}
+      {showFullHeader && (
       <div style={headerStyle}>
         <TrafficLights />
         <Wordmark dotColor={logoDot} />
@@ -351,6 +372,7 @@ function Shell(): JSX.Element {
           }}
         >{revealLabel}</button>
       </div>
+      )}
 
       <div style={{ flex: 1, position: "relative", minHeight: 0, display: "flex" }}>
         <div style={{
