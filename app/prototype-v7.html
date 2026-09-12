@@ -77,36 +77,8 @@
    </sc-if>
    <sc-if value="{{ notDescended }}" hint-placeholder-val="{{ true }}">
    <div style="flex:1;overflow-y:auto;overflow-x:hidden;padding:16px 22px;line-height:2;font-size:{{ fontSize }}px;min-width:0">
-    <div style="color:#62676f;opacity:{{ fdIntro }}">session fix-race-in-metering resumed · turn 9 · record 01M1684 · 244 events</div>
-    <div style="margin-top:12px;opacity:{{ fdU1 }}"><span style="color:#82a5c8">›</span> <span style="color:#e2e5e9">the metering test flakes under load — find and fix the race</span></div>
-    <div style="color:#62676f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:{{ fdGrep }}">  ⚙ grep "meter_lock" src/ ······································ 14 matches</div>
-    <div style="color:#62676f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:{{ fdRead }}">  ⚙ read_file src/substrate/metering.py ························ 312 lines</div>
-    <div style="color:#62676f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:{{ fdEdit }}">  ⚙ edit_file src/substrate/metering.py ························ ok</div>
-    <div style="margin-top:10px;opacity:{{ fdU2 }}"><span style="color:#82a5c8">›</span> <span style="color:#e2e5e9">have someone review the locking change before we land it</span></div>
-    <div style="color:#a08fc9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:{{ fdDel }}"><span style="cursor:pointer" onClick="{{ toggleChild }}">  ⑂ delegate → reviewer-a "review the locking change" {{ childHint }}</span> <span onClick="{{ descendReviewer }}" style="cursor:pointer;color:#62676f" title="descend into the child — talk to it (D70)">· descend ⏎</span></div>
-    <sc-if value="{{ childOpen }}" hint-placeholder-val="{{ false }}">
-     <div style="margin:6px 0 6px 34px;border-left:2px solid #665f7d;background:#1a1c20;border-radius:0 6px 6px 0;max-width:min(720px,calc(100% - 34px));overflow:hidden">
-      <div style="display:flex;gap:12px;padding:7px 14px;font-size:11px;background:#26292e;min-width:0"><span style="color:#a08fc9;flex:none">⑂ child</span><span style="color:#9aa0a8;flex:none">reviewer-a · standing</span><span style="color:#62676f;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0" title="record delegate_child_3e366fe6_c0">record delegate_child_3e366fe6_c0</span><span style="margin-left:auto;color:#62676f;flex:none">depth 1/2 · done</span></div>
-      <div style="padding:10px 14px;font-size:12px;line-height:1.9;color:#62676f;min-width:0"><div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">⚙ read_file src/substrate/metering.py ·· 312 lines</div><div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">⚙ grep "acquire" src/substrate/kernel/ ·· 6 matches</div><div style="color:#9aa0a8">folded back: "lock scope is right — add a comment on why the deque needs the kernel lock"</div></div>
-     </div>
-    </sc-if>
-    <div style="color:#62676f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:{{ fdBash }}">  ⚙ bash pytest -k metering -n 8 ································ <span style="color:#9aa0a8">24 passed ✓</span></div>
-    <div style="margin-top:10px;color:#b9bec5;max-width:700px;opacity:{{ fdAns }}">The race was in _emit_log — an unlocked deque shared by two producers. Wrapped it in the kernel lock; reviewer-a signed off. 24/24 green under -n 8.</div>
-    <div style="margin-top:10px;opacity:{{ fdU1 }}"><span style="color:#82a5c8">›</span> <span style="color:#e2e5e9">get three independent takes on the stripe floor — different models</span></div>
-    <div style="color:#a08fc9;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" onClick="{{ toggleFan }}">  ⑂ delegate → 3 children "derive the stripe floor independently" · 2 running · 1 parked {{ fanHint }}</div>
-    <sc-if value="{{ fanOpen }}" hint-placeholder-val="{{ false }}">
-     <div style="margin:4px 0 4px 34px;border-left:2px solid #665f7d;padding:2px 0 2px 14px;display:flex;flex-direction:column;gap:2px;font-size:12px">
-      <sc-for list="{{ fanRows }}" as="fr" hint-placeholder-count="3">
-       <div onClick="{{ fr.go }}" style="display:flex;gap:10px;align-items:baseline;cursor:pointer;padding:1px 8px;margin:0 -8px;border-radius:4px;white-space:nowrap;overflow:hidden" style-hover="background:#2e3138"><span style="color:#a08fc9;flex:none">⑂ {{ fr.name }}</span><span style="color:#9aa0a8;flex:none">{{ fr.driver }}</span><span style="color:#62676f;overflow:hidden;text-overflow:ellipsis">{{ fr.meta }}</span><span style="color:{{ fr.stC }};flex:none">{{ fr.st }}</span><span style="margin-left:auto;color:#62676f;flex:none">descend ⏎</span></div>
-      </sc-for>
-      <div style="color:#4a4e55;font-size:10.5px">results fold back as one ToolResult when all three finish</div>
-     </div>
-    </sc-if>
-    <sc-if value="{{ simRL }}" hint-placeholder-val="{{ false }}"><div style="color:#4a4e55">  ◌ rate-limited — retry 3/6 in 14s · kimi-k2 (api)</div></sc-if>
-    <div style="margin-top:12px;color:#82a5c8;opacity:{{ fdPark }}">◐ parked</div>
-    <sc-if value="{{ isEnded }}" hint-placeholder-val="{{ false }}"><div style="margin-top:8px;color:#62676f">◇ SessionEnded — record finalised · 246 events · ✓ clean · view in records</div></sc-if>
-    <sc-for list="{{ sentLines }}" as="sl" hint-placeholder-count="0">
-     <div style="margin-top:8px"><span style="color:#82a5c8">›</span> <span style="color:#e2e5e9">{{ sl.text }}</span><div style="color:#62676f;font-size:11px">queued — prototype only; the real app resumes the parked run in-process (registry turn)</div></div>
+    <sc-for list="{{ mainTranscriptRows }}" as="row" hint-placeholder-count="4">
+     <div style="margin-top:{{ row.margin }};color:{{ row.textColor }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:840px"><span style="color:{{ row.glyphColor }};margin-right:6px">{{ row.glyph }}</span>{{ row.text }}<sc-if value="{{ row.canDescend }}" hint-placeholder-val="{{ false }}"> <span onClick="{{ row.onDescend }}" style="cursor:pointer;color:#62676f;margin-left:8px" title="descend into the child — talk to it (D70)">· descend ⏎</span></sc-if></div>
     </sc-for>
    </div>
    <div style="flex:none;padding:0 22px 16px">
@@ -677,6 +649,144 @@ class Component extends DCLogic {
       this.setState({ sessionsFromRegistry: [] });
     }
   }
+  _deriveTranscriptRows(envelopes) {
+    // One display row per user-visible envelope in the record. A run of
+    // adjacent delegate ToolCalls at the same turn_index collapses into
+    // one fan-out group row. record_read already filters the framework
+    // brackets (TriggerFired / ProducerStarted / ProducerCompleted) via
+    // VISIBLE_KINDS, so we don't re-filter here.
+    if (!Array.isArray(envelopes) || envelopes.length === 0) return [];
+    const fanoutLeaderSeqs = new Set();
+    const fanoutSiblingSeqs = new Set();
+    const fanoutGroups = new Map();  // leaderSeq → [envelope, ...]
+    let idx = 0;
+    while (idx < envelopes.length) {
+      const envelope = envelopes[idx];
+      if (envelope.kind === 'ToolCall' && envelope.tool_name === 'delegate') {
+        const siblings = [envelope];
+        let next = idx + 1;
+        while (next < envelopes.length
+          && envelopes[next].kind === 'ToolCall'
+          && envelopes[next].tool_name === 'delegate'
+          && envelopes[next].turn_index === envelope.turn_index) {
+          siblings.push(envelopes[next]);
+          next++;
+        }
+        if (siblings.length >= 2) {
+          fanoutLeaderSeqs.add(envelope.seq);
+          fanoutGroups.set(envelope.seq, siblings);
+          for (let siblingIndex = 1; siblingIndex < siblings.length; siblingIndex++) {
+            fanoutSiblingSeqs.add(siblings[siblingIndex].seq);
+          }
+        }
+        idx = next;
+      } else {
+        idx++;
+      }
+    }
+    const rows = [];
+    for (const envelope of envelopes) {
+      if (fanoutSiblingSeqs.has(envelope.seq)) continue;
+      const key = 'env-' + envelope.seq;
+      switch (envelope.kind) {
+        case 'UserMessage': {
+          const text = (envelope.payload && envelope.payload.text) || envelope.summary || '';
+          rows.push({ key, kind: envelope.kind, glyph: '›', glyphColor: '#82a5c8',
+            text, textColor: '#e2e5e9', margin: '10px' });
+          break;
+        }
+        case 'ModelReply':
+        case 'FinalAnswer': {
+          const text = (envelope.payload && (envelope.payload.text || envelope.payload.answer))
+            || envelope.summary || '';
+          rows.push({ key, kind: envelope.kind, glyph: '', glyphColor: '',
+            text, textColor: '#b9bec5', margin: '10px', wrap: true });
+          break;
+        }
+        case 'ToolCall': {
+          const toolName = envelope.tool_name || '?';
+          const isDelegate = toolName === 'delegate';
+          const isFanoutLeader = fanoutLeaderSeqs.has(envelope.seq);
+          if (isFanoutLeader) {
+            const siblings = fanoutGroups.get(envelope.seq);
+            rows.push({ key, kind: 'FanoutGroup', glyph: '⑂',
+              glyphColor: '#a08fc9', textColor: '#a08fc9',
+              text: 'delegate → ' + siblings.length + ' children · click to walk',
+              siblings,
+              margin: '4px',
+            });
+            continue;
+          }
+          const args = envelope.payload && envelope.payload.args;
+          const argsText = Array.isArray(args) ? args.slice(0, 2).join(' ') : '';
+          const glyph = isDelegate ? '⑂' : '⚙';
+          const label = isDelegate
+            ? 'delegate → ' + (envelope.payload && envelope.payload.args && envelope.payload.args[0])
+            : toolName + (argsText ? ' ' + argsText : '');
+          rows.push({ key, kind: envelope.kind, glyph, glyphColor: isDelegate ? '#a08fc9' : '#62676f',
+            text: label, textColor: isDelegate ? '#a08fc9' : '#62676f',
+            toolCallId: envelope.tool_call_id, childRecordRoot: envelope.child_record_root,
+            canDescend: isDelegate && !!envelope.child_record_root,
+            isDelegate,
+          });
+          break;
+        }
+        case 'ToolResult': {
+          // Elide — the preceding ToolCall row already carries the tool
+          // name; the result content lands in the inspect drawer.
+          break;
+        }
+        case 'Park': {
+          rows.push({ key, kind: envelope.kind, glyph: '◐', glyphColor: '#82a5c8',
+            text: 'parked' + (envelope.park_reason ? ' — ' + envelope.park_reason : ''),
+            textColor: '#82a5c8', margin: '12px' });
+          break;
+        }
+        case 'SessionEnded': {
+          rows.push({ key, kind: envelope.kind, glyph: '◇', glyphColor: '#62676f',
+            text: 'SessionEnded' + (envelope.end_reason ? ' — ' + envelope.end_reason : ''),
+            textColor: '#62676f', margin: '8px' });
+          break;
+        }
+        case 'TranscriptCompacted': {
+          rows.push({ key, kind: envelope.kind, glyph: '⇘', glyphColor: '#62676f',
+            text: 'compacted · ' + envelope.summary, textColor: '#62676f' });
+          break;
+        }
+        case 'RateLimitedWaiting': {
+          rows.push({ key, kind: envelope.kind, glyph: '◌', glyphColor: '#4a4e55',
+            text: 'rate-limited · ' + envelope.summary, textColor: '#4a4e55' });
+          break;
+        }
+        default: {
+          rows.push({ key, kind: envelope.kind, glyph: '·', glyphColor: '#62676f',
+            text: envelope.summary || envelope.kind, textColor: '#62676f' });
+        }
+      }
+    }
+    return rows;
+  }
+  async _descend(paneId, toolCallId, childRecordRoot, childName) {
+    if (!childRecordRoot) return;
+    try {
+      const envelopes = await this._bridge('record_read', { record_root: childRecordRoot });
+      this.setState(s => ({
+        descentRecords: Object.assign({}, s.descentRecords, {
+          [childRecordRoot]: envelopes.envelopes || [],
+        }),
+        descent: [...(s.descent || []), {
+          recordRoot: childRecordRoot,
+          name: childName || toolCallId || 'child',
+          toolCallId,
+        }],
+        descPv: '',
+      }));
+    } catch (err) {
+      this.setState(s => ({
+        descentError: 'record_read failed: ' + (err.message || String(err)),
+      }));
+    }
+  }
   async _resumeSession(paneId, session_id) {
     // Load the manifest fields the shell needs to bind the pane,
     // then load the record. Close the records surface on success.
@@ -818,68 +928,74 @@ class Component extends DCLogic {
     const state = this.state;
     const focusedPane = state.panes.find(p => p.id === state.focused) || state.panes[0];
     const mainFocused = focusedPane.id === 1;
-    // ── turn 20: delegate descent ──
-    const DEPTHC = ['#a08fc9', '#b88fd9'];
-    const CH = {
-      'reviewer-a': { name: 'reviewer-a', driver: 'glm-4.6', rec: 'delegate_child_3e36', talkable: true,
-        head: 'reviewer-a · glm-4.6 · child record delegate_child_3e36 · 26 events',
-        lines: [
-          { t: 'delegated: check the stripe-count derivation · from fix-race-in-metering · turn 9', c: '#62676f' },
-          { t: '  ⚙ read_file src/substrate/metering.py ·· 312 lines', c: '#62676f' },
-          { t: '  ⚙ bash python -c "stripe_model.py --check" ·· ok', c: '#62676f' },
-          { t: 'The derivation holds for N≥4 stripes; below that CAS retry cost dominates. Checking the boundary case now.', c: '#b9bec5', wrap: 1 },
-          { t: '  ⑂ delegate → verifier "re-derive independently" · running · depth 2/2 · click to descend', c: '#b88fd9', go: 'verifier' },
-          { t: '◐ parked — awaiting your message', c: '#7fb3b8' }] },
-      'verifier': { name: 'verifier', driver: 'deterministic', rec: 'delegate_child_9a12', talkable: false,
-        head: 'verifier · deterministic · child record delegate_child_9a12 · 11 events',
-        lines: [
-          { t: 'delegated: re-derive independently · from ⑂ reviewer-a', c: '#62676f' },
-          { t: '  ⚙ read_file stripe_model.py ·· 88 lines', c: '#62676f' },
-          { t: '  ⚙ bash python stripe_rederive.py --independent ·· ok', c: '#62676f' },
-          { t: 'Re-derived from the queueing model directly: floor(N)=4 confirmed; N=3 degrades 2.1× under -n 8.', c: '#b9bec5', wrap: 1 },
-          { t: '  ⑂ delegate → checker · refused — ok false · "delegate depth cap reached (max_depth=2)"', c: '#c9a0b8' },
-          { t: '  ⚙ bash python stripe_rederive.py --sweep 2..16 ·· running 4s', c: '#62676f' },
-          { t: '◌ working — this topology takes no messages', c: '#4a4e55' }] },
-      'floor_a': { name: 'floor_a', driver: 'glm-4.6', rec: 'delegate_child_a1c8', talkable: true,
-        head: 'floor_a · glm-4.6 · child record delegate_child_a1c8 · 19 events',
-        lines: [
-          { t: 'delegated: derive the stripe floor independently · from fix-race-in-metering · turn 10', c: '#62676f' },
-          { t: '  ⚙ bash python stripe_floor.py --derive ·· ok', c: '#62676f' },
-          { t: 'floor(N)=4 — the CAS retry cost dominates below 4 stripes.', c: '#b9bec5', wrap: 1 },
-          { t: '◐ parked — awaiting your message', c: '#7fb3b8' }] },
-      'floor_b': { name: 'floor_b', driver: 'qwen3:8b', rec: 'delegate_child_b774', talkable: false,
-        head: 'floor_b · qwen3:8b · child record delegate_child_b774 · 11 events',
-        lines: [
-          { t: 'delegated: derive the stripe floor independently · from fix-race-in-metering · turn 10', c: '#62676f' },
-          { t: '  ⚙ bash python stripe_floor.py --sweep 2..16 ·· running 12s', c: '#62676f' },
-          { t: '◌ running — this topology takes no messages', c: '#4a4e55' }] },
-      'floor_c': { name: 'floor_c', driver: 'deterministic', rec: 'delegate_child_c093', talkable: false,
-        head: 'floor_c · deterministic · child record delegate_child_c093 · 6 events',
-        lines: [
-          { t: 'delegated: derive the stripe floor independently · from fix-race-in-metering · turn 10', c: '#62676f' },
-          { t: '  ⚙ bash python queueing_model.py ·· running 3s', c: '#62676f' },
-          { t: '◌ running — this topology takes no messages', c: '#4a4e55' }] },
-    };
-    const descTop = state.descent[state.descent.length - 1] || null;
-    const dChild = descTop ? CH[descTop] : null;
-    const descended = !!dChild && mainFocused;
-    const dColor = DEPTHC[Math.min(Math.max(state.descent.length - 1, 0), DEPTHC.length - 1)];
-    const descLines = !dChild ? [] : dChild.lines.concat((state.descExtra[descTop] || [])).map(L => ({
-      t: L.t, c: L.c, mt: L.wrap ? '6px' : '0', ws: L.wrap ? 'normal' : 'nowrap', cur: L.go ? 'pointer' : 'default',
-      click: L.go ? (() => this.setState(st => ({ descent: [...st.descent, L.go], descPv: '' }))) : (() => {}),
+    // Delegate descent — state.descent holds a stack of frames
+    // {recordRoot, name, toolCallId}. state.descentRecords[recordRoot]
+    // holds the envelope list loaded by _descend via bridge
+    // record_read. When descended, the main-pane body swaps in the
+    // child's transcript.
+    const descentColorLadder = ['#a08fc9', '#b88fd9'];
+    const descentFrames = state.descent || [];
+    const descentTop = descentFrames.length > 0 ? descentFrames[descentFrames.length - 1] : null;
+    const descentEnvelopes = descentTop
+      ? (state.descentRecords && state.descentRecords[descentTop.recordRoot]) || []
+      : [];
+    const descended = !!descentTop && mainFocused;
+    const descentColor = descentColorLadder[Math.min(Math.max(descentFrames.length - 1, 0), descentColorLadder.length - 1)];
+    const descentTranscriptRows = !descentTop ? [] : this._deriveTranscriptRows(descentEnvelopes);
+    const descLines = descentTranscriptRows.map((row, index) => ({
+      t: (row.glyph ? row.glyph + ' ' : '') + row.text,
+      c: row.textColor,
+      mt: row.wrap ? '6px' : '0',
+      ws: row.wrap ? 'normal' : 'nowrap',
+      cur: row.canDescend ? 'pointer' : 'default',
+      click: row.canDescend
+        ? (() => this._descend(focusedPane.id, row.toolCallId, row.childRecordRoot, row.text))
+        : (() => {}),
     }));
-    const descCrumbs = [{ t: 'fix-race-in-metering', c: '#4a4e55', jump: () => this.setState({ descent: [], descPv: '' }) }]
-      .concat(state.descent.map((k, i) => ({ t: '› ⑂ ' + CH[k].name, c: i === state.descent.length - 1 ? DEPTHC[Math.min(i, 1)] : '#4a4e55', jump: () => this.setState({ descent: this.state.descent.slice(0, i + 1), descPv: '' }) })));
-    const descAncestors = !state.nestedDescent || !dChild ? [] : (() => {
-      const rows = [{ t: '› have someone review the locking change before we land it', c: '#62676f' }];
-      state.descent.slice(0, -1).forEach(k => rows.push({ t: '  ⑂ delegate → ' + CH[k].name + ' · running', c: '#a08fc9' }));
-      return rows;
-    })();
-    // ── 20g: fan-out ──
-    const fanRows = ['floor_a', 'floor_b', 'floor_c'].map((k, ki) => { const c = CH[k]; const parked = c.talkable; return {
-      name: c.name, driver: c.driver, meta: c.rec.replace('delegate_child_', '') + ' · ' + c.head.match(/(\d+) events/)[1] + ' ev',
-      st: parked ? '◐ parked — floor(N)=4' : '◌ running', stC: parked ? '#7fb3b8' : '#4a4e55',
-      bg: state.fanOpen && state.fanSel === ki ? '#2e3138' : 'transparent', go: () => this.setState({ descent: [k], descPv: '', fanSel: ki }) }; });
+    const descCrumbs = [
+      {
+        t: focusedPane.name || 'session',
+        c: '#4a4e55',
+        jump: () => this.setState({ descent: [], descPv: '' }),
+      },
+      ...descentFrames.map((frame, frameIndex) => ({
+        t: '› ⑂ ' + frame.name,
+        c: frameIndex === descentFrames.length - 1
+          ? descentColorLadder[Math.min(frameIndex, 1)]
+          : '#4a4e55',
+        jump: () => this.setState({
+          descent: descentFrames.slice(0, frameIndex + 1),
+          descPv: '',
+        }),
+      })),
+    ];
+    const descAncestors = state.nestedDescent && descentTop
+      ? descentFrames.slice(0, -1).map(frame => ({
+          t: '  ⑂ delegate → ' + frame.name + ' · running',
+          c: '#a08fc9',
+        }))
+      : [];
+    // Fan-out landing rows: when a delegate line in the current
+    // transcript is a fan-out leader, expose its siblings for the
+    // walked-list dropdown. Reads the client-derived rows built above.
+    const rowsForFanout = envelopesLive ? this._deriveTranscriptRows(envelopesLive) : [];
+    const fanoutLeaderRow = rowsForFanout.find(row => row.kind === 'FanoutGroup');
+    const fanRows = fanoutLeaderRow && fanoutLeaderRow.siblings
+      ? fanoutLeaderRow.siblings.map((sibling, siblingIndex) => {
+          const name = (sibling.payload && sibling.payload.args && sibling.payload.args[0])
+            || sibling.tool_call_id || 'child ' + siblingIndex;
+          return {
+            name,
+            driver: '',
+            meta: sibling.tool_call_id || '',
+            st: sibling.child_record_root ? '◐ parked' : '◌ running',
+            stC: sibling.child_record_root ? '#7fb3b8' : '#4a4e55',
+            bg: state.fanOpen && state.fanSel === siblingIndex ? '#2e3138' : 'transparent',
+            go: () => this._descend(
+              focusedPane.id, sibling.tool_call_id, sibling.child_record_root, name),
+          };
+        })
+      : [];
     // ── 19h/k/l: find (transcript scope — the focused pane) ──
     const FQ = state.findOpen ? state.findQ.trim().toLowerCase() : '';
     const FSTREAM = state.findOpen && state.findScope === 'stream';
@@ -1131,7 +1247,13 @@ class Component extends DCLogic {
       { name: 'glm + reviewer-kimi', nameColor: '#9aa0a8', overall: '.76', barW: '76%', barColor: '#62676f', easy: '.95', med: '.85', hard: '.58', adv: 'n/a', advColor: '#c26058', delta: '+.12', deltaColor: '#9aa0a8', verdict: 'underpowered', verdictColor: '#c26058' },
     ];
     return {
-      crumb: surf === 'records' ? focusedPane.name + ' › records' : surf === 'assay' ? focusedPane.name + ' › assays › rev_kimi_vs_glm' : surf === 'studio' ? focusedPane.name + ' › studio' : descended ? focusedPane.name + state.descent.map(k => ' › ⑂ ' + CH[k].name).join('') : focusedPane.name,
+      crumb:
+        surf === 'records' ? focusedPane.name + ' › records'
+        : surf === 'assay' ? focusedPane.name + ' › assays'
+        : surf === 'studio' ? focusedPane.name + ' › studio'
+        : descended
+        ? focusedPane.name + descentFrames.map(frame => ' › ⑂ ' + frame.name).join('')
+        : focusedPane.name,
       escHint: surf ? 'esc — back' : descended ? 'esc — up one level' : '',
       openRecords: () => this._toggleSurface('records'),
       openStudio: () => this._toggleSurface('studio'),
@@ -1170,7 +1292,10 @@ class Component extends DCLogic {
       revealBtnColor: state.revealed && !surf ? '#212327' : '#9aa0a8', revealBtnBg: state.revealed && !surf ? '#82a5c8' : '#3d434c',
       fontSize: state.fontOverride ?? this.props.transcriptFontSize ?? 13,
       childOpen: state.childOpen, toggleChild: () => this.setState(s => ({ childOpen: !s.childOpen })),
-      descendReviewer: (ev) => { ev.stopPropagation(); this.setState({ descent: ['reviewer-a'], descPv: '', surface: null }); },
+      // Reveal-view demo body's placeholder descend button — kept
+      // as a no-op until Round 5 rewires the reveal-view transcript
+      // to iterate real envelopes.
+      descendReviewer: (event) => { event.stopPropagation(); },
       swallow: (ev) => ev.stopPropagation(),
       childHint: state.childOpen ? '▾' : '· answered ▸',
       promptVal: state.promptVal, onPrompt: (ev) => this.setState({ promptVal: ev.target.value }),
@@ -1193,6 +1318,16 @@ class Component extends DCLogic {
         requestAnimationFrame(() => { this._syncing = false; });
       },
       events, modeChips, sideLanes, laneDefs, laneW, laneLegend,
+      // mainTranscriptRows — the terminal-view iterator over real
+      // envelopes (or an empty list before session_create lands).
+      mainTranscriptRows: envelopesLive
+        ? this._deriveTranscriptRows(envelopesLive).map(row => Object.assign({}, row, {
+            onDescend: row.canDescend
+              ? () => this._descend(focusedPane.id, row.toolCallId, row.childRecordRoot, row.text)
+              : (() => {}),
+          }))
+        : [],
+      hasLiveTranscript: !!envelopesLive,
       isStream: state.mode === 'stream', isIo: state.mode === 'io', isStructure: state.mode === 'structure', isScene: state.mode === 'scene',
       isDown: state.dir === 'down', isSide: state.dir === 'side',
       setAll: () => this.setState({ level: 'all' }), setApp: () => this.setState({ level: 'app' }),
@@ -1325,21 +1460,43 @@ class Component extends DCLogic {
       nsStatus: state.nsStatus, nsStatusColor: state.nsStatus.startsWith('created') ? '#82a5c8' : '#9aa0a8',
       createNs: () => { const w = this.state.nsWorkspace.trim(); if (w && !w.startsWith('/') && !w.startsWith('~')) { this.setState({ nsStatus: 'workspace must be an absolute path (or blank for the sandbox)' }); return; } this.setState({ nsStatus: 'created (prototype — the real app POSTs /api/session and the rail picks it up)' }); },
       logoDot: state.ended ? '#4a4e55' : '#62676f', // session status (D31); gray once finalised
-      footRecord: descended ? 'record ' + dChild.rec + ' · ⑂ depth ' + state.descent.length + '/2' : mainFocused ? (state.ended ? 'record 01M1684 · 246 events · finalised' : 'record 01M1684 · 244 events') : focusedPane.unbound ? 'unbound — pick a workspace' : 'record ' + focusedPane.name + ' · 2 events',
+      footRecord: descended
+        ? 'record ' + (descentTop.recordRoot || '').split('/').pop() + ' · ⑂ depth ' + descentFrames.length + '/2'
+        : focusedPane.boundSessionId
+        ? 'record ' + focusedPane.boundSessionId
+        : focusedPane.unbound
+        ? 'unbound — pick a workspace'
+        : '',
       footHint: surf ? 'esc back to session' : descended ? 'esc climbs one level' : '⌃` toggles the reveal',
-      footStatus: (this.props.simulateRateLimit ?? false) ? '◌ rate-limited · retry 3/6 in 14s' : state.ended ? '● finalised · ✓ clean' : '● live · clean',
-      footStatusColor: (this.props.simulateRateLimit ?? false) ? '#7fb3b8' : state.ended ? '#62676f' : '#82a5c8',
+      footStatus: state.ended ? '● finalised · ✓ clean' : '● live · clean',
+      footStatusColor: state.ended ? '#62676f' : '#82a5c8',
       // ── descend (turn 20) ──
       descended, notDescended: !descended, descLines, descCrumbs, descAncestors,
-      descHead: dChild ? dChild.head : '', descColor: dColor,
-      descTalkable: descended && dChild.talkable, descNotTalkable: descended && !dChild.talkable,
-      descWatchNote: dChild && !dChild.talkable ? '· watching' : '',
-      nestedOn: state.nestedDescent && descended, descBorder: state.nestedDescent && descended ? '2px solid ' + dColor : 'none', descPad: state.nestedDescent && descended ? '16px' : '0',
-      descEscHint: 'esc back to ' + (state.descent.length > 1 ? '⑂ ' + CH[state.descent[state.descent.length - 2]].name : 'session'),
-      descPlaceholder: dChild ? 'message ' + dChild.name + (dChild.talkable ? ' — delivers at its next park · / commands' : '') : '',
-      descPv: state.descPv, onDescPv: (ev) => this.setState({ descPv: ev.target.value }),
-      onDescPvKey: (ev) => { if (ev.key !== 'Enter') return; const v = this.state.descPv.trim(); if (!v) return; const k = descTop;
-        this.setState(st => ({ descPv: '', descExtra: Object.assign({}, st.descExtra, { [k]: [...(st.descExtra[k] || []), { t: '› ' + v, c: '#e2e5e9' }, { t: 'queued — delivers at the child\u2019s next park (prototype; needs park/resume wiring in the child topology, D70)', c: '#4a4e55' }] }) })); },
+      descHead: descentTop
+        ? '⑂ ' + descentTop.name + ' · child record ' + (descentTop.recordRoot || '').split('/').pop()
+          + ' · ' + descentEnvelopes.length + ' events'
+        : '',
+      descColor: descentColor,
+      descTalkable: descended, descNotTalkable: false, descWatchNote: '',
+      nestedOn: state.nestedDescent && descended,
+      descBorder: state.nestedDescent && descended ? '2px solid ' + descentColor : 'none',
+      descPad: state.nestedDescent && descended ? '16px' : '0',
+      descEscHint: 'esc back to ' + (descentFrames.length > 1
+        ? '⑂ ' + descentFrames[descentFrames.length - 2].name
+        : 'session'),
+      descPlaceholder: descentTop
+        ? 'message ' + descentTop.name + ' — delivers at its next park · / commands'
+        : '',
+      descPv: state.descPv, onDescPv: (event) => this.setState({ descPv: event.target.value }),
+      onDescPvKey: (event) => {
+        if (event.key !== 'Enter') return;
+        const messageText = this.state.descPv.trim();
+        if (!messageText || !descentTop) return;
+        this.setState({ descPv: '' });
+        // A descended child would receive this message via its own
+        // turn_submit; wiring the child's session_id from the parent
+        // ToolCall envelope is a later Round.
+      },
       // ── fan-out (20g) ──
       fanOpen: state.fanOpen, toggleFan: () => this.setState(st => ({ fanOpen: !st.fanOpen })),
       fanHint: state.fanOpen ? '▾' : '· expand ▸', fanRows,
