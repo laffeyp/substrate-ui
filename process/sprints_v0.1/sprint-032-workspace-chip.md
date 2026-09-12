@@ -3,7 +3,7 @@
 ---
 id: 032
 epic: I — Header & driver
-status: pending
+status: closed
 phase: 3
 pass_kind: architecture
 spec_reference: signals/0.1.json § header WORKSPACE_POPOVER_OPENED; workspace immutability on bound session; D9c

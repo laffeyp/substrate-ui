@@ -58,6 +58,7 @@ export function splitPane(
     slashRouter: { open: false, index: 0 },
     driver: null,
     driverPopover: { open: false, options: [], index: 0 },
+    workspacePopover: { open: false },
   };
   const updatedParent: Pane = { ...parent, splitParentId: newSplitId, ratio: 0.5 };
   const newSplit: Split = {
