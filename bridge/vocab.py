@@ -161,6 +161,7 @@ class BridgeOp(StrEnum):
     DRIVER_CHANGE = "driver_change"
     LIST_DRIVERS = "list_drivers"
     TOPOLOGY_INTROSPECT = "topology_introspect"
+    SCENE_PROJECT = "scene_project"
 
 
 class ReplyOp(StrEnum):

@@ -288,11 +288,15 @@
      </sc-if>
      <sc-if value="{{ isScene }}" hint-placeholder-val="{{ false }}">
       <div style="padding:10px 16px 16px">
-       <div style="font-size:12px;color:#9aa0a8">scene · <span style="color:#e2e5e9">Generation.grid</span> <span style="color:#62676f">seq 38 · 12×12 · frame 3/9 · generation=3</span></div>
-       <div style="display:grid;grid-template-columns:repeat(12,1fr);gap:3px;max-width:420px;margin-top:12px">
-        <sc-for list="{{ sceneCells }}" as="c" hint-placeholder-count="24"><div style="aspect-ratio:1;border-radius:3px;background:{{ c.bg }};border:1px solid rgba(255,255,255,.06)"></div></sc-for>
-       </div>
-       <div style="margin-top:12px;font-size:11px;color:#62676f">the shared world-state at this seq — appears only when the record carries a renderable 2-D shape (this frame: the game_of_life demo record; a session record has none, so the tab hides itself)</div>
+       <sc-if value="{{ sceneHasFrame }}" hint-placeholder-val="{{ false }}">
+        <div style="font-size:12px;color:#9aa0a8">scene · <span style="color:#e2e5e9">{{ sceneKind }}</span> <span style="color:#62676f">seq {{ sceneSeq }} · {{ sceneDimensions }}</span></div>
+        <div style="display:grid;grid-template-columns:repeat({{ sceneColumns }},1fr);gap:3px;max-width:420px;margin-top:12px">
+         <sc-for list="{{ sceneCells }}" as="cell" hint-placeholder-count="0"><div style="aspect-ratio:1;border-radius:3px;background:{{ cell.bg }};border:1px solid rgba(255,255,255,.06)"></div></sc-for>
+        </div>
+       </sc-if>
+       <sc-if value="{{ sceneEmpty }}" hint-placeholder-val="{{ true }}">
+        <div style="font-size:11px;color:#62676f">no scene frame — the current record has no envelope with a `cells` array. Topologies like game_of_life emit them; a chat session_topology does not.</div>
+       </sc-if>
       </div>
      </sc-if>
     </div>
@@ -661,6 +665,19 @@ class Component extends DCLogic {
       this.setState({ sessionsFromRegistry: rows || [] });
     } catch (err) {
       this.setState({ sessionsFromRegistry: [] });
+    }
+  }
+  async _loadSceneFrame(session_id) {
+    if (!session_id) return;
+    try {
+      const frame = await this._bridge('scene_project', { session_id }, 5000);
+      this.setState(s => ({
+        sceneFrames: Object.assign({}, s.sceneFrames, { [session_id]: frame }),
+      }));
+    } catch (err) {
+      this.setState(s => ({
+        sceneFrames: Object.assign({}, s.sceneFrames, { [session_id]: null }),
+      }));
     }
   }
   async _loadTopologyGraph(session_id) {
@@ -1312,7 +1329,15 @@ class Component extends DCLogic {
     const CMDS = [['/list', 'records · topologies · sessions · applications · bundles', () => this.setState({ surface: 'records', promptVal: '' })], ['/run', 'launch an application as a delegate child', null], ['/inspect', "narrate a record's causal beats", null], ['/diff', "worktree diff for this session's workspace", null], ['/context', 'inject a record slice into the next turn', null], ['/model', 'swap driver mid-session', null], ['/studio', 'open the topology-authoring studio', () => this.setState({ surface: 'studio', promptVal: '' })], ['/export', 'export this record — .record dir or flat events.jsonl', () => this.setState({ showExport: true, promptVal: '' })], ['/exit', 'end this session cleanly', () => this.setState({ showEndConfirm: true, promptVal: '' })]];
     const q = state.promptVal.trim();
     const routerRows = q.startsWith('/') ? CMDS.filter(c => c[0].startsWith(q) || q === '/').map(c => ({ cmd: c[0], desc: c[1], pick: c[2] || (() => this.setState({ promptVal: c[0] + ' ' })) })) : [];
-    const G = [[0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,1,0,0,0,0,0,0,0,0],[0,0,0,0,1,0,0,0,0,0,0,0],[0,0,1,1,1,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,1,1,0,0,0],[0,0,0,0,0,0,0,1,1,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0]];
+    // Scene frame — pulled from the record's latest event with a
+    // `cells` array (see bridge op_scene_project). Empty when the
+    // session topology emits no scene envelopes (chat topologies
+    // never do; game_of_life does).
+    const sceneFrames = state.sceneFrames || {};
+    const sceneFrame = focusedPane.boundSessionId
+      ? sceneFrames[focusedPane.boundSessionId] : null;
+    const sceneRawCells = sceneFrame && Array.isArray(sceneFrame.cells)
+      ? sceneFrame.cells.flat() : [];
     const surf = state.surface;
     // Assay report — state.assayReport is populated by the future
     // assay_report bridge op (Round 4). Until then, no report → empty
@@ -1468,6 +1493,21 @@ class Component extends DCLogic {
         : [],
       hasLiveTranscript: !!envelopesLive,
       isStream: state.mode === 'stream', isIo: state.mode === 'io', isStructure: state.mode === 'structure', isScene: state.mode === 'scene',
+      ...(() => {
+        // Lazy-load the scene frame when the Scene lens opens on a
+        // bound session.
+        const boundId = focusedPane.boundSessionId;
+        const sceneCache = state.sceneFrames || {};
+        const isSceneLens = state.mode === 'scene' && state.revealed && !state.surface;
+        if (isSceneLens && boundId && !(boundId in sceneCache) && !this._sceneLoadInFlight) {
+          this._sceneLoadInFlight = true;
+          Promise.resolve().then(() => {
+            this._sceneLoadInFlight = false;
+            this._loadSceneFrame(boundId);
+          });
+        }
+        return {};
+      })(),
       // Topology graph fields for the Structure lens — fired lazily
       // when the lens opens on a bound session.
       ...(() => {
@@ -1529,7 +1569,19 @@ class Component extends DCLogic {
         { seq: 235, title: 'ToolResult · delegate output', text: 'lock scope is right — add a comment on why the deque needs the kernel lock' },
         { seq: 242, title: 'FinalAnswer · output', text: 'The race was in _emit_log — an unlocked deque shared by two producers. Wrapped it in the kernel lock; reviewer-a signed off. 24/24 green under -n 8.' },
       ],
-      sceneCells: G.flat().map(v => ({ bg: v ? '#82a5c8' : '#1a1c20' })),
+      sceneCells: sceneRawCells.map(cellValue => ({
+        bg: cellValue ? '#82a5c8' : '#1a1c20',
+      })),
+      sceneHasFrame: sceneRawCells.length > 0,
+      sceneEmpty: sceneRawCells.length === 0,
+      sceneKind: sceneFrame ? sceneFrame.kind : '',
+      sceneSeq: sceneFrame ? sceneFrame.seq : '',
+      sceneColumns: sceneFrame && Array.isArray(sceneFrame.cells) && Array.isArray(sceneFrame.cells[0])
+        ? sceneFrame.cells[0].length
+        : 12,
+      sceneDimensions: sceneFrame && Array.isArray(sceneFrame.cells) && Array.isArray(sceneFrame.cells[0])
+        ? sceneFrame.cells.length + '×' + sceneFrame.cells[0].length
+        : '',
       armRows,
       assayReportReady: !!assayReport,
       assayReportEmpty: !assayReport,
