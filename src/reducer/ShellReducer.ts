@@ -12,6 +12,7 @@ import {
 import { Tag } from "@/observability/tags";
 import { newId } from "@/state/ids";
 import { splitPane, resizeSplit, atCap, movePane, closePane, Zone, Axis } from "@/state/SplitTree";
+import { SLASH_COMMANDS } from "@/state/SlashCommands";
 import { RevealState } from "@/observability/reasons";
 
 // The reducer's action-type discriminant. Every action's `type` field
@@ -82,6 +83,9 @@ export const ActionType = {
   FIND_QUERY_COMMIT: "FIND_QUERY_COMMIT",
   FIND_QUERY_TYPE: "FIND_QUERY_TYPE",
   FIND_STEP: "FIND_STEP",
+  SLASH_ROUTER_WALK: "SLASH_ROUTER_WALK",
+  SLASH_ROUTER_CANCEL: "SLASH_ROUTER_CANCEL",
+  SLASH_COMMAND_ROUTE: "SLASH_COMMAND_ROUTE",
 } as const;
 export type ActionTypeT = typeof ActionType[keyof typeof ActionType];
 
@@ -158,6 +162,9 @@ export type Action =
   | { type: typeof ActionType.FIND_QUERY_TYPE; paneId: string; q: string }
   | { type: typeof ActionType.FIND_QUERY_COMMIT; paneId: string; q: string; count: number }
   | { type: typeof ActionType.FIND_STEP; paneId: string; delta: 1 | -1 }
+  | { type: typeof ActionType.SLASH_ROUTER_WALK; paneId: string; delta: 1 | -1 }
+  | { type: typeof ActionType.SLASH_ROUTER_CANCEL; paneId: string }
+  | { type: typeof ActionType.SLASH_COMMAND_ROUTE; paneId: string; command: string; arg: string }
   ;
 
 // Layer 5 (delegate.py:353) caps descent at depth 2. The reducer
@@ -269,9 +276,22 @@ export function reduce(state: ShellState, action: Action): Step {
     case ActionType.PROMPT_TEXT: {
       const pane = state.panes[action.paneId];
       if (!pane) return { state, emissions: [] };
+      const startsSlash = action.text.startsWith("/");
+      const wasOpen = pane.slashRouter.open;
+      const emissions: Emission[] = [];
+      let nextRouter = pane.slashRouter;
+      if (startsSlash && !wasOpen) {
+        nextRouter = { open: true, index: 0 };
+        emissions.push({ kind: Tag.SLASH_ROUTER_OPENED, payload: { pane_id: action.paneId } });
+      } else if (!startsSlash && wasOpen) {
+        nextRouter = { open: false, index: 0 };
+        emissions.push({ kind: Tag.SLASH_ROUTER_CLOSED, payload: { pane_id: action.paneId } });
+      }
       return {
-        state: { ...state, panes: { ...state.panes, [action.paneId]: { ...pane, promptDraft: action.text } } },
-        emissions: [], // Private — draft never appears in the trace.
+        state: { ...state, panes: { ...state.panes, [action.paneId]: {
+          ...pane, promptDraft: action.text, slashRouter: nextRouter,
+        } } },
+        emissions,
       };
     }
     case ActionType.PROMPT_LENGTH_CHANGED:
@@ -684,6 +704,44 @@ export function reduce(state: ShellState, action: Action): Step {
         } } },
         emissions: [{ kind: Tag.FIND_QUERY_CHANGED, payload: {
           pane_id: action.paneId, q_length: action.q.length, count: action.count,
+        } }],
+      };
+    }
+    case ActionType.SLASH_ROUTER_WALK: {
+      const pane = state.panes[action.paneId];
+      if (!pane || !pane.slashRouter.open) return { state, emissions: [] };
+      const n = SLASH_COMMANDS.length;
+      const from = pane.slashRouter.index;
+      const to = ((from + action.delta) % n + n) % n;
+      if (to === from) return { state, emissions: [] };
+      return {
+        state: { ...state, panes: { ...state.panes, [action.paneId]: {
+          ...pane, slashRouter: { open: true, index: to },
+        } } },
+        emissions: [{ kind: Tag.SLASH_ROUTER_WALKED, payload: {
+          pane_id: action.paneId, from_index: from, to_index: to,
+        } }],
+      };
+    }
+    case ActionType.SLASH_ROUTER_CANCEL: {
+      const pane = state.panes[action.paneId];
+      if (!pane || !pane.slashRouter.open) return { state, emissions: [] };
+      return {
+        state: { ...state, panes: { ...state.panes, [action.paneId]: {
+          ...pane, slashRouter: { open: false, index: 0 }, promptDraft: "",
+        } } },
+        emissions: [{ kind: Tag.SLASH_ROUTER_CLOSED, payload: { pane_id: action.paneId } }],
+      };
+    }
+    case ActionType.SLASH_COMMAND_ROUTE: {
+      const pane = state.panes[action.paneId];
+      if (!pane || !pane.slashRouter.open) return { state, emissions: [] };
+      return {
+        state: { ...state, panes: { ...state.panes, [action.paneId]: {
+          ...pane, slashRouter: { open: false, index: 0 }, promptDraft: "",
+        } } },
+        emissions: [{ kind: Tag.SLASH_COMMAND_ROUTED, payload: {
+          pane_id: action.paneId, command: action.command, arg_length: action.arg.length,
         } }],
       };
     }
@@ -1150,6 +1208,7 @@ function boot(): Step {
     studioView: StudioView.FORM,
     studioDraft: { topoName: "", producerCount: 1, viewCount: 0, triggerCount: 0, routeCount: 0 },
     find: { open: false, scope: FindScope.TRANSCRIPT, q: "", count: 0, activeIndex: 0 },
+    slashRouter: { open: false, index: 0 },
   };
   const window: Window = { id: windowId, rootId: paneId };
   const next: ShellState = {

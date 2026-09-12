@@ -355,6 +355,12 @@ function Shell(): JSX.Element {
             },
             onFindStep: (paneId, delta) => dispatch({ type: ActionType.FIND_STEP, paneId, delta }),
             onFindClose: (paneId) => dispatch({ type: ActionType.FIND_CLOSE, paneId }),
+            onSlashRouterWalk: (paneId, delta) =>
+              dispatch({ type: ActionType.SLASH_ROUTER_WALK, paneId, delta }),
+            onSlashRouterCancel: (paneId) =>
+              dispatch({ type: ActionType.SLASH_ROUTER_CANCEL, paneId }),
+            onSlashCommandRoute: (paneId, command, arg) =>
+              dispatch({ type: ActionType.SLASH_COMMAND_ROUTE, paneId, command, arg }),
           }}
         />
       )}

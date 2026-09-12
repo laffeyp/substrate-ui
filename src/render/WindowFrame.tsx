@@ -39,6 +39,9 @@ export interface PaneCallbacks {
   onFindScopeTab: (paneId: string) => void;
   onFindStep: (paneId: string, delta: 1 | -1) => void;
   onFindClose: (paneId: string) => void;
+  onSlashRouterWalk: (paneId: string, delta: 1 | -1) => void;
+  onSlashRouterCancel: (paneId: string) => void;
+  onSlashCommandRoute: (paneId: string, command: string, arg: string) => void;
 }
 
 export interface GutterCallbacks {
@@ -93,6 +96,9 @@ function Node({ id, state, gutter, pane }: { id: string; state: ShellState; gutt
         onFindScopeTab={pane.onFindScopeTab}
         onFindStep={pane.onFindStep}
         onFindClose={pane.onFindClose}
+        onSlashRouterWalk={pane.onSlashRouterWalk}
+        onSlashRouterCancel={pane.onSlashRouterCancel}
+        onSlashCommandRoute={pane.onSlashCommandRoute}
       />
     );
   }

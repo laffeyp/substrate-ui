@@ -3,7 +3,7 @@
 ---
 id: 030
 epic: I — Header & driver
-status: pending
+status: closed
 phase: 3
 pass_kind: architecture
 spec_reference: signals/0.1.json § prompt SLASH_ROUTER_OPENED / _WALKED / _CLOSED + SLASH_COMMAND_ROUTED
