@@ -168,6 +168,8 @@ class BridgeOp(StrEnum):
     TOOLS_RESTRICT = "tools_restrict"
     WORKSPACE_DIFF = "workspace_diff"
     RECORD_EXPORT = "record_export"
+    RECORD_SUBSCRIBE = "record_subscribe"
+    RECORD_UNSUBSCRIBE = "record_unsubscribe"
 
 
 class ReplyOp(StrEnum):

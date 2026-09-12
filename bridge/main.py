@@ -562,6 +562,111 @@ def op_session_resume(payload: dict) -> dict:
     }
 
 
+def _shape_envelope(env: dict, tool_call_id_to_child_root: dict[str, str]) -> dict:
+    """Shape a raw substrate envelope into the row the shell renders. Reads
+    substrate constants for kind names; never inlines strings. Also mutates
+    `tool_call_id_to_child_root` when a delegate ToolResult carries a
+    child_root — subsequent ToolCall rows read that map to attach descent."""
+    kind = env.get("kind", "")
+    producer = env.get("producer") or {}
+    producer_kind = producer.get("kind") if isinstance(producer, dict) else None
+    payload_dict = env.get("payload") or {}
+    summary = ""
+    park_reason = None
+    end_reason = None
+    tokens_before = None
+    tokens_after = None
+    compact_strategy = None
+    retry_index = None
+    retry_max = None
+    retry_after_seconds = None
+    tool_name = None
+    tool_call_id = None
+    tool_ok = None
+    tool_error = None
+    if kind == USER_MESSAGE:
+        summary = str(payload_dict.get("assembled_prompt", ""))[:200]
+    elif kind == MODEL_REPLY:
+        summary = str(payload_dict.get("text", ""))[:200]
+    elif kind == PARK:
+        park_reason = payload_dict.get("reason") if isinstance(payload_dict, dict) else None
+        summary = str(park_reason or "")
+    elif kind == SESSION_ENDED:
+        end_reason = payload_dict.get("reason") if isinstance(payload_dict, dict) else None
+        summary = str(end_reason or "")
+    elif kind == TRANSCRIPT_COMPACTED:
+        tokens_before = payload_dict.get("tokens_before") if isinstance(payload_dict, dict) else None
+        tokens_after = payload_dict.get("tokens_after") if isinstance(payload_dict, dict) else None
+        compact_strategy = payload_dict.get("strategy") if isinstance(payload_dict, dict) else None
+        summary = f"{tokens_before}→{tokens_after} via {compact_strategy}"
+    elif kind == RATE_LIMITED_WAITING:
+        retry_index = payload_dict.get("retry_index") if isinstance(payload_dict, dict) else None
+        retry_max = payload_dict.get("retry_max") if isinstance(payload_dict, dict) else None
+        retry_after_seconds = payload_dict.get("retry_after_seconds") if isinstance(payload_dict, dict) else None
+        summary = f"retry {retry_index}/{retry_max} in {retry_after_seconds}s"
+    elif kind == TOOL_CALL:
+        tool_name = payload_dict.get("tool") if isinstance(payload_dict, dict) else None
+        tool_call_id = payload_dict.get("call_id") if isinstance(payload_dict, dict) else None
+        summary = str(tool_name or "")
+    elif kind == TOOL_RESULT:
+        tool_name = payload_dict.get("tool") if isinstance(payload_dict, dict) else None
+        tool_call_id = payload_dict.get("call_id") if isinstance(payload_dict, dict) else None
+        tool_ok = bool(payload_dict.get("ok", True)) if isinstance(payload_dict, dict) else None
+        tool_error = payload_dict.get("error") if isinstance(payload_dict, dict) else None
+        summary = f"{tool_name} → ok" if tool_ok else f"{tool_name} → err"
+        if isinstance(payload_dict, dict):
+            output = payload_dict.get("output")
+            call_id = payload_dict.get("call_id")
+            if isinstance(call_id, str) and isinstance(output, dict):
+                child_root = output.get("child_root")
+                if isinstance(child_root, str):
+                    tool_call_id_to_child_root[call_id] = child_root
+    child_record_root = (
+        tool_call_id_to_child_root.get(tool_call_id) if tool_call_id else None
+    )
+    content_blocks: list[dict] = []
+    if isinstance(payload_dict, dict):
+        if kind == USER_MESSAGE and payload_dict.get("assembled_prompt"):
+            content_blocks.append({"k": "ASSEMBLED_PROMPT", "v": str(payload_dict.get("assembled_prompt", ""))})
+        elif kind == MODEL_REPLY and payload_dict.get("text"):
+            content_blocks.append({"k": "TEXT", "v": str(payload_dict.get("text", ""))})
+        elif kind == TOOL_RESULT:
+            output = payload_dict.get("output")
+            if isinstance(output, dict):
+                for k_ in ("stdout", "text", "child_root"):
+                    v_ = output.get(k_)
+                    if v_ is not None:
+                        content_blocks.append({"k": f"OUTPUT.{k_.upper()}", "v": str(v_)})
+            elif output is not None:
+                content_blocks.append({"k": "OUTPUT", "v": str(output)})
+    schema = str(env.get("schema", ""))
+    timestamp = env.get("t") or env.get("timestamp") or env.get("ts")
+    return {
+        "seq": int(env.get("seq", -1)),
+        "kind": kind,
+        "schema": schema,
+        "timestamp": timestamp,
+        "producer_kind": producer_kind or "?",
+        "summary": summary,
+        "turn_index": payload_dict.get("turn_index") if isinstance(payload_dict, dict) else None,
+        "park_reason": park_reason,
+        "end_reason": end_reason,
+        "tokens_before": tokens_before,
+        "tokens_after": tokens_after,
+        "compact_strategy": compact_strategy,
+        "retry_index": retry_index,
+        "retry_max": retry_max,
+        "retry_after_seconds": retry_after_seconds,
+        "tool_name": tool_name,
+        "tool_call_id": tool_call_id,
+        "tool_ok": tool_ok,
+        "tool_error": tool_error,
+        "child_record_root": child_record_root,
+        "payload": payload_dict if isinstance(payload_dict, (dict, list)) else {},
+        "content": content_blocks,
+    }
+
+
 def op_record_read(payload: dict) -> dict:
     """Return the ordered envelopes for a session's record. Only envelopes
     whose `kind` names a user-visible beat come back; framework brackets
@@ -602,122 +707,87 @@ def op_record_read(payload: dict) -> dict:
                         child_root = output.get("child_root")
                         if isinstance(child_root, str):
                             tool_call_id_to_child_root[call_id] = child_root
-        # Include framework brackets (TriggerFired / ProducerStarted /
-        # ProducerCompleted) alongside user-visible kinds — the swim-
-        # lane graph in the machinery lens reads span boundaries from
-        # them. The terminal transcript derivation ignores them via a
-        # switch/default in the shell.
         include_brackets = bool(payload.get("include_framework_brackets", True))
         for env in api.read_record(root):
             kind = env.get("kind", "")
             if not include_brackets and kind not in VISIBLE_KINDS:
                 continue
-            producer = env.get("producer") or {}
-            producer_kind = producer.get("kind") if isinstance(producer, dict) else None
-            payload_dict = env.get("payload") or {}
-            summary = ""
-            park_reason = None
-            end_reason = None
-            tokens_before = None
-            tokens_after = None
-            compact_strategy = None
-            retry_index = None
-            retry_max = None
-            retry_after_seconds = None
-            tool_name = None
-            tool_call_id = None
-            tool_ok = None
-            tool_error = None
-            if kind == USER_MESSAGE:
-                summary = str(payload_dict.get("assembled_prompt", ""))[:200]
-            elif kind == MODEL_REPLY:
-                summary = str(payload_dict.get("text", ""))[:200]
-            elif kind == PARK:
-                # Propagate substrate's ParkReason enum verbatim.
-                park_reason = payload_dict.get("reason") if isinstance(payload_dict, dict) else None
-                summary = str(park_reason or "")
-            elif kind == SESSION_ENDED:
-                end_reason = payload_dict.get("reason") if isinstance(payload_dict, dict) else None
-                summary = str(end_reason or "")
-            elif kind == TRANSCRIPT_COMPACTED:
-                tokens_before = payload_dict.get("tokens_before") if isinstance(payload_dict, dict) else None
-                tokens_after = payload_dict.get("tokens_after") if isinstance(payload_dict, dict) else None
-                compact_strategy = payload_dict.get("strategy") if isinstance(payload_dict, dict) else None
-                summary = f"{tokens_before}→{tokens_after} via {compact_strategy}"
-            elif kind == RATE_LIMITED_WAITING:
-                retry_index = payload_dict.get("retry_index") if isinstance(payload_dict, dict) else None
-                retry_max = payload_dict.get("retry_max") if isinstance(payload_dict, dict) else None
-                retry_after_seconds = payload_dict.get("retry_after_seconds") if isinstance(payload_dict, dict) else None
-                summary = f"retry {retry_index}/{retry_max} in {retry_after_seconds}s"
-            elif kind == TOOL_CALL:
-                tool_name = payload_dict.get("tool") if isinstance(payload_dict, dict) else None
-                tool_call_id = payload_dict.get("call_id") if isinstance(payload_dict, dict) else None
-                summary = str(tool_name or "")
-            elif kind == TOOL_RESULT:
-                # Sprint 021 — a delegate ToolResult carries the child
-                # record_root; the shell folds the delegate flow on the
-                # parent side when this envelope lands. Sprint 023-fix
-                # — a delegate raise (depth cap, etc.) lands as ok=false
-                # with the error text; the shell reads that to fire the
-                # correct terminal (DEPTH_CAP_REFUSED or FOLDED).
-                tool_name = payload_dict.get("tool") if isinstance(payload_dict, dict) else None
-                tool_call_id = payload_dict.get("call_id") if isinstance(payload_dict, dict) else None
-                tool_ok = bool(payload_dict.get("ok", True)) if isinstance(payload_dict, dict) else None
-                tool_error = payload_dict.get("error") if isinstance(payload_dict, dict) else None
-                summary = f"{tool_name} → ok" if tool_ok else f"{tool_name} → err"
-            child_record_root = (
-                tool_call_id_to_child_root.get(tool_call_id) if tool_call_id else None
-            )
-            # Sprint-port-Round-0 — the inspect drawer (prototype
-            # :277, :280) renders SCHEMA / TIME / PRODUCER / CONTENT /
-            # PAYLOAD off each envelope. Passing raw payload + a
-            # per-kind content block set surfaces those to the shell
-            # without a second bridge op.
-            content_blocks = []
-            if isinstance(payload_dict, dict):
-                if kind == USER_MESSAGE and payload_dict.get("assembled_prompt"):
-                    content_blocks.append({"k": "ASSEMBLED_PROMPT", "v": str(payload_dict.get("assembled_prompt", ""))})
-                elif kind == MODEL_REPLY and payload_dict.get("text"):
-                    content_blocks.append({"k": "TEXT", "v": str(payload_dict.get("text", ""))})
-                elif kind == TOOL_RESULT:
-                    output = payload_dict.get("output")
-                    if isinstance(output, dict):
-                        for k_ in ("stdout", "text", "child_root"):
-                            v_ = output.get(k_)
-                            if v_ is not None:
-                                content_blocks.append({"k": f"OUTPUT.{k_.upper()}", "v": str(v_)})
-                    elif output is not None:
-                        content_blocks.append({"k": "OUTPUT", "v": str(output)})
-            schema = str(env.get("schema", ""))
-            timestamp = env.get("t") or env.get("timestamp") or env.get("ts")
-            out.append({
-                "seq": int(env.get("seq", -1)),
-                "kind": kind,
-                "schema": schema,
-                "timestamp": timestamp,
-                "producer_kind": producer_kind or "?",
-                "summary": summary,
-                "turn_index": payload_dict.get("turn_index") if isinstance(payload_dict, dict) else None,
-                "park_reason": park_reason,
-                "end_reason": end_reason,
-                "tokens_before": tokens_before,
-                "tokens_after": tokens_after,
-                "compact_strategy": compact_strategy,
-                "retry_index": retry_index,
-                "retry_max": retry_max,
-                "retry_after_seconds": retry_after_seconds,
-                "tool_name": tool_name,
-                "tool_call_id": tool_call_id,
-                "tool_ok": tool_ok,
-                "tool_error": tool_error,
-                "child_record_root": child_record_root,
-                # Raw payload + content blocks — the inspect drawer reads these.
-                "payload": payload_dict if isinstance(payload_dict, (dict, list)) else {},
-                "content": content_blocks,
-            })
+            out.append(_shape_envelope(env, tool_call_id_to_child_root))
     except Exception as e:  # noqa: BLE001
         return {"__error__": True, "reason": f"{RRR.READ_ERROR.value}:{e}"}
     return {"session_id": session_id, "envelopes": out}
+
+
+
+_FOLLOWERS_LOCK = threading.Lock()
+_FOLLOWERS: dict[str, threading.Event] = {}
+
+
+def _run_follower(session_id: str, record_root: Path, stop_flag: threading.Event) -> None:
+    """Poll a substrate LiveRecord until stop_flag is set. Each wake emits
+    every complete new envelope as a push message. The initial flush carries
+    `initial: true` so the renderer resets its per-session envelope array
+    before appending."""
+    from substrate import api  # type: ignore[import-not-found]
+    live = api.attach(record_root)
+    child_map: dict[str, str] = {}
+    first = True
+    while not stop_flag.is_set():
+        try:
+            new_envelopes = live.read_new()
+        except Exception as e:  # noqa: BLE001
+            emit({
+                "op": "envelopes_appended",
+                "session_id": session_id,
+                "envelopes": [],
+                "initial": first,
+                "error": f"{RRR.READ_ERROR.value}:{e}",
+            })
+            return
+        if new_envelopes:
+            shaped = [_shape_envelope(env, child_map) for env in new_envelopes]
+            emit({
+                "op": "envelopes_appended",
+                "session_id": session_id,
+                "envelopes": shaped,
+                "initial": first,
+            })
+            first = False
+        stop_flag.wait(0.1)
+
+
+def op_record_subscribe(payload: dict) -> dict:
+    """Spin up (or reuse) a follower thread that pushes appended envelopes
+    for a session to the shell. Idempotent — a second subscribe returns
+    the existing subscription without spawning a duplicate thread."""
+    reg = _registry()
+    session_id = payload.get("session_id", "")
+    manifest = reg.get(session_id)  # type: ignore[attr-defined]
+    if manifest is None:
+        return {"__error__": True, "reason": RRR.NOT_FOUND.value}
+    with _FOLLOWERS_LOCK:
+        if session_id in _FOLLOWERS:
+            return {"session_id": session_id, "subscribed": True, "existing": True}
+        stop_flag = threading.Event()
+        _FOLLOWERS[session_id] = stop_flag
+    threading.Thread(
+        target=_run_follower,
+        args=(session_id, Path(manifest.record_root), stop_flag),
+        name=f"follower-{session_id[:8]}",
+        daemon=True,
+    ).start()
+    return {"session_id": session_id, "subscribed": True, "existing": False}
+
+
+def op_record_unsubscribe(payload: dict) -> dict:
+    """Signal the follower thread for a session to exit. No-op if none is
+    running."""
+    session_id = payload.get("session_id", "")
+    with _FOLLOWERS_LOCK:
+        stop_flag = _FOLLOWERS.pop(session_id, None)
+    if stop_flag is not None:
+        stop_flag.set()
+    return {"session_id": session_id, "unsubscribed": stop_flag is not None}
 
 
 def op_turn_submit(payload: dict) -> dict:
@@ -977,6 +1047,22 @@ def _handle_short_op(op: BridgeOp, msg: dict, rid: str) -> None:
                 reply_err(rid, result.get("reason", SCR.REGISTRY_ERROR.value))
             else:
                 reply_ok(rid, result)
+        except Exception as e:  # noqa: BLE001
+            reply_err(rid, f"{SCR.REGISTRY_ERROR.value}:{e}")
+        return
+    if op is BridgeOp.RECORD_SUBSCRIBE:
+        try:
+            result = op_record_subscribe(msg)
+            if result.get("__error__"):
+                reply_err(rid, result.get("reason", RRR.READ_ERROR.value))
+            else:
+                reply_ok(rid, result)
+        except Exception as e:  # noqa: BLE001
+            reply_err(rid, f"{SCR.REGISTRY_ERROR.value}:{e}")
+        return
+    if op is BridgeOp.RECORD_UNSUBSCRIBE:
+        try:
+            reply_ok(rid, op_record_unsubscribe(msg))
         except Exception as e:  # noqa: BLE001
             reply_err(rid, f"{SCR.REGISTRY_ERROR.value}:{e}")
         return

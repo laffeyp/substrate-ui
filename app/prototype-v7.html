@@ -577,9 +577,6 @@ class Component extends DCLogic {
         bundle: '',
         seed: '',
       });
-      const envelopes = await this._bridge('record_read', {
-        session_id: created.session_id,
-      });
       this.setState(s => ({
         panes: s.panes.map(p => p.id === id ? Object.assign({}, p, {
           unbound: false, connecting: false,
@@ -590,7 +587,7 @@ class Component extends DCLogic {
           lines: [],
         }) : p),
         records: Object.assign({}, s.records, {
-          [created.session_id]: envelopes.envelopes || [],
+          [created.session_id]: s.records[created.session_id] || [],
         }),
         allSessions: [...(s.allSessions || []), {
           id, name: created.session_name || pane.name,
@@ -598,6 +595,10 @@ class Component extends DCLogic {
           session_id: created.session_id,
         }],
       }));
+      // Subscribe: the follower thread pushes envelopes as they
+      // land; the onMessage handler folds them into state.records.
+      this._bridge('record_subscribe', { session_id: created.session_id }, 10000)
+        .catch(() => { /* falls back to the record_read the turn code triggers */ });
     } catch (err) {
       this.setState(s => ({
         panes: s.panes.map(p => p.id === id ? Object.assign({}, p, {
@@ -619,26 +620,14 @@ class Component extends DCLogic {
   }
   async _submitTurn(paneId, session_id, text) {
     if (!session_id || !text.trim()) return;
-    // Start a polling loop so envelopes surface as the turn produces
-    // them. turn_submit is a long op; the ack lands when the run
-    // parks. Poll every 500ms until then.
-    let stop = false;
-    const poll = async () => {
-      while (!stop) {
-        await new Promise(r => setTimeout(r, 500));
-        if (stop) return;
-        await this._refreshRecord(session_id);
-      }
-    };
-    const polling = poll();
+    // Live envelope push (round 6) — the bridge follower thread
+    // streams envelopes as they land, so no polling loop here. Fire
+    // turn_submit and await its ack; the transcript refills itself.
     try {
       await this._bridge('turn_submit', {
         session_id, text, timeout_seconds: 120,
       }, 130000);
-      stop = true;
-      await this._refreshRecord(session_id);
     } catch (err) {
-      stop = true;
       this.setState(s => ({
         panes: s.panes.map(p => p.id === paneId ? Object.assign({}, p, {
           lines: (p.lines || []).concat([
@@ -647,13 +636,16 @@ class Component extends DCLogic {
         }) : p),
       }));
     }
-    await polling;
+    // Fallback catch-up in case the follower missed the trailing
+    // envelope on a slow poll — cheap, one call, no loop.
+    await this._refreshRecord(session_id);
   }
   async _endSession(paneId, session_id) {
     if (!session_id) return;
     try {
       await this._bridge('session_end', { session_id }, 45000);
       await this._refreshRecord(session_id);
+      this._bridge('record_unsubscribe', { session_id }, 5000).catch(() => {});
       this.setState(s => ({
         panes: s.panes.map(p => p.id === paneId ? Object.assign({}, p, {
           ended: true,
@@ -892,6 +884,7 @@ class Component extends DCLogic {
           [manifest.session_id]: envelopes.envelopes || [],
         }),
       }));
+      this._bridge('record_subscribe', { session_id: manifest.session_id }, 10000).catch(() => {});
     } catch (err) {
       this.setState(s => ({
         panes: s.panes.map(p => p.id === paneId ? Object.assign({}, p, {
@@ -915,9 +908,28 @@ class Component extends DCLogic {
     });
   }
   componentDidMount() {
-    // Load the real driver roster once at mount. Bridge list_drivers
-    // walks ollama + PATH; the picker uses state.driverRoster.
     this._loadDrivers();
+    // Live envelope push (round 6). The bridge follower thread for
+    // each subscribed session emits {op:"envelopes_appended", ...};
+    // fold them into state.records so the transcript grows without
+    // polling record_read.
+    if (window.substrate && window.substrate.onMessage) {
+      this._offEnvelopes = window.substrate.onMessage((msg) => {
+        if (!msg || msg.op !== 'envelopes_appended') return;
+        const session_id = msg.session_id;
+        const incoming = Array.isArray(msg.envelopes) ? msg.envelopes : [];
+        this.setState(s => {
+          const existing = msg.initial ? [] : (s.records[session_id] || []);
+          const seen = new Set(existing.map(env => env.seq));
+          const merged = existing.slice();
+          for (const env of incoming) {
+            if (!seen.has(env.seq)) merged.push(env);
+          }
+          merged.sort((a, b) => a.seq - b.seq);
+          return { records: Object.assign({}, s.records, { [session_id]: merged }) };
+        });
+      });
+    }
     this._kd = (e) => {
       if (e.ctrlKey && e.key === '\u0060') { e.preventDefault(); this.setState(s => ({ revealed: !s.revealed, surface: null })); }
       if (e.metaKey && (e.key === 'd' || e.key === 'D')) { e.preventDefault(); this._split(e.shiftKey ? 'down' : 'right'); }

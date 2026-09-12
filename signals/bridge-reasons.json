@@ -74,7 +74,9 @@
     "bundle_attach": "bundle_attach",
     "tools_restrict": "tools_restrict",
     "workspace_diff": "workspace_diff",
-    "record_export": "record_export"
+    "record_export": "record_export",
+    "record_subscribe": "record_subscribe",
+    "record_unsubscribe": "record_unsubscribe"
   },
 
   "delegate_error_prefixes": {
