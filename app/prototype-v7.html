@@ -1502,8 +1502,51 @@ class Component extends DCLogic {
         return labels;
       })(),
       slotNodes: state.sroutes.map(r => { const tgt = String(r.slot).split('.')[0]; const i = state.prods.findIndex(p => p.name === tgt); if (i < 0) return null; const pos = state.cardPos[tgt] || { x: 120 + (i % 3) * 260, y: 300 }; return { slot: String(r.slot).split('.')[1] || r.slot, x: pos.x + 150, y: pos.y - 2 }; }).filter(Boolean),
-      doValidate: () => { const errs = this._validate(); this.setState(errs.length ? { studioOut: 'invalid — ' + errs.join(' · '), studioOutColor: '#c26058' } : { studioOut: 'ok — ' + this.state.prods.length + ' producers · ' + this.state.sviews.length + ' views · ' + this.state.trigs.length + ' triggers · ' + this.state.sroutes.length + ' routes · every emitted kind consumed or terminal', studioOutColor: '#9aa0a8' }); },
-      doBuild: () => { const errs = this._validate(); this.setState(errs.length ? { studioOut: 'build refused — ' + errs.join(' · '), studioOutColor: '#c26058' } : { studioOut: 'built — registered ' + this.state.topoName + ' (' + this.state.responder + (this.state.responder === 'deterministic' ? ' seed ' + this.state.seed : ' model ' + this.state.model) + ') · launched build_authored_demo_72eb8f85fcab ▸', studioOutColor: '#82a5c8' }); },
+      doValidate: async () => {
+        const clientErrors = this._validate();
+        if (clientErrors.length) {
+          this.setState({ studioOut: 'invalid — ' + clientErrors.join(' · '), studioOutColor: '#c26058' });
+          return;
+        }
+        try {
+          const result = await this._bridge('topology_validate', {
+            topo_name: this.state.topoName,
+            producer_count: this.state.prods.length,
+            view_count: this.state.sviews.length,
+            trigger_count: this.state.trigs.length,
+            route_count: this.state.sroutes.length,
+          });
+          this.setState({
+            studioOut: 'ok — ' + result.producer_count + ' producers · '
+              + result.view_count + ' views · '
+              + result.trigger_count + ' triggers · '
+              + result.route_count + ' routes',
+            studioOutColor: '#9aa0a8',
+          });
+        } catch (err) {
+          let errorMessage = err.message || String(err);
+          try { errorMessage = JSON.parse(errorMessage).errors.join(' · '); } catch (_parseErr) { /* keep raw */ }
+          this.setState({ studioOut: 'validate failed — ' + errorMessage, studioOutColor: '#c26058' });
+        }
+      },
+      doBuild: async () => {
+        const clientErrors = this._validate();
+        if (clientErrors.length) {
+          this.setState({ studioOut: 'build refused — ' + clientErrors.join(' · '), studioOutColor: '#c26058' });
+          return;
+        }
+        try {
+          const result = await this._bridge('topology_build', { topo_name: this.state.topoName });
+          this.setState({
+            studioOut: 'built ' + result.topo_name + ' · stub written to ' + result.record_root,
+            studioOutColor: '#82a5c8',
+          });
+        } catch (err) {
+          let errorMessage = err.message || String(err);
+          try { errorMessage = JSON.parse(errorMessage).errors.join(' · '); } catch (_parseErr) { /* keep raw */ }
+          this.setState({ studioOut: 'build failed — ' + errorMessage, studioOutColor: '#c26058' });
+        }
+      },
       studioOut: state.studioOut, studioOutColor: state.studioOutColor,
       sentLines: state.sent.map(t => ({ text: t })),
       onPromptKey: (ev) => {
