@@ -170,6 +170,7 @@ class BridgeOp(StrEnum):
     RECORD_EXPORT = "record_export"
     RECORD_SUBSCRIBE = "record_subscribe"
     RECORD_UNSUBSCRIBE = "record_unsubscribe"
+    TOPOLOGY_BUILD_AND_LAUNCH = "topology_build_and_launch"
 
 
 class ReplyOp(StrEnum):

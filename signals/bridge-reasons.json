@@ -76,7 +76,8 @@
     "workspace_diff": "workspace_diff",
     "record_export": "record_export",
     "record_subscribe": "record_subscribe",
-    "record_unsubscribe": "record_unsubscribe"
+    "record_unsubscribe": "record_unsubscribe",
+    "topology_build_and_launch": "topology_build_and_launch"
   },
 
   "delegate_error_prefixes": {
