@@ -267,21 +267,23 @@
      </sc-if>
      <sc-if value="{{ isStructure }}" hint-placeholder-val="{{ false }}">
       <div style="padding:10px 16px 16px;font-size:12.5px;line-height:1.9">
-       <div style="color:#62676f;font-size:10px;letter-spacing:.12em;margin:6px 0 4px">PRODUCERS (4) · ▸ INITIAL = ON THE RUN'state OPENING COHORT</div>
-       <div style="display:flex;gap:10px"><span style="color:#e2e5e9;width:120px;flex:none">model <span style="color:#82a5c8;font-size:10px">▸ initial</span></span><span style="color:#9aa0a8">emits ToolCall, ModelReply, FinalAnswer</span></div>
-       <div style="display:flex;gap:10px"><span style="color:#e2e5e9;width:120px;flex:none">tool</span><span style="color:#9aa0a8">emits ToolResult</span></div>
-       <div style="display:flex;gap:10px"><span style="color:#e2e5e9;width:120px;flex:none">park</span><span style="color:#9aa0a8">emits Park</span></div>
-       <div style="display:flex;gap:10px"><span style="color:#e2e5e9;width:120px;flex:none">session_end</span><span style="color:#9aa0a8">emits SessionEnded</span></div>
-       <div style="color:#62676f;font-size:10px;letter-spacing:.12em;margin:14px 0 4px">TRIGGERS (10 · 4 SHOWN)</div>
-       <div><span style="color:#c9a0b8">fire-tool</span> <span style="color:#62676f">on</span> <span style="color:#9aa0a8">ToolCall</span> <span style="color:#62676f">→ starts</span> <span style="color:#e2e5e9">tool</span></div>
-       <div><span style="color:#c9a0b8">refire-model</span> <span style="color:#62676f">on</span> <span style="color:#9aa0a8">ToolResult</span> <span style="color:#62676f">→ starts</span> <span style="color:#e2e5e9">model</span></div>
-       <div><span style="color:#c9a0b8">park-on-final-answer</span> <span style="color:#62676f">on</span> <span style="color:#9aa0a8">FinalAnswer</span> <span style="color:#62676f">→ starts</span> <span style="color:#e2e5e9">park</span></div>
-       <div><span style="color:#c9a0b8">end-on-request</span> <span style="color:#62676f">on</span> <span style="color:#9aa0a8">SessionEndRequested</span> <span style="color:#62676f">→ starts</span> <span style="color:#e2e5e9">session_end</span></div>
-       <div style="color:#62676f;font-size:10px;letter-spacing:.12em;margin:14px 0 4px">VIEWS (3)</div>
-       <div style="color:#9aa0a8">transcript rolling-window renderer · driver context lookup</div>
-       <div style="color:#62676f;font-size:10px;letter-spacing:.12em;margin:14px 0 4px">TERMINATION POLICY</div>
-       <div style="color:#a08fc9">any_of( pause_await_input(on Park, resume="UserMessage"), threshold_count(SessionEnded, 1) )</div>
-       <div style="margin-top:6px;color:#62676f;font-size:11px">all_completed is refused at build — a pausable topology on it hangs on resume</div>
+       <sc-if value="{{ topologyGraphReady }}" hint-placeholder-val="{{ false }}">
+        <div style="color:#62676f;font-size:10px;letter-spacing:.12em;margin:6px 0 4px">PRODUCERS ({{ topologyProducerCount }}) · ▸ INITIAL = ON THE RUN'S OPENING COHORT</div>
+        <sc-for list="{{ topologyProducers }}" as="producer" hint-placeholder-count="0">
+         <div style="display:flex;gap:10px"><span style="color:#e2e5e9;width:120px;flex:none">{{ producer.kind }} <span style="color:#82a5c8;font-size:10px">{{ producer.initialTag }}</span></span><span style="color:#9aa0a8">emits {{ producer.emits }}</span></div>
+        </sc-for>
+        <div style="color:#62676f;font-size:10px;letter-spacing:.12em;margin:14px 0 4px">TRIGGERS ({{ topologyTriggerCount }})</div>
+        <sc-for list="{{ topologyTriggers }}" as="trigger" hint-placeholder-count="0">
+         <div><span style="color:#c9a0b8">{{ trigger.id }}</span> <span style="color:#62676f">on</span> <span style="color:#9aa0a8">{{ trigger.on }}</span> <span style="color:#62676f">→ starts</span> <span style="color:#e2e5e9">{{ trigger.starts }}</span></div>
+        </sc-for>
+        <div style="color:#62676f;font-size:10px;letter-spacing:.12em;margin:14px 0 4px">VIEWS ({{ topologyViewCount }})</div>
+        <div style="color:#9aa0a8">{{ topologyViewsText }}</div>
+        <div style="color:#62676f;font-size:10px;letter-spacing:.12em;margin:14px 0 4px">TERMINATION POLICY</div>
+        <div style="color:#a08fc9">{{ topologyTerminationText }}</div>
+       </sc-if>
+       <sc-if value="{{ topologyGraphEmpty }}" hint-placeholder-val="{{ true }}">
+        <div style="color:#62676f;font-size:11px">no topology graph yet — submit a turn to write the RunStarted manifest, then re-open the Structure lens</div>
+       </sc-if>
       </div>
      </sc-if>
      <sc-if value="{{ isScene }}" hint-placeholder-val="{{ false }}">
@@ -661,6 +663,25 @@ class Component extends DCLogic {
       this.setState({ sessionsFromRegistry: [] });
     }
   }
+  async _loadTopologyGraph(session_id) {
+    // Wraps bridge topology_introspect (→ substrate.api.topology_graph).
+    // Fires once when the reveal-view Structure lens opens on a
+    // bound session.
+    if (!session_id) return;
+    try {
+      const graph = await this._bridge('topology_introspect', { session_id }, 5000);
+      this.setState(s => ({
+        topologyGraphs: Object.assign({}, s.topologyGraphs, { [session_id]: graph }),
+      }));
+    } catch (err) {
+      // A record without a RunStarted manifest yet (session just
+      // created, no turn submitted) throws RecordIncompleteError.
+      // Store null so the lens surfaces its empty state.
+      this.setState(s => ({
+        topologyGraphs: Object.assign({}, s.topologyGraphs, { [session_id]: null }),
+      }));
+    }
+  }
   async _loadDrivers() {
     // Bridge op list_drivers walks ollama /api/tags for installed
     // models, tests each CLI candidate on PATH, and always returns
@@ -713,6 +734,13 @@ class Component extends DCLogic {
     const rows = [];
     for (const envelope of envelopes) {
       if (fanoutSiblingSeqs.has(envelope.seq)) continue;
+      // Framework brackets carry no user-visible content — the
+      // machinery lens reads them for span boundaries; the terminal
+      // transcript skips them.
+      if (envelope.kind === 'TriggerFired'
+        || envelope.kind === 'ProducerStarted'
+        || envelope.kind === 'ProducerCompleted'
+        || envelope.kind === 'RunStarted') continue;
       const key = 'env-' + envelope.seq;
       switch (envelope.kind) {
         case 'UserMessage': {
@@ -1440,6 +1468,51 @@ class Component extends DCLogic {
         : [],
       hasLiveTranscript: !!envelopesLive,
       isStream: state.mode === 'stream', isIo: state.mode === 'io', isStructure: state.mode === 'structure', isScene: state.mode === 'scene',
+      // Topology graph fields for the Structure lens — fired lazily
+      // when the lens opens on a bound session.
+      ...(() => {
+        const boundId = focusedPane.boundSessionId;
+        const graphs = state.topologyGraphs || {};
+        const graph = boundId ? graphs[boundId] : null;
+        const isStructureLens = state.mode === 'structure' && state.revealed && !state.surface;
+        // Fire the loader once per session_id when the lens opens.
+        if (isStructureLens && boundId && !(boundId in graphs) && !this._topologyLoadInFlight) {
+          this._topologyLoadInFlight = true;
+          Promise.resolve().then(() => {
+            this._topologyLoadInFlight = false;
+            this._loadTopologyGraph(boundId);
+          });
+        }
+        if (!graph) {
+          return {
+            topologyGraphReady: false,
+            topologyGraphEmpty: true,
+            topologyProducers: [], topologyTriggers: [],
+            topologyProducerCount: 0, topologyTriggerCount: 0,
+            topologyViewCount: 0,
+            topologyViewsText: '', topologyTerminationText: '',
+          };
+        }
+        return {
+          topologyGraphReady: true,
+          topologyGraphEmpty: false,
+          topologyProducers: graph.producers.map(producer => ({
+            kind: producer.kind,
+            initialTag: producer.is_initial ? '▸ initial' : '',
+            emits: producer.emits.join(', '),
+          })),
+          topologyTriggers: graph.triggers.map(trigger => ({
+            id: trigger.id,
+            on: trigger.on.join(' | '),
+            starts: trigger.starts,
+          })),
+          topologyProducerCount: graph.producers.length,
+          topologyTriggerCount: graph.triggers.length,
+          topologyViewCount: graph.views.length,
+          topologyViewsText: graph.views.join(' · ') || '(none)',
+          topologyTerminationText: graph.termination.join(' ; ') || '(none)',
+        };
+      })(),
       isDown: state.dir === 'down', isSide: state.dir === 'side',
       setAll: () => this.setState({ level: 'all' }), setApp: () => this.setState({ level: 'app' }),
       allColor: state.level === 'all' ? '#d7dade' : '#62676f', allBg: state.level === 'all' ? '#2e3138' : 'transparent',

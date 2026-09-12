@@ -224,6 +224,38 @@ def op_probe_driver(payload: dict) -> dict:
             "detail": f"unknown driver kind: {driver_name}"}
 
 
+def op_topology_introspect(payload: dict) -> dict:
+    """Wrap substrate.api.topology_graph — return the Producer nodes,
+    Trigger edges, Route edges, Views, and Termination policy of a
+    bound session's session_topology."""
+    from substrate import api  # type: ignore[import-not-found]
+    session_id = payload.get("session_id", "")
+    reg = _registry()
+    manifest = reg.get(session_id)  # type: ignore[attr-defined]
+    if manifest is None:
+        return {"__error__": True, "reason": SRR.NOT_FOUND.value}
+    record_root = Path(manifest.record_root)
+    try:
+        graph = api.topology_graph(list(api.read_record(record_root)))
+    except Exception as e:  # noqa: BLE001
+        return {"__error__": True, "reason": f"{RRR.READ_ERROR.value}:{e}"}
+    return {
+        "session_id": session_id,
+        "producers": [
+            {"kind": p.kind, "emits": list(p.emits), "deterministic": p.deterministic,
+             "is_initial": p.is_initial}
+            for p in graph.producers
+        ],
+        "triggers": [
+            {"id": t.id, "policy": t.policy, "on": list(t.on), "starts": t.starts}
+            for t in graph.triggers
+        ],
+        "routes": [{"id": r.id, "slot": r.slot} for r in graph.routes],
+        "views": list(graph.views),
+        "termination": list(graph.termination),
+    }
+
+
 def op_list_drivers(_payload: dict | None = None) -> list[dict]:
     """Enumerate every driver the current machine can run right now.
 
@@ -407,9 +439,15 @@ def op_record_read(payload: dict) -> dict:
                         child_root = output.get("child_root")
                         if isinstance(child_root, str):
                             tool_call_id_to_child_root[call_id] = child_root
+        # Include framework brackets (TriggerFired / ProducerStarted /
+        # ProducerCompleted) alongside user-visible kinds — the swim-
+        # lane graph in the machinery lens reads span boundaries from
+        # them. The terminal transcript derivation ignores them via a
+        # switch/default in the shell.
+        include_brackets = bool(payload.get("include_framework_brackets", True))
         for env in api.read_record(root):
             kind = env.get("kind", "")
-            if kind not in VISIBLE_KINDS:
+            if not include_brackets and kind not in VISIBLE_KINDS:
                 continue
             producer = env.get("producer") or {}
             producer_kind = producer.get("kind") if isinstance(producer, dict) else None
@@ -736,6 +774,16 @@ def _handle_short_op(op: BridgeOp, msg: dict, rid: str) -> None:
     if op is BridgeOp.READ_RECENT_WORKSPACES:
         try:
             reply_ok(rid, op_read_recent_workspaces())
+        except Exception as e:  # noqa: BLE001
+            reply_err(rid, f"{SCR.REGISTRY_ERROR.value}:{e}")
+        return
+    if op is BridgeOp.TOPOLOGY_INTROSPECT:
+        try:
+            result = op_topology_introspect(msg)
+            if result.get("__error__"):
+                reply_err(rid, result.get("reason", RRR.READ_ERROR.value))
+            else:
+                reply_ok(rid, result)
         except Exception as e:  # noqa: BLE001
             reply_err(rid, f"{SCR.REGISTRY_ERROR.value}:{e}")
         return
