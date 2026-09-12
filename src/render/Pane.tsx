@@ -23,6 +23,7 @@ import { RecordsSurface } from "./RecordsSurface";
 import { AssaySurface } from "./AssaySurface";
 import { StudioSurface } from "./StudioSurface";
 import { FindBar } from "./FindBar";
+import { SlashRouter } from "./SlashRouter";
 import { detectFanoutGroups } from "@/reducer/ShellReducer";
 import { computeMatches } from "@/lib/findMatches";
 
@@ -60,6 +61,9 @@ interface Props {
   onFindScopeTab?: (paneId: string) => void;
   onFindStep?: (paneId: string, delta: 1 | -1) => void;
   onFindClose?: (paneId: string) => void;
+  onSlashRouterWalk?: (paneId: string, delta: 1 | -1) => void;
+  onSlashRouterCancel?: (paneId: string) => void;
+  onSlashCommandRoute?: (paneId: string, command: string, arg: string) => void;
 }
 
 const ROW_COLORS: Record<string, string> = {
@@ -134,7 +138,7 @@ function initialByte(slot: (typeof PANE_SLOT_ORDER)[number], pane: PaneModel): n
   return 0;
 }
 
-export function Pane({ pane, onFocus, onDragStart, onClose, onPickerText, onPickerWalk, onPickerCommit, onResume, onPromptText, onPromptLengthChanged, onPromptSubmit, onRevealToggle, onLensSwitch, onStreamLevelToggle, onStreamDirToggle, onRevealFocusToggle, onDelegateExpandToggle, onDescend, onDescentExit, onFanoutExpand, onFanoutWalk, onFanoutCollapse, onInspectorToggle, onSurfaceClose, onResumeFromSurface, onStudioDraftSet, onStudioViewToggle, onStudioValidate, onStudioBuild, onFindQueryType, onFindScopeTab, onFindStep, onFindClose }: Props): JSX.Element {
+export function Pane({ pane, onFocus, onDragStart, onClose, onPickerText, onPickerWalk, onPickerCommit, onResume, onPromptText, onPromptLengthChanged, onPromptSubmit, onRevealToggle, onLensSwitch, onStreamLevelToggle, onStreamDirToggle, onRevealFocusToggle, onDelegateExpandToggle, onDescend, onDescentExit, onFanoutExpand, onFanoutWalk, onFanoutCollapse, onInspectorToggle, onSurfaceClose, onResumeFromSurface, onStudioDraftSet, onStudioViewToggle, onStudioValidate, onStudioBuild, onFindQueryType, onFindScopeTab, onFindStep, onFindClose, onSlashRouterWalk, onSlashRouterCancel, onSlashCommandRoute }: Props): JSX.Element {
   const depth = pane.descentStack.length;
   const inDescent = depth > 0;
   const activeRows: TranscriptRow[] = inDescent
@@ -311,7 +315,11 @@ export function Pane({ pane, onFocus, onDragStart, onClose, onPickerText, onPick
               onText={onPromptText}
               onLengthChanged={onPromptLengthChanged}
               onSubmit={onPromptSubmit}
+              onSlashRouterWalk={onSlashRouterWalk}
+              onSlashRouterCancel={onSlashRouterCancel}
+              onSlashCommandRoute={onSlashCommandRoute}
             />
+            <SlashRouter pane={pane} />
           </div>
         ) : (
           <div className="label">substrate — pane {pane.id.slice(0, 6)}</div>

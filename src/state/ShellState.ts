@@ -130,6 +130,11 @@ export interface Pane {
     count: number;
     activeIndex: number;
   };
+  // Sprint 030 — slash router. Opens on a prompt draft that begins
+  // with "/". The `index` walks the ratified command list. Layer 2's
+  // SLASH_ROUTER_WALKED carries {from_index, to_index} — the reducer
+  // holds `index` state, WALKED payloads derive from adjacent values.
+  slashRouter: { open: boolean; index: number };
   // Later sprints extend: surface (records/assay/studio),
   // find, header_popover, etc.
 }

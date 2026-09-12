@@ -5,17 +5,34 @@
 
 import { useEffect, useRef } from "react";
 import { Pane } from "@/state/ShellState";
+import { SLASH_COMMANDS } from "@/state/SlashCommands";
+
+function pickSlashCommand(index: number): string {
+  const n = SLASH_COMMANDS.length;
+  return SLASH_COMMANDS[((index % n) + n) % n].name;
+}
+
+function parseSlashArg(text: string): string {
+  const sp = text.indexOf(" ");
+  return sp === -1 ? "" : text.slice(sp + 1);
+}
 
 interface Props {
   pane: Pane;
   onText: (paneId: string, text: string) => void;
   onLengthChanged: (paneId: string, length: number) => void;
   onSubmit: (paneId: string, text: string) => void;
+  onSlashRouterWalk?: (paneId: string, delta: 1 | -1) => void;
+  onSlashRouterCancel?: (paneId: string) => void;
+  onSlashCommandRoute?: (paneId: string, command: string, arg: string) => void;
 }
 
 const DEBOUNCE_MS = 100;
 
-export function Prompt({ pane, onText, onLengthChanged, onSubmit }: Props): JSX.Element {
+export function Prompt({
+  pane, onText, onLengthChanged, onSubmit,
+  onSlashRouterWalk, onSlashRouterCancel, onSlashCommandRoute,
+}: Props): JSX.Element {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastFiredLength = useRef<number>(pane.promptDraft.length);
 
@@ -44,6 +61,18 @@ export function Prompt({ pane, onText, onLengthChanged, onSubmit }: Props): JSX.
           scheduleEmit(pane.id, text.length);
         }}
         onKeyDown={(e) => {
+          if (pane.slashRouter.open && onSlashRouterWalk && onSlashRouterCancel && onSlashCommandRoute) {
+            if (e.key === "ArrowDown") { e.preventDefault(); onSlashRouterWalk(pane.id, 1); return; }
+            if (e.key === "ArrowUp")   { e.preventDefault(); onSlashRouterWalk(pane.id, -1); return; }
+            if (e.key === "Escape")    { e.preventDefault(); onSlashRouterCancel(pane.id); return; }
+            if (e.key === "Enter" && !e.metaKey && !e.ctrlKey && !e.shiftKey) {
+              e.preventDefault();
+              const command = pickSlashCommand(pane.slashRouter.index);
+              const arg = parseSlashArg(pane.promptDraft);
+              onSlashCommandRoute(pane.id, command, arg);
+              return;
+            }
+          }
           if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
             e.preventDefault();
             const text = pane.promptDraft.trim();
