@@ -16,10 +16,11 @@
 import { StrictMode, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { initial, reduce, Action, Emission, ActionType } from "@/reducer/ShellReducer";
-import { ShellState, Pane } from "@/state/ShellState";
+import { ShellState, Pane as PaneModel } from "@/state/ShellState";
 import { emit } from "@/observability/Emitter";
 import { Tag } from "@/observability/tags";
 import { Anchor, AnchorScope, AppSlot, appAnchorId } from "./Anchor";
+import { Pane } from "./Pane";
 import { BridgeStatus, SurfaceKind, RevealState } from "@/observability/reasons";
 
 interface SubstrateBridge {
@@ -107,7 +108,7 @@ function Wordmark({ dotColor }: { dotColor: string }): JSX.Element {
 function DriverPicker({
   pane, onOpen, onClose, onPick,
 }: {
-  pane: Pane;
+  pane: PaneModel;
   onOpen: () => void;
   onClose: () => void;
   onPick: (from: string, to: string) => void;
@@ -162,7 +163,7 @@ function DriverPicker({
 
 function WorkspacePopoverChip({
   pane, onOpen, onClose,
-}: { pane: Pane; onOpen: () => void; onClose: () => void }): JSX.Element {
+}: { pane: PaneModel; onOpen: () => void; onClose: () => void }): JSX.Element {
   const shape = pane.workspaceShape ?? "";
   const label = shape ? `⌥ ${shape}` : "⌥ —";
   const chipStyle: React.CSSProperties = {
@@ -251,7 +252,7 @@ function Shell(): JSX.Element {
 
   const state = stateRef.current;
   const focusedId = state.focusedPaneId;
-  const focused: Pane | null = focusedId ? state.panes[focusedId] : null;
+  const focused: PaneModel | null = focusedId ? state.panes[focusedId] : null;
 
   const surfaceKind = focused?.surface?.kind ?? null;
   const revealed = focused?.reveal === RevealState.REVEAL;
@@ -351,15 +352,53 @@ function Shell(): JSX.Element {
         >{revealLabel}</button>
       </div>
 
-      <div style={{ flex: 1, position: "relative", minHeight: 0 }}>
-        <div
-          style={{
-            position: "absolute", inset: 0, display: "flex",
-            alignItems: "center", justifyContent: "center",
-            color: C.textFaintest, fontSize: 11,
-          }}
-        >
-          <span className="label">port in progress · Q2 lands the pane grid</span>
+      <div style={{ flex: 1, position: "relative", minHeight: 0, display: "flex" }}>
+        <div style={{
+          flex: 1, display: "grid",
+          gridTemplateColumns: "1fr", gridTemplateRows: "1fr",
+          gap: 1, background: "rgba(255,255,255,.055)", minHeight: 0,
+        }}>
+          {Object.values(state.panes).map((pn) => (
+            <Pane
+              key={pn.id}
+              pane={pn}
+              focused={pn.id === focusedId}
+              singlePane={Object.keys(state.panes).length === 1}
+              onFocus={(paneId) => dispatch({ type: ActionType.FOCUS_PANE, paneId })}
+              onDriverDropdownOpen={(paneId, options) =>
+                dispatch({ type: ActionType.DRIVER_DROPDOWN_OPEN, paneId, options })}
+              onDriverDropdownClose={(paneId) =>
+                dispatch({ type: ActionType.DRIVER_DROPDOWN_CLOSE, paneId })}
+              onDriverPick={(paneId, sessionId, fromDriver, toDriver) =>
+                dispatch({
+                  type: ActionType.DRIVER_PICK_START,
+                  paneId,
+                  requestId: crypto.randomUUID().replace(/-/g, "").slice(0, 12),
+                  sessionId, fromDriver, toDriver,
+                })}
+              onWorkspacePopoverOpen={(paneId) =>
+                dispatch({ type: ActionType.WORKSPACE_POPOVER_OPEN, paneId })}
+              onWorkspacePopoverClose={(paneId) =>
+                dispatch({ type: ActionType.WORKSPACE_POPOVER_CLOSE, paneId })}
+              onRecordsToggle={(paneId) => {
+                const p = stateRef.current.panes[paneId];
+                if (p?.surface?.kind === SurfaceKind.RECORDS) {
+                  dispatch({ type: ActionType.SURFACE_CLOSE, paneId });
+                } else {
+                  dispatch({ type: ActionType.SURFACE_OPEN, paneId, kind: SurfaceKind.RECORDS });
+                }
+              }}
+              onStudioToggle={(paneId) => {
+                const p = stateRef.current.panes[paneId];
+                if (p?.surface?.kind === SurfaceKind.STUDIO) {
+                  dispatch({ type: ActionType.SURFACE_CLOSE, paneId });
+                } else {
+                  dispatch({ type: ActionType.SURFACE_OPEN, paneId, kind: SurfaceKind.STUDIO });
+                }
+              }}
+              onRevealToggle={(paneId) => dispatch({ type: ActionType.REVEAL_TOGGLE, paneId })}
+            />
+          ))}
         </div>
       </div>
 
