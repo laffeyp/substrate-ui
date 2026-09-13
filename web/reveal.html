@@ -364,19 +364,25 @@
   <div style="flex:1;overflow:auto;background:#212327;padding:22px 40px">
    <div style="max-width:760px">
     <div style="font-size:10px;letter-spacing:.14em;color:#62676f;margin-bottom:10px">WORKSPACES</div>
-    <div style="color:#d7dade;font-size:13px">~/code/substrate <span style="color:#62676f;font-size:11px">git · sessions get worktrees</span></div>
-    <div style="margin:8px 0 0 16px;padding:10px 14px;background:#2e3138;border-radius:6px;cursor:pointer" onClick="{{ backToSession }}">
-     <div style="display:flex;gap:9px;align-items:center"><span style="width:7px;height:7px;border-radius:50%;background:#82a5c8"></span><span style="color:#e2e5e9">fix-race-in-metering</span><span style="color:#62676f;font-size:11px">◐ parked · turn 9</span><span style="margin-left:auto;color:#62676f;font-size:11px">substrate/fix-race · kimi-k2 · open ▸</span></div>
-     <div style="font-size:11px;color:#9aa0a8;margin:4px 0 0 16px">⑂ reviewer-a <span style="color:#62676f">standing · 3 calls</span> &nbsp;·&nbsp; <span style="color:#62676f">⑂ 2 one-shot children · folded under their turns</span></div>
-    </div>
-    <sc-for list="{{ extraSessions }}" as="x" hint-placeholder-count="0">
-     <div style="margin:6px 0 0 16px;padding:8px 14px;font-size:12px;color:#9aa0a8;display:flex;gap:9px;align-items:center"><span style="width:7px;height:7px;border-radius:50%;background:#82a5c8;opacity:.55;flex:none"></span><span style="color:#e2e5e9">{{ x.name }}</span><span style="color:#62676f;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">◐ parked · {{ x.meta }}</span><span style="margin-left:auto;color:#62676f;font-size:11px;flex:none">{{ x.where }}</span></div>
+    <sc-for list="{{ workspaceGroups }}" as="ws" hint-placeholder-count="1">
+     <div style="margin-top:16px">
+      <div style="color:#d7dade;font-size:13px">{{ ws.path }} <span style="color:#62676f;font-size:11px">{{ ws.shapeLabel }}</span></div>
+      <sc-for list="{{ ws.sessions }}" as="s" hint-placeholder-count="1">
+       <div style="margin:6px 0 0 16px;padding:8px 14px;font-size:12px;display:flex;gap:9px;align-items:center;border-radius:6px" style-hover="background:#26292e">
+        <span style="width:7px;height:7px;border-radius:50%;background:{{ s.dotColor }};flex:none"></span>
+        <span style="color:#e2e5e9">{{ s.name }}</span>
+        <span style="color:#62676f;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ s.statusLabel }} · {{ s.driver }}</span>
+        <span style="margin-left:auto;color:#62676f;font-size:11px;flex:none">{{ s.sessionIdShort }}</span>
+       </div>
+      </sc-for>
+      <sc-if value="{{ ws.empty }}" hint-placeholder-val="{{ false }}">
+       <div style="margin:6px 0 0 16px;padding:8px 14px;color:#62676f;font-size:11px">no live sessions here</div>
+      </sc-if>
+     </div>
     </sc-for>
-    <div style="margin:6px 0 0 16px;padding:8px 14px;color:#62676f;font-size:12px"><span style="color:#4a4e55">●</span> swebench-repro <span style="font-size:11px">finalised tue · ✓ clean</span></div>
-    <div style="color:#d7dade;font-size:13px;margin-top:16px">~/notes/substrate-docs <span style="color:#62676f;font-size:11px">flat</span></div>
-    <div style="margin:6px 0 0 16px;padding:8px 14px;font-size:12px;color:#9aa0a8"><span style="color:#82a5c8;opacity:.55">●</span> docs-pass <span style="color:#62676f;font-size:11px">◐ parked 41m · claude-cli</span></div>
-    <div style="color:#d7dade;font-size:13px;margin-top:16px">~/.substrate <span style="color:#62676f;font-size:11px">sandbox</span></div>
-    <div style="margin:6px 0 0 16px;padding:8px 14px;font-size:12px;color:#9aa0a8"><span style="color:#82a5c8">●</span> scratch <span style="color:#62676f;font-size:11px">● running · deepseek-r1:8b · ~/.substrate/sessions/s_9b2…/workspace</span></div>
+    <sc-if value="{{ workspaceGroupsEmpty }}" hint-placeholder-val="{{ false }}">
+     <div style="padding:8px 14px;color:#62676f;font-size:11.5px">no workspaces on record — bind one below</div>
+    </sc-if>
     <div style="font-size:10px;letter-spacing:.14em;color:#62676f;margin:22px 0 8px;border-top:1px solid rgba(255,255,255,.055);padding-top:14px">ASSAYS</div>
     <div style="padding:8px 14px;background:#1a1c20;border-radius:6px;cursor:pointer;display:flex;gap:12px" style-hover="background:#26292e" onClick="{{ openAssay }}"><span style="color:#e2e5e9">rev_kimi_vs_glm</span><span style="color:#62676f;font-size:11px">4 arms × 32 cases × 3 trials · 384 cells · finding ready · open ▸</span></div>
     <div style="padding:8px 14px;margin-top:4px;display:flex;gap:12px;color:#9aa0a8"><span>coding_cells</span><span style="color:#62676f;font-size:11px">4 arms · 2840 cells</span></div>
@@ -950,6 +956,62 @@ class Component extends DCLogic {
     // controller change. `scriptedOn` inverts `liveOn` so the demo
     // narrative fades out the moment a real session is bound.
     const _vmSnap = S.controllerSnapshot || null;
+    // Records surface: group live sessions by workspace path. Every
+    // recentWorkspaces row gets a group; sessions the controller has
+    // seen slot in under their workspace.
+    const _liveSessionsForGroups = (S.liveSessionsFromServer || []);
+    const _workspaces = (S.recentWorkspaces || []);
+    const _sessionsByWorkspace = new Map();
+    for (const row of _liveSessionsForGroups) {
+      const key = row.workspacePath || row.workspace || '(unknown)';
+      const list = _sessionsByWorkspace.get(key) || [];
+      list.push(row);
+      _sessionsByWorkspace.set(key, list);
+    }
+    const _workspaceGroups = _workspaces.map(ws => {
+      const rows = _sessionsByWorkspace.get(ws.path) || [];
+      _sessionsByWorkspace.delete(ws.path);
+      return {
+        path: ws.path,
+        shapeLabel: ws.shape === 'worktree' ? 'git · sessions get worktrees'
+          : ws.shape === 'sandbox' ? 'sandbox'
+          : ws.shape,
+        sessions: rows.map(r => ({
+          name: r.name || (r.sessionId || '').slice(0, 12),
+          driver: r.driver || '?',
+          statusLabel: r.status === 'live' ? '● running'
+            : r.status === 'parked' ? '◐ parked'
+            : r.status === 'interrupted' ? '! interrupted'
+            : '◇ ' + r.status,
+          dotColor: r.status === 'live' ? '#7fb3b8'
+            : r.status === 'parked' ? '#82a5c8'
+            : r.status === 'interrupted' ? '#c26058'
+            : '#62676f',
+          sessionIdShort: (r.sessionId || '').slice(0, 12),
+        })),
+        empty: rows.length === 0,
+      };
+    });
+    // Any sessions whose workspace is not on the recent list still
+    // appear under an "(other)" group so nothing hides.
+    if (_sessionsByWorkspace.size > 0) {
+      const orphans = [];
+      for (const [key, rows] of _sessionsByWorkspace.entries()) {
+        for (const r of rows) orphans.push({ workspace: key, row: r });
+      }
+      _workspaceGroups.push({
+        path: '(other)',
+        shapeLabel: `${orphans.length} session${orphans.length === 1 ? '' : 's'} in workspaces not on the recent list`,
+        sessions: orphans.map(o => ({
+          name: o.row.name || (o.row.sessionId || '').slice(0, 12),
+          driver: o.row.driver || '?',
+          statusLabel: '· ' + o.row.status,
+          dotColor: '#62676f',
+          sessionIdShort: (o.row.sessionId || '').slice(0, 12) + ' · ' + o.workspace,
+        })),
+        empty: orphans.length === 0,
+      });
+    }
     const _hasVmSession = !!(_vmSnap && _vmSnap.sessionId);
     const _vmTranscript = (_vmSnap && Array.isArray(_vmSnap.transcript)) ? _vmSnap.transcript : [];
     const _liveTranscriptRows = _vmTranscript.map(row => {
@@ -964,6 +1026,8 @@ class Component extends DCLogic {
     });
 
     return {
+      workspaceGroups: _workspaceGroups,
+      workspaceGroupsEmpty: _workspaceGroups.length === 0,
       liveOn: _hasVmSession,
       scriptedOn: !_hasVmSession,
       liveTranscript: _liveTranscriptRows,
