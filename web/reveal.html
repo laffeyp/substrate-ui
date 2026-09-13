@@ -82,6 +82,18 @@
    </sc-if>
    <sc-if value="{{ notDescended }}" hint-placeholder-val="{{ true }}">
    <div style="flex:1;overflow-y:auto;overflow-x:hidden;padding:16px 22px;line-height:2;font-size:{{ fontSize }}px;min-width:0">
+    <sc-if value="{{ liveOn }}" hint-placeholder-val="{{ true }}">
+     <div style="color:#62676f;font-size:11px;padding-bottom:6px">session {{ liveSessionLabel }} · {{ liveEventCount }} events · {{ liveConnection }}</div>
+     <sc-for list="{{ liveTranscript }}" as="row" hint-placeholder-count="0">
+      <div style="margin-top:{{ row.marginTop }};color:{{ row.textColor }};white-space:normal;max-width:840px">
+       <span style="color:{{ row.glyphColor }};margin-right:6px">{{ row.glyph }}</span>{{ row.text }}
+      </div>
+     </sc-for>
+     <sc-if value="{{ liveEmpty }}" hint-placeholder-val="{{ true }}">
+      <div style="color:#4a4e55;font-size:11.5px">◐ ready — type below to send your first turn</div>
+     </sc-if>
+    </sc-if>
+    <sc-if value="{{ scriptedOn }}" hint-placeholder-val="{{ false }}">
     <div style="color:#62676f;opacity:{{ fdIntro }}">session fix-race-in-metering resumed · turn 9 · record 01M1684 · 244 events</div>
     <div style="margin-top:12px;opacity:{{ fdU1 }}"><span style="color:#82a5c8">›</span> <span style="color:#e2e5e9">the metering test flakes under load — find and fix the race</span></div>
     <div style="color:#62676f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:{{ fdGrep }}">  ⚙ grep "meter_lock" src/ ······································ 14 matches</div>
@@ -113,6 +125,7 @@
     <sc-for list="{{ sentLines }}" as="sl" hint-placeholder-count="0">
      <div style="margin-top:8px"><span style="color:#82a5c8">›</span> <span style="color:#e2e5e9">{{ sl.text }}</span><div style="color:#62676f;font-size:11px">queued — prototype only; the real app resumes the parked run in-process (registry turn)</div></div>
     </sc-for>
+    </sc-if>
    </div>
    <div style="flex:none;padding:0 22px 16px">
     <sc-if value="{{ routerOpen }}" hint-placeholder-val="{{ false }}">
@@ -187,6 +200,18 @@
     </sc-if>
     <sc-if value="{{ notDescended }}" hint-placeholder-val="{{ true }}">
     <div onClick="{{ focusTranscript }}" style="flex:1;overflow-y:auto;overflow-x:hidden;padding:20px 26px;line-height:1.95;font-size:{{ fontSize }}px;min-width:0">
+     <sc-if value="{{ liveOn }}" hint-placeholder-val="{{ true }}">
+      <div style="color:#62676f;font-size:11px;padding-bottom:8px">session {{ liveSessionLabel }} · {{ liveEventCount }} events · {{ liveConnection }}</div>
+      <sc-for list="{{ liveTranscript }}" as="row" hint-placeholder-count="0">
+       <div style="margin-top:{{ row.marginTop }};color:{{ row.textColor }};white-space:normal;max-width:840px">
+        <span style="color:{{ row.glyphColor }};margin-right:6px">{{ row.glyph }}</span>{{ row.text }}
+       </div>
+      </sc-for>
+      <sc-if value="{{ liveEmpty }}" hint-placeholder-val="{{ true }}">
+       <div style="color:#4a4e55;font-size:11.5px">◐ ready — type below to send your first turn</div>
+      </sc-if>
+     </sc-if>
+     <sc-if value="{{ scriptedOn }}" hint-placeholder-val="{{ false }}">
      <div style="opacity:{{ fdU1 }}"><span style="color:#82a5c8">›</span> <span style="color:#e2e5e9">the metering test flakes under load — find and fix the race</span></div>
      <div style="color:#62676f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:{{ fdGrep }}">  ⚙ grep "meter_lock" src/ ····················· 14 matches</div>
      <div style="color:#62676f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:{{ fdRead }}">  ⚙ read_file metering.py ······················ 312 lines</div>
@@ -201,6 +226,7 @@
      <div style="color:#62676f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:{{ fdBash }}">  ⚙ bash pytest -k metering -n 8 ················ <span style="color:#9aa0a8">24 passed ✓</span></div>
      <div style="margin-top:8px;max-width:560px;opacity:{{ fdAns }}">The race was in _emit_log — unlocked deque shared by two producers. Kernel lock added; reviewer-a signed off.</div>
      <div style="margin-top:10px;color:#82a5c8;opacity:{{ fdPark }}">◐ parked</div>
+     </sc-if>
     </div>
     </sc-if>
     </sc-if>
@@ -215,7 +241,7 @@
      <sc-if value="{{ descNotTalkable }}" hint-placeholder-val="{{ false }}"><div style="flex:none;padding:0 26px 18px;font-size:11px;color:#4a4e55">this topology takes no messages — watching · esc to leave</div></sc-if>
     </sc-if>
     <sc-if value="{{ notDescended }}" hint-placeholder-val="{{ true }}">
-    <div style="flex:none;padding:12px 26px 18px"><div style="display:flex;gap:12px;border-radius:6px;padding:10px 15px;background:#1a1c20"><span style="color:#82a5c8">›</span><span style="color:#62676f">type to talk · / commands</span></div></div>
+    <div style="flex:none;padding:12px 26px 18px"><div style="display:flex;gap:12px;align-items:center;border-radius:6px;padding:10px 15px;background:#1a1c20"><span style="color:#82a5c8">›</span><input value="{{ promptVal }}" onChange="{{ onPrompt }}" onKeyDown="{{ onPromptKey }}" placeholder="type to talk · ↵ to send" style="flex:1;background:none;border:none;outline:none;color:#e2e5e9;font-family:inherit;font-size:13px"></input></div></div>
     </sc-if>
    </div>
    <div style="flex:1;display:flex;flex-direction:column;min-width:0;background:#1a1c20">
@@ -915,7 +941,33 @@ class Component extends DCLogic {
       { name: 'glm_solo', nameColor: '#9aa0a8', overall: '.59', barW: '59%', barColor: '#62676f', easy: '.94', med: '.73', hard: '.50', adv: '.17', advColor: '#9aa0a8', delta: '−.05 · p=.41', deltaColor: '#9aa0a8', verdict: 'inconclusive', verdictColor: '#9aa0a8' },
       { name: 'glm + reviewer-kimi', nameColor: '#9aa0a8', overall: '.76', barW: '76%', barColor: '#62676f', easy: '.95', med: '.85', hard: '.58', adv: 'n/a', advColor: '#c26058', delta: '+.12', deltaColor: '#9aa0a8', verdict: 'underpowered', verdictColor: '#c26058' },
     ];
+    // Presentation-Model bindings — Phase 4. Every field here reads
+    // from `S.controllerSnapshot` which reveal.ts refreshes on every
+    // controller change. `scriptedOn` inverts `liveOn` so the demo
+    // narrative fades out the moment a real session is bound.
+    const _vmSnap = S.controllerSnapshot || null;
+    const _hasVmSession = !!(_vmSnap && _vmSnap.sessionId);
+    const _vmTranscript = (_vmSnap && Array.isArray(_vmSnap.transcript)) ? _vmSnap.transcript : [];
+    const _liveTranscriptRows = _vmTranscript.map(row => {
+      let glyph = '·', glyphColor = '#4a4e55', textColor = '#9aa0a8', marginTop = '2px';
+      if (row.role === 'user') { glyph = '›'; glyphColor = '#82a5c8'; textColor = '#e2e5e9'; marginTop = '12px'; }
+      else if (row.role === 'model') { glyph = '◆'; glyphColor = '#7fb3b8'; textColor = '#b9bec5'; marginTop = '6px'; }
+      else if (row.role === 'tool') { glyph = '⚙'; glyphColor = '#62676f'; textColor = '#62676f'; }
+      else if (row.role === 'park') { glyph = '◐'; glyphColor = '#82a5c8'; textColor = '#82a5c8'; marginTop = '10px'; }
+      else if (row.role === 'ended') { glyph = '◇'; glyphColor = '#62676f'; textColor = '#62676f'; marginTop = '10px'; }
+      else if (row.role === 'warning') { glyph = '!'; glyphColor = '#c26058'; textColor = '#c26058'; }
+      return { glyph, glyphColor, textColor, marginTop, text: row.text || '' };
+    });
+
     return {
+      liveOn: _hasVmSession,
+      scriptedOn: !_hasVmSession,
+      liveTranscript: _liveTranscriptRows,
+      liveEmpty: _hasVmSession && _liveTranscriptRows.length === 0,
+      liveSessionLabel: _vmSnap && _vmSnap.sessionName ? _vmSnap.sessionName
+        : (_vmSnap && _vmSnap.sessionId ? _vmSnap.sessionId.slice(0, 12) : ''),
+      liveEventCount: _liveTranscriptRows.length,
+      liveConnection: _vmSnap ? _vmSnap.connection : 'idle',
       crumb: surf === 'records' ? fp.name + ' › records' : surf === 'assay' ? fp.name + ' › assays › rev_kimi_vs_glm' : surf === 'studio' ? fp.name + ' › studio' : descended ? fp.name + S.descent.map(k => ' › ⑂ ' + CH[k].name).join('') : fp.name,
       escHint: surf ? 'esc — back' : descended ? 'esc — up one level' : '',
       openRecords: () => this._toggleSurface('records'),
@@ -1051,7 +1103,14 @@ class Component extends DCLogic {
       doBuild: () => { const errs = this._validate(); this.setState(errs.length ? { studioOut: 'build refused — ' + errs.join(' · '), studioOutColor: '#c26058' } : { studioOut: 'built — registered ' + this.state.topoName + ' (' + this.state.responder + (this.state.responder === 'deterministic' ? ' seed ' + this.state.seed : ' model ' + this.state.model) + ') · launched build_authored_demo_72eb8f85fcab ▸', studioOutColor: '#82a5c8' }); },
       studioOut: S.studioOut, studioOutColor: S.studioOutColor,
       sentLines: S.sent.map(t => ({ text: t })),
-      onPromptKey: (ev) => { if (ev.key === 'Enter') { const v = this.state.promptVal.trim(); if (v && !v.startsWith('/')) this.setState(s => ({ sent: [...s.sent, v], promptVal: '' })); } },
+      onPromptKey: (ev) => {
+        if (ev.key !== 'Enter') return;
+        const v = this.state.promptVal.trim();
+        if (!v || v.startsWith('/')) return;
+        this.setState({ promptVal: '' });
+        const vm = window.__vm;
+        if (vm) vm.sendTurn(v);
+      },
       panes, paneCols: S.colW.map(w => w.toFixed(3) + 'fr').join(' '), paneRows: S.rowW.map(w => w.toFixed(3) + 'fr').join(' '), focusedName: fp.name, fpLines: fp.lines || [],
       revealFlexL: S.revealL.toFixed(3) + ' 1 0%',
       revealGutterLeft: (S.revealL / (S.revealL + 1) * 100).toFixed(2) + '%',
