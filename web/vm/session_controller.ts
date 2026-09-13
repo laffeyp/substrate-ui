@@ -58,6 +58,8 @@ interface RawSession {
   session_id: string;
   name?: string | null;
   driver?: string | null;
+  workspace?: string | null;
+  workspace_shape?: string | null;
 }
 
 interface RecentWorkspaceRow {
@@ -385,5 +387,7 @@ function rowFrom(s: RawSession, status: SessionRow["status"]): SessionRow {
     name: s.name ?? (short ? `${short}…` : "session"),
     driver: s.driver ?? "?",
     status,
+    workspacePath: s.workspace ?? null,
+    workspaceShape: s.workspace_shape ?? null,
   };
 }

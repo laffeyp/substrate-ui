@@ -30,6 +30,8 @@ export interface SessionRow {
   name: string;
   driver: string;
   status: "live" | "parked" | "interrupted" | "ended";
+  workspacePath: string | null;
+  workspaceShape: string | null;
 }
 
 /** One row a View renders in the workspace-picker list. */
