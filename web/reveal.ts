@@ -52,6 +52,7 @@ function reachComponent(): DCLogicHandle | null {
 
 function computeStatePatch(snap: Snapshot): Record<string, unknown> {
   return {
+    controllerSnapshot: snap,
     driverRoster: snap.driverRoster,
     driverDefault: snap.driverDefault,
   };
