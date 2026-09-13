@@ -14,6 +14,7 @@ export default defineConfig({
       input: {
         main: resolve(__dirname, "web/index.html"),
         studio: resolve(__dirname, "web/studio.html"),
+        reveal: resolve(__dirname, "web/reveal.html"),
       },
     },
   },

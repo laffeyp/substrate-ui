@@ -1,0 +1,1137 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>substrate · reveal</title>
+<!-- dc-runtime needs React + ReactDOM in window scope before support.js runs. -->
+<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script src="./support.js"></script>
+<script type="module" src="./reveal.ts"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><style>body{margin:0;background:#212327}a{color:#82a5c8}a:hover{color:#9db8d6}*{scrollbar-width:thin;scrollbar-color:#33373d transparent}::-webkit-scrollbar{width:5px;height:5px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#33373d;border-radius:3px}::-webkit-scrollbar-thumb:hover{background:#4a4e55}</style></helmet>
+<div style="height:100vh;display:flex;flex-direction:column;background:#212327;color:#b9bec5;font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;font-size:13px;overflow:hidden">
+ <sc-if value="{{ showStrip }}" hint-placeholder-val="{{ false }}">
+  <div style="display:flex;align-items:center;gap:6px;padding:7px 16px;background:#26292e;flex:none"><div style="display:flex;gap:6px;flex:none"><span style="width:12px;height:12px;border-radius:50%;background:#4a4e55"></span><span style="width:12px;height:12px;border-radius:50%;background:#4a4e55"></span><span style="width:12px;height:12px;border-radius:50%;background:#4a4e55"></span></div></div>
+ </sc-if>
+ <sc-if value="{{ showFullHeader }}" hint-placeholder-val="{{ true }}">
+  <div style="display:flex;align-items:center;gap:10px;padding:8px 16px;background:#26292e;flex:none;white-space:nowrap;min-width:0">
+   <div style="display:flex;gap:6px;flex:none"><span style="width:12px;height:12px;border-radius:50%;background:#4a4e55"></span><span style="width:12px;height:12px;border-radius:50%;background:#4a4e55"></span><span style="width:12px;height:12px;border-radius:50%;background:#4a4e55"></span></div>
+   <span style="display:inline-flex;align-items:baseline;flex:none"><span style="color:#e2e5e9;font-weight:600">substrate</span><span style="width:5px;height:5px;border-radius:50%;background:{{ logoDot }};display:inline-block;margin-left:3px"></span></span>
+   <span title="{{ crumb }}" style="color:#9aa0a8;font-size:11px;overflow:hidden;text-overflow:ellipsis;flex:0 1 auto;min-width:64px">{{ crumb }}</span>
+   <sc-if value="{{ showRevealed }}" hint-placeholder-val="{{ true }}"><span style="position:relative;flex:none;display:inline-block"><span onClick="{{ fpToggleDd }}" style="font-size:10.5px;color:#9aa0a8;border:1px solid rgba(255,255,255,.08);border-radius:4px;padding:1px 7px;cursor:pointer;display:inline-block" style-hover="color:#d7dade">{{ driverName }} ▾</span>
+   <sc-if value="{{ fpDdOpen }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;left:0;top:22px;z-index:30;background:#26292e;border:1px solid rgba(255,255,255,.12);border-radius:6px;padding:5px 0;display:flex;flex-direction:column;min-width:180px;box-shadow:0 8px 24px rgba(0,0,0,.4)"><sc-for list="{{ fpDriverOpts }}" as="d" hint-placeholder-count="5"><span onClick="{{ d.pick }}" style="padding:4px 12px;cursor:pointer;font-size:10.5px;color:{{ d.color }};white-space:nowrap" style-hover="background:#2e3138">{{ d.label }}</span></sc-for></span></sc-if></span>
+  <span style="position:relative;flex:0 4 auto;min-width:34px;display:inline-block"><span onClick="{{ fpToggleWs }}" style="font-size:10.5px;color:#62676f;border:1px solid rgba(255,255,255,.08);border-radius:4px;padding:1px 7px;cursor:pointer;display:inline-block;max-width:100%;box-sizing:border-box;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" style-hover="color:#9aa0a8">⌥ {{ focusedBranch }}</span>
+   <sc-if value="{{ fpWsOpen }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;left:0;top:22px;z-index:30;background:#26292e;border:1px solid rgba(255,255,255,.12);border-radius:6px;padding:9px 13px;display:block;min-width:270px;box-shadow:0 8px 24px rgba(0,0,0,.4);font-size:10.5px;line-height:1.8;color:#9aa0a8;white-space:nowrap">workspace <span style="color:#e2e5e9">~/code/substrate</span><br>shape <span style="color:#e2e5e9">worktree</span> · branch <span style="color:#e2e5e9">{{ focusedBranch }}</span><br><span style="color:#62676f">frozen at seq 1</span></span></sc-if></span></sc-if>
+   <span style="font-size:10.5px;color:#62676f;flex:none">{{ escHint }}</span>
+   <span style="flex:1;min-width:8px"></span>
+   <span style="font-size:11.5px;cursor:pointer;flex:none;color:{{ recordsColor }}" style-hover="color:#d7dade" onClick="{{ openRecords }}">records</span>
+   <span style="font-size:11.5px;cursor:pointer;flex:none;color:{{ studioColor }}" style-hover="color:#d7dade" onClick="{{ openStudio }}">studio</span>
+   <button onClick="{{ toggleReveal }}" style="font-family:inherit;cursor:pointer;flex:none;font-size:11.5px;color:{{ revealBtnColor }};background:{{ revealBtnBg }};border:none;border-radius:5px;padding:3px 10px;font-weight:600">{{ revealLabel }}</button>
+  </div>
+ </sc-if>
+
+ <!-- ══ SESSION · terminal at rest ══ -->
+ <sc-if value="{{ showTerminal }}" hint-placeholder-val="{{ true }}">
+  <div style="flex:1;position:relative;min-height:0;display:flex">
+  <div style="flex:1;display:grid;grid-template-columns:{{ paneCols }};grid-template-rows:{{ paneRows }};gap:1px;background:rgba(255,255,255,.055);min-height:0">
+   <sc-for list="{{ panes }}" as="pn" hint-placeholder-count="1">
+    <div onClick="{{ pn.focus }}" onDragOver="{{ pn.dragOver }}" onDragLeave="{{ pn.dragLeave }}" onDrop="{{ pn.dropSwap }}" style="background:#212327;display:flex;flex-direction:column;min-width:0;min-height:0;opacity:{{ pn.dim }};position:relative">
+     <sc-if value="{{ pn.hintOn }}" hint-placeholder-val="{{ false }}"><div style="position:absolute;left:{{ pn.hintL }};top:{{ pn.hintT }};width:{{ pn.hintW }};height:{{ pn.hintH }};background:rgba(130,165,200,.13);border:1px solid rgba(130,165,200,.4);z-index:20;pointer-events:none"></div></sc-if>
+     <div draggable="true" onDragStart="{{ pn.gripStart }}" style="display:flex;gap:{{ pn.hdrGap }};padding:6px 10px;background:#26292e;font-size:10px;align-items:center;white-space:nowrap;flex:none;min-width:0;overflow:hidden;cursor:default">
+      <sc-if value="{{ singlePane }}" hint-placeholder-val="{{ true }}"><div style="display:flex;gap:6px;flex:none"><span style="width:11px;height:11px;border-radius:50%;background:#4a4e55"></span><span style="width:11px;height:11px;border-radius:50%;background:#4a4e55"></span><span style="width:11px;height:11px;border-radius:50%;background:#4a4e55"></span></div></sc-if>
+      <span style="display:inline-flex;align-items:baseline;flex:none"><span style="color:#e2e5e9;font-weight:600;font-size:11px">substrate</span><span title="the dot is this session's status" style="width:4px;height:4px;border-radius:50%;background:{{ pn.dot }};display:inline-block;margin-left:3px"></span></span>
+      <sc-if value="{{ pn.editing }}" hint-placeholder-val="{{ false }}"><input value="{{ pn.nameVal }}" onChange="{{ pn.updName }}" onKeyDown="{{ pn.nameKey }}" style="background:#1a1c20;border:1px solid #82a5c8;border-radius:4px;color:#e2e5e9;font-family:inherit;font-size:10px;padding:1px 6px;outline:none;width:160px"></input></sc-if>
+      <sc-if value="{{ pn.notEditing }}" hint-placeholder-val="{{ true }}"><span onDoubleClick="{{ pn.startEdit }}" title="double-click to rename (needs a rename endpoint daemon-side — FD-1)" style="color:{{ pn.nameColor }};cursor:text;overflow:hidden;text-overflow:ellipsis;flex:0 1 auto;min-width:{{ pn.nameMin }}">{{ pn.name }}</span></sc-if>
+      <span style="margin-left:auto;flex:none"></span>
+      <sc-if value="{{ pn.showChips }}" hint-placeholder-val="{{ true }}"><span style="flex:none;position:relative;display:inline-block"><span onClick="{{ pn.toggleDd }}" style="color:#9aa0a8;border:1px solid rgba(255,255,255,.08);border-radius:4px;padding:0 6px;cursor:pointer;display:inline-block" style-hover="color:#d7dade">{{ pn.driver }} ▾</span>
+       <sc-if value="{{ pn.ddOpen }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;right:0;top:20px;z-index:30;background:#26292e;border:1px solid rgba(255,255,255,.12);border-radius:6px;padding:5px 0;display:flex;flex-direction:column;min-width:180px;box-shadow:0 8px 24px rgba(0,0,0,.4)"><sc-for list="{{ pn.driverOpts }}" as="d" hint-placeholder-count="5"><span onClick="{{ d.pick }}" style="padding:4px 12px;cursor:pointer;font-size:10.5px;color:{{ d.color }};white-space:nowrap" style-hover="background:#2e3138">{{ d.label }}</span></sc-for></span></sc-if></span>
+      <span style="flex:0 4 auto;min-width:34px;position:relative;display:inline-block;overflow:visible"><span onClick="{{ pn.toggleWsP }}" style="color:#62676f;border:1px solid rgba(255,255,255,.08);border-radius:4px;padding:0 6px;cursor:pointer;display:inline-block;max-width:100%;box-sizing:border-box;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" style-hover="color:#9aa0a8" title="⌥ {{ pn.branch }}">{{ pn.wsLabel }}</span>
+       <sc-if value="{{ pn.wsOpenP }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;right:0;top:20px;z-index:30;background:#26292e;border:1px solid rgba(255,255,255,.12);border-radius:6px;padding:9px 13px;display:block;min-width:270px;box-shadow:0 8px 24px rgba(0,0,0,.4);font-size:10.5px;line-height:1.8;color:#9aa0a8;white-space:nowrap">workspace <span style="color:#e2e5e9">~/code/substrate</span><br>shape <span style="color:#e2e5e9">worktree</span> · branch <span style="color:#e2e5e9">{{ pn.branch }}</span><br><span style="color:#62676f">frozen at seq 1</span></span></sc-if></span></sc-if>
+      <span style="cursor:pointer;flex:none;color:#9aa0a8" style-hover="color:#d7dade" onClick="{{ pn.goRecords }}">records</span>
+      <span style="cursor:pointer;flex:none;color:#9aa0a8" style-hover="color:#d7dade" onClick="{{ pn.goStudio }}">studio</span>
+      <span onClick="{{ pn.goReveal }}" style="cursor:pointer;flex:none;color:#9aa0a8;background:#3d434c;border-radius:4px;padding:1px 6px;font-weight:600" title="⌃` reveal — expand this session over the window" style-hover="color:#d7dade">{{ pn.revealText }}</span>
+     </div>
+     <sc-if value="{{ pn.isMain }}" hint-placeholder-val="{{ true }}">
+   <sc-if value="{{ findOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="display:flex;gap:10px;align-items:center;padding:8px 22px;border-bottom:1px solid rgba(255,255,255,.055);flex:none"><span style="color:#62676f;font-size:11px">find</span><div style="display:flex;gap:8px;border:1px solid rgba(255,255,255,.13);border-radius:5px;padding:4px 10px;background:#1a1c20;width:230px"><input value="{{ findQ }}" onChange="{{ onFindQ }}" placeholder="find in transcript" style="flex:1;background:none;border:none;outline:none;color:#e2e5e9;font-family:inherit;font-size:12px"></input></div><span style="color:#62676f;font-size:10.5px">{{ findCount }}</span><span onClick="{{ closeFind }}" style="margin-left:auto;color:#62676f;font-size:10.5px;cursor:pointer">esc</span></div>
+   </sc-if>
+   <sc-if value="{{ descended }}" hint-placeholder-val="{{ false }}">
+    <div style="flex:1;overflow-y:auto;overflow-x:hidden;padding:16px 22px;line-height:2;font-size:{{ fontSize }}px;min-width:0">
+     <sc-if value="{{ nestedOn }}" hint-placeholder-val="{{ false }}">
+      <sc-for list="{{ descAncestors }}" as="an" hint-placeholder-count="0"><div style="opacity:.35;color:{{ an.c }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ an.t }}</div></sc-for>
+     </sc-if>
+     <div style="border-left:{{ descBorder }};padding-left:{{ descPad }}">
+      <div style="color:#9aa0a8">{{ descHead }} <span style="color:#4a4e55">{{ descWatchNote }}</span></div>
+      <sc-for list="{{ descLines }}" as="dl" hint-placeholder-count="4">
+       <div onClick="{{ dl.click }}" style="color:{{ dl.c }};cursor:{{ dl.cur }};white-space:{{ dl.ws }};overflow:hidden;text-overflow:ellipsis;margin-top:{{ dl.mt }};max-width:700px">{{ dl.t }}</div>
+      </sc-for>
+     </div>
+    </div>
+    <div style="flex:none;padding:0 22px 6px;font-size:10.5px;display:flex;gap:8px;align-items:center;white-space:nowrap;overflow:hidden">
+     <sc-for list="{{ descCrumbs }}" as="cr" hint-placeholder-count="2"><span onClick="{{ cr.jump }}" style="color:{{ cr.c }};cursor:pointer">{{ cr.t }}</span></sc-for>
+     <span style="margin-left:auto;color:#4a4e55;flex:none">{{ descEscHint }}</span>
+    </div>
+    <sc-if value="{{ descTalkable }}" hint-placeholder-val="{{ false }}">
+     <div style="flex:none;padding:0 22px 16px"><div style="display:flex;gap:12px;align-items:center;border-radius:6px;padding:11px 16px;background:#1a1c20;border-left:2px solid {{ descColor }}"><span style="color:{{ descColor }}">›</span><input value="{{ descPv }}" onChange="{{ onDescPv }}" onKeyDown="{{ onDescPvKey }}" placeholder="{{ descPlaceholder }}" style="flex:1;background:none;border:none;outline:none;color:#e2e5e9;font-family:inherit;font-size:13px"></input></div></div>
+    </sc-if>
+    <sc-if value="{{ descNotTalkable }}" hint-placeholder-val="{{ false }}"><div style="flex:none;padding:0 22px 16px;font-size:11px;color:#4a4e55">this topology takes no messages — watching · esc to leave</div></sc-if>
+   </sc-if>
+   <sc-if value="{{ notDescended }}" hint-placeholder-val="{{ true }}">
+   <div style="flex:1;overflow-y:auto;overflow-x:hidden;padding:16px 22px;line-height:2;font-size:{{ fontSize }}px;min-width:0">
+    <div style="color:#62676f;opacity:{{ fdIntro }}">session fix-race-in-metering resumed · turn 9 · record 01M1684 · 244 events</div>
+    <div style="margin-top:12px;opacity:{{ fdU1 }}"><span style="color:#82a5c8">›</span> <span style="color:#e2e5e9">the metering test flakes under load — find and fix the race</span></div>
+    <div style="color:#62676f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:{{ fdGrep }}">  ⚙ grep "meter_lock" src/ ······································ 14 matches</div>
+    <div style="color:#62676f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:{{ fdRead }}">  ⚙ read_file src/substrate/metering.py ························ 312 lines</div>
+    <div style="color:#62676f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:{{ fdEdit }}">  ⚙ edit_file src/substrate/metering.py ························ ok</div>
+    <div style="margin-top:10px;opacity:{{ fdU2 }}"><span style="color:#82a5c8">›</span> <span style="color:#e2e5e9">have someone review the locking change before we land it</span></div>
+    <div style="color:#a08fc9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:{{ fdDel }}"><span style="cursor:pointer" onClick="{{ toggleChild }}">  ⑂ delegate → reviewer-a "review the locking change" {{ childHint }}</span> <span onClick="{{ descendReviewer }}" style="cursor:pointer;color:#62676f" title="descend into the child — talk to it (D70)">· descend ⏎</span></div>
+    <sc-if value="{{ childOpen }}" hint-placeholder-val="{{ false }}">
+     <div style="margin:6px 0 6px 34px;border-left:2px solid #665f7d;background:#1a1c20;border-radius:0 6px 6px 0;max-width:min(720px,calc(100% - 34px));overflow:hidden">
+      <div style="display:flex;gap:12px;padding:7px 14px;font-size:11px;background:#26292e;min-width:0"><span style="color:#a08fc9;flex:none">⑂ child</span><span style="color:#9aa0a8;flex:none">reviewer-a · standing</span><span style="color:#62676f;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0" title="record delegate_child_3e366fe6_c0">record delegate_child_3e366fe6_c0</span><span style="margin-left:auto;color:#62676f;flex:none">depth 1/2 · done</span></div>
+      <div style="padding:10px 14px;font-size:12px;line-height:1.9;color:#62676f;min-width:0"><div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">⚙ read_file src/substrate/metering.py ·· 312 lines</div><div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">⚙ grep "acquire" src/substrate/kernel/ ·· 6 matches</div><div style="color:#9aa0a8">folded back: "lock scope is right — add a comment on why the deque needs the kernel lock"</div></div>
+     </div>
+    </sc-if>
+    <div style="color:#62676f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:{{ fdBash }}">  ⚙ bash pytest -k metering -n 8 ································ <span style="color:#9aa0a8">24 passed ✓</span></div>
+    <div style="margin-top:10px;color:#b9bec5;max-width:700px;opacity:{{ fdAns }}">The race was in _emit_log — an unlocked deque shared by two producers. Wrapped it in the kernel lock; reviewer-a signed off. 24/24 green under -n 8.</div>
+    <div style="margin-top:10px;opacity:{{ fdU1 }}"><span style="color:#82a5c8">›</span> <span style="color:#e2e5e9">get three independent takes on the stripe floor — different models</span></div>
+    <div style="color:#a08fc9;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" onClick="{{ toggleFan }}">  ⑂ delegate → 3 children "derive the stripe floor independently" · 2 running · 1 parked {{ fanHint }}</div>
+    <sc-if value="{{ fanOpen }}" hint-placeholder-val="{{ false }}">
+     <div style="margin:4px 0 4px 34px;border-left:2px solid #665f7d;padding:2px 0 2px 14px;display:flex;flex-direction:column;gap:2px;font-size:12px">
+      <sc-for list="{{ fanRows }}" as="fr" hint-placeholder-count="3">
+       <div onClick="{{ fr.go }}" style="display:flex;gap:10px;align-items:baseline;cursor:pointer;padding:1px 8px;margin:0 -8px;border-radius:4px;white-space:nowrap;overflow:hidden" style-hover="background:#2e3138"><span style="color:#a08fc9;flex:none">⑂ {{ fr.name }}</span><span style="color:#9aa0a8;flex:none">{{ fr.driver }}</span><span style="color:#62676f;overflow:hidden;text-overflow:ellipsis">{{ fr.meta }}</span><span style="color:{{ fr.stC }};flex:none">{{ fr.st }}</span><span style="margin-left:auto;color:#62676f;flex:none">descend ⏎</span></div>
+      </sc-for>
+      <div style="color:#4a4e55;font-size:10.5px">results fold back as one ToolResult when all three finish</div>
+     </div>
+    </sc-if>
+    <sc-if value="{{ simRL }}" hint-placeholder-val="{{ false }}"><div style="color:#4a4e55">  ◌ rate-limited — retry 3/6 in 14s · kimi-k2 (api)</div></sc-if>
+    <div style="margin-top:12px;color:#82a5c8;opacity:{{ fdPark }}">◐ parked</div>
+    <sc-if value="{{ isEnded }}" hint-placeholder-val="{{ false }}"><div style="margin-top:8px;color:#62676f">◇ SessionEnded — record finalised · 246 events · ✓ clean · view in records</div></sc-if>
+    <sc-for list="{{ sentLines }}" as="sl" hint-placeholder-count="0">
+     <div style="margin-top:8px"><span style="color:#82a5c8">›</span> <span style="color:#e2e5e9">{{ sl.text }}</span><div style="color:#62676f;font-size:11px">queued — prototype only; the real app resumes the parked run in-process (registry turn)</div></div>
+    </sc-for>
+   </div>
+   <div style="flex:none;padding:0 22px 16px">
+    <sc-if value="{{ routerOpen }}" hint-placeholder-val="{{ false }}">
+     <div style="border-radius:6px 6px 0 0;background:#1a1c20;padding:6px 0;font-size:12.5px;line-height:2.2;border-bottom:1px solid rgba(255,255,255,.055)">
+      <sc-for list="{{ routerRows }}" as="r" hint-placeholder-count="4">
+       <div style="padding:0 16px;display:flex;gap:16px;cursor:pointer" style-hover="background:#2e3138" onClick="{{ r.pick }}"><span style="color:#9aa0a8;width:130px;flex:none">{{ r.cmd }}</span><span style="color:#62676f">{{ r.desc }}</span></div>
+      </sc-for>
+     </div>
+    </sc-if>
+    <div style="display:flex;gap:12px;align-items:center;border-radius:{{ promptRadius }};padding:11px 16px;background:#1a1c20"><span style="color:#82a5c8">›</span><input value="{{ promptVal }}" onChange="{{ onPrompt }}" onKeyDown="{{ onPromptKey }}" placeholder="type to talk · / for commands · ↵ to send" style="flex:1;background:none;border:none;outline:none;color:#e2e5e9;font-family:inherit;font-size:13px"></input></div>
+   </div>
+   </sc-if>
+     </sc-if>
+     <sc-if value="{{ pn.notMain }}" hint-placeholder-val="{{ false }}">
+      <sc-if value="{{ pn.unbound }}" hint-placeholder-val="{{ false }}">
+       <div style="flex:1"></div>
+       <div style="flex:none;padding:0 22px 16px">
+        <div style="border:1px solid rgba(255,255,255,.13);border-radius:6px;background:#1a1c20;overflow:hidden">
+         <div style="padding:6px 0;font-size:11.5px;line-height:2.1">
+          <div style="padding:0 14px;font-size:9.5px;letter-spacing:.14em;color:#62676f">WORKSPACE</div>
+          <sc-for list="{{ pn.wsRows }}" as="wr" hint-placeholder-count="4">
+           <div onClick="{{ wr.pick }}" style="padding:0 14px;display:flex;gap:12px;cursor:pointer;background:{{ wr.bg }};white-space:nowrap;overflow:hidden" style-hover="background:#2e3138"><span style="color:{{ wr.c }};width:230px;flex:none;overflow:hidden;text-overflow:ellipsis">{{ wr.path }}</span><span style="color:#4a4e55;overflow:hidden;text-overflow:ellipsis">{{ wr.meta }}</span><span style="margin-left:auto;color:#62676f;flex:none">{{ wr.key }}</span></div>
+          </sc-for>
+         </div>
+         <div style="display:flex;gap:10px;padding:9px 13px;border-top:1px solid rgba(255,255,255,.08)"><span style="color:#82a5c8">›</span><input value="{{ pn.wsQ }}" onChange="{{ pn.onWsQ }}" onKeyDown="{{ pn.onWsKey }}" placeholder="type a path — ↵ binds + starts · repo gets a worktree, plain folder works flat" style="flex:1;background:none;border:none;outline:none;color:#e2e5e9;font-family:inherit;font-size:12px"></input></div>
+        </div>
+       </div>
+      </sc-if>
+      <sc-if value="{{ pn.bound }}" hint-placeholder-val="{{ true }}">
+      <div style="flex:1;overflow:auto;padding:16px 22px;line-height:2;font-size:{{ fontSize }}px;color:#62676f">
+       <sc-for list="{{ pn.lines }}" as="L" hint-placeholder-count="3"><div style="color:{{ L.c }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ L.t }}</div></sc-for>
+ 
+      </div>
+      <div style="flex:none;padding:0 22px 16px"><div style="display:flex;gap:12px;align-items:center;border-radius:6px;padding:11px 16px;background:#1a1c20"><span style="color:{{ pn.caretColor }}">›</span><input value="{{ pn.pv }}" onChange="{{ pn.onPv }}" onKeyDown="{{ pn.onPvKey }}" placeholder="type to talk · ↵ to send" style="flex:1;background:none;border:none;outline:none;color:#e2e5e9;font-family:inherit;font-size:13px"></input></div></div>
+      </sc-if>
+     </sc-if>
+    </div>
+   </sc-for>
+  </div>
+  <sc-for list="{{ colGutters }}" as="g" hint-placeholder-count="0"><div onMouseDown="{{ g.grab }}" title="drag to resize" style="position:absolute;top:0;bottom:0;left:{{ g.left }};width:11px;transform:translateX(-50%);cursor:col-resize;z-index:15"></div></sc-for>
+  <sc-for list="{{ rowGutters }}" as="g" hint-placeholder-count="0"><div onMouseDown="{{ g.grab }}" title="drag to resize" style="position:absolute;left:0;right:0;top:{{ g.top }};height:11px;transform:translateY(-50%);cursor:row-resize;z-index:15"></div></sc-for>
+  </div>
+ </sc-if>
+
+ <!-- ══ SESSION · revealed ══ -->
+ <sc-if value="{{ showRevealed }}" hint-placeholder-val="{{ false }}">
+  <div style="flex:1;display:flex;flex-direction:column;min-height:0">
+<div style="flex:1;display:flex;min-height:0;position:relative">
+   <div style="flex:{{ revealFlexL }};display:flex;flex-direction:column;min-width:0;background:#212327">
+    <sc-if value="{{ notMainFocused }}" hint-placeholder-val="{{ false }}">
+     <div style="flex:1;padding:20px 26px;line-height:1.95;font-size:{{ fontSize }}px;color:#62676f">
+      <sc-for list="{{ fpLines }}" as="L" hint-placeholder-count="3"><div style="color:{{ L.c }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ L.t }}</div></sc-for>
+     </div>
+    </sc-if>
+    <sc-if value="{{ isMainFocused }}" hint-placeholder-val="{{ true }}">
+    <sc-if value="{{ findOpen }}" hint-placeholder-val="{{ false }}">
+     <span onClick="{{ focusTranscript }}" style="display:none"></span>
+     <div style="display:flex;gap:10px;align-items:center;padding:8px 26px;border-bottom:1px solid rgba(255,255,255,.055);flex:none"><span style="color:#62676f;font-size:11px">find</span><div style="display:flex;gap:8px;border:1px solid rgba(255,255,255,.13);border-radius:5px;padding:4px 10px;background:#1a1c20;width:230px"><input value="{{ findQ }}" onChange="{{ onFindQ }}" placeholder="find in transcript" style="flex:1;background:none;border:none;outline:none;color:#e2e5e9;font-family:inherit;font-size:12px"></input></div><span style="color:#62676f;font-size:10.5px">{{ findCount }}</span><span onClick="{{ closeFind }}" style="margin-left:auto;color:#62676f;font-size:10.5px;cursor:pointer">esc</span></div>
+    </sc-if>
+    <sc-if value="{{ descended }}" hint-placeholder-val="{{ false }}">
+     <div style="flex:1;overflow-y:auto;overflow-x:hidden;padding:20px 26px;line-height:1.95;font-size:{{ fontSize }}px;min-width:0">
+      <sc-if value="{{ nestedOn }}" hint-placeholder-val="{{ false }}">
+       <sc-for list="{{ descAncestors }}" as="an" hint-placeholder-count="0"><div style="opacity:.35;color:{{ an.c }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ an.t }}</div></sc-for>
+      </sc-if>
+      <div style="border-left:{{ descBorder }};padding-left:{{ descPad }}">
+       <div style="color:#9aa0a8">{{ descHead }} <span style="color:#4a4e55">{{ descWatchNote }}</span></div>
+       <sc-for list="{{ descLines }}" as="dl" hint-placeholder-count="4">
+        <div onClick="{{ dl.click }}" style="color:{{ dl.c }};cursor:{{ dl.cur }};white-space:{{ dl.ws }};overflow:hidden;text-overflow:ellipsis;margin-top:{{ dl.mt }};max-width:700px">{{ dl.t }}</div>
+       </sc-for>
+      </div>
+     </div>
+    </sc-if>
+    <sc-if value="{{ notDescended }}" hint-placeholder-val="{{ true }}">
+    <div onClick="{{ focusTranscript }}" style="flex:1;overflow-y:auto;overflow-x:hidden;padding:20px 26px;line-height:1.95;font-size:{{ fontSize }}px;min-width:0">
+     <div style="opacity:{{ fdU1 }}"><span style="color:#82a5c8">›</span> <span style="color:#e2e5e9">the metering test flakes under load — find and fix the race</span></div>
+     <div style="color:#62676f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:{{ fdGrep }}">  ⚙ grep "meter_lock" src/ ····················· 14 matches</div>
+     <div style="color:#62676f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:{{ fdRead }}">  ⚙ read_file metering.py ······················ 312 lines</div>
+     <div style="color:#62676f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:{{ fdEdit }}">  ⚙ edit_file metering.py ······················ ok</div>
+     <div style="color:#a08fc9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:{{ fdDel }}"><span style="cursor:pointer" onClick="{{ toggleChild }}">  ⑂ delegate → reviewer-a ······················ {{ childHint }}</span> <span onClick="{{ descendReviewer }}" style="cursor:pointer;color:#62676f" title="descend into the child — talk to it (D70)">· descend ⏎</span></div>
+     <sc-if value="{{ childOpen }}" hint-placeholder-val="{{ false }}">
+      <div style="margin:6px 0 6px 24px;border-left:2px solid #665f7d;background:#1a1c20;border-radius:0 6px 6px 0;max-width:min(720px,calc(100% - 24px));overflow:hidden">
+       <div style="display:flex;gap:12px;padding:7px 14px;font-size:11px;background:#26292e;min-width:0"><span style="color:#a08fc9;flex:none">⑂ child</span><span style="color:#9aa0a8;flex:none">reviewer-a · standing</span><span style="color:#62676f;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0" title="record delegate_child_3e366fe6_c0">record delegate_child_3e366fe6_c0</span><span style="margin-left:auto;color:#62676f;flex:none">depth 1/2 · done</span></div>
+       <div style="padding:10px 14px;font-size:12px;line-height:1.9;color:#62676f;min-width:0"><div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">⚙ read_file src/substrate/metering.py ·· 312 lines</div><div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">⚙ grep "acquire" src/substrate/kernel/ ·· 6 matches</div><div style="color:#9aa0a8">folded back: "lock scope is right — add a comment on why the deque needs the kernel lock"</div></div>
+      </div>
+     </sc-if>
+     <div style="color:#62676f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:{{ fdBash }}">  ⚙ bash pytest -k metering -n 8 ················ <span style="color:#9aa0a8">24 passed ✓</span></div>
+     <div style="margin-top:8px;max-width:560px;opacity:{{ fdAns }}">The race was in _emit_log — unlocked deque shared by two producers. Kernel lock added; reviewer-a signed off.</div>
+     <div style="margin-top:10px;color:#82a5c8;opacity:{{ fdPark }}">◐ parked</div>
+    </div>
+    </sc-if>
+    </sc-if>
+    <sc-if value="{{ descended }}" hint-placeholder-val="{{ false }}">
+     <div style="flex:none;padding:0 26px 6px;font-size:10.5px;display:flex;gap:8px;align-items:center;white-space:nowrap;overflow:hidden">
+      <sc-for list="{{ descCrumbs }}" as="cr" hint-placeholder-count="2"><span onClick="{{ cr.jump }}" style="color:{{ cr.c }};cursor:pointer">{{ cr.t }}</span></sc-for>
+      <span style="margin-left:auto;color:#4a4e55;flex:none">{{ descEscHint }}</span>
+     </div>
+     <sc-if value="{{ descTalkable }}" hint-placeholder-val="{{ false }}">
+      <div style="flex:none;padding:0 26px 18px"><div style="display:flex;gap:12px;align-items:center;border-radius:6px;padding:10px 15px;background:#1a1c20;border-left:2px solid {{ descColor }}"><span style="color:{{ descColor }}">›</span><input value="{{ descPv }}" onChange="{{ onDescPv }}" onKeyDown="{{ onDescPvKey }}" placeholder="{{ descPlaceholder }}" style="flex:1;background:none;border:none;outline:none;color:#e2e5e9;font-family:inherit;font-size:13px"></input></div></div>
+     </sc-if>
+     <sc-if value="{{ descNotTalkable }}" hint-placeholder-val="{{ false }}"><div style="flex:none;padding:0 26px 18px;font-size:11px;color:#4a4e55">this topology takes no messages — watching · esc to leave</div></sc-if>
+    </sc-if>
+    <sc-if value="{{ notDescended }}" hint-placeholder-val="{{ true }}">
+    <div style="flex:none;padding:12px 26px 18px"><div style="display:flex;gap:12px;border-radius:6px;padding:10px 15px;background:#1a1c20"><span style="color:#82a5c8">›</span><span style="color:#62676f">type to talk · / commands</span></div></div>
+    </sc-if>
+   </div>
+   <div style="flex:1;display:flex;flex-direction:column;min-width:0;background:#1a1c20">
+    <div style="display:flex;flex-wrap:wrap;gap:6px 8px;padding:10px 16px 8px;font-size:11.5px;flex:none;align-items:center">
+     <sc-for list="{{ modeChips }}" as="m" hint-placeholder-count="4">
+      <span onClick="{{ m.pick }}" style="cursor:pointer;padding:2px 10px;border-radius:4px;color:{{ m.color }};background:{{ m.bg }}">{{ m.label }}</span>
+     </sc-for>
+     <sc-if value="{{ isStream }}" hint-placeholder-val="{{ true }}">
+      <span style="margin-left:auto;flex:none;display:flex;border:1px solid rgba(255,255,255,.09);border-radius:4px;overflow:hidden;font-size:11px"><span onClick="{{ setAll }}" style="cursor:pointer;padding:2px 9px;white-space:nowrap;color:{{ allColor }};background:{{ allBg }}" title="every event on the record, lifecycle included">all</span><span onClick="{{ setApp }}" style="cursor:pointer;padding:2px 9px;white-space:nowrap;color:{{ appColor }};background:{{ appBg }}" title="hide the low-level machinery: TriggerFired · ProducerStarted · ProducerCompleted">app</span></span>
+      <span style="flex:none;display:flex;border:1px solid rgba(255,255,255,.09);border-radius:4px;overflow:hidden;font-size:11px"><span onClick="{{ setDown }}" style="cursor:pointer;padding:2px 9px;white-space:nowrap;color:{{ downColor }};background:{{ downBg }}">⇅ down</span><span onClick="{{ setSide }}" style="cursor:pointer;padding:2px 9px;white-space:nowrap;color:{{ sideColor }};background:{{ sideBg }}">→ side</span></span>
+     </sc-if>
+    </div>
+    <sc-if value="{{ isSide }}" hint-placeholder-val="{{ false }}">
+      <div style="position:relative;border-bottom:1px solid rgba(255,255,255,.055);flex:none">
+       <div ref="{{ graphRef }}" onScroll="{{ onGraphScroll }}" style="background:#1a1c20;padding:12px 16px 14px;overflow-x:auto">
+        <div style="min-width:540px">
+         <div style="display:flex;font-size:11px;color:#62676f;margin-bottom:10px"><span>seq 214</span><span style="flex:1;border-bottom:1px dashed rgba(255,255,255,.12);margin:0 8px 5px"></span><span>244</span></div>
+         <div style="display:flex;flex-direction:column;gap:9px;font-size:11px">
+          <sc-for list="{{ sideLanes }}" as="ln" hint-placeholder-count="5">
+           <div style="display:flex;align-items:center;gap:10px"><span style="width:92px;flex:none;visibility:hidden;white-space:nowrap;overflow:hidden">{{ ln.label }}</span><div style="position:relative;flex:1;height:12px">
+            <sc-for list="{{ ln.segs }}" as="sg" hint-placeholder-count="1"><div onClick="{{ sg.pick }}" title="{{ sg.title }}" style="position:absolute;left:{{ sg.l }};width:{{ sg.w }};top:1px;height:10px;border-radius:2px;background:{{ sg.bg }};cursor:pointer" style-hover="outline:1px solid #9db8d6"></div></sc-for>
+           </div></div>
+          </sc-for>
+         </div>
+         
+        </div>
+       </div>
+      
+       <div style="position:absolute;left:16px;top:12px;bottom:14px;pointer-events:none;overflow:hidden">
+        <div style="display:flex;font-size:11px;margin-bottom:10px;visibility:hidden"><span>seq 214</span></div>
+        <div style="display:flex;flex-direction:column;gap:9px;font-size:11px">
+         <sc-for list="{{ sideLanes }}" as="ln" hint-placeholder-count="5">
+          <div style="display:flex;align-items:center;gap:10px"><span style="color:{{ ln.color }};white-space:nowrap;overflow:hidden;text-shadow:0 0 6px #1a1c20,0 0 10px #1a1c20,0 0 3px #1a1c20">{{ ln.label }}</span><div style="width:1px;height:12px;flex:none"></div></div>
+         </sc-for>
+        </div>
+       </div>
+      </div>
+</sc-if>
+    <div ref="{{ streamRef }}" onScroll="{{ onStreamScroll }}" onClick="{{ focusStream }}" style="flex:1;overflow:auto;min-height:0">
+     <sc-if value="{{ isStream }}" hint-placeholder-val="{{ true }}">
+      <sc-if value="{{ isDown }}" hint-placeholder-val="{{ true }}">
+       <div style="display:flex;gap:8px;padding:2px 16px 4px;font-size:10px;color:#62676f;flex-wrap:wrap;align-items:baseline"><span style="color:#4a4e55" title="one lane per producer kind, derived from the record — spans run ToolCall→ToolResult; ⑂ child spans violet on the tool lane; sub-tracks appear only under real concurrency">lanes ·</span><sc-for list="{{ laneLegend }}" as="ld" hint-placeholder-count="4"><span style="color:{{ ld.color }}">{{ ld.label }}</span></sc-for></div>
+      </sc-if>
+      
+      <div style="font-size:12px;line-height:2.05;padding-bottom:8px">
+       <sc-for list="{{ events }}" as="e" hint-placeholder-count="10">
+        <div onClick="{{ e.pick }}" title="click to inspect · click again to close" style="padding:1px 16px;display:flex;gap:10px;align-items:stretch;cursor:pointer;background:{{ e.rowBg }};opacity:{{ e.rowOp }}" style-hover="background:#26292e">
+         <sc-if value="{{ isDown }}" hint-placeholder-val="{{ true }}"><span style="width:{{ laneW }}px;display:flex;gap:4px;flex:none;position:relative"><sc-for list="{{ e.laneCells }}" as="lc" hint-placeholder-count="4"><span style="width:8px;border-radius:2px;background:{{ lc.bg }}"></span></sc-for><sc-if value="{{ e.hasConn }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;left:{{ e.connL }}px;top:50%;width:{{ e.connW }}px;height:2px;background:{{ e.connC }};opacity:.75;transform:translateY(-1px)"></span><span style="position:absolute;left:{{ e.dotL }}px;top:50%;width:5px;height:5px;border-radius:50%;background:{{ e.connC }};transform:translate(-2px,-2.5px)"></span></sc-if></span></sc-if>
+         <span style="color:#4a4e55;width:34px;flex:none;text-align:right">{{ e.seq }}</span>
+         <span style="color:#4a4e55;width:50px;flex:none;font-size:11px">{{ e.t }}</span>
+         <span style="color:{{ e.kindColor }};width:132px;flex:none">{{ e.kind }}</span>
+         <span style="color:#62676f;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ e.pl }}</span>
+        </div>
+        <sc-if value="{{ e.sel }}" hint-placeholder-val="{{ false }}">
+         <div style="display:flex;gap:10px;padding:2px 16px 8px;align-items:stretch">
+          <sc-if value="{{ isDown }}" hint-placeholder-val="{{ true }}"><span style="width:{{ laneW }}px;display:flex;gap:4px;flex:none"><sc-for list="{{ e.laneCells }}" as="lc" hint-placeholder-count="4"><span style="width:8px;border-radius:2px;background:{{ lc.bg }}"></span></sc-for></span></sc-if>
+          <div style="flex:1;padding:11px 14px;background:#212327;border-left:2px solid {{ selColor }};border-radius:0 6px 6px 0;line-height:1.8;font-size:12px">
+           <div style="display:flex;gap:10px;align-items:baseline"><span style="font-size:10px;letter-spacing:.14em;color:#62676f">INSPECT</span><span style="color:{{ selColor }};border:1px solid rgba(255,255,255,.12);border-radius:5px;padding:0 8px;font-size:11px">{{ selKind }}</span><span style="color:#62676f;font-size:11px">seq {{ selSeq }} · click the row again to close</span></div>
+           <div style="display:grid;grid-template-columns:78px 1fr;gap:2px 12px;margin-top:8px;font-size:12px">
+            <span style="color:#62676f;font-size:10px;letter-spacing:.1em;padding-top:2px">SCHEMA</span><span style="color:#9aa0a8">{{ selSchema }}</span>
+            <span style="color:#62676f;font-size:10px;letter-spacing:.1em;padding-top:2px">TIME</span><span style="color:#9aa0a8">{{ selTime }}</span>
+            <span style="color:#62676f;font-size:10px;letter-spacing:.1em;padding-top:2px">PRODUCER</span><span style="color:#9aa0a8">{{ selProducer }}</span>
+           </div>
+           <sc-for list="{{ selContent }}" as="cb" hint-placeholder-count="0">
+            <div style="margin-top:8px"><div style="color:#62676f;font-size:10px;letter-spacing:.1em">{{ cb.k }}</div><pre style="margin:4px 0 0;padding:9px 12px;background:#1a1c20;border-left:2px solid #82a5c8;border-radius:6px;font-family:inherit;font-size:11.5px;color:#d7dade;white-space:pre-wrap;word-break:break-word">{{ cb.v }}</pre></div>
+           </sc-for>
+           <div style="margin-top:8px"><div style="color:#62676f;font-size:10px;letter-spacing:.1em">PAYLOAD</div><pre style="margin:4px 0 0;padding:9px 12px;background:#1a1c20;border-radius:6px;font-family:inherit;font-size:11px;color:#9aa0a8;white-space:pre-wrap;word-break:break-word">{{ selPayload }}</pre></div>
+          </div>
+         </div>
+        </sc-if>
+       </sc-for>
+      </div>
+      
+     </sc-if>
+     <sc-if value="{{ isIo }}" hint-placeholder-val="{{ false }}">
+      <div style="padding:6px 16px 16px">
+       <sc-for list="{{ ioDocs }}" as="d" hint-placeholder-count="2">
+        <div style="margin-top:12px;border:1px solid rgba(255,255,255,.07);border-radius:7px;overflow:hidden"><div style="padding:8px 13px;background:#26292e;font-size:11.5px;color:#9aa0a8">{{ d.title }}<span style="float:right;color:#62676f;font-size:11px">seq {{ d.seq }}</span></div><pre style="margin:0;padding:11px 13px;font-family:inherit;font-size:12px;color:#b9bec5;white-space:pre-wrap;word-break:break-word">{{ d.text }}</pre></div>
+       </sc-for>
+       <div style="margin-top:12px;font-size:11px;color:#62676f">inputs &amp; outputs — the application documents on this record, in seq order</div>
+      </div>
+     </sc-if>
+     <sc-if value="{{ isStructure }}" hint-placeholder-val="{{ false }}">
+      <div style="padding:10px 16px 16px;font-size:12.5px;line-height:1.9">
+       <div style="color:#62676f;font-size:10px;letter-spacing:.12em;margin:6px 0 4px">PRODUCERS (4) · ▸ INITIAL = ON THE RUN'S OPENING COHORT</div>
+       <div style="display:flex;gap:10px"><span style="color:#e2e5e9;width:120px;flex:none">model <span style="color:#82a5c8;font-size:10px">▸ initial</span></span><span style="color:#9aa0a8">emits ToolCall, ModelReply, FinalAnswer</span></div>
+       <div style="display:flex;gap:10px"><span style="color:#e2e5e9;width:120px;flex:none">tool</span><span style="color:#9aa0a8">emits ToolResult</span></div>
+       <div style="display:flex;gap:10px"><span style="color:#e2e5e9;width:120px;flex:none">park</span><span style="color:#9aa0a8">emits Park</span></div>
+       <div style="display:flex;gap:10px"><span style="color:#e2e5e9;width:120px;flex:none">session_end</span><span style="color:#9aa0a8">emits SessionEnded</span></div>
+       <div style="color:#62676f;font-size:10px;letter-spacing:.12em;margin:14px 0 4px">TRIGGERS (10 · 4 SHOWN)</div>
+       <div><span style="color:#c9a0b8">fire-tool</span> <span style="color:#62676f">on</span> <span style="color:#9aa0a8">ToolCall</span> <span style="color:#62676f">→ starts</span> <span style="color:#e2e5e9">tool</span></div>
+       <div><span style="color:#c9a0b8">refire-model</span> <span style="color:#62676f">on</span> <span style="color:#9aa0a8">ToolResult</span> <span style="color:#62676f">→ starts</span> <span style="color:#e2e5e9">model</span></div>
+       <div><span style="color:#c9a0b8">park-on-final-answer</span> <span style="color:#62676f">on</span> <span style="color:#9aa0a8">FinalAnswer</span> <span style="color:#62676f">→ starts</span> <span style="color:#e2e5e9">park</span></div>
+       <div><span style="color:#c9a0b8">end-on-request</span> <span style="color:#62676f">on</span> <span style="color:#9aa0a8">SessionEndRequested</span> <span style="color:#62676f">→ starts</span> <span style="color:#e2e5e9">session_end</span></div>
+       <div style="color:#62676f;font-size:10px;letter-spacing:.12em;margin:14px 0 4px">VIEWS (3)</div>
+       <div style="color:#9aa0a8">transcript rolling-window renderer · driver context lookup</div>
+       <div style="color:#62676f;font-size:10px;letter-spacing:.12em;margin:14px 0 4px">TERMINATION POLICY</div>
+       <div style="color:#a08fc9">any_of( pause_await_input(on Park, resume="UserMessage"), threshold_count(SessionEnded, 1) )</div>
+       <div style="margin-top:6px;color:#62676f;font-size:11px">all_completed is refused at build — a pausable topology on it hangs on resume</div>
+      </div>
+     </sc-if>
+     <sc-if value="{{ isScene }}" hint-placeholder-val="{{ false }}">
+      <div style="padding:10px 16px 16px">
+       <div style="font-size:12px;color:#9aa0a8">scene · <span style="color:#e2e5e9">Generation.grid</span> <span style="color:#62676f">seq 38 · 12×12 · frame 3/9 · generation=3</span></div>
+       <div style="display:grid;grid-template-columns:repeat(12,1fr);gap:3px;max-width:420px;margin-top:12px">
+        <sc-for list="{{ sceneCells }}" as="c" hint-placeholder-count="24"><div style="aspect-ratio:1;border-radius:3px;background:{{ c.bg }};border:1px solid rgba(255,255,255,.06)"></div></sc-for>
+       </div>
+       <div style="margin-top:12px;font-size:11px;color:#62676f">the shared world-state at this seq — appears only when the record carries a renderable 2-D shape (this frame: the game_of_life demo record; a session record has none, so the tab hides itself)</div>
+      </div>
+     </sc-if>
+    </div>
+   </div>
+  <div onMouseDown="{{ revealGrab }}" title="drag — more transcript or more machinery" style="position:absolute;top:0;bottom:0;left:{{ revealGutterLeft }};width:11px;transform:translateX(-50%);cursor:col-resize;z-index:15"></div>
+  </div>
+  </div>
+ </sc-if>
+
+ <!-- ══ SURFACE · records ══ -->
+ <sc-if value="{{ showRecords }}" hint-placeholder-val="{{ false }}">
+  <div style="flex:1;overflow:auto;background:#212327;padding:22px 40px">
+   <div style="max-width:760px">
+    <div style="font-size:10px;letter-spacing:.14em;color:#62676f;margin-bottom:10px">WORKSPACES</div>
+    <div style="color:#d7dade;font-size:13px">~/code/substrate <span style="color:#62676f;font-size:11px">git · sessions get worktrees</span></div>
+    <div style="margin:8px 0 0 16px;padding:10px 14px;background:#2e3138;border-radius:6px;cursor:pointer" onClick="{{ backToSession }}">
+     <div style="display:flex;gap:9px;align-items:center"><span style="width:7px;height:7px;border-radius:50%;background:#82a5c8"></span><span style="color:#e2e5e9">fix-race-in-metering</span><span style="color:#62676f;font-size:11px">◐ parked · turn 9</span><span style="margin-left:auto;color:#62676f;font-size:11px">substrate/fix-race · kimi-k2 · open ▸</span></div>
+     <div style="font-size:11px;color:#9aa0a8;margin:4px 0 0 16px">⑂ reviewer-a <span style="color:#62676f">standing · 3 calls</span> &nbsp;·&nbsp; <span style="color:#62676f">⑂ 2 one-shot children · folded under their turns</span></div>
+    </div>
+    <sc-for list="{{ extraSessions }}" as="x" hint-placeholder-count="0">
+     <div style="margin:6px 0 0 16px;padding:8px 14px;font-size:12px;color:#9aa0a8;display:flex;gap:9px;align-items:center"><span style="width:7px;height:7px;border-radius:50%;background:#82a5c8;opacity:.55;flex:none"></span><span style="color:#e2e5e9">{{ x.name }}</span><span style="color:#62676f;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">◐ parked · {{ x.meta }}</span><span style="margin-left:auto;color:#62676f;font-size:11px;flex:none">{{ x.where }}</span></div>
+    </sc-for>
+    <div style="margin:6px 0 0 16px;padding:8px 14px;color:#62676f;font-size:12px"><span style="color:#4a4e55">●</span> swebench-repro <span style="font-size:11px">finalised tue · ✓ clean</span></div>
+    <div style="color:#d7dade;font-size:13px;margin-top:16px">~/notes/substrate-docs <span style="color:#62676f;font-size:11px">flat</span></div>
+    <div style="margin:6px 0 0 16px;padding:8px 14px;font-size:12px;color:#9aa0a8"><span style="color:#82a5c8;opacity:.55">●</span> docs-pass <span style="color:#62676f;font-size:11px">◐ parked 41m · claude-cli</span></div>
+    <div style="color:#d7dade;font-size:13px;margin-top:16px">~/.substrate <span style="color:#62676f;font-size:11px">sandbox</span></div>
+    <div style="margin:6px 0 0 16px;padding:8px 14px;font-size:12px;color:#9aa0a8"><span style="color:#82a5c8">●</span> scratch <span style="color:#62676f;font-size:11px">● running · deepseek-r1:8b · ~/.substrate/sessions/s_9b2…/workspace</span></div>
+    <div style="font-size:10px;letter-spacing:.14em;color:#62676f;margin:22px 0 8px;border-top:1px solid rgba(255,255,255,.055);padding-top:14px">ASSAYS</div>
+    <div style="padding:8px 14px;background:#1a1c20;border-radius:6px;cursor:pointer;display:flex;gap:12px" style-hover="background:#26292e" onClick="{{ openAssay }}"><span style="color:#e2e5e9">rev_kimi_vs_glm</span><span style="color:#62676f;font-size:11px">4 arms × 32 cases × 3 trials · 384 cells · finding ready · open ▸</span></div>
+    <div style="padding:8px 14px;margin-top:4px;display:flex;gap:12px;color:#9aa0a8"><span>coding_cells</span><span style="color:#62676f;font-size:11px">4 arms · 2840 cells</span></div>
+    <div style="font-size:11px;color:#62676f;margin-top:22px;border-top:1px solid rgba(255,255,255,.055);padding-top:12px">raw records — the debug pile, collapsed ▸ &nbsp;&nbsp;·&nbsp;&nbsp; + session prompts for a workspace (default: where you opened substrate)</div>
+   </div>
+  </div>
+ </sc-if>
+
+ <!-- ══ SURFACE · assay ══ -->
+ <sc-if value="{{ showAssay }}" hint-placeholder-val="{{ false }}">
+  <div style="flex:1;overflow:auto;background:#212327;padding:20px 40px">
+   <div style="display:flex;align-items:baseline;gap:14px"><span style="color:#e2e5e9;font-weight:600;font-size:15px">rev_kimi_vs_glm</span><span style="color:#62676f;font-size:11px">4 arms × 32 cases × 3 trials · 384 cells · preregistered · arms_hash ✓</span></div>
+   <div style="margin-top:12px;padding:10px 14px;background:rgba(130,165,200,.09);border-left:3px solid #82a5c8;border-radius:0 5px 5px 0;font-size:12.5px"><span style="color:#e2e5e9;font-weight:600">FINDING</span> &nbsp;<span style="color:#d7dade">kimi + reviewer-glm beats control kimi_solo</span> &nbsp;<span style="color:#9aa0a8">Δ-pass¹ +.17 · paired bootstrap p=.008 · BH-FDR significant</span></div>
+   <div style="margin-top:8px;padding:10px 14px;background:rgba(194,96,88,.1);border-left:3px solid #c26058;border-radius:0 5px 5px 0;font-size:12.5px"><span style="color:#c26058;font-weight:600">UNDERPOWERED</span> &nbsp;<span style="color:#d7dade">glm + reviewer-kimi on adversarial: 4 cases × 3 trials cannot answer this question</span> &nbsp;<span style="color:#9aa0a8">verdict withheld</span></div>
+   <div style="display:grid;grid-template-columns:180px 1.3fr .6fr .6fr .6fr .7fr 140px 120px;gap:0 16px;font-size:12px;align-items:center;margin-top:14px;max-width:1060px">
+    <div style="color:#62676f;font-size:10px;letter-spacing:.1em;padding:6px 0">ARM</div><div style="color:#62676f;font-size:10px;letter-spacing:.1em">OVERALL PASS¹</div><div style="color:#62676f;font-size:10px;letter-spacing:.1em">EASY·8</div><div style="color:#62676f;font-size:10px;letter-spacing:.1em">MED·12</div><div style="color:#62676f;font-size:10px;letter-spacing:.1em">HARD·8</div><div style="color:#62676f;font-size:10px;letter-spacing:.1em">ADV·4</div><div style="color:#62676f;font-size:10px;letter-spacing:.1em">Δ VS CONTROL·P</div><div style="color:#62676f;font-size:10px;letter-spacing:.1em">VERDICT</div>
+    <sc-for list="{{ arms }}" as="a" hint-placeholder-count="4">
+     <div style="padding:10px 0;color:{{ a.nameColor }}">{{ a.name }}</div>
+     <div><div style="display:flex;align-items:center;gap:8px"><div style="flex:1;height:9px;border-radius:2px;background:#2e3138"><div style="width:{{ a.barW }};height:9px;border-radius:2px;background:{{ a.barColor }}"></div></div><span style="color:#d7dade;width:28px;text-align:right">{{ a.overall }}</span></div></div>
+     <div style="color:#9aa0a8">{{ a.easy }}</div><div style="color:#9aa0a8">{{ a.med }}</div><div style="color:#9aa0a8">{{ a.hard }}</div><div style="color:{{ a.advColor }}">{{ a.adv }}</div>
+     <div style="color:{{ a.deltaColor }}">{{ a.delta }}</div><div style="color:{{ a.verdictColor }};font-weight:600">{{ a.verdict }}</div>
+    </sc-for>
+   </div>
+   <div style="margin-top:16px;max-width:1060px;padding:12px 14px;background:#1a1c20;border-left:2px solid #665f7d;border-radius:0 5px 5px 0;font-size:11.5px;line-height:1.7;color:#9aa0a8">what this run can say: adding a glm reviewer to kimi helps, and the effect survives multiplicity correction. What it can't: whether the reverse pairing helps on adversarial cases — 4×3 cells is below power. Cells are write-gated by the preregistration on disk; click a cell for its 3 trial records.</div>
+  </div>
+ </sc-if>
+
+ <!-- ══ SURFACE · studio (parity with web/studio.html) ══ -->
+ <sc-if value="{{ showStudio }}" hint-placeholder-val="{{ false }}">
+  <div style="flex:1;display:flex;flex-direction:column;min-height:0;background:#212327">
+   <div style="display:flex;align-items:center;gap:14px;padding:12px 40px 0;font-size:11.5px;flex:none">
+    <span style="color:#62676f">studio · author a topology</span>
+    <span style="flex:none;display:flex;border:1px solid rgba(255,255,255,.09);border-radius:4px;overflow:hidden"><span onClick="{{ setStudioForm }}" style="cursor:pointer;padding:2px 10px;white-space:nowrap;color:{{ sFormColor }};background:{{ sFormBg }}">form</span><span onClick="{{ setStudioCanvas }}" style="cursor:pointer;padding:2px 10px;white-space:nowrap;color:{{ sCanvasColor }};background:{{ sCanvasBg }}">canvas</span></span>
+    <span style="margin-left:auto;color:#62676f">a built topology registers and runs immediately</span>
+   </div>
+   <sc-if value="{{ isStudioForm }}" hint-placeholder-val="{{ true }}">
+    <div style="flex:1;overflow:auto;padding:14px 40px 8px">
+     <div style="max-width:880px;font-size:12px">
+      <div style="font-size:10px;letter-spacing:.12em;color:#62676f;margin:8px 0 6px">TOPOLOGY NAME</div>
+      <input value="{{ topoName }}" onChange="{{ updTopoName }}" style="background:#1a1c20;border:1px solid rgba(255,255,255,.07);border-radius:5px;padding:5px 11px;color:#e2e5e9;font-family:inherit;font-size:12px;outline:none;min-width:240px"></input>
+      <div style="font-size:10px;letter-spacing:.12em;color:#62676f;margin:16px 0 6px">PRODUCERS <span onClick="{{ addProd }}" style="color:#82a5c8;border:1px solid rgba(255,255,255,.09);border-radius:4px;padding:0 7px;letter-spacing:0;cursor:pointer">+ producer</span></div>
+      <sc-for list="{{ prodRows }}" as="p" hint-placeholder-count="3">
+       <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px"><input value="{{ p.name }}" onChange="{{ p.updName }}" style="background:#1a1c20;border:1px solid rgba(255,255,255,.07);border-radius:5px;padding:5px 11px;color:#e2e5e9;font-family:inherit;font-size:12px;outline:none;width:130px"></input><span onClick="{{ p.toggleInit }}" style="cursor:pointer;color:#9aa0a8;font-size:11px;display:flex;gap:5px;align-items:center"><span style="width:11px;height:11px;border:1px solid {{ p.initBorder }};border-radius:2px;background:{{ p.initBox }};display:inline-block"></span>initial</span><span style="color:#62676f">emits</span><input value="{{ p.emits }}" onChange="{{ p.updEmits }}" style="background:#1a1c20;border:1px solid rgba(255,255,255,.07);border-radius:5px;padding:5px 11px;color:#e2e5e9;font-family:inherit;font-size:12px;outline:none;min-width:180px;color:#9aa0a8"></input><span onClick="{{ p.rm }}" style="color:#62676f;border:1px solid rgba(255,255,255,.09);border-radius:4px;padding:0 7px;cursor:pointer">✕</span></div>
+      </sc-for>
+      <div style="font-size:11px;color:#62676f">a Producer brings a computation; "initial" Producers run on the run's opening cohort. emits = comma-separated event kinds.</div>
+      <div style="font-size:10px;letter-spacing:.12em;color:#62676f;margin:16px 0 6px">VIEWS <span onClick="{{ addView }}" style="color:#82a5c8;border:1px solid rgba(255,255,255,.09);border-radius:4px;padding:0 7px;letter-spacing:0;cursor:pointer">+ view</span></div>
+      <sc-for list="{{ viewRows }}" as="v" hint-placeholder-count="2">
+       <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px"><input value="{{ v.name }}" onChange="{{ v.updName }}" style="background:#1a1c20;border:1px solid rgba(255,255,255,.07);border-radius:5px;padding:5px 11px;color:#e2e5e9;font-family:inherit;font-size:12px;outline:none;width:130px;color:#88b0d0"></input><span style="color:#62676f">=</span><input value="{{ v.def }}" onChange="{{ v.updDef }}" style="background:#1a1c20;border:1px solid rgba(255,255,255,.07);border-radius:5px;padding:5px 11px;color:#e2e5e9;font-family:inherit;font-size:12px;outline:none;min-width:210px;color:#9aa0a8"></input><span onClick="{{ v.rm }}" style="color:#62676f;border:1px solid rgba(255,255,255,.09);border-radius:4px;padding:0 7px;cursor:pointer">✕</span></div>
+      </sc-for>
+      <div style="font-size:11px;color:#62676f;margin-top:5px">a View is a running projection of the Bus a Predicate reads. KindCount(of) counts a kind; KindBuffer(of) buffers it.</div>
+      <div style="font-size:10px;letter-spacing:.12em;color:#62676f;margin:16px 0 6px">TRIGGERS <span onClick="{{ addTrig }}" style="color:#82a5c8;border:1px solid rgba(255,255,255,.09);border-radius:4px;padding:0 7px;letter-spacing:0;cursor:pointer">+ trigger</span></div>
+      <sc-for list="{{ trigRows }}" as="t" hint-placeholder-count="2">
+       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px"><input value="{{ t.id }}" onChange="{{ t.updId }}" style="background:#1a1c20;border:1px solid rgba(255,255,255,.07);border-radius:5px;padding:5px 11px;color:#e2e5e9;font-family:inherit;font-size:12px;outline:none;width:130px;color:#c9a0b8"></input><span style="color:#62676f">when</span><input value="{{ t.view }}" onChange="{{ t.updView }}" style="background:#1a1c20;border:1px solid rgba(255,255,255,.07);border-radius:5px;padding:5px 11px;color:#e2e5e9;font-family:inherit;font-size:12px;outline:none;width:130px;color:#88b0d0"></input><span style="color:#9aa0a8">≥</span><input value="{{ t.n }}" onChange="{{ t.updN }}" style="background:#1a1c20;border:1px solid rgba(255,255,255,.07);border-radius:5px;padding:5px 11px;color:#e2e5e9;font-family:inherit;font-size:12px;outline:none;width:44px"></input><span style="color:#62676f">→ starts</span><input value="{{ t.starts }}" onChange="{{ t.updStarts }}" style="background:#1a1c20;border:1px solid rgba(255,255,255,.07);border-radius:5px;padding:5px 11px;color:#e2e5e9;font-family:inherit;font-size:12px;outline:none;width:120px"></input><span onClick="{{ t.rm }}" style="color:#62676f;border:1px solid rgba(255,255,255,.09);border-radius:4px;padding:0 7px;cursor:pointer">✕</span></div>
+      </sc-for>
+      <div style="font-size:11px;color:#62676f;margin-top:5px">a Trigger starts a Producer when its Predicate over a View matures. predicate: View &lt;op&gt; n — leave the View blank for always.</div>
+      <div style="font-size:10px;letter-spacing:.12em;color:#62676f;margin:16px 0 6px">ROUTES <span onClick="{{ addRoute }}" style="color:#82a5c8;border:1px solid rgba(255,255,255,.09);border-radius:4px;padding:0 7px;letter-spacing:0;cursor:pointer">+ route</span></div>
+      <sc-for list="{{ routeRows }}" as="r" hint-placeholder-count="1">
+       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px"><input value="{{ r.id }}" onChange="{{ r.updId }}" style="background:#1a1c20;border:1px solid rgba(255,255,255,.07);border-radius:5px;padding:5px 11px;color:#e2e5e9;font-family:inherit;font-size:12px;outline:none;width:130px;color:#a08fc9"></input><span style="color:#62676f">stages</span><input value="{{ r.kind }}" onChange="{{ r.updKind }}" style="background:#1a1c20;border:1px solid rgba(255,255,255,.07);border-radius:5px;padding:5px 11px;color:#e2e5e9;font-family:inherit;font-size:12px;outline:none;width:110px;color:#9aa0a8"></input><span style="color:#62676f">→ slot</span><input value="{{ r.slot }}" onChange="{{ r.updSlot }}" style="background:#1a1c20;border:1px solid rgba(255,255,255,.07);border-radius:5px;padding:5px 11px;color:#e2e5e9;font-family:inherit;font-size:12px;outline:none;width:140px;color:#a08fc9"></input><span onClick="{{ r.rm }}" style="color:#62676f;border:1px solid rgba(255,255,255,.09);border-radius:4px;padding:0 7px;cursor:pointer">✕</span></div>
+      </sc-for>
+      <div style="font-size:11px;color:#62676f;margin-top:5px">a Route stages an event of a kind into a future Producer's named input slot — carrying data into instances the Trigger will create.</div>
+      <div style="font-size:10px;letter-spacing:.12em;color:#62676f;margin:16px 0 6px">TERMINATION POLICY</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+       <sc-for list="{{ termChips }}" as="tc" hint-placeholder-count="6"><span onClick="{{ tc.pick }}" style="cursor:pointer;padding:3px 10px;border-radius:4px;font-size:11.5px;color:{{ tc.color }};background:{{ tc.bg }}">{{ tc.label }}</span></sc-for>
+      </div>
+      <sc-if value="{{ isThreshold }}" hint-placeholder-val="{{ true }}">
+       <div style="display:flex;gap:8px;align-items:center;margin-top:8px"><span style="color:#62676f">kind</span><input value="{{ termOf }}" onChange="{{ updTermOf }}" style="background:#1a1c20;border:1px solid rgba(255,255,255,.07);border-radius:5px;padding:5px 11px;color:#e2e5e9;font-family:inherit;font-size:12px;outline:none;width:120px"></input><span style="color:#62676f">n</span><input value="{{ termN }}" onChange="{{ updTermN }}" style="background:#1a1c20;border:1px solid rgba(255,255,255,.07);border-radius:5px;padding:5px 11px;color:#e2e5e9;font-family:inherit;font-size:12px;outline:none;width:44px"></input><span style="color:#62676f;font-size:11px">· any_of / all_of compose member policies</span></div>
+      </sc-if>
+     </div>
+    </div>
+   </sc-if>
+   <sc-if value="{{ isStudioCanvas }}" hint-placeholder-val="{{ false }}">
+    <div style="flex:1;overflow:auto;padding:14px 40px 8px">
+     <div style="font-size:11px;color:#62676f;margin-bottom:8px">node-graph — drag the Producer cards; solid edges are Triggers; dashed edges feed a Route's named slot</div>
+     <div style="position:relative;height:420px;border:1px solid rgba(255,255,255,.07);border-radius:8px;background:#1a1c20;overflow:hidden;width:960px">
+      <svg viewBox="0 0 960 420" preserveAspectRatio="none" style="position:absolute;inset:0;width:960px;height:420px;pointer-events:none">
+       <sc-for list="{{ canvasEdges }}" as="ed" hint-placeholder-count="2"><path d="{{ ed.d }}" stroke="{{ ed.stroke }}" stroke-width="1.5" fill="none" stroke-dasharray="{{ ed.dash }}"></path></sc-for>
+      </svg>
+      <sc-for list="{{ canvasLabels }}" as="cl" hint-placeholder-count="2"><div style="position:absolute;left:{{ cl.x }}px;top:{{ cl.y }}px;color:{{ cl.fill }};font-size:10px;background:rgba(26,28,32,.88);border-radius:4px;padding:1px 6px;pointer-events:none;white-space:nowrap">{{ cl.text }}</div></sc-for>
+      <sc-for list="{{ canvasCards }}" as="cc" hint-placeholder-count="3">
+       <div onMouseDown="{{ cc.dragStart }}" style="position:absolute;left:{{ cc.x }}px;top:{{ cc.y }}px;background:#26292e;border:1px solid {{ cc.border }};border-radius:8px;padding:8px 12px;cursor:grab;user-select:none;min-width:110px"><div style="color:#e2e5e9;font-weight:600">{{ cc.name }}</div><div style="color:#82a5c8;font-size:11px">emits {{ cc.emits }}</div><sc-if value="{{ cc.initial }}" hint-placeholder-val="{{ false }}"><div style="color:#62676f;font-size:10px">▸ initial</div></sc-if></div>
+      </sc-for>
+      <sc-for list="{{ slotNodes }}" as="sn" hint-placeholder-count="1"><div style="position:absolute;left:{{ sn.x }}px;top:{{ sn.y }}px;background:rgba(160,143,201,.12);border:1px dashed #a08fc9;border-radius:6px;padding:5px 9px;color:#a08fc9;font-size:11px">slot: {{ sn.slot }}</div></sc-for>
+     </div>
+    </div>
+   </sc-if>
+   <div style="flex:none;display:flex;gap:10px;align-items:center;padding:10px 40px 16px;flex-wrap:wrap;font-size:12px">
+    <span style="color:#62676f;font-size:11px">responder</span><span style="flex:none;display:flex;border:1px solid rgba(255,255,255,.09);border-radius:4px;overflow:hidden;font-size:11.5px"><span onClick="{{ setRespD }}" style="cursor:pointer;padding:3px 10px;color:{{ respDColor }};background:{{ respDBg }}">deterministic</span><span onClick="{{ setRespO }}" style="cursor:pointer;padding:3px 10px;color:{{ respOColor }};background:{{ respOBg }}">ollama</span></span>
+    <span style="color:#62676f;font-size:11px">seed</span><input value="{{ seed }}" onChange="{{ updSeed }}" style="background:#1a1c20;border:1px solid rgba(255,255,255,.07);border-radius:5px;padding:5px 11px;color:#e2e5e9;font-family:inherit;font-size:12px;outline:none;width:44px"></input>
+    <span style="color:#62676f;font-size:11px">model</span><input value="{{ model }}" onChange="{{ updModel }}" style="background:#1a1c20;border:1px solid rgba(255,255,255,.07);border-radius:5px;padding:5px 11px;color:#e2e5e9;font-family:inherit;font-size:12px;outline:none;width:100px"></input>
+    <span onClick="{{ doValidate }}" style="padding:6px 16px;background:#2e3138;border-radius:5px;color:#d7dade;cursor:pointer">validate</span>
+    <span onClick="{{ doBuild }}" style="padding:6px 16px;background:#1a1c20;border:1px solid #82a5c8;border-radius:5px;color:#82a5c8;cursor:pointer;font-weight:600">build &amp; launch ▸</span>
+    <span style="color:#62676f;font-size:11px">deterministic = pure + seeded (replay-stable) · ollama = a real local LLM, fails loudly if not running</span>
+    <div style="flex-basis:100%;padding:10px 13px;background:#1a1c20;border-radius:6px;color:{{ studioOutColor }};font-size:12px"><span style="color:#62676f;margin-right:8px">output</span>{{ studioOut }}</div>
+   </div>
+  </div>
+ </sc-if>
+
+ <div style="display:flex;gap:16px;padding:7px 16px;background:#2a2d33;font-size:11px;color:#62676f;flex:none"><span style="color:{{ footStatusColor }}">{{ footStatus }}</span><span>{{ footRecord }}</span><span style="margin-left:auto">{{ footHint }}</span></div>
+
+ <!-- ══ DIALOGS · 19c settings / 19f export / 19g end-session (D40h: confirms are UI) ══ -->
+ <sc-if value="{{ showSettings }}" hint-placeholder-val="{{ false }}">
+  <div onClick="{{ closeSettings }}" style="position:fixed;inset:0;z-index:50;background:rgba(13,16,19,.55);display:flex;align-items:center;justify-content:center">
+   <div onClick="{{ swallow }}" style="width:560px;background:#26292e;border:1px solid rgba(255,255,255,.09);border-radius:10px;box-shadow:0 18px 48px rgba(0,0,0,.5);padding:18px 22px 20px;display:flex;flex-direction:column;gap:14px;font-size:12px">
+    <div style="font-size:9.5px;letter-spacing:.14em;color:#62676f">SETTINGS · ⌘,</div>
+    <div style="display:flex;align-items:center;gap:14px"><span style="color:#62676f;width:130px">appearance</span><span style="display:flex;border:1px solid rgba(255,255,255,.09);border-radius:5px;overflow:hidden"><sc-for list="{{ themeChips }}" as="tc" hint-placeholder-count="3"><span onClick="{{ tc.pick }}" style="padding:3px 12px;cursor:pointer;color:{{ tc.color }};background:{{ tc.bg }}">{{ tc.label }}</span></sc-for></span></div>
+    <sc-if value="{{ settingsNote }}" hint-placeholder-val="{{ false }}"><div style="color:#62676f;font-size:11px;margin:-8px 0 0 144px">{{ settingsNote }}</div></sc-if>
+    <div style="display:flex;align-items:center;gap:14px"><span style="color:#62676f;width:130px">type size</span><span onClick="{{ fontMinus }}" style="cursor:pointer;color:#9aa0a8;border:1px solid rgba(255,255,255,.09);border-radius:4px;padding:0 9px">−</span><span style="color:#e2e5e9">{{ fontLabel }}</span><span onClick="{{ fontPlus }}" style="cursor:pointer;color:#9aa0a8;border:1px solid rgba(255,255,255,.09);border-radius:4px;padding:0 9px">+</span></div>
+    <div style="display:flex;align-items:center;gap:14px"><span style="color:#62676f;width:130px">nested descent</span><span onClick="{{ toggleNested }}" style="cursor:pointer;color:#9aa0a8;font-size:11.5px;display:flex;gap:6px;align-items:center"><span style="width:11px;height:11px;border:1px solid {{ nestedBorder }};border-radius:2px;background:{{ nestedBox }};display:inline-block"></span>keep the parent text visibly nested when descended into a delegate (20d)</span></div>
+    <div style="display:flex;align-items:flex-start;gap:14px"><span style="color:#62676f;width:130px;padding-top:2px">bindings</span>
+     <div style="display:flex;flex-direction:column;gap:5px;flex:1;font-size:11.5px">
+      <div style="display:flex"><span style="color:#b9bec5">reveal cycle</span><span style="margin-left:auto;color:#9aa0a8;background:#1a1c20;border:1px solid rgba(255,255,255,.08);border-radius:4px;padding:0 7px">⌃`</span></div>
+      <div style="display:flex"><span style="color:#b9bec5">split right / down</span><span style="margin-left:auto;color:#9aa0a8;background:#1a1c20;border:1px solid rgba(255,255,255,.08);border-radius:4px;padding:0 7px">⌘D · ⌘⇧D</span></div>
+      <div style="display:flex"><span style="color:#b9bec5">find in focused lens</span><span style="margin-left:auto;color:#9aa0a8;background:#1a1c20;border:1px solid rgba(255,255,255,.08);border-radius:4px;padding:0 7px">⌘F</span></div>
+      <div style="display:flex"><span style="color:#b9bec5">full-line divider drag</span><span style="margin-left:auto;color:#9aa0a8;background:#1a1c20;border:1px solid rgba(255,255,255,.08);border-radius:4px;padding:0 7px">⌥ drag</span></div>
+     </div>
+    </div>
+    <div style="display:flex;justify-content:flex-end"><span onClick="{{ closeSettings }}" style="color:#9aa0a8;border:1px solid rgba(255,255,255,.09);border-radius:5px;padding:4px 14px;cursor:pointer;font-size:11.5px">close esc</span></div>
+   </div>
+  </div>
+ </sc-if>
+ <sc-if value="{{ showExport }}" hint-placeholder-val="{{ false }}">
+  <div onClick="{{ closeExport }}" style="position:fixed;inset:0;z-index:50;background:rgba(13,16,19,.55);display:flex;align-items:center;justify-content:center">
+   <div onClick="{{ swallow }}" style="width:560px;background:#26292e;border:1px solid rgba(255,255,255,.09);border-radius:10px;box-shadow:0 18px 48px rgba(0,0,0,.5);padding:18px 22px 20px;display:flex;flex-direction:column;gap:12px;font-size:12px">
+    <div style="font-size:9.5px;letter-spacing:.14em;color:#62676f">EXPORT RECORD · 01M1684 · fix-race-in-metering · 244 ev</div>
+    <div style="display:flex;flex-direction:column;gap:6px;font-size:11.5px">
+     <div style="display:flex;gap:10px;padding:8px 12px;background:#2e3138;border-radius:6px"><span style="color:#e2e5e9">.record directory</span><span style="color:#62676f">segments + manifest + blobs + sidecar — replayable</span><span style="margin-left:auto;color:#62676f">↵</span></div>
+     <div style="display:flex;gap:10px;padding:8px 12px;background:#1a1c20;border-radius:6px"><span style="color:#b9bec5">events.jsonl</span><span style="color:#4a4e55">flat, single file — read-only</span></div>
+    </div>
+    <div style="display:flex;gap:10px;border:1px solid rgba(255,255,255,.13);border-radius:6px;padding:8px 12px;background:#1a1c20;font-size:11.5px"><span style="color:#62676f">to</span><span style="color:#e2e5e9">~/exports/fix-race-in-metering.record</span></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;font-size:11.5px"><span onClick="{{ closeExport }}" style="color:#9aa0a8;border:1px solid rgba(255,255,255,.09);border-radius:5px;padding:4px 14px;cursor:pointer">cancel esc</span><span onClick="{{ doExport }}" style="color:#0d1013;background:#82a5c8;border-radius:5px;padding:4px 14px;font-weight:600;cursor:pointer">export ↵</span></div>
+   </div>
+  </div>
+ </sc-if>
+ <sc-if value="{{ showEndConfirm }}" hint-placeholder-val="{{ false }}">
+  <div onClick="{{ closeEndConfirm }}" style="position:fixed;inset:0;z-index:50;background:rgba(13,16,19,.55);display:flex;align-items:center;justify-content:center">
+   <div onClick="{{ swallow }}" style="width:560px;background:#26292e;border:1px solid rgba(255,255,255,.09);border-radius:10px;box-shadow:0 18px 48px rgba(0,0,0,.5);padding:18px 22px 20px;display:flex;flex-direction:column;gap:12px">
+    <div style="color:#e2e5e9;font-size:13px">End session fix-race-in-metering?</div>
+    <div style="color:#62676f;font-size:11.5px;line-height:1.7">Interrupts the running turn, emits SessionEnded and finalises the record. The record stays in records; the session cannot be resumed.</div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;font-size:11.5px"><span onClick="{{ closeEndConfirm }}" style="color:#9aa0a8;border:1px solid rgba(255,255,255,.09);border-radius:5px;padding:4px 14px;cursor:pointer">cancel esc</span><span onClick="{{ doEndSession }}" style="color:#e2e5e9;background:#2e3138;border:1px solid rgba(255,255,255,.12);border-radius:5px;padding:4px 14px;font-weight:600;cursor:pointer">end session</span></div>
+   </div>
+  </div>
+ </sc-if>
+
+ <!-- ══ FIRST RUN · 19m (tweak: firstRun) ══ -->
+ <sc-if value="{{ showFirstRun }}" hint-placeholder-val="{{ false }}">
+  <div style="position:fixed;inset:0;z-index:60;background:#212327;display:flex;flex-direction:column">
+   <div style="display:flex;align-items:center;gap:10px;padding:8px 16px;background:#26292e;white-space:nowrap"><div style="display:flex;gap:6px;flex:none"><span style="width:12px;height:12px;border-radius:50%;background:#4a4e55"></span><span style="width:12px;height:12px;border-radius:50%;background:#4a4e55"></span><span style="width:12px;height:12px;border-radius:50%;background:#4a4e55"></span></div><span style="display:inline-flex;align-items:baseline;flex:none"><span style="color:#e2e5e9;font-weight:600">substrate</span><span style="width:5px;height:5px;border-radius:50%;background:#62676f;display:inline-block;margin-left:3px"></span></span><span style="color:#e2e5e9;font-size:11px">s-1a04</span><span style="font-size:10.5px;color:#4a4e55;border:1px dashed rgba(255,255,255,.12);border-radius:4px;padding:1px 7px">driver —</span><span style="font-size:10.5px;color:#4a4e55;border:1px dashed rgba(255,255,255,.12);border-radius:4px;padding:1px 7px">⌥ —</span></div>
+   <div style="flex:1"></div>
+   <div style="padding:0 40px 20px;max-width:900px;width:100%;box-sizing:border-box;align-self:center">
+    <div style="border:1px solid rgba(255,255,255,.13);border-radius:6px;background:#1a1c20;overflow:hidden;font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;color:#b9bec5">
+     <div style="padding:6px 0;font-size:11.5px;line-height:2.1">
+      <div style="padding:0 15px;font-size:9.5px;letter-spacing:.14em;color:#62676f">DRIVERS ON THIS MACHINE</div>
+      <sc-for list="{{ frRows }}" as="fr" hint-placeholder-count="6">
+       <div onClick="{{ fr.pick }}" style="padding:0 15px;display:flex;gap:12px;cursor:pointer;background:{{ fr.bg }};white-space:nowrap;overflow:hidden" style-hover="background:#2e3138"><span style="color:{{ fr.c }};width:230px;flex:none;overflow:hidden;text-overflow:ellipsis">{{ fr.name }}</span><span style="color:#4a4e55;overflow:hidden;text-overflow:ellipsis">{{ fr.meta }}</span><span style="margin-left:auto;color:#62676f;flex:none">{{ fr.key }}</span></div>
+      </sc-for>
+      <div style="padding:0 15px;font-size:9.5px;letter-spacing:.14em;color:#62676f;margin-top:6px">WORKSPACE</div>
+      <div style="padding:0 15px;display:flex;gap:12px"><span style="color:#b9bec5;width:230px">~/Documents/substrate</span><span style="color:#4a4e55">default · created on bind</span></div>
+     </div>
+     <div style="display:flex;gap:10px;padding:9px 14px;border-top:1px solid rgba(255,255,255,.08);font-size:11.5px"><span style="color:#82a5c8">›</span><span style="color:#4a4e55">click a driver to start — everything changeable later: header ▾ · /model · settings ⌘,</span></div>
+    </div>
+   </div>
+  </div>
+ </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;transcriptFontSize&quot;: {&quot;editor&quot;: &quot;range&quot;, &quot;default&quot;: 13, &quot;min&quot;: 6.5, &quot;max&quot;: 19.5, &quot;step&quot;: 0.5, &quot;tsType&quot;: &quot;number&quot;, &quot;section&quot;: &quot;Type — default ±50%&quot;}, &quot;columns&quot;: {&quot;editor&quot;: &quot;range&quot;, &quot;default&quot;: 1, &quot;min&quot;: 1, &quot;max&quot;: 4, &quot;step&quot;: 1, &quot;tsType&quot;: &quot;number&quot;, &quot;section&quot;: &quot;Test the splits (⌘D also works once clicked in)&quot;}, &quot;rows&quot;: {&quot;editor&quot;: &quot;range&quot;, &quot;default&quot;: 1, &quot;min&quot;: 1, &quot;max&quot;: 2, &quot;step&quot;: 1, &quot;tsType&quot;: &quot;number&quot;, &quot;section&quot;: &quot;Test the splits (⌘D also works once clicked in)&quot;}, &quot;view&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;default&quot;: &quot;revealed&quot;, &quot;options&quot;: [&quot;terminal&quot;, &quot;revealed&quot;], &quot;tsType&quot;: &quot;string&quot;, &quot;section&quot;: &quot;Level&quot;}, &quot;firstRun&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: false, &quot;tsType&quot;: &quot;boolean&quot;, &quot;section&quot;: &quot;Scenarios&quot;}, &quot;simulateRateLimit&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: false, &quot;tsType&quot;: &quot;boolean&quot;, &quot;section&quot;: &quot;Scenarios&quot;}}">
+class Component extends DCLogic {
+  state = { revealed: true, mode: 'stream', dir: 'down', sel: 240, childOpen: false, promptVal: '', surface: null, studioView: 'form', studioOut: 'author a topology, then validate or build.', studioOutColor: '#62676f', level: 'all', sent: [],
+    topoName: 'adversarial_pair_review',
+    prods: [{ name: 'builder', initial: true, emits: 'Draft' }, { name: 'attacker', initial: false, emits: 'Critique' }, { name: 'judge', initial: false, emits: 'Verdict' }],
+    sviews: [{ name: 'draft_count', def: 'KindCount(of Draft)' }, { name: 'critique_buf', def: 'KindBuffer(of Critique)' }],
+    trigs: [{ id: 'attack', view: 'draft_count', op: '≥', n: '1', starts: 'attacker' }, { id: 'adjudicate', view: 'critique_buf', op: '≥', n: '2', starts: 'judge' }],
+    sroutes: [{ id: 'seed-judge', kind: 'Draft', slot: 'judge.draft' }],
+    termKind: 'threshold_count', termOf: 'Verdict', termN: '1',
+    responder: 'deterministic', seed: '0', model: 'llama3.2',
+    cardPos: { builder: { x: 80, y: 80 }, attacker: { x: 390, y: 190 }, judge: { x: 700, y: 86 } },
+    driverName: 'kimi-k2', driverOpen: false, wsOpen: false,
+    nsOpen: false, nsName: '', nsWorkspace: '~/code/substrate', nsIsolate: false, nsStatus: '',
+    panes: [{ id: 1, name: 'fix-race-in-metering', driver: 'kimi-k2', editing: false, nameVal: '' }],
+    focused: 1, cols: 1, rows: 1, colW: [1], rowW: [1], revealL: 1.15, ddFor: null, wsFor: null, allSessions: [], dropHint: null,
+    descent: [], descPv: '', descExtra: {}, fanOpen: false, fanSel: 0, findOpen: false, findQ: '', findScope: 'transcript', nestedDescent: false,
+    showSettings: false, showExport: false, showEndConfirm: false, ended: false, frDone: false, theme: 'dark', fontOverride: null, settingsNote: '' };
+  _newPane() {
+    const id = (this._nextId = (this._nextId || Math.max(...this.state.panes.map(p => p.id), ...(this.state.allSessions || []).map(s => s.id)) + 1)) && this._nextId++;
+    // D66f: a fresh pane IS the workspace picker — unbound until ↵ binds and starts the session
+    return { id, name: 's-' + (4096 + (id * 731) % 61439).toString(16), driver: 'kimi-k2', unbound: true, wsQ: '', editing: false, nameVal: '', pv: '', lines: [] };
+  }
+  _bindPane(id, ws) {
+    this.setState(s => {
+      const pane = s.panes.find(p => p.id === id); if (!pane || !pane.unbound) return {};
+      // ONE rule (D68 corollary): bind a folder — git repo ⇒ worktree, else flat; sandbox for ~/.substrate
+      const shape = (ws === '~/code/substrate' || ws === '~/code/swebench-repro') ? 'worktree' : ws === '~/.substrate/sandbox' ? 'sandbox' : 'flat';
+      const lines = [
+        { t: 'session ' + pane.name + ' started · driver ' + pane.driver + ' · ' + ws + (shape === 'worktree' ? ' · worktree substrate/' + pane.name : ' · ' + shape), c: '#62676f' },
+        { t: '◐ parked — awaiting your first message', c: '#82a5c8' }];
+      return { panes: s.panes.map(p => p.id === id ? Object.assign({}, p, { unbound: false, ws, shape, lines }) : p),
+        allSessions: [...(s.allSessions || []), { id, name: pane.name, driver: pane.driver, ws }] };
+    });
+  }
+  _split(dir) {
+    this.setState(s => {
+      let { cols, rows } = s;
+      let { colW, rowW } = s;
+      if (dir === 'right') { if (cols < 4) { cols++; colW = [...colW, 1]; } else if (rows < 2) { rows++; rowW = [...rowW, 1]; } else return {}; }
+      else { if (rows < 2) { rows++; rowW = [...rowW, 1]; } else if (cols < 4) { cols++; colW = [...colW, 1]; } else return {}; }
+      const need = cols * rows;
+      const panes = s.panes.slice();
+      while (panes.length < need) panes.push(this._newPane());
+      return { cols, rows, colW, rowW, panes, focused: panes[panes.length - 1].id };
+    });
+  }
+  componentDidMount() {
+    this._kd = (e) => {
+      if (e.ctrlKey && e.key === '\u0060') { e.preventDefault(); this.setState(s => ({ revealed: !s.revealed, surface: null })); }
+      if (e.metaKey && (e.key === 'd' || e.key === 'D')) { e.preventDefault(); this._split(e.shiftKey ? 'down' : 'right'); }
+      if (e.metaKey && (e.key === 'f' || e.key === 'F')) { e.preventDefault(); this.setState(s => ({ findOpen: !s.findOpen, findQ: '' })); }
+      if (e.metaKey && e.key === ',') { e.preventDefault(); this.setState({ showSettings: true }); }
+      if (this.state.fanOpen && !this.state.descent.length && !this.state.showSettings && !this.state.showExport && !this.state.showEndConfirm) {
+        if (e.key === 'ArrowDown') { e.preventDefault(); this.setState(s => ({ fanSel: Math.min(2, s.fanSel + 1) })); }
+        if (e.key === 'ArrowUp') { e.preventDefault(); this.setState(s => ({ fanSel: Math.max(0, s.fanSel - 1) })); }
+        if (e.key === 'Enter' && !(document.activeElement && document.activeElement.tagName === 'INPUT')) { e.preventDefault(); const k = ['floor_a', 'floor_b', 'floor_c'][this.state.fanSel]; this.setState({ descent: [k], descPv: '' }); }
+      }
+      if (e.key === 'Escape') {
+        const s = this.state;
+        if (s.findOpen) this.setState({ findOpen: false, findQ: '' });
+        else if (s.showSettings || s.showExport || s.showEndConfirm) this.setState({ showSettings: false, showExport: false, showEndConfirm: false });
+        else if (s.nsOpen || s.driverOpen || s.wsOpen || s.ddFor || s.wsFor) this.setState({ nsOpen: false, driverOpen: false, wsOpen: false, ddFor: null, wsFor: null, nsStatus: '' });
+        else if (s.descent.length) this.setState({ descent: s.descent.slice(0, -1), descPv: '' });
+        else if (s.fanOpen) this.setState({ fanOpen: false });
+        else if (s.surface) this.setState({ surface: null });
+      }
+    };
+    window.addEventListener('keydown', this._kd);
+    this._gm = (e) => {
+      if (!this._gut) return;
+      const g = this._gut; const s = this.state;
+      if (g.type === 'reveal') {
+        const d = (e.movementX / Math.max(300, (s.winW || window.innerWidth))) * (s.revealL + 1);
+        this.setState({ revealL: Math.min(3, Math.max(.5, s.revealL + d)) });
+        return;
+      }
+      if (g.type === 'col') {
+        const total = s.colW.reduce((a, b) => a + b, 0);
+        const d = (e.movementX / Math.max(300, (s.winW || window.innerWidth))) * total;
+        const w = s.colW.slice(); w[g.i - 1] = Math.max(.25, w[g.i - 1] + d); w[g.i] = Math.max(.25, w[g.i] - d);
+        this.setState({ colW: w });
+      } else {
+        const total = s.rowW.reduce((a, b) => a + b, 0);
+        const d = (e.movementY / 600) * total;
+        const w = s.rowW.slice(); w[g.i - 1] = Math.max(.3, w[g.i - 1] + d); w[g.i] = Math.max(.3, w[g.i] - d);
+        this.setState({ rowW: w });
+      }
+    };
+    this._gu = () => { this._gut = null; };
+    window.addEventListener('mousemove', this._gm); window.addEventListener('mouseup', this._gu);
+    this._mm = (e) => { if (!this._drag) return; const n = this._drag; this.setState(s => { const p = s.cardPos[n] || { x: 100, y: 100 }; return { cardPos: Object.assign({}, s.cardPos, { [n]: { x: Math.max(0, Math.min(800, p.x + e.movementX)), y: Math.max(0, Math.min(360, p.y + e.movementY)) } }) }; }); };
+    this._mu = () => { this._drag = null; };
+    window.addEventListener('mousemove', this._mm); window.addEventListener('mouseup', this._mu);
+    this._rs = () => this.setState({ winW: window.innerWidth });
+    window.addEventListener('resize', this._rs);
+  }
+  componentDidUpdate(prevProps) {
+    // sync ONLY when a tweak actually changed — never fight the UI's own state
+    const pc = this.props.columns, pr = this.props.rows, pv = this.props.view;
+    const changed = (k) => prevProps && this.props[k] !== prevProps[k];
+    if (!changed('columns') && !changed('rows') && !changed('view')) return;
+    const S = this.state;
+    if ((changed('columns') && pc && pc !== S.cols) || (changed('rows') && pr && pr !== S.rows)) {
+      const cols = pc || S.cols, rows = pr || S.rows;
+      const need = cols * rows;
+      const panes = S.panes.slice(0, Math.max(1, need));
+      while (panes.length < need) panes.push(this._newPane());
+      const colW = Array.from({ length: cols }, (_, i) => S.colW[i] || 1);
+      const rowW = Array.from({ length: rows }, (_, i) => S.rowW[i] || 1);
+      this.setState({ cols, rows, colW, rowW, panes });
+    }
+    if (changed('view') && pv && (pv === 'revealed') !== S.revealed) this.setState({ revealed: pv === 'revealed', surface: null });
+  }
+  componentWillUnmount() { window.removeEventListener('keydown', this._kd); window.removeEventListener('mousemove', this._mm); window.removeEventListener('mouseup', this._mu); window.removeEventListener('resize', this._rs); }
+  _upd(arrKey, i, field) { return (ev) => this.setState(s => { const arr = s[arrKey].map((x, j) => j === i ? Object.assign({}, x, { [field]: ev.target.value }) : x); return { [arrKey]: arr }; }); }
+  _rm(arrKey, i) { return () => this.setState(s => ({ [arrKey]: s[arrKey].filter((x, j) => j !== i) })); }
+  _validate() {
+    const St = this.state; const errs = [];
+    if (!/^[a-z0-9_]+$/.test(St.topoName)) errs.push('name must be [a-z0-9_]+');
+    if (!St.prods.length) errs.push('no producers');
+    const names = St.prods.map(p => p.name);
+    if (!St.prods.some(p => p.initial)) errs.push('no initial producer — nothing runs on the opening cohort');
+    St.trigs.forEach(t => {
+      if (!names.includes(t.starts)) errs.push('trigger ' + t.id + ' starts unknown producer "' + t.starts + '"');
+      if (t.view && !St.sviews.find(v => v.name === t.view)) errs.push('trigger ' + t.id + ' reads unknown view "' + t.view + '"');
+    });
+    const emitted = new Set(); St.prods.forEach(p => String(p.emits).split(',').map(x => x.trim()).filter(Boolean).forEach(k => emitted.add(k)));
+    const consumed = new Set([St.termOf]);
+    St.sviews.forEach(v => { const m = String(v.def).match(/of\s+(\w+)/); if (m) consumed.add(m[1]); });
+    St.sroutes.forEach(r => consumed.add(r.kind));
+    emitted.forEach(k => { if (!consumed.has(k)) errs.push('emitted kind ' + k + ' is neither consumed nor terminal'); });
+    return errs;
+  }
+  _toggleSurface(name) { this.setState(s => ({ surface: s.surface === name ? null : name })); }
+  renderVals() {
+    const S = this.state;
+    const fp = S.panes.find(p => p.id === S.focused) || S.panes[0];
+    const mainFocused = fp.id === 1;
+    // ── turn 20: delegate descent ──
+    const DEPTHC = ['#a08fc9', '#b88fd9'];
+    const CH = {
+      'reviewer-a': { name: 'reviewer-a', driver: 'glm-4.6', rec: 'delegate_child_3e36', talkable: true,
+        head: 'reviewer-a · glm-4.6 · child record delegate_child_3e36 · 26 events',
+        lines: [
+          { t: 'delegated: check the stripe-count derivation · from fix-race-in-metering · turn 9', c: '#62676f' },
+          { t: '  ⚙ read_file src/substrate/metering.py ·· 312 lines', c: '#62676f' },
+          { t: '  ⚙ bash python -c "stripe_model.py --check" ·· ok', c: '#62676f' },
+          { t: 'The derivation holds for N≥4 stripes; below that CAS retry cost dominates. Checking the boundary case now.', c: '#b9bec5', wrap: 1 },
+          { t: '  ⑂ delegate → verifier "re-derive independently" · running · depth 2/2 · click to descend', c: '#b88fd9', go: 'verifier' },
+          { t: '◐ parked — awaiting your message', c: '#7fb3b8' }] },
+      'verifier': { name: 'verifier', driver: 'deterministic', rec: 'delegate_child_9a12', talkable: false,
+        head: 'verifier · deterministic · child record delegate_child_9a12 · 11 events',
+        lines: [
+          { t: 'delegated: re-derive independently · from ⑂ reviewer-a', c: '#62676f' },
+          { t: '  ⚙ read_file stripe_model.py ·· 88 lines', c: '#62676f' },
+          { t: '  ⚙ bash python stripe_rederive.py --independent ·· ok', c: '#62676f' },
+          { t: 'Re-derived from the queueing model directly: floor(N)=4 confirmed; N=3 degrades 2.1× under -n 8.', c: '#b9bec5', wrap: 1 },
+          { t: '  ⑂ delegate → checker · refused — ok false · "delegate depth cap reached (max_depth=2)"', c: '#c9a0b8' },
+          { t: '  ⚙ bash python stripe_rederive.py --sweep 2..16 ·· running 4s', c: '#62676f' },
+          { t: '◌ working — this topology takes no messages', c: '#4a4e55' }] },
+      'floor_a': { name: 'floor_a', driver: 'glm-4.6', rec: 'delegate_child_a1c8', talkable: true,
+        head: 'floor_a · glm-4.6 · child record delegate_child_a1c8 · 19 events',
+        lines: [
+          { t: 'delegated: derive the stripe floor independently · from fix-race-in-metering · turn 10', c: '#62676f' },
+          { t: '  ⚙ bash python stripe_floor.py --derive ·· ok', c: '#62676f' },
+          { t: 'floor(N)=4 — the CAS retry cost dominates below 4 stripes.', c: '#b9bec5', wrap: 1 },
+          { t: '◐ parked — awaiting your message', c: '#7fb3b8' }] },
+      'floor_b': { name: 'floor_b', driver: 'qwen3:8b', rec: 'delegate_child_b774', talkable: false,
+        head: 'floor_b · qwen3:8b · child record delegate_child_b774 · 11 events',
+        lines: [
+          { t: 'delegated: derive the stripe floor independently · from fix-race-in-metering · turn 10', c: '#62676f' },
+          { t: '  ⚙ bash python stripe_floor.py --sweep 2..16 ·· running 12s', c: '#62676f' },
+          { t: '◌ running — this topology takes no messages', c: '#4a4e55' }] },
+      'floor_c': { name: 'floor_c', driver: 'deterministic', rec: 'delegate_child_c093', talkable: false,
+        head: 'floor_c · deterministic · child record delegate_child_c093 · 6 events',
+        lines: [
+          { t: 'delegated: derive the stripe floor independently · from fix-race-in-metering · turn 10', c: '#62676f' },
+          { t: '  ⚙ bash python queueing_model.py ·· running 3s', c: '#62676f' },
+          { t: '◌ running — this topology takes no messages', c: '#4a4e55' }] },
+    };
+    const descTop = S.descent[S.descent.length - 1] || null;
+    const dChild = descTop ? CH[descTop] : null;
+    const descended = !!dChild && mainFocused;
+    const dColor = DEPTHC[Math.min(Math.max(S.descent.length - 1, 0), DEPTHC.length - 1)];
+    const descLines = !dChild ? [] : dChild.lines.concat((S.descExtra[descTop] || [])).map(L => ({
+      t: L.t, c: L.c, mt: L.wrap ? '6px' : '0', ws: L.wrap ? 'normal' : 'nowrap', cur: L.go ? 'pointer' : 'default',
+      click: L.go ? (() => this.setState(st => ({ descent: [...st.descent, L.go], descPv: '' }))) : (() => {}),
+    }));
+    const descCrumbs = [{ t: 'fix-race-in-metering', c: '#4a4e55', jump: () => this.setState({ descent: [], descPv: '' }) }]
+      .concat(S.descent.map((k, i) => ({ t: '› ⑂ ' + CH[k].name, c: i === S.descent.length - 1 ? DEPTHC[Math.min(i, 1)] : '#4a4e55', jump: () => this.setState({ descent: this.state.descent.slice(0, i + 1), descPv: '' }) })));
+    const descAncestors = !S.nestedDescent || !dChild ? [] : (() => {
+      const rows = [{ t: '› have someone review the locking change before we land it', c: '#62676f' }];
+      S.descent.slice(0, -1).forEach(k => rows.push({ t: '  ⑂ delegate → ' + CH[k].name + ' · running', c: '#a08fc9' }));
+      return rows;
+    })();
+    // ── 20g: fan-out ──
+    const fanRows = ['floor_a', 'floor_b', 'floor_c'].map((k, ki) => { const c = CH[k]; const parked = c.talkable; return {
+      name: c.name, driver: c.driver, meta: c.rec.replace('delegate_child_', '') + ' · ' + c.head.match(/(\d+) events/)[1] + ' ev',
+      st: parked ? '◐ parked — floor(N)=4' : '◌ running', stC: parked ? '#7fb3b8' : '#4a4e55',
+      bg: S.fanOpen && S.fanSel === ki ? '#2e3138' : 'transparent', go: () => this.setState({ descent: [k], descPv: '', fanSel: ki }) }; });
+    // ── 19h/k/l: find (transcript scope — the focused pane) ──
+    const FQ = S.findOpen ? S.findQ.trim().toLowerCase() : '';
+    const FSTREAM = S.findOpen && S.findScope === 'stream';
+    const FTRANS = S.findOpen && S.findScope === 'transcript';
+    const FTXT = {
+      fdIntro: 'session fix-race-in-metering resumed turn 9 record 01M1684 244 events',
+      fdU1: 'the metering test flakes under load — find and fix the race',
+      fdGrep: 'grep meter_lock src 14 matches', fdRead: 'read_file src substrate metering.py 312 lines', fdEdit: 'edit_file metering.py ok',
+      fdU2: 'have someone review the locking change before we land it',
+      fdDel: 'delegate reviewer-a review the locking change answered',
+      fdBash: 'bash pytest -k metering -n 8 24 passed',
+      fdAns: 'the race was in _emit_log — an unlocked deque shared by two producers. wrapped it in the kernel lock; reviewer-a signed off. 24 24 green under -n 8.',
+      fdPark: 'parked' };
+    const fdOf = (k) => (!FQ || !FTRANS ? 1 : (FTXT[k].toLowerCase().includes(FQ) ? 1 : 0.3));
+    const paneW = (S.winW || window.innerWidth) / S.cols;
+    const compact = paneW < 480;
+    const panes = S.panes.map(p => ({
+      unbound: !!p.unbound, bound: !p.unbound,
+      wsRows: !p.unbound ? [] : ((p.wsQ ? [{ path: p.wsQ, meta: 'typed — ↵ binds + starts', c: '#e2e5e9', bg: '#2e3138', key: '↵' }] : []).concat([
+        { path: '~/code/substrate', meta: p.wsQ ? 'inherit' : 'inherit · worktree on bind', c: p.wsQ ? '#b9bec5' : '#e2e5e9', bg: p.wsQ ? 'transparent' : '#2e3138', key: p.wsQ ? '' : '↵' },
+        { path: '~/notes/substrate-docs', meta: 'recent · flat', c: '#b9bec5', bg: 'transparent', key: '' },
+        { path: '~/code/swebench-repro', meta: 'recent · worktree', c: '#b9bec5', bg: 'transparent', key: '' },
+        { path: '~/.substrate/sandbox', meta: 'sandbox', c: '#b9bec5', bg: 'transparent', key: '' },
+      ])).map(r => Object.assign(r, { pick: () => this._bindPane(p.id, r.path) })),
+      wsQ: p.wsQ || '', onWsQ: (ev) => this.setState(st => ({ panes: st.panes.map(x => x.id === p.id ? Object.assign({}, x, { wsQ: ev.target.value }) : x) })),
+      onWsKey: (ev) => { if (ev.key === 'Enter') this._bindPane(p.id, (p.wsQ || '').trim() || '~/code/substrate'); },
+      showChips: paneW >= 340,
+      hdrGap: compact ? '5px' : '8px',
+      nameMin: compact ? '44px' : '64px',
+      wsLabel: p.unbound ? '⌥ —' : compact ? '⌥' : '⌥ ' + (p.id === 1 ? 'substrate/fix-race' : (p.shape === 'worktree' ? 'substrate/' + p.name : (p.ws || p.name))),
+      revealText: compact ? '⌃`' : '⌃` reveal',
+      name: p.name, driver: p.driver, isMain: p.id === 1, notMain: p.id !== 1, lines: p.lines || [], pv: p.pv || '',
+      onPv: (ev) => this.setState(s => ({ panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, { pv: ev.target.value }) : x) })),
+      onPvKey: (ev) => { if (ev.key !== 'Enter') return; const v = (p.pv || '').trim(); if (!v || v.startsWith('/')) return; this.setState(s => ({ panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, { pv: '', lines: [...x.lines, { t: '› ' + v, c: '#e2e5e9' }, { t: 'queued — prototype only; the real app resumes the parked run in-process (registry turn)', c: '#4a4e55' }] }) : x) })); },
+      editing: p.editing, notEditing: !p.editing, nameVal: p.nameVal,
+      nameColor: p.id === S.focused ? '#e2e5e9' : '#9aa0a8',
+      dot: (p.id === 1 && (this.props.simulateRateLimit ?? false)) ? '#7fb3b8' : '#62676f', // session status (D31); teal while the driver is rate-limit waiting (19i)
+      outline: 'none',
+      dim: (S.panes.length > 1 && p.id !== S.focused) ? '.55' : '1',
+      hintOn: !!(S.dropHint && S.dropHint.id === p.id),
+      hintL: S.dropHint && S.dropHint.zone === 'e' ? '50%' : '0', hintT: S.dropHint && S.dropHint.zone === 's' ? '50%' : '0',
+      hintW: S.dropHint && (S.dropHint.zone === 'w' || S.dropHint.zone === 'e') ? '50%' : '100%',
+      hintH: S.dropHint && (S.dropHint.zone === 'n' || S.dropHint.zone === 's') ? '50%' : (S.dropHint && (S.dropHint.zone === 'w' || S.dropHint.zone === 'e') ? '100%' : '100%'),
+      branch: p.id === 1 ? 'substrate/fix-race' : 'substrate/' + p.name,
+      ddOpen: S.ddFor === p.id, wsOpenP: S.wsFor === p.id,
+      toggleDd: () => this.setState(s => ({ focused: p.id, ddFor: s.ddFor === p.id ? null : p.id, wsFor: null })),
+      toggleWsP: () => this.setState(s => ({ focused: p.id, wsFor: s.wsFor === p.id ? null : p.id, ddFor: null })),
+      driverOpts: ['kimi-k2', 'deepseek-r1:8b', 'qwen3-coder:480b-cloud', 'nemotron-3-super', 'claude (cli)', 'gemini (cli)', 'deterministic'].map(m => ({
+        label: m, color: m === p.driver ? '#e2e5e9' : '#9aa0a8',
+        pick: () => this.setState(s => ({ ddFor: null, panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, { driver: m }) : x) })),
+      })),
+      caretColor: p.id === S.focused ? '#82a5c8' : '#4a4e55',
+      promptHint: p.id === S.focused ? 'type to talk · / for commands' : 'click to focus',
+      focus: () => this.setState({ focused: p.id }),
+      gripStart: (ev) => { ev.stopPropagation(); this._dragPaneId = p.id; if (ev.dataTransfer) { ev.dataTransfer.setData('text/plain', String(p.id)); const pane = ev.currentTarget.parentElement; if (pane && ev.dataTransfer.setDragImage) ev.dataTransfer.setDragImage(pane, 60, 14); } },
+      splitR: (ev) => { ev.stopPropagation(); this.setState({ focused: p.id }); this._split('right'); },
+      splitD: (ev) => { ev.stopPropagation(); this.setState({ focused: p.id }); this._split('down'); },
+      dragOver: (ev) => {
+        ev.preventDefault();
+        if (!this._dragPaneId || this._dragPaneId === p.id) return;
+        const r = ev.currentTarget.getBoundingClientRect();
+        const x = (ev.clientX - r.left) / r.width, y = (ev.clientY - r.top) / r.height;
+        const zone = x < .3 ? 'w' : x > .7 ? 'e' : y < .3 ? 'n' : y > .7 ? 's' : 'c';
+        if (!this.state.dropHint || this.state.dropHint.id !== p.id || this.state.dropHint.zone !== zone) this.setState({ dropHint: { id: p.id, zone } });
+      },
+      dragLeave: () => { if (this.state.dropHint && this.state.dropHint.id === p.id) this.setState({ dropHint: null }); },
+      dropSwap: (ev) => {
+        ev.preventDefault(); const from = this._dragPaneId; const hint = this.state.dropHint; this._dragPaneId = null;
+        if (!from || from === p.id) { this.setState({ dropHint: null }); return; }
+        this.setState(s => {
+          const panes = s.panes.slice();
+          const a = panes.findIndex(x => x.id === from), b = panes.findIndex(x => x.id === p.id);
+          if (a < 0 || b < 0) return { dropHint: null };
+          const zone = (hint && hint.id === p.id) ? hint.zone : 'c';
+          if (zone === 'c') { const t = panes[a]; panes[a] = panes[b]; panes[b] = t; }
+          else { const [moved] = panes.splice(a, 1); let bi = panes.findIndex(x => x.id === p.id); const before = (zone === 'w' || zone === 'n'); panes.splice(before ? bi : bi + 1, 0, moved); }
+          return { panes, focused: from, dropHint: null };
+        });
+      },
+      goRecords: () => this.setState({ focused: p.id, surface: 'records' }),
+      goStudio: () => this.setState({ focused: p.id, surface: 'studio' }),
+      goReveal: () => this.setState({ focused: p.id, revealed: true, surface: null }),
+      startEdit: () => this.setState(s => ({ panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, { editing: true, nameVal: x.name }) : x) })),
+      updName: (ev) => this.setState(s => ({ panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, { nameVal: ev.target.value }) : x) })),
+      nameKey: (ev) => { if (ev.key === 'Enter') this.setState(s => ({ panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, { editing: false, name: x.nameVal.trim() || x.name }) : x), allSessions: (s.allSessions || []).map(x => x.id === p.id ? Object.assign({}, x, { name: (s.panes.find(pp => pp.id === p.id) || {}).nameVal || x.name }) : x) })); if (ev.key === 'Escape') this.setState(s => ({ panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, { editing: false }) : x) })); },
+    }));
+    const KC = { ToolCall: '#a08fc9', ToolResult: '#7fb3b8', FinalAnswer: '#88b0d0', UserMessage: '#88b0d0', TriggerFired: '#c9a0b8', Park: '#82a5c8', ModelReply: '#88b0d0', ProducerStarted: '#62676f', ProducerCompleted: '#62676f' };
+    // full-granularity turn slice — every tool cycle is ToolCall · TriggerFired · ProducerStarted · ToolResult · ProducerCompleted, as on a real record
+    const cycle = (base, tool, callId, step, args, gist, resultGist, resultPayload, resultContent, child) => ([
+      { seq: base, kind: 'ToolCall', schema: 'tool_loop.ToolCall', prod: 'model', gist, lanes: child ? 'mc' : 'mt', payload: { call_id: callId, tool, args, step }, content: [] },
+      { seq: base + 1, kind: 'TriggerFired', schema: 'substrate.TriggerFired', prod: 'runtime', gist: 'fire-tool → tool', lanes: child ? 'mc' : 'mt', payload: { trigger_id: 'fire-tool', starts: 'tool' }, content: [] },
+      { seq: base + 2, kind: 'ProducerStarted', schema: 'substrate.ProducerStarted', prod: 'runtime', gist: 'tool · ' + tool, lanes: child ? 'mc' : 'mt', payload: { kind: 'tool', instance: 'tool_' + callId }, content: [] },
+      { seq: base + 3, kind: 'ToolResult', schema: 'tool_loop.ToolResult', prod: 'tool · ' + tool, gist: resultGist, lanes: child ? 'mc' : 'mt', payload: Object.assign({ call_id: callId, tool, step, ok: true, error: '' }, resultPayload), content: resultContent },
+      { seq: base + 4, kind: 'ProducerCompleted', schema: 'substrate.ProducerCompleted', prod: 'runtime', gist: 'tool · ' + tool, lanes: child ? 'mc' : 'mt', payload: { kind: 'tool', instance: 'tool_' + callId }, content: [] },
+    ]);
+    const EVFULL = [
+      { seq: 214, kind: 'UserMessage', schema: 'session.UserMessage', prod: 'runtime', gist: 'the metering test flakes…', lanes: 'm',
+        payload: { text: 'the metering test flakes under load — find and fix the race', turn_index: 9, slash_source: null },
+        content: [{ k: 'ASSEMBLED_PROMPT', v: '[system] You are the session driver…\n[turn 8] …compacted…\n[user] the metering test flakes under load — find and fix the race' }] },
+      { seq: 215, kind: 'TriggerFired', schema: 'substrate.TriggerFired', prod: 'runtime', gist: 'fire-model → model', lanes: 'm', payload: { trigger_id: 'fire-model', starts: 'model' }, content: [] },
+      { seq: 216, kind: 'ProducerStarted', schema: 'substrate.ProducerStarted', prod: 'runtime', gist: 'model', lanes: 'm', payload: { kind: 'model', instance: 'model_a1b2c3' }, content: [] },
+      ...cycle(217, 'grep', 'tc_0034', 34, ['meter_lock', 'src/'], 'grep "meter_lock" src/', 'ok · 14 matches', {}, [{ k: 'OUTPUT', v: 'src/substrate/metering.py:41: with meter_lock:\nsrc/substrate/metering.py:88: meter_lock = Lock()\n… 14 matches' }]),
+      ...cycle(222, 'read_file', 'tc_0035', 35, ['src/substrate/metering.py'], 'read_file metering.py', 'ok · 312 lines', {}, [{ k: 'OUTPUT', v: 'def _emit_log(self, entry):\n    self._log.append(entry)   # ← two producers share this deque\n… 312 lines' }]),
+      ...cycle(227, 'edit_file', 'tc_0036', 36, ['src/substrate/metering.py', 'self._log.append(entry)', 'with self._kernel_lock:\n    self._log.append(entry)'], 'edit_file metering.py', 'ok · 1 replacement', { output: 'ok — 1 replacement' }, []),
+      ...cycle(232, 'delegate', 'tc_0037', 37, ['review the locking change in metering.py'], 'delegate → reviewer-a', 'ok · answer folded', {}, [{ k: 'OUTPUT', v: 'lock scope is right — add a comment on why the deque needs the kernel lock\n\n(child record: delegate_child_3e366fe6_c0 · 47 events)' }], true),
+      ...cycle(237, 'bash', 'tc_0038', 38, ['pytest -k metering -n 8'], 'bash pytest -k metering -n 8', 'ok · 24 passed', { output: { exit: 0, stdout: '24 passed in 4.12s', stderr: '' } }, [{ k: 'OUTPUT.STDOUT', v: '24 passed in 4.12s' }]),
+      { seq: 242, kind: 'FinalAnswer', schema: 'tool_loop.FinalAnswer', prod: 'model', gist: 'turn done', lanes: 'm', payload: { steps: 38 },
+        content: [{ k: 'TEXT', v: 'The race was in _emit_log — an unlocked deque shared by two producers. Wrapped it in the kernel lock; reviewer-a signed off. 24/24 green under -n 8.' }] },
+      { seq: 243, kind: 'TriggerFired', schema: 'substrate.TriggerFired', prod: 'runtime', gist: 'park-on-final-answer → park', lanes: '', payload: { trigger_id: 'park-on-final-answer', starts: 'park' }, content: [] },
+      { seq: 244, kind: 'Park', schema: 'session.Park', prod: 'park', gist: 'await UserMessage', lanes: '', payload: { awaiting: 'UserMessage', turn_index: 9, reason: 'final_answer' }, content: [] },
+    ];
+    const EVLITE = [
+      { seq: 0, kind: 'SessionStarted', schema: 'session.SessionStarted', prod: 'runtime', gist: 'seed · driver ' + fp.driver + ' · worktree substrate/' + fp.name, lanes: '', payload: { session_id: fp.name, driver_model: fp.driver, workspace_shape: 'worktree', bundle: null, parent_session_id: null }, content: [] },
+      { seq: 1, kind: 'Park', schema: 'session.Park', prod: 'park', gist: 'await UserMessage', lanes: '', payload: { awaiting: 'UserMessage', turn_index: 0, reason: 'session_open' }, content: [] },
+    ];
+    const EV = mainFocused ? EVFULL : EVLITE;
+    const _evTexts = EV.map(e => (e.kind + ' ' + e.prod + ' ' + e.gist).toLowerCase());
+    const findCount = !FQ ? 'scope: ' + S.findScope + ' — click a lens to move it' : (FSTREAM ? _evTexts.filter(t => t.includes(FQ)).length + ' matching events · scope: stream' : Object.keys(FTXT).filter(k => FTXT[k].toLowerCase().includes(FQ)).length + ' matching lines · scope: transcript');
+    const T = { 0: 't+0.0s', 1: 't+0.0s', 214: 't+0.0s', 215: 't+0.0s', 216: 't+0.0s', 242: 't+49s', 243: 't+49s', 244: 't+49s' };
+    const tFor = (seq) => T[seq] || ('t+' + (seq < 222 ? '2' : seq < 227 ? '4' : seq < 232 ? '8' : seq < 237 ? '10' : '43') + 's');
+    const LOW = { TriggerFired: 1, ProducerStarted: 1, ProducerCompleted: 1 };
+    const shownEV = S.level === 'app' ? EV.filter(e => !LOW[e.kind]) : EV;
+    const selE = EV.find(e => e.seq === S.sel);
+    // lanes: one per producer KIND (fixed width). A lane's bars are SPANS — a tool span runs
+    // ToolCall → ToolResult; the model span runs its ProducerStarted → FinalAnswer; park spans
+    // TriggerFired → Park. Concurrent spans of one kind pack into sub-tracks that appear ONLY
+    // when real overlap exists, so the graph never widens for a merely long run.
+    const spansByKind = { model: [], tool: [], park: [] };
+    const _calls = {};
+    EV.forEach(e => {
+      if (e.kind === 'ProducerStarted' && e.payload.kind === 'model') spansByKind.model.push({ start: e.seq, end: 242, color: '#3d5166', bright: '#82a5c8' });
+      if (e.kind === 'ToolCall') _calls[e.payload.call_id] = { start: e.seq, tool: e.payload.tool };
+      if (e.kind === 'ToolResult') { const c = _calls[e.payload.call_id]; if (c) spansByKind.tool.push({ start: c.start, end: e.seq, color: c.tool === 'delegate' ? '#665f7d' : '#4d6b6e', bright: c.tool === 'delegate' ? '#a08fc9' : '#7fb3b8' }); }
+      if (e.kind === 'Park') spansByKind.park.push({ start: e.seq - 1, end: e.seq, color: '#3d5166', bright: '#82a5c8' });
+    });
+    const laneDefs = [];
+    Object.keys(spansByKind).forEach(kind => {
+      const spans = spansByKind[kind].sort((a, b) => a.start - b.start);
+      const tracks = [];
+      spans.forEach(sp => { let t = tracks.find(t => t[t.length - 1].end < sp.start); if (!t) { t = []; tracks.push(t); } t.push(sp); });
+      if (!tracks.length) tracks.push([]);
+      tracks.forEach((t, i) => laneDefs.push({ kind, label: i === 0 ? kind : kind + ' ·' + (i + 1), spans: t }));
+    });
+    const kindOf = (e) => (e.kind === 'Park' || (e.payload && e.payload.starts === 'park')) ? 'park' : (e.prod.startsWith('tool') || (e.payload && e.payload.kind === 'tool') || e.kind === 'ToolCall') ? 'tool' : 'model';
+    // message connectors (sequence-diagram arrows): ToolCall = model→tool, ToolResult = tool→model,
+    // TriggerFired / UserMessage = runtime stub into the lane it starts.
+    const laneIdx = {}; laneDefs.forEach((ld, i) => { if (laneIdx[ld.kind] === undefined) laneIdx[ld.kind] = i; });
+    const cx = (i) => i * 12 + 4;
+    const connFor = (e) => {
+      if (e.kind === 'ToolCall') { const a = cx(laneIdx.model), b = cx(laneIdx.tool); return { c: e.payload.tool === 'delegate' ? '#a08fc9' : '#7fb3b8', l: Math.min(a, b), w: Math.abs(b - a), dot: b }; }
+      if (e.kind === 'ToolResult') { const a = cx(laneIdx.tool), b = cx(laneIdx.model); return { c: '#7fb3b8', l: Math.min(a, b), w: Math.abs(b - a), dot: b }; }
+      if (e.kind === 'TriggerFired') { const k = e.payload.starts === 'park' ? 'park' : e.payload.starts === 'tool' ? 'tool' : 'model'; const b = cx(laneIdx[k]); return { c: '#c9a0b8', l: 0, w: b, dot: b }; }
+      if (e.kind === 'UserMessage') { const b = cx(laneIdx.model); return { c: '#88b0d0', l: 0, w: b, dot: b }; }
+      return null;
+    };
+    const events = shownEV.map(e => {
+      const ownKind = kindOf(e);
+      const conn = connFor(e);
+      return {
+        hasConn: !!conn, connL: conn ? conn.l : 0, connW: conn ? Math.max(conn.w, 2) : 0, connC: conn ? conn.c : 'transparent', dotL: conn ? conn.dot : 0,
+        seq: e.seq, t: tFor(e.seq), kind: e.kind, pl: e.prod + ' · ' + e.gist, kindColor: KC[e.kind] || '#9aa0a8',
+        rowOp: (FSTREAM && FQ) ? ((e.kind + ' ' + e.prod + ' ' + e.gist).toLowerCase().includes(FQ) ? 1 : 0.3) : 1,
+        sel: e.seq === S.sel, rowBg: e.seq === S.sel ? '#2e3138' : ((FSTREAM && FQ && (e.kind + ' ' + e.prod + ' ' + e.gist).toLowerCase().includes(FQ)) ? '#26292e' : 'transparent'),
+        laneCells: laneDefs.map(ld => {
+          const sp = ld.spans.find(s => s.start <= e.seq && e.seq <= s.end);
+          return { bg: sp ? (ld.kind === ownKind ? sp.bright : sp.color) : 'transparent' };
+        }),
+        pick: () => this.setState(s => ({ sel: s.sel === e.seq ? null : e.seq })),
+      };
+    });
+    const laneW = laneDefs.length * 12 - 4;
+    const laneLegend = laneDefs.map(ld => ({ label: ld.label, color: ld.kind === 'tool' ? '#7fb3b8' : '#82a5c8' }));
+    const A = 214, B = 244, pct = (x) => (((x - A) / (B - A)) * 100).toFixed(1) + '%';
+    const span = (s0, s1, base, seq) => ({ l: pct(s0), w: (((s1 - s0) / (B - A)) * 100).toFixed(1) + '%', title: 'seq ' + seq + ' — click to inspect', bg: S.sel === seq ? '#9db8d6' : base, pick: () => this.setState(st => ({ sel: st.sel === seq ? null : seq })) });
+    const sideLanes = !mainFocused ? [] : [
+      { label: 'model', color: '#82a5c8', segs: [span(216, 241, '#3d5166', 216), span(241, 242.6, '#82a5c8', 242)] },
+      { label: 'grep', color: '#7fb3b8', segs: [span(219, 221.4, '#4d6b6e', 220)] },
+      { label: 'read_file', color: '#7fb3b8', segs: [span(224, 226.4, '#4d6b6e', 225)] },
+      { label: 'edit_file', color: '#7fb3b8', segs: [span(229, 231.4, '#4d6b6e', 230)] },
+      { label: '⑂ reviewer-a', color: '#a08fc9', segs: [span(234, 236.4, '#665f7d', 235)] },
+      { label: 'bash', color: '#7fb3b8', segs: [span(239, 241.4, '#4d6b6e', 240)] },
+      { label: 'park', color: '#82a5c8', segs: [span(243.4, 244.6, '#82a5c8', 244)] },
+    ];
+    const modes = [['stream', 'stream+graph'], ['io', 'i/o'], ['structure', 'structure'], ['scene', 'scene']];
+    const modeChips = modes.map(([id, label]) => ({
+      label, pick: () => this.setState({ mode: id }),
+      color: S.mode === id ? '#d7dade' : '#62676f', bg: S.mode === id ? '#2e3138' : 'transparent',
+    }));
+    const CMDS = [['/list', 'records · topologies · sessions · applications · bundles', () => this.setState({ surface: 'records', promptVal: '' })], ['/run', 'launch an application as a delegate child', null], ['/inspect', "narrate a record's causal beats", null], ['/diff', "worktree diff for this session's workspace", null], ['/context', 'inject a record slice into the next turn', null], ['/model', 'swap driver mid-session', null], ['/studio', 'open the topology-authoring studio', () => this.setState({ surface: 'studio', promptVal: '' })], ['/export', 'export this record — .record dir or flat events.jsonl', () => this.setState({ showExport: true, promptVal: '' })], ['/exit', 'end this session cleanly', () => this.setState({ showEndConfirm: true, promptVal: '' })]];
+    const q = S.promptVal.trim();
+    const routerRows = q.startsWith('/') ? CMDS.filter(c => c[0].startsWith(q) || q === '/').map(c => ({ cmd: c[0], desc: c[1], pick: c[2] || (() => this.setState({ promptVal: c[0] + ' ' })) })) : [];
+    const G = [[0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,1,0,0,0,0,0,0,0,0],[0,0,0,0,1,0,0,0,0,0,0,0],[0,0,1,1,1,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,1,1,0,0,0],[0,0,0,0,0,0,0,1,1,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0]];
+    const surf = S.surface;
+    const arms = [
+      { name: 'kimi_solo ⌂ control', nameColor: '#9aa0a8', overall: '.64', barW: '64%', barColor: '#62676f', easy: '.96', med: '.81', hard: '.54', adv: '.25', advColor: '#9aa0a8', delta: '—', deltaColor: '#62676f', verdict: 'the bar', verdictColor: '#62676f' },
+      { name: 'kimi + reviewer-glm', nameColor: '#e2e5e9', overall: '.81', barW: '81%', barColor: '#82a5c8', easy: '.98', med: '.90', hard: '.71', adv: '.42', advColor: '#9aa0a8', delta: '+.17 · p=.008 ✓FDR', deltaColor: '#e2e5e9', verdict: 'superior', verdictColor: '#82a5c8' },
+      { name: 'glm_solo', nameColor: '#9aa0a8', overall: '.59', barW: '59%', barColor: '#62676f', easy: '.94', med: '.73', hard: '.50', adv: '.17', advColor: '#9aa0a8', delta: '−.05 · p=.41', deltaColor: '#9aa0a8', verdict: 'inconclusive', verdictColor: '#9aa0a8' },
+      { name: 'glm + reviewer-kimi', nameColor: '#9aa0a8', overall: '.76', barW: '76%', barColor: '#62676f', easy: '.95', med: '.85', hard: '.58', adv: 'n/a', advColor: '#c26058', delta: '+.12', deltaColor: '#9aa0a8', verdict: 'underpowered', verdictColor: '#c26058' },
+    ];
+    return {
+      crumb: surf === 'records' ? fp.name + ' › records' : surf === 'assay' ? fp.name + ' › assays › rev_kimi_vs_glm' : surf === 'studio' ? fp.name + ' › studio' : descended ? fp.name + S.descent.map(k => ' › ⑂ ' + CH[k].name).join('') : fp.name,
+      escHint: surf ? 'esc — back' : descended ? 'esc — up one level' : '',
+      openRecords: () => this._toggleSurface('records'),
+      openStudio: () => this._toggleSurface('studio'),
+      openAssay: () => this.setState({ surface: 'assay' }),
+      backToSession: () => this.setState({ surface: null }),
+      extraSessions: (S.allSessions || []).map(x => { const open = S.panes.some(pp => pp.id === x.id); const nm = (S.panes.find(pp => pp.id === x.id) || x).name; return { name: nm, meta: x.driver + ' · worktree substrate/' + nm, where: open ? 'open in a pane ▸' : 'no pane — still yours' }; }),
+      fpDdOpen: S.ddFor === fp.id && S.revealed, fpToggleDd: () => this.setState(s => ({ ddFor: s.ddFor === fp.id ? null : fp.id, wsFor: null })),
+      fpWsOpen: S.wsFor === fp.id && S.revealed, fpToggleWs: () => this.setState(s => ({ wsFor: s.wsFor === fp.id ? null : fp.id, ddFor: null })),
+      fpDriverOpts: ['kimi-k2', 'deepseek-r1:8b', 'qwen3-coder:480b-cloud', 'nemotron-3-super', 'claude (cli)', 'gemini (cli)', 'deterministic'].map(m => ({ label: m, color: m === fp.driver ? '#e2e5e9' : '#9aa0a8', pick: () => this.setState(s => ({ ddFor: null, panes: s.panes.map(x => x.id === fp.id ? Object.assign({}, x, { driver: m }) : x) })) })),
+      recordsColor: surf === 'records' ? '#e2e5e9' : '#9aa0a8',
+      studioColor: surf === 'studio' ? '#e2e5e9' : '#9aa0a8',
+      showTerminal: !surf && !S.revealed, showRevealed: !surf && S.revealed,
+      showRecords: surf === 'records', showAssay: surf === 'assay', showStudio: surf === 'studio',
+      toggleReveal: () => this.setState(s => ({ revealed: !s.revealed, surface: null })),
+      revealLabel: S.revealed ? '⌃` terminal' : '⌃` reveal',
+      revealBtnColor: S.revealed && !surf ? '#212327' : '#9aa0a8', revealBtnBg: S.revealed && !surf ? '#82a5c8' : '#3d434c',
+      fontSize: S.fontOverride ?? this.props.transcriptFontSize ?? 13,
+      childOpen: S.childOpen, toggleChild: () => this.setState(s => ({ childOpen: !s.childOpen })),
+      descendReviewer: (ev) => { ev.stopPropagation(); this.setState({ descent: ['reviewer-a'], descPv: '', surface: null }); },
+      swallow: (ev) => ev.stopPropagation(),
+      childHint: S.childOpen ? '▾' : '· answered ▸',
+      promptVal: S.promptVal, onPrompt: (ev) => this.setState({ promptVal: ev.target.value }),
+      routerOpen: routerRows.length > 0, routerRows,
+      promptRadius: routerRows.length > 0 ? '0 0 6px 6px' : '6px',
+      streamRef: (el) => { this._streamEl = el; },
+      graphRef: (el) => { this._graphEl = el; },
+      onStreamScroll: (ev) => {
+        if (this._syncing || this.state.dir !== 'side') return;
+        const el = ev.target, g = this._graphEl; if (!g) return;
+        const f = el.scrollTop / Math.max(1, el.scrollHeight - el.clientHeight);
+        this._syncing = true; g.scrollLeft = f * Math.max(0, g.scrollWidth - g.clientWidth);
+        requestAnimationFrame(() => { this._syncing = false; });
+      },
+      onGraphScroll: (ev) => {
+        if (this._syncing) return;
+        const el = ev.target, s = this._streamEl; if (!s) return;
+        const f = el.scrollLeft / Math.max(1, el.scrollWidth - el.clientWidth);
+        this._syncing = true; s.scrollTop = f * Math.max(0, s.scrollHeight - s.clientHeight);
+        requestAnimationFrame(() => { this._syncing = false; });
+      },
+      events, modeChips, sideLanes, laneDefs, laneW, laneLegend,
+      isStream: S.mode === 'stream', isIo: S.mode === 'io', isStructure: S.mode === 'structure', isScene: S.mode === 'scene',
+      isDown: S.dir === 'down', isSide: S.dir === 'side',
+      setAll: () => this.setState({ level: 'all' }), setApp: () => this.setState({ level: 'app' }),
+      allColor: S.level === 'all' ? '#d7dade' : '#62676f', allBg: S.level === 'all' ? '#2e3138' : 'transparent',
+      appColor: S.level === 'app' ? '#d7dade' : '#62676f', appBg: S.level === 'app' ? '#2e3138' : 'transparent',
+      setDown: () => this.setState({ dir: 'down' }), setSide: () => this.setState({ dir: 'side' }),
+      downColor: S.dir === 'down' ? '#d7dade' : '#62676f', downBg: S.dir === 'down' ? '#2e3138' : 'transparent',
+      sideColor: S.dir === 'side' ? '#d7dade' : '#62676f', sideBg: S.dir === 'side' ? '#2e3138' : 'transparent',
+      selSeq: selE ? selE.seq : 0, selKind: selE ? selE.kind : '', selSchema: selE ? selE.schema : '',
+      selTime: selE ? tFor(selE.seq) + ' into turn 9' : '', selProducer: selE ? selE.prod : '',
+      selColor: selE ? (KC[selE.kind] || '#9aa0a8') : '#9aa0a8',
+      selContent: selE ? selE.content : [], selPayload: selE ? JSON.stringify(selE.payload, null, 1) : '',
+      ioDocs: [
+        { seq: 214, title: 'UserMessage · input', text: 'the metering test flakes under load — find and fix the race' },
+        { seq: 235, title: 'ToolResult · delegate output', text: 'lock scope is right — add a comment on why the deque needs the kernel lock' },
+        { seq: 242, title: 'FinalAnswer · output', text: 'The race was in _emit_log — an unlocked deque shared by two producers. Wrapped it in the kernel lock; reviewer-a signed off. 24/24 green under -n 8.' },
+      ],
+      sceneCells: G.flat().map(v => ({ bg: v ? '#82a5c8' : '#1a1c20' })),
+      arms,
+      topoName: S.topoName, updTopoName: (ev) => this.setState({ topoName: ev.target.value }),
+      prodRows: S.prods.map((p, i) => ({
+        name: p.name, emits: p.emits, updName: this._upd('prods', i, 'name'), updEmits: this._upd('prods', i, 'emits'), rm: this._rm('prods', i),
+        initBox: p.initial ? '#82a5c8' : 'transparent', initBorder: p.initial ? '#82a5c8' : '#4a4e55',
+        toggleInit: () => this.setState(s => ({ prods: s.prods.map((x, j) => j === i ? Object.assign({}, x, { initial: !x.initial }) : x) })),
+      })),
+      addProd: () => this.setState(s => ({ prods: [...s.prods, { name: 'producer_' + (s.prods.length + 1), initial: false, emits: '' }] })),
+      viewRows: S.sviews.map((v, i) => ({ name: v.name, def: v.def, updName: this._upd('sviews', i, 'name'), updDef: this._upd('sviews', i, 'def'), rm: this._rm('sviews', i) })),
+      addView: () => this.setState(s => ({ sviews: [...s.sviews, { name: 'view_' + (s.sviews.length + 1), def: 'KindCount(of )' }] })),
+      trigRows: S.trigs.map((t, i) => ({ id: t.id, view: t.view, n: t.n, starts: t.starts, updId: this._upd('trigs', i, 'id'), updView: this._upd('trigs', i, 'view'), updN: this._upd('trigs', i, 'n'), updStarts: this._upd('trigs', i, 'starts'), rm: this._rm('trigs', i) })),
+      addTrig: () => this.setState(s => ({ trigs: [...s.trigs, { id: 'trigger_' + (s.trigs.length + 1), view: '', op: '≥', n: '1', starts: '' }] })),
+      routeRows: S.sroutes.map((r, i) => ({ id: r.id, kind: r.kind, slot: r.slot, updId: this._upd('sroutes', i, 'id'), updKind: this._upd('sroutes', i, 'kind'), updSlot: this._upd('sroutes', i, 'slot'), rm: this._rm('sroutes', i) })),
+      addRoute: () => this.setState(s => ({ sroutes: [...s.sroutes, { id: 'route_' + (s.sroutes.length + 1), kind: '', slot: '' }] })),
+      termChips: ['quiescence_with_watchdog', 'all_completed', 'threshold_count', 'cancel_all_others', 'any_of', 'all_of'].map(k => ({
+        label: k, pick: () => this.setState({ termKind: k }),
+        color: S.termKind === k ? '#a08fc9' : '#62676f', bg: S.termKind === k ? '#2e3138' : 'transparent',
+      })),
+      isThreshold: S.termKind === 'threshold_count',
+      termOf: S.termOf, updTermOf: (ev) => this.setState({ termOf: ev.target.value }),
+      termN: S.termN, updTermN: (ev) => this.setState({ termN: ev.target.value }),
+      respDColor: S.responder === 'deterministic' ? '#d7dade' : '#62676f', respDBg: S.responder === 'deterministic' ? '#2e3138' : 'transparent',
+      respOColor: S.responder === 'ollama' ? '#d7dade' : '#62676f', respOBg: S.responder === 'ollama' ? '#2e3138' : 'transparent',
+      setRespD: () => this.setState({ responder: 'deterministic' }), setRespO: () => this.setState({ responder: 'ollama' }),
+      seed: S.seed, updSeed: (ev) => this.setState({ seed: ev.target.value }),
+      model: S.model, updModel: (ev) => this.setState({ model: ev.target.value }),
+      isStudioForm: S.studioView === 'form', isStudioCanvas: S.studioView === 'canvas',
+      setStudioForm: () => this.setState({ studioView: 'form' }), setStudioCanvas: () => this.setState({ studioView: 'canvas' }),
+      sFormColor: S.studioView === 'form' ? '#d7dade' : '#62676f', sFormBg: S.studioView === 'form' ? '#2e3138' : 'transparent',
+      sCanvasColor: S.studioView === 'canvas' ? '#d7dade' : '#62676f', sCanvasBg: S.studioView === 'canvas' ? '#2e3138' : 'transparent',
+      canvasCards: S.prods.map((p, i) => {
+        const pos = S.cardPos[p.name] || { x: 120 + (i % 3) * 260, y: 300 };
+        return { name: p.name, emits: p.emits || '—', initial: p.initial, x: pos.x, y: pos.y, border: p.initial ? '#82a5c8' : 'rgba(255,255,255,.12)', dragStart: (ev) => { ev.preventDefault(); this._drag = p.name; } };
+      }),
+      canvasEdges: (() => {
+        const posOf = (n) => { const i = S.prods.findIndex(p => p.name === n); return S.cardPos[n] || { x: 120 + (Math.max(i, 0) % 3) * 260, y: 300 }; };
+        const srcOfKind = (k) => { const p = S.prods.find(p => String(p.emits).split(',').map(x => x.trim()).includes(k)); return p ? p.name : null; };
+        const edges = []; const labels = [];
+        S.trigs.forEach(t => {
+          const v = S.sviews.find(v => v.name === t.view); const m = v ? String(v.def).match(/of\s+(\w+)/) : null;
+          const src = m ? srcOfKind(m[1]) : null; if (!src || !S.prods.find(p => p.name === t.starts)) return;
+          const a = posOf(src), b = posOf(t.starts);
+          edges.push({ d: 'M ' + (a.x + 140) + ' ' + (a.y + 26) + ' C ' + (a.x + 210) + ' ' + (a.y + 26) + ' ' + (b.x - 70) + ' ' + (b.y + 26) + ' ' + b.x + ' ' + (b.y + 26), stroke: '#62676f', dash: '' });
+          labels.push({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 + 14, fill: '#c9a0b8', text: t.id + ' · ' + t.view + ' ≥ ' + t.n });
+        });
+        S.sroutes.forEach(r => {
+          const src = srcOfKind(r.kind); const tgt = String(r.slot).split('.')[0]; if (!src || !S.prods.find(p => p.name === tgt)) return;
+          const a = posOf(src), b = posOf(tgt);
+          edges.push({ d: 'M ' + (a.x + 140) + ' ' + (a.y + 10) + ' C ' + (a.x + 240) + ' ' + (a.y - 40) + ' ' + (b.x - 60) + ' ' + (b.y - 30) + ' ' + (b.x + 150) + ' ' + (b.y + 4), stroke: '#a08fc9', dash: '4 3' });
+          labels.push({ x: (a.x + b.x) / 2, y: Math.min(a.y, b.y) - 18, fill: '#a08fc9', text: r.id + ' · ' + r.kind + ' → ' + r.slot });
+        });
+        return { edges, labels };
+      })().edges,
+      canvasLabels: (() => {
+        const posOf = (n) => { const i = S.prods.findIndex(p => p.name === n); return S.cardPos[n] || { x: 120 + (Math.max(i, 0) % 3) * 260, y: 300 }; };
+        const srcOfKind = (k) => { const p = S.prods.find(p => String(p.emits).split(',').map(x => x.trim()).includes(k)); return p ? p.name : null; };
+        const labels = [];
+        S.trigs.forEach(t => {
+          const v = S.sviews.find(v => v.name === t.view); const m = v ? String(v.def).match(/of\s+(\w+)/) : null;
+          const src = m ? srcOfKind(m[1]) : null; if (!src || !S.prods.find(p => p.name === t.starts)) return;
+          const a = posOf(src), b = posOf(t.starts);
+          labels.push({ x: (a.x + b.x) / 2 - 55, y: (a.y + b.y) / 2 + 16, fill: '#c9a0b8', text: t.id + ' · ' + t.view + ' ≥ ' + t.n });
+        });
+        S.sroutes.forEach(r => {
+          const src = srcOfKind(r.kind); const tgt = String(r.slot).split('.')[0]; if (!src || !S.prods.find(p => p.name === tgt)) return;
+          const a = posOf(src), b = posOf(tgt);
+          labels.push({ x: (a.x + b.x) / 2 - 55, y: Math.max(6, Math.min(a.y, b.y) - 42), fill: '#a08fc9', text: r.id + ' · ' + r.kind + ' → ' + r.slot });
+        });
+        return labels;
+      })(),
+      slotNodes: S.sroutes.map(r => { const tgt = String(r.slot).split('.')[0]; const i = S.prods.findIndex(p => p.name === tgt); if (i < 0) return null; const pos = S.cardPos[tgt] || { x: 120 + (i % 3) * 260, y: 300 }; return { slot: String(r.slot).split('.')[1] || r.slot, x: pos.x + 150, y: pos.y - 2 }; }).filter(Boolean),
+      doValidate: () => { const errs = this._validate(); this.setState(errs.length ? { studioOut: 'invalid — ' + errs.join(' · '), studioOutColor: '#c26058' } : { studioOut: 'ok — ' + this.state.prods.length + ' producers · ' + this.state.sviews.length + ' views · ' + this.state.trigs.length + ' triggers · ' + this.state.sroutes.length + ' routes · every emitted kind consumed or terminal', studioOutColor: '#9aa0a8' }); },
+      doBuild: () => { const errs = this._validate(); this.setState(errs.length ? { studioOut: 'build refused — ' + errs.join(' · '), studioOutColor: '#c26058' } : { studioOut: 'built — registered ' + this.state.topoName + ' (' + this.state.responder + (this.state.responder === 'deterministic' ? ' seed ' + this.state.seed : ' model ' + this.state.model) + ') · launched build_authored_demo_72eb8f85fcab ▸', studioOutColor: '#82a5c8' }); },
+      studioOut: S.studioOut, studioOutColor: S.studioOutColor,
+      sentLines: S.sent.map(t => ({ text: t })),
+      onPromptKey: (ev) => { if (ev.key === 'Enter') { const v = this.state.promptVal.trim(); if (v && !v.startsWith('/')) this.setState(s => ({ sent: [...s.sent, v], promptVal: '' })); } },
+      panes, paneCols: S.colW.map(w => w.toFixed(3) + 'fr').join(' '), paneRows: S.rowW.map(w => w.toFixed(3) + 'fr').join(' '), focusedName: fp.name, fpLines: fp.lines || [],
+      revealFlexL: S.revealL.toFixed(3) + ' 1 0%',
+      revealGutterLeft: (S.revealL / (S.revealL + 1) * 100).toFixed(2) + '%',
+      revealGrab: (ev) => { ev.preventDefault(); this._gut = { type: 'reveal' }; },
+      colGutters: S.colW.slice(0, -1).map((_, i) => { const total = S.colW.reduce((a, b) => a + b, 0); const left = S.colW.slice(0, i + 1).reduce((a, b) => a + b, 0) / total * 100; return { left: left.toFixed(2) + '%', grab: (ev) => { ev.preventDefault(); this._gut = { type: 'col', i: i + 1 }; } }; }),
+      rowGutters: S.rowW.slice(0, -1).map((_, i) => { const total = S.rowW.reduce((a, b) => a + b, 0); const top = S.rowW.slice(0, i + 1).reduce((a, b) => a + b, 0) / total * 100; return { top: top.toFixed(2) + '%', grab: (ev) => { ev.preventDefault(); this._gut = { type: 'row', i: i + 1 }; } }; }), focusedBranch: fp.id === 1 ? 'substrate/fix-race' : 'substrate/' + fp.name, isMainFocused: mainFocused, notMainFocused: !mainFocused,
+      singlePane: S.panes.length === 1,
+      showStrip: !surf && !S.revealed && S.panes.length > 1,
+      showFullHeader: !!surf || S.revealed,
+      splitRight: () => this._split('right'),
+      driverName: fp.driver, driverOpen: S.driverOpen,
+      toggleDriverMenu: () => this.setState(s => ({ driverOpen: !s.driverOpen, wsOpen: false })),
+      driverOptions: ['kimi-k2', 'deepseek-r1:8b', 'qwen3-coder:480b-cloud', 'nemotron-3-super', 'claude (cli)', 'gemini (cli)', 'deterministic'].map(m => ({
+        label: m, color: m === fp.driver ? '#e2e5e9' : '#9aa0a8',
+        pick: () => this.setState(s => ({ driverOpen: false, panes: s.panes.map(x => x.id === s.focused ? Object.assign({}, x, { driver: m }) : x) })),
+      })),
+      wsOpen: S.wsOpen, toggleWs: () => this.setState(s => ({ wsOpen: !s.wsOpen, driverOpen: false })),
+      nsOpen: S.nsOpen, openNs: () => this.setState({ nsOpen: true, driverOpen: false, wsOpen: false }),
+      closeNs: () => this.setState({ nsOpen: false, nsStatus: '' }),
+      nsName: S.nsName, updNsName: (ev) => this.setState({ nsName: ev.target.value }),
+      nsWorkspace: S.nsWorkspace, updNsWorkspace: (ev) => this.setState({ nsWorkspace: ev.target.value }),
+      nsShape: (() => { const w = S.nsWorkspace.trim(); if (!w) return 'sandbox — ~/.substrate/sessions/<id>/workspace/'; if (w === '~/code/substrate') return 'git repo → worktree on branch substrate/<session-name>'; return 'plain directory → flat (same tree, same reflexes)'; })(),
+      nsIsolate: S.nsIsolate, toggleNsIsolate: () => this.setState(s => ({ nsIsolate: !s.nsIsolate })),
+      nsIsoBox: S.nsIsolate ? '#82a5c8' : 'transparent', nsIsoBorder: S.nsIsolate ? '#82a5c8' : '#4a4e55',
+      nsStatus: S.nsStatus, nsStatusColor: S.nsStatus.startsWith('created') ? '#82a5c8' : '#9aa0a8',
+      createNs: () => { const w = this.state.nsWorkspace.trim(); if (w && !w.startsWith('/') && !w.startsWith('~')) { this.setState({ nsStatus: 'workspace must be an absolute path (or blank for the sandbox)' }); return; } this.setState({ nsStatus: 'created (prototype — the real app POSTs /api/session and the rail picks it up)' }); },
+      logoDot: S.ended ? '#4a4e55' : '#62676f', // session status (D31); gray once finalised
+      footRecord: descended ? 'record ' + dChild.rec + ' · ⑂ depth ' + S.descent.length + '/2' : mainFocused ? (S.ended ? 'record 01M1684 · 246 events · finalised' : 'record 01M1684 · 244 events') : fp.unbound ? 'unbound — pick a workspace' : 'record ' + fp.name + ' · 2 events',
+      footHint: surf ? 'esc back to session' : descended ? 'esc climbs one level' : '⌃` toggles the reveal',
+      footStatus: (this.props.simulateRateLimit ?? false) ? '◌ rate-limited · retry 3/6 in 14s' : S.ended ? '● finalised · ✓ clean' : '● live · clean',
+      footStatusColor: (this.props.simulateRateLimit ?? false) ? '#7fb3b8' : S.ended ? '#62676f' : '#82a5c8',
+      // ── descend (turn 20) ──
+      descended, notDescended: !descended, descLines, descCrumbs, descAncestors,
+      descHead: dChild ? dChild.head : '', descColor: dColor,
+      descTalkable: descended && dChild.talkable, descNotTalkable: descended && !dChild.talkable,
+      descWatchNote: dChild && !dChild.talkable ? '· watching' : '',
+      nestedOn: S.nestedDescent && descended, descBorder: S.nestedDescent && descended ? '2px solid ' + dColor : 'none', descPad: S.nestedDescent && descended ? '16px' : '0',
+      descEscHint: 'esc back to ' + (S.descent.length > 1 ? '⑂ ' + CH[S.descent[S.descent.length - 2]].name : 'session'),
+      descPlaceholder: dChild ? 'message ' + dChild.name + (dChild.talkable ? ' — delivers at its next park · / commands' : '') : '',
+      descPv: S.descPv, onDescPv: (ev) => this.setState({ descPv: ev.target.value }),
+      onDescPvKey: (ev) => { if (ev.key !== 'Enter') return; const v = this.state.descPv.trim(); if (!v) return; const k = descTop;
+        this.setState(st => ({ descPv: '', descExtra: Object.assign({}, st.descExtra, { [k]: [...(st.descExtra[k] || []), { t: '› ' + v, c: '#e2e5e9' }, { t: 'queued — delivers at the child\u2019s next park (prototype; needs park/resume wiring in the child topology, D70)', c: '#4a4e55' }] }) })); },
+      // ── fan-out (20g) ──
+      fanOpen: S.fanOpen, toggleFan: () => this.setState(st => ({ fanOpen: !st.fanOpen })),
+      fanHint: S.fanOpen ? '▾' : '· expand ▸', fanRows,
+      // ── find (19k/19l) ──
+      findOpen: S.findOpen, findQ: S.findQ, onFindQ: (ev) => this.setState({ findQ: ev.target.value }), findCount,
+      focusTranscript: () => { if (this.state.findScope !== 'transcript') this.setState({ findScope: 'transcript' }); },
+      focusStream: () => { if (this.state.findScope !== 'stream') this.setState({ findScope: 'stream' }); },
+      closeFind: () => this.setState({ findOpen: false, findQ: '' }),
+      fdIntro: fdOf('fdIntro'), fdU1: fdOf('fdU1'), fdGrep: fdOf('fdGrep'), fdRead: fdOf('fdRead'), fdEdit: fdOf('fdEdit'), fdU2: fdOf('fdU2'), fdDel: fdOf('fdDel'), fdBash: fdOf('fdBash'), fdAns: fdOf('fdAns'), fdPark: fdOf('fdPark'),
+      // ── dialogs (19c/19f/19g) ──
+      showSettings: S.showSettings, closeSettings: () => this.setState({ showSettings: false, settingsNote: '' }),
+      themeChips: ['dark', 'light', 'system'].map(t => ({ label: t, color: S.theme === t ? '#e2e5e9' : '#62676f', bg: S.theme === t ? '#2e3138' : 'transparent',
+        pick: () => this.setState({ theme: t, settingsNote: t === 'dark' ? '' : 'noted — the light theme ships with the build; the prototype renders dark' }) })),
+      settingsNote: S.settingsNote,
+      fontLabel: (S.fontOverride ?? this.props.transcriptFontSize ?? 13) + 'px',
+      fontMinus: () => this.setState(st => ({ fontOverride: Math.max(9, (st.fontOverride ?? this.props.transcriptFontSize ?? 13) - 1) })),
+      fontPlus: () => this.setState(st => ({ fontOverride: Math.min(19, (st.fontOverride ?? this.props.transcriptFontSize ?? 13) + 1) })),
+      nestedBox: S.nestedDescent ? '#82a5c8' : 'transparent', nestedBorder: S.nestedDescent ? '#82a5c8' : '#4a4e55',
+      toggleNested: () => this.setState(st => ({ nestedDescent: !st.nestedDescent })),
+      showExport: S.showExport, closeExport: () => this.setState({ showExport: false }), doExport: () => this.setState({ showExport: false }),
+      showEndConfirm: S.showEndConfirm, closeEndConfirm: () => this.setState({ showEndConfirm: false }),
+      doEndSession: () => this.setState({ showEndConfirm: false, ended: true, descent: [] }),
+      isEnded: S.ended,
+      simRL: this.props.simulateRateLimit ?? false,
+      // ── first run (19m) ──
+      showFirstRun: (this.props.firstRun ?? false) && !S.frDone,
+      frRows: [
+        { name: 'ollama · llama3.2', meta: 'localhost:11434 · 3.2 GB · preselected', c: '#e2e5e9', bg: '#2e3138', key: '↵' },
+        { name: 'ollama · qwen3:8b', meta: 'localhost:11434 · 5.2 GB', c: '#b9bec5', bg: 'transparent', key: '' },
+        { name: 'ollama · cloud', meta: 'not signed in — ollama signin', c: '#62676f', bg: 'transparent', key: '' },
+        { name: 'claude (cli)', meta: 'found on PATH', c: '#b9bec5', bg: 'transparent', key: '' },
+        { name: 'claude (api) · openai (api)', meta: 'no keys in env — add in settings ⌘,', c: '#62676f', bg: 'transparent', key: '' },
+        { name: 'deterministic', meta: 'built in · replay-stable · no network', c: '#b9bec5', bg: 'transparent', key: '' },
+      ].map(r => Object.assign(r, { pick: () => { const d = r.name.startsWith('ollama · llama') ? 'llama3.2' : r.name.startsWith('ollama · qwen') ? 'qwen3:8b' : r.name.startsWith('claude (cli)') ? 'claude (cli)' : r.name === 'deterministic' ? 'deterministic' : null;
+        if (!d) return; this.setState(st => ({ frDone: true, panes: st.panes.map(p => p.id === 1 ? Object.assign({}, p, { driver: d }) : p) })); } })),
+    };
+  }
+}
+</script>
+</body>
+</html>
