@@ -79,9 +79,23 @@ function gist(ev: RunEvent): string {
 
 import { createAppState, type AppState, type RunEvent, type RunGraphInstance } from "./state";
 import { mountRail, type RailHandle } from "./rail";
+// Phase 2a of the Presentation-Model extraction: one SessionController
+// runs alongside the classic shell. Nothing consumes its state yet;
+// Phase 2b rewires the terminal + rail render paths to read from it,
+// Phase 3 hands the same instance to the prototype view.
+import { SessionController, BrowserSubstrateClient } from "./vm";
 import type { HealthHandle as _HealthHandle, HealthSummary as _HealthSummary } from "./console/health.js";
 import type { TransportHandle as _TransportHandle } from "./console/transport.js";
 const STATE: AppState = createAppState();
+
+// Presentation Model. Built once at boot, running in the background.
+// `window.__vm` gives the DevTools console a live reference for
+// inspection and hands the same instance to a second shell mounted at
+// /reveal in Phase 3.
+const _vm = new SessionController(new BrowserSubstrateClient());
+_vm.loadDriverRoster().catch(() => undefined);
+_vm.loadLiveSessions().catch(() => undefined);
+(window as unknown as { __vm: SessionController }).__vm = _vm;
 // Sprint 040a/b: console handles bound at boot; declared here so
 // hoisted delegates (renderHealth, selectRecord, ...) can reference them.
 let _healthHandle: _HealthHandle | null = null;
