@@ -611,6 +611,88 @@ def _agent_models() -> dict[str, object]:
     }
 
 
+def _list_sessions_snapshot() -> dict[str, list[dict[str, Any]]]:
+    """Every session manifest bucketed by status. Shared by GET
+    /api/session (rendered as-is) and by `_recent_workspaces` (used to
+    derive distinct workspace paths when there is no
+    ~/.substrate/recent-workspaces.json file). Returns empty buckets
+    when the registry has not booted yet."""
+    buckets: dict[str, list[dict[str, Any]]] = {
+        "live": [], "parked": [], "ended": [], "interrupted": [],
+    }
+    if _SESSION_REGISTRY is None:
+        return buckets
+    for manifest in _SESSION_REGISTRY.list_all():
+        payload = {
+            "session_id": manifest.session_id,
+            "name": manifest.name,
+            "driver": manifest.driver,
+            "workspace": manifest.workspace,
+            "workspace_shape": manifest.workspace_shape,
+            "record": manifest.record_root,
+            "created_at": manifest.created_at,
+            "bundle": manifest.bundle,
+        }
+        key = "live" if manifest.status == STATUS_RUNNING else manifest.status
+        if key in buckets:
+            buckets[key].append(payload)
+    return buckets
+
+
+def _recent_workspaces() -> list[dict[str, str]]:
+    """Recent workspace paths for the picker. Reads
+    `~/.substrate/recent-workspaces.json` when present; otherwise
+    derives distinct (workspace, workspace_shape) pairs off every live
+    session's manifest, newest first. A stable sandbox path always
+    sits at the tail so a fresh user has at least one bindable row."""
+    from pathlib import Path as _Path
+    home_file = _Path.home() / ".substrate" / "recent-workspaces.json"
+    seen: dict[str, dict[str, str]] = {}
+    order: list[str] = []
+    if home_file.exists():
+        try:
+            data = msgspec.json.decode(home_file.read_bytes())
+            if isinstance(data, list):
+                for row in data:
+                    if not isinstance(row, dict):
+                        continue
+                    path_value = row.get("path")
+                    shape_value = row.get("shape")
+                    if not isinstance(path_value, str) or not isinstance(shape_value, str):
+                        continue
+                    if path_value in seen:
+                        continue
+                    seen[path_value] = {"path": path_value, "shape": shape_value}
+                    order.append(path_value)
+        except Exception:  # noqa: BLE001 — file malformed / unreadable, fall through to sessions
+            seen.clear()
+            order.clear()
+    if not order:
+        # Fall back to distinct workspaces across live session manifests.
+        try:
+            sessions = _list_sessions_snapshot()
+        except Exception:  # noqa: BLE001
+            sessions = {"live": [], "parked": [], "interrupted": [], "ended": []}
+        rows: list[tuple[str, str]] = []
+        for bucket in ("live", "parked", "interrupted", "ended"):
+            for entry in sessions.get(bucket, []):
+                workspace = entry.get("workspace") if isinstance(entry, dict) else None
+                shape = entry.get("workspace_shape") if isinstance(entry, dict) else None
+                if isinstance(workspace, str) and isinstance(shape, str):
+                    rows.append((workspace, shape))
+        for workspace, shape in rows:
+            if workspace in seen:
+                continue
+            seen[workspace] = {"path": workspace, "shape": shape}
+            order.append(workspace)
+    # Always append the sandbox as a last-resort bindable path.
+    sandbox = str(_Path.home() / ".substrate" / "sandbox")
+    if sandbox not in seen:
+        seen[sandbox] = {"path": sandbox, "shape": "sandbox"}
+        order.append(sandbox)
+    return [seen[path_value] for path_value in order]
+
+
 HOST, PORT = (
     os.environ.get("SUBSTRATE_UI_HOST", "127.0.0.1"),
     int(os.environ.get("SUBSTRATE_UI_PORT", "8765")),
@@ -1611,27 +1693,7 @@ class Handler(BaseHTTPRequestHandler):
         if _SESSION_REGISTRY is None:
             self._error(503, "session registry not initialized (boot ordering)")
             return
-        buckets: dict[str, list[dict[str, Any]]] = {
-            "live": [],
-            "parked": [],
-            "ended": [],
-            "interrupted": [],
-        }
-        for manifest in _SESSION_REGISTRY.list_all():
-            payload = {
-                "session_id": manifest.session_id,
-                "name": manifest.name,
-                "driver": manifest.driver,
-                "workspace": manifest.workspace,
-                "workspace_shape": manifest.workspace_shape,
-                "record": manifest.record_root,
-                "created_at": manifest.created_at,
-                "bundle": manifest.bundle,
-            }
-            key = "live" if manifest.status == STATUS_RUNNING else manifest.status
-            if key in buckets:
-                buckets[key].append(payload)
-        self._json(buckets)
+        self._json(_list_sessions_snapshot())
 
     def _session_get(self, session_id: str) -> None:
         """Sprint 035w: GET /api/session/<id>. Returns the manifest slice the
@@ -2659,6 +2721,13 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if path == "/api/models":
                 self._json(_agent_models())
+                return
+            if path == "/api/workspaces":
+                # Phase-4 addition: read-only listing of workspace paths a
+                # UI can offer as a picker default. Falls back to distinct
+                # workspace fields across live sessions when there is no
+                # ~/.substrate/recent-workspaces.json.
+                self._json(_recent_workspaces())
                 return
             if path == "/api/worktree_diff":  # what the agent changed in a session worktree
                 wt = parse_qs(urlparse(self.path).query).get("path", [""])[0]

@@ -55,6 +55,8 @@ function computeStatePatch(snap: Snapshot): Record<string, unknown> {
     controllerSnapshot: snap,
     driverRoster: snap.driverRoster,
     driverDefault: snap.driverDefault,
+    recentWorkspaces: snap.recentWorkspaces,
+    liveSessionsFromServer: snap.liveSessions,
   };
 }
 
