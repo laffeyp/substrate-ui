@@ -760,12 +760,16 @@ class Component extends DCLogic {
     const compact = paneW < 480;
     const panes = S.panes.map(p => ({
       unbound: !!p.unbound, bound: !p.unbound,
-      wsRows: !p.unbound ? [] : ((p.wsQ ? [{ path: p.wsQ, meta: 'typed — ↵ binds + starts', c: '#e2e5e9', bg: '#2e3138', key: '↵' }] : []).concat([
-        { path: '~/code/substrate', meta: p.wsQ ? 'inherit' : 'inherit · worktree on bind', c: p.wsQ ? '#b9bec5' : '#e2e5e9', bg: p.wsQ ? 'transparent' : '#2e3138', key: p.wsQ ? '' : '↵' },
-        { path: '~/notes/substrate-docs', meta: 'recent · flat', c: '#b9bec5', bg: 'transparent', key: '' },
-        { path: '~/code/swebench-repro', meta: 'recent · worktree', c: '#b9bec5', bg: 'transparent', key: '' },
-        { path: '~/.substrate/sandbox', meta: 'sandbox', c: '#b9bec5', bg: 'transparent', key: '' },
-      ])).map(r => Object.assign(r, { pick: () => this._bindPane(p.id, r.path) })),
+      wsRows: !p.unbound ? [] : ((p.wsQ ? [{ path: p.wsQ, meta: 'typed — ↵ binds + starts', c: '#e2e5e9', bg: '#2e3138', key: '↵' }] : []).concat(
+        ((S.recentWorkspaces && S.recentWorkspaces.length) ? S.recentWorkspaces : [{ path: '~/.substrate/sandbox', shape: 'sandbox' }])
+          .map((row, idx) => ({
+            path: row.path,
+            meta: 'recent · ' + row.shape,
+            c: (!p.wsQ && idx === 0) ? '#e2e5e9' : '#b9bec5',
+            bg: (!p.wsQ && idx === 0) ? '#2e3138' : 'transparent',
+            key: (!p.wsQ && idx === 0) ? '↵' : '',
+          }))
+      )).map(r => Object.assign(r, { pick: () => this._bindPane(p.id, r.path) })),
       wsQ: p.wsQ || '', onWsQ: (ev) => this.setState(st => ({ panes: st.panes.map(x => x.id === p.id ? Object.assign({}, x, { wsQ: ev.target.value }) : x) })),
       onWsKey: (ev) => { if (ev.key === 'Enter') this._bindPane(p.id, (p.wsQ || '').trim() || '~/code/substrate'); },
       showChips: paneW >= 340,
@@ -974,7 +978,14 @@ class Component extends DCLogic {
       openStudio: () => this._toggleSurface('studio'),
       openAssay: () => this.setState({ surface: 'assay' }),
       backToSession: () => this.setState({ surface: null }),
-      extraSessions: (S.allSessions || []).map(x => { const open = S.panes.some(pp => pp.id === x.id); const nm = (S.panes.find(pp => pp.id === x.id) || x).name; return { name: nm, meta: x.driver + ' · worktree substrate/' + nm, where: open ? 'open in a pane ▸' : 'no pane — still yours' }; }),
+      extraSessions: (S.liveSessionsFromServer && S.liveSessionsFromServer.length
+        ? S.liveSessionsFromServer.map(row => ({
+            name: row.name || (row.sessionId || '').slice(0, 12),
+            meta: (row.driver || '?') + ' · ' + row.status,
+            where: 'open in a pane ▸',
+          }))
+        : (S.allSessions || []).map(x => { const open = S.panes.some(pp => pp.id === x.id); const nm = (S.panes.find(pp => pp.id === x.id) || x).name; return { name: nm, meta: x.driver + ' · worktree substrate/' + nm, where: open ? 'open in a pane ▸' : 'no pane — still yours' }; })
+      ),
       fpDdOpen: S.ddFor === fp.id && S.revealed, fpToggleDd: () => this.setState(s => ({ ddFor: s.ddFor === fp.id ? null : fp.id, wsFor: null })),
       fpWsOpen: S.wsFor === fp.id && S.revealed, fpToggleWs: () => this.setState(s => ({ wsFor: s.wsFor === fp.id ? null : fp.id, ddFor: null })),
       fpDriverOpts: ((S.driverRoster && S.driverRoster.length) ? S.driverRoster : ['deterministic']).map(m => ({ label: m, color: m === fp.driver ? '#e2e5e9' : '#9aa0a8', pick: () => this.setState(s => ({ ddFor: null, panes: s.panes.map(x => x.id === fp.id ? Object.assign({}, x, { driver: m }) : x) })) })),
