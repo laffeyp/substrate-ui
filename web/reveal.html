@@ -368,11 +368,11 @@
      <div style="margin-top:16px">
       <div style="color:#d7dade;font-size:13px">{{ ws.path }} <span style="color:#62676f;font-size:11px">{{ ws.shapeLabel }}</span></div>
       <sc-for list="{{ ws.sessions }}" as="s" hint-placeholder-count="1">
-       <div style="margin:6px 0 0 16px;padding:8px 14px;font-size:12px;display:flex;gap:9px;align-items:center;border-radius:6px" style-hover="background:#26292e">
+       <div onClick="{{ s.pick }}" style="margin:6px 0 0 16px;padding:8px 14px;font-size:12px;display:flex;gap:9px;align-items:center;border-radius:6px;cursor:pointer" style-hover="background:#26292e">
         <span style="width:7px;height:7px;border-radius:50%;background:{{ s.dotColor }};flex:none"></span>
         <span style="color:#e2e5e9">{{ s.name }}</span>
         <span style="color:#62676f;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ s.statusLabel }} · {{ s.driver }}</span>
-        <span style="margin-left:auto;color:#62676f;font-size:11px;flex:none">{{ s.sessionIdShort }}</span>
+        <span style="margin-left:auto;color:#62676f;font-size:11px;flex:none">{{ s.sessionIdShort }} · open ▸</span>
        </div>
       </sc-for>
       <sc-if value="{{ ws.empty }}" hint-placeholder-val="{{ false }}">
@@ -1002,6 +1002,13 @@ class Component extends DCLogic {
             : r.status === 'interrupted' ? '#c26058'
             : '#62676f',
           sessionIdShort: (r.sessionId || '').slice(0, 12),
+          pick: () => {
+            const vm = window.__vm;
+            if (vm && r.sessionId) {
+              this.setState({ surface: null });
+              vm.attachExisting(r.sessionId);
+            }
+          },
         })),
         empty: rows.length === 0,
       };
@@ -1022,6 +1029,13 @@ class Component extends DCLogic {
           statusLabel: '· ' + o.row.status,
           dotColor: '#62676f',
           sessionIdShort: (o.row.sessionId || '').slice(0, 12) + ' · ' + o.workspace,
+          pick: () => {
+            const vm = window.__vm;
+            if (vm && o.row.sessionId) {
+              this.setState({ surface: null });
+              vm.attachExisting(o.row.sessionId);
+            }
+          },
         })),
         empty: orphans.length === 0,
       });
