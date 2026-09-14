@@ -130,6 +130,21 @@ async function main() {
     `saw ${Array.from(seenKinds).join(", ")}`);
   step("park reason recorded", !!afterTurn.parkReason, afterTurn.parkReason || "(none)");
 
+  // Slash commands routed through submitLine.
+  await controller.submitLine("/help");
+  const helpSnap = controller.snapshot();
+  const helpRow = helpSnap.transcript.find(r => r.text.startsWith("slash commands:"));
+  step("/help renders a slash-command listing", !!helpRow, helpRow?.text?.slice(0, 60) ?? "(no help row)");
+
+  await controller.submitLine("/model deterministic");
+  const modelSnap = controller.snapshot();
+  step("/model sets driver", modelSnap.driver === "deterministic", modelSnap.driver ?? "(none)");
+
+  await controller.submitLine("/unknownslash");
+  const unkSnap = controller.snapshot();
+  const unkRow = unkSnap.transcript.find(r => r.text.startsWith("unknown slash: /unknownslash"));
+  step("unknown slash surfaces a warning row", !!unkRow, unkRow?.text?.slice(0, 60) ?? "(no warning)");
+
   await controller.endSession("smoke_test_done");
   const endDeadline = Date.now() + 5000;
   while (Date.now() < endDeadline) {
