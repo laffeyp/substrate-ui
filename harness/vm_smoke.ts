@@ -100,16 +100,20 @@ async function main() {
     if (!ok && !failed) failed = `${name}: ${detail || "assertion failed"}`;
   }
 
+  // Subscribe to events BEFORE the first loader fires so
+  // DRIVER_ROSTER_LOADED lands in the tape.
+  const seenKinds = new Set<string>();
+  const emittedTags: string[] = [];
+  controller.onEvent((ev) => { emittedTags.push(ev.tag); });
+  controller.subscribe((snap) => {
+    for (const row of snap.transcript) seenKinds.add(row.kind);
+  });
+
   await controller.loadDriverRoster();
   const rosterSnap = controller.snapshot();
   step("driver roster loads", rosterSnap.driverRoster.length > 0
     && rosterSnap.driverRoster.includes("deterministic"),
     `${rosterSnap.driverRoster.length} entries, default ${rosterSnap.driverDefault}`);
-
-  const seenKinds = new Set();
-  controller.subscribe((snap) => {
-    for (const row of snap.transcript) seenKinds.add(row.kind);
-  });
 
   await controller.openSession({ driver: "deterministic" });
   const openSnap = controller.snapshot();
@@ -158,6 +162,25 @@ async function main() {
   }
   const closed = controller.snapshot();
   step("session ends cleanly", closed.sessionId === null, closed.endedReason || "(no reason)");
+
+  const expectedTags = [
+    "DRIVER_ROSTER_LOADED",
+    "SESSION_OPEN_REQUESTED",
+    "SESSION_OPEN_ACKED",
+    "STREAM_ATTACHED",
+    "TURN_SUBMITTED",
+    "TURN_ACK",
+    "STREAM_ENVELOPE_APPENDED",
+    "TURN_PARKED",
+    "SLASH_ROUTED",
+    "DRIVER_PICKED",
+    "SESSION_END_REQUESTED",
+    "SESSION_ENDED_LOCAL",
+    "STREAM_CLOSED",
+  ];
+  const missingTags = expectedTags.filter((t) => !emittedTags.includes(t));
+  step("controller emits every declared tag", missingTags.length === 0,
+    missingTags.length ? `missing ${missingTags.join(", ")}` : `saw ${new Set(emittedTags).size} distinct`);
 
   controller.disconnect();
   console.log("");

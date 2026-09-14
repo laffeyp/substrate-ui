@@ -23,6 +23,15 @@ import type { SubstrateClient, Unsubscribe } from "./client";
 
 type Listener = (snap: Snapshot) => void;
 
+/** One typed signal the controller emits at a named call site. */
+export interface ControllerEvent {
+  tag: string;
+  payload: Record<string, unknown>;
+  at: number;
+}
+
+type EventListener = (ev: ControllerEvent) => void;
+
 /** Session-create body per POST /api/session (piece B). */
 export interface OpenSessionRequest {
   driver?: string;
@@ -94,6 +103,7 @@ const EMPTY_SNAPSHOT: Snapshot = {
 export class SessionController {
   private snap: Snapshot = { ...EMPTY_SNAPSHOT };
   private readonly listeners = new Set<Listener>();
+  private readonly eventListeners = new Set<EventListener>();
   private unsubscribeStream: Unsubscribe | null = null;
   private lastSeq = -1;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -110,6 +120,19 @@ export class SessionController {
     return () => { this.listeners.delete(listener); };
   }
 
+  /** Subscribe to typed events (`SESSION_OPEN_ACKED`,
+   * `TURN_SUBMITTED`, etc.). Every shell that forwards to an SDD sink
+   * plugs in here. Every emission fires at exactly one call site. */
+  onEvent(listener: EventListener): Unsubscribe {
+    this.eventListeners.add(listener);
+    return () => { this.eventListeners.delete(listener); };
+  }
+
+  private emit(tag: string, payload: Record<string, unknown> = {}): void {
+    const event: ControllerEvent = { tag, payload, at: Date.now() };
+    for (const listener of this.eventListeners) listener(event);
+  }
+
   // ── boot loaders ────────────────────────────────────────────────────
   async loadDriverRoster(): Promise<void> {
     const result = await this.client.fetchJson<ModelsRoster>("/api/models");
@@ -117,6 +140,7 @@ export class SessionController {
     const roster = Array.isArray(result.data.models) ? result.data.models : [];
     const defaultDriver = typeof result.data.default === "string" ? result.data.default : null;
     this.patch({ driverRoster: roster, driverDefault: defaultDriver });
+    this.emit("DRIVER_ROSTER_LOADED", { count: roster.length, default: defaultDriver });
   }
 
   async loadLiveSessions(): Promise<void> {
@@ -128,6 +152,7 @@ export class SessionController {
     for (const s of result.data.interrupted ?? []) rows.push(rowFrom(s, "interrupted"));
     for (const s of result.data.ended ?? []) rows.push(rowFrom(s, "ended"));
     this.patch({ liveSessions: rows });
+    this.emit("SESSIONS_LOADED", { count: rows.length });
   }
 
   /** Fetch the record's topology graph off /api/records/<name>/topology_graph.
@@ -161,6 +186,7 @@ export class SessionController {
       };
     });
     this.patch({ topologyGraph: { producers, triggers } });
+    this.emit("TOPOLOGY_LOADED", { producer_count: producers.length, trigger_count: triggers.length });
   }
 
   async loadRecentWorkspaces(): Promise<void> {
@@ -175,6 +201,7 @@ export class SessionController {
         .map((r) => ({ path: r.path, shape: r.shape ?? "flat" }))
       : [];
     this.patch({ recentWorkspaces: rows });
+    this.emit("WORKSPACES_LOADED", { count: rows.length });
   }
 
   // ── session lifecycle ───────────────────────────────────────────────
@@ -200,9 +227,11 @@ export class SessionController {
     if (request.name) body.name = request.name;
     if (request.isolate) body.isolate = request.isolate;
     this.patch({ connection: "connecting", lastError: null, driver });
+    this.emit("SESSION_OPEN_REQUESTED", { driver, workspace: request.workspace ?? null, bundle: request.bundle ?? null });
     const result = await this.client.fetchJson<OpenSessionAck>("/api/session", { method: "POST", body });
     if (!result.ok) {
       this.patch({ connection: "closed", lastError: `session_open: ${result.detail}` });
+      this.emit("SESSION_OPEN_REFUSED", { failure_class: result.failureClass, detail: result.detail });
       return;
     }
     const ack = result.data;
@@ -222,6 +251,7 @@ export class SessionController {
     });
     this.attachStream(ack.session_id);
     this.loadTopologyGraph(`s_${ack.session_id}`).catch(() => undefined);
+    this.emit("SESSION_OPEN_ACKED", { session_id: ack.session_id, name: ack.name ?? null, driver });
   }
 
   async sendTurn(text: string): Promise<void> {
@@ -239,6 +269,7 @@ export class SessionController {
     });
     const turnIndex = this.snap.turnIndex;
     this.patch({ turnIndex: turnIndex + 1, parkReason: null });
+    this.emit("TURN_SUBMITTED", { session_id: sessionId, turn_index: turnIndex, text_length: trimmed.length });
     const result = await this.client.fetchJson<unknown>(
       `/api/session/${encodeURIComponent(sessionId)}/turn`,
       { method: "POST", body: { text: trimmed } },
@@ -250,6 +281,9 @@ export class SessionController {
         role: "warning",
         text: `turn refused: ${result.detail}`,
       });
+      this.emit("TURN_REFUSED", { failure_class: result.failureClass, detail: result.detail });
+    } else {
+      this.emit("TURN_ACK", { session_id: sessionId });
     }
   }
 
@@ -258,6 +292,7 @@ export class SessionController {
    * transcript is the record's full history, then follows live. */
   async attachExisting(sessionId: string): Promise<void> {
     if (!sessionId) return;
+    this.emit("SESSION_ATTACH_STARTED", { session_id: sessionId });
     // Look up the manifest so the snapshot's name/driver/workspace
     // fields carry through the same way openSession does.
     const result = await this.client.fetchJson<{
@@ -295,6 +330,7 @@ export class SessionController {
   async endSession(reason: string = "user_exit"): Promise<void> {
     const sessionId = this.snap.sessionId;
     if (!sessionId) return;
+    this.emit("SESSION_END_REQUESTED", { session_id: sessionId, reason });
     const result = await this.client.fetchJson<unknown>(
       `/api/session/${encodeURIComponent(sessionId)}/end`,
       { method: "POST", body: { reason } },
@@ -310,6 +346,7 @@ export class SessionController {
 
   pickDriver(name: string): void {
     this.patch({ driver: name });
+    this.emit("DRIVER_PICKED", { driver: name });
   }
 
   /** Route a prompt line. `/foo` goes to a slash handler, plain text
@@ -325,6 +362,7 @@ export class SessionController {
     const parts = text.slice(1).split(/\s+/);
     const cmd = parts[0].toLowerCase();
     const rest = parts.slice(1).join(" ");
+    this.emit("SLASH_ROUTED", { cmd });
     switch (cmd) {
       case "exit":
       case "quit":
@@ -390,6 +428,7 @@ export class SessionController {
           kind: "SlashUnknown", role: "warning",
           text: `unknown slash: /${cmd}. /help for the list.`,
         });
+        this.emit("SLASH_UNKNOWN", { cmd });
         return true;
     }
   }
@@ -446,6 +485,7 @@ export class SessionController {
         ? `^C interrupt (${landed ? "landed" : "dispatched — envelope arriving on /events"})`
         : "^C — no turn in flight",
     });
+    this.emit("TURN_INTERRUPTED", { was_interrupted: wasInterrupted, landed });
   }
 
   disconnect(): void {
@@ -459,7 +499,7 @@ export class SessionController {
     if (this.unsubscribeStream) { this.unsubscribeStream(); this.unsubscribeStream = null; }
     this.patch({ connection: "connecting" });
     this.unsubscribeStream = this.client.streamRecord(sessionId, this.lastSeq, {
-      onOpen: () => this.patch({ connection: "connected" }),
+      onOpen: () => { this.patch({ connection: "connected" }); this.emit("STREAM_ATTACHED", { session_id: sessionId }); },
       onEnvelope: (env) => this.handleEnvelope(sessionId, env),
       onClose: () => this.handleStreamClose(sessionId),
       onError: () => this.handleStreamError(sessionId),
@@ -471,11 +511,13 @@ export class SessionController {
     // updated state. Move connection to closed and stop.
     if (this.snap.sessionId !== sessionId) return;
     this.patch({ connection: "closed" });
+    this.emit("STREAM_CLOSED", { session_id: sessionId });
   }
 
   private handleStreamError(sessionId: string): void {
     if (this.snap.sessionId !== sessionId) return;
     this.patch({ connection: "reconnecting" });
+    this.emit("STREAM_RECONNECTING", { session_id: sessionId });
     if (this.reconnectTimer) return;
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
@@ -485,6 +527,7 @@ export class SessionController {
 
   private handleEnvelope(sessionId: string, env: RecordEnvelope): void {
     if (typeof env.seq === "number" && env.seq > this.lastSeq) this.lastSeq = env.seq;
+    this.emit("STREAM_ENVELOPE_APPENDED", { seq: env.seq, kind: env.kind });
     const payload = env.payload ?? {};
     switch (env.kind) {
       case "SessionStarted": {
@@ -552,6 +595,7 @@ export class SessionController {
           seq: env.seq, kind: env.kind, role: "park",
           text: `· parked (${reason}) — your turn`,
         });
+        this.emit("TURN_PARKED", { park_reason: reason });
         return;
       }
       case "SessionEnded": {
@@ -562,6 +606,7 @@ export class SessionController {
           text: `session ended (${reason})`,
         });
         this.forceClose(reason);
+        this.emit("SESSION_ENDED_LOCAL", { reason });
         return;
       }
       case "SessionWarning": {
@@ -600,6 +645,7 @@ export class SessionController {
   }
 
   private forceClose(reason: string): void {
+    const priorSessionId = this.snap.sessionId;
     if (this.unsubscribeStream) { this.unsubscribeStream(); this.unsubscribeStream = null; }
     if (this.reconnectTimer) { clearTimeout(this.reconnectTimer); this.reconnectTimer = null; }
     this.patch({
@@ -609,6 +655,10 @@ export class SessionController {
       connection: "closed" as ConnectionState,
       endedReason: reason,
     });
+    // Emit STREAM_CLOSED here so a force-close on SessionEnded still
+    // fires the tag; the client-side onClose callback races the
+    // patched snapshot and its guard short-circuits.
+    if (priorSessionId) this.emit("STREAM_CLOSED", { session_id: priorSessionId });
   }
 
   private appendTranscript(row: TranscriptRow): void {

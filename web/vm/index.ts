@@ -22,5 +22,5 @@ export type {
   Unsubscribe,
 } from "./client";
 export { BrowserSubstrateClient } from "./client";
-export type { OpenSessionRequest } from "./session_controller";
+export type { ControllerEvent, OpenSessionRequest } from "./session_controller";
 export { SessionController } from "./session_controller";
