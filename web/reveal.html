@@ -41,7 +41,7 @@
    <sc-for list="{{ panes }}" as="pn" hint-placeholder-count="1">
     <div onClick="{{ pn.focus }}" onDragOver="{{ pn.dragOver }}" onDragLeave="{{ pn.dragLeave }}" onDrop="{{ pn.dropSwap }}" style="background:#212327;display:flex;flex-direction:column;min-width:0;min-height:0;opacity:{{ pn.dim }};position:relative">
      <sc-if value="{{ pn.hintOn }}" hint-placeholder-val="{{ false }}"><div style="position:absolute;left:{{ pn.hintL }};top:{{ pn.hintT }};width:{{ pn.hintW }};height:{{ pn.hintH }};background:rgba(130,165,200,.13);border:1px solid rgba(130,165,200,.4);z-index:20;pointer-events:none"></div></sc-if>
-     <div draggable="true" onDragStart="{{ pn.gripStart }}" style="display:flex;gap:{{ pn.hdrGap }};padding:6px 10px;background:#26292e;font-size:10px;align-items:center;white-space:nowrap;flex:none;min-width:0;overflow:hidden;cursor:default">
+     <div style="display:flex;gap:{{ pn.hdrGap }};padding:6px 10px;background:#26292e;font-size:10px;align-items:center;white-space:nowrap;flex:none;min-width:0;overflow:hidden;cursor:default">
       <sc-if value="{{ singlePane }}" hint-placeholder-val="{{ true }}"><div style="display:flex;gap:6px;flex:none"><span style="width:11px;height:11px;border-radius:50%;background:#4a4e55"></span><span style="width:11px;height:11px;border-radius:50%;background:#4a4e55"></span><span style="width:11px;height:11px;border-radius:50%;background:#4a4e55"></span></div></sc-if>
       <span style="display:inline-flex;align-items:baseline;flex:none"><span style="color:#e2e5e9;font-weight:600;font-size:11px">substrate</span><span title="the dot is this session's status" style="width:4px;height:4px;border-radius:50%;background:{{ pn.dot }};display:inline-block;margin-left:3px"></span></span>
       <sc-if value="{{ pn.editing }}" hint-placeholder-val="{{ false }}"><input value="{{ pn.nameVal }}" onChange="{{ pn.updName }}" onKeyDown="{{ pn.nameKey }}" style="background:#1a1c20;border:1px solid #82a5c8;border-radius:4px;color:#e2e5e9;font-family:inherit;font-size:10px;padding:1px 6px;outline:none;width:160px"></input></sc-if>
@@ -804,7 +804,11 @@ class Component extends DCLogic {
       toggleWsP: () => this.setState(s => ({ focused: p.id, wsFor: s.wsFor === p.id ? null : p.id, ddFor: null })),
       driverOpts: ((S.driverRoster && S.driverRoster.length) ? S.driverRoster : ['deterministic']).map(m => ({
         label: m, color: m === p.driver ? '#e2e5e9' : '#9aa0a8',
-        pick: () => this.setState(s => ({ ddFor: null, panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, { driver: m }) : x) })),
+        pick: () => {
+          this.setState(s => ({ ddFor: null, panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, { driver: m }) : x) }));
+          const vm = window.__vm;
+          if (vm) vm.pickDriver(m);
+        },
       })),
       caretColor: p.id === S.focused ? '#82a5c8' : '#4a4e55',
       promptHint: p.id === S.focused ? 'type to talk · / for commands' : 'click to focus',
@@ -1055,7 +1059,7 @@ class Component extends DCLogic {
       ),
       fpDdOpen: S.ddFor === fp.id && S.revealed, fpToggleDd: () => this.setState(s => ({ ddFor: s.ddFor === fp.id ? null : fp.id, wsFor: null })),
       fpWsOpen: S.wsFor === fp.id && S.revealed, fpToggleWs: () => this.setState(s => ({ wsFor: s.wsFor === fp.id ? null : fp.id, ddFor: null })),
-      fpDriverOpts: ((S.driverRoster && S.driverRoster.length) ? S.driverRoster : ['deterministic']).map(m => ({ label: m, color: m === fp.driver ? '#e2e5e9' : '#9aa0a8', pick: () => this.setState(s => ({ ddFor: null, panes: s.panes.map(x => x.id === fp.id ? Object.assign({}, x, { driver: m }) : x) })) })),
+      fpDriverOpts: ((S.driverRoster && S.driverRoster.length) ? S.driverRoster : ['deterministic']).map(m => ({ label: m, color: m === fp.driver ? '#e2e5e9' : '#9aa0a8', pick: () => { this.setState(s => ({ ddFor: null, panes: s.panes.map(x => x.id === fp.id ? Object.assign({}, x, { driver: m }) : x) })); const vm = window.__vm; if (vm) vm.pickDriver(m); } })),
       recordsColor: surf === 'records' ? '#e2e5e9' : '#9aa0a8',
       studioColor: surf === 'studio' ? '#e2e5e9' : '#9aa0a8',
       showTerminal: !surf && !S.revealed, showRevealed: !surf && S.revealed,
