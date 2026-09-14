@@ -375,8 +375,8 @@
         <span style="margin-left:auto;color:#62676f;font-size:11px;flex:none">{{ s.sessionIdShort }} · open ▸</span>
        </div>
       </sc-for>
-      <sc-if value="{{ ws.empty }}" hint-placeholder-val="{{ false }}">
-       <div style="margin:6px 0 0 16px;padding:8px 14px;color:#62676f;font-size:11px">no live sessions here</div>
+      <sc-if value="{{ ws.hasMore }}" hint-placeholder-val="{{ false }}">
+       <div style="margin:6px 0 0 16px;padding:4px 14px;color:#4a4e55;font-size:11px">+ {{ ws.moreCount }} more</div>
       </sc-if>
      </div>
     </sc-for>
@@ -973,7 +973,10 @@ class Component extends DCLogic {
     // Records surface: group live sessions by workspace path. Every
     // recentWorkspaces row gets a group; sessions the controller has
     // seen slot in under their workspace.
-    const _liveSessionsForGroups = (S.liveSessionsFromServer || []);
+    const _SESSIONS_PER_WORKSPACE = 8;
+    const _liveSessionsForGroups = (S.liveSessionsFromServer || [])
+      .slice()
+      .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
     const _workspaces = (S.recentWorkspaces || []);
     const _sessionsByWorkspace = new Map();
     for (const row of _liveSessionsForGroups) {
@@ -982,62 +985,63 @@ class Component extends DCLogic {
       list.push(row);
       _sessionsByWorkspace.set(key, list);
     }
-    const _workspaceGroups = _workspaces.map(ws => {
-      const rows = _sessionsByWorkspace.get(ws.path) || [];
+    const _labelStatus = (row) => row.status === 'live' ? '● running'
+      : row.status === 'parked' ? '◐ parked'
+      : row.status === 'interrupted' ? '! interrupted'
+      : row.status === 'ended' ? '◇ ended'
+      : '· ' + row.status;
+    const _dotFor = (row) => row.status === 'live' ? '#7fb3b8'
+      : row.status === 'parked' ? '#82a5c8'
+      : row.status === 'interrupted' ? '#c26058'
+      : '#4a4e55';
+    const _mapSession = (r) => ({
+      name: r.name || (r.sessionId || '').slice(0, 12),
+      driver: r.driver || '?',
+      statusLabel: _labelStatus(r),
+      dotColor: _dotFor(r),
+      sessionIdShort: (r.sessionId || '').slice(0, 12),
+      pick: () => {
+        const vm = window.__vm;
+        if (vm && r.sessionId) {
+          this.setState({ surface: null });
+          vm.attachExisting(r.sessionId);
+        }
+      },
+    });
+    const _workspaceGroups = [];
+    for (const ws of _workspaces) {
+      const rows = (_sessionsByWorkspace.get(ws.path) || []).slice(0, _SESSIONS_PER_WORKSPACE);
+      const totalUnderWs = (_sessionsByWorkspace.get(ws.path) || []).length;
       _sessionsByWorkspace.delete(ws.path);
-      return {
+      // Skip workspaces with zero sessions unless it's the sandbox
+      // fallback — the sandbox row is always useful as a bind target.
+      if (rows.length === 0 && ws.shape !== 'sandbox') continue;
+      _workspaceGroups.push({
         path: ws.path,
         shapeLabel: ws.shape === 'worktree' ? 'git · sessions get worktrees'
           : ws.shape === 'sandbox' ? 'sandbox'
           : ws.shape,
-        sessions: rows.map(r => ({
-          name: r.name || (r.sessionId || '').slice(0, 12),
-          driver: r.driver || '?',
-          statusLabel: r.status === 'live' ? '● running'
-            : r.status === 'parked' ? '◐ parked'
-            : r.status === 'interrupted' ? '! interrupted'
-            : '◇ ' + r.status,
-          dotColor: r.status === 'live' ? '#7fb3b8'
-            : r.status === 'parked' ? '#82a5c8'
-            : r.status === 'interrupted' ? '#c26058'
-            : '#62676f',
-          sessionIdShort: (r.sessionId || '').slice(0, 12),
-          pick: () => {
-            const vm = window.__vm;
-            if (vm && r.sessionId) {
-              this.setState({ surface: null });
-              vm.attachExisting(r.sessionId);
-            }
-          },
-        })),
+        sessions: rows.map(_mapSession),
+        moreCount: Math.max(0, totalUnderWs - rows.length),
+        hasMore: totalUnderWs > rows.length,
         empty: rows.length === 0,
-      };
-    });
+      });
+    }
     // Any sessions whose workspace is not on the recent list still
-    // appear under an "(other)" group so nothing hides.
+    // appear under an "(other)" group so nothing hides. Capped too.
     if (_sessionsByWorkspace.size > 0) {
-      const orphans = [];
-      for (const [key, rows] of _sessionsByWorkspace.entries()) {
-        for (const r of rows) orphans.push({ workspace: key, row: r });
-      }
+      const orphanRows = [];
+      for (const rows of _sessionsByWorkspace.values()) orphanRows.push(...rows);
+      orphanRows.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+      const totalOrphans = orphanRows.length;
+      const shown = orphanRows.slice(0, _SESSIONS_PER_WORKSPACE);
       _workspaceGroups.push({
         path: '(other)',
-        shapeLabel: `${orphans.length} session${orphans.length === 1 ? '' : 's'} in workspaces not on the recent list`,
-        sessions: orphans.map(o => ({
-          name: o.row.name || (o.row.sessionId || '').slice(0, 12),
-          driver: o.row.driver || '?',
-          statusLabel: '· ' + o.row.status,
-          dotColor: '#62676f',
-          sessionIdShort: (o.row.sessionId || '').slice(0, 12) + ' · ' + o.workspace,
-          pick: () => {
-            const vm = window.__vm;
-            if (vm && o.row.sessionId) {
-              this.setState({ surface: null });
-              vm.attachExisting(o.row.sessionId);
-            }
-          },
-        })),
-        empty: orphans.length === 0,
+        shapeLabel: `${totalOrphans} session${totalOrphans === 1 ? '' : 's'} in workspaces not on the recent list`,
+        sessions: shown.map(_mapSession),
+        moreCount: Math.max(0, totalOrphans - shown.length),
+        hasMore: totalOrphans > shown.length,
+        empty: shown.length === 0,
       });
     }
     const _hasVmSession = !!(_vmSnap && _vmSnap.sessionId);

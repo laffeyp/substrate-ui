@@ -60,6 +60,7 @@ interface RawSession {
   driver?: string | null;
   workspace?: string | null;
   workspace_shape?: string | null;
+  created_at?: number | null;
 }
 
 interface RecentWorkspaceRow {
@@ -121,6 +122,7 @@ export class SessionController {
     for (const s of result.data.live ?? []) rows.push(rowFrom(s, "live"));
     for (const s of result.data.parked ?? []) rows.push(rowFrom(s, "parked"));
     for (const s of result.data.interrupted ?? []) rows.push(rowFrom(s, "interrupted"));
+    for (const s of result.data.ended ?? []) rows.push(rowFrom(s, "ended"));
     this.patch({ liveSessions: rows });
   }
 
@@ -582,5 +584,6 @@ function rowFrom(s: RawSession, status: SessionRow["status"]): SessionRow {
     status,
     workspacePath: s.workspace ?? null,
     workspaceShape: s.workspace_shape ?? null,
+    createdAt: typeof s.created_at === "number" ? s.created_at : 0,
   };
 }
