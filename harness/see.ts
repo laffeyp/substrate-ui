@@ -34,7 +34,8 @@ async function main(): Promise<void> {
   // page context. Pass every browser-side script as a raw string so
   // nothing gets transpiled.
   const WAIT_ENVELOPES = "() => { var v = window.__vm; return !!(v && v.snapshot && (v.snapshot().rawEnvelopes||[]).length > 0); }";
-  const OPEN_REVEAL = "() => { var root = document.getElementById('dc-root'); if (!root) return; var key = Object.keys(root).find(function(k){return k.indexOf('__reactContainer')===0}); if (!key) return; function walk(f){ if(!f) return null; var i=f.stateNode; if(i && i.logic && typeof i.logic.setState==='function') return i.logic; return walk(f.child)||walk(f.sibling); } var c=root[key]; var cur=c && c.stateNode && c.stateNode.current; var l=walk(cur); if(l) l.setState({revealed:true, mode:'stream', dir:'down'}); }";
+  const DIR = process.env.SUBSTRATE_UI_SEE_DIR || "down";
+  const OPEN_REVEAL = "() => { var root = document.getElementById('dc-root'); if (!root) return; var key = Object.keys(root).find(function(k){return k.indexOf('__reactContainer')===0}); if (!key) return; function walk(f){ if(!f) return null; var i=f.stateNode; if(i && i.logic && typeof i.logic.setState==='function') return i.logic; return walk(f.child)||walk(f.sibling); } var c=root[key]; var cur=c && c.stateNode && c.stateNode.current; var l=walk(cur); if(l) l.setState({revealed:true, mode:'stream', dir:'" + DIR + "'}); }";
 
   try {
     await page.waitForFunction(WAIT_ENVELOPES, null, { timeout: 8000 });
@@ -43,6 +44,10 @@ async function main(): Promise<void> {
   // Ctrl+` is the canonical reveal toggle. Fire it as a fallback if
   // setState hasn't landed by the time we take the shot.
   await page.keyboard.press("Control+`");
+  await page.waitForTimeout(400);
+  if (DIR === "side") {
+    try { await page.locator('text="→ side"').first().click({ timeout: 2000 }); } catch (_e) { /* ignore */ }
+  }
   await page.waitForTimeout(800);
   // Scroll the stream pane by a fraction if the caller asked. The
   // stream+graph pane's overflow container carries `ref={streamRef}`
