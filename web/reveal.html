@@ -798,7 +798,19 @@ class Component extends DCLogic {
       onPvKey: (ev) => { if (ev.key !== 'Enter') return; const v = (p.pv || '').trim(); if (!v || v.startsWith('/')) return; this.setState(s => ({ panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, { pv: '', lines: [...x.lines, { t: '› ' + v, c: '#e2e5e9' }, { t: 'queued — prototype only; the real app resumes the parked run in-process (registry turn)', c: '#4a4e55' }] }) : x) })); },
       editing: p.editing, notEditing: !p.editing, nameVal: p.nameVal,
       nameColor: p.id === S.focused ? '#e2e5e9' : '#9aa0a8',
-      dot: (p.id === 1 && (this.props.simulateRateLimit ?? false)) ? '#7fb3b8' : '#62676f', // session status (D31); teal while the driver is rate-limit waiting (19i)
+      dot: (() => {
+        // Pane 1 mirrors the controller's real connection state so a
+        // user can see connecting / reconnecting / closed at a glance.
+        if (p.id !== 1) return '#4a4e55';
+        const snap = S.controllerSnapshot;
+        if (!snap) return '#4a4e55';
+        const conn = snap.connection;
+        if (conn === 'connected') return '#7fb3b8';
+        if (conn === 'connecting') return '#82a5c8';
+        if (conn === 'reconnecting') return '#c9a05a';
+        if (conn === 'closed') return '#c26058';
+        return '#4a4e55';
+      })(),
       outline: 'none',
       dim: (S.panes.length > 1 && p.id !== S.focused) ? '.55' : '1',
       hintOn: !!(S.dropHint && S.dropHint.id === p.id),
