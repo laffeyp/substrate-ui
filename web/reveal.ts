@@ -64,6 +64,17 @@ function boot(): void {
   const controller = new SessionController(new BrowserSubstrateClient());
   (window as unknown as { __vm: SessionController }).__vm = controller;
 
+  // Ring-buffer the emitted vocabulary on window.__vmTape so a
+  // headless harness can read it, and a developer can inspect the
+  // last 500 tags in DevTools without opening the SDD JSONL.
+  interface TapeEntry { tag: string; payload: Record<string, unknown>; at: number; }
+  const tape: TapeEntry[] = [];
+  (window as unknown as { __vmTape: TapeEntry[] }).__vmTape = tape;
+  controller.onEvent((ev) => {
+    tape.push(ev);
+    if (tape.length > 500) tape.splice(0, tape.length - 500);
+  });
+
   controller.loadDriverRoster().catch(() => undefined);
   controller.loadLiveSessions().catch(() => undefined);
   controller.loadRecentWorkspaces().catch(() => undefined);
