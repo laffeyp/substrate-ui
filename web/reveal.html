@@ -562,16 +562,18 @@ class Component extends DCLogic {
     termKind: 'threshold_count', termOf: 'Verdict', termN: '1',
     responder: 'deterministic', seed: '0', model: 'llama3.2',
     cardPos: { builder: { x: 80, y: 80 }, attacker: { x: 390, y: 190 }, judge: { x: 700, y: 86 } },
-    driverName: 'kimi-k2', driverOpen: false, wsOpen: false,
+    driverName: 'deterministic', driverOpen: false, wsOpen: false,
     nsOpen: false, nsName: '', nsWorkspace: '~/code/substrate', nsIsolate: false, nsStatus: '',
-    panes: [{ id: 1, name: 'fix-race-in-metering', driver: 'kimi-k2', editing: false, nameVal: '' }],
+    panes: [{ id: 1, name: 'pane-1', driver: 'deterministic', editing: false, nameVal: '' }],
     focused: 1, cols: 1, rows: 1, colW: [1], rowW: [1], revealL: 1.15, ddFor: null, wsFor: null, allSessions: [], dropHint: null,
     descent: [], descPv: '', descExtra: {}, fanOpen: false, fanSel: 0, findOpen: false, findQ: '', findScope: 'transcript', nestedDescent: false,
     showSettings: false, showExport: false, showEndConfirm: false, ended: false, frDone: false, theme: 'dark', fontOverride: null, settingsNote: '' };
   _newPane() {
     const id = (this._nextId = (this._nextId || Math.max(...this.state.panes.map(p => p.id), ...(this.state.allSessions || []).map(s => s.id)) + 1)) && this._nextId++;
     // D66f: a fresh pane IS the workspace picker — unbound until ↵ binds and starts the session
-    return { id, name: 's-' + (4096 + (id * 731) % 61439).toString(16), driver: 'kimi-k2', unbound: true, wsQ: '', editing: false, nameVal: '', pv: '', lines: [] };
+    const roster = this.state.driverRoster || [];
+    const defaultDriver = roster[0] || 'deterministic';
+    return { id, name: 'pane-' + id, driver: defaultDriver, unbound: true, wsQ: '', editing: false, nameVal: '', pv: '', lines: [] };
   }
   _bindPane(id, ws) {
     this.setState(s => {
@@ -1035,8 +1037,8 @@ class Component extends DCLogic {
       workspaceGroupsEmpty: _workspaceGroups.length === 0,
       assaysEmpty: arms.length === 0,
       assaysAny: arms.length > 0,
-      liveOn: _hasVmSession,
-      scriptedOn: !_hasVmSession,
+      liveOn: true,
+      scriptedOn: false,
       liveTranscript: _liveTranscriptRows,
       liveEmpty: _hasVmSession && _liveTranscriptRows.length === 0,
       liveSessionLabel: _vmSnap && _vmSnap.sessionName ? _vmSnap.sessionName
