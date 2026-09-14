@@ -902,28 +902,26 @@ class Component extends DCLogic {
       { seq: 0, kind: 'SessionStarted', schema: 'session.SessionStarted', prod: 'runtime', gist: 'seed · driver ' + fp.driver + ' · worktree substrate/' + fp.name, lanes: '', payload: { session_id: fp.name, driver_model: fp.driver, workspace_shape: 'worktree', bundle: null, parent_session_id: null }, content: [] },
       { seq: 1, kind: 'Park', schema: 'session.Park', prod: 'park', gist: 'await UserMessage', lanes: '', payload: { awaiting: 'UserMessage', turn_index: 0, reason: 'session_open' }, content: [] },
     ];
-    // Real envelopes for the stream lens when a session is bound.
-    // Falls back to the prototype's scripted EVFULL only when the
-    // reveal view has no live substrate stream to draw from.
+    // Stream lens is always fed off the controller's real envelopes.
+    // No session yet → empty stream (the template shows an empty
+    // state); no prototype demo interposes.
     const _liveEnvelopes = (_vmSnap && Array.isArray(_vmSnap.rawEnvelopes)) ? _vmSnap.rawEnvelopes : [];
-    const EV = _hasVmSession
-      ? _liveEnvelopes.map((env) => ({
-          seq: env.seq,
-          kind: env.kind,
-          schema: env.schema || (env.kind ? `session.${env.kind}` : 'unknown'),
-          prod: (env.producer && env.producer.kind) || 'runtime',
-          gist: (env.payload && (
-            env.payload.assembled_prompt || env.payload.text
-              || env.payload.reason || env.payload.tool
-              || env.payload.condition_kind || ''
-          )) || env.kind,
-          lanes: env.kind === 'ToolCall' || env.kind === 'ToolResult' ? 'mt'
-            : env.kind === 'Park' || env.kind === 'SessionEnded' ? ''
-            : 'm',
-          payload: env.payload || {},
-          content: [],
-        }))
-      : (mainFocused ? EVFULL : EVLITE);
+    const EV = _liveEnvelopes.map((env) => ({
+      seq: env.seq,
+      kind: env.kind,
+      schema: env.schema || (env.kind ? `session.${env.kind}` : 'unknown'),
+      prod: (env.producer && env.producer.kind) || 'runtime',
+      gist: (env.payload && (
+        env.payload.assembled_prompt || env.payload.text
+          || env.payload.reason || env.payload.tool
+          || env.payload.condition_kind || ''
+      )) || env.kind,
+      lanes: env.kind === 'ToolCall' || env.kind === 'ToolResult' ? 'mt'
+        : env.kind === 'Park' || env.kind === 'SessionEnded' ? ''
+        : 'm',
+      payload: env.payload || {},
+      content: [],
+    }));
     const _evTexts = EV.map(e => (e.kind + ' ' + e.prod + ' ' + e.gist).toLowerCase());
     const findCount = !FQ ? 'scope: ' + S.findScope + ' — click a lens to move it' : (FSTREAM ? _evTexts.filter(t => t.includes(FQ)).length + ' matching events · scope: stream' : Object.keys(FTXT).filter(k => FTXT[k].toLowerCase().includes(FQ)).length + ' matching lines · scope: transcript');
     const T = { 0: 't+0.0s', 1: 't+0.0s', 214: 't+0.0s', 215: 't+0.0s', 216: 't+0.0s', 242: 't+49s', 243: 't+49s', 244: 't+49s' };
@@ -1226,30 +1224,24 @@ class Component extends DCLogic {
       selColor: selE ? (KC[selE.kind] || '#9aa0a8') : '#9aa0a8',
       selContent: selE ? selE.content : [], selPayload: selE ? JSON.stringify(selE.payload, null, 1) : '',
       // IO lens: the application-visible input/output documents on
-      // the record, in seq order. Real when a session is bound; falls
-      // back to a small demo when not.
-      ioDocs: _hasVmSession
-        ? _liveEnvelopes
-            .filter((env) => env && env.payload && (
-              env.kind === 'UserMessage' || env.kind === 'ModelReply'
-              || env.kind === 'FinalAnswer' || env.kind === 'ToolResult'))
-            .map((env) => {
-              const p = env.payload || {};
-              const text = env.kind === 'ToolResult'
-                ? (typeof p.output === 'string' ? p.output
-                    : (p.output && (p.output.stdout || p.output.text || JSON.stringify(p.output))) || '')
-                : String(p.text || p.assembled_prompt || '');
-              const label = env.kind === 'UserMessage' ? 'UserMessage · input'
-                : env.kind === 'ModelReply' ? 'ModelReply · output'
-                : env.kind === 'FinalAnswer' ? 'FinalAnswer · output'
-                : `ToolResult · ${(p && p.tool) || 'tool'}`;
-              return { seq: env.seq, title: label, text };
-            })
-        : [
-          { seq: 214, title: 'UserMessage · input', text: 'the metering test flakes under load — find and fix the race' },
-          { seq: 235, title: 'ToolResult · delegate output', text: 'lock scope is right — add a comment on why the deque needs the kernel lock' },
-          { seq: 242, title: 'FinalAnswer · output', text: 'The race was in _emit_log — an unlocked deque shared by two producers. Wrapped it in the kernel lock; reviewer-a signed off. 24/24 green under -n 8.' },
-        ],
+      // the record, in seq order. Always real; empty when no session
+      // has spoken yet.
+      ioDocs: _liveEnvelopes
+        .filter((env) => env && env.payload && (
+          env.kind === 'UserMessage' || env.kind === 'ModelReply'
+          || env.kind === 'FinalAnswer' || env.kind === 'ToolResult'))
+        .map((env) => {
+          const p = env.payload || {};
+          const text = env.kind === 'ToolResult'
+            ? (typeof p.output === 'string' ? p.output
+                : (p.output && (p.output.stdout || p.output.text || JSON.stringify(p.output))) || '')
+            : String(p.text || p.assembled_prompt || '');
+          const label = env.kind === 'UserMessage' ? 'UserMessage · input'
+            : env.kind === 'ModelReply' ? 'ModelReply · output'
+            : env.kind === 'FinalAnswer' ? 'FinalAnswer · output'
+            : `ToolResult · ${(p && p.tool) || 'tool'}`;
+          return { seq: env.seq, title: label, text };
+        }),
       sceneHas: G.length > 0,
       sceneEmpty: G.length === 0,
       sceneRows: G.length,
