@@ -555,7 +555,7 @@
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props="{&quot;transcriptFontSize&quot;: {&quot;editor&quot;: &quot;range&quot;, &quot;default&quot;: 13, &quot;min&quot;: 6.5, &quot;max&quot;: 19.5, &quot;step&quot;: 0.5, &quot;tsType&quot;: &quot;number&quot;, &quot;section&quot;: &quot;Type — default ±50%&quot;}, &quot;columns&quot;: {&quot;editor&quot;: &quot;range&quot;, &quot;default&quot;: 1, &quot;min&quot;: 1, &quot;max&quot;: 4, &quot;step&quot;: 1, &quot;tsType&quot;: &quot;number&quot;, &quot;section&quot;: &quot;Test the splits (⌘D also works once clicked in)&quot;}, &quot;rows&quot;: {&quot;editor&quot;: &quot;range&quot;, &quot;default&quot;: 1, &quot;min&quot;: 1, &quot;max&quot;: 2, &quot;step&quot;: 1, &quot;tsType&quot;: &quot;number&quot;, &quot;section&quot;: &quot;Test the splits (⌘D also works once clicked in)&quot;}, &quot;view&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;default&quot;: &quot;revealed&quot;, &quot;options&quot;: [&quot;terminal&quot;, &quot;revealed&quot;], &quot;tsType&quot;: &quot;string&quot;, &quot;section&quot;: &quot;Level&quot;}, &quot;firstRun&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: false, &quot;tsType&quot;: &quot;boolean&quot;, &quot;section&quot;: &quot;Scenarios&quot;}, &quot;simulateRateLimit&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: false, &quot;tsType&quot;: &quot;boolean&quot;, &quot;section&quot;: &quot;Scenarios&quot;}}">
 class Component extends DCLogic {
-  state = { revealed: false, mode: 'stream', dir: 'down', sel: 240, childOpen: false, promptVal: '', surface: null, studioView: 'form', studioOut: 'author a topology, then validate or build.', studioOutColor: '#62676f', level: 'app', sent: [],
+  state = { revealed: false, mode: 'stream', dir: 'down', sel: 240, childOpen: false, promptVal: '', surface: null, studioView: 'form', studioOut: 'author a topology, then validate or build.', studioOutColor: '#62676f', level: 'all', sent: [],
     topoName: 'adversarial_pair_review',
     prods: [{ name: 'builder', initial: true, emits: 'Draft' }, { name: 'attacker', initial: false, emits: 'Critique' }, { name: 'judge', initial: false, emits: 'Verdict' }],
     sviews: [{ name: 'draft_count', def: 'KindCount(of Draft)' }, { name: 'critique_buf', def: 'KindBuffer(of Critique)' }],
@@ -967,54 +967,43 @@ class Component extends DCLogic {
     // ToolCall → ToolResult; the model span runs its ProducerStarted → FinalAnswer; park spans
     // TriggerFired → Park. Concurrent spans of one kind pack into sub-tracks that appear ONLY
     // when real overlap exists, so the graph never widens for a merely long run.
-    // Design spec (DESIGN-SPEC 2026-08-31 §Reveal, D26–D30): three
-    // lanes per producer KIND — model, tool, park. Bars are call
-    // spans. A tool bar runs ToolCall → matching ToolResult. A model
-    // bar runs the model producer's ProducerStarted → ProducerCompleted
-    // (one turn = one bar). A park bar covers the single Park
-    // envelope. Sub-tracks appear only under real concurrency. Every
-    // other producer kind (session_started, per_turn_fragment,
-    // session_end, session_warning, framework brackets) rides the
-    // stream rows but paints no lane bar.
+    // Verbatim from prototype v7 (lines 837-848), with `end: 242`
+    // replaced by the real FinalAnswer seq lookup per D29 amendment
+    // ("one span, ProducerStarted → FinalAnswer"). Falls back to the
+    // model producer's ProducerCompleted seq when there is no
+    // FinalAnswer (a session that only emits ModelReply), and to the
+    // last envelope seq when the run is still open (live tail).
+    const _lastSeq = EV.length ? EV[EV.length - 1].seq : 0;
+    const _finalAnswerAfter = (fromSeq) => {
+      for (const x of EV) {
+        if (x.seq >= fromSeq && x.kind === 'FinalAnswer') return x.seq;
+      }
+      return null;
+    };
+    const _producerCompletedFor = (fromSeq, instance) => {
+      for (const x of EV) {
+        if (x.seq <= fromSeq) continue;
+        if (x.kind === 'ProducerCompleted' && x.producerInstance === instance) return x.seq;
+      }
+      return null;
+    };
+    // lanes: one per producer KIND (fixed width). A lane's bars are SPANS — a tool span runs
+    // ToolCall → ToolResult; the model span runs its ProducerStarted → FinalAnswer; park spans
+    // TriggerFired → Park. Concurrent spans of one kind pack into sub-tracks that appear ONLY
+    // when real overlap exists, so the graph never widens for a merely long run.
     const spansByKind = { model: [], tool: [], park: [] };
     const _calls = {};
-    const _modelStarts = {};  // instance → seq (open model producers only)
-    const _lastSeq = EV.length ? EV[EV.length - 1].seq : 0;
     EV.forEach(e => {
-      // Model span from ProducerStarted(kind=model) to matching
-      // ProducerCompleted; one turn = one bar per instance.
-      if (e.kind === 'ProducerStarted' && e.payload && e.payload.kind === 'model' && e.producerInstance) {
-        _modelStarts[e.producerInstance] = e.seq;
+      if (e.kind === 'ProducerStarted' && e.payload.kind === 'model') {
+        const modelEnd = _finalAnswerAfter(e.seq)
+          ?? _producerCompletedFor(e.seq, e.producerInstance)
+          ?? _lastSeq;
+        spansByKind.model.push({ start: e.seq, end: modelEnd, color: '#3d5166', bright: '#82a5c8' });
       }
-      if (e.kind === 'ProducerCompleted' && e.producerInstance && _modelStarts[e.producerInstance] !== undefined) {
-        spansByKind.model.push({
-          start: _modelStarts[e.producerInstance],
-          end: e.seq,
-          color: '#3d5166', bright: '#82a5c8',
-        });
-        delete _modelStarts[e.producerInstance];
-      }
-      // Tool call span — the ToolCall → ToolResult message pair per D26.
-      if (e.kind === 'ToolCall') {
-        _calls[e.payload && e.payload.call_id] = { start: e.seq, tool: e.payload && e.payload.tool };
-      }
-      if (e.kind === 'ToolResult') {
-        const c = _calls[e.payload && e.payload.call_id];
-        if (c) spansByKind.tool.push({
-          start: c.start, end: e.seq,
-          color: c.tool === 'delegate' ? '#665f7d' : '#4d6b6e',
-          bright: c.tool === 'delegate' ? '#a08fc9' : '#7fb3b8',
-        });
-      }
-      // Park bar — single envelope; ends where it starts.
-      if (e.kind === 'Park') {
-        spansByKind.park.push({ start: Math.max(0, e.seq - 1), end: e.seq, color: '#3d5166', bright: '#82a5c8' });
-      }
+      if (e.kind === 'ToolCall') _calls[e.payload.call_id] = { start: e.seq, tool: e.payload.tool };
+      if (e.kind === 'ToolResult') { const c = _calls[e.payload.call_id]; if (c) spansByKind.tool.push({ start: c.start, end: e.seq, color: c.tool === 'delegate' ? '#665f7d' : '#4d6b6e', bright: c.tool === 'delegate' ? '#a08fc9' : '#7fb3b8' }); }
+      if (e.kind === 'Park') spansByKind.park.push({ start: e.seq - 1, end: e.seq, color: '#3d5166', bright: '#82a5c8' });
     });
-    // Live-tail: any model bar still open runs to the last envelope.
-    for (const inst of Object.keys(_modelStarts)) {
-      spansByKind.model.push({ start: _modelStarts[inst], end: _lastSeq, color: '#3d5166', bright: '#82a5c8' });
-    }
     const laneDefs = [];
     Object.keys(spansByKind).forEach(kind => {
       const spans = spansByKind[kind].sort((a, b) => a.start - b.start);
