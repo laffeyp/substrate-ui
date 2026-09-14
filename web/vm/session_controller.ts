@@ -10,10 +10,13 @@
 
 import type {
   ConnectionState,
+  ProducerNode,
   RecordEnvelope,
   Snapshot,
   SessionRow,
+  TopologyGraph,
   TranscriptRow,
+  TriggerEdge,
   WorkspaceRow,
 } from "./types";
 import type { SubstrateClient, Unsubscribe } from "./client";
@@ -85,6 +88,7 @@ const EMPTY_SNAPSHOT: Snapshot = {
   recentWorkspaces: [],
   connection: "idle",
   lastError: null,
+  topologyGraph: null,
 };
 
 export class SessionController {
@@ -124,6 +128,39 @@ export class SessionController {
     for (const s of result.data.interrupted ?? []) rows.push(rowFrom(s, "interrupted"));
     for (const s of result.data.ended ?? []) rows.push(rowFrom(s, "ended"));
     this.patch({ liveSessions: rows });
+  }
+
+  /** Fetch the record's topology graph off /api/records/<name>/topology_graph.
+   * `recordName` is `s_<session_id>` for a session record. Silent 404
+   * leaves `topologyGraph` at its previous value. */
+  async loadTopologyGraph(recordName: string): Promise<void> {
+    if (!recordName) return;
+    const result = await this.client.fetchJson<Record<string, unknown>>(
+      `/api/records/${encodeURIComponent(recordName)}/topology_graph`,
+    );
+    if (!result.ok) { return; }
+    const raw = result.data ?? {};
+    const producersRaw = Array.isArray((raw as { producers?: unknown[] }).producers)
+      ? ((raw as { producers: unknown[] }).producers) : [];
+    const triggersRaw = Array.isArray((raw as { triggers?: unknown[] }).triggers)
+      ? ((raw as { triggers: unknown[] }).triggers) : [];
+    const producers: ProducerNode[] = producersRaw.map((p) => {
+      const row = p as { kind?: string; emits?: string[]; initial?: boolean };
+      return {
+        kind: String(row.kind ?? "?"),
+        emits: Array.isArray(row.emits) ? row.emits.map((e) => String(e)) : [],
+        initial: !!row.initial,
+      };
+    });
+    const triggers: TriggerEdge[] = triggersRaw.map((t, idx) => {
+      const row = t as { id?: string; on?: string; on_kind?: string; kind?: string; starts?: string };
+      return {
+        id: String(row.id ?? `trigger_${idx}`),
+        onKind: String(row.on_kind ?? row.on ?? row.kind ?? "?"),
+        starts: String(row.starts ?? "?"),
+      };
+    });
+    this.patch({ topologyGraph: { producers, triggers } });
   }
 
   async loadRecentWorkspaces(): Promise<void> {
@@ -177,6 +214,7 @@ export class SessionController {
       endedReason: null,
     });
     this.attachStream(ack.session_id);
+    this.loadTopologyGraph(`s_${ack.session_id}`).catch(() => undefined);
   }
 
   async sendTurn(text: string): Promise<void> {
@@ -244,6 +282,7 @@ export class SessionController {
       endedReason: null,
     });
     this.attachStream(manifest.session_id);
+    this.loadTopologyGraph(`s_${manifest.session_id}`).catch(() => undefined);
   }
 
   async endSession(reason: string = "user_exit"): Promise<void> {

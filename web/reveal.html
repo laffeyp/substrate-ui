@@ -326,21 +326,19 @@
      </sc-if>
      <sc-if value="{{ isStructure }}" hint-placeholder-val="{{ false }}">
       <div style="padding:10px 16px 16px;font-size:12.5px;line-height:1.9">
-       <div style="color:#62676f;font-size:10px;letter-spacing:.12em;margin:6px 0 4px">PRODUCERS (4) · ▸ INITIAL = ON THE RUN'S OPENING COHORT</div>
-       <div style="display:flex;gap:10px"><span style="color:#e2e5e9;width:120px;flex:none">model <span style="color:#82a5c8;font-size:10px">▸ initial</span></span><span style="color:#9aa0a8">emits ToolCall, ModelReply, FinalAnswer</span></div>
-       <div style="display:flex;gap:10px"><span style="color:#e2e5e9;width:120px;flex:none">tool</span><span style="color:#9aa0a8">emits ToolResult</span></div>
-       <div style="display:flex;gap:10px"><span style="color:#e2e5e9;width:120px;flex:none">park</span><span style="color:#9aa0a8">emits Park</span></div>
-       <div style="display:flex;gap:10px"><span style="color:#e2e5e9;width:120px;flex:none">session_end</span><span style="color:#9aa0a8">emits SessionEnded</span></div>
-       <div style="color:#62676f;font-size:10px;letter-spacing:.12em;margin:14px 0 4px">TRIGGERS (10 · 4 SHOWN)</div>
-       <div><span style="color:#c9a0b8">fire-tool</span> <span style="color:#62676f">on</span> <span style="color:#9aa0a8">ToolCall</span> <span style="color:#62676f">→ starts</span> <span style="color:#e2e5e9">tool</span></div>
-       <div><span style="color:#c9a0b8">refire-model</span> <span style="color:#62676f">on</span> <span style="color:#9aa0a8">ToolResult</span> <span style="color:#62676f">→ starts</span> <span style="color:#e2e5e9">model</span></div>
-       <div><span style="color:#c9a0b8">park-on-final-answer</span> <span style="color:#62676f">on</span> <span style="color:#9aa0a8">FinalAnswer</span> <span style="color:#62676f">→ starts</span> <span style="color:#e2e5e9">park</span></div>
-       <div><span style="color:#c9a0b8">end-on-request</span> <span style="color:#62676f">on</span> <span style="color:#9aa0a8">SessionEndRequested</span> <span style="color:#62676f">→ starts</span> <span style="color:#e2e5e9">session_end</span></div>
-       <div style="color:#62676f;font-size:10px;letter-spacing:.12em;margin:14px 0 4px">VIEWS (3)</div>
-       <div style="color:#9aa0a8">transcript rolling-window renderer · driver context lookup</div>
-       <div style="color:#62676f;font-size:10px;letter-spacing:.12em;margin:14px 0 4px">TERMINATION POLICY</div>
-       <div style="color:#a08fc9">any_of( pause_await_input(on Park, resume="UserMessage"), threshold_count(SessionEnded, 1) )</div>
-       <div style="margin-top:6px;color:#62676f;font-size:11px">all_completed is refused at build — a pausable topology on it hangs on resume</div>
+       <sc-if value="{{ topoEmpty }}" hint-placeholder-val="{{ true }}">
+        <div style="color:#62676f;font-size:11.5px">no topology loaded — bind a session or open a record to see its producers and triggers.</div>
+       </sc-if>
+       <sc-if value="{{ topoAny }}" hint-placeholder-val="{{ false }}">
+        <div style="color:#62676f;font-size:10px;letter-spacing:.12em;margin:6px 0 4px">PRODUCERS ({{ topoProducerCount }}) · ▸ INITIAL = ON THE RUN'S OPENING COHORT</div>
+        <sc-for list="{{ topoProducerRows }}" as="p" hint-placeholder-count="4">
+         <div style="display:flex;gap:10px"><span style="color:#e2e5e9;width:120px;flex:none">{{ p.name }} <span style="color:#82a5c8;font-size:10px">{{ p.initialTag }}</span></span><span style="color:#9aa0a8">emits {{ p.emits }}</span></div>
+        </sc-for>
+        <div style="color:#62676f;font-size:10px;letter-spacing:.12em;margin:14px 0 4px">TRIGGERS ({{ topoTriggerCount }})</div>
+        <sc-for list="{{ topoTriggerRows }}" as="t" hint-placeholder-count="4">
+         <div><span style="color:#c9a0b8">{{ t.id }}</span> <span style="color:#62676f">on</span> <span style="color:#9aa0a8">{{ t.onKind }}</span> <span style="color:#62676f">→ starts</span> <span style="color:#e2e5e9">{{ t.starts }}</span></div>
+        </sc-for>
+       </sc-if>
       </div>
      </sc-if>
      <sc-if value="{{ isScene }}" hint-placeholder-val="{{ false }}">
@@ -1074,6 +1072,18 @@ class Component extends DCLogic {
     return {
       workspaceGroups: _workspaceGroups,
       workspaceGroupsEmpty: _workspaceGroups.length === 0,
+      topoProducerRows: (_vmSnap && _vmSnap.topologyGraph && _vmSnap.topologyGraph.producers ? _vmSnap.topologyGraph.producers : []).map(p => ({
+        name: p.kind,
+        emits: (p.emits && p.emits.length ? p.emits.join(', ') : '(no emissions)'),
+        initialTag: p.initial ? '▸ initial' : '',
+      })),
+      topoTriggerRows: (_vmSnap && _vmSnap.topologyGraph && _vmSnap.topologyGraph.triggers ? _vmSnap.topologyGraph.triggers : []).map(t => ({
+        id: t.id, onKind: t.onKind, starts: t.starts,
+      })),
+      topoProducerCount: (_vmSnap && _vmSnap.topologyGraph && _vmSnap.topologyGraph.producers) ? _vmSnap.topologyGraph.producers.length : 0,
+      topoTriggerCount: (_vmSnap && _vmSnap.topologyGraph && _vmSnap.topologyGraph.triggers) ? _vmSnap.topologyGraph.triggers.length : 0,
+      topoAny: !!(_vmSnap && _vmSnap.topologyGraph && _vmSnap.topologyGraph.producers && _vmSnap.topologyGraph.producers.length),
+      topoEmpty: !(_vmSnap && _vmSnap.topologyGraph && _vmSnap.topologyGraph.producers && _vmSnap.topologyGraph.producers.length),
       assaysEmpty: arms.length === 0,
       assaysAny: arms.length > 0,
       liveOn: true,

@@ -41,6 +41,26 @@ export interface WorkspaceRow {
   shape: string;
 }
 
+/** One producer node inside the topology graph. */
+export interface ProducerNode {
+  kind: string;
+  emits: string[];
+  initial: boolean;
+}
+
+/** One trigger edge inside the topology graph. */
+export interface TriggerEdge {
+  id: string;
+  onKind: string;
+  starts: string;
+}
+
+/** The topology graph the reveal-view structure lens renders. */
+export interface TopologyGraph {
+  producers: ProducerNode[];
+  triggers: TriggerEdge[];
+}
+
 /** The connection lifecycle the transcript reflects. */
 export type ConnectionState =
   | "idle"
@@ -67,4 +87,5 @@ export interface Snapshot {
   recentWorkspaces: WorkspaceRow[];
   connection: ConnectionState;
   lastError: string | null;
+  topologyGraph: TopologyGraph | null;
 }

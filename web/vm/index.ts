@@ -5,10 +5,13 @@
 
 export type {
   ConnectionState,
+  ProducerNode,
   RecordEnvelope,
   SessionRow,
   Snapshot,
+  TopologyGraph,
   TranscriptRow,
+  TriggerEdge,
   WorkspaceRow,
 } from "./types";
 export type {
