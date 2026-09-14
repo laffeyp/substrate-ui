@@ -1220,11 +1220,31 @@ class Component extends DCLogic {
       selTime: selE ? tFor(selE.seq) + ' into turn 9' : '', selProducer: selE ? selE.prod : '',
       selColor: selE ? (KC[selE.kind] || '#9aa0a8') : '#9aa0a8',
       selContent: selE ? selE.content : [], selPayload: selE ? JSON.stringify(selE.payload, null, 1) : '',
-      ioDocs: [
-        { seq: 214, title: 'UserMessage · input', text: 'the metering test flakes under load — find and fix the race' },
-        { seq: 235, title: 'ToolResult · delegate output', text: 'lock scope is right — add a comment on why the deque needs the kernel lock' },
-        { seq: 242, title: 'FinalAnswer · output', text: 'The race was in _emit_log — an unlocked deque shared by two producers. Wrapped it in the kernel lock; reviewer-a signed off. 24/24 green under -n 8.' },
-      ],
+      // IO lens: the application-visible input/output documents on
+      // the record, in seq order. Real when a session is bound; falls
+      // back to a small demo when not.
+      ioDocs: _hasVmSession
+        ? _liveEnvelopes
+            .filter((env) => env && env.payload && (
+              env.kind === 'UserMessage' || env.kind === 'ModelReply'
+              || env.kind === 'FinalAnswer' || env.kind === 'ToolResult'))
+            .map((env) => {
+              const p = env.payload || {};
+              const text = env.kind === 'ToolResult'
+                ? (typeof p.output === 'string' ? p.output
+                    : (p.output && (p.output.stdout || p.output.text || JSON.stringify(p.output))) || '')
+                : String(p.text || p.assembled_prompt || '');
+              const label = env.kind === 'UserMessage' ? 'UserMessage · input'
+                : env.kind === 'ModelReply' ? 'ModelReply · output'
+                : env.kind === 'FinalAnswer' ? 'FinalAnswer · output'
+                : `ToolResult · ${(p && p.tool) || 'tool'}`;
+              return { seq: env.seq, title: label, text };
+            })
+        : [
+          { seq: 214, title: 'UserMessage · input', text: 'the metering test flakes under load — find and fix the race' },
+          { seq: 235, title: 'ToolResult · delegate output', text: 'lock scope is right — add a comment on why the deque needs the kernel lock' },
+          { seq: 242, title: 'FinalAnswer · output', text: 'The race was in _emit_log — an unlocked deque shared by two producers. Wrapped it in the kernel lock; reviewer-a signed off. 24/24 green under -n 8.' },
+        ],
       sceneHas: G.length > 0,
       sceneEmpty: G.length === 0,
       sceneRows: G.length,
