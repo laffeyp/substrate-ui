@@ -86,6 +86,22 @@ function boot(): void {
     window.setTimeout(() => window.clearInterval(tick), 5000);
   }
 
+  // Ctrl+C over a prompt input interrupts the in-flight turn, matching
+  // the classic shell's behavior. A selection in the input still gets
+  // native copy — only a caret-only Ctrl+C fires the interrupt.
+  window.addEventListener("keydown", (ev) => {
+    if (ev.key !== "c" && ev.key !== "C") return;
+    if (!(ev.ctrlKey || ev.metaKey)) return;
+    const active = document.activeElement;
+    if (!active || active.tagName !== "INPUT") return;
+    const input = active as HTMLInputElement;
+    if (typeof input.selectionStart === "number"
+      && typeof input.selectionEnd === "number"
+      && input.selectionStart !== input.selectionEnd) return;
+    ev.preventDefault();
+    controller.interruptTurn();
+  });
+
   console.info("[reveal] SessionController booted. Read window.__vm.snapshot() in DevTools.");
 }
 
