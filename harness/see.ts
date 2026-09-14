@@ -35,7 +35,8 @@ async function main(): Promise<void> {
   // nothing gets transpiled.
   const WAIT_ENVELOPES = "() => { var v = window.__vm; return !!(v && v.snapshot && (v.snapshot().rawEnvelopes||[]).length > 0); }";
   const DIR = process.env.SUBSTRATE_UI_SEE_DIR || "down";
-  const OPEN_REVEAL = "() => { var root = document.getElementById('dc-root'); if (!root) return; var key = Object.keys(root).find(function(k){return k.indexOf('__reactContainer')===0}); if (!key) return; function walk(f){ if(!f) return null; var i=f.stateNode; if(i && i.logic && typeof i.logic.setState==='function') return i.logic; return walk(f.child)||walk(f.sibling); } var c=root[key]; var cur=c && c.stateNode && c.stateNode.current; var l=walk(cur); if(l) l.setState({revealed:true, mode:'stream', dir:'" + DIR + "'}); }";
+  const LEVEL = process.env.SUBSTRATE_UI_SEE_LEVEL || "all";
+  const OPEN_REVEAL = "() => { var root = document.getElementById('dc-root'); if (!root) return; var key = Object.keys(root).find(function(k){return k.indexOf('__reactContainer')===0}); if (!key) return; function walk(f){ if(!f) return null; var i=f.stateNode; if(i && i.logic && typeof i.logic.setState==='function') return i.logic; return walk(f.child)||walk(f.sibling); } var c=root[key]; var cur=c && c.stateNode && c.stateNode.current; var l=walk(cur); if(l) l.setState({revealed:true, mode:'stream', dir:'" + DIR + "', level:'" + LEVEL + "'}); }";
 
   try {
     await page.waitForFunction(WAIT_ENVELOPES, null, { timeout: 8000 });
@@ -47,6 +48,9 @@ async function main(): Promise<void> {
   await page.waitForTimeout(400);
   if (DIR === "side") {
     try { await page.locator('text="→ side"').first().click({ timeout: 2000 }); } catch (_e) { /* ignore */ }
+  }
+  if (LEVEL === "app") {
+    try { await page.locator('span[title*="hide the low-level machinery"]').first().click({ timeout: 2000 }); } catch (_e) { /* ignore */ }
   }
   await page.waitForTimeout(800);
   // Scroll the stream pane by a fraction if the caller asked. The
