@@ -1061,17 +1061,28 @@ class Component extends DCLogic {
     });
     const laneW = laneDefs.length * 12 - 4;
     const laneLegend = laneDefs.map(ld => ({ label: ld.label, color: ld.kind === 'tool' ? '#7fb3b8' : '#82a5c8' }));
-    const A = 214, B = 244, pct = (x) => (((x - A) / (B - A)) * 100).toFixed(1) + '%';
-    const span = (s0, s1, base, seq) => ({ l: pct(s0), w: (((s1 - s0) / (B - A)) * 100).toFixed(1) + '%', title: 'seq ' + seq + ' — click to inspect', bg: S.sel === seq ? '#9db8d6' : base, pick: () => this.setState(st => ({ sel: st.sel === seq ? null : seq })) });
-    const sideLanes = !mainFocused ? [] : [
-      { label: 'model', color: '#82a5c8', segs: [span(216, 241, '#3d5166', 216), span(241, 242.6, '#82a5c8', 242)] },
-      { label: 'grep', color: '#7fb3b8', segs: [span(219, 221.4, '#4d6b6e', 220)] },
-      { label: 'read_file', color: '#7fb3b8', segs: [span(224, 226.4, '#4d6b6e', 225)] },
-      { label: 'edit_file', color: '#7fb3b8', segs: [span(229, 231.4, '#4d6b6e', 230)] },
-      { label: '⑂ reviewer-a', color: '#a08fc9', segs: [span(234, 236.4, '#665f7d', 235)] },
-      { label: 'bash', color: '#7fb3b8', segs: [span(239, 241.4, '#4d6b6e', 240)] },
-      { label: 'park', color: '#82a5c8', segs: [span(243.4, 244.6, '#82a5c8', 244)] },
-    ];
+    // Side (horizontal) graph — each producer kind gets one row and
+    // its spans plot along a normalized seq axis (A = first seq,
+    // B = last seq of the visible envelopes). Real spans only —
+    // pulls straight from `spansByKind` above so the down and side
+    // views show the same data at different orientations.
+    const A = EV.length ? EV[0].seq : 0;
+    const B = EV.length ? Math.max(EV[EV.length - 1].seq, A + 1) : 1;
+    const pct = (x) => (((x - A) / (B - A)) * 100).toFixed(1) + '%';
+    const segOf = (s0, s1, base, seq) => ({
+      l: pct(s0),
+      w: (((s1 - s0) / (B - A)) * 100).toFixed(1) + '%',
+      title: 'seq ' + seq + ' — click to inspect',
+      bg: S.sel === seq ? '#9db8d6' : base,
+      pick: () => this.setState(st => ({ sel: st.sel === seq ? null : seq })),
+    });
+    const _sideLaneOrder = ['model', 'tool', 'park'];
+    const _sideLaneColor = { model: '#82a5c8', tool: '#7fb3b8', park: '#82a5c8' };
+    const sideLanes = _sideLaneOrder.map((kind) => ({
+      label: kind,
+      color: _sideLaneColor[kind],
+      segs: (spansByKind[kind] || []).map(sp => segOf(sp.start, sp.end + 0.6, sp.bright, sp.start)),
+    })).filter(row => row.segs.length > 0);
     const modes = [['stream', 'stream+graph'], ['io', 'i/o'], ['structure', 'structure'], ['scene', 'scene']];
     const modeChips = modes.map(([id, label]) => ({
       label, pick: () => this.setState({ mode: id }),
