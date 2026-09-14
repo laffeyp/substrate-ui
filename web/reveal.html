@@ -562,17 +562,24 @@ class Component extends DCLogic {
     termKind: 'threshold_count', termOf: 'Verdict', termN: '1',
     responder: 'deterministic', seed: '0', model: 'llama3.2',
     cardPos: { builder: { x: 80, y: 80 }, attacker: { x: 390, y: 190 }, judge: { x: 700, y: 86 } },
-    driverName: 'deterministic', driverOpen: false, wsOpen: false,
+    // `driverName` in the top strip reads the pane's driver at render
+    // time; null here means "read from the controller default."
+    driverName: null, driverOpen: false, wsOpen: false,
     nsOpen: false, nsName: '', nsWorkspace: '~/code/substrate', nsIsolate: false, nsStatus: '',
-    panes: [{ id: 1, name: 'pane-1', driver: 'deterministic', editing: false, nameVal: '' }],
+    // Pane driver stays null until the controller's /api/models roster
+    // lands; then reveal.ts (or the picker) fills it with the server's
+    // real default. Anything set at boot would be a guess.
+    panes: [{ id: 1, name: 'pane-1', driver: null, editing: false, nameVal: '' }],
     focused: 1, cols: 1, rows: 1, colW: [1], rowW: [1], revealL: 1.15, ddFor: null, wsFor: null, allSessions: [], dropHint: null,
     descent: [], descPv: '', descExtra: {}, fanOpen: false, fanSel: 0, findOpen: false, findQ: '', findScope: 'transcript', nestedDescent: false,
     showSettings: false, showExport: false, showEndConfirm: false, ended: false, frDone: false, theme: 'dark', fontOverride: null, settingsNote: '' };
   _newPane() {
     const id = (this._nextId = (this._nextId || Math.max(...this.state.panes.map(p => p.id), ...(this.state.allSessions || []).map(s => s.id)) + 1)) && this._nextId++;
     // D66f: a fresh pane IS the workspace picker — unbound until ↵ binds and starts the session
-    const roster = this.state.driverRoster || [];
-    const defaultDriver = roster[0] || 'deterministic';
+    // Pull the real default off the controller's snapshot when it's
+    // loaded; if the controller hasn't answered yet, leave it null so
+    // renderVals can substitute driverDefault at read time.
+    const defaultDriver = this.state.driverDefault || null;
     return { id, name: 'pane-' + id, driver: defaultDriver, unbound: true, wsQ: '', editing: false, nameVal: '', pv: '', lines: [] };
   }
   _bindPane(id, ws) {
@@ -788,7 +795,7 @@ class Component extends DCLogic {
       nameMin: compact ? '44px' : '64px',
       wsLabel: p.unbound ? '⌥ —' : compact ? '⌥' : '⌥ ' + (p.id === 1 ? 'substrate/fix-race' : (p.shape === 'worktree' ? 'substrate/' + p.name : (p.ws || p.name))),
       revealText: compact ? '⌃`' : '⌃` reveal',
-      name: p.name, driver: p.driver, isMain: p.id === 1, notMain: p.id !== 1, lines: p.lines || [], pv: p.pv || '',
+      name: p.name, driver: p.driver || S.driverDefault || 'deterministic', isMain: p.id === 1, notMain: p.id !== 1, lines: p.lines || [], pv: p.pv || '',
       onPv: (ev) => this.setState(s => ({ panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, { pv: ev.target.value }) : x) })),
       onPvKey: (ev) => { if (ev.key !== 'Enter') return; const v = (p.pv || '').trim(); if (!v || v.startsWith('/')) return; this.setState(s => ({ panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, { pv: '', lines: [...x.lines, { t: '› ' + v, c: '#e2e5e9' }, { t: 'queued — prototype only; the real app resumes the parked run in-process (registry turn)', c: '#4a4e55' }] }) : x) })); },
       editing: p.editing, notEditing: !p.editing, nameVal: p.nameVal,
@@ -1205,7 +1212,7 @@ class Component extends DCLogic {
       showStrip: !surf && !S.revealed && S.panes.length > 1,
       showFullHeader: !!surf || S.revealed,
       splitRight: () => this._split('right'),
-      driverName: fp.driver, driverOpen: S.driverOpen,
+      driverName: fp.driver || S.driverDefault || 'deterministic', driverOpen: S.driverOpen,
       toggleDriverMenu: () => this.setState(s => ({ driverOpen: !s.driverOpen, wsOpen: false })),
       driverOptions: ['kimi-k2', 'deepseek-r1:8b', 'qwen3-coder:480b-cloud', 'nemotron-3-super', 'claude (cli)', 'gemini (cli)', 'deterministic'].map(m => ({
         label: m, color: m === fp.driver ? '#e2e5e9' : '#9aa0a8',
