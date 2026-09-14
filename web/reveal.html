@@ -700,6 +700,11 @@ class Component extends DCLogic {
     const S = this.state;
     const fp = S.panes.find(p => p.id === S.focused) || S.panes[0];
     const mainFocused = fp.id === 1;
+    // Controller snapshot — hoisted so the machinery-lens code below
+    // (stream/io/scene) can read _vmSnap + _hasVmSession before the
+    // template-return block writes them as render fields.
+    const _vmSnap = S.controllerSnapshot || null;
+    const _hasVmSession = !!(_vmSnap && _vmSnap.sessionId);
     // ── turn 20: delegate descent ──
     const DEPTHC = ['#a08fc9', '#b88fd9'];
     const CH = {
@@ -1032,7 +1037,7 @@ class Component extends DCLogic {
     // from `S.controllerSnapshot` which reveal.ts refreshes on every
     // controller change. `scriptedOn` inverts `liveOn` so the demo
     // narrative fades out the moment a real session is bound.
-    const _vmSnap = S.controllerSnapshot || null;
+    // (`_vmSnap` is hoisted at the top of renderVals.)
     // Records surface: group live sessions by workspace path. Every
     // recentWorkspaces row gets a group; sessions the controller has
     // seen slot in under their workspace.
@@ -1121,7 +1126,7 @@ class Component extends DCLogic {
         empty: shown.length === 0,
       });
     }
-    const _hasVmSession = !!(_vmSnap && _vmSnap.sessionId);
+    // (_hasVmSession hoisted with _vmSnap at renderVals top.)
     const _vmTranscript = (_vmSnap && Array.isArray(_vmSnap.transcript)) ? _vmSnap.transcript : [];
     const _liveTranscriptRows = _vmTranscript.map(row => {
       let glyph = '·', glyphColor = '#4a4e55', textColor = '#9aa0a8', marginTop = '2px';
