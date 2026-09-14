@@ -873,7 +873,20 @@ class Component extends DCLogic {
       updName: (ev) => this.setState(s => ({ panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, { nameVal: ev.target.value }) : x) })),
       nameKey: (ev) => { if (ev.key === 'Enter') this.setState(s => ({ panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, { editing: false, name: x.nameVal.trim() || x.name }) : x), allSessions: (s.allSessions || []).map(x => x.id === p.id ? Object.assign({}, x, { name: (s.panes.find(pp => pp.id === p.id) || {}).nameVal || x.name }) : x) })); if (ev.key === 'Escape') this.setState(s => ({ panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, { editing: false }) : x) })); },
     }));
-    const KC = { ToolCall: '#a08fc9', ToolResult: '#7fb3b8', FinalAnswer: '#88b0d0', UserMessage: '#88b0d0', TriggerFired: '#c9a0b8', Park: '#82a5c8', ModelReply: '#88b0d0', ProducerStarted: '#62676f', ProducerCompleted: '#62676f' };
+    // Color = participant relevance. Bright = participant-to-participant
+    // message (Model, Delegate, External); shown in both `all` and `app`.
+    // Gray = runtime plumbing (scheduling, lifecycle, bookkeeping);
+    // shown only in `all`. The LOW filter below reads this rule.
+    const KC = {
+      // Participant messages — bright.
+      ToolCall: '#a08fc9', ToolResult: '#7fb3b8',
+      UserMessage: '#88b0d0', ModelReply: '#88b0d0', FinalAnswer: '#88b0d0',
+      Park: '#82a5c8', SessionEnded: '#88b0d0',
+      // Runtime plumbing — gray.
+      TriggerFired: '#62676f', ProducerStarted: '#62676f', ProducerCompleted: '#62676f',
+      RunStarted: '#62676f', RunFinalised: '#62676f', TerminationMatched: '#62676f',
+      SessionStarted: '#62676f', PromptFragment: '#62676f', PromptComposed: '#62676f',
+    };
     // full-granularity turn slice — every tool cycle is ToolCall · TriggerFired · ProducerStarted · ToolResult · ProducerCompleted, as on a real record
     const cycle = (base, tool, callId, step, args, gist, resultGist, resultPayload, resultContent, child) => ([
       { seq: base, kind: 'ToolCall', schema: 'tool_loop.ToolCall', prod: 'model', gist, lanes: child ? 'mc' : 'mt', payload: { call_id: callId, tool, args, step }, content: [] },
@@ -1000,13 +1013,10 @@ class Component extends DCLogic {
     const findCount = !FQ ? 'scope: ' + S.findScope + ' — click a lens to move it' : (FSTREAM ? _evTexts.filter(t => t.includes(FQ)).length + ' matching events · scope: stream' : Object.keys(FTXT).filter(k => FTXT[k].toLowerCase().includes(FQ)).length + ' matching lines · scope: transcript');
     const T = { 0: 't+0.0s', 1: 't+0.0s', 214: 't+0.0s', 215: 't+0.0s', 216: 't+0.0s', 242: 't+49s', 243: 't+49s', 244: 't+49s' };
     const tFor = (seq) => T[seq] || ('t+' + (seq < 222 ? '2' : seq < 227 ? '4' : seq < 232 ? '8' : seq < 237 ? '10' : '43') + 's');
-    // Prototype v7 LOW set only lists three framework brackets because
-    // EVFULL was a hand-authored tool_loop trace that never emitted
-    // the real session-topology scaffolding. Real session records
-    // carry RunStarted, TerminationMatched, RunFinalised, SessionStarted,
-    // PromptFragment, PromptComposed — none of which the design's
-    // "app" reading wants. Hide all of them under app-level per the
-    // spec's "hide the low-level machinery" intent (D26).
+    // LOW = runtime plumbing, hidden in `app`. Derived from KC by the
+    // color rule: any envelope colored #62676f is plumbing. Kept as an
+    // explicit set so a stray color change cannot silently move an
+    // envelope into or out of the app view.
     const LOW = {
       TriggerFired: 1, ProducerStarted: 1, ProducerCompleted: 1,
       RunStarted: 1, RunFinalised: 1, TerminationMatched: 1,
@@ -1018,7 +1028,10 @@ class Component extends DCLogic {
     // ToolCall → ToolResult; the model span runs its ProducerStarted → FinalAnswer; park spans
     // TriggerFired → Park. Concurrent spans of one kind pack into sub-tracks that appear ONLY
     // when real overlap exists, so the graph never widens for a merely long run.
-    // Three lanes: model (durable, left), delegation (middle), park
+    // Three lifelines per UML sequence diagram (Booch/Rumbaugh/Jacobson):
+    // model (durable, left), delegate (middle), external (right).
+    // Every envelope is either a message between two lifelines or a
+    // moment on one. See DESIGN-DECISIONS D73.
     // (right). The model is the session's durable participant — one
     // continuous span from the first envelope to SessionEnded (or to
     // the last envelope for a live session). Every OTHER producer is
@@ -1034,7 +1047,7 @@ class Component extends DCLogic {
       for (const x of EV) if (x.kind === 'SessionEnded') return x.seq;
       return _lastSeq;
     })();
-    const spansByKind = { model: [], delegation: [], park: [] };
+    const spansByKind = { model: [], delegation: [], external: [] };
     if (EV.length) {
       spansByKind.model.push({
         start: _firstSeq, end: _endedSeq,
@@ -1043,9 +1056,10 @@ class Component extends DCLogic {
     }
     const _calls = {};
     const _producerStarts = {}; // instance → {seq, kind} — non-park only
-    // Park is a wait-shape, not a producer activation. It opens at
-    // TriggerFired(starts=park) and closes at the next UserMessage —
-    // same round trip as ToolCall → ToolResult on the delegation lane.
+    // Park is a wait-shape on the External lifeline, not a producer
+    // activation. It opens at TriggerFired(starts=park) and closes at
+    // the next UserMessage — same round trip shape as ToolCall →
+    // ToolResult on the Delegate lifeline.
     let _parkOpen = null;
     EV.forEach(e => {
       if (e.kind === 'ProducerStarted' && e.producerInstance && e.payload && e.payload.kind && e.payload.kind !== 'park') {
@@ -1064,7 +1078,7 @@ class Component extends DCLogic {
         _parkOpen = e.seq;
       }
       if (e.kind === 'UserMessage' && _parkOpen !== null) {
-        spansByKind.park.push({ start: _parkOpen, end: e.seq, color: '#3d5166', bright: '#82a5c8', kind: 'park' });
+        spansByKind.external.push({ start: _parkOpen, end: e.seq, color: '#3d5166', bright: '#82a5c8', kind: 'park' });
         _parkOpen = null;
       }
       if (e.kind === 'ToolCall') _calls[e.payload.call_id] = { start: e.seq, tool: e.payload.tool };
@@ -1087,31 +1101,33 @@ class Component extends DCLogic {
       spansByKind.delegation.push({ start: st.seq, end: _lastSeq, color: '#4d6b6e', bright: '#7fb3b8', kind: st.kind });
     }
     if (_parkOpen !== null) {
-      spansByKind.park.push({ start: _parkOpen, end: _parkOpen, color: '#3d5166', bright: '#82a5c8', kind: 'park' });
+      spansByKind.external.push({ start: _parkOpen, end: _parkOpen, color: '#3d5166', bright: '#82a5c8', kind: 'park' });
     }
-    // Fixed three-lane shape: model / delegation / park. No sub-track
-    // packing — overlapping delegation or park spans stack in the
-    // same lane cell. Sub-track expansion under real concurrency
-    // remains a design option (D29) but the daily-driver session
-    // topology reads cleaner without it.
-    const laneDefs = ['model', 'delegation', 'park'].map(kind => ({
-      kind, label: kind,
-      spans: (spansByKind[kind] || []).slice().sort((a, b) => a.start - b.start),
+    // Fixed three-lifeline shape: model / delegate / external. No
+    // sub-track packing — overlapping spans stack in the same lane
+    // cell. Sub-track expansion under real concurrency remains a
+    // design option (D29) but the daily-driver session topology
+    // reads cleaner without it.
+    const laneDefs = [
+      { kind: 'model', label: 'model' },
+      { kind: 'delegation', label: 'delegate' },
+      { kind: 'external', label: 'external' },
+    ].map(ld => ({
+      ...ld,
+      spans: (spansByKind[ld.kind] || []).slice().sort((a, b) => a.start - b.start),
     }));
     const kindOf = (e) => {
-      // Three lanes: model / delegation / park. Every envelope belongs
-      // to one. A row's "own kind" decides which lane cell renders
-      // bright.
+      // Three lifelines: model / delegate / external. Every envelope
+      // belongs to one. A row's "own kind" decides which lane cell
+      // renders bright.
       const pkind = (e.payload && e.payload.kind) || '';
-      if (pkind === 'park' || e.kind === 'Park') return 'park';
+      if (pkind === 'park' || e.kind === 'Park') return 'external';
+      if (e.kind === 'UserMessage') return 'external';
       if (e.kind === 'ToolCall' || e.kind === 'ToolResult') return 'delegation';
-      // Any non-model producer sits on the delegation lane.
       if (pkind && pkind !== 'model') return 'delegation';
-      // TriggerFired that starts a non-model producer points at the
-      // delegation lane (park is its own lane).
       if (e.kind === 'TriggerFired') {
         const starts = e.payload && e.payload.starts;
-        if (starts === 'park') return 'park';
+        if (starts === 'park') return 'external';
         if (starts && starts !== 'model') return 'delegation';
       }
       return 'model';
@@ -1122,7 +1138,7 @@ class Component extends DCLogic {
     const cx = (i) => i * 12 + 4;
     // Which UserMessage seqs close an open park? Precomputed so the
     // return arrow can render on that row.
-    const _closesPark = new Set(spansByKind.park.map(sp => sp.end).filter(s => s !== undefined));
+    const _closesPark = new Set(spansByKind.external.map(sp => sp.end).filter(s => s !== undefined));
     const connFor = (e) => {
       // ToolCall = model → delegation. Dot lands on the delegation lane.
       if (e.kind === 'ToolCall') {
@@ -1139,7 +1155,7 @@ class Component extends DCLogic {
       if (e.kind === 'TriggerFired') {
         const starts = e.payload && e.payload.starts;
         if (starts === 'park') {
-          const a = cx(laneIdx.model), b = cx(laneIdx.park);
+          const a = cx(laneIdx.model), b = cx(laneIdx.external);
           return { c: '#82a5c8', l: Math.min(a, b), w: Math.abs(b - a), dot: b };
         }
         const laneName = (starts && starts !== 'model') ? 'delegation' : 'model';
@@ -1150,7 +1166,7 @@ class Component extends DCLogic {
       // A UserMessage with no open park is the user → model stub.
       if (e.kind === 'UserMessage') {
         if (_closesPark.has(e.seq)) {
-          const a = cx(laneIdx.park), b = cx(laneIdx.model);
+          const a = cx(laneIdx.external), b = cx(laneIdx.model);
           return { c: '#82a5c8', l: Math.min(a, b), w: Math.abs(b - a), dot: b };
         }
         const b = cx(laneIdx.model);
@@ -1176,7 +1192,7 @@ class Component extends DCLogic {
       // Dot only, no line — the arrow lives on TriggerFired and on the
       // UserMessage that closes it.
       if (e.kind === 'Park') {
-        const b = cx(laneIdx.park);
+        const b = cx(laneIdx.external);
         return { c: '#82a5c8', l: b, w: 0, dot: b };
       }
       return null;
