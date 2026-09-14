@@ -206,6 +206,44 @@ export class SessionController {
     }
   }
 
+  /** Attach to an existing session (opened by another client or by an
+   * earlier boot). Replays every envelope from seq 0 so the visible
+   * transcript is the record's full history, then follows live. */
+  async attachExisting(sessionId: string): Promise<void> {
+    if (!sessionId) return;
+    // Look up the manifest so the snapshot's name/driver/workspace
+    // fields carry through the same way openSession does.
+    const result = await this.client.fetchJson<{
+      session_id: string;
+      name?: string | null;
+      driver?: string | null;
+      workspace?: string | null;
+      workspace_shape?: string | null;
+      bundle?: string | null;
+      status?: string | null;
+    }>(`/api/session/${encodeURIComponent(sessionId)}`);
+    if (!result.ok) {
+      this.patch({ lastError: `attach: ${result.detail}` });
+      return;
+    }
+    const manifest = result.data;
+    this.lastSeq = -1;
+    this.endedEmittedFor = null;
+    this.patch({
+      sessionId: manifest.session_id,
+      sessionName: manifest.name ?? null,
+      driver: manifest.driver ?? this.snap.driver,
+      bundleSlug: manifest.bundle ?? null,
+      workspacePath: manifest.workspace ?? null,
+      workspaceShape: manifest.workspace_shape ?? null,
+      turnIndex: 0,
+      transcript: [],
+      parkReason: null,
+      endedReason: null,
+    });
+    this.attachStream(manifest.session_id);
+  }
+
   async endSession(reason: string = "user_exit"): Promise<void> {
     const sessionId = this.snap.sessionId;
     if (!sessionId) return;
