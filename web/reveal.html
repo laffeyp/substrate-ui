@@ -1283,7 +1283,11 @@ class Component extends DCLogic {
       toggleNested: () => this.setState(st => ({ nestedDescent: !st.nestedDescent })),
       showExport: S.showExport, closeExport: () => this.setState({ showExport: false }), doExport: () => this.setState({ showExport: false }),
       showEndConfirm: S.showEndConfirm, closeEndConfirm: () => this.setState({ showEndConfirm: false }),
-      doEndSession: () => this.setState({ showEndConfirm: false, ended: true, descent: [] }),
+      doEndSession: () => {
+        this.setState({ showEndConfirm: false, descent: [] });
+        const vm = window.__vm;
+        if (vm) vm.endSession('user_end');
+      },
       isEnded: S.ended,
       simRL: this.props.simulateRateLimit ?? false,
       // ── first run (19m) ──
