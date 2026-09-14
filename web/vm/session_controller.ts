@@ -180,6 +180,13 @@ export class SessionController {
   // ── session lifecycle ───────────────────────────────────────────────
   async openSession(request: OpenSessionRequest = {}): Promise<void> {
     if (this.snap.sessionId) return;
+    // Never open a session with a made-up driver. If the caller passed
+    // none and the roster hasn't landed, wait for it — /api/models
+    // resolves in a few milliseconds and its `default` is the honest
+    // driver to use.
+    if (!request.driver && !this.snap.driver && !this.snap.driverDefault) {
+      await this.loadDriverRoster();
+    }
     const driver = request.driver
       ?? this.snap.driver
       ?? this.snap.driverDefault

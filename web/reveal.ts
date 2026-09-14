@@ -73,9 +73,20 @@ function boot(): void {
     if (component) return true;
     component = reachComponent();
     if (!component) return false;
+    let lastTranscriptLen = 0;
     controller.subscribe((snap) => {
       if (!component) return;
       component.setState(computeStatePatch(snap));
+      // Autoscroll the transcript when it grew. Delayed one animation
+      // frame so React has committed the new rows.
+      const newLen = snap.transcript.length;
+      if (newLen > lastTranscriptLen) {
+        window.requestAnimationFrame(() => {
+          const el = document.getElementById("vm-transcript");
+          if (el) el.scrollTop = el.scrollHeight;
+        });
+      }
+      lastTranscriptLen = newLen;
     });
     return true;
   };
