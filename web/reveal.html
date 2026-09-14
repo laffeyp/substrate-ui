@@ -1232,12 +1232,12 @@ class Component extends DCLogic {
       bg: S.sel === seq ? '#9db8d6' : base,
       pick: () => this.setState(st => ({ sel: st.sel === seq ? null : seq })),
     });
-    // Side (horizontal Gantt) graph = the same UML sequence diagram
-    // rotated ninety degrees. Three lifelines — model / delegate /
-    // external — matching the down graph and LANE-THEORY -2026-09-14-.
-    // Each span from `spansByKind` renders as its own labelled segment
-    // on its lane. In `app` mode, plumbing spans drop under the same
-    // rule the down graph uses.
+    // Side (horizontal Gantt) graph per D23: "one lane per producer,
+    // spans from ToolCall→ToolResult seqs". Read as: one lane per
+    // unique tool name (labelled `grep`, `read_file`, etc.), one lane
+    // per delegate child (labelled `⑂ <name>`), plus the model span
+    // and any park events. Every row is a real segment; no hardcoded
+    // demo seqs.
     const _sideLanes = [];
     if (spansByKind.model.length) {
       _sideLanes.push({
@@ -1245,18 +1245,30 @@ class Component extends DCLogic {
         segs: spansByKind.model.map(sp => segOf(sp.start, sp.end + 0.6, sp.bright, sp.start)),
       });
     }
-    const _delegSpans = spansByKind.delegation.filter(_laneFilter);
-    if (_delegSpans.length) {
+    const _toolsByName = new Map();
+    EV.forEach(e => {
+      if (e.kind === 'ToolResult') {
+        const c = _calls[e.payload.call_id];
+        if (!c) return;
+        const name = c.tool || 'tool';
+        const list = _toolsByName.get(name) || [];
+        list.push({ start: c.start, end: e.seq, delegate: c.tool === 'delegate' });
+        _toolsByName.set(name, list);
+      }
+    });
+    for (const [name, spans] of _toolsByName) {
+      const isDelegate = name === 'delegate';
       _sideLanes.push({
-        label: 'delegate', color: '#7fb3b8',
-        segs: _delegSpans.map(sp => segOf(sp.start, sp.end + 0.6, sp.bright, sp.start)),
+        label: isDelegate ? '⑂ delegate' : name,
+        color: isDelegate ? '#a08fc9' : '#7fb3b8',
+        segs: spans.map(sp => segOf(sp.start, sp.end + 0.6, isDelegate ? '#665f7d' : '#4d6b6e', sp.start)),
       });
     }
-    const _extSpans = spansByKind.external.filter(_laneFilter);
-    if (_extSpans.length) {
+    const _parkSeqs = EV.filter(e => e.kind === 'Park').map(e => e.seq);
+    if (_parkSeqs.length) {
       _sideLanes.push({
-        label: 'external', color: '#82a5c8',
-        segs: _extSpans.map(sp => segOf(sp.start, sp.end + 0.6, sp.bright, sp.start)),
+        label: 'park', color: '#82a5c8',
+        segs: _parkSeqs.map(seq => segOf(Math.max(0, seq - 0.5), seq + 0.6, '#82a5c8', seq)),
       });
     }
     const sideLanes = _sideLanes;
