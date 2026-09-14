@@ -88,4 +88,8 @@ export interface Snapshot {
   connection: ConnectionState;
   lastError: string | null;
   topologyGraph: TopologyGraph | null;
+  /** The raw envelope stream for the currently bound session, in seq
+   * order. The transcript is a compact projection of this; the stream
+   * lens renders it directly. */
+  rawEnvelopes: RecordEnvelope[];
 }
