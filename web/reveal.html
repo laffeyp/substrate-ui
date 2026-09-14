@@ -343,11 +343,15 @@
      </sc-if>
      <sc-if value="{{ isScene }}" hint-placeholder-val="{{ false }}">
       <div style="padding:10px 16px 16px">
-       <div style="font-size:12px;color:#9aa0a8">scene · <span style="color:#e2e5e9">Generation.grid</span> <span style="color:#62676f">seq 38 · 12×12 · frame 3/9 · generation=3</span></div>
-       <div style="display:grid;grid-template-columns:repeat(12,1fr);gap:3px;max-width:420px;margin-top:12px">
-        <sc-for list="{{ sceneCells }}" as="c" hint-placeholder-count="24"><div style="aspect-ratio:1;border-radius:3px;background:{{ c.bg }};border:1px solid rgba(255,255,255,.06)"></div></sc-for>
-       </div>
-       <div style="margin-top:12px;font-size:11px;color:#62676f">the shared world-state at this seq — appears only when the record carries a renderable 2-D shape (this frame: the game_of_life demo record; a session record has none, so the tab hides itself)</div>
+       <sc-if value="{{ sceneHas }}" hint-placeholder-val="{{ false }}">
+        <div style="font-size:12px;color:#9aa0a8">scene · <span style="color:#e2e5e9">grid</span> <span style="color:#62676f">{{ sceneRows }}×{{ sceneCols }}</span></div>
+        <div style="display:grid;grid-template-columns:{{ sceneGridCols }};gap:3px;max-width:420px;margin-top:12px">
+         <sc-for list="{{ sceneCells }}" as="c" hint-placeholder-count="24"><div style="aspect-ratio:1;border-radius:3px;background:{{ c.bg }};border:1px solid rgba(255,255,255,.06)"></div></sc-for>
+        </div>
+       </sc-if>
+       <sc-if value="{{ sceneEmpty }}" hint-placeholder-val="{{ true }}">
+        <div style="color:#62676f;font-size:11.5px">no 2-D grid on this record. the scene lens appears only when the record carries a renderable 2-D shape (e.g. game_of_life's Generation.grid).</div>
+       </sc-if>
       </div>
      </sc-if>
     </div>
@@ -999,7 +1003,26 @@ class Component extends DCLogic {
     ];
     const q = S.promptVal.trim();
     const routerRows = q.startsWith('/') ? CMDS.filter(c => c[0].startsWith(q) || q === '/').map(c => ({ cmd: c[0], desc: c[1], pick: c[2] || (() => this.setState({ promptVal: c[0] + ' ' })) })) : [];
-    const G = [[0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,1,0,0,0,0,0,0,0,0],[0,0,0,0,1,0,0,0,0,0,0,0],[0,0,1,1,1,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,1,1,0,0,0],[0,0,0,0,0,0,0,1,1,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0]];
+    // Detect a 2-D numeric grid inside the bound session's envelopes.
+    // game_of_life-style topologies emit `payload.grid` on their
+    // Generation event; session records don't. When none is found the
+    // scene lens shows an empty state.
+    const _findGrid = () => {
+      const envs = (_vmSnap && Array.isArray(_vmSnap.rawEnvelopes)) ? _vmSnap.rawEnvelopes : [];
+      for (let i = envs.length - 1; i >= 0; i--) {
+        const p = envs[i] && envs[i].payload;
+        if (!p) continue;
+        const candidate = p.grid || p.cells || p.matrix;
+        if (Array.isArray(candidate) && candidate.length
+            && Array.isArray(candidate[0])
+            && typeof candidate[0][0] === 'number') {
+          return candidate;
+        }
+      }
+      return null;
+    };
+    const _liveGrid = _findGrid();
+    const G = _liveGrid || [];
     const surf = S.surface;
     // The assay surface reads the controller's assay listing once
     // loadAssays lands (deferred until substrate exposes the projection
@@ -1202,6 +1225,11 @@ class Component extends DCLogic {
         { seq: 235, title: 'ToolResult · delegate output', text: 'lock scope is right — add a comment on why the deque needs the kernel lock' },
         { seq: 242, title: 'FinalAnswer · output', text: 'The race was in _emit_log — an unlocked deque shared by two producers. Wrapped it in the kernel lock; reviewer-a signed off. 24/24 green under -n 8.' },
       ],
+      sceneHas: G.length > 0,
+      sceneEmpty: G.length === 0,
+      sceneRows: G.length,
+      sceneCols: (G[0] && G[0].length) || 0,
+      sceneGridCols: `repeat(${(G[0] && G[0].length) || 12}, 1fr)`,
       sceneCells: G.flat().map(v => ({ bg: v ? '#82a5c8' : '#1a1c20' })),
       arms,
       topoName: S.topoName, updTopoName: (ev) => this.setState({ topoName: ev.target.value }),
