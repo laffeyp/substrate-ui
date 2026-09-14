@@ -1042,27 +1042,33 @@ class Component extends DCLogic {
       });
     }
     const _calls = {};
-    const _producerStarts = {}; // instance → {seq, kind}
+    const _producerStarts = {}; // instance → {seq, kind} — non-park only
+    // Park is a wait-shape, not a producer activation. It opens at
+    // TriggerFired(starts=park) and closes at the next UserMessage —
+    // same round trip as ToolCall → ToolResult on the delegation lane.
+    let _parkOpen = null;
     EV.forEach(e => {
-      if (e.kind === 'ProducerStarted' && e.producerInstance && e.payload && e.payload.kind) {
+      if (e.kind === 'ProducerStarted' && e.producerInstance && e.payload && e.payload.kind && e.payload.kind !== 'park') {
         _producerStarts[e.producerInstance] = { seq: e.seq, kind: e.payload.kind };
       }
       if (e.kind === 'ProducerCompleted' && e.producerInstance && _producerStarts[e.producerInstance]) {
         const started = _producerStarts[e.producerInstance];
         delete _producerStarts[e.producerInstance];
         if (started.kind === 'model') return; // model owns its own lane
-        const bucket = started.kind === 'park' ? 'park' : 'delegation';
-        // Colors: delegate tool is violet; every other non-model
-        // producer is teal for its dark/bright pair. Park keeps the
-        // steel blue used elsewhere.
-        const color = bucket === 'park' ? '#3d5166' : '#4d6b6e';
-        const bright = bucket === 'park' ? '#82a5c8' : '#7fb3b8';
-        spansByKind[bucket].push({ start: started.seq, end: e.seq, color, bright, kind: started.kind });
+        spansByKind.delegation.push({
+          start: started.seq, end: e.seq,
+          color: '#4d6b6e', bright: '#7fb3b8', kind: started.kind,
+        });
+      }
+      if (e.kind === 'TriggerFired' && e.payload && e.payload.starts === 'park' && _parkOpen === null) {
+        _parkOpen = e.seq;
+      }
+      if (e.kind === 'UserMessage' && _parkOpen !== null) {
+        spansByKind.park.push({ start: _parkOpen, end: e.seq, color: '#3d5166', bright: '#82a5c8', kind: 'park' });
+        _parkOpen = null;
       }
       if (e.kind === 'ToolCall') _calls[e.payload.call_id] = { start: e.seq, tool: e.payload.tool };
       if (e.kind === 'ToolResult') {
-        // A tool_loop delegate spans violet on the delegation lane;
-        // other tools share the delegation lane in their own color.
         const c = _calls[e.payload.call_id];
         if (c) spansByKind.delegation.push({
           start: c.start, end: e.seq,
@@ -1072,13 +1078,16 @@ class Component extends DCLogic {
         });
       }
     });
-    // Live producers still open — draw their span out to the last
-    // envelope so the graph shows the leading edge.
+    // Live delegation producers still open — leading edge to last seq.
+    // Park deliberately excluded: an unterminated park stays a dot,
+    // not a bar smeared across the rest of the session.
     for (const inst of Object.keys(_producerStarts)) {
       const st = _producerStarts[inst];
       if (st.kind === 'model') continue;
-      const bucket = st.kind === 'park' ? 'park' : 'delegation';
-      spansByKind[bucket].push({ start: st.seq, end: _lastSeq, color: '#3d5166', bright: '#82a5c8', kind: st.kind });
+      spansByKind.delegation.push({ start: st.seq, end: _lastSeq, color: '#4d6b6e', bright: '#7fb3b8', kind: st.kind });
+    }
+    if (_parkOpen !== null) {
+      spansByKind.park.push({ start: _parkOpen, end: _parkOpen, color: '#3d5166', bright: '#82a5c8', kind: 'park' });
     }
     // Fixed three-lane shape: model / delegation / park. No sub-track
     // packing — overlapping delegation or park spans stack in the
@@ -1111,38 +1120,64 @@ class Component extends DCLogic {
     // TriggerFired / UserMessage = runtime stub into the lane it starts.
     const laneIdx = {}; laneDefs.forEach((ld, i) => { if (laneIdx[ld.kind] === undefined) laneIdx[ld.kind] = i; });
     const cx = (i) => i * 12 + 4;
+    // Which UserMessage seqs close an open park? Precomputed so the
+    // return arrow can render on that row.
+    const _closesPark = new Set(spansByKind.park.map(sp => sp.end).filter(s => s !== undefined));
     const connFor = (e) => {
-      // ToolCall = model → delegation arrow.
+      // ToolCall = model → delegation. Dot lands on the delegation lane.
       if (e.kind === 'ToolCall') {
         const a = cx(laneIdx.model), b = cx(laneIdx.delegation);
         return { c: e.payload.tool === 'delegate' ? '#a08fc9' : '#7fb3b8', l: Math.min(a, b), w: Math.abs(b - a), dot: b };
       }
-      // ToolResult = delegation → model arrow (return).
+      // ToolResult = delegation → model return.
       if (e.kind === 'ToolResult') {
         const a = cx(laneIdx.delegation), b = cx(laneIdx.model);
         return { c: '#7fb3b8', l: Math.min(a, b), w: Math.abs(b - a), dot: b };
       }
-      // TriggerFired = runtime stub into the started lane.
+      // TriggerFired(starts=park) = model → park (tool_loop shape).
+      // Every other TriggerFired keeps the runtime-stub arrow.
       if (e.kind === 'TriggerFired') {
         const starts = e.payload && e.payload.starts;
-        const laneName = starts === 'park' ? 'park' : (starts && starts !== 'model') ? 'delegation' : 'model';
+        if (starts === 'park') {
+          const a = cx(laneIdx.model), b = cx(laneIdx.park);
+          return { c: '#82a5c8', l: Math.min(a, b), w: Math.abs(b - a), dot: b };
+        }
+        const laneName = (starts && starts !== 'model') ? 'delegation' : 'model';
         const b = cx(laneIdx[laneName]);
         return { c: '#c9a0b8', l: 0, w: b, dot: b };
       }
-      // UserMessage = user → model arrow (reverse tool call shape).
+      // UserMessage closing a park = park → model return arrow.
+      // A UserMessage with no open park is the user → model stub.
       if (e.kind === 'UserMessage') {
+        if (_closesPark.has(e.seq)) {
+          const a = cx(laneIdx.park), b = cx(laneIdx.model);
+          return { c: '#82a5c8', l: Math.min(a, b), w: Math.abs(b - a), dot: b };
+        }
         const b = cx(laneIdx.model);
         return { c: '#88b0d0', l: 0, w: b, dot: b };
+      }
+      // ProducerCompleted for a non-model producer = delegation → model
+      // return arrow. Model's own ProducerCompleted stays a lifeline dot.
+      if (e.kind === 'ProducerCompleted') {
+        const pkind = (e.payload && e.payload.kind) || '';
+        if (pkind && pkind !== 'model' && pkind !== 'park') {
+          const a = cx(laneIdx.delegation), b = cx(laneIdx.model);
+          return { c: '#7fb3b8', l: Math.min(a, b), w: Math.abs(b - a), dot: b };
+        }
+        const b = cx(laneIdx.model);
+        return { c: '#82a5c8', l: b, w: 0, dot: b };
       }
       // FinalAnswer, SessionEnded = moments on the model lifeline.
       if (e.kind === 'FinalAnswer' || e.kind === 'SessionEnded') {
         const b = cx(laneIdx.model);
         return { c: '#82a5c8', l: 0, w: b, dot: b };
       }
-      // Park = the park producer returning to the park lane.
+      // Park envelope = the await moment inside the open park span.
+      // Dot only, no line — the arrow lives on TriggerFired and on the
+      // UserMessage that closes it.
       if (e.kind === 'Park') {
         const b = cx(laneIdx.park);
-        return { c: '#82a5c8', l: 0, w: b, dot: b };
+        return { c: '#82a5c8', l: b, w: 0, dot: b };
       }
       return null;
     };
