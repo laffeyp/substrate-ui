@@ -140,6 +140,11 @@ async function main() {
   const modelSnap = controller.snapshot();
   step("/model sets driver", modelSnap.driver === "deterministic", modelSnap.driver ?? "(none)");
 
+  await controller.submitLine("/ls");
+  const lsSnap = controller.snapshot();
+  const lsRow = lsSnap.transcript.find(r => r.kind === "SlashListed");
+  step("/ls appends a transcript row from loadLiveSessions", !!lsRow, lsRow?.text?.slice(0, 60) ?? "(no /ls row)");
+
   await controller.submitLine("/unknownslash");
   const unkSnap = controller.snapshot();
   const unkRow = unkSnap.transcript.find(r => r.text.startsWith("unknown slash: /unknownslash"));
