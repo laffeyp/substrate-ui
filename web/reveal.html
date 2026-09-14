@@ -258,7 +258,7 @@
       <div style="position:relative;border-bottom:1px solid rgba(255,255,255,.055);flex:none">
        <div ref="{{ graphRef }}" onScroll="{{ onGraphScroll }}" style="background:#1a1c20;padding:12px 16px 14px;overflow-x:auto">
         <div style="min-width:540px">
-         <div style="display:flex;font-size:11px;color:#62676f;margin-bottom:10px"><span>seq 214</span><span style="flex:1;border-bottom:1px dashed rgba(255,255,255,.12);margin:0 8px 5px"></span><span>244</span></div>
+         <div style="display:flex;font-size:11px;color:#62676f;margin-bottom:10px"><span>seq {{ sideAxisA }}</span><span style="flex:1;border-bottom:1px dashed rgba(255,255,255,.12);margin:0 8px 5px"></span><span>{{ sideAxisB }}</span></div>
          <div style="display:flex;flex-direction:column;gap:9px;font-size:11px">
           <sc-for list="{{ sideLanes }}" as="ln" hint-placeholder-count="5">
            <div style="display:flex;align-items:center;gap:10px"><span style="width:92px;flex:none;visibility:hidden;white-space:nowrap;overflow:hidden">{{ ln.label }}</span><div style="position:relative;flex:1;height:12px">
@@ -1129,13 +1129,51 @@ class Component extends DCLogic {
       bg: S.sel === seq ? '#9db8d6' : base,
       pick: () => this.setState(st => ({ sel: st.sel === seq ? null : seq })),
     });
-    const _sideLaneOrder = ['model', 'tool', 'park'];
-    const _sideLaneColor = { model: '#82a5c8', tool: '#7fb3b8', park: '#82a5c8' };
-    const sideLanes = _sideLaneOrder.map((kind) => ({
-      label: kind,
-      color: _sideLaneColor[kind],
-      segs: (spansByKind[kind] || []).map(sp => segOf(sp.start, sp.end + 0.6, sp.bright, sp.start)),
-    })).filter(row => row.segs.length > 0);
+    // Side (horizontal Gantt) graph per D23: "one lane per producer,
+    // spans from ToolCall→ToolResult seqs". Read as: one lane per
+    // unique tool name (labelled `grep`, `read_file`, etc.), one lane
+    // per delegate child (labelled `⑂ <name>`), plus the model span
+    // and any park events. Every row is a real segment; no hardcoded
+    // demo seqs.
+    const _sideLanes = [];
+    // Model lane — the durable activation of the turn (or turns).
+    if (spansByKind.model.length) {
+      _sideLanes.push({
+        label: 'model', color: '#82a5c8',
+        segs: spansByKind.model.map(sp => segOf(sp.start, sp.end + 0.6, sp.bright, sp.start)),
+      });
+    }
+    // One lane per unique tool name, so a session that grepped four
+    // times and read_file'd twice shows two lanes with their bars.
+    const _toolsByName = new Map();
+    EV.forEach(e => {
+      if (e.kind === 'ToolResult') {
+        const c = _calls[e.payload.call_id];
+        if (!c) return;
+        const name = c.tool || 'tool';
+        const list = _toolsByName.get(name) || [];
+        list.push({ start: c.start, end: e.seq, delegate: c.tool === 'delegate' });
+        _toolsByName.set(name, list);
+      }
+    });
+    for (const [name, spans] of _toolsByName) {
+      const isDelegate = name === 'delegate';
+      _sideLanes.push({
+        label: isDelegate ? '⑂ delegate' : name,
+        color: isDelegate ? '#a08fc9' : '#7fb3b8',
+        segs: spans.map(sp => segOf(sp.start, sp.end + 0.6, isDelegate ? '#665f7d' : '#4d6b6e', sp.start)),
+      });
+    }
+    // Park events collapse into a single lane; a turn's park is one
+    // return-to-model tick.
+    const _parkSeqs = EV.filter(e => e.kind === 'Park').map(e => e.seq);
+    if (_parkSeqs.length) {
+      _sideLanes.push({
+        label: 'park', color: '#82a5c8',
+        segs: _parkSeqs.map(seq => segOf(Math.max(0, seq - 0.5), seq + 0.6, '#82a5c8', seq)),
+      });
+    }
+    const sideLanes = _sideLanes;
     const modes = [['stream', 'stream+graph'], ['io', 'i/o'], ['structure', 'structure'], ['scene', 'scene']];
     const modeChips = modes.map(([id, label]) => ({
       label, pick: () => this.setState({ mode: id }),
@@ -1358,6 +1396,7 @@ class Component extends DCLogic {
         requestAnimationFrame(() => { this._syncing = false; });
       },
       events, modeChips, sideLanes, laneDefs, laneW, laneLegend,
+      sideAxisA: A, sideAxisB: B,
       isStream: S.mode === 'stream', isIo: S.mode === 'io', isStructure: S.mode === 'structure', isScene: S.mode === 'scene',
       isDown: S.dir === 'down', isSide: S.dir === 'side',
       setAll: () => this.setState({ level: 'all' }), setApp: () => this.setState({ level: 'app' }),
