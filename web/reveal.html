@@ -394,19 +394,22 @@
  <!-- ══ SURFACE · assay ══ -->
  <sc-if value="{{ showAssay }}" hint-placeholder-val="{{ false }}">
   <div style="flex:1;overflow:auto;background:#212327;padding:20px 40px">
-   <div style="display:flex;align-items:baseline;gap:14px"><span style="color:#e2e5e9;font-weight:600;font-size:15px">rev_kimi_vs_glm</span><span style="color:#62676f;font-size:11px">4 arms × 32 cases × 3 trials · 384 cells · preregistered · arms_hash ✓</span></div>
-   <div style="margin-top:12px;padding:10px 14px;background:rgba(130,165,200,.09);border-left:3px solid #82a5c8;border-radius:0 5px 5px 0;font-size:12.5px"><span style="color:#e2e5e9;font-weight:600">FINDING</span> &nbsp;<span style="color:#d7dade">kimi + reviewer-glm beats control kimi_solo</span> &nbsp;<span style="color:#9aa0a8">Δ-pass¹ +.17 · paired bootstrap p=.008 · BH-FDR significant</span></div>
-   <div style="margin-top:8px;padding:10px 14px;background:rgba(194,96,88,.1);border-left:3px solid #c26058;border-radius:0 5px 5px 0;font-size:12.5px"><span style="color:#c26058;font-weight:600">UNDERPOWERED</span> &nbsp;<span style="color:#d7dade">glm + reviewer-kimi on adversarial: 4 cases × 3 trials cannot answer this question</span> &nbsp;<span style="color:#9aa0a8">verdict withheld</span></div>
-   <div style="display:grid;grid-template-columns:180px 1.3fr .6fr .6fr .6fr .7fr 140px 120px;gap:0 16px;font-size:12px;align-items:center;margin-top:14px;max-width:1060px">
-    <div style="color:#62676f;font-size:10px;letter-spacing:.1em;padding:6px 0">ARM</div><div style="color:#62676f;font-size:10px;letter-spacing:.1em">OVERALL PASS¹</div><div style="color:#62676f;font-size:10px;letter-spacing:.1em">EASY·8</div><div style="color:#62676f;font-size:10px;letter-spacing:.1em">MED·12</div><div style="color:#62676f;font-size:10px;letter-spacing:.1em">HARD·8</div><div style="color:#62676f;font-size:10px;letter-spacing:.1em">ADV·4</div><div style="color:#62676f;font-size:10px;letter-spacing:.1em">Δ VS CONTROL·P</div><div style="color:#62676f;font-size:10px;letter-spacing:.1em">VERDICT</div>
-    <sc-for list="{{ arms }}" as="a" hint-placeholder-count="4">
-     <div style="padding:10px 0;color:{{ a.nameColor }}">{{ a.name }}</div>
-     <div><div style="display:flex;align-items:center;gap:8px"><div style="flex:1;height:9px;border-radius:2px;background:#2e3138"><div style="width:{{ a.barW }};height:9px;border-radius:2px;background:{{ a.barColor }}"></div></div><span style="color:#d7dade;width:28px;text-align:right">{{ a.overall }}</span></div></div>
-     <div style="color:#9aa0a8">{{ a.easy }}</div><div style="color:#9aa0a8">{{ a.med }}</div><div style="color:#9aa0a8">{{ a.hard }}</div><div style="color:{{ a.advColor }}">{{ a.adv }}</div>
-     <div style="color:{{ a.deltaColor }}">{{ a.delta }}</div><div style="color:{{ a.verdictColor }};font-weight:600">{{ a.verdict }}</div>
-    </sc-for>
-   </div>
-   <div style="margin-top:16px;max-width:1060px;padding:12px 14px;background:#1a1c20;border-left:2px solid #665f7d;border-radius:0 5px 5px 0;font-size:11.5px;line-height:1.7;color:#9aa0a8">what this run can say: adding a glm reviewer to kimi helps, and the effect survives multiplicity correction. What it can't: whether the reverse pairing helps on adversarial cases — 4×3 cells is below power. Cells are write-gated by the preregistration on disk; click a cell for its 3 trial records.</div>
+   <sc-if value="{{ assaysEmpty }}" hint-placeholder-val="{{ true }}">
+    <div style="max-width:640px;padding:18px 20px;background:#1a1c20;border-left:2px solid #665f7d;border-radius:0 5px 5px 0;color:#9aa0a8;font-size:12.5px;line-height:1.65">
+     no assays on record. /api/assays returned an empty list. preregister a run with a `.preg.json` on disk to see the arm-by-arm delta report here.
+    </div>
+   </sc-if>
+   <sc-if value="{{ assaysAny }}" hint-placeholder-val="{{ false }}">
+    <div style="display:grid;grid-template-columns:180px 1.3fr .6fr .6fr .6fr .7fr 140px 120px;gap:0 16px;font-size:12px;align-items:center;margin-top:14px;max-width:1060px">
+     <div style="color:#62676f;font-size:10px;letter-spacing:.1em;padding:6px 0">ARM</div><div style="color:#62676f;font-size:10px;letter-spacing:.1em">OVERALL PASS¹</div><div style="color:#62676f;font-size:10px;letter-spacing:.1em">EASY·8</div><div style="color:#62676f;font-size:10px;letter-spacing:.1em">MED·12</div><div style="color:#62676f;font-size:10px;letter-spacing:.1em">HARD·8</div><div style="color:#62676f;font-size:10px;letter-spacing:.1em">ADV·4</div><div style="color:#62676f;font-size:10px;letter-spacing:.1em">Δ VS CONTROL·P</div><div style="color:#62676f;font-size:10px;letter-spacing:.1em">VERDICT</div>
+     <sc-for list="{{ arms }}" as="a" hint-placeholder-count="4">
+      <div style="padding:10px 0;color:{{ a.nameColor }}">{{ a.name }}</div>
+      <div><div style="display:flex;align-items:center;gap:8px"><div style="flex:1;height:9px;border-radius:2px;background:#2e3138"><div style="width:{{ a.barW }};height:9px;border-radius:2px;background:{{ a.barColor }}"></div></div><span style="color:#d7dade;width:28px;text-align:right">{{ a.overall }}</span></div></div>
+      <div style="color:#9aa0a8">{{ a.easy }}</div><div style="color:#9aa0a8">{{ a.med }}</div><div style="color:#9aa0a8">{{ a.hard }}</div><div style="color:{{ a.advColor }}">{{ a.adv }}</div>
+      <div style="color:{{ a.deltaColor }}">{{ a.delta }}</div><div style="color:{{ a.verdictColor }};font-weight:600">{{ a.verdict }}</div>
+     </sc-for>
+    </div>
+   </sc-if>
   </div>
  </sc-if>
 
@@ -945,12 +948,10 @@ class Component extends DCLogic {
     const routerRows = q.startsWith('/') ? CMDS.filter(c => c[0].startsWith(q) || q === '/').map(c => ({ cmd: c[0], desc: c[1], pick: c[2] || (() => this.setState({ promptVal: c[0] + ' ' })) })) : [];
     const G = [[0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,1,0,0,0,0,0,0,0,0],[0,0,0,0,1,0,0,0,0,0,0,0],[0,0,1,1,1,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,1,1,0,0,0],[0,0,0,0,0,0,0,1,1,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0]];
     const surf = S.surface;
-    const arms = [
-      { name: 'kimi_solo ⌂ control', nameColor: '#9aa0a8', overall: '.64', barW: '64%', barColor: '#62676f', easy: '.96', med: '.81', hard: '.54', adv: '.25', advColor: '#9aa0a8', delta: '—', deltaColor: '#62676f', verdict: 'the bar', verdictColor: '#62676f' },
-      { name: 'kimi + reviewer-glm', nameColor: '#e2e5e9', overall: '.81', barW: '81%', barColor: '#82a5c8', easy: '.98', med: '.90', hard: '.71', adv: '.42', advColor: '#9aa0a8', delta: '+.17 · p=.008 ✓FDR', deltaColor: '#e2e5e9', verdict: 'superior', verdictColor: '#82a5c8' },
-      { name: 'glm_solo', nameColor: '#9aa0a8', overall: '.59', barW: '59%', barColor: '#62676f', easy: '.94', med: '.73', hard: '.50', adv: '.17', advColor: '#9aa0a8', delta: '−.05 · p=.41', deltaColor: '#9aa0a8', verdict: 'inconclusive', verdictColor: '#9aa0a8' },
-      { name: 'glm + reviewer-kimi', nameColor: '#9aa0a8', overall: '.76', barW: '76%', barColor: '#62676f', easy: '.95', med: '.85', hard: '.58', adv: 'n/a', advColor: '#c26058', delta: '+.12', deltaColor: '#9aa0a8', verdict: 'underpowered', verdictColor: '#c26058' },
-    ];
+    // The assay surface reads the controller's assay listing once
+    // loadAssays lands (deferred until substrate exposes the projection
+    // per plan Phase 4-open). Until then it renders empty.
+    const arms = [];
     // Presentation-Model bindings — Phase 4. Every field here reads
     // from `S.controllerSnapshot` which reveal.ts refreshes on every
     // controller change. `scriptedOn` inverts `liveOn` so the demo
@@ -1028,6 +1029,8 @@ class Component extends DCLogic {
     return {
       workspaceGroups: _workspaceGroups,
       workspaceGroupsEmpty: _workspaceGroups.length === 0,
+      assaysEmpty: arms.length === 0,
+      assaysAny: arms.length > 0,
       liveOn: _hasVmSession,
       scriptedOn: !_hasVmSession,
       liveTranscript: _liveTranscriptRows,
