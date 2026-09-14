@@ -1184,10 +1184,10 @@ class Component extends DCLogic {
       onPromptKey: (ev) => {
         if (ev.key !== 'Enter') return;
         const v = this.state.promptVal.trim();
-        if (!v || v.startsWith('/')) return;
+        if (!v) return;
         this.setState({ promptVal: '' });
         const vm = window.__vm;
-        if (vm) vm.sendTurn(v);
+        if (vm) vm.submitLine(v);
       },
       panes, paneCols: S.colW.map(w => w.toFixed(3) + 'fr').join(' '), paneRows: S.rowW.map(w => w.toFixed(3) + 'fr').join(' '), focusedName: fp.name, fpLines: fp.lines || [],
       revealFlexL: S.revealL.toFixed(3) + ' 1 0%',

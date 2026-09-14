@@ -226,6 +226,57 @@ export class SessionController {
     this.patch({ driver: name });
   }
 
+  /** Route a prompt line. `/foo` goes to a slash handler, plain text
+   * to `sendTurn`. Returns true when the line was consumed as a
+   * slash so the caller can hand a residual back if it wants. */
+  async submitLine(line: string): Promise<boolean> {
+    const text = line.trim();
+    if (!text) return true;
+    if (!text.startsWith("/")) {
+      await this.sendTurn(text);
+      return false;
+    }
+    const parts = text.slice(1).split(/\s+/);
+    const cmd = parts[0].toLowerCase();
+    const rest = parts.slice(1).join(" ");
+    switch (cmd) {
+      case "exit":
+      case "quit":
+      case "end":
+        await this.endSession("user_end");
+        return true;
+      case "model":
+      case "driver":
+        if (rest) this.pickDriver(rest);
+        else this.appendTranscript({
+          seq: -Math.round(Date.now()) - 2,
+          kind: "SlashHelp", role: "system",
+          text: `current driver: ${this.snap.driver ?? this.snap.driverDefault ?? "deterministic"}. use /model <name> to switch.`,
+        });
+        return true;
+      case "help":
+      case "?": {
+        const known = ["/exit", "/model <name>", "/help", "/clear"];
+        this.appendTranscript({
+          seq: -Math.round(Date.now()) - 3,
+          kind: "SlashHelp", role: "system",
+          text: `slash commands: ${known.join(" · ")}`,
+        });
+        return true;
+      }
+      case "clear":
+        this.patch({ transcript: [] });
+        return true;
+      default:
+        this.appendTranscript({
+          seq: -Math.round(Date.now()) - 4,
+          kind: "SlashUnknown", role: "warning",
+          text: `unknown slash: /${cmd}. /help for the list.`,
+        });
+        return true;
+    }
+  }
+
   disconnect(): void {
     if (this.reconnectTimer) { clearTimeout(this.reconnectTimer); this.reconnectTimer = null; }
     if (this.unsubscribeStream) { this.unsubscribeStream(); this.unsubscribeStream = null; }
