@@ -1018,19 +1018,23 @@ class Component extends DCLogic {
     // ToolCall → ToolResult; the model span runs its ProducerStarted → FinalAnswer; park spans
     // TriggerFired → Park. Concurrent spans of one kind pack into sub-tracks that appear ONLY
     // when real overlap exists, so the graph never widens for a merely long run.
-    // Session topology's shape: the model is the DURABLE participant —
-    // there for every seq the session exists. The lifeline is one
-    // continuous vertical bar from the session's first envelope to
-    // its last (or to SessionEnded's seq). Tool cycles dip out to
-    // the tool lane and return. Park is a moment on the model lane,
-    // not a break in it.
+    // Three lanes: model (durable, left), delegation (middle), park
+    // (right). The model is the session's durable participant — one
+    // continuous span from the first envelope to SessionEnded (or to
+    // the last envelope for a live session). Every OTHER producer is
+    // a delegation from the model: session_started, session_open,
+    // tools_suite_fragment, per_turn_fragment, prompt_composer, the
+    // tool_loop tools, session_end, session_warning — each renders as
+    // a span in the delegation lane from its ProducerStarted to its
+    // matching ProducerCompleted (paired by producer instance). Park
+    // rides its own lane so the return-to-idle beat reads cleanly.
     const _lastSeq = EV.length ? EV[EV.length - 1].seq : 0;
     const _firstSeq = EV.length ? EV[0].seq : 0;
     const _endedSeq = (function () {
       for (const x of EV) if (x.kind === 'SessionEnded') return x.seq;
       return _lastSeq;
     })();
-    const spansByKind = { model: [], tool: [] };
+    const spansByKind = { model: [], delegation: [], park: [] };
     if (EV.length) {
       spansByKind.model.push({
         start: _firstSeq, end: _endedSeq,
@@ -1038,33 +1042,69 @@ class Component extends DCLogic {
       });
     }
     const _calls = {};
+    const _producerStarts = {}; // instance → {seq, kind}
     EV.forEach(e => {
+      if (e.kind === 'ProducerStarted' && e.producerInstance && e.payload && e.payload.kind) {
+        _producerStarts[e.producerInstance] = { seq: e.seq, kind: e.payload.kind };
+      }
+      if (e.kind === 'ProducerCompleted' && e.producerInstance && _producerStarts[e.producerInstance]) {
+        const started = _producerStarts[e.producerInstance];
+        delete _producerStarts[e.producerInstance];
+        if (started.kind === 'model') return; // model owns its own lane
+        const bucket = started.kind === 'park' ? 'park' : 'delegation';
+        // Colors: delegate tool is violet; every other non-model
+        // producer is teal for its dark/bright pair. Park keeps the
+        // steel blue used elsewhere.
+        const color = bucket === 'park' ? '#3d5166' : '#4d6b6e';
+        const bright = bucket === 'park' ? '#82a5c8' : '#7fb3b8';
+        spansByKind[bucket].push({ start: started.seq, end: e.seq, color, bright, kind: started.kind });
+      }
       if (e.kind === 'ToolCall') _calls[e.payload.call_id] = { start: e.seq, tool: e.payload.tool };
       if (e.kind === 'ToolResult') {
+        // A tool_loop delegate spans violet on the delegation lane;
+        // other tools share the delegation lane in their own color.
         const c = _calls[e.payload.call_id];
-        if (c) spansByKind.tool.push({
+        if (c) spansByKind.delegation.push({
           start: c.start, end: e.seq,
           color: c.tool === 'delegate' ? '#665f7d' : '#4d6b6e',
           bright: c.tool === 'delegate' ? '#a08fc9' : '#7fb3b8',
+          kind: c.tool || 'tool',
         });
       }
     });
-    const laneDefs = [];
-    Object.keys(spansByKind).forEach(kind => {
-      const spans = spansByKind[kind].sort((a, b) => a.start - b.start);
-      const tracks = [];
-      spans.forEach(sp => { let t = tracks.find(t => t[t.length - 1].end < sp.start); if (!t) { t = []; tracks.push(t); } t.push(sp); });
-      if (!tracks.length) tracks.push([]);
-      tracks.forEach((t, i) => laneDefs.push({ kind, label: i === 0 ? kind : kind + ' ·' + (i + 1), spans: t }));
-    });
+    // Live producers still open — draw their span out to the last
+    // envelope so the graph shows the leading edge.
+    for (const inst of Object.keys(_producerStarts)) {
+      const st = _producerStarts[inst];
+      if (st.kind === 'model') continue;
+      const bucket = st.kind === 'park' ? 'park' : 'delegation';
+      spansByKind[bucket].push({ start: st.seq, end: _lastSeq, color: '#3d5166', bright: '#82a5c8', kind: st.kind });
+    }
+    // Fixed three-lane shape: model / delegation / park. No sub-track
+    // packing — overlapping delegation or park spans stack in the
+    // same lane cell. Sub-track expansion under real concurrency
+    // remains a design option (D29) but the daily-driver session
+    // topology reads cleaner without it.
+    const laneDefs = ['model', 'delegation', 'park'].map(kind => ({
+      kind, label: kind,
+      spans: (spansByKind[kind] || []).slice().sort((a, b) => a.start - b.start),
+    }));
     const kindOf = (e) => {
-      // Two-lane shape for the session topology (model + tool). Every
-      // envelope belongs to either the model lifeline (default) or the
-      // tool lifeline (only ToolCall/ToolResult and their producers).
-      // Park + SessionEnded ride the model lane — they are moments on
-      // the model's activation, not their own participants.
-      if (e.prod === 'tool' || e.kind === 'ToolCall' || e.kind === 'ToolResult'
-          || (e.payload && e.payload.kind === 'tool')) return 'tool';
+      // Three lanes: model / delegation / park. Every envelope belongs
+      // to one. A row's "own kind" decides which lane cell renders
+      // bright.
+      const pkind = (e.payload && e.payload.kind) || '';
+      if (pkind === 'park' || e.kind === 'Park') return 'park';
+      if (e.kind === 'ToolCall' || e.kind === 'ToolResult') return 'delegation';
+      // Any non-model producer sits on the delegation lane.
+      if (pkind && pkind !== 'model') return 'delegation';
+      // TriggerFired that starts a non-model producer points at the
+      // delegation lane (park is its own lane).
+      if (e.kind === 'TriggerFired') {
+        const starts = e.payload && e.payload.starts;
+        if (starts === 'park') return 'park';
+        if (starts && starts !== 'model') return 'delegation';
+      }
       return 'model';
     };
     // message connectors (sequence-diagram arrows): ToolCall = model→tool, ToolResult = tool→model,
@@ -1072,21 +1112,36 @@ class Component extends DCLogic {
     const laneIdx = {}; laneDefs.forEach((ld, i) => { if (laneIdx[ld.kind] === undefined) laneIdx[ld.kind] = i; });
     const cx = (i) => i * 12 + 4;
     const connFor = (e) => {
-      if (e.kind === 'ToolCall') { const a = cx(laneIdx.model), b = cx(laneIdx.tool); return { c: e.payload.tool === 'delegate' ? '#a08fc9' : '#7fb3b8', l: Math.min(a, b), w: Math.abs(b - a), dot: b }; }
-      if (e.kind === 'ToolResult') { const a = cx(laneIdx.tool), b = cx(laneIdx.model); return { c: '#7fb3b8', l: Math.min(a, b), w: Math.abs(b - a), dot: b }; }
+      // ToolCall = model → delegation arrow.
+      if (e.kind === 'ToolCall') {
+        const a = cx(laneIdx.model), b = cx(laneIdx.delegation);
+        return { c: e.payload.tool === 'delegate' ? '#a08fc9' : '#7fb3b8', l: Math.min(a, b), w: Math.abs(b - a), dot: b };
+      }
+      // ToolResult = delegation → model arrow (return).
+      if (e.kind === 'ToolResult') {
+        const a = cx(laneIdx.delegation), b = cx(laneIdx.model);
+        return { c: '#7fb3b8', l: Math.min(a, b), w: Math.abs(b - a), dot: b };
+      }
+      // TriggerFired = runtime stub into the started lane.
       if (e.kind === 'TriggerFired') {
-        // A trigger firing points at the producer it starts. Under the
-        // two-lane shape everything but `tool` collapses to `model`.
-        const startsTool = e.payload && e.payload.starts === 'tool';
-        const b = cx(startsTool ? laneIdx.tool : laneIdx.model);
+        const starts = e.payload && e.payload.starts;
+        const laneName = starts === 'park' ? 'park' : (starts && starts !== 'model') ? 'delegation' : 'model';
+        const b = cx(laneIdx[laneName]);
         return { c: '#c9a0b8', l: 0, w: b, dot: b };
       }
-      if (e.kind === 'UserMessage') { const b = cx(laneIdx.model); return { c: '#88b0d0', l: 0, w: b, dot: b }; }
-      // Park / SessionEnded / FinalAnswer are moments on the model
-      // lifeline. Show a runtime-stub connector dot so the diagram
-      // reads as "return to model".
-      if (e.kind === 'Park' || e.kind === 'SessionEnded' || e.kind === 'FinalAnswer') {
+      // UserMessage = user → model arrow (reverse tool call shape).
+      if (e.kind === 'UserMessage') {
         const b = cx(laneIdx.model);
+        return { c: '#88b0d0', l: 0, w: b, dot: b };
+      }
+      // FinalAnswer, SessionEnded = moments on the model lifeline.
+      if (e.kind === 'FinalAnswer' || e.kind === 'SessionEnded') {
+        const b = cx(laneIdx.model);
+        return { c: '#82a5c8', l: 0, w: b, dot: b };
+      }
+      // Park = the park producer returning to the park lane.
+      if (e.kind === 'Park') {
+        const b = cx(laneIdx.park);
         return { c: '#82a5c8', l: 0, w: b, dot: b };
       }
       return null;
