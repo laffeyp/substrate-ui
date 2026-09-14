@@ -1018,40 +1018,40 @@ class Component extends DCLogic {
     // ToolCall → ToolResult; the model span runs its ProducerStarted → FinalAnswer; park spans
     // TriggerFired → Park. Concurrent spans of one kind pack into sub-tracks that appear ONLY
     // when real overlap exists, so the graph never widens for a merely long run.
-    // Design D29 amendment: "one span, ProducerStarted → FinalAnswer
-    // ('the turn is the model's')". The engine's refire-model cycle
-    // fires ProducerStarted(model) multiple times per turn (once per
-    // tool cycle), but the graph shows ONE activation from the first
-    // ProducerStarted(model) after the last turn boundary to the next
-    // FinalAnswer. Otherwise every refire opens a new sub-track
-    // because they all end at the same FinalAnswer — that "many
-    // models" packing was the bug.
+    // Session topology's shape: the model is the durable participant.
+    // Everything else (UserMessage, ToolCall, ToolResult, Park) is a
+    // message TO the model lifeline. Two lanes suffice: `model` and
+    // `tool`. Park lives on the model lane as a return-to-model dot
+    // rather than a lane of its own. Model span = ProducerStarted →
+    // FinalAnswer (D29 amendment: "the turn is the model's"), one
+    // per turn regardless of refire-model cycles.
     const _lastSeq = EV.length ? EV[EV.length - 1].seq : 0;
-    // lanes: one per producer KIND (fixed width). A lane's bars are SPANS — a tool span runs
-    // ToolCall → ToolResult; the model span runs its ProducerStarted → FinalAnswer; park spans
-    // TriggerFired → Park. Concurrent spans of one kind pack into sub-tracks that appear ONLY
-    // when real overlap exists, so the graph never widens for a merely long run.
-    const spansByKind = { model: [], tool: [], park: [] };
+    const spansByKind = { model: [], tool: [] };
     const _calls = {};
     let _modelSpanStart = null;
     EV.forEach(e => {
-      // Turn-scoped model span: open on the first ProducerStarted(model)
-      // seen while no span is open; close on the next FinalAnswer.
-      // A refire-model ProducerStarted mid-turn is a no-op here — the
-      // span stays open through the tool cycles.
       if (e.kind === 'ProducerStarted' && e.payload.kind === 'model' && _modelSpanStart === null) {
         _modelSpanStart = e.seq;
       }
       if (e.kind === 'FinalAnswer' && _modelSpanStart !== null) {
-        spansByKind.model.push({ start: _modelSpanStart, end: e.seq, color: '#3d5166', bright: '#82a5c8' });
+        // Extend the span to include the following Park (return-to-
+        // model marker) so the model bar reads as one continuous
+        // activation through the turn's park boundary.
+        const nextPark = EV.find(x => x.seq > e.seq && x.kind === 'Park');
+        const end = nextPark ? nextPark.seq : e.seq;
+        spansByKind.model.push({ start: _modelSpanStart, end, color: '#3d5166', bright: '#82a5c8' });
         _modelSpanStart = null;
       }
       if (e.kind === 'ToolCall') _calls[e.payload.call_id] = { start: e.seq, tool: e.payload.tool };
-      if (e.kind === 'ToolResult') { const c = _calls[e.payload.call_id]; if (c) spansByKind.tool.push({ start: c.start, end: e.seq, color: c.tool === 'delegate' ? '#665f7d' : '#4d6b6e', bright: c.tool === 'delegate' ? '#a08fc9' : '#7fb3b8' }); }
-      if (e.kind === 'Park') spansByKind.park.push({ start: e.seq - 1, end: e.seq, color: '#3d5166', bright: '#82a5c8' });
+      if (e.kind === 'ToolResult') {
+        const c = _calls[e.payload.call_id];
+        if (c) spansByKind.tool.push({
+          start: c.start, end: e.seq,
+          color: c.tool === 'delegate' ? '#665f7d' : '#4d6b6e',
+          bright: c.tool === 'delegate' ? '#a08fc9' : '#7fb3b8',
+        });
+      }
     });
-    // Live tail: turn is still open, no FinalAnswer seen yet. Span
-    // runs to the last envelope so the bar is visibly growing.
     if (_modelSpanStart !== null) {
       spansByKind.model.push({ start: _modelSpanStart, end: _lastSeq, color: '#3d5166', bright: '#82a5c8' });
     }
@@ -1064,13 +1064,13 @@ class Component extends DCLogic {
       tracks.forEach((t, i) => laneDefs.push({ kind, label: i === 0 ? kind : kind + ' ·' + (i + 1), spans: t }));
     });
     const kindOf = (e) => {
-      if (e.kind === 'Park' || (e.payload && e.payload.starts === 'park')) return 'park';
+      // Two-lane shape for the session topology (model + tool). Every
+      // envelope belongs to either the model lifeline (default) or the
+      // tool lifeline (only ToolCall/ToolResult and their producers).
+      // Park + SessionEnded ride the model lane — they are moments on
+      // the model's activation, not their own participants.
       if (e.prod === 'tool' || e.kind === 'ToolCall' || e.kind === 'ToolResult'
           || (e.payload && e.payload.kind === 'tool')) return 'tool';
-      // Everything else falls back to the model lane, matching the
-      // spec's three-lane sequence-diagram shape. Session-scaffold
-      // producers (session_started, per_turn_fragment, session_end)
-      // paint no bar but still show in the row list.
       return 'model';
     };
     // message connectors (sequence-diagram arrows): ToolCall = model→tool, ToolResult = tool→model,
@@ -1080,8 +1080,21 @@ class Component extends DCLogic {
     const connFor = (e) => {
       if (e.kind === 'ToolCall') { const a = cx(laneIdx.model), b = cx(laneIdx.tool); return { c: e.payload.tool === 'delegate' ? '#a08fc9' : '#7fb3b8', l: Math.min(a, b), w: Math.abs(b - a), dot: b }; }
       if (e.kind === 'ToolResult') { const a = cx(laneIdx.tool), b = cx(laneIdx.model); return { c: '#7fb3b8', l: Math.min(a, b), w: Math.abs(b - a), dot: b }; }
-      if (e.kind === 'TriggerFired') { const k = e.payload.starts === 'park' ? 'park' : e.payload.starts === 'tool' ? 'tool' : 'model'; const b = cx(laneIdx[k]); return { c: '#c9a0b8', l: 0, w: b, dot: b }; }
+      if (e.kind === 'TriggerFired') {
+        // A trigger firing points at the producer it starts. Under the
+        // two-lane shape everything but `tool` collapses to `model`.
+        const startsTool = e.payload && e.payload.starts === 'tool';
+        const b = cx(startsTool ? laneIdx.tool : laneIdx.model);
+        return { c: '#c9a0b8', l: 0, w: b, dot: b };
+      }
       if (e.kind === 'UserMessage') { const b = cx(laneIdx.model); return { c: '#88b0d0', l: 0, w: b, dot: b }; }
+      // Park / SessionEnded / FinalAnswer are moments on the model
+      // lifeline. Show a runtime-stub connector dot so the diagram
+      // reads as "return to model".
+      if (e.kind === 'Park' || e.kind === 'SessionEnded' || e.kind === 'FinalAnswer') {
+        const b = cx(laneIdx.model);
+        return { c: '#82a5c8', l: 0, w: b, dot: b };
+      }
       return null;
     };
     const events = shownEV.map(e => {
