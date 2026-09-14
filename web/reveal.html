@@ -903,25 +903,59 @@ class Component extends DCLogic {
       { seq: 1, kind: 'Park', schema: 'session.Park', prod: 'park', gist: 'await UserMessage', lanes: '', payload: { awaiting: 'UserMessage', turn_index: 0, reason: 'session_open' }, content: [] },
     ];
     // Stream lens is always fed off the controller's real envelopes.
-    // No session yet → empty stream (the template shows an empty
-    // state); no prototype demo interposes.
+    // Framework brackets carry the `substrate.` prefix on the wire;
+    // strip it so the lane derivation below matches on bare kind
+    // names, the way the prototype's EVFULL demo did.
     const _liveEnvelopes = (_vmSnap && Array.isArray(_vmSnap.rawEnvelopes)) ? _vmSnap.rawEnvelopes : [];
-    const EV = _liveEnvelopes.map((env) => ({
-      seq: env.seq,
-      kind: env.kind,
-      schema: env.schema || (env.kind ? `session.${env.kind}` : 'unknown'),
-      prod: (env.producer && env.producer.kind) || 'runtime',
-      gist: (env.payload && (
-        env.payload.assembled_prompt || env.payload.text
-          || env.payload.reason || env.payload.tool
-          || env.payload.condition_kind || ''
-      )) || env.kind,
-      lanes: env.kind === 'ToolCall' || env.kind === 'ToolResult' ? 'mt'
-        : env.kind === 'Park' || env.kind === 'SessionEnded' ? ''
-        : 'm',
-      payload: env.payload || {},
-      content: [],
-    }));
+    const _bareKind = (k) => (typeof k === 'string' && k.indexOf('substrate.') === 0) ? k.slice('substrate.'.length) : k;
+    // Bucket every producer kind onto one of four swim lanes.
+    const _laneOf = (producerKind) => {
+      const k = producerKind || '';
+      if (k === 'model') return 'model';
+      if (k === 'tool') return 'tool';
+      if (k === 'park') return 'park';
+      return 'runtime';
+    };
+    const EV = _liveEnvelopes.map((env) => {
+      const kind = _bareKind(env.kind);
+      const payload = env.payload || {};
+      // ProducerStarted / ProducerCompleted carry the producer info
+      // on `payload.producer`; hoist its kind + instance up so the
+      // lane logic below can index on them.
+      const producerFromPayload = payload && payload.producer;
+      const producerKind = (env.producer && env.producer.kind)
+        || (producerFromPayload && producerFromPayload.kind) || '';
+      const producerInstance = (env.producer && env.producer.instance)
+        || (producerFromPayload && producerFromPayload.instance) || '';
+      const triggerId = kind === 'TriggerFired' ? String(payload.factory || payload.trigger_id || '') : '';
+      const gist = kind === 'TriggerFired' ? (triggerId ? `${triggerId} fired` : 'trigger')
+        : kind === 'ProducerStarted' ? (producerKind || 'producer')
+        : kind === 'ProducerCompleted' ? (producerKind || 'producer')
+        : kind === 'ToolCall' ? String(payload.tool || 'tool call')
+        : kind === 'ToolResult' ? `${String(payload.tool || 'tool')} → ${payload.ok === false ? 'err' : 'ok'}`
+        : kind === 'UserMessage' ? String(payload.text || payload.assembled_prompt || '').slice(0, 120)
+        : kind === 'ModelReply' ? String(payload.text || '').slice(0, 120)
+        : kind === 'FinalAnswer' ? String(payload.text || '').slice(0, 120)
+        : kind === 'Park' ? `await ${payload.awaiting || 'input'}${payload.reason ? ' · ' + payload.reason : ''}`
+        : kind === 'SessionEnded' ? `end · ${payload.reason || 'server_end'}`
+        : kind === 'SessionStarted' ? `driver ${payload.driver_model || '?'}`
+        : kind === 'RateLimitedWaiting' ? `retry ${payload.attempt || '?'} in ${payload.retry_after_seconds || '?'}s`
+        : kind;
+      const laneKey = _laneOf(producerKind || (kind === 'ToolCall' ? 'model' : kind === 'ToolResult' ? 'tool' : ''));
+      return {
+        seq: env.seq,
+        kind,
+        schema: env.schema || '',
+        prod: producerKind || 'runtime',
+        producerInstance,
+        gist,
+        // A short lane-hint keeps the row's own coloring in sync with
+        // the swim-lane logic even when the producer is missing.
+        lanes: laneKey === 'tool' ? 'mt' : laneKey === 'park' ? '' : laneKey === 'runtime' ? '' : 'm',
+        payload: Object.assign({}, payload, { kind: producerKind || payload.kind }),
+        content: [],
+      };
+    });
     const _evTexts = EV.map(e => (e.kind + ' ' + e.prod + ' ' + e.gist).toLowerCase());
     const findCount = !FQ ? 'scope: ' + S.findScope + ' — click a lens to move it' : (FSTREAM ? _evTexts.filter(t => t.includes(FQ)).length + ' matching events · scope: stream' : Object.keys(FTXT).filter(k => FTXT[k].toLowerCase().includes(FQ)).length + ' matching lines · scope: transcript');
     const T = { 0: 't+0.0s', 1: 't+0.0s', 214: 't+0.0s', 215: 't+0.0s', 216: 't+0.0s', 242: 't+49s', 243: 't+49s', 244: 't+49s' };
@@ -933,14 +967,54 @@ class Component extends DCLogic {
     // ToolCall → ToolResult; the model span runs its ProducerStarted → FinalAnswer; park spans
     // TriggerFired → Park. Concurrent spans of one kind pack into sub-tracks that appear ONLY
     // when real overlap exists, so the graph never widens for a merely long run.
-    const spansByKind = { model: [], tool: [], park: [] };
+    // Spans by lane. `model`/`tool`/`park` are the daily-driver lanes;
+    // `runtime` catches every other producer (session_started,
+    // per_turn_fragment, session_end, session_warning, etc.) so the
+    // graph doesn't hide state the record actually holds.
+    const spansByKind = { model: [], tool: [], park: [], runtime: [] };
     const _calls = {};
+    const _producerStarts = {};  // instance → {seq, kind}
     EV.forEach(e => {
-      if (e.kind === 'ProducerStarted' && e.payload.kind === 'model') spansByKind.model.push({ start: e.seq, end: 242, color: '#3d5166', bright: '#82a5c8' });
-      if (e.kind === 'ToolCall') _calls[e.payload.call_id] = { start: e.seq, tool: e.payload.tool };
-      if (e.kind === 'ToolResult') { const c = _calls[e.payload.call_id]; if (c) spansByKind.tool.push({ start: c.start, end: e.seq, color: c.tool === 'delegate' ? '#665f7d' : '#4d6b6e', bright: c.tool === 'delegate' ? '#a08fc9' : '#7fb3b8' }); }
+      if (e.kind === 'ProducerStarted') {
+        const inst = e.producerInstance;
+        const pkind = e.payload && e.payload.kind;
+        if (inst) _producerStarts[inst] = { seq: e.seq, kind: pkind };
+      }
+      if (e.kind === 'ProducerCompleted') {
+        const inst = e.producerInstance;
+        const start = inst ? _producerStarts[inst] : null;
+        if (start) {
+          const bucket = start.kind === 'model' ? 'model'
+            : start.kind === 'tool' ? 'tool'
+            : start.kind === 'park' ? 'park'
+            : 'runtime';
+          const dark = bucket === 'model' ? '#3d5166'
+            : bucket === 'tool' ? '#4d6b6e'
+            : bucket === 'park' ? '#3d5166' : '#3d3f45';
+          const bright = bucket === 'model' ? '#82a5c8'
+            : bucket === 'tool' ? '#7fb3b8'
+            : bucket === 'park' ? '#82a5c8' : '#9aa0a8';
+          spansByKind[bucket].push({ start: start.seq, end: e.seq, color: dark, bright });
+          delete _producerStarts[inst];
+        }
+      }
+      if (e.kind === 'ToolCall') _calls[e.payload && e.payload.call_id] = { start: e.seq, tool: e.payload && e.payload.tool };
+      if (e.kind === 'ToolResult') { const c = _calls[e.payload && e.payload.call_id]; if (c) spansByKind.tool.push({ start: c.start, end: e.seq, color: c.tool === 'delegate' ? '#665f7d' : '#4d6b6e', bright: c.tool === 'delegate' ? '#a08fc9' : '#7fb3b8' }); }
       if (e.kind === 'Park') spansByKind.park.push({ start: e.seq - 1, end: e.seq, color: '#3d5166', bright: '#82a5c8' });
     });
+    // Any producer still open (no matching ProducerCompleted seen yet)
+    // gets a live-tail span running to the last envelope's seq.
+    const _lastSeq = EV.length ? EV[EV.length - 1].seq : 0;
+    for (const inst of Object.keys(_producerStarts)) {
+      const start = _producerStarts[inst];
+      const bucket = start.kind === 'model' ? 'model'
+        : start.kind === 'tool' ? 'tool'
+        : start.kind === 'park' ? 'park'
+        : 'runtime';
+      const dark = bucket === 'runtime' ? '#3d3f45' : '#3d5166';
+      const bright = bucket === 'runtime' ? '#9aa0a8' : '#82a5c8';
+      spansByKind[bucket].push({ start: start.seq, end: _lastSeq, color: dark, bright });
+    }
     const laneDefs = [];
     Object.keys(spansByKind).forEach(kind => {
       const spans = spansByKind[kind].sort((a, b) => a.start - b.start);
@@ -949,7 +1023,17 @@ class Component extends DCLogic {
       if (!tracks.length) tracks.push([]);
       tracks.forEach((t, i) => laneDefs.push({ kind, label: i === 0 ? kind : kind + ' ·' + (i + 1), spans: t }));
     });
-    const kindOf = (e) => (e.kind === 'Park' || (e.payload && e.payload.starts === 'park')) ? 'park' : (e.prod.startsWith('tool') || (e.payload && e.payload.kind === 'tool') || e.kind === 'ToolCall') ? 'tool' : 'model';
+    const kindOf = (e) => {
+      if (e.kind === 'Park' || (e.payload && e.payload.starts === 'park')) return 'park';
+      if (e.prod === 'tool' || e.kind === 'ToolCall' || e.kind === 'ToolResult'
+          || (e.payload && e.payload.kind === 'tool')) return 'tool';
+      if (e.prod === 'model' || (e.payload && e.payload.kind === 'model')
+          || e.kind === 'ModelReply' || e.kind === 'FinalAnswer' || e.kind === 'UserMessage') return 'model';
+      // Every other producer (session_started, per_turn_fragment,
+      // session_end, session_warning, framework brackets) rides the
+      // runtime lane so nothing rides a wrong lane by default.
+      return 'runtime';
+    };
     // message connectors (sequence-diagram arrows): ToolCall = model→tool, ToolResult = tool→model,
     // TriggerFired / UserMessage = runtime stub into the lane it starts.
     const laneIdx = {}; laneDefs.forEach((ld, i) => { if (laneIdx[ld.kind] === undefined) laneIdx[ld.kind] = i; });
@@ -977,7 +1061,7 @@ class Component extends DCLogic {
       };
     });
     const laneW = laneDefs.length * 12 - 4;
-    const laneLegend = laneDefs.map(ld => ({ label: ld.label, color: ld.kind === 'tool' ? '#7fb3b8' : '#82a5c8' }));
+    const laneLegend = laneDefs.map(ld => ({ label: ld.label, color: ld.kind === 'tool' ? '#7fb3b8' : ld.kind === 'runtime' ? '#9aa0a8' : '#82a5c8' }));
     const A = 214, B = 244, pct = (x) => (((x - A) / (B - A)) * 100).toFixed(1) + '%';
     const span = (s0, s1, base, seq) => ({ l: pct(s0), w: (((s1 - s0) / (B - A)) * 100).toFixed(1) + '%', title: 'seq ' + seq + ' — click to inspect', bg: S.sel === seq ? '#9db8d6' : base, pick: () => this.setState(st => ({ sel: st.sel === seq ? null : seq })) });
     const sideLanes = !mainFocused ? [] : [
