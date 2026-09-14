@@ -916,43 +916,83 @@ class Component extends DCLogic {
       if (k === 'park') return 'park';
       return 'runtime';
     };
+    // Prototype v7 convention for the `prod` column and gist per kind
+    // is hand-annotated in EVFULL (lines 803, 806, 810, 823, etc.).
+    // Real envelopes carry different fields; this map translates while
+    // keeping the visible strings identical to the prototype's shape.
+    const _prodFor = (kind, producerKind, payload) => {
+      // Framework brackets always read as `runtime` — matches prototype.
+      if (kind === 'TriggerFired' || kind === 'ProducerStarted' || kind === 'ProducerCompleted'
+          || kind === 'RunStarted' || kind === 'RunFinalised' || kind === 'TerminationMatched') return 'runtime';
+      if (kind === 'UserMessage') return 'runtime';
+      if (kind === 'ToolCall') return 'model';
+      if (kind === 'ToolResult') return payload.tool ? `tool · ${payload.tool}` : 'tool';
+      if (kind === 'FinalAnswer' || kind === 'ModelReply') return 'model';
+      if (kind === 'Park') return 'park';
+      if (kind === 'PromptFragment' || kind === 'PromptComposed' || kind === 'SessionStarted') return 'runtime';
+      return producerKind || 'runtime';
+    };
+    const _gistFor = (kind, payload) => {
+      if (kind === 'UserMessage') return String(payload.text || payload.assembled_prompt || '').slice(0, 160);
+      if (kind === 'ModelReply') return String(payload.text || '').slice(0, 160);
+      if (kind === 'FinalAnswer') return 'turn done';
+      if (kind === 'ToolCall') {
+        const t = payload.tool || 'tool';
+        const args = Array.isArray(payload.args) ? payload.args.join(' ') : (payload.args ? String(payload.args) : '');
+        return args ? `${t} ${args}`.slice(0, 160) : t;
+      }
+      if (kind === 'ToolResult') {
+        const ok = payload.ok !== false;
+        const out = payload.output;
+        const tail = ok
+          ? (typeof out === 'string' ? String(out).slice(0, 80) : (out && (out.stdout || out.text) ? String(out.stdout || out.text).slice(0, 80) : 'ok'))
+          : `err · ${payload.error || 'failed'}`;
+        return `${ok ? 'ok' : 'err'} · ${tail}`;
+      }
+      if (kind === 'TriggerFired') {
+        const tid = String(payload.factory || payload.trigger_id || 'trigger');
+        const starts = payload.starts ? ` → ${payload.starts}` : '';
+        return tid + (starts ? ` fired${starts}` : ' fired');
+      }
+      if (kind === 'ProducerStarted') return (payload.kind || (payload.producer && payload.producer.kind) || 'producer');
+      if (kind === 'ProducerCompleted') return (payload.kind || (payload.producer && payload.producer.kind) || 'producer');
+      if (kind === 'Park') return `await ${payload.awaiting || 'UserMessage'}`;
+      if (kind === 'SessionStarted') return `seed · driver ${payload.driver_model || '?'}`;
+      if (kind === 'SessionEnded') return `end · ${payload.reason || 'server_end'}`;
+      if (kind === 'RateLimitedWaiting') return `retry ${payload.retry_index || payload.attempt || '?'} in ${payload.retry_after_seconds || '?'}s`;
+      return '';
+    };
     const EV = _liveEnvelopes.map((env) => {
       const kind = _bareKind(env.kind);
-      const payload = env.payload || {};
-      // ProducerStarted / ProducerCompleted carry the producer info
-      // on `payload.producer`; hoist its kind + instance up so the
-      // lane logic below can index on them.
-      const producerFromPayload = payload && payload.producer;
+      const rawPayload = env.payload || {};
+      // ProducerStarted / ProducerCompleted carry the producer info on
+      // `payload.producer` (real wire) but the lane logic wants it on
+      // `payload.kind` + `payload.instance` (prototype's flat shape).
+      const producerFromPayload = rawPayload && rawPayload.producer;
       const producerKind = (env.producer && env.producer.kind)
         || (producerFromPayload && producerFromPayload.kind) || '';
       const producerInstance = (env.producer && env.producer.instance)
         || (producerFromPayload && producerFromPayload.instance) || '';
-      const triggerId = kind === 'TriggerFired' ? String(payload.factory || payload.trigger_id || '') : '';
-      const gist = kind === 'TriggerFired' ? (triggerId ? `${triggerId} fired` : 'trigger')
-        : kind === 'ProducerStarted' ? (producerKind || 'producer')
-        : kind === 'ProducerCompleted' ? (producerKind || 'producer')
-        : kind === 'ToolCall' ? String(payload.tool || 'tool call')
-        : kind === 'ToolResult' ? `${String(payload.tool || 'tool')} → ${payload.ok === false ? 'err' : 'ok'}`
-        : kind === 'UserMessage' ? String(payload.text || payload.assembled_prompt || '').slice(0, 120)
-        : kind === 'ModelReply' ? String(payload.text || '').slice(0, 120)
-        : kind === 'FinalAnswer' ? String(payload.text || '').slice(0, 120)
-        : kind === 'Park' ? `await ${payload.awaiting || 'input'}${payload.reason ? ' · ' + payload.reason : ''}`
-        : kind === 'SessionEnded' ? `end · ${payload.reason || 'server_end'}`
-        : kind === 'SessionStarted' ? `driver ${payload.driver_model || '?'}`
-        : kind === 'RateLimitedWaiting' ? `retry ${payload.attempt || '?'} in ${payload.retry_after_seconds || '?'}s`
-        : kind;
-      const laneKey = _laneOf(producerKind || (kind === 'ToolCall' ? 'model' : kind === 'ToolResult' ? 'tool' : ''));
+      // Flatten producer.kind onto payload.kind for the span logic
+      // that reads `e.payload.kind === 'model'`.
+      const payload = Object.assign({}, rawPayload, {
+        kind: producerKind || rawPayload.kind,
+        instance: producerInstance || rawPayload.instance,
+      });
+      const prod = _prodFor(kind, producerKind, rawPayload);
+      const gist = _gistFor(kind, rawPayload);
       return {
         seq: env.seq,
         kind,
         schema: env.schema || '',
-        prod: producerKind || 'runtime',
+        prod,
         producerInstance,
         gist,
-        // A short lane-hint keeps the row's own coloring in sync with
-        // the swim-lane logic even when the producer is missing.
-        lanes: laneKey === 'tool' ? 'mt' : laneKey === 'park' ? '' : laneKey === 'runtime' ? '' : 'm',
-        payload: Object.assign({}, payload, { kind: producerKind || payload.kind }),
+        // Lane hint mirrors the prototype's EVFULL shape.
+        lanes: (kind === 'ToolCall' || kind === 'ToolResult') ? 'mt'
+          : (kind === 'Park' || kind === 'TriggerFired' && payload.starts === 'park') ? ''
+          : 'm',
+        payload,
         content: [],
       };
     });
@@ -960,7 +1000,18 @@ class Component extends DCLogic {
     const findCount = !FQ ? 'scope: ' + S.findScope + ' — click a lens to move it' : (FSTREAM ? _evTexts.filter(t => t.includes(FQ)).length + ' matching events · scope: stream' : Object.keys(FTXT).filter(k => FTXT[k].toLowerCase().includes(FQ)).length + ' matching lines · scope: transcript');
     const T = { 0: 't+0.0s', 1: 't+0.0s', 214: 't+0.0s', 215: 't+0.0s', 216: 't+0.0s', 242: 't+49s', 243: 't+49s', 244: 't+49s' };
     const tFor = (seq) => T[seq] || ('t+' + (seq < 222 ? '2' : seq < 227 ? '4' : seq < 232 ? '8' : seq < 237 ? '10' : '43') + 's');
-    const LOW = { TriggerFired: 1, ProducerStarted: 1, ProducerCompleted: 1 };
+    // Prototype v7 LOW set only lists three framework brackets because
+    // EVFULL was a hand-authored tool_loop trace that never emitted
+    // the real session-topology scaffolding. Real session records
+    // carry RunStarted, TerminationMatched, RunFinalised, SessionStarted,
+    // PromptFragment, PromptComposed — none of which the design's
+    // "app" reading wants. Hide all of them under app-level per the
+    // spec's "hide the low-level machinery" intent (D26).
+    const LOW = {
+      TriggerFired: 1, ProducerStarted: 1, ProducerCompleted: 1,
+      RunStarted: 1, RunFinalised: 1, TerminationMatched: 1,
+      SessionStarted: 1, PromptFragment: 1, PromptComposed: 1,
+    };
     const shownEV = S.level === 'app' ? EV.filter(e => !LOW[e.kind]) : EV;
     const selE = EV.find(e => e.seq === S.sel);
     // lanes: one per producer KIND (fixed width). A lane's bars are SPANS — a tool span runs
