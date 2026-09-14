@@ -294,7 +294,7 @@ export class SessionController {
         return true;
       case "help":
       case "?": {
-        const known = ["/exit", "/model <name>", "/help", "/clear"];
+        const known = ["/exit", "/model <name>", "/interrupt", "/clear", "/help"];
         this.appendTranscript({
           seq: -Math.round(Date.now()) - 3,
           kind: "SlashHelp", role: "system",
@@ -305,6 +305,10 @@ export class SessionController {
       case "clear":
         this.patch({ transcript: [] });
         return true;
+      case "interrupt":
+      case "int":
+        await this.interruptTurn();
+        return true;
       default:
         this.appendTranscript({
           seq: -Math.round(Date.now()) - 4,
@@ -313,6 +317,35 @@ export class SessionController {
         });
         return true;
     }
+  }
+
+  /** Interrupt the in-flight turn. Server refuses if no turn is
+   * running (returns {interrupted: false}). Records the outcome as a
+   * transcript row so the UI shows what happened. */
+  async interruptTurn(): Promise<void> {
+    const sessionId = this.snap.sessionId;
+    if (!sessionId) return;
+    const result = await this.client.fetchJson<{ interrupted?: boolean; landed?: boolean }>(
+      `/api/session/${encodeURIComponent(sessionId)}/interrupt`,
+      { method: "POST", body: {} },
+    );
+    if (!result.ok) {
+      this.appendTranscript({
+        seq: -Math.round(Date.now()) - 5,
+        kind: "InterruptFailed", role: "warning",
+        text: `interrupt failed: ${result.detail}`,
+      });
+      return;
+    }
+    const wasInterrupted = result.data?.interrupted === true;
+    const landed = result.data?.landed === true;
+    this.appendTranscript({
+      seq: -Math.round(Date.now()) - 6,
+      kind: "Interrupted", role: "system",
+      text: wasInterrupted
+        ? `^C interrupt (${landed ? "landed" : "dispatched — envelope arriving on /events"})`
+        : "^C — no turn in flight",
+    });
   }
 
   disconnect(): void {
