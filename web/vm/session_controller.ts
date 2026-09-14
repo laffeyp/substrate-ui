@@ -294,7 +294,7 @@ export class SessionController {
         return true;
       case "help":
       case "?": {
-        const known = ["/exit", "/model <name>", "/interrupt", "/clear", "/help"];
+        const known = ["/exit", "/model <name>", "/name <new>", "/list", "/interrupt", "/clear", "/help"];
         this.appendTranscript({
           seq: -Math.round(Date.now()) - 3,
           kind: "SlashHelp", role: "system",
@@ -309,6 +309,33 @@ export class SessionController {
       case "int":
         await this.interruptTurn();
         return true;
+      case "name":
+      case "rename":
+        if (!rest) {
+          this.appendTranscript({
+            seq: -Math.round(Date.now()) - 9,
+            kind: "SlashHelp", role: "system",
+            text: `current name: ${this.snap.sessionName ?? "(unnamed)"}. use /name <new> to rename.`,
+          });
+        } else {
+          await this.renameSession(rest);
+        }
+        return true;
+      case "list":
+      case "ls":
+        await this.loadLiveSessions();
+        {
+          const rows = this.snap.liveSessions;
+          const text = rows.length
+            ? `${rows.length} session${rows.length === 1 ? "" : "s"}: ${rows.map(r => `${r.name} (${r.status})`).join(", ")}`
+            : "no sessions on the server";
+          this.appendTranscript({
+            seq: -Math.round(Date.now()) - 10,
+            kind: "SlashListed", role: "system",
+            text,
+          });
+        }
+        return true;
       default:
         this.appendTranscript({
           seq: -Math.round(Date.now()) - 4,
@@ -317,6 +344,31 @@ export class SessionController {
         });
         return true;
     }
+  }
+
+  /** Rename the current session. PATCH /api/session/<id> body
+   * `{name: <new>}`. Refreshes the snapshot's sessionName on ACK. */
+  async renameSession(newName: string): Promise<void> {
+    const sessionId = this.snap.sessionId;
+    if (!sessionId) return;
+    const result = await this.client.fetchJson<{ name?: string | null }>(
+      `/api/session/${encodeURIComponent(sessionId)}`,
+      { method: "PATCH", body: { name: newName } },
+    );
+    if (!result.ok) {
+      this.appendTranscript({
+        seq: -Math.round(Date.now()) - 7,
+        kind: "RenameFailed", role: "warning",
+        text: `rename failed: ${result.detail}`,
+      });
+      return;
+    }
+    this.patch({ sessionName: result.data.name ?? newName });
+    this.appendTranscript({
+      seq: -Math.round(Date.now()) - 8,
+      kind: "Renamed", role: "system",
+      text: `session renamed to ${result.data.name ?? newName}`,
+    });
   }
 
   /** Interrupt the in-flight turn. Server refuses if no turn is
