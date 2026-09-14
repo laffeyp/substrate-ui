@@ -1018,30 +1018,27 @@ class Component extends DCLogic {
     // ToolCall → ToolResult; the model span runs its ProducerStarted → FinalAnswer; park spans
     // TriggerFired → Park. Concurrent spans of one kind pack into sub-tracks that appear ONLY
     // when real overlap exists, so the graph never widens for a merely long run.
-    // Session topology's shape: the model is the durable participant.
-    // Everything else (UserMessage, ToolCall, ToolResult, Park) is a
-    // message TO the model lifeline. Two lanes suffice: `model` and
-    // `tool`. Park lives on the model lane as a return-to-model dot
-    // rather than a lane of its own. Model span = ProducerStarted →
-    // FinalAnswer (D29 amendment: "the turn is the model's"), one
-    // per turn regardless of refire-model cycles.
+    // Session topology's shape: the model is the DURABLE participant —
+    // there for every seq the session exists. The lifeline is one
+    // continuous vertical bar from the session's first envelope to
+    // its last (or to SessionEnded's seq). Tool cycles dip out to
+    // the tool lane and return. Park is a moment on the model lane,
+    // not a break in it.
     const _lastSeq = EV.length ? EV[EV.length - 1].seq : 0;
+    const _firstSeq = EV.length ? EV[0].seq : 0;
+    const _endedSeq = (function () {
+      for (const x of EV) if (x.kind === 'SessionEnded') return x.seq;
+      return _lastSeq;
+    })();
     const spansByKind = { model: [], tool: [] };
+    if (EV.length) {
+      spansByKind.model.push({
+        start: _firstSeq, end: _endedSeq,
+        color: '#3d5166', bright: '#82a5c8',
+      });
+    }
     const _calls = {};
-    let _modelSpanStart = null;
     EV.forEach(e => {
-      if (e.kind === 'ProducerStarted' && e.payload.kind === 'model' && _modelSpanStart === null) {
-        _modelSpanStart = e.seq;
-      }
-      if (e.kind === 'FinalAnswer' && _modelSpanStart !== null) {
-        // Extend the span to include the following Park (return-to-
-        // model marker) so the model bar reads as one continuous
-        // activation through the turn's park boundary.
-        const nextPark = EV.find(x => x.seq > e.seq && x.kind === 'Park');
-        const end = nextPark ? nextPark.seq : e.seq;
-        spansByKind.model.push({ start: _modelSpanStart, end, color: '#3d5166', bright: '#82a5c8' });
-        _modelSpanStart = null;
-      }
       if (e.kind === 'ToolCall') _calls[e.payload.call_id] = { start: e.seq, tool: e.payload.tool };
       if (e.kind === 'ToolResult') {
         const c = _calls[e.payload.call_id];
@@ -1052,9 +1049,6 @@ class Component extends DCLogic {
         });
       }
     });
-    if (_modelSpanStart !== null) {
-      spansByKind.model.push({ start: _modelSpanStart, end: _lastSeq, color: '#3d5166', bright: '#82a5c8' });
-    }
     const laneDefs = [];
     Object.keys(spansByKind).forEach(kind => {
       const spans = spansByKind[kind].sort((a, b) => a.start - b.start);
