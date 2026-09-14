@@ -2841,6 +2841,16 @@ class Handler(BaseHTTPRequestHandler):
         )
 
     def _static(self, path: str) -> None:
+        # Phase 6 of the Presentation-Model extraction: `/` serves the
+        # reveal shell (prototype-v7 view bound to SessionController);
+        # `/classic` still serves the sprint-051 shell. Every other
+        # asset path falls through to _static_root unchanged.
+        if path in ("", "/"):
+            self._static_root(WEB, "/reveal.html")
+            return
+        if path == "/classic" or path == "/classic/":
+            self._static_root(WEB, "/index.html")
+            return
         self._static_root(WEB, path)
 
     def _static_root(self, root: Path, path: str) -> None:
