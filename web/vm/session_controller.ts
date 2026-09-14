@@ -170,18 +170,26 @@ export class SessionController {
     const triggersRaw = Array.isArray((raw as { triggers?: unknown[] }).triggers)
       ? ((raw as { triggers: unknown[] }).triggers) : [];
     const producers: ProducerNode[] = producersRaw.map((p) => {
-      const row = p as { kind?: string; emits?: string[]; initial?: boolean };
+      const row = p as { kind?: string; emits?: string[]; initial?: boolean; is_initial?: boolean };
       return {
         kind: String(row.kind ?? "?"),
         emits: Array.isArray(row.emits) ? row.emits.map((e) => String(e)) : [],
-        initial: !!row.initial,
+        // Server uses `is_initial`; older shapes used `initial`. Accept both.
+        initial: !!(row.is_initial ?? row.initial),
       };
     });
     const triggers: TriggerEdge[] = triggersRaw.map((t, idx) => {
-      const row = t as { id?: string; on?: string; on_kind?: string; kind?: string; starts?: string };
+      const row = t as { id?: string; on?: string | string[]; on_kind?: string; kind?: string; starts?: string };
+      // Server sends `on` as an array of event kinds (`["substrate.RunStarted"]`).
+      // Older shapes used a scalar `on_kind`. Handle both.
+      let onKind: string;
+      if (Array.isArray(row.on)) onKind = row.on.join(", ");
+      else if (typeof row.on === "string") onKind = row.on;
+      else if (typeof row.on_kind === "string") onKind = row.on_kind;
+      else onKind = String(row.kind ?? "?");
       return {
         id: String(row.id ?? `trigger_${idx}`),
-        onKind: String(row.on_kind ?? row.on ?? row.kind ?? "?"),
+        onKind,
         starts: String(row.starts ?? "?"),
       };
     });
@@ -250,7 +258,7 @@ export class SessionController {
       endedReason: null,
     });
     this.attachStream(ack.session_id);
-    this.loadTopologyGraph(`s_${ack.session_id}`).catch(() => undefined);
+    this.loadTopologyGraph(ack.session_id).catch(() => undefined);
     this.emit("SESSION_OPEN_ACKED", { session_id: ack.session_id, name: ack.name ?? null, driver });
   }
 
@@ -324,7 +332,7 @@ export class SessionController {
       endedReason: null,
     });
     this.attachStream(manifest.session_id);
-    this.loadTopologyGraph(`s_${manifest.session_id}`).catch(() => undefined);
+    this.loadTopologyGraph(manifest.session_id).catch(() => undefined);
   }
 
   async endSession(reason: string = "user_exit"): Promise<void> {
