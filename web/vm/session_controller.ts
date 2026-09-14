@@ -300,6 +300,10 @@ export class SessionController {
   /** Attach to an existing session (opened by another client or by an
    * earlier boot). Replays every envelope from seq 0 so the visible
    * transcript is the record's full history, then follows live. */
+  /** Plan-named alias for `attachExisting`. Kept for the two-shell
+   * parity harness which reads action names off the plan doc. */
+  async openRecord(sessionId: string): Promise<void> { return this.attachExisting(sessionId); }
+
   async attachExisting(sessionId: string): Promise<void> {
     if (!sessionId) return;
     this.emit("SESSION_ATTACH_STARTED", { session_id: sessionId });
