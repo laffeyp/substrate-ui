@@ -138,8 +138,13 @@ export class SessionController {
   async loadDriverRoster(): Promise<void> {
     const result = await this.client.fetchJson<ModelsRoster>("/api/models");
     if (!result.ok) { this.patch({ lastError: `driver_roster: ${result.detail}` }); return; }
-    const roster = Array.isArray(result.data.models) ? result.data.models : [];
-    const defaultDriver = typeof result.data.default === "string" ? result.data.default : null;
+    // `deterministic` is a dev/CI stand-in with no reasoning ability;
+    // it does not belong in a user-facing driver picker. It stays
+    // available server-side for harness pins (?driver=deterministic).
+    const rawModels = Array.isArray(result.data.models) ? result.data.models : [];
+    const roster = rawModels.filter((m) => m !== "deterministic");
+    const rawDefault = typeof result.data.default === "string" ? result.data.default : null;
+    const defaultDriver = rawDefault === "deterministic" ? (roster[0] ?? null) : rawDefault;
     this.patch({ driverRoster: roster, driverDefault: defaultDriver });
     this.emit("DRIVER_ROSTER_LOADED", { count: roster.length, default: defaultDriver });
   }
