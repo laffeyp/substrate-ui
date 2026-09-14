@@ -98,6 +98,7 @@ const EMPTY_SNAPSHOT: Snapshot = {
   connection: "idle",
   lastError: null,
   topologyGraph: null,
+  rawEnvelopes: [],
 };
 
 export class SessionController {
@@ -254,6 +255,7 @@ export class SessionController {
       workspaceShape: ack.workspace_shape ?? null,
       turnIndex: 0,
       transcript: [],
+      rawEnvelopes: [],
       parkReason: null,
       endedReason: null,
     });
@@ -328,6 +330,7 @@ export class SessionController {
       workspaceShape: manifest.workspace_shape ?? null,
       turnIndex: 0,
       transcript: [],
+      rawEnvelopes: [],
       parkReason: null,
       endedReason: null,
     });
@@ -536,6 +539,13 @@ export class SessionController {
   private handleEnvelope(sessionId: string, env: RecordEnvelope): void {
     if (typeof env.seq === "number" && env.seq > this.lastSeq) this.lastSeq = env.seq;
     this.emit("STREAM_ENVELOPE_APPENDED", { seq: env.seq, kind: env.kind });
+    // Append to rawEnvelopes for the stream lens; dedupe by seq so a
+    // resume-replay doesn't double-count.
+    const existing = this.snap.rawEnvelopes;
+    const alreadyAt = existing.findIndex((e) => e.seq === env.seq);
+    if (alreadyAt < 0) {
+      this.patch({ rawEnvelopes: [...existing, env] });
+    }
     const payload = env.payload ?? {};
     switch (env.kind) {
       case "SessionStarted": {

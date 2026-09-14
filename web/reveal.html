@@ -893,7 +893,28 @@ class Component extends DCLogic {
       { seq: 0, kind: 'SessionStarted', schema: 'session.SessionStarted', prod: 'runtime', gist: 'seed · driver ' + fp.driver + ' · worktree substrate/' + fp.name, lanes: '', payload: { session_id: fp.name, driver_model: fp.driver, workspace_shape: 'worktree', bundle: null, parent_session_id: null }, content: [] },
       { seq: 1, kind: 'Park', schema: 'session.Park', prod: 'park', gist: 'await UserMessage', lanes: '', payload: { awaiting: 'UserMessage', turn_index: 0, reason: 'session_open' }, content: [] },
     ];
-    const EV = mainFocused ? EVFULL : EVLITE;
+    // Real envelopes for the stream lens when a session is bound.
+    // Falls back to the prototype's scripted EVFULL only when the
+    // reveal view has no live substrate stream to draw from.
+    const _liveEnvelopes = (_vmSnap && Array.isArray(_vmSnap.rawEnvelopes)) ? _vmSnap.rawEnvelopes : [];
+    const EV = _hasVmSession
+      ? _liveEnvelopes.map((env) => ({
+          seq: env.seq,
+          kind: env.kind,
+          schema: env.schema || (env.kind ? `session.${env.kind}` : 'unknown'),
+          prod: (env.producer && env.producer.kind) || 'runtime',
+          gist: (env.payload && (
+            env.payload.assembled_prompt || env.payload.text
+              || env.payload.reason || env.payload.tool
+              || env.payload.condition_kind || ''
+          )) || env.kind,
+          lanes: env.kind === 'ToolCall' || env.kind === 'ToolResult' ? 'mt'
+            : env.kind === 'Park' || env.kind === 'SessionEnded' ? ''
+            : 'm',
+          payload: env.payload || {},
+          content: [],
+        }))
+      : (mainFocused ? EVFULL : EVLITE);
     const _evTexts = EV.map(e => (e.kind + ' ' + e.prod + ' ' + e.gist).toLowerCase());
     const findCount = !FQ ? 'scope: ' + S.findScope + ' — click a lens to move it' : (FSTREAM ? _evTexts.filter(t => t.includes(FQ)).length + ' matching events · scope: stream' : Object.keys(FTXT).filter(k => FTXT[k].toLowerCase().includes(FQ)).length + ' matching lines · scope: transcript');
     const T = { 0: 't+0.0s', 1: 't+0.0s', 214: 't+0.0s', 215: 't+0.0s', 216: 't+0.0s', 242: 't+49s', 243: 't+49s', 244: 't+49s' };
