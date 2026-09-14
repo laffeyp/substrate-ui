@@ -68,12 +68,21 @@ function boot(): void {
   controller.loadLiveSessions().catch(() => undefined);
   controller.loadRecentWorkspaces().catch(() => undefined);
 
+  // Bookmarkable sessions: /?session=<id> attaches on load. The URL
+  // stays put; hitting refresh continues on the same record.
+  const params = new URLSearchParams(window.location.search);
+  const attachId = params.get("session");
+  if (attachId) {
+    controller.attachExisting(attachId).catch(() => undefined);
+  }
+
   let component: DCLogicHandle | null = null;
   const bind = () => {
     if (component) return true;
     component = reachComponent();
     if (!component) return false;
     let lastTranscriptLen = 0;
+    let lastSessionId: string | null = null;
     controller.subscribe((snap) => {
       if (!component) return;
       component.setState(computeStatePatch(snap));
@@ -87,6 +96,15 @@ function boot(): void {
         });
       }
       lastTranscriptLen = newLen;
+      // Reflect the current session in the URL so a refresh stays on
+      // it. Only writes when the session id actually changes.
+      if (snap.sessionId !== lastSessionId) {
+        lastSessionId = snap.sessionId;
+        const url = new URL(window.location.href);
+        if (snap.sessionId) url.searchParams.set("session", snap.sessionId);
+        else url.searchParams.delete("session");
+        window.history.replaceState({}, "", url.toString());
+      }
     });
     return true;
   };
