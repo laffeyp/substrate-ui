@@ -954,7 +954,16 @@ class Component extends DCLogic {
       label, pick: () => this.setState({ mode: id }),
       color: S.mode === id ? '#d7dade' : '#62676f', bg: S.mode === id ? '#2e3138' : 'transparent',
     }));
-    const CMDS = [['/list', 'records · topologies · sessions · applications · bundles', () => this.setState({ surface: 'records', promptVal: '' })], ['/run', 'launch an application as a delegate child', null], ['/inspect', "narrate a record's causal beats", null], ['/diff', "worktree diff for this session's workspace", null], ['/context', 'inject a record slice into the next turn', null], ['/model', 'swap driver mid-session', null], ['/studio', 'open the topology-authoring studio', () => this.setState({ surface: 'studio', promptVal: '' })], ['/export', 'export this record — .record dir or flat events.jsonl', () => this.setState({ showExport: true, promptVal: '' })], ['/exit', 'end this session cleanly', () => this.setState({ showEndConfirm: true, promptVal: '' })]];
+    const _vmSubmit = (line) => { const vm = window.__vm; if (vm) vm.submitLine(line); };
+    const CMDS = [
+      ['/exit', 'end this session cleanly', () => this.setState({ showEndConfirm: true, promptVal: '' })],
+      ['/model', 'swap driver — /model <name>', null],
+      ['/name', 'rename this session — /name <new>', null],
+      ['/list', 'list sessions on the server', () => { this.setState({ promptVal: '' }); _vmSubmit('/list'); }],
+      ['/interrupt', 'stop the in-flight turn (also ^C)', () => { this.setState({ promptVal: '' }); _vmSubmit('/interrupt'); }],
+      ['/clear', 'clear the transcript view', () => { this.setState({ promptVal: '' }); _vmSubmit('/clear'); }],
+      ['/help', 'show this list', () => { this.setState({ promptVal: '' }); _vmSubmit('/help'); }],
+    ];
     const q = S.promptVal.trim();
     const routerRows = q.startsWith('/') ? CMDS.filter(c => c[0].startsWith(q) || q === '/').map(c => ({ cmd: c[0], desc: c[1], pick: c[2] || (() => this.setState({ promptVal: c[0] + ' ' })) })) : [];
     const G = [[0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,1,0,0,0,0,0,0,0,0],[0,0,0,0,1,0,0,0,0,0,0,0],[0,0,1,1,1,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,1,1,0,0,0],[0,0,0,0,0,0,0,1,1,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0]];
