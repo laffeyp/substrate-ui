@@ -524,6 +524,25 @@ export class SessionController {
         });
         return;
       }
+      case "RateLimitedWaiting": {
+        const model = payload.model ? String(payload.model) : this.snap.driver ?? "?";
+        const retry = payload.retry_after_seconds ?? payload.wait_s ?? "?";
+        const attempt = payload.attempt ?? payload.retry ?? "?";
+        this.appendTranscript({
+          seq: env.seq, kind: env.kind, role: "warning",
+          text: `◌ rate-limited — retry ${attempt} in ${retry}s · ${model}`,
+        });
+        return;
+      }
+      case "TranscriptCompacted": {
+        const droppedStart = payload.dropped_seq_start ?? "?";
+        const droppedEnd = payload.dropped_seq_end ?? "?";
+        this.appendTranscript({
+          seq: env.seq, kind: env.kind, role: "system",
+          text: `— transcript compacted (dropped seq ${droppedStart}–${droppedEnd})`,
+        });
+        return;
+      }
       default: {
         // Every other envelope kind is recorded but not rendered; a future
         // View can pick it up off the transcript by kind.
