@@ -93,9 +93,20 @@ const STATE: AppState = createAppState();
 // inspection and hands the same instance to a second shell mounted at
 // /reveal in Phase 3.
 const _vm = new SessionController(new BrowserSubstrateClient());
+(window as unknown as { __vm: SessionController }).__vm = _vm;
+// Ring-buffer the emitted vocabulary onto `window.__vmTape` — same
+// contract the reveal shell exposes, so the parity harness can read
+// both shells uniformly.
+interface TapeEntry { tag: string; payload: Record<string, unknown>; at: number; }
+const _tape: TapeEntry[] = [];
+(window as unknown as { __vmTape: TapeEntry[] }).__vmTape = _tape;
+_vm.onEvent((ev) => {
+  _tape.push(ev);
+  if (_tape.length > 500) _tape.splice(0, _tape.length - 500);
+});
 _vm.loadDriverRoster().catch(() => undefined);
 _vm.loadLiveSessions().catch(() => undefined);
-(window as unknown as { __vm: SessionController }).__vm = _vm;
+_vm.loadRecentWorkspaces().catch(() => undefined);
 // Sprint 040a/b: console handles bound at boot; declared here so
 // hoisted delegates (renderHealth, selectRecord, ...) can reference them.
 let _healthHandle: _HealthHandle | null = null;

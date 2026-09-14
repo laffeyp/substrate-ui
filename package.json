@@ -46,7 +46,8 @@
     "sync:substrate-vocab": "npx tsx tools/sync-substrate-vocab.ts",
     "e2e:terminal-v1": "node _deprecated/terminal-v1-round1/harness/e2e_terminal_v1.js",
     "capture:terminal-v1": "node _deprecated/terminal-v1-round1/harness/capture_terminal_v1.js",
-    "smoke:vm": "npx tsx harness/vm_smoke.ts"
+    "smoke:vm": "npx tsx harness/vm_smoke.ts",
+    "parity": "npx tsx harness/parity.ts"
   },
   "devDependencies": {
     "@types/node": "^22",
