@@ -1069,9 +1069,11 @@ class Component extends DCLogic {
         const started = _producerStarts[e.producerInstance];
         delete _producerStarts[e.producerInstance];
         if (started.kind === 'model') return; // model owns its own lane
+        // Scaffolding producers (session_started, prompt_composer, …)
+        // are runtime plumbing under the color rule.
         spansByKind.delegation.push({
           start: started.seq, end: e.seq,
-          color: '#4d6b6e', bright: '#7fb3b8', kind: started.kind,
+          color: '#4d6b6e', bright: '#7fb3b8', kind: started.kind, plumbing: true,
         });
       }
       if (e.kind === 'TriggerFired' && e.payload && e.payload.starts === 'park' && _parkOpen === null) {
@@ -1088,7 +1090,7 @@ class Component extends DCLogic {
           start: c.start, end: e.seq,
           color: c.tool === 'delegate' ? '#665f7d' : '#4d6b6e',
           bright: c.tool === 'delegate' ? '#a08fc9' : '#7fb3b8',
-          kind: c.tool || 'tool',
+          kind: c.tool || 'tool', plumbing: false,
         });
       }
     });
@@ -1098,7 +1100,7 @@ class Component extends DCLogic {
     for (const inst of Object.keys(_producerStarts)) {
       const st = _producerStarts[inst];
       if (st.kind === 'model') continue;
-      spansByKind.delegation.push({ start: st.seq, end: _lastSeq, color: '#4d6b6e', bright: '#7fb3b8', kind: st.kind });
+      spansByKind.delegation.push({ start: st.seq, end: _lastSeq, color: '#4d6b6e', bright: '#7fb3b8', kind: st.kind, plumbing: true });
     }
     if (_parkOpen !== null) {
       spansByKind.external.push({ start: _parkOpen, end: _parkOpen, color: '#3d5166', bright: '#82a5c8', kind: 'park' });
@@ -1108,13 +1110,14 @@ class Component extends DCLogic {
     // cell. Sub-track expansion under real concurrency remains a
     // design option (D29) but the daily-driver session topology
     // reads cleaner without it.
+    const _laneFilter = (sp) => S.level === 'app' ? !sp.plumbing : true;
     const laneDefs = [
       { kind: 'model', label: 'model' },
       { kind: 'delegation', label: 'delegate' },
       { kind: 'external', label: 'external' },
     ].map(ld => ({
       ...ld,
-      spans: (spansByKind[ld.kind] || []).slice().sort((a, b) => a.start - b.start),
+      spans: (spansByKind[ld.kind] || []).filter(_laneFilter).slice().sort((a, b) => a.start - b.start),
     }));
     const kindOf = (e) => {
       // Three lifelines: model / delegate / external. Every envelope
@@ -1229,48 +1232,31 @@ class Component extends DCLogic {
       bg: S.sel === seq ? '#9db8d6' : base,
       pick: () => this.setState(st => ({ sel: st.sel === seq ? null : seq })),
     });
-    // Side (horizontal Gantt) graph per D23: "one lane per producer,
-    // spans from ToolCall→ToolResult seqs". Read as: one lane per
-    // unique tool name (labelled `grep`, `read_file`, etc.), one lane
-    // per delegate child (labelled `⑂ <name>`), plus the model span
-    // and any park events. Every row is a real segment; no hardcoded
-    // demo seqs.
+    // Side (horizontal Gantt) graph = the same UML sequence diagram
+    // rotated ninety degrees. Three lifelines — model / delegate /
+    // external — matching the down graph and LANE-THEORY -2026-09-14-.
+    // Each span from `spansByKind` renders as its own labelled segment
+    // on its lane. In `app` mode, plumbing spans drop under the same
+    // rule the down graph uses.
     const _sideLanes = [];
-    // Model lane — the durable activation of the turn (or turns).
     if (spansByKind.model.length) {
       _sideLanes.push({
         label: 'model', color: '#82a5c8',
         segs: spansByKind.model.map(sp => segOf(sp.start, sp.end + 0.6, sp.bright, sp.start)),
       });
     }
-    // One lane per unique tool name, so a session that grepped four
-    // times and read_file'd twice shows two lanes with their bars.
-    const _toolsByName = new Map();
-    EV.forEach(e => {
-      if (e.kind === 'ToolResult') {
-        const c = _calls[e.payload.call_id];
-        if (!c) return;
-        const name = c.tool || 'tool';
-        const list = _toolsByName.get(name) || [];
-        list.push({ start: c.start, end: e.seq, delegate: c.tool === 'delegate' });
-        _toolsByName.set(name, list);
-      }
-    });
-    for (const [name, spans] of _toolsByName) {
-      const isDelegate = name === 'delegate';
+    const _delegSpans = spansByKind.delegation.filter(_laneFilter);
+    if (_delegSpans.length) {
       _sideLanes.push({
-        label: isDelegate ? '⑂ delegate' : name,
-        color: isDelegate ? '#a08fc9' : '#7fb3b8',
-        segs: spans.map(sp => segOf(sp.start, sp.end + 0.6, isDelegate ? '#665f7d' : '#4d6b6e', sp.start)),
+        label: 'delegate', color: '#7fb3b8',
+        segs: _delegSpans.map(sp => segOf(sp.start, sp.end + 0.6, sp.bright, sp.start)),
       });
     }
-    // Park events collapse into a single lane; a turn's park is one
-    // return-to-model tick.
-    const _parkSeqs = EV.filter(e => e.kind === 'Park').map(e => e.seq);
-    if (_parkSeqs.length) {
+    const _extSpans = spansByKind.external.filter(_laneFilter);
+    if (_extSpans.length) {
       _sideLanes.push({
-        label: 'park', color: '#82a5c8',
-        segs: _parkSeqs.map(seq => segOf(Math.max(0, seq - 0.5), seq + 0.6, '#82a5c8', seq)),
+        label: 'external', color: '#82a5c8',
+        segs: _extSpans.map(sp => segOf(sp.start, sp.end + 0.6, sp.bright, sp.start)),
       });
     }
     const sideLanes = _sideLanes;
