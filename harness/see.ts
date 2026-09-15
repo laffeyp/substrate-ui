@@ -63,6 +63,14 @@ async function main(): Promise<void> {
   // and attach it to a second session id. Requires
   // SUBSTRATE_UI_SEE_SESSION2=<id> alongside the primary.
   const SESSION_2 = process.env.SUBSTRATE_UI_SEE_SESSION2 || "";
+  if (process.env.SUBSTRATE_UI_SEE_STUDIO === "validate" || process.env.SUBSTRATE_UI_SEE_STUDIO === "build") {
+    const STUDIO_OPEN = "(function(){ var root = document.getElementById('dc-root'); if (!root) return; var key = Object.keys(root).find(function(k){return k.indexOf('__reactContainer')===0}); if (!key) return; function walk(f){ if(!f) return null; var i=f.stateNode; if(i && i.logic && typeof i.logic._toggleSurface==='function') return i.logic; return walk(f.child)||walk(f.sibling); } var l=walk(root[key].stateNode.current); if (l) l._toggleSurface('studio'); })()";
+    await page.evaluate(STUDIO_OPEN);
+    await page.waitForTimeout(500);
+    const btn = process.env.SUBSTRATE_UI_SEE_STUDIO === "build" ? 'build & launch ▸' : 'validate';
+    try { await page.locator(`text="${btn}"`).first().click({ timeout: 2000 }); } catch (_e) { /* ignore */ }
+    await page.waitForTimeout(2000);
+  }
   if (SESSION_2) {
     await page.keyboard.press("Meta+d");
     await page.waitForTimeout(600);

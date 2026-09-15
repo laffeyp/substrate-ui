@@ -577,6 +577,60 @@ class Component extends DCLogic {
     focused: 1, cols: 1, rows: 1, colW: [1], rowW: [1], revealL: 1.15, ddFor: null, wsFor: null, allSessions: [], dropHint: null,
     descent: [], descPv: '', descExtra: {}, fanOpen: false, fanSel: 0, findOpen: false, findQ: '', findScope: 'transcript', nestedDescent: false,
     showSettings: false, showExport: false, showEndConfirm: false, ended: false, frDone: false, theme: 'dark', fontOverride: null, settingsNote: '' };
+  _buildStudioSpec() {
+    // Studio state → server spec. Mirrors the shape web/studio.ts posts
+    // to /api/validate + /api/build. Fields are the ones builder.py
+    // reads (kind, emits, initial, model, prompt on producers; name,
+    // kind, of on views; id, on, predicate, starts, policy, reads on
+    // triggers; id, of, slot on routes; termination + responder + seed
+    // + model_name at the top).
+    const St = this.state;
+    const producers = St.prods.map(p => ({
+      kind: String(p.name || '').trim(),
+      emits: String(p.emits || '').split(',').map(s => s.trim()).filter(Boolean),
+      initial: !!p.initial,
+      model: !!p.model,
+      prompt: String(p.prompt || '').trim(),
+    })).filter(p => p.kind);
+    const views = St.sviews.map(v => {
+      const def = String(v.def || '');
+      const m = def.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*\(\s*of\s+([A-Za-z_][A-Za-z0-9_]*)\s*\)\s*$/);
+      const kind = m ? m[1] : def.split('(')[0].trim();
+      const of = m ? m[2] : (def.match(/of\s+([A-Za-z_][A-Za-z0-9_]*)/) || [])[1] || '';
+      return { name: String(v.name || '').trim(), kind, of };
+    }).filter(v => v.name && v.of);
+    const triggers = St.trigs.map(t => {
+      const view = String(t.view || '').trim();
+      const rawOp = String(t.op || '≥');
+      const op = rawOp === '≥' ? '>=' : rawOp === '≤' ? '<=' : rawOp === '≠' ? '!=' : rawOp;
+      const predicate = view ? { view, op, n: Number(t.n) || 0 } : null;
+      return {
+        id: String(t.id || '').trim(),
+        on: String(t.on || '').trim(),
+        predicate,
+        starts: String(t.starts || '').trim(),
+        policy: String(t.policy || 'PerEvent'),
+        reads: String(t.reads || '').trim(),
+      };
+    }).filter(t => t.id && t.starts);
+    const routes = St.sroutes.map(r => ({
+      id: String(r.id || '').trim(),
+      of: String(r.kind || '').trim(),
+      slot: String(r.slot || '').trim(),
+    })).filter(r => r.id && r.of && r.slot);
+    const termKind = St.termKind || 'quiescence_with_watchdog';
+    let termination;
+    if (termKind === 'all_completed' || termKind === 'cancel_all_others') termination = { kind: termKind };
+    else if (termKind === 'threshold_count') termination = { kind: 'threshold_count', of: String(St.termOf || ''), n: Number(St.termN) || 1 };
+    else termination = { kind: 'quiescence_with_watchdog', seconds: Number(St.termSeconds) || 1 };
+    return {
+      name: String(St.topoName || 'authored').trim(),
+      producers, views, triggers, routes, termination,
+      responder: St.responder || 'deterministic',
+      seed: Number(St.seed) || 0,
+      model_name: String(St.model || '').trim(),
+    };
+  }
   _linesForPane(p, S) {
     const snaps = S.controllerSnapshots || {};
     const snap = snaps[p.id];
@@ -1666,8 +1720,28 @@ class Component extends DCLogic {
         return labels;
       })(),
       slotNodes: S.sroutes.map(r => { const tgt = String(r.slot).split('.')[0]; const i = S.prods.findIndex(p => p.name === tgt); if (i < 0) return null; const pos = S.cardPos[tgt] || { x: 120 + (i % 3) * 260, y: 300 }; return { slot: String(r.slot).split('.')[1] || r.slot, x: pos.x + 150, y: pos.y - 2 }; }).filter(Boolean),
-      doValidate: () => { const errs = this._validate(); this.setState(errs.length ? { studioOut: 'invalid — ' + errs.join(' · '), studioOutColor: '#c26058' } : { studioOut: 'ok — ' + this.state.prods.length + ' producers · ' + this.state.sviews.length + ' views · ' + this.state.trigs.length + ' triggers · ' + this.state.sroutes.length + ' routes · every emitted kind consumed or terminal', studioOutColor: '#9aa0a8' }); },
-      doBuild: () => { const errs = this._validate(); this.setState(errs.length ? { studioOut: 'build refused — ' + errs.join(' · '), studioOutColor: '#c26058' } : { studioOut: 'built — registered ' + this.state.topoName + ' (' + this.state.responder + (this.state.responder === 'deterministic' ? ' seed ' + this.state.seed : ' model ' + this.state.model) + ') · launched build_authored_demo_72eb8f85fcab ▸', studioOutColor: '#82a5c8' }); },
+      doValidate: async () => {
+        const errs = this._validate();
+        if (errs.length) { this.setState({ studioOut: 'invalid — ' + errs.join(' · '), studioOutColor: '#c26058' }); return; }
+        this.setState({ studioOut: 'validating…', studioOutColor: '#62676f' });
+        const vm = window.__vm;
+        if (!vm || typeof vm.validateSpec !== 'function') { this.setState({ studioOut: 'controller unavailable', studioOutColor: '#c26058' }); return; }
+        const r = await vm.validateSpec(this._buildStudioSpec());
+        if (r.valid) this.setState({ studioOut: 'ok — builds through the real TopologyBuilder', studioOutColor: '#82a5c8' });
+        else this.setState({ studioOut: 'invalid — ' + (r.error || ''), studioOutColor: '#c26058' });
+      },
+      doBuild: async () => {
+        const errs = this._validate();
+        if (errs.length) { this.setState({ studioOut: 'build refused — ' + errs.join(' · '), studioOutColor: '#c26058' }); return; }
+        this.setState({ studioOut: 'building & launching…', studioOutColor: '#62676f' });
+        const vm = window.__vm;
+        if (!vm || typeof vm.buildSpec !== 'function') { this.setState({ studioOut: 'controller unavailable', studioOutColor: '#c26058' }); return; }
+        const r = await vm.buildSpec(this._buildStudioSpec());
+        if (!r.ok) { this.setState({ studioOut: 'build rejected — ' + (r.error || ''), studioOutColor: '#c26058' }); return; }
+        const runName = String((r.run && r.run.name) || '');
+        const status = String((r.run && r.run.status) || 'unknown');
+        this.setState({ studioOut: 'built — ' + runName + ' (' + status + ') ▸', studioOutColor: '#82a5c8' });
+      },
       studioOut: S.studioOut, studioOutColor: S.studioOutColor,
       sentLines: S.sent.map(t => ({ text: t })),
       onPromptKey: (ev) => {

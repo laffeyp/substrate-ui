@@ -402,6 +402,53 @@ export class SessionController {
     this.emit("BUNDLE_PICKED", { bundle: slug });
   }
 
+  /** Post an authored topology spec to /api/validate. Returns
+   * {valid, error?} the server produced. Emits the SPEC_VALIDATE
+   * pair so parity harnesses can see the round trip. */
+  async validateSpec(spec: Record<string, unknown>): Promise<{ valid: boolean; error?: string }> {
+    const name = typeof spec.name === "string" ? spec.name : "";
+    this.emit("SPEC_VALIDATE_REQUESTED", name ? { topology_name: name } : {});
+    const result = await this.client.fetchJson<{ valid: boolean; error?: string }>("/api/validate", { method: "POST", body: spec });
+    if (!result.ok) {
+      const err = `validate: ${result.detail}`;
+      this.emit("SPEC_VALIDATED", { valid: false, error: err });
+      return { valid: false, error: err };
+    }
+    const r = result.data;
+    if (r.valid) this.emit("SPEC_VALIDATED", { valid: true });
+    else this.emit("SPEC_VALIDATED", { valid: false, error: String(r.error ?? "") });
+    return { valid: !!r.valid, error: r.error };
+  }
+
+  /** Post an authored topology spec to /api/build. Validates first
+   * so a bad spec never reaches the runtime. Returns whatever the
+   * server produced on success or an error string. Emits the SPEC_BUILD
+   * pair or SPEC_BUILD_REJECTED. */
+  async buildSpec(spec: Record<string, unknown>): Promise<{ ok: boolean; run?: Record<string, unknown>; error?: string }> {
+    const name = typeof spec.name === "string" ? spec.name : "";
+    this.emit("SPEC_BUILD_REQUESTED", name ? { topology_name: name } : {});
+    const v = await this.client.fetchJson<{ valid: boolean; error?: string }>("/api/validate", { method: "POST", body: spec });
+    if (!v.ok || !v.data.valid) {
+      const err = !v.ok ? `validate: ${v.detail}` : String(v.data.error ?? "invalid spec");
+      this.emit("SPEC_BUILD_REJECTED", { reason: err });
+      return { ok: false, error: err };
+    }
+    const r = await this.client.fetchJson<Record<string, unknown>>("/api/build", { method: "POST", body: spec });
+    if (!r.ok) {
+      const err = `build: ${r.detail}`;
+      this.emit("SPEC_BUILD_REJECTED", { reason: err });
+      return { ok: false, error: err };
+    }
+    const run = r.data;
+    const unfired = Array.isArray(run.unfired_triggers) ? run.unfired_triggers : [];
+    this.emit("SPEC_BUILT", {
+      run_name: String(run.name ?? ""),
+      status: String(run.status ?? "unknown"),
+      ...(unfired.length ? { unfired_triggers_count: unfired.length } : {}),
+    });
+    return { ok: true, run };
+  }
+
   /** Route a prompt line. `/foo` goes to a slash handler, plain text
    * to `sendTurn`. Returns true when the line was consumed as a
    * slash so the caller can hand a residual back if it wants. */
