@@ -169,6 +169,12 @@
     </sc-for>
     </sc-if>
    </div>
+   <sc-if value="{{ activityShow }}" hint-placeholder-val="{{ false }}">
+    <div style="flex:none;padding:0 22px 8px;font-size:11px;line-height:1.6;color:{{ activityColor }};display:flex;gap:8px;align-items:baseline">
+     <span style="color:{{ activityGlyphColor }}">{{ activityGlyph }}</span>
+     <span>{{ activityText }}</span>
+    </div>
+   </sc-if>
    <div style="flex:none;padding:0 22px 16px">
     <sc-if value="{{ routerOpen }}" hint-placeholder-val="{{ false }}">
      <div style="border-radius:6px 6px 0 0;background:#1a1c20;padding:6px 0;font-size:12.5px;line-height:2.2;border-bottom:1px solid rgba(255,255,255,.055)">
@@ -323,6 +329,12 @@
      <sc-if value="{{ descNotTalkable }}" hint-placeholder-val="{{ false }}"><div style="flex:none;padding:0 26px 18px;font-size:11px;color:#4a4e55">this topology takes no messages — watching · esc to leave</div></sc-if>
     </sc-if>
     <sc-if value="{{ notDescended }}" hint-placeholder-val="{{ true }}">
+    <sc-if value="{{ activityShow }}" hint-placeholder-val="{{ false }}">
+     <div style="flex:none;padding:0 26px 6px;font-size:11px;line-height:1.6;color:{{ activityColor }};display:flex;gap:8px;align-items:baseline">
+      <span style="color:{{ activityGlyphColor }}">{{ activityGlyph }}</span>
+      <span>{{ activityText }}</span>
+     </div>
+    </sc-if>
     <div style="flex:none;padding:12px 26px 18px"><div style="display:flex;gap:12px;align-items:center;border-radius:6px;padding:10px 15px;background:#1a1c20"><span style="color:#82a5c8">›</span><input value="{{ promptVal }}" onChange="{{ onPrompt }}" onKeyDown="{{ onPromptKey }}" placeholder="type to talk · ↵ to send" style="flex:1;background:none;border:none;outline:none;color:#e2e5e9;font-family:inherit;font-size:13px"></input></div></div>
     </sc-if>
    </div>
@@ -813,6 +825,106 @@ class Component extends DCLogic {
     }
     return blocks;
   }
+  _liveActivity(snap) {
+    // The activity strip above the prompt has three states.
+    // Live: an unpaired ProducerStarted for `model` or `tool` — name
+    //   the producer and count seconds since it started.
+    // Recap: the most recent envelope is a Park (or SessionEnded);
+    //   walk back to the UserMessage that started that turn, count
+    //   the tools that ran, compute elapsed seconds from the first
+    //   turn-envelope timestamp to the Park.
+    // Empty: no session, no envelopes, or a session that has not run
+    //   its first turn yet.
+    if (!snap || !Array.isArray(snap.rawEnvelopes) || !snap.rawEnvelopes.length) return null;
+    const envs = snap.rawEnvelopes;
+    const nowSec = Date.now() / 1000;
+    // Walk backward for a live producer.
+    const openStarts = new Map(); // instance → { kind, tool, t }
+    for (const env of envs) {
+      const kind = env.kind || '';
+      const inst = env.producer && env.producer.instance;
+      const pkind = (env.payload && env.payload.kind) || '';
+      const t = typeof env.t === 'number' ? env.t : 0;
+      if (kind === 'substrate.ProducerStarted' && inst && pkind) {
+        openStarts.set(inst, { kind: pkind, t });
+      } else if (kind === 'substrate.ProducerCompleted' && inst && openStarts.has(inst)) {
+        openStarts.delete(inst);
+      }
+    }
+    let liveTool = null, liveModel = null;
+    for (const [, info] of openStarts) {
+      if (info.kind === 'tool' && !liveTool) liveTool = info;
+      else if (info.kind === 'model' && !liveModel) liveModel = info;
+    }
+    // Also read the current tool call to name it — the last ToolCall
+    // whose ToolResult has not landed.
+    let liveToolName = '';
+    if (liveTool) {
+      const outstanding = new Map();
+      for (const env of envs) {
+        const p = env.payload || {};
+        if (env.kind === 'ToolCall' && typeof p.call_id === 'string') outstanding.set(p.call_id, typeof p.tool === 'string' ? p.tool : 'tool');
+        if (env.kind === 'ToolResult' && typeof p.call_id === 'string') outstanding.delete(p.call_id);
+      }
+      if (outstanding.size) {
+        const last = Array.from(outstanding.entries()).pop();
+        liveToolName = last[1] || 'tool';
+      }
+    }
+    if (liveTool || liveModel) {
+      const producer = liveTool || liveModel;
+      const secs = Math.max(0, Math.floor(nowSec - (producer.t || nowSec)));
+      const verb = liveTool ? (liveToolName || 'tool') : 'thinking';
+      return {
+        kind: 'live', verb, seconds: secs,
+        text: `${verb} · ${secs}s`,
+        glyph: '◌',
+        glyphColor: '#7fb3b8',
+        color: '#b9bec5',
+      };
+    }
+    // No live producer. Build the recap for the most recent completed
+    // turn. A turn runs from a UserMessage to the next Park or
+    // SessionEnded.
+    let parkIdx = -1, parkKind = '';
+    for (let i = envs.length - 1; i >= 0; i--) {
+      if (envs[i].kind === 'Park' || envs[i].kind === 'SessionEnded') {
+        parkIdx = i;
+        parkKind = envs[i].kind;
+        break;
+      }
+    }
+    if (parkIdx < 0) return null;
+    let umIdx = -1;
+    for (let i = parkIdx; i >= 0; i--) {
+      if (envs[i].kind === 'UserMessage') { umIdx = i; break; }
+    }
+    const start = umIdx >= 0 ? envs[umIdx] : envs[0];
+    const end = envs[parkIdx];
+    const tools = [];
+    for (let i = umIdx >= 0 ? umIdx + 1 : 0; i <= parkIdx; i++) {
+      if (envs[i].kind === 'ToolCall') {
+        const p = envs[i].payload || {};
+        if (typeof p.tool === 'string') tools.push(p.tool);
+      }
+    }
+    const startT = typeof start.t === 'number' ? start.t : 0;
+    const endT = typeof end.t === 'number' ? end.t : 0;
+    const elapsed = Math.max(0, endT - startT);
+    const elapsedTxt = elapsed >= 60 ? `${(elapsed / 60).toFixed(1)}m` : `${elapsed.toFixed(1)}s`;
+    const parkReason = (end.payload && end.payload.reason) || '';
+    const parkLabel = parkKind === 'SessionEnded' ? 'session ended' : `parked${parkReason ? ' (' + parkReason + ')' : ''}`;
+    const toolLabel = tools.length === 0 ? 'no tools' : `${tools.length} tool${tools.length === 1 ? '' : 's'}`;
+    const turnIdx = start.payload && typeof start.payload.turn_index === 'number' ? start.payload.turn_index : null;
+    const turnLabel = turnIdx !== null ? `turn ${turnIdx} · ` : '';
+    return {
+      kind: 'recap',
+      text: `${turnLabel}${elapsedTxt} · ${toolLabel} · ${parkLabel}`,
+      glyph: '·',
+      glyphColor: '#4a4e55',
+      color: '#62676f',
+    };
+  }
   _liveBindingsFor(paneId, S) {
     const snap = (S.controllerSnapshots || {})[paneId] || null;
     const transcript = (snap && Array.isArray(snap.transcript)) ? snap.transcript : [];
@@ -894,10 +1006,17 @@ class Component extends DCLogic {
     // row is the surface; the ToolResult row folds into its card.
     const filteredRows = rows.filter((r, i) => transcript[i].kind !== 'ToolResult');
     const hasSession = !!(snap && snap.sessionId);
+    const activity = this._liveActivity(snap);
     return {
       liveOn: true,
       scriptedOn: false,
       liveTranscript: filteredRows,
+      // Activity strip above the prompt (live producer / turn recap).
+      activityShow: !!activity,
+      activityText: activity ? activity.text : '',
+      activityGlyph: activity ? activity.glyph : '',
+      activityGlyphColor: activity ? activity.glyphColor : '#4a4e55',
+      activityColor: activity ? activity.color : '#62676f',
       liveEmpty: hasSession && rows.length === 0,
       liveSessionLabel: snap && snap.sessionName ? snap.sessionName
         : (snap && snap.sessionId ? snap.sessionId.slice(0, 12) : ''),
@@ -1035,6 +1154,10 @@ class Component extends DCLogic {
         }));
       } catch (_e) { /* ignore */ }
     };
+    // Tick the activity strip's seconds counter between controller
+    // events. A live tool that takes 12s emits no envelopes for 12s;
+    // without a tick the counter reads its start value the whole time.
+    this._activityTick = window.setInterval(() => this.forceUpdate(), 500);
     this._kd = (e) => {
       if (e.ctrlKey && e.key === '\u0060') { e.preventDefault(); this.setState(s => ({ revealed: !s.revealed, surface: null })); }
       if (e.metaKey && (e.key === 'd' || e.key === 'D')) { e.preventDefault(); this._split(e.shiftKey ? 'down' : 'right'); }
@@ -1118,7 +1241,7 @@ class Component extends DCLogic {
     }
     if (changed('view') && pv && (pv === 'revealed') !== S.revealed) this.setState({ revealed: pv === 'revealed', surface: null });
   }
-  componentWillUnmount() { window.removeEventListener('keydown', this._kd); window.removeEventListener('mousemove', this._mm); window.removeEventListener('mouseup', this._mu); window.removeEventListener('resize', this._rs); }
+  componentWillUnmount() { window.removeEventListener('keydown', this._kd); window.removeEventListener('mousemove', this._mm); window.removeEventListener('mouseup', this._mu); window.removeEventListener('resize', this._rs); if (this._activityTick) { window.clearInterval(this._activityTick); this._activityTick = null; } }
   _upd(arrKey, i, field) { return (ev) => this.setState(s => { const arr = s[arrKey].map((x, j) => j === i ? Object.assign({}, x, { [field]: ev.target.value }) : x); return { [arrKey]: arr }; }); }
   _rm(arrKey, i) { return () => this.setState(s => ({ [arrKey]: s[arrKey].filter((x, j) => j !== i) })); }
   _validate() {
