@@ -119,6 +119,88 @@ that warrants its own design turn. The r5 design's "session transparency
 + interrupt with delegate scope" reaches session scope end-to-end today;
 delegate-scope interrupt is queued.
 
+## The wire, drawn
+
+```
+CLIENT (reveal.html)         SERVER (server.py)          REGISTRY (session_registry.py)
+     │                              │                              │
+     │  Shift+ESC                   │                              │
+     │  ─────────────────► POST     │                              │
+     │  /interrupt?tier=soft ─────► │                              │
+     │                              │  interrupt(sid, tier="soft") │
+     │                              │ ────────────────────────────►│
+     │                              │                              │ ── call_soon_threadsafe(_do_cancel)
+     │                              │                              │
+     │                              │                              ▼
+
+                                                          RUNTIME LOOP (event loop thread)
+                                                              │
+                                                              │ _do_cancel closure runs
+                                                              │ finds live tool, no live model
+                                                              │ runtime.inject_event(
+                                                              │     InterruptRequested(
+                                                              │         session_id, "soft", caller))
+                                                              │
+                                                              │ ── canonicalize + refuse-reserved
+                                                              │ ── st.inbox.put_nowait(_Lifecycle(...))
+                                                              │
+                                                              ▼
+
+                                                          MAIN LOOP DRAIN
+                                                              │
+                                                              │ inbox.get() → _Lifecycle(InterruptRequested)
+                                                              │ AppendCycle.cycle(...)
+                                                              │
+                                                              ▼
+                                                       ┌──────────────────────────────┐
+                                                       │  RECORD                      │
+                                                       │  seq=N   InterruptRequested  │
+                                                       │          producer=null       │
+                                                       └──────────────┬───────────────┘
+                                                                      │
+                                                                      ▼
+                                                       trigger: emit-interrupt-fragment
+                                                       fires → interrupt_fragment_producer
+                                                       yields → PromptFragment(
+                                                                    source="interrupt",
+                                                                    precedence=95,
+                                                                    provenance={tier, source})
+                                                                      │
+                                                                      ▼
+                                                       FragmentCohort._turn.append(...)
+                                                                      │
+                                                                      │      (tool still running)
+                                                                      │      ...tool completes...
+                                                                      ▼
+                                                       ┌──────────────────────────────┐
+                                                       │  RECORD                      │
+                                                       │  seq=M   ToolResult          │
+                                                       └──────────────┬───────────────┘
+                                                                      │
+                                                                      ▼
+                                                       Three triggers subscribed to ToolResult:
+                                                         CONTINUE  → predicate: no interrupt? → FALSE, refuse
+                                                         WRAP_UP   → same predicate            → FALSE, refuse
+                                                         COMPOSE_ON_INTERRUPT_TOOL_RESULT
+                                                                   → predicate: has interrupt? → TRUE, fires
+                                                                      │
+                                                                      ▼
+                                                       prompt_composer reads FragmentCohort:
+                                                         [role, tools_suite, ..., interrupt(prec 95)]
+                                                       yields → PromptComposed(
+                                                                    text=<...role + directive>,
+                                                                    fragment_seqs=(...,seq_of_interrupt))
+                                                                      │
+                                                                      ▼
+                                                       FragmentCohort._turn.clear()  (turn slice reset)
+                                                                      │
+                                                                      ▼
+                                                       trigger: RESUME_ON_COMPOSED
+                                                       fires → model producer
+                                                       reads composed_prompt with the interrupt directive
+                                                       yields → FinalAnswer (a real model would)
+```
+
 ## Sources
 
 - `substrate/src/substrate/kernel/runtime.py:817` — `cancel_producer`
