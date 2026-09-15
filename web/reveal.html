@@ -114,7 +114,7 @@
         </span>
        </sc-if>
        <sc-if value="{{ row.isTool }}" hint-placeholder-val="{{ false }}">
-        <span style="cursor:pointer;display:inline-block;max-width:calc(100% - 24px);vertical-align:top" onClick="{{ row.openCard }}"><span style="color:#9aa0a8;font-family:ui-monospace,'SF Mono',Menlo,monospace">{{ row.toolName }}</span> <span style="color:#b9bec5;font-family:ui-monospace,'SF Mono',Menlo,monospace">{{ row.toolPreview }}</span> <span style="color:#4a4e55"> · </span><span style="color:{{ row.toolStatusColor }};font-family:ui-monospace,'SF Mono',Menlo,monospace">{{ row.toolStatus }}</span> <span style="color:#4a4e55;margin-left:8px">{{ row.cardCaret }}</span></span>
+        <span style="cursor:pointer;display:inline-block;max-width:calc(100% - 24px);vertical-align:top" onClick="{{ row.openCard }}"><span style="color:#9aa0a8;font-family:ui-monospace,'SF Mono',Menlo,monospace">{{ row.toolName }}</span> <span style="color:#b9bec5;font-family:ui-monospace,'SF Mono',Menlo,monospace">{{ row.toolPreview }}</span> <span style="color:#4a4e55"> · </span><span style="color:{{ row.toolStatusColor }};font-family:ui-monospace,'SF Mono',Menlo,monospace">{{ row.toolStatus }}</span> <span style="color:#4a4e55;margin-left:8px">{{ row.cardCaret }}</span></span><sc-if value="{{ row.descendShow }}" hint-placeholder-val="{{ false }}"> <span onClick="{{ row.descend }}" style="cursor:pointer;color:#a08fc9;margin-left:8px" title="descend into the child record — the pane's stream switches to the delegate's own envelopes">· descend ⏎</span></sc-if>
         <sc-if value="{{ row.toolCardOpen }}" hint-placeholder-val="{{ false }}">
          <div style="margin:6px 0 8px 24px;background:#26292e;border-radius:0 0 6px 6px;padding:10px 14px;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:11px;line-height:1.7;color:#b9bec5">
           <div style="color:#62676f">args</div>
@@ -277,7 +277,7 @@
          </span>
         </sc-if>
         <sc-if value="{{ row.isTool }}" hint-placeholder-val="{{ false }}">
-         <span style="cursor:pointer;display:inline-block;max-width:calc(100% - 24px);vertical-align:top" onClick="{{ row.openCard }}"><span style="color:#9aa0a8;font-family:ui-monospace,'SF Mono',Menlo,monospace">{{ row.toolName }}</span> <span style="color:#b9bec5;font-family:ui-monospace,'SF Mono',Menlo,monospace">{{ row.toolPreview }}</span> <span style="color:#4a4e55"> · </span><span style="color:{{ row.toolStatusColor }};font-family:ui-monospace,'SF Mono',Menlo,monospace">{{ row.toolStatus }}</span> <span style="color:#4a4e55;margin-left:8px">{{ row.cardCaret }}</span></span>
+         <span style="cursor:pointer;display:inline-block;max-width:calc(100% - 24px);vertical-align:top" onClick="{{ row.openCard }}"><span style="color:#9aa0a8;font-family:ui-monospace,'SF Mono',Menlo,monospace">{{ row.toolName }}</span> <span style="color:#b9bec5;font-family:ui-monospace,'SF Mono',Menlo,monospace">{{ row.toolPreview }}</span> <span style="color:#4a4e55"> · </span><span style="color:{{ row.toolStatusColor }};font-family:ui-monospace,'SF Mono',Menlo,monospace">{{ row.toolStatus }}</span> <span style="color:#4a4e55;margin-left:8px">{{ row.cardCaret }}</span></span><sc-if value="{{ row.descendShow }}" hint-placeholder-val="{{ false }}"> <span onClick="{{ row.descend }}" style="cursor:pointer;color:#a08fc9;margin-left:8px" title="descend into the child record — the pane's stream switches to the delegate's own envelopes">· descend ⏎</span></sc-if>
          <sc-if value="{{ row.toolCardOpen }}" hint-placeholder-val="{{ false }}">
           <div style="margin:6px 0 8px 24px;background:#26292e;border-radius:0 0 6px 6px;padding:10px 14px;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:11px;line-height:1.7;color:#b9bec5">
            <div style="color:#62676f">args</div>
@@ -956,6 +956,7 @@ class Component extends DCLogic {
       // preview stays legible.
       const isToolCall = row.kind === 'ToolCall';
       let toolCardOpen = false, toolGlyph = '', toolPreview = '', toolArgs = [], toolOutput = '', toolError = '', toolCallId = '', toolStep = '', toolBytes = '', toolStatus = '', toolStatusColor = '#62676f', toolRunning = false;
+      let descendShow = false, descendPath = '';
       if (isToolCall && row.callId) {
         const paired = resultByCallId.get(row.callId);
         toolRunning = !paired;
@@ -966,7 +967,24 @@ class Component extends DCLogic {
         textColor = toolRunning ? '#b9bec5' : failed ? '#c26058' : '#9aa0a8';
         toolPreview = (row.args && row.args[0]) ? String(row.args[0]) : '';
         toolArgs = row.args || [];
-        toolOutput = paired ? String(paired.output || '') : '';
+        // delegate returns {answer, child_root, steps} — a dict. String()
+        // over a dict yields "[object Object]"; render the answer text as
+        // the card body and expose child_root as a "· descend ⏎"
+        // affordance the user clicks to attach the pane's controller to
+        // the child record via SessionController.attachRecordRoot (item 4).
+        const output = paired ? paired.output : null;
+        const isDelegate = row.toolName === 'delegate' && output && typeof output === 'object';
+        if (isDelegate) {
+          toolOutput = String((output && output.answer) || '');
+          if (output && typeof output.child_root === 'string') {
+            descendPath = output.child_root;
+            descendShow = descendPath.length > 0;
+          }
+        } else if (output && typeof output === 'object') {
+          toolOutput = JSON.stringify(output, null, 2);
+        } else {
+          toolOutput = paired ? String(output || '') : '';
+        }
         toolError = paired ? String(paired.error || '') : '';
         toolCallId = row.callId;
         toolStep = row.toolStep !== undefined ? String(row.toolStep) : '';
@@ -983,6 +1001,24 @@ class Component extends DCLogic {
         if (next[cid]) delete next[cid]; else next[cid] = true;
         return { toolOpen: next };
       });
+      // Phase 8 item 9 prerequisite — descent click on a delegate row.
+      // Clicking calls SessionController.attachRecordRoot(child_root)
+      // (item 4 endpoint) and pushes the child_root onto S.descent so
+      // the descent crumbs and depth-ramp accent apply to the child
+      // scope. Consumed only when the paired ToolResult carried a
+      // child_root string (delegate always does; other tools never).
+      const bindDescend = (rootPath) => () => {
+        const vm = window.__vm;
+        if (!vm) return;
+        if (typeof vm.setActive === 'function') vm.setActive(paneId);
+        if (typeof vm.attachRecordRoot === 'function') {
+          vm.attachRecordRoot(rootPath).catch(() => undefined);
+        }
+        this.setState(st => ({
+          descent: [...(st.descent || []), rootPath],
+          descPv: '',
+        }));
+      };
       return {
         glyph, glyphColor, textColor, marginTop, text, blocks, isModel, notModel: !isModel, opacity,
         isTool, notTool,
@@ -992,6 +1028,8 @@ class Component extends DCLogic {
         toolOutput, toolError, toolCallId, toolStep, toolBytes, toolStatus, toolStatusColor,
         toolRunning, hasResult: !toolRunning, hasError: !!toolError,
         openCard: isTool && row.callId ? bindToggleTool(row.callId) : (() => {}),
+        descendShow, descendPath,
+        descend: descendShow ? bindDescend(descendPath) : (() => {}),
       };
     });
     // Only KEEP one row per (ToolCall, ToolResult) pair — the ToolCall
