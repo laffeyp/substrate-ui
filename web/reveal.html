@@ -111,7 +111,24 @@
          </sc-for>
         </span>
        </sc-if>
-       <sc-if value="{{ row.notModel }}" hint-placeholder-val="{{ true }}"><span>{{ row.text }}</span></sc-if>
+       <sc-if value="{{ row.isTool }}" hint-placeholder-val="{{ false }}">
+        <span style="cursor:pointer;display:inline-block;max-width:calc(100% - 24px);vertical-align:top" onClick="{{ row.openCard }}"><span style="color:#9aa0a8;font-family:ui-monospace,'SF Mono',Menlo,monospace">{{ row.toolName }}</span> <span style="color:#b9bec5;font-family:ui-monospace,'SF Mono',Menlo,monospace">{{ row.toolPreview }}</span> <span style="color:#4a4e55"> · </span><span style="color:{{ row.toolStatusColor }};font-family:ui-monospace,'SF Mono',Menlo,monospace">{{ row.toolStatus }}</span> <span style="color:#4a4e55;margin-left:8px">{{ row.cardCaret }}</span></span>
+        <sc-if value="{{ row.toolCardOpen }}" hint-placeholder-val="{{ false }}">
+         <div style="margin:6px 0 8px 24px;background:#26292e;border-radius:0 0 6px 6px;padding:10px 14px;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:11px;line-height:1.7;color:#b9bec5">
+          <div style="color:#62676f">args</div>
+          <sc-for list="{{ row.toolArgs }}" as="a" hint-placeholder-count="1"><div style="color:#b9bec5">{{ a.i }} <span style="color:#e2e5e9">{{ a.v }}</span></div></sc-for>
+          <sc-if value="{{ row.hasResult }}" hint-placeholder-val="{{ true }}">
+           <div style="margin-top:8px;color:#62676f">output</div>
+           <div style="background:#1a1c20;border-radius:5px;padding:8px 12px;max-height:220px;overflow:auto;color:#9aa0a8;white-space:pre-wrap">{{ row.toolOutput }}</div>
+          </sc-if>
+          <sc-if value="{{ row.hasError }}" hint-placeholder-val="{{ false }}">
+           <div style="margin-top:6px;color:#c26058">error {{ row.toolError }}</div>
+          </sc-if>
+          <div style="color:#4a4e55;margin-top:6px">call_id {{ row.toolCallId }} · step {{ row.toolStep }} · {{ row.toolStatus }} · {{ row.toolBytes }}</div>
+         </div>
+        </sc-if>
+       </sc-if>
+       <sc-if value="{{ row.notTool }}" hint-placeholder-val="{{ true }}"><sc-if value="{{ row.notModel }}" hint-placeholder-val="{{ true }}"><span>{{ row.text }}</span></sc-if></sc-if>
       </div>
      </sc-for>
      <sc-if value="{{ pn.liveEmpty }}" hint-placeholder-val="{{ true }}">
@@ -580,7 +597,7 @@
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props="{&quot;transcriptFontSize&quot;: {&quot;editor&quot;: &quot;range&quot;, &quot;default&quot;: 13, &quot;min&quot;: 6.5, &quot;max&quot;: 19.5, &quot;step&quot;: 0.5, &quot;tsType&quot;: &quot;number&quot;, &quot;section&quot;: &quot;Type — default ±50%&quot;}, &quot;columns&quot;: {&quot;editor&quot;: &quot;range&quot;, &quot;default&quot;: 1, &quot;min&quot;: 1, &quot;max&quot;: 4, &quot;step&quot;: 1, &quot;tsType&quot;: &quot;number&quot;, &quot;section&quot;: &quot;Test the splits (⌘D also works once clicked in)&quot;}, &quot;rows&quot;: {&quot;editor&quot;: &quot;range&quot;, &quot;default&quot;: 1, &quot;min&quot;: 1, &quot;max&quot;: 2, &quot;step&quot;: 1, &quot;tsType&quot;: &quot;number&quot;, &quot;section&quot;: &quot;Test the splits (⌘D also works once clicked in)&quot;}, &quot;view&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;default&quot;: &quot;revealed&quot;, &quot;options&quot;: [&quot;terminal&quot;, &quot;revealed&quot;], &quot;tsType&quot;: &quot;string&quot;, &quot;section&quot;: &quot;Level&quot;}, &quot;firstRun&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: false, &quot;tsType&quot;: &quot;boolean&quot;, &quot;section&quot;: &quot;Scenarios&quot;}, &quot;simulateRateLimit&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: false, &quot;tsType&quot;: &quot;boolean&quot;, &quot;section&quot;: &quot;Scenarios&quot;}}">
 class Component extends DCLogic {
-  state = { revealed: false, mode: 'stream', dir: 'down', sel: 240, childOpen: false, promptVal: '', surface: null, studioView: 'form', studioOut: 'author a topology, then validate or build.', studioOutColor: '#62676f', level: 'all', sent: [],
+  state = { revealed: false, mode: 'stream', dir: 'down', sel: 240, childOpen: false, promptVal: '', surface: null, studioView: 'form', studioOut: 'author a topology, then validate or build.', studioOutColor: '#62676f', level: 'all', sent: [], toolOpen: {},
     topoName: 'adversarial_pair_review',
     prods: [{ name: 'builder', initial: true, emits: 'Draft' }, { name: 'attacker', initial: false, emits: 'Critique' }, { name: 'judge', initial: false, emits: 'Verdict' }],
     sviews: [{ name: 'draft_count', def: 'KindCount(of Draft)' }, { name: 'critique_buf', def: 'KindBuffer(of Critique)' }],
@@ -763,6 +780,13 @@ class Component extends DCLogic {
     // transcript scope (findScope === 'transcript') when the find bar
     // is open with a non-empty query.
     const findQ = (S.findOpen && S.findScope === 'transcript' ? (S.findQ || '') : '').toLowerCase();
+    // 21c: a ToolCall whose paired ToolResult (same call_id) has not
+    // arrived is a live tool. Pair by call_id in one pass.
+    const resultByCallId = new Map();
+    for (const row of transcript) {
+      if (row.kind === 'ToolResult' && row.callId) resultByCallId.set(row.callId, row);
+    }
+    const toolOpen = S.toolOpen || {};
     const rows = transcript.map(row => {
       let glyph = '·', glyphColor = '#4a4e55', textColor = '#9aa0a8', marginTop = '2px';
       if (row.role === 'user') { glyph = '›'; glyphColor = '#82a5c8'; textColor = '#e2e5e9'; marginTop = '12px'; }
@@ -782,13 +806,58 @@ class Component extends DCLogic {
       const isModel = row.role === 'model';
       const matches = !findQ || text.toLowerCase().includes(findQ);
       const opacity = findQ ? (matches ? '1' : '.35') : '1';
-      return { glyph, glyphColor, textColor, marginTop, text, blocks, isModel, notModel: !isModel, opacity };
+      // 21a/21b/21c: only ToolCall rows carry the card. A ToolCall
+      // with no matching ToolResult is running (◌); with one is done
+      // (⚙); a failed result stamps ⚠ onto the CALL row so the arg
+      // preview stays legible.
+      const isToolCall = row.kind === 'ToolCall';
+      let toolCardOpen = false, toolGlyph = '', toolPreview = '', toolArgs = [], toolOutput = '', toolError = '', toolCallId = '', toolStep = '', toolBytes = '', toolStatus = '', toolStatusColor = '#62676f', toolRunning = false;
+      if (isToolCall && row.callId) {
+        const paired = resultByCallId.get(row.callId);
+        toolRunning = !paired;
+        const failed = paired && paired.toolOk === false;
+        toolGlyph = toolRunning ? '◌' : failed ? '⚠' : '⚙';
+        glyph = toolGlyph;
+        glyphColor = toolRunning ? '#7fb3b8' : failed ? '#c26058' : '#62676f';
+        textColor = toolRunning ? '#b9bec5' : failed ? '#c26058' : '#9aa0a8';
+        toolPreview = (row.args && row.args[0]) ? String(row.args[0]) : '';
+        toolArgs = row.args || [];
+        toolOutput = paired ? String(paired.output || '') : '';
+        toolError = paired ? String(paired.error || '') : '';
+        toolCallId = row.callId;
+        toolStep = row.toolStep !== undefined ? String(row.toolStep) : '';
+        toolBytes = paired ? String(toolOutput.length) + ' bytes' : '';
+        toolStatus = toolRunning ? 'running' : failed ? 'err · ' + toolError : 'ok';
+        toolStatusColor = toolRunning ? '#7fb3b8' : failed ? '#c26058' : '#9aa0a8';
+        toolCardOpen = !!toolOpen[row.callId];
+      }
+      const isTool = row.role === 'tool' && isToolCall;
+      const notTool = !isTool;
+      const cardCaret = toolCardOpen ? '▾' : '▸';
+      const bindToggleTool = (cid) => () => this.setState(st => {
+        const next = Object.assign({}, st.toolOpen || {});
+        if (next[cid]) delete next[cid]; else next[cid] = true;
+        return { toolOpen: next };
+      });
+      return {
+        glyph, glyphColor, textColor, marginTop, text, blocks, isModel, notModel: !isModel, opacity,
+        isTool, notTool,
+        toolName: row.toolName || '',
+        toolPreview, toolCardOpen, cardCaret,
+        toolArgs: toolArgs.map((a, i) => ({ i: '[' + i + ']', v: String(a) })),
+        toolOutput, toolError, toolCallId, toolStep, toolBytes, toolStatus, toolStatusColor,
+        toolRunning, hasResult: !toolRunning, hasError: !!toolError,
+        openCard: isTool && row.callId ? bindToggleTool(row.callId) : (() => {}),
+      };
     });
+    // Only KEEP one row per (ToolCall, ToolResult) pair — the ToolCall
+    // row is the surface; the ToolResult row folds into its card.
+    const filteredRows = rows.filter((r, i) => transcript[i].kind !== 'ToolResult');
     const hasSession = !!(snap && snap.sessionId);
     return {
       liveOn: true,
       scriptedOn: false,
-      liveTranscript: rows,
+      liveTranscript: filteredRows,
       liveEmpty: hasSession && rows.length === 0,
       liveSessionLabel: snap && snap.sessionName ? snap.sessionName
         : (snap && snap.sessionId ? snap.sessionId.slice(0, 12) : ''),
