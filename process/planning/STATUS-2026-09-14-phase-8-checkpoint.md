@@ -56,6 +56,22 @@ source)` Struct + `__all__` export. The daemon-injection path and
 the fragment producer that subscribes to it are queued as items 7's
 follow-up.
 
+**Substrate defect fix: tool body runs in a worker thread
+(`tool_loop/__init__.py:306`).** Diagnostic reproduced by the user:
+during `bash for i in {1..10}; do echo …; sleep 1; done`, the first
+two ESCs printed `^C — no turn in flight` and only the third (after
+bash returned) fired the hard interrupt. Root cause: `entry.run(args)`
+ran synchronously on the runtime's event loop. `subprocess.run`
+pinned the loop for ten seconds; `SessionRegistry.interrupt`'s
+`call_soon_threadsafe` closure never got a slice; its 1s future
+timed out; the daemon returned None; the server responded
+`{interrupted:false}`; the client rendered `no turn in flight`.
+Fix: `output = await asyncio.to_thread(entry.run, args)`. Worker
+thread runs the body; the loop keeps its slice; cancel and soft-signal
+closures land in their 1s window. Tool contract unchanged. Substrate
+tests: 21 tool_loop pass, mypy --strict clean, ruff format clean.
+Substrate commit `806c6680`.
+
 ## Deferred, with cause
 
 **7. `interrupt_fragment_producer` + trigger.**
