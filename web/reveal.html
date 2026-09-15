@@ -245,8 +245,48 @@
      <sc-if value="{{ liveOn }}" hint-placeholder-val="{{ true }}">
       <div style="color:#62676f;font-size:11px;padding-bottom:8px">session {{ liveSessionLabel }} · {{ liveEventCount }} events · {{ liveConnection }}</div>
       <sc-for list="{{ liveTranscript }}" as="row" hint-placeholder-count="0">
-       <div style="margin-top:{{ row.marginTop }};color:{{ row.textColor }};white-space:normal;max-width:840px;opacity:{{ row.opacity }}">
-        <span style="color:{{ row.glyphColor }};margin-right:6px">{{ row.glyph }}</span>{{ row.text }}
+       <div style="margin-top:{{ row.marginTop }};color:{{ row.textColor }};white-space:normal;max-width:840px;overflow-wrap:anywhere;opacity:{{ row.opacity }}">
+        <span style="color:{{ row.glyphColor }};margin-right:6px;vertical-align:top">{{ row.glyph }}</span>
+        <sc-if value="{{ row.isModel }}" hint-placeholder-val="{{ false }}">
+         <span style="display:inline-block;vertical-align:top;max-width:calc(100% - 24px)">
+          <sc-for list="{{ row.blocks }}" as="blk" hint-placeholder-count="1">
+           <sc-if value="{{ blk.isP }}" hint-placeholder-val="{{ true }}"><div style="margin:0 0 10px">
+            <sc-for list="{{ blk.inlines }}" as="ii" hint-placeholder-count="1"><span style="font-family:{{ ii.font }};background:{{ ii.bg }};color:{{ ii.color }};font-weight:{{ ii.fw }};font-style:{{ ii.fs }};padding:{{ ii.pad }};border-radius:{{ ii.br }}">{{ ii.t }}</span></sc-for>
+           </div></sc-if>
+           <sc-if value="{{ blk.isCode }}" hint-placeholder-val="{{ false }}"><div style="margin:0 0 12px;background:#1a1c20;border-radius:6px;padding:10px 14px;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:12px;color:#b9bec5;white-space:pre-wrap;overflow-x:auto">
+            <sc-if value="{{ blk.hasLang }}" hint-placeholder-val="{{ false }}"><div style="color:#62676f;font-size:10px;text-transform:lowercase;margin-bottom:6px">{{ blk.lang }}</div></sc-if>
+            <div>{{ blk.text }}</div>
+           </div></sc-if>
+           <sc-if value="{{ blk.isUl }}" hint-placeholder-val="{{ false }}"><ul style="margin:0 0 10px;padding-left:20px">
+            <sc-for list="{{ blk.items }}" as="it" hint-placeholder-count="1"><li style="margin:0 0 4px"><sc-for list="{{ it.inlines }}" as="ii" hint-placeholder-count="1"><span style="font-family:{{ ii.font }};background:{{ ii.bg }};color:{{ ii.color }};font-weight:{{ ii.fw }};font-style:{{ ii.fs }};padding:{{ ii.pad }};border-radius:{{ ii.br }}">{{ ii.t }}</span></sc-for></li></sc-for>
+           </ul></sc-if>
+           <sc-if value="{{ blk.isOl }}" hint-placeholder-val="{{ false }}"><ol style="margin:0 0 10px;padding-left:22px">
+            <sc-for list="{{ blk.items }}" as="it" hint-placeholder-count="1"><li style="margin:0 0 4px"><sc-for list="{{ it.inlines }}" as="ii" hint-placeholder-count="1"><span style="font-family:{{ ii.font }};background:{{ ii.bg }};color:{{ ii.color }};font-weight:{{ ii.fw }};font-style:{{ ii.fs }};padding:{{ ii.pad }};border-radius:{{ ii.br }}">{{ ii.t }}</span></sc-for></li></sc-for>
+           </ol></sc-if>
+           <sc-if value="{{ blk.isH }}" hint-placeholder-val="{{ false }}"><div style="font-size:{{ blk.hSize }};font-weight:600;color:#e2e5e9;margin:16px 0 6px">
+            <sc-for list="{{ blk.inlines }}" as="ii" hint-placeholder-count="1"><span style="font-family:{{ ii.font }};background:{{ ii.bg }};color:{{ ii.color }};font-weight:{{ ii.fw }};font-style:{{ ii.fs }};padding:{{ ii.pad }};border-radius:{{ ii.br }}">{{ ii.t }}</span></sc-for>
+           </div></sc-if>
+          </sc-for>
+         </span>
+        </sc-if>
+        <sc-if value="{{ row.isTool }}" hint-placeholder-val="{{ false }}">
+         <span style="cursor:pointer;display:inline-block;max-width:calc(100% - 24px);vertical-align:top" onClick="{{ row.openCard }}"><span style="color:#9aa0a8;font-family:ui-monospace,'SF Mono',Menlo,monospace">{{ row.toolName }}</span> <span style="color:#b9bec5;font-family:ui-monospace,'SF Mono',Menlo,monospace">{{ row.toolPreview }}</span> <span style="color:#4a4e55"> · </span><span style="color:{{ row.toolStatusColor }};font-family:ui-monospace,'SF Mono',Menlo,monospace">{{ row.toolStatus }}</span> <span style="color:#4a4e55;margin-left:8px">{{ row.cardCaret }}</span></span>
+         <sc-if value="{{ row.toolCardOpen }}" hint-placeholder-val="{{ false }}">
+          <div style="margin:6px 0 8px 24px;background:#26292e;border-radius:0 0 6px 6px;padding:10px 14px;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:11px;line-height:1.7;color:#b9bec5">
+           <div style="color:#62676f">args</div>
+           <sc-for list="{{ row.toolArgs }}" as="a" hint-placeholder-count="1"><div style="color:#b9bec5">{{ a.i }} <span style="color:#e2e5e9">{{ a.v }}</span></div></sc-for>
+           <sc-if value="{{ row.hasResult }}" hint-placeholder-val="{{ true }}">
+            <div style="margin-top:8px;color:#62676f">output</div>
+            <div style="background:#1a1c20;border-radius:5px;padding:8px 12px;max-height:220px;overflow:auto;color:#9aa0a8;white-space:pre-wrap">{{ row.toolOutput }}</div>
+           </sc-if>
+           <sc-if value="{{ row.hasError }}" hint-placeholder-val="{{ false }}">
+            <div style="margin-top:6px;color:#c26058">error {{ row.toolError }}</div>
+           </sc-if>
+           <div style="color:#4a4e55;margin-top:6px">call_id {{ row.toolCallId }} · step {{ row.toolStep }} · {{ row.toolStatus }} · {{ row.toolBytes }}</div>
+          </div>
+         </sc-if>
+        </sc-if>
+        <sc-if value="{{ row.notTool }}" hint-placeholder-val="{{ true }}"><sc-if value="{{ row.notModel }}" hint-placeholder-val="{{ true }}"><span>{{ row.text }}</span></sc-if></sc-if>
        </div>
       </sc-for>
       <sc-if value="{{ liveEmpty }}" hint-placeholder-val="{{ true }}">
@@ -1984,14 +2024,11 @@ class Component extends DCLogic {
       topoEmpty: !(_vmSnap && _vmSnap.topologyGraph && _vmSnap.topologyGraph.producers && _vmSnap.topologyGraph.producers.length),
       assaysEmpty: arms.length === 0,
       assaysAny: arms.length > 0,
-      liveOn: true,
-      scriptedOn: false,
-      liveTranscript: _liveTranscriptRows,
-      liveEmpty: _hasVmSession && _liveTranscriptRows.length === 0,
-      liveSessionLabel: _vmSnap && _vmSnap.sessionName ? _vmSnap.sessionName
-        : (_vmSnap && _vmSnap.sessionId ? _vmSnap.sessionId.slice(0, 12) : ''),
-      liveEventCount: _liveTranscriptRows.length,
-      liveConnection: _vmSnap ? _vmSnap.connection : 'idle',
+      // Reveal view transcript reads the SAME rich rows the per-pane
+      // terminal view reads. _liveBindingsFor already computes tool
+      // cards, Markdown blocks, opacity from find, running seconds —
+      // reuse it here for the focused pane so both views stay in sync.
+      ...this._liveBindingsFor(fp.id, S),
       crumb: surf === 'records' ? fp.name + ' › records' : surf === 'assay' ? fp.name + ' › assays › rev_kimi_vs_glm' : surf === 'studio' ? fp.name + ' › studio' : descended ? fp.name + S.descent.map(k => ' › ⑂ ' + CH[k].name).join('') : fp.name,
       escHint: surf ? 'esc — back' : descended ? 'esc — up one level' : '',
       openRecords: () => this._toggleSurface('records'),
