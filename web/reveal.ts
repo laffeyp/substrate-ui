@@ -57,6 +57,8 @@ function computeStatePatch(snap: Snapshot): Record<string, unknown> {
     driverDefault: snap.driverDefault,
     recentWorkspaces: snap.recentWorkspaces,
     liveSessionsFromServer: snap.liveSessions,
+    bundleRoster: snap.bundleRoster,
+    bundleSlug: snap.bundleSlug,
   };
 }
 
@@ -78,6 +80,7 @@ function boot(): void {
   controller.loadDriverRoster().catch(() => undefined);
   controller.loadLiveSessions().catch(() => undefined);
   controller.loadRecentWorkspaces().catch(() => undefined);
+  controller.loadBundleRoster().catch(() => undefined);
 
   // Bookmarkable sessions: /?session=<id> attaches on load. The URL
   // stays put; hitting refresh continues on the same record.
