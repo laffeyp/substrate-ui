@@ -1021,7 +1021,13 @@ class Component extends DCLogic {
     const _vmSnap = ((S.controllerSnapshots || {})[S.focused]) || S.controllerSnapshot || null;
     const _hasVmSession = !!(_vmSnap && _vmSnap.sessionId);
     // ── turn 20: delegate descent ──
-    const DEPTHC = ['#a08fc9', '#b88fd9'];
+    // D70 (2026-09-06): the depth ramp for delegation. Session accent
+    // is #82a5c8 (depth 0); each descent step deepens toward violet.
+    // The step is deliberately subtle so adjacent levels look almost
+    // identical — the ramp reads only when levels are stacked (20f).
+    // Applied to the ⑂ line, inset border, path chip, and focused
+    // prompt at the corresponding depth.
+    const DEPTHC = ['#82a5c8', '#93a0cb', '#9a9bce', '#a096d0', '#ac92d4', '#b88fd9'];
     const CH = {
       'reviewer-a': { name: 'reviewer-a', driver: 'glm-4.6', rec: 'delegate_child_3e36', talkable: true,
         head: 'reviewer-a · glm-4.6 · child record delegate_child_3e36 · 26 events',
