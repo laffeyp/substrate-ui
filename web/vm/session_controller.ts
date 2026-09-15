@@ -9,6 +9,7 @@
 // hexagonal core. The `SubstrateClient` port keeps the transport swappable.
 
 import type {
+  BundleRow,
   ConnectionState,
   ProducerNode,
   RecordEnvelope,
@@ -80,6 +81,12 @@ interface RecentWorkspaceRow {
   shape: string;
 }
 
+interface RawBundleRow {
+  name: string;
+  description?: string | null;
+  slot_count?: number | null;
+}
+
 const EMPTY_SNAPSHOT: Snapshot = {
   sessionId: null,
   sessionName: null,
@@ -95,6 +102,7 @@ const EMPTY_SNAPSHOT: Snapshot = {
   driverDefault: null,
   liveSessions: [],
   recentWorkspaces: [],
+  bundleRoster: [],
   connection: "idle",
   lastError: null,
   topologyGraph: null,
@@ -218,6 +226,21 @@ export class SessionController {
     this.emit("WORKSPACES_LOADED", { count: rows.length });
   }
 
+  async loadBundleRoster(): Promise<void> {
+    const result = await this.client.fetchJson<RawBundleRow[]>("/api/bundles");
+    if (!result.ok) { this.patch({ lastError: `bundle_roster: ${result.detail}` }); return; }
+    const raw = Array.isArray(result.data) ? result.data : [];
+    const rows: BundleRow[] = raw
+      .filter((r): r is RawBundleRow => !!r && typeof r.name === "string")
+      .map((r) => ({
+        name: r.name,
+        description: typeof r.description === "string" ? r.description : "",
+        slotCount: typeof r.slot_count === "number" ? r.slot_count : 0,
+      }));
+    this.patch({ bundleRoster: rows });
+    this.emit("BUNDLE_ROSTER_LOADED", { count: rows.length });
+  }
+
   // ── session lifecycle ───────────────────────────────────────────────
   async openSession(request: OpenSessionRequest = {}): Promise<void> {
     if (this.snap.sessionId) return;
@@ -236,7 +259,8 @@ export class SessionController {
     if (request.driverParams) body.driver_params = request.driverParams;
     if (request.workspace) body.workspace = request.workspace;
     if (request.workspaceShape) body.workspace_shape = request.workspaceShape;
-    if (request.bundle) body.bundle = request.bundle;
+    const bundle = request.bundle ?? this.snap.bundleSlug;
+    if (bundle) body.bundle = bundle;
     if (request.tools) body.tools = request.tools;
     if (request.name) body.name = request.name;
     if (request.isolate) body.isolate = request.isolate;
@@ -367,6 +391,15 @@ export class SessionController {
   pickDriver(name: string): void {
     this.patch({ driver: name });
     this.emit("DRIVER_PICKED", { driver: name });
+  }
+
+  /** Choose the bundle openSession will pass unless overridden. Null
+   * clears the choice. Silent no-op after a session opens; the bundle
+   * is fixed on the record at that point. */
+  pickBundle(slug: string | null): void {
+    if (this.snap.sessionId) return;
+    this.patch({ bundleSlug: slug });
+    this.emit("BUNDLE_PICKED", { bundle: slug });
   }
 
   /** Route a prompt line. `/foo` goes to a slash handler, plain text

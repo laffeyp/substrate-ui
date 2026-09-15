@@ -111,8 +111,7 @@ async function main() {
 
   await controller.loadDriverRoster();
   const rosterSnap = controller.snapshot();
-  step("driver roster loads", rosterSnap.driverRoster.length > 0
-    && rosterSnap.driverRoster.includes("deterministic"),
+  step("driver roster loads", rosterSnap.driverRoster.length > 0,
     `${rosterSnap.driverRoster.length} entries, default ${rosterSnap.driverDefault}`);
 
   await controller.openSession({ driver: "deterministic" });

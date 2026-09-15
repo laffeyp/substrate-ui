@@ -41,6 +41,14 @@ export interface WorkspaceRow {
   shape: string;
 }
 
+/** One row a View renders in the bundle-picker list. `/api/bundles`
+ * returns these; the reveal shell's bundle picker binds to them. */
+export interface BundleRow {
+  name: string;
+  description: string;
+  slotCount: number;
+}
+
 /** One producer node inside the topology graph. */
 export interface ProducerNode {
   kind: string;
@@ -85,6 +93,7 @@ export interface Snapshot {
   driverDefault: string | null;
   liveSessions: SessionRow[];
   recentWorkspaces: WorkspaceRow[];
+  bundleRoster: BundleRow[];
   connection: ConnectionState;
   lastError: string | null;
   topologyGraph: TopologyGraph | null;
