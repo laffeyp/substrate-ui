@@ -669,6 +669,15 @@ def _recent_workspaces() -> list[dict[str, str]]:
             order.clear()
     if not order:
         # Fall back to distinct workspaces across live session manifests.
+        # Session-scoped sandboxes (~/.substrate/sessions/<id>/workspace)
+        # and pytest temp workspaces (/tmp, /var/folders, walkthrough/
+        # harness fixtures) are not user-level workspaces; the picker
+        # surfaces the user's own repos, not the runtime's per-run
+        # scratch dirs. Collapse them.
+        import re as _re
+        _sandbox_re = _re.compile(
+            r"(\.substrate/sessions/|^/var/folders/|^/tmp/|substrate-walkthrough-|substrate-harness-|^/$)"
+        )
         try:
             sessions = _list_sessions_snapshot()
         except Exception:  # noqa: BLE001
@@ -681,7 +690,7 @@ def _recent_workspaces() -> list[dict[str, str]]:
                 if isinstance(workspace, str) and isinstance(shape, str):
                     rows.append((workspace, shape))
         for workspace, shape in rows:
-            if workspace in seen:
+            if workspace in seen or _sandbox_re.search(workspace):
                 continue
             seen[workspace] = {"path": workspace, "shape": shape}
             order.append(workspace)

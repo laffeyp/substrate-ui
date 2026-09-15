@@ -175,7 +175,7 @@
            <div onClick="{{ wr.pick }}" style="padding:0 14px;display:flex;gap:12px;cursor:pointer;background:{{ wr.bg }};white-space:nowrap;overflow:hidden" style-hover="background:#2e3138"><span style="color:{{ wr.c }};width:230px;flex:none;overflow:hidden;text-overflow:ellipsis">{{ wr.path }}</span><span style="color:#4a4e55;overflow:hidden;text-overflow:ellipsis">{{ wr.meta }}</span><span style="margin-left:auto;color:#62676f;flex:none">{{ wr.key }}</span></div>
           </sc-for>
          </div>
-         <div style="display:flex;gap:10px;padding:9px 13px;border-top:1px solid rgba(255,255,255,.08)"><span style="color:#82a5c8">›</span><input value="{{ pn.wsQ }}" onChange="{{ pn.onWsQ }}" onKeyDown="{{ pn.onWsKey }}" placeholder="type a path — ↵ binds + starts · repo gets a worktree, plain folder works flat" style="flex:1;background:none;border:none;outline:none;color:#e2e5e9;font-family:inherit;font-size:12px"></input></div>
+         <div style="display:flex;gap:10px;padding:9px 13px;border-top:1px solid rgba(255,255,255,.08)"><span style="color:#82a5c8">›</span><input value="{{ pn.wsQ }}" onChange="{{ pn.onWsQ }}" onKeyDown="{{ pn.onWsKey }}" placeholder="type a path — ⇥ completes · ↑↓ pick · ↵ bind + start" style="flex:1;background:none;border:none;outline:none;color:#e2e5e9;font-family:inherit;font-size:12px"></input></div>
         </div>
        </div>
       </sc-if>
@@ -799,6 +799,24 @@ class Component extends DCLogic {
     }
     return out;
   }
+  _pickFolder(paneId) {
+    // ⌘O — a native folder picker via the browser's directory input.
+    // Not every browser exposes a synchronous path; when the picker
+    // returns file objects only, fall back to `webkitRelativePath`'s
+    // top segment, which is enough to bind a workspace.
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.setAttribute('webkitdirectory', '');
+    input.setAttribute('directory', '');
+    input.onchange = () => {
+      const f = input.files && input.files[0];
+      if (!f) return;
+      const rel = f.webkitRelativePath || f.name || '';
+      const top = rel.split('/')[0];
+      if (top) this._bindPane(paneId, top);
+    };
+    input.click();
+  }
   _newPane() {
     const id = (this._nextId = (this._nextId || Math.max(...this.state.panes.map(p => p.id), ...(this.state.allSessions || []).map(s => s.id)) + 1)) && this._nextId++;
     const defaultDriver = this.state.driverDefault || null;
@@ -1056,18 +1074,65 @@ class Component extends DCLogic {
       gridRow: (p.row || 1) + ' / span ' + (p.rh || S.rows),
     }, {
       unbound: !!p.unbound, bound: !p.unbound,
-      wsRows: !p.unbound ? [] : ((p.wsQ ? [{ path: p.wsQ, meta: 'typed — ↵ binds + starts', c: '#e2e5e9', bg: '#2e3138', key: '↵' }] : []).concat(
-        ((S.recentWorkspaces && S.recentWorkspaces.length) ? S.recentWorkspaces : [{ path: '~/.substrate/sandbox', shape: 'sandbox' }])
-          .map((row, idx) => ({
-            path: row.path,
-            meta: 'recent · ' + row.shape,
-            c: (!p.wsQ && idx === 0) ? '#e2e5e9' : '#b9bec5',
-            bg: (!p.wsQ && idx === 0) ? '#2e3138' : 'transparent',
-            key: (!p.wsQ && idx === 0) ? '↵' : '',
-          }))
-      )).map(r => Object.assign(r, { pick: () => this._bindPane(p.id, r.path) })),
-      wsQ: p.wsQ || '', onWsQ: (ev) => this.setState(st => ({ panes: st.panes.map(x => x.id === p.id ? Object.assign({}, x, { wsQ: ev.target.value }) : x) })),
-      onWsKey: (ev) => { if (ev.key === 'Enter') this._bindPane(p.id, (p.wsQ || '').trim() || '~/code/substrate'); },
+      // 19a picker per Substrate Shell Directions v3.dc.html:
+      //   [inherit-from-split] · [recent…] · [~/.substrate/sandbox] · [choose folder…]
+      // Filter the server's fallback list so per-session sandbox paths
+      // do not swamp the picker (D66f expects a curated list).
+      wsRows: (() => {
+        if (!p.unbound) return [];
+        const isSandbox = (path) => typeof path === 'string' && /(\.substrate\/sessions\/[^/]+\/workspace$|^\/var\/folders\/|^\/tmp\/|substrate-walkthrough-|substrate-harness-)/.test(path);
+        const recents = ((S.recentWorkspaces || []).filter(r => !isSandbox(r.path)));
+        const inheritFrom = this.state.panes.find(pp => pp.id !== p.id && !pp.unbound);
+        const inheritPath = inheritFrom ? (inheritFrom.ws || '~/code/substrate') : null;
+        const rows = [];
+        if (inheritPath) rows.push({ path: inheritPath, meta: 'inherit · from ' + (inheritFrom.name || 'split'), kind: 'inherit' });
+        for (const r of recents) rows.push({ path: r.path, meta: 'recent · ' + r.shape, kind: 'recent' });
+        if (!recents.some(r => r.shape === 'sandbox')) rows.push({ path: '~/.substrate/sandbox', meta: 'sandbox', kind: 'sandbox' });
+        rows.push({ path: 'choose folder…', meta: '', kind: 'choose', key: '⌘O' });
+        if (p.wsQ) rows.unshift({ path: p.wsQ, meta: 'typed — ↵ binds + starts', kind: 'typed', key: '↵' });
+        const selIdx = Math.max(0, Math.min(p.wsSelIdx || 0, rows.length - 1));
+        return rows.map((row, i) => Object.assign({}, row, {
+          c: i === selIdx ? '#e2e5e9' : '#b9bec5',
+          bg: i === selIdx ? '#2e3138' : 'transparent',
+          key: row.key || (i === selIdx ? '↵' : ''),
+          pick: () => {
+            if (row.kind === 'choose') { this._pickFolder(p.id); return; }
+            this._bindPane(p.id, row.path);
+          },
+        }));
+      })(),
+      wsQ: p.wsQ || '',
+      onWsQ: (ev) => this.setState(st => ({ panes: st.panes.map(x => x.id === p.id ? Object.assign({}, x, { wsQ: ev.target.value, wsSelIdx: 0 }) : x) })),
+      onWsKey: (ev) => {
+        // Keyboard nav — ↑↓ moves through the row list, ⇥ completes the
+        // typed path against the first recent, ↵ binds the current row.
+        const wsRows = ((St) => {
+          const isSandbox = (path) => typeof path === 'string' && /(\.substrate\/sessions\/[^/]+\/workspace$|^\/var\/folders\/|^\/tmp\/|substrate-walkthrough-|substrate-harness-)/.test(path);
+          const recents = ((St.recentWorkspaces || []).filter(r => !isSandbox(r.path)));
+          const inheritFrom = St.panes.find(pp => pp.id !== p.id && !pp.unbound);
+          const rows = [];
+          if (inheritFrom) rows.push({ path: inheritFrom.ws || '~/code/substrate', kind: 'inherit' });
+          for (const r of recents) rows.push({ path: r.path, kind: 'recent' });
+          if (!recents.some(r => r.shape === 'sandbox')) rows.push({ path: '~/.substrate/sandbox', kind: 'sandbox' });
+          rows.push({ path: 'choose folder…', kind: 'choose' });
+          if (p.wsQ) rows.unshift({ path: p.wsQ, kind: 'typed' });
+          return rows;
+        })(this.state);
+        const cur = Math.max(0, Math.min(p.wsSelIdx || 0, wsRows.length - 1));
+        if (ev.key === 'ArrowDown') { ev.preventDefault(); this.setState(st => ({ panes: st.panes.map(x => x.id === p.id ? Object.assign({}, x, { wsSelIdx: (cur + 1) % wsRows.length }) : x) })); return; }
+        if (ev.key === 'ArrowUp') { ev.preventDefault(); this.setState(st => ({ panes: st.panes.map(x => x.id === p.id ? Object.assign({}, x, { wsSelIdx: (cur - 1 + wsRows.length) % wsRows.length }) : x) })); return; }
+        if (ev.key === 'Tab') {
+          const firstRecent = wsRows.find(r => r.kind === 'recent' || r.kind === 'inherit' || r.kind === 'sandbox');
+          if (firstRecent) { ev.preventDefault(); this.setState(st => ({ panes: st.panes.map(x => x.id === p.id ? Object.assign({}, x, { wsQ: firstRecent.path, wsSelIdx: 0 }) : x) })); }
+          return;
+        }
+        if (ev.key === 'Enter') {
+          const row = wsRows[cur];
+          if (!row) return;
+          if (row.kind === 'choose') { this._pickFolder(p.id); return; }
+          this._bindPane(p.id, row.path);
+        }
+      },
       showChips: paneW >= 340,
       hdrGap: compact ? '5px' : '8px',
       nameMin: compact ? '44px' : '64px',
