@@ -2161,16 +2161,49 @@ class Component extends DCLogic {
       isEnded: S.ended,
       simRL: this.props.simulateRateLimit ?? false,
       // ── first run (19m) ──
-      showFirstRun: (this.props.firstRun ?? false) && !S.frDone,
-      frRows: [
-        { name: 'ollama · llama3.2', meta: 'localhost:11434 · 3.2 GB · preselected', c: '#e2e5e9', bg: '#2e3138', key: '↵' },
-        { name: 'ollama · qwen3:8b', meta: 'localhost:11434 · 5.2 GB', c: '#b9bec5', bg: 'transparent', key: '' },
-        { name: 'ollama · cloud', meta: 'not signed in — ollama signin', c: '#62676f', bg: 'transparent', key: '' },
-        { name: 'claude (cli)', meta: 'found on PATH', c: '#b9bec5', bg: 'transparent', key: '' },
-        { name: 'claude (api) · openai (api)', meta: 'no keys in env — add in settings ⌘,', c: '#62676f', bg: 'transparent', key: '' },
-        { name: 'deterministic', meta: 'built in · replay-stable · no network', c: '#b9bec5', bg: 'transparent', key: '' },
-      ].map(r => Object.assign(r, { pick: () => { const d = r.name.startsWith('ollama · llama') ? 'llama3.2' : r.name.startsWith('ollama · qwen') ? 'qwen3:8b' : r.name.startsWith('claude (cli)') ? 'claude (cli)' : r.name === 'deterministic' ? 'deterministic' : null;
-        if (!d) return; this.setState(st => ({ frDone: true, panes: st.panes.map(p => p.id === 1 ? Object.assign({}, p, { driver: d }) : p) })); } })),
+      // Gates: this.props.firstRun (for the dc-runtime scenario
+      // switcher) OR ?firstrun=1 in the URL. `frDone` closes it once
+      // the user picks a driver.
+      showFirstRun: (() => {
+        const propOn = this.props.firstRun ?? false;
+        let urlOn = false;
+        try { urlOn = /[?&]firstrun=1(?:&|$)/.test(window.location.search); } catch(_e) {}
+        return (propOn || urlOn) && !S.frDone;
+      })(),
+      // Group the real driver roster by provider — the 19m frame's
+      // "what the machine actually has" list. Ordering: local ollama
+      // (installed) · cloud ollama (:cloud suffix) · CLIs · APIs (grouped
+      // by absent env keys) · deterministic floor.
+      frRows: (() => {
+        const roster = (S.driverRoster || []);
+        const def = S.driverDefault || null;
+        const cli = (S.controllerSnapshot && Array.isArray(S.controllerSnapshot.cli)) ? S.controllerSnapshot.cli : ['claude', 'gemini'];
+        const isCloud = (m) => /:cloud$/.test(m);
+        const isCli = (m) => cli.includes(m);
+        const local = roster.filter(m => !isCloud(m) && !isCli(m) && m !== 'deterministic');
+        const cloud = roster.filter(m => isCloud(m));
+        const clis = roster.filter(m => isCli(m));
+        const detOn = roster.includes('deterministic') || true;
+        const rows = [];
+        for (const m of local) rows.push({ name: 'ollama · ' + m, meta: 'localhost:11434 · installed' + (m === def ? ' · preselected' : ''), driver: m, on: true });
+        for (const m of cloud) rows.push({ name: 'ollama·cloud · ' + m, meta: (m === def ? 'default · ' : '') + 'cloud model', driver: m, on: true });
+        for (const m of clis) rows.push({ name: m + ' (cli)', meta: 'found on PATH', driver: m, on: true });
+        if (detOn) rows.push({ name: 'deterministic', meta: 'built in · replay-stable · no network', driver: 'deterministic', on: true });
+        return rows.map(r => ({
+          name: r.name, meta: r.meta,
+          c: r.driver === def ? '#e2e5e9' : (r.on ? '#b9bec5' : '#62676f'),
+          bg: r.driver === def ? '#2e3138' : 'transparent',
+          key: r.driver === def ? '↵' : '',
+          pick: () => {
+            this.setState(st => ({
+              frDone: true,
+              panes: st.panes.map(p => p.id === 1 ? Object.assign({}, p, { driver: r.driver }) : p),
+            }));
+            const vm = window.__vm;
+            if (vm && typeof vm.pickDriver === 'function') vm.pickDriver(r.driver);
+          },
+        }));
+      })(),
     };
   }
 }
