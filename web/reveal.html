@@ -84,18 +84,18 @@
    </sc-if>
    <sc-if value="{{ notDescended }}" hint-placeholder-val="{{ true }}">
    <div id="vm-transcript" style="flex:1;overflow-y:auto;overflow-x:hidden;padding:16px 22px;line-height:2;font-size:{{ fontSize }}px;min-width:0">
-    <sc-if value="{{ liveOn }}" hint-placeholder-val="{{ true }}">
-     <div style="color:#62676f;font-size:11px;padding-bottom:6px">session {{ liveSessionLabel }} · {{ liveEventCount }} events · {{ liveConnection }}</div>
-     <sc-for list="{{ liveTranscript }}" as="row" hint-placeholder-count="0">
+    <sc-if value="{{ pn.liveOn }}" hint-placeholder-val="{{ true }}">
+     <div style="color:#62676f;font-size:11px;padding-bottom:6px">session {{ pn.liveSessionLabel }} · {{ pn.liveEventCount }} events · {{ pn.liveConnection }}</div>
+     <sc-for list="{{ pn.liveTranscript }}" as="row" hint-placeholder-count="0">
       <div style="margin-top:{{ row.marginTop }};color:{{ row.textColor }};white-space:normal;max-width:840px">
        <span style="color:{{ row.glyphColor }};margin-right:6px">{{ row.glyph }}</span>{{ row.text }}
       </div>
      </sc-for>
-     <sc-if value="{{ liveEmpty }}" hint-placeholder-val="{{ true }}">
+     <sc-if value="{{ pn.liveEmpty }}" hint-placeholder-val="{{ true }}">
       <div style="color:#4a4e55;font-size:11.5px">◐ ready — type below to send your first turn</div>
      </sc-if>
     </sc-if>
-    <sc-if value="{{ scriptedOn }}" hint-placeholder-val="{{ false }}">
+    <sc-if value="{{ pn.scriptedOn }}" hint-placeholder-val="{{ false }}">
     <div style="color:#62676f;opacity:{{ fdIntro }}">session fix-race-in-metering resumed · turn 9 · record 01M1684 · 244 events</div>
     <div style="margin-top:12px;opacity:{{ fdU1 }}"><span style="color:#82a5c8">›</span> <span style="color:#e2e5e9">the metering test flakes under load — find and fix the race</span></div>
     <div style="color:#62676f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:{{ fdGrep }}">  ⚙ grep "meter_lock" src/ ······································ 14 matches</div>
@@ -631,6 +631,31 @@ class Component extends DCLogic {
       model_name: String(St.model || '').trim(),
     };
   }
+  _liveBindingsFor(paneId, S) {
+    const snap = (S.controllerSnapshots || {})[paneId] || null;
+    const transcript = (snap && Array.isArray(snap.transcript)) ? snap.transcript : [];
+    const rows = transcript.map(row => {
+      let glyph = '·', glyphColor = '#4a4e55', textColor = '#9aa0a8', marginTop = '2px';
+      if (row.role === 'user') { glyph = '›'; glyphColor = '#82a5c8'; textColor = '#e2e5e9'; marginTop = '12px'; }
+      else if (row.role === 'model') { glyph = '◆'; glyphColor = '#7fb3b8'; textColor = '#b9bec5'; marginTop = '6px'; }
+      else if (row.role === 'tool') { glyph = '⚙'; glyphColor = '#62676f'; textColor = '#62676f'; }
+      else if (row.role === 'park') { glyph = '◐'; glyphColor = '#82a5c8'; textColor = '#82a5c8'; marginTop = '10px'; }
+      else if (row.role === 'ended') { glyph = '◇'; glyphColor = '#62676f'; textColor = '#62676f'; marginTop = '10px'; }
+      else if (row.role === 'warning') { glyph = '!'; glyphColor = '#c26058'; textColor = '#c26058'; }
+      return { glyph, glyphColor, textColor, marginTop, text: row.text || '' };
+    });
+    const hasSession = !!(snap && snap.sessionId);
+    return {
+      liveOn: true,
+      scriptedOn: false,
+      liveTranscript: rows,
+      liveEmpty: hasSession && rows.length === 0,
+      liveSessionLabel: snap && snap.sessionName ? snap.sessionName
+        : (snap && snap.sessionId ? snap.sessionId.slice(0, 12) : ''),
+      liveEventCount: rows.length,
+      liveConnection: snap ? snap.connection : 'idle',
+    };
+  }
   _linesForPane(p, S) {
     const snaps = S.controllerSnapshots || {};
     const snap = snaps[p.id];
@@ -890,6 +915,10 @@ class Component extends DCLogic {
       wsLabel: p.unbound ? '⌥ —' : compact ? '⌥' : '⌥ ' + (p.id === 1 ? 'substrate/fix-race' : (p.shape === 'worktree' ? 'substrate/' + p.name : (p.ws || p.name))),
       revealText: compact ? '⌃`' : '⌃` reveal',
       name: p.name, driver: p.driver || S.driverDefault || 'deterministic', isMain: p.id === 1, notMain: p.id !== 1,
+      // Machinery-lens bindings scoped to THIS pane so splitting the
+      // window does not blank an unfocused pane. Each pane reads its
+      // own controller's snapshot; focus only controls emphasis.
+      ...this._liveBindingsFor(p.id, S),
       // Each pane's transcript lines come from its own controller's
       // snapshot. Non-focused panes still show live transcript from
       // their own session — no cross-pane bleed. `_linesForPane` is
