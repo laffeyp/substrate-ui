@@ -767,7 +767,12 @@ class Component extends DCLogic {
       let glyph = '·', glyphColor = '#4a4e55', textColor = '#9aa0a8', marginTop = '2px';
       if (row.role === 'user') { glyph = '›'; glyphColor = '#82a5c8'; textColor = '#e2e5e9'; marginTop = '12px'; }
       else if (row.role === 'model') { glyph = '◆'; glyphColor = '#7fb3b8'; textColor = '#b9bec5'; marginTop = '6px'; }
-      else if (row.role === 'tool') { glyph = '⚙'; glyphColor = '#62676f'; textColor = '#62676f'; }
+      else if (row.role === 'tool') {
+        const failed = row.toolOk === false;
+        glyph = failed ? '⚠' : '⚙';
+        glyphColor = failed ? '#c26058' : '#62676f';
+        textColor = failed ? '#c26058' : '#62676f';
+      }
       else if (row.role === 'park') { glyph = '◐'; glyphColor = '#82a5c8'; textColor = '#82a5c8'; marginTop = '10px'; }
       else if (row.role === 'ended') { glyph = '◇'; glyphColor = '#62676f'; textColor = '#62676f'; marginTop = '10px'; }
       else if (row.role === 'warning') { glyph = '!'; glyphColor = '#c26058'; textColor = '#c26058'; }
@@ -1860,7 +1865,12 @@ class Component extends DCLogic {
       let glyph = '·', glyphColor = '#4a4e55', textColor = '#9aa0a8', marginTop = '2px';
       if (row.role === 'user') { glyph = '›'; glyphColor = '#82a5c8'; textColor = '#e2e5e9'; marginTop = '12px'; }
       else if (row.role === 'model') { glyph = '◆'; glyphColor = '#7fb3b8'; textColor = '#b9bec5'; marginTop = '6px'; }
-      else if (row.role === 'tool') { glyph = '⚙'; glyphColor = '#62676f'; textColor = '#62676f'; }
+      else if (row.role === 'tool') {
+        const failed = row.toolOk === false;
+        glyph = failed ? '⚠' : '⚙';
+        glyphColor = failed ? '#c26058' : '#62676f';
+        textColor = failed ? '#c26058' : '#62676f';
+      }
       else if (row.role === 'park') { glyph = '◐'; glyphColor = '#82a5c8'; textColor = '#82a5c8'; marginTop = '10px'; }
       else if (row.role === 'ended') { glyph = '◇'; glyphColor = '#62676f'; textColor = '#62676f'; marginTop = '10px'; }
       else if (row.role === 'warning') { glyph = '!'; glyphColor = '#c26058'; textColor = '#c26058'; }

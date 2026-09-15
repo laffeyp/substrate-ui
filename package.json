@@ -48,7 +48,8 @@
     "capture:terminal-v1": "node _deprecated/terminal-v1-round1/harness/capture_terminal_v1.js",
     "smoke:vm": "npx tsx harness/vm_smoke.ts",
     "parity": "npx tsx harness/parity.ts",
-    "see": "npx tsx harness/see.ts"
+    "see": "npx tsx harness/see.ts",
+    "e2e:delegate-depth": "cd ../substrate && uv run python ../substrate-ui-working/harness/e2e_delegate_depth.py"
   },
   "devDependencies": {
     "@types/node": "^22",
