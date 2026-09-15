@@ -32,6 +32,7 @@ export type Unsubscribe = () => void;
 export interface SubstrateClient {
   fetchJson<T>(path: string, opts?: FetchOpts): Promise<FetchResult<T>>;
   streamRecord(sessionId: string, sinceSeq: number, handlers: StreamHandlers): Unsubscribe;
+  streamRecordByPath(recordRoot: string, sinceSeq: number, handlers: StreamHandlers): Unsubscribe;
 }
 
 export class BrowserSubstrateClient implements SubstrateClient {
@@ -76,6 +77,17 @@ export class BrowserSubstrateClient implements SubstrateClient {
 
   streamRecord(sessionId: string, sinceSeq: number, handlers: StreamHandlers): Unsubscribe {
     const url = `${this.baseUrl}/api/session/${encodeURIComponent(sessionId)}/events?since_seq=${sinceSeq}`;
+    return this._openSse(url, handlers);
+  }
+
+  /** Phase 8 item 4: stream a record given its filesystem path.
+   * Backs `SessionController.attachRecordRoot` for delegate descent. */
+  streamRecordByPath(recordRoot: string, sinceSeq: number, handlers: StreamHandlers): Unsubscribe {
+    const url = `${this.baseUrl}/api/records/by-path/events?path=${encodeURIComponent(recordRoot)}&since_seq=${sinceSeq}`;
+    return this._openSse(url, handlers);
+  }
+
+  private _openSse(url: string, handlers: StreamHandlers): Unsubscribe {
     const source = new EventSource(url);
     source.onopen = () => { handlers.onOpen?.(); };
     source.onmessage = (ev) => {
