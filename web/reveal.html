@@ -126,11 +126,13 @@
           <sc-if value="{{ row.hasError }}" hint-placeholder-val="{{ false }}">
            <div style="margin-top:6px;color:#c26058">error {{ row.toolError }}</div>
           </sc-if>
-          <sc-if value="{{ row.streamingShow }}" hint-placeholder-val="{{ false }}">
-           <div style="margin-top:6px;color:#62676f">streaming <sc-if value="{{ row.streamingEof }}" hint-placeholder-val="{{ false }}"><span style="color:#4a4e55">· eof</span></sc-if></div>
-           <div style="background:#1a1c20;border-radius:5px;padding:8px 12px;max-height:220px;overflow:auto;color:#7fb3b8;white-space:pre-wrap;font-family:ui-monospace,'SF Mono',Menlo,monospace">{{ row.streamingText }}</div>
-          </sc-if>
           <div style="color:#4a4e55;margin-top:6px">call_id {{ row.toolCallId }} · step {{ row.toolStep }} · {{ row.toolStatus }} · {{ row.toolBytes }}</div>
+         </div>
+        </sc-if>
+        <sc-if value="{{ row.streamingShow }}" hint-placeholder-val="{{ false }}">
+         <div style="margin:4px 0 4px 24px;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:11px;line-height:1.6">
+          <div style="color:#62676f">streaming <sc-if value="{{ row.streamingEof }}" hint-placeholder-val="{{ false }}"><span style="color:#4a4e55">· eof</span></sc-if></div>
+          <div style="background:#1a1c20;border-radius:5px;padding:6px 10px;max-height:180px;overflow:auto;color:#7fb3b8;white-space:pre-wrap">{{ row.streamingText }}</div>
          </div>
         </sc-if>
        </sc-if>
@@ -294,6 +296,12 @@
             <div style="margin-top:6px;color:#c26058">error {{ row.toolError }}</div>
            </sc-if>
            <div style="color:#4a4e55;margin-top:6px">call_id {{ row.toolCallId }} · step {{ row.toolStep }} · {{ row.toolStatus }} · {{ row.toolBytes }}</div>
+          </div>
+         </sc-if>
+         <sc-if value="{{ row.streamingShow }}" hint-placeholder-val="{{ false }}">
+          <div style="margin:4px 0 4px 24px;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:11px;line-height:1.6">
+           <div style="color:#62676f">streaming <sc-if value="{{ row.streamingEof }}" hint-placeholder-val="{{ false }}"><span style="color:#4a4e55">· eof</span></sc-if></div>
+           <div style="background:#1a1c20;border-radius:5px;padding:6px 10px;max-height:180px;overflow:auto;color:#7fb3b8;white-space:pre-wrap">{{ row.streamingText }}</div>
           </div>
          </sc-if>
         </sc-if>
