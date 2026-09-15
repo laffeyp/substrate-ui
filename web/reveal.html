@@ -885,6 +885,28 @@ class Component extends DCLogic {
     });
   }
   componentDidMount() {
+    // 19c settings persistence — load once at mount, save on change.
+    // Whole-state restore per D68 still lives in SQLite; these are
+    // per-viewer preferences that never round-trip to the server.
+    try {
+      const raw = window.localStorage.getItem('substrate-ui.settings');
+      if (raw) {
+        const s = JSON.parse(raw) || {};
+        const patch = {};
+        if (s.theme === 'dark' || s.theme === 'light' || s.theme === 'system') patch.theme = s.theme;
+        if (typeof s.fontOverride === 'number' && s.fontOverride >= 9 && s.fontOverride <= 19) patch.fontOverride = s.fontOverride;
+        if (typeof s.nestedDescent === 'boolean') patch.nestedDescent = s.nestedDescent;
+        if (Object.keys(patch).length) this.setState(patch);
+      }
+    } catch (_e) { /* localStorage unavailable / disabled — carry defaults */ }
+    this._persistSettings = () => {
+      try {
+        const s = this.state;
+        window.localStorage.setItem('substrate-ui.settings', JSON.stringify({
+          theme: s.theme, fontOverride: s.fontOverride, nestedDescent: !!s.nestedDescent,
+        }));
+      } catch (_e) { /* ignore */ }
+    };
     this._kd = (e) => {
       if (e.ctrlKey && e.key === '\u0060') { e.preventDefault(); this.setState(s => ({ revealed: !s.revealed, surface: null })); }
       if (e.metaKey && (e.key === 'd' || e.key === 'D')) { e.preventDefault(); this._split(e.shiftKey ? 'down' : 'right'); }
@@ -2086,13 +2108,13 @@ class Component extends DCLogic {
       // ── dialogs (19c/19f/19g) ──
       showSettings: S.showSettings, closeSettings: () => this.setState({ showSettings: false, settingsNote: '' }),
       themeChips: ['dark', 'light', 'system'].map(t => ({ label: t, color: S.theme === t ? '#e2e5e9' : '#62676f', bg: S.theme === t ? '#2e3138' : 'transparent',
-        pick: () => this.setState({ theme: t, settingsNote: t === 'dark' ? '' : 'noted — the light theme ships with the build; the prototype renders dark' }) })),
+        pick: () => this.setState({ theme: t, settingsNote: t === 'dark' ? '' : 'noted — the light theme ships with the build; the prototype renders dark' }, this._persistSettings) })),
       settingsNote: S.settingsNote,
       fontLabel: (S.fontOverride ?? this.props.transcriptFontSize ?? 13) + 'px',
-      fontMinus: () => this.setState(st => ({ fontOverride: Math.max(9, (st.fontOverride ?? this.props.transcriptFontSize ?? 13) - 1) })),
-      fontPlus: () => this.setState(st => ({ fontOverride: Math.min(19, (st.fontOverride ?? this.props.transcriptFontSize ?? 13) + 1) })),
+      fontMinus: () => this.setState(st => ({ fontOverride: Math.max(9, (st.fontOverride ?? this.props.transcriptFontSize ?? 13) - 1) }), this._persistSettings),
+      fontPlus: () => this.setState(st => ({ fontOverride: Math.min(19, (st.fontOverride ?? this.props.transcriptFontSize ?? 13) + 1) }), this._persistSettings),
       nestedBox: S.nestedDescent ? '#82a5c8' : 'transparent', nestedBorder: S.nestedDescent ? '#82a5c8' : '#4a4e55',
-      toggleNested: () => this.setState(st => ({ nestedDescent: !st.nestedDescent })),
+      toggleNested: () => this.setState(st => ({ nestedDescent: !st.nestedDescent }), this._persistSettings),
       showExport: S.showExport, closeExport: () => this.setState({ showExport: false }), doExport: () => this.setState({ showExport: false }),
       showEndConfirm: S.showEndConfirm, closeEndConfirm: () => this.setState({ showEndConfirm: false }),
       doEndSession: () => {
