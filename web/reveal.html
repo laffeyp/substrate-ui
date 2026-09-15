@@ -1022,17 +1022,11 @@ class Component extends DCLogic {
           const snap = (s.controllerSnapshots || {})[s.focused] || (vm && vm.snapshot ? vm.snapshot() : null);
           const running = !!(snap && snap.sessionId && snap.connection === 'connected' && !snap.parkReason && !snap.endedReason);
           if (running && vm && typeof vm.interruptTurn === 'function') {
-            // Track the last tier per (sessionId, turnIndex). A fresh
-            // turn resets to soft; a second press within the same turn
-            // escalates to hard. Third and later presses stay hard until
-            // the turn parks.
-            const sid = snap.sessionId;
-            const turn = snap.turnIndex;
-            const last = this._lastEscTier || {};
-            const sameTurn = last.sid === sid && last.turn === turn;
-            const prev = sameTurn ? last.tier : null;
-            const tier = prev === 'soft' ? 'hard' : prev === 'hard' ? 'hard' : 'soft';
-            this._lastEscTier = { sid, turn, tier };
+            // ESC is hard by default — the terminal habit says "stop
+            // now." Shift+ESC is the softer verb: "stop after this
+            // tool." Shift as the delay modifier reads naturally to a
+            // user who has hit ESC once expecting immediate action.
+            const tier = e.shiftKey ? 'soft' : 'hard';
             vm.interruptTurn(tier);
           }
         }
