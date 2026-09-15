@@ -87,8 +87,31 @@
     <sc-if value="{{ pn.liveOn }}" hint-placeholder-val="{{ true }}">
      <div style="color:#62676f;font-size:11px;padding-bottom:6px">session {{ pn.liveSessionLabel }} · {{ pn.liveEventCount }} events · {{ pn.liveConnection }}</div>
      <sc-for list="{{ pn.liveTranscript }}" as="row" hint-placeholder-count="0">
-      <div style="margin-top:{{ row.marginTop }};color:{{ row.textColor }};white-space:normal;max-width:840px">
-       <span style="color:{{ row.glyphColor }};margin-right:6px">{{ row.glyph }}</span>{{ row.text }}
+      <div style="margin-top:{{ row.marginTop }};color:{{ row.textColor }};white-space:normal;max-width:840px;overflow-wrap:anywhere">
+       <span style="color:{{ row.glyphColor }};margin-right:6px;vertical-align:top">{{ row.glyph }}</span>
+       <sc-if value="{{ row.isModel }}" hint-placeholder-val="{{ false }}">
+        <span style="display:inline-block;vertical-align:top;max-width:calc(100% - 24px)">
+         <sc-for list="{{ row.blocks }}" as="blk" hint-placeholder-count="1">
+          <sc-if value="{{ blk.isP }}" hint-placeholder-val="{{ true }}"><div style="margin:0 0 10px">
+           <sc-for list="{{ blk.inlines }}" as="ii" hint-placeholder-count="1"><span style="font-family:{{ ii.font }};background:{{ ii.bg }};color:{{ ii.color }};font-weight:{{ ii.fw }};font-style:{{ ii.fs }};padding:{{ ii.pad }};border-radius:{{ ii.br }}">{{ ii.t }}</span></sc-for>
+          </div></sc-if>
+          <sc-if value="{{ blk.isCode }}" hint-placeholder-val="{{ false }}"><div style="margin:0 0 12px;background:#1a1c20;border-radius:6px;padding:10px 14px;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:12px;color:#b9bec5;white-space:pre-wrap;overflow-x:auto">
+           <sc-if value="{{ blk.hasLang }}" hint-placeholder-val="{{ false }}"><div style="color:#62676f;font-size:10px;text-transform:lowercase;margin-bottom:6px">{{ blk.lang }}</div></sc-if>
+           <div>{{ blk.text }}</div>
+          </div></sc-if>
+          <sc-if value="{{ blk.isUl }}" hint-placeholder-val="{{ false }}"><ul style="margin:0 0 10px;padding-left:20px">
+           <sc-for list="{{ blk.items }}" as="it" hint-placeholder-count="1"><li style="margin:0 0 4px"><sc-for list="{{ it.inlines }}" as="ii" hint-placeholder-count="1"><span style="font-family:{{ ii.font }};background:{{ ii.bg }};color:{{ ii.color }};font-weight:{{ ii.fw }};font-style:{{ ii.fs }};padding:{{ ii.pad }};border-radius:{{ ii.br }}">{{ ii.t }}</span></sc-for></li></sc-for>
+          </ul></sc-if>
+          <sc-if value="{{ blk.isOl }}" hint-placeholder-val="{{ false }}"><ol style="margin:0 0 10px;padding-left:22px">
+           <sc-for list="{{ blk.items }}" as="it" hint-placeholder-count="1"><li style="margin:0 0 4px"><sc-for list="{{ it.inlines }}" as="ii" hint-placeholder-count="1"><span style="font-family:{{ ii.font }};background:{{ ii.bg }};color:{{ ii.color }};font-weight:{{ ii.fw }};font-style:{{ ii.fs }};padding:{{ ii.pad }};border-radius:{{ ii.br }}">{{ ii.t }}</span></sc-for></li></sc-for>
+          </ol></sc-if>
+          <sc-if value="{{ blk.isH }}" hint-placeholder-val="{{ false }}"><div style="font-size:{{ blk.hSize }};font-weight:600;color:#e2e5e9;margin:16px 0 6px">
+           <sc-for list="{{ blk.inlines }}" as="ii" hint-placeholder-count="1"><span style="font-family:{{ ii.font }};background:{{ ii.bg }};color:{{ ii.color }};font-weight:{{ ii.fw }};font-style:{{ ii.fs }};padding:{{ ii.pad }};border-radius:{{ ii.br }}">{{ ii.t }}</span></sc-for>
+          </div></sc-if>
+         </sc-for>
+        </span>
+       </sc-if>
+       <sc-if value="{{ row.notModel }}" hint-placeholder-val="{{ true }}"><span>{{ row.text }}</span></sc-if>
       </div>
      </sc-for>
      <sc-if value="{{ pn.liveEmpty }}" hint-placeholder-val="{{ true }}">
@@ -631,6 +654,102 @@ class Component extends DCLogic {
       model_name: String(St.model || '').trim(),
     };
   }
+  _mdRenderInline(seg) {
+    // Precompute the CSS variants a template can flow. Every rendered
+    // <span> reads all six style keys, so the template stays flat.
+    const s = { t: seg.t || '', font: 'inherit', bg: 'transparent', color: 'inherit', fw: '400', fs: 'normal', pad: '0', br: '0' };
+    if (seg.code) { s.font = "ui-monospace,'SF Mono',Menlo,monospace"; s.bg = '#1a1c20'; s.color = '#d7dade'; s.pad = '1px 4px'; s.br = '3px'; }
+    if (seg.bold) { s.fw = '600'; s.color = '#e2e5e9'; }
+    if (seg.italic) { s.fs = 'italic'; }
+    return s;
+  }
+  _mdRenderBlock(blk) {
+    // Attach per-kind boolean gates so the template's <sc-if>s stay
+    // simple. Inlines are pre-styled here too.
+    const b = { isP: false, isCode: false, isUl: false, isOl: false, isH: false, hasLang: false, lang: '', text: '', inlines: [], items: [], hSize: '13px' };
+    if (blk.kind === 'p') { b.isP = true; b.inlines = (blk.inlines || []).map(x => this._mdRenderInline(x)); }
+    else if (blk.kind === 'code_block') { b.isCode = true; b.text = blk.text || ''; b.lang = blk.lang || ''; b.hasLang = !!b.lang; }
+    else if (blk.kind === 'ul') { b.isUl = true; b.items = (blk.items || []).map(it => ({ inlines: (it.inlines || []).map(x => this._mdRenderInline(x)) })); }
+    else if (blk.kind === 'ol') { b.isOl = true; b.items = (blk.items || []).map(it => ({ inlines: (it.inlines || []).map(x => this._mdRenderInline(x)) })); }
+    else if (blk.kind === 'heading') { b.isH = true; b.inlines = (blk.inlines || []).map(x => this._mdRenderInline(x)); b.hSize = blk.level === 1 ? '17px' : blk.level === 2 ? '15px' : '13px'; }
+    return b;
+  }
+  _mdInlines(text) {
+    // Tokenize a single line of prose into inline segments so the
+    // template can flow `code`, **bold**, and *italic* at their own
+    // weights and fonts. No HTML injection — every segment renders as
+    // a plain `<span>` with the styling on it.
+    const out = [];
+    const re = /(`[^`]+`)|(\*\*[^*]+\*\*)|(\*[^*]+\*)/g;
+    let last = 0, m;
+    while ((m = re.exec(text)) !== null) {
+      if (m.index > last) out.push({ t: text.slice(last, m.index) });
+      if (m[1]) out.push({ t: m[1].slice(1, -1), code: true });
+      else if (m[2]) out.push({ t: m[2].slice(2, -2), bold: true });
+      else if (m[3]) out.push({ t: m[3].slice(1, -1), italic: true });
+      last = m.index + m[0].length;
+    }
+    if (last < text.length) out.push({ t: text.slice(last) });
+    return out.length ? out : [{ t: text }];
+  }
+  _mdBlocks(text) {
+    // Standard chat-Markdown blocks: paragraph, fenced code block,
+    // unordered list, ordered list, heading. Everything else falls to
+    // a paragraph so no user input is ever dropped.
+    if (!text || typeof text !== 'string') return [];
+    const lines = text.split('\n');
+    const blocks = [];
+    let i = 0;
+    while (i < lines.length) {
+      const line = lines[i];
+      const trimmed = line.trim();
+      const fence = trimmed.match(/^```(\w*)\s*$/);
+      if (fence) {
+        const lang = fence[1] || '';
+        const body = [];
+        i++;
+        while (i < lines.length && !/^```\s*$/.test(lines[i].trim())) { body.push(lines[i]); i++; }
+        if (i < lines.length) i++; // consume closing fence
+        blocks.push({ kind: 'code_block', lang, text: body.join('\n') });
+        continue;
+      }
+      const heading = trimmed.match(/^(#{1,4})\s+(.*)$/);
+      if (heading) {
+        blocks.push({ kind: 'heading', level: heading[1].length, inlines: this._mdInlines(heading[2]) });
+        i++;
+        continue;
+      }
+      const bullet = trimmed.match(/^[-*+]\s+(.*)$/);
+      const ordered = trimmed.match(/^(\d+)\.\s+(.*)$/);
+      if (bullet || ordered) {
+        const kind = bullet ? 'ul' : 'ol';
+        const items = [];
+        while (i < lines.length) {
+          const t = lines[i].trim();
+          const b = t.match(/^[-*+]\s+(.*)$/);
+          const o = t.match(/^(\d+)\.\s+(.*)$/);
+          if (kind === 'ul' && b) items.push({ inlines: this._mdInlines(b[1]) });
+          else if (kind === 'ol' && o) items.push({ inlines: this._mdInlines(o[2]) });
+          else break;
+          i++;
+        }
+        blocks.push({ kind, items });
+        continue;
+      }
+      if (trimmed === '') { i++; continue; }
+      // Gather a paragraph until the next blank line, fence, list, or
+      // heading. Soft newlines join with a space.
+      const buf = [];
+      while (i < lines.length) {
+        const t = lines[i].trim();
+        if (t === '' || /^```/.test(t) || /^#{1,4}\s+/.test(t) || /^[-*+]\s+/.test(t) || /^\d+\.\s+/.test(t)) break;
+        buf.push(lines[i]);
+        i++;
+      }
+      blocks.push({ kind: 'p', inlines: this._mdInlines(buf.join(' ')) });
+    }
+    return blocks;
+  }
   _liveBindingsFor(paneId, S) {
     const snap = (S.controllerSnapshots || {})[paneId] || null;
     const transcript = (snap && Array.isArray(snap.transcript)) ? snap.transcript : [];
@@ -642,7 +761,13 @@ class Component extends DCLogic {
       else if (row.role === 'park') { glyph = '◐'; glyphColor = '#82a5c8'; textColor = '#82a5c8'; marginTop = '10px'; }
       else if (row.role === 'ended') { glyph = '◇'; glyphColor = '#62676f'; textColor = '#62676f'; marginTop = '10px'; }
       else if (row.role === 'warning') { glyph = '!'; glyphColor = '#c26058'; textColor = '#c26058'; }
-      return { glyph, glyphColor, textColor, marginTop, text: row.text || '' };
+      // Model output renders as Markdown blocks; user turns render
+      // verbatim so the user's own text is not reshaped under them.
+      const text = row.text || '';
+      const rawBlocks = row.role === 'model' ? this._mdBlocks(text) : [];
+      const blocks = rawBlocks.map(b => this._mdRenderBlock(b));
+      const isModel = row.role === 'model';
+      return { glyph, glyphColor, textColor, marginTop, text, blocks, isModel, notModel: !isModel };
     });
     const hasSession = !!(snap && snap.sessionId);
     return {
