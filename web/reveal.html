@@ -87,7 +87,7 @@
     <sc-if value="{{ pn.liveOn }}" hint-placeholder-val="{{ true }}">
      <div style="color:#62676f;font-size:11px;padding-bottom:6px">session {{ pn.liveSessionLabel }} · {{ pn.liveEventCount }} events · {{ pn.liveConnection }}</div>
      <sc-for list="{{ pn.liveTranscript }}" as="row" hint-placeholder-count="0">
-      <div style="margin-top:{{ row.marginTop }};color:{{ row.textColor }};white-space:normal;max-width:840px;overflow-wrap:anywhere">
+      <div style="margin-top:{{ row.marginTop }};color:{{ row.textColor }};white-space:normal;max-width:840px;overflow-wrap:anywhere;opacity:{{ row.opacity }}">
        <span style="color:{{ row.glyphColor }};margin-right:6px;vertical-align:top">{{ row.glyph }}</span>
        <sc-if value="{{ row.isModel }}" hint-placeholder-val="{{ false }}">
         <span style="display:inline-block;vertical-align:top;max-width:calc(100% - 24px)">
@@ -228,7 +228,7 @@
      <sc-if value="{{ liveOn }}" hint-placeholder-val="{{ true }}">
       <div style="color:#62676f;font-size:11px;padding-bottom:8px">session {{ liveSessionLabel }} · {{ liveEventCount }} events · {{ liveConnection }}</div>
       <sc-for list="{{ liveTranscript }}" as="row" hint-placeholder-count="0">
-       <div style="margin-top:{{ row.marginTop }};color:{{ row.textColor }};white-space:normal;max-width:840px">
+       <div style="margin-top:{{ row.marginTop }};color:{{ row.textColor }};white-space:normal;max-width:840px;opacity:{{ row.opacity }}">
         <span style="color:{{ row.glyphColor }};margin-right:6px">{{ row.glyph }}</span>{{ row.text }}
        </div>
       </sc-for>
@@ -753,6 +753,10 @@ class Component extends DCLogic {
   _liveBindingsFor(paneId, S) {
     const snap = (S.controllerSnapshots || {})[paneId] || null;
     const transcript = (snap && Array.isArray(snap.transcript)) ? snap.transcript : [];
+    // 19h/19k/19l — matches bright, non-matches dim to .35. Applies to
+    // transcript scope (findScope === 'transcript') when the find bar
+    // is open with a non-empty query.
+    const findQ = (S.findOpen && S.findScope === 'transcript' ? (S.findQ || '') : '').toLowerCase();
     const rows = transcript.map(row => {
       let glyph = '·', glyphColor = '#4a4e55', textColor = '#9aa0a8', marginTop = '2px';
       if (row.role === 'user') { glyph = '›'; glyphColor = '#82a5c8'; textColor = '#e2e5e9'; marginTop = '12px'; }
@@ -761,13 +765,13 @@ class Component extends DCLogic {
       else if (row.role === 'park') { glyph = '◐'; glyphColor = '#82a5c8'; textColor = '#82a5c8'; marginTop = '10px'; }
       else if (row.role === 'ended') { glyph = '◇'; glyphColor = '#62676f'; textColor = '#62676f'; marginTop = '10px'; }
       else if (row.role === 'warning') { glyph = '!'; glyphColor = '#c26058'; textColor = '#c26058'; }
-      // Model output renders as Markdown blocks; user turns render
-      // verbatim so the user's own text is not reshaped under them.
       const text = row.text || '';
       const rawBlocks = row.role === 'model' ? this._mdBlocks(text) : [];
       const blocks = rawBlocks.map(b => this._mdRenderBlock(b));
       const isModel = row.role === 'model';
-      return { glyph, glyphColor, textColor, marginTop, text, blocks, isModel, notModel: !isModel };
+      const matches = !findQ || text.toLowerCase().includes(findQ);
+      const opacity = findQ ? (matches ? '1' : '.35') : '1';
+      return { glyph, glyphColor, textColor, marginTop, text, blocks, isModel, notModel: !isModel, opacity };
     });
     const hasSession = !!(snap && snap.sessionId);
     return {
