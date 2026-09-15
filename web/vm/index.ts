@@ -24,3 +24,5 @@ export type {
 export { BrowserSubstrateClient } from "./client";
 export type { ControllerEvent, OpenSessionRequest } from "./session_controller";
 export { SessionController } from "./session_controller";
+export type { PaneEvent, PaneRegistryDeps } from "./pane_registry";
+export { PaneRegistry } from "./pane_registry";

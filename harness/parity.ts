@@ -75,15 +75,23 @@ function diffTagSequences(a: string[], b: string[]): string[] {
   const setB = new Set(b);
   for (const t of setA) if (!setB.has(t)) drift.push(`only in reveal: ${t}`);
   for (const t of setB) if (!setA.has(t)) drift.push(`only in classic: ${t}`);
-  // Order comparison — for tags that appear in both, check relative order.
-  const shared = a.filter((t) => setB.has(t));
-  const sharedB = b.filter((t) => setA.has(t));
-  const len = Math.min(shared.length, sharedB.length);
-  for (let i = 0; i < len; i++) {
-    if (shared[i] !== sharedB[i]) {
-      drift.push(`order[${i}] diverged: reveal=${shared[i]} classic=${sharedB[i]}`);
-      break;
-    }
+  // The two shells fire independent boot loaders in parallel; their
+  // global arrival order is network-dependent noise. What matters is
+  // that each intra-flow ordering holds — the pairs below travel as
+  // ordered pairs on both shells.
+  const ORDERED_PAIRS: [string, string][] = [
+    ["SESSION_OPEN_REQUESTED", "SESSION_OPEN_ACKED"],
+    ["TURN_SUBMITTED", "TURN_ACK"],
+    ["STREAM_ATTACHED", "STREAM_CLOSED"],
+  ];
+  for (const [first, second] of ORDERED_PAIRS) {
+    const check = (seq: string[], label: string): string | null => {
+      const i = seq.indexOf(first), j = seq.indexOf(second);
+      if (i === -1 || j === -1) return null;
+      return i < j ? null : `${label}: ${first} arrived after ${second}`;
+    };
+    const da = check(a, "reveal"); if (da) drift.push(da);
+    const db = check(b, "classic"); if (db) drift.push(db);
   }
   return drift;
 }

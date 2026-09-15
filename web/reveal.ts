@@ -8,7 +8,7 @@
 // next to each corresponding controller field.
 
 import type { Snapshot } from "./vm";
-import { SessionController, BrowserSubstrateClient } from "./vm";
+import { BrowserSubstrateClient, PaneRegistry } from "./vm";
 
 interface DCLogicHandle {
   state: Record<string, unknown>;
@@ -63,16 +63,17 @@ function computeStatePatch(snap: Snapshot): Record<string, unknown> {
 }
 
 function boot(): void {
-  const controller = new SessionController(new BrowserSubstrateClient());
-  (window as unknown as { __vm: SessionController }).__vm = controller;
+  const registry = new PaneRegistry({ makeClient: () => new BrowserSubstrateClient() });
+  const controller = registry.spawn(1); // pane 1 is the initial view
+  (window as unknown as { __vm: PaneRegistry }).__vm = registry;
 
-  // Ring-buffer the emitted vocabulary on window.__vmTape so a
-  // headless harness can read it, and a developer can inspect the
-  // last 500 tags in DevTools without opening the SDD JSONL.
-  interface TapeEntry { tag: string; payload: Record<string, unknown>; at: number; }
+  // Ring-buffer every pane's typed events. The parity harness reads
+  // this to compare vocabulary; a developer inspecting DevTools sees
+  // the last 500 tags with paneId attached so bleed shows up.
+  interface TapeEntry { paneId: number; tag: string; payload: Record<string, unknown>; at: number; }
   const tape: TapeEntry[] = [];
   (window as unknown as { __vmTape: TapeEntry[] }).__vmTape = tape;
-  controller.onEvent((ev) => {
+  registry.onEvent((ev) => {
     tape.push(ev);
     if (tape.length > 500) tape.splice(0, tape.length - 500);
   });
@@ -91,33 +92,42 @@ function boot(): void {
   }
 
   let component: DCLogicHandle | null = null;
+  // Per-pane snapshots. renderVals reads `controllerSnapshots[p.id]`
+  // for a pane-scoped view; `controllerSnapshot` mirrors the FOCUSED
+  // pane's snapshot to keep single-pane bindings working unchanged.
+  const perPane: Record<number, Snapshot> = {};
   const bind = () => {
     if (component) return true;
     component = reachComponent();
     if (!component) return false;
-    let lastTranscriptLen = 0;
-    let lastSessionId: string | null = null;
-    controller.subscribe((snap) => {
+    const transcriptLens: Record<number, number> = {};
+    const sessionIds: Record<number, string | null> = {};
+    registry.subscribe((paneId, snap) => {
       if (!component) return;
-      component.setState(computeStatePatch(snap));
-      // Autoscroll the transcript when it grew. Delayed one animation
-      // frame so React has committed the new rows.
-      const newLen = snap.transcript.length;
-      if (newLen > lastTranscriptLen) {
-        window.requestAnimationFrame(() => {
-          const el = document.getElementById("vm-transcript");
-          if (el) el.scrollTop = el.scrollHeight;
-        });
-      }
-      lastTranscriptLen = newLen;
-      // Reflect the current session in the URL so a refresh stays on
-      // it. Only writes when the session id actually changes.
-      if (snap.sessionId !== lastSessionId) {
-        lastSessionId = snap.sessionId;
-        const url = new URL(window.location.href);
-        if (snap.sessionId) url.searchParams.set("session", snap.sessionId);
-        else url.searchParams.delete("session");
-        window.history.replaceState({}, "", url.toString());
+      perPane[paneId] = snap;
+      const focusedId = (component.state as { focused?: number }).focused ?? 1;
+      const patch: Record<string, unknown> = { controllerSnapshots: { ...perPane } };
+      if (paneId === focusedId) Object.assign(patch, computeStatePatch(snap));
+      component.setState(patch);
+      // Autoscroll the transcript when the focused pane's grew. Non-focused
+      // panes update silently until the user brings them to focus.
+      if (paneId === focusedId) {
+        const lastLen = transcriptLens[paneId] ?? 0;
+        if (snap.transcript.length > lastLen) {
+          window.requestAnimationFrame(() => {
+            const el = document.getElementById("vm-transcript");
+            if (el) el.scrollTop = el.scrollHeight;
+          });
+        }
+        transcriptLens[paneId] = snap.transcript.length;
+        // Reflect the focused pane's session in the URL.
+        if (snap.sessionId !== (sessionIds[paneId] ?? null)) {
+          sessionIds[paneId] = snap.sessionId;
+          const url = new URL(window.location.href);
+          if (snap.sessionId) url.searchParams.set("session", snap.sessionId);
+          else url.searchParams.delete("session");
+          window.history.replaceState({}, "", url.toString());
+        }
       }
     });
     return true;

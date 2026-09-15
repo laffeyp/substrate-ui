@@ -106,6 +106,7 @@ _vm.onEvent((ev) => {
 });
 _vm.loadDriverRoster().catch(() => undefined);
 _vm.loadLiveSessions().catch(() => undefined);
+_vm.loadBundleRoster().catch(() => undefined);
 _vm.loadRecentWorkspaces().catch(() => undefined);
 // Sprint 040a/b: console handles bound at boot; declared here so
 // hoisted delegates (renderHealth, selectRecord, ...) can reference them.
