@@ -1014,17 +1014,21 @@ class Component extends DCLogic {
         else if (s.fanOpen) this.setState({ fanOpen: false });
         else if (s.surface) this.setState({ surface: null });
         else {
-          // Nothing else on screen to close — interrupt the running turn
-          // (Claude Code convention). A turn is running when the focused
-          // pane's controller is connected with no park reason and no
-          // ended reason. The interrupt maps to the same signal /interrupt
-          // fires (controller.interruptTurn -> substrate's session topology
-          // records TURN_INTERRUPTED and parks). Guarded so ESC is inert
-          // when no turn is running.
+          // Phase 8 item 5 · two-tier ESC. First press within the same
+          // running turn sends tier=soft; a second press before the turn
+          // parks sends tier=hard. `_lastEscTier` tracks the last tier for
+          // the current turn's sessionId; a new sessionId resets it.
           const vm = window.__vm;
           const snap = (s.controllerSnapshots || {})[s.focused] || (vm && vm.snapshot ? vm.snapshot() : null);
           const running = !!(snap && snap.sessionId && snap.connection === 'connected' && !snap.parkReason && !snap.endedReason);
-          if (running && vm && typeof vm.interruptTurn === 'function') vm.interruptTurn();
+          if (running && vm && typeof vm.interruptTurn === 'function') {
+            const sid = snap.sessionId;
+            const last = this._lastEscTier || {};
+            const prev = last.sid === sid ? last.tier : null;
+            const tier = prev === 'soft' ? 'hard' : prev === 'hard' ? 'hard' : 'soft';
+            this._lastEscTier = { sid, tier };
+            vm.interruptTurn(tier);
+          }
         }
       }
     };

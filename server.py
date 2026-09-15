@@ -1654,7 +1654,13 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError:
             self._error(400, f"max_wait_ms must be an integer, got {raw!r}")
             return
-        ref = _SESSION_REGISTRY.interrupt(session_id)
+        # Phase 8 item 5: `?tier=soft|hard`; default "hard" preserves
+        # pre-Phase-8 behavior for callers that don't pass a tier.
+        tier_raw = parse_qs(urlparse(self.path).query).get("tier", ["hard"])[0]
+        if tier_raw not in ("soft", "hard"):
+            self._error(400, f"tier must be 'soft' or 'hard', got {tier_raw!r}")
+            return
+        ref = _SESSION_REGISTRY.interrupt(session_id, tier=tier_raw)
         if ref is None:
             self._json(
                 {"interrupted": False, "landed": False, "session_id": session_id}
@@ -1683,10 +1689,17 @@ class Handler(BaseHTTPRequestHandler):
                 if landed:
                     break
                 time.sleep(0.05)
+        # Phase 8 item 5: distinguish a real cancel from a soft signal.
+        # ref = {"kind": "signal", "instance": "soft", ...} means the tier
+        # was received while a tool was running; the model will read the
+        # InterruptRequested envelope on its next turn (items 6-7).
+        is_signal = isinstance(ref, dict) and ref.get("kind") == "signal"
         self._json(
             {
                 "interrupted": True,
-                "landed": landed,
+                "landed": landed or is_signal,
+                "tier": tier_raw,
+                "signal": is_signal,
                 "producer": ref,
                 "session_id": session_id,
             }
