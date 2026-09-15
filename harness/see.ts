@@ -59,6 +59,21 @@ async function main(): Promise<void> {
   if (process.env.SUBSTRATE_UI_SEE_BUNDLE === "1") {
     try { await page.locator('span[title*="bundle · role kit"]').first().click({ timeout: 2000 }); } catch (_e) { /* ignore */ }
   }
+  // Two-pane capture: split the shell right, spawn pane 2's controller,
+  // and attach it to a second session id. Requires
+  // SUBSTRATE_UI_SEE_SESSION2=<id> alongside the primary.
+  const SESSION_2 = process.env.SUBSTRATE_UI_SEE_SESSION2 || "";
+  if (SESSION_2) {
+    await page.keyboard.press("Meta+d");
+    await page.waitForTimeout(600);
+    const ATTACH2 = "(function(){ var root = document.getElementById('dc-root'); if (!root) return 'noroot'; var key = Object.keys(root).find(function(k){return k.indexOf('__reactContainer')===0}); if (!key) return 'nokey'; function walk(f){ if(!f) return null; var i=f.stateNode; if(i && i.logic && typeof i.logic._bindPane==='function') return i.logic; return walk(f.child)||walk(f.sibling); } var c=root[key]; var cur=c && c.stateNode && c.stateNode.current; var l=walk(cur); if(!l) return 'nolog'; var s=l.state; var pane2 = s.panes[s.panes.length-1]; if (!pane2 || pane2.id === 1) return 'nopane2'; var vm = window.__vm; if (vm && typeof vm.get==='function'){ var c2 = vm.get(pane2.id); if (c2 && typeof c2.attachExisting==='function') c2.attachExisting('" + SESSION_2 + "'); } l.setState({ focused: pane2.id, panes: s.panes.map(function(p){ return p.id===pane2.id ? Object.assign({}, p, { unbound:false, ws:'~/code/substrate', shape:'worktree', lines:[] }) : p; }) }); return 'ok:' + s.panes.length; })()";
+    const r = await page.evaluate(ATTACH2);
+    console.log(`  · two-pane attach: ${r}`);
+    await page.waitForTimeout(3500);
+    const NUDGE = "(function(){ var root = document.getElementById('dc-root'); if (!root) return; var key = Object.keys(root).find(function(k){return k.indexOf('__reactContainer')===0}); if (!key) return; function walk(f){ if(!f) return null; var i=f.stateNode; if(i && i.logic && typeof i.logic.setState==='function') return i.logic; return walk(f.child)||walk(f.sibling); } var l=walk(root[key].stateNode.current); if (l) l.setState({ __seeNudge: Date.now() }); })()";
+    await page.evaluate(NUDGE);
+    await page.waitForTimeout(500);
+  }
   await page.waitForTimeout(800);
   // Scroll the stream pane by a fraction if the caller asked. The
   // stream+graph pane's overflow container carries `ref={streamRef}`
