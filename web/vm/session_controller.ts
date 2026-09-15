@@ -696,21 +696,41 @@ export class SessionController {
         return;
       }
       case "ToolCall": {
+        // Phase 8 · 21a: carry the tool name, call_id, args, and step
+        // onto the row so the shell can preview the first arg and
+        // open the card without a second envelope walk.
         const toolName = payload.tool ? String(payload.tool) : "";
+        const callId = payload.call_id ? String(payload.call_id) : "";
+        const args = Array.isArray(payload.args)
+          ? payload.args.map((a) => (typeof a === "string" ? a : JSON.stringify(a)))
+          : [];
+        const step = typeof payload.step === "number" ? payload.step : undefined;
+        const preview = args.length ? args[0] : "";
         this.appendTranscript({
           seq: env.seq, kind: env.kind, role: "tool",
-          text: `call ${toolName}`, toolName,
+          text: preview ? `${toolName} ${preview}` : `call ${toolName}`,
+          toolName, callId, args, toolStep: step,
         });
         return;
       }
       case "ToolResult": {
+        // Phase 8 · 21b: carry the output/error onto the row. The
+        // matching ToolCall row is looked up by call_id at render.
         const toolName = payload.tool ? String(payload.tool) : "";
+        const callId = payload.call_id ? String(payload.call_id) : "";
         const ok = payload.ok !== false;
         const err = payload.error ? String(payload.error) : "";
+        const rawOutput = payload.output;
+        const output = typeof rawOutput === "string"
+          ? rawOutput
+          : rawOutput === undefined || rawOutput === null
+            ? ""
+            : JSON.stringify(rawOutput);
+        const step = typeof payload.step === "number" ? payload.step : undefined;
         this.appendTranscript({
           seq: env.seq, kind: env.kind, role: "tool",
           text: ok ? `${toolName} → ok` : `${toolName} → err ${err}`,
-          toolName, toolOk: ok,
+          toolName, callId, output, error: err, toolOk: ok, toolStep: step,
         });
         return;
       }

@@ -22,6 +22,17 @@ export interface TranscriptRow {
   text: string;
   toolName?: string;
   toolOk?: boolean;
+  // Phase 8 · 21a/21b: expandable tool card. A `ToolCall` row carries
+  // its `call_id`, the full `args`, and the `step` from the envelope
+  // payload. The matching `ToolResult` row carries the same call_id
+  // plus the `output` (or `error`), so the client can pair them and
+  // render one card. The row builder in `session_controller.ts`
+  // populates these off `payload.args` / `payload.output`.
+  callId?: string;
+  args?: string[];
+  output?: string;
+  error?: string;
+  toolStep?: number;
 }
 
 /** One row a View renders in the session-rail sidebar. */
