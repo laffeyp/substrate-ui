@@ -70,9 +70,11 @@ async function main(): Promise<void> {
     const r = await page.evaluate(ATTACH2);
     console.log(`  · two-pane attach: ${r}`);
     await page.waitForTimeout(3500);
-    const NUDGE = "(function(){ var root = document.getElementById('dc-root'); if (!root) return; var key = Object.keys(root).find(function(k){return k.indexOf('__reactContainer')===0}); if (!key) return; function walk(f){ if(!f) return null; var i=f.stateNode; if(i && i.logic && typeof i.logic.setState==='function') return i.logic; return walk(f.child)||walk(f.sibling); } var l=walk(root[key].stateNode.current); if (l) l.setState({ __seeNudge: Date.now() }); })()";
-    await page.evaluate(NUDGE);
-    await page.waitForTimeout(500);
+    // Swap focus to pane 1 briefly then back — probes the dc-runtime
+    // list-reconcile behavior on focus change.
+    const FOCUS1 = "(function(){ var root = document.getElementById('dc-root'); if (!root) return; var key = Object.keys(root).find(function(k){return k.indexOf('__reactContainer')===0}); if (!key) return; function walk(f){ if(!f) return null; var i=f.stateNode; if(i && i.logic && typeof i.logic.setState==='function') return i.logic; return walk(f.child)||walk(f.sibling); } var l=walk(root[key].stateNode.current); if (l) l.setState({ focused: 1 }); })()";
+    await page.evaluate(FOCUS1);
+    await page.waitForTimeout(600);
   }
   await page.waitForTimeout(800);
   // Scroll the stream pane by a fraction if the caller asked. The
