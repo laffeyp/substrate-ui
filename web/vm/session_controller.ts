@@ -578,13 +578,32 @@ export class SessionController {
     }
     const wasInterrupted = result.data?.interrupted === true;
     const landed = result.data?.landed === true;
-    this.appendTranscript({
-      seq: -Math.round(Date.now()) - 6,
-      kind: "Interrupted", role: "system",
-      text: wasInterrupted
-        ? `^C interrupt (${landed ? "landed" : "dispatched — envelope arriving on /events"})`
-        : "^C — no turn in flight",
-    });
+    // Substrate's /interrupt cancels the MODEL producer only. During a
+    // tool call the model producer has already completed and the tool
+    // producer is running instead — the registry reports "nothing to
+    // cancel". Detect that specific case by walking the recent
+    // envelope tail: an unpaired ToolCall means a tool is in flight.
+    let text: string;
+    if (wasInterrupted) {
+      text = `^C interrupt (${landed ? "landed" : "dispatched — envelope arriving on /events"})`;
+    } else {
+      const tail = this.snap.rawEnvelopes.slice(-40);
+      const openTool = (() => {
+        const outstanding = new Map<string, string>();
+        for (const env of tail) {
+          const p = env.payload || {};
+          if (env.kind === "ToolCall" && typeof p.call_id === "string") outstanding.set(p.call_id, typeof p.tool === "string" ? p.tool : "");
+          if (env.kind === "ToolResult" && typeof p.call_id === "string") outstanding.delete(p.call_id);
+        }
+        if (outstanding.size === 0) return null;
+        const [, tool] = Array.from(outstanding.entries()).pop() as [string, string];
+        return tool || "tool";
+      })();
+      text = openTool
+        ? `^C — a ${openTool} tool call is running; substrate's interrupt only reaches the MODEL producer today. The tool will return on its own or timeout.`
+        : "^C — no turn in flight";
+    }
+    this.appendTranscript({ seq: -Math.round(Date.now()) - 6, kind: "Interrupted", role: "system", text });
     this.emit("TURN_INTERRUPTED", { was_interrupted: wasInterrupted, landed });
   }
 
