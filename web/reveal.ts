@@ -109,14 +109,30 @@ function boot(): void {
       const patch: Record<string, unknown> = { controllerSnapshots: { ...perPane } };
       if (paneId === focusedId) Object.assign(patch, computeStatePatch(snap));
       component.setState(patch);
-      // Autoscroll the transcript when the focused pane's grew. Non-focused
-      // panes update silently until the user brings them to focus.
+      // Autoscroll the transcript when the focused pane's grew AND the
+      // user is already at the bottom (sticky-bottom terminal rule).
+      // If the user scrolled up to read history, transcript growth
+      // does not jerk them back to the tail. The shell's ref callbacks
+      // save `atBottom` per pane per view under `logic._scrolls`.
       if (paneId === focusedId) {
         const lastLen = transcriptLens[paneId] ?? 0;
         if (snap.transcript.length > lastLen) {
           window.requestAnimationFrame(() => {
-            const el = document.getElementById("vm-transcript");
-            if (el) el.scrollTop = el.scrollHeight;
+            const logic = component as unknown as { _scrolls?: { termByPane?: Record<number, { atBottom?: boolean }>; revByPane?: Record<number, { atBottom?: boolean }> } };
+            const scrolls = logic._scrolls;
+            const termBottom = scrolls?.termByPane?.[paneId]?.atBottom ?? true;
+            const revBottom = scrolls?.revByPane?.[paneId]?.atBottom ?? true;
+            if (termBottom) {
+              const el = document.getElementById("vm-transcript");
+              if (el) el.scrollTop = el.scrollHeight;
+            }
+            if (revBottom) {
+              // The reveal-view transcript container has no id; find it
+              // by class-adjacent structure. The pane loop keeps only
+              // one such container mounted at a time.
+              const el = document.querySelector<HTMLDivElement>('[style*="line-height:1.95"]');
+              if (el) el.scrollTop = el.scrollHeight;
+            }
           });
         }
         transcriptLens[paneId] = snap.transcript.length;

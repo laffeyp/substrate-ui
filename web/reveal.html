@@ -83,7 +83,7 @@
     <sc-if value="{{ descNotTalkable }}" hint-placeholder-val="{{ false }}"><div style="flex:none;padding:0 22px 16px;font-size:11px;color:#4a4e55">this topology takes no messages — watching · esc to leave</div></sc-if>
    </sc-if>
    <sc-if value="{{ notDescended }}" hint-placeholder-val="{{ true }}">
-   <div id="vm-transcript" style="flex:1;overflow-y:auto;overflow-x:hidden;padding:16px 22px;line-height:2;font-size:{{ fontSize }}px;min-width:0">
+   <div id="vm-transcript" ref="{{ termScrollRef }}" onScroll="{{ onTermScroll }}" style="flex:1;overflow-y:auto;overflow-x:hidden;padding:16px 22px;line-height:2;font-size:{{ fontSize }}px;min-width:0">
     <sc-if value="{{ pn.liveOn }}" hint-placeholder-val="{{ true }}">
      <div style="color:#62676f;font-size:11px;padding-bottom:6px">session {{ pn.liveSessionLabel }} · {{ pn.liveEventCount }} events · {{ pn.liveConnection }}</div>
      <sc-for list="{{ pn.liveTranscript }}" as="row" hint-placeholder-count="0">
@@ -241,7 +241,7 @@
      </div>
     </sc-if>
     <sc-if value="{{ notDescended }}" hint-placeholder-val="{{ true }}">
-    <div onClick="{{ focusTranscript }}" style="flex:1;overflow-y:auto;overflow-x:hidden;padding:20px 26px;line-height:1.95;font-size:{{ fontSize }}px;min-width:0">
+    <div onClick="{{ focusTranscript }}" ref="{{ revScrollRef }}" onScroll="{{ onRevScroll }}" style="flex:1;overflow-y:auto;overflow-x:hidden;padding:20px 26px;line-height:1.95;font-size:{{ fontSize }}px;min-width:0">
      <sc-if value="{{ liveOn }}" hint-placeholder-val="{{ true }}">
       <div style="color:#62676f;font-size:11px;padding-bottom:8px">session {{ liveSessionLabel }} · {{ liveEventCount }} events · {{ liveConnection }}</div>
       <sc-for list="{{ liveTranscript }}" as="row" hint-placeholder-count="0">
@@ -2025,6 +2025,57 @@ class Component extends DCLogic {
       routerOpen: routerRows.length > 0, routerRows,
       promptRadius: routerRows.length > 0 ? '0 0 6px 6px' : '6px',
       streamRef: (el) => { this._streamEl = el; },
+      // Terminal vs reveal transcript scroll — remember scrollTop per
+      // pane per view, sticky-bottom only when the user is already
+      // there. The container's `ref` callback fires whenever the div
+      // mounts; a view switch re-mounts it, so this is where the saved
+      // position lands.
+      termScrollRef: (el) => {
+        this._termScrollEl = el;
+        if (!el) return;
+        const saved = (this._scrolls || {}).termByPane || {};
+        const rec = saved[fp.id];
+        window.requestAnimationFrame(() => {
+          if (!this._termScrollEl) return;
+          if (rec) {
+            this._termScrollEl.scrollTop = rec.atBottom
+              ? Math.max(0, this._termScrollEl.scrollHeight - this._termScrollEl.clientHeight)
+              : rec.scrollTop;
+          } else {
+            this._termScrollEl.scrollTop = Math.max(0, this._termScrollEl.scrollHeight - this._termScrollEl.clientHeight);
+          }
+        });
+      },
+      onTermScroll: (ev) => {
+        const el = ev.target;
+        if (!this._scrolls) this._scrolls = { termByPane: {}, revByPane: {} };
+        if (!this._scrolls.termByPane) this._scrolls.termByPane = {};
+        const nearBottom = (el.scrollHeight - el.scrollTop - el.clientHeight) < 40;
+        this._scrolls.termByPane[fp.id] = { scrollTop: el.scrollTop, atBottom: nearBottom };
+      },
+      revScrollRef: (el) => {
+        this._revScrollEl = el;
+        if (!el) return;
+        const saved = (this._scrolls || {}).revByPane || {};
+        const rec = saved[fp.id];
+        window.requestAnimationFrame(() => {
+          if (!this._revScrollEl) return;
+          if (rec) {
+            this._revScrollEl.scrollTop = rec.atBottom
+              ? Math.max(0, this._revScrollEl.scrollHeight - this._revScrollEl.clientHeight)
+              : rec.scrollTop;
+          } else {
+            this._revScrollEl.scrollTop = Math.max(0, this._revScrollEl.scrollHeight - this._revScrollEl.clientHeight);
+          }
+        });
+      },
+      onRevScroll: (ev) => {
+        const el = ev.target;
+        if (!this._scrolls) this._scrolls = { termByPane: {}, revByPane: {} };
+        if (!this._scrolls.revByPane) this._scrolls.revByPane = {};
+        const nearBottom = (el.scrollHeight - el.scrollTop - el.clientHeight) < 40;
+        this._scrolls.revByPane[fp.id] = { scrollTop: el.scrollTop, atBottom: nearBottom };
+      },
       graphRef: (el) => { this._graphEl = el; },
       onStreamScroll: (ev) => {
         if (this._syncing || this.state.dir !== 'side') return;
