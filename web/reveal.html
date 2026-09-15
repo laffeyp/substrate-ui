@@ -596,7 +596,13 @@ class Component extends DCLogic {
     // Pane driver stays null until the controller's /api/models roster
     // lands; then reveal.ts (or the picker) fills it with the server's
     // real default. Anything set at boot would be a guess.
-    panes: [{ id: 1, name: 'pane-1', driver: null, editing: false, nameVal: '' }],
+    // 19b: `?blank=1` in the URL flips pane 1 into the workspace
+    // picker on first load, matching the "same picker, full screen"
+    // frame. A user hitting ⇧⌘N (browser-reserved for incognito;
+    // cannot be intercepted) is expected to open /?blank=1 as a
+    // bookmark or menu action; the picker state itself carries the
+    // frame.
+    panes: [(function(){ var blank = false; try { blank = /[?&]blank=1(?:&|$)/.test(window.location.search); } catch(_e){} return { id: 1, name: 'pane-1', driver: null, editing: false, nameVal: '', unbound: blank }; })()],
     focused: 1, cols: 1, rows: 1, colW: [1], rowW: [1], revealL: 1.15, ddFor: null, wsFor: null, allSessions: [], dropHint: null,
     descent: [], descPv: '', descExtra: {}, fanOpen: false, fanSel: 0, findOpen: false, findQ: '', findScope: 'transcript', nestedDescent: false,
     showSettings: false, showExport: false, showEndConfirm: false, ended: false, frDone: false, theme: 'dark', fontOverride: null, settingsNote: '' };
@@ -1164,7 +1170,11 @@ class Component extends DCLogic {
       nameMin: compact ? '44px' : '64px',
       wsLabel: p.unbound ? '⌥ —' : compact ? '⌥' : '⌥ ' + (p.id === 1 ? 'substrate/fix-race' : (p.shape === 'worktree' ? 'substrate/' + p.name : (p.ws || p.name))),
       revealText: compact ? '⌃`' : '⌃` reveal',
-      name: p.name, driver: p.driver || S.driverDefault || 'deterministic', isMain: p.id === 1, notMain: p.id !== 1,
+      name: p.name, driver: p.driver || S.driverDefault || 'deterministic',
+      // isMain gates the full machinery lens. An unbound pane 1
+      // (19b: /?blank=1) falls through to the notMain branch so its
+      // workspace picker renders in place of the empty transcript.
+      isMain: p.id === 1 && !p.unbound, notMain: p.id !== 1 || !!p.unbound,
       // Machinery-lens bindings scoped to THIS pane so splitting the
       // window does not blank an unfocused pane. Each pane reads its
       // own controller's snapshot; focus only controls emphasis.
