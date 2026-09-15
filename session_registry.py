@@ -843,18 +843,25 @@ class SessionRegistry:
         session_id: str,
         *,
         tier: str = "hard",
+        record_root: str | None = None,
     ) -> dict[str, Any] | None:
-        """Sprint 217d + Phase 8 item 5: cancel a running producer through
-        `Runtime.cancel_producer`. See ../substrate/src/substrate/session_registry.py
-        for the full docstring. This copy is the daemon-side runtime path.
+        """Sprint 217d + Phase 8 items 5, 7, 9: cancel a running producer
+        through `Runtime.cancel_producer`, or (Phase 8 item 7) inject
+        `InterruptRequested` on a live tool, or (Phase 8 item 9) route
+        the same to a delegate CHILD runtime addressed by `record_root`.
 
         `tier="hard"` walks `kind_by_instance` for `model` then `tool` and
         cancels the first live one. `tier="soft"` cancels a live model
         (soft on a model is a graceful stop), but for a live TOOL it does
-        NOT cancel — it returns a synthetic ref `{kind: "signal", instance:
-        "soft", parent: null}` so the caller knows the request landed as a
-        signal. The InterruptRequested envelope that carries the signal to
-        the model is written by phase-8 items 6 and 7 on the producer side.
+        NOT cancel — it injects `InterruptRequested` onto the record via
+        `Runtime.inject_event` and returns a synthetic signal ref.
+
+        `record_root` (Phase 8 item 9): when set, look up the child
+        runtime the parent's delegate published on the process-global
+        `_ACTIVE_RUNTIMES_BY_RECORD_ROOT` map (kernel/runtime.py). The
+        cancel or signal targets the CHILD's producers on the CHILD's
+        event loop, not the parent session's. See substrate-source
+        session_registry.py for the full docstring.
         """
         import concurrent.futures
 
@@ -862,11 +869,23 @@ class SessionRegistry:
         if handle is None:
             return None
         loop = handle.loop
-        runtime = handle.runtime
-        if loop is None or runtime is None:
+        parent_runtime = handle.runtime
+        if loop is None or parent_runtime is None:
             return None
         if tier not in ("soft", "hard"):
             raise ValueError(f"tier must be 'soft' or 'hard', got {tier!r}")
+        if record_root is not None:
+            from substrate.kernel.runtime import find_active_runtime
+
+            child_runtime = find_active_runtime(record_root)
+            if child_runtime is None:
+                return None
+            runtime = child_runtime
+            loop = child_runtime._loop  # noqa: SLF001 — kernel-adjacent
+            if loop is None:
+                return None
+        else:
+            runtime = parent_runtime
 
         fut: concurrent.futures.Future[dict[str, Any] | None] = concurrent.futures.Future()
 
@@ -883,7 +902,11 @@ class SessionRegistry:
                         live_model = inst
                     elif kind == "tool" and live_tool is None:
                         live_tool = inst
-                caller = f"daemon:interrupt-{tier}"
+                caller = (
+                    f"daemon:interrupt-{tier}@{record_root}"
+                    if record_root
+                    else f"daemon:interrupt-{tier}"
+                )
                 if live_model is not None:
                     ref = runtime.cancel_producer(live_model, cause="external", caller=caller)
                     fut.set_result(ref)

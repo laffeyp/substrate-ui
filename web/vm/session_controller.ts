@@ -589,11 +589,23 @@ export class SessionController {
   /** Interrupt the in-flight turn. Server refuses if no turn is
    * running (returns {interrupted: false}). Records the outcome as a
    * transcript row so the UI shows what happened. */
-  async interruptTurn(tier: "soft" | "hard" = "hard"): Promise<void> {
+  async interruptTurn(tier: "soft" | "hard" = "hard", recordRoot?: string): Promise<void> {
     const sessionId = this.snap.sessionId;
     if (!sessionId) return;
-    const result = await this.client.fetchJson<{ interrupted?: boolean; landed?: boolean; signal?: boolean; tier?: string }>(
-      `/api/session/${encodeURIComponent(sessionId)}/interrupt?tier=${tier}`,
+    // Phase 8 item 9 descent scope: when `recordRoot` is set, the client
+    // is descended into a delegate; the server routes the interrupt to
+    // the CHILD runtime's producers, not the session's.
+    const params = new URLSearchParams({ tier });
+    if (recordRoot) params.set("record_root", recordRoot);
+    const result = await this.client.fetchJson<{
+      interrupted?: boolean;
+      landed?: boolean;
+      signal?: boolean;
+      tier?: string;
+      scope?: "session" | "descent";
+      record_root?: string;
+    }>(
+      `/api/session/${encodeURIComponent(sessionId)}/interrupt?${params.toString()}`,
       { method: "POST", body: {} },
     );
     if (!result.ok) {
@@ -607,21 +619,24 @@ export class SessionController {
     const wasInterrupted = result.data?.interrupted === true;
     const landed = result.data?.landed === true;
     const isSignal = result.data?.signal === true;
+    const scope = result.data?.scope === "descent" ? "descent" : "session";
+    const scopeSuffix = scope === "descent" ? " · scoped to child" : "";
     let text: string;
     if (isSignal) {
-      // Phase 8 item 5 · tier=soft with a live tool: the registry
-      // recorded the signal; the model will read the InterruptRequested
-      // envelope on its next turn (items 6-7) and return.
-      text = "^C — soft interrupt requested; the model will stop after this tool";
+      text = `^C — soft interrupt requested; the model will stop after this tool${scopeSuffix}`;
     } else if (wasInterrupted && tier === "hard") {
-      text = "^C — hard interrupt; producer cancelled";
+      text = scope === "descent"
+        ? "^C — hard interrupt; tool cancelled · cancel_producer on the child's runtime"
+        : "^C — hard interrupt; producer cancelled";
     } else if (wasInterrupted) {
-      text = `^C interrupt (${landed ? "landed" : "dispatched — envelope arriving on /events"})`;
+      text = `^C interrupt (${landed ? "landed" : "dispatched — envelope arriving on /events"})${scopeSuffix}`;
     } else {
-      text = "^C — no turn in flight";
+      text = scope === "descent"
+        ? "^C — no turn in flight on the child (already parked or ended)"
+        : "^C — no turn in flight";
     }
     this.appendTranscript({ seq: -Math.round(Date.now()) - 6, kind: "Interrupted", role: "system", text });
-    this.emit("TURN_INTERRUPTED", { was_interrupted: wasInterrupted, landed, tier, signal: isSignal });
+    this.emit("TURN_INTERRUPTED", { was_interrupted: wasInterrupted, landed, tier, signal: isSignal, scope });
   }
 
   disconnect(): void {

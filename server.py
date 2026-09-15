@@ -1656,11 +1656,21 @@ class Handler(BaseHTTPRequestHandler):
             return
         # Phase 8 item 5: `?tier=soft|hard`; default "hard" preserves
         # pre-Phase-8 behavior for callers that don't pass a tier.
-        tier_raw = parse_qs(urlparse(self.path).query).get("tier", ["hard"])[0]
+        qs = parse_qs(urlparse(self.path).query)
+        tier_raw = qs.get("tier", ["hard"])[0]
         if tier_raw not in ("soft", "hard"):
             self._error(400, f"tier must be 'soft' or 'hard', got {tier_raw!r}")
             return
-        ref = _SESSION_REGISTRY.interrupt(session_id, tier=tier_raw)
+        # Phase 8 item 9 descent-scope: an optional `?record_root=<path>`
+        # routes the interrupt to a delegate CHILD's runtime rather than
+        # the parent session's. The client sends this when the pane is
+        # descended into a delegate — `S.descent[-1]` holds the child's
+        # record_root string. Empty / absent → session scope.
+        record_root_raw = qs.get("record_root", [""])[0].strip()
+        record_root_arg = record_root_raw or None
+        ref = _SESSION_REGISTRY.interrupt(
+            session_id, tier=tier_raw, record_root=record_root_arg
+        )
         if ref is None:
             self._json(
                 {"interrupted": False, "landed": False, "session_id": session_id}
@@ -1674,7 +1684,11 @@ class Handler(BaseHTTPRequestHandler):
         if max_wait_ms > 0:
             deadline = time.monotonic() + (max_wait_ms / 1000.0)
             target_instance = str(ref.get("instance", ""))
-            record_root = Path(manifest.record_root)
+            # Descent scope: poll the CHILD's record for the ProducerCancelled
+            # or InterruptRequested envelope. Session scope: parent's record.
+            record_root = (
+                Path(record_root_arg) if record_root_arg else Path(manifest.record_root)
+            )
             while time.monotonic() < deadline:
                 try:
                     for env in api.read_record(record_root):
@@ -1702,6 +1716,8 @@ class Handler(BaseHTTPRequestHandler):
                 "signal": is_signal,
                 "producer": ref,
                 "session_id": session_id,
+                "scope": "descent" if record_root_arg else "session",
+                "record_root": record_root_arg or "",
             }
         )
 
