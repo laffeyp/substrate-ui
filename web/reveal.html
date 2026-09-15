@@ -579,11 +579,17 @@ class Component extends DCLogic {
     showSettings: false, showExport: false, showEndConfirm: false, ended: false, frDone: false, theme: 'dark', fontOverride: null, settingsNote: '' };
   _newPane() {
     const id = (this._nextId = (this._nextId || Math.max(...this.state.panes.map(p => p.id), ...(this.state.allSessions || []).map(s => s.id)) + 1)) && this._nextId++;
-    // D66f: a fresh pane IS the workspace picker — unbound until ↵ binds and starts the session
-    // Pull the real default off the controller's snapshot when it's
-    // loaded; if the controller hasn't answered yet, leave it null so
-    // renderVals can substitute driverDefault at read time.
     const defaultDriver = this.state.driverDefault || null;
+    // Split-pane multi-session: each pane owns its own SessionController.
+    // The registry lazily spawns one on first ask; roster loaders fire
+    // once so a new pane starts with the drivers/bundles already known.
+    const vm = window.__vm;
+    if (vm && typeof vm.spawn === 'function') {
+      const c = vm.spawn(id);
+      c.loadDriverRoster && c.loadDriverRoster().catch(() => undefined);
+      c.loadBundleRoster && c.loadBundleRoster().catch(() => undefined);
+      c.loadRecentWorkspaces && c.loadRecentWorkspaces().catch(() => undefined);
+    }
     return { id, name: 'pane-' + id, driver: defaultDriver, unbound: true, wsQ: '', editing: false, nameVal: '', pv: '', lines: [] };
   }
   _bindPane(id, ws) {
@@ -702,6 +708,10 @@ class Component extends DCLogic {
     const S = this.state;
     const fp = S.panes.find(p => p.id === S.focused) || S.panes[0];
     const mainFocused = fp.id === 1;
+    // Route back-compat proxy calls to the focused pane's controller.
+    // setActive is idempotent; calling it on every render is cheap and
+    // guarantees any window.__vm.<action> goes to the right session.
+    { const vm = window.__vm; if (vm && typeof vm.setActive === 'function') vm.setActive(fp.id); }
     // Controller snapshot — hoisted so the machinery-lens code below
     // (stream/io/scene) can read _vmSnap + _hasVmSession before the
     // template-return block writes them as render fields.
