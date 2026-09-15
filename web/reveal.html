@@ -870,15 +870,15 @@ class Component extends DCLogic {
       const liveToolName = outstanding.size ? Array.from(outstanding.values()).pop() : '';
       const umT = typeof lastUM.t === 'number' ? lastUM.t : nowSec;
       const secs = Math.max(0, Math.floor(nowSec - umT));
-      // "turn N" is the head word and pulses. The tail names what the
-      // turn is doing right now: the tool's name when a tool is
-      // running, or nothing (empty) when the model is between tools.
-      // Static "thinking" is dishonest and gone.
+      // "turn N" is the head word and pulses. The tail always names
+      // the same three fields — seconds, tool count, running tool
+      // (if any) — so the strip never gains or loses columns as a
+      // turn progresses. Zero tools reads "no tools"; the field is
+      // always present.
       const turnWord = turnIdx !== null ? `turn ${turnIdx}` : 'turn';
-      const restParts = [];
+      const restParts = [`${secs}s`];
+      restParts.push(tools === 0 ? 'no tools' : `${tools} tool${tools === 1 ? '' : 's'}`);
       if (liveToolName) restParts.push(liveToolName);
-      restParts.push(`${secs}s`);
-      if (tools > 0) restParts.push(`${tools} tool${tools === 1 ? '' : 's'}`);
       const restText = restParts.join(' · ');
       return {
         kind: 'live', verb: liveToolName || '', seconds: secs,
