@@ -893,6 +893,21 @@ class SessionRegistry:
                         ref = runtime.cancel_producer(live_tool, cause="external", caller=caller)
                         fut.set_result(ref)
                         return
+                    # Soft with a live tool (Phase 8 item 7 wiring): inject
+                    # InterruptRequested onto the record via Runtime.inject_event.
+                    # The topology's emit-interrupt-fragment trigger spawns the
+                    # fragment producer, which emits PromptFragment(source=interrupt).
+                    # On the next ToolResult boundary the composer refires and the
+                    # model wakes with the tool result + interrupt directive in scope.
+                    from substrate.topologies.session import InterruptRequested
+
+                    runtime.inject_event(
+                        InterruptRequested(
+                            session_id=session_id,
+                            tier="soft",
+                            source=caller,
+                        )
+                    )
                     fut.set_result({"kind": "signal", "instance": "soft", "parent": None})
                     return
                 fut.set_result(None)
