@@ -329,6 +329,34 @@ export class SessionController {
   /** Attach to an existing session (opened by another client or by an
    * earlier boot). Replays every envelope from seq 0 so the visible
    * transcript is the record's full history, then follows live. */
+  /** Phase 8 item 4: attach to a delegate child record given its
+   * filesystem path (from ToolResult.payload.child_root). Replays the
+   * child's envelopes into the snapshot the same way `attachExisting`
+   * does for a session. The pane's descent stack governs which record
+   * feeds the transcript. */
+  async attachRecordRoot(recordRoot: string): Promise<void> {
+    if (this.unsubscribeStream) { this.unsubscribeStream(); this.unsubscribeStream = null; }
+    this.lastSeq = -1;
+    this.endedEmittedFor = null;
+    this.patch({
+      sessionId: null,
+      sessionName: recordRoot,
+      turnIndex: 0,
+      transcript: [],
+      rawEnvelopes: [],
+      parkReason: null,
+      endedReason: null,
+      connection: "connecting",
+    });
+    this.emit("CHILD_RECORD_ATTACH_REQUESTED", { record_root: recordRoot });
+    this.unsubscribeStream = this.client.streamRecordByPath(recordRoot, -1, {
+      onOpen: () => { this.patch({ connection: "connected" }); this.emit("STREAM_ATTACHED", { record_root: recordRoot }); },
+      onEnvelope: (env) => this.handleEnvelope(recordRoot, env),
+      onClose: () => { this.patch({ connection: "closed" }); this.emit("STREAM_CLOSED", { record_root: recordRoot }); },
+      onError: () => { this.patch({ connection: "reconnecting" }); this.emit("STREAM_RECONNECTING", { record_root: recordRoot }); },
+    });
+  }
+
   /** Plan-named alias for `attachExisting`. Kept for the two-shell
    * parity harness which reads action names off the plan doc. */
   async openRecord(sessionId: string): Promise<void> { return this.attachExisting(sessionId); }

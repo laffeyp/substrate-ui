@@ -1780,6 +1780,71 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", "0")
         self.end_headers()
 
+    def _record_events_by_path(self, raw_path: str, since_seq: int) -> None:
+        """Phase 8 item 4: SSE stream of a record given its filesystem path.
+        Descent onto a delegate child record uses this — the delegate
+        machinery writes the child at
+        `<delegation_root>/delegate-runs/d<depth>-c<n>/record` and the
+        parent's ToolResult carries that path in `payload.child_root`.
+        The shell posts the path here and streams the child's envelopes.
+
+        Safety: resolve the path, require it exists as a directory, and
+        require it live under one of a known set of roots so a client
+        cannot read arbitrary files off disk. Allowed roots: RUNS,
+        `~/.substrate/sessions`, `/tmp`, `/var/folders` (macOS temp
+        parents that hold delegate-runs in tests).
+        """
+        from pathlib import Path as _Path
+        try:
+            resolved = _Path(raw_path).resolve()
+        except (OSError, RuntimeError) as exc:
+            self._error(400, f"path could not be resolved: {exc}")
+            return
+        if not resolved.exists() or not resolved.is_dir():
+            self._error(404, f"no record directory at {raw_path!r}")
+            return
+        allowed_roots = [
+            RUNS.resolve(),
+            (_Path.home() / ".substrate" / "sessions").resolve(),
+            _Path("/tmp").resolve(),
+            _Path("/var/folders").resolve(),
+        ]
+        ok = False
+        for root in allowed_roots:
+            try:
+                resolved.relative_to(root)
+                ok = True
+                break
+            except ValueError:
+                continue
+        if not ok:
+            self._error(403, f"path {raw_path!r} outside allowed record roots")
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("X-Accel-Buffering", "no")
+        self.end_headers()
+        try:
+            follower = api.attach(resolved)
+            finalised = False
+            while not finalised:
+                for env in follower.read_new():
+                    seq = int(env.get("seq", -1))
+                    is_final = env.get("kind") == api.RUN_FINALISED
+                    if is_final:
+                        finalised = True
+                    if seq <= since_seq and not is_final:
+                        continue
+                    frame = b"data: " + msgspec.json.encode(env) + b"\n\n"
+                    self.wfile.write(frame)
+                    self.wfile.flush()
+                if finalised:
+                    break
+                time.sleep(0.1)
+        except (OSError, BrokenPipeError):
+            return
+
     def _session_events(self, session_id: str, since_seq: int) -> None:
         """Sprint 214c: GET /api/session/<id>/events?since_seq=N. Server-Sent
         Events stream of the session's record. Each envelope arrives as
@@ -2722,6 +2787,26 @@ class Handler(BaseHTTPRequestHandler):
                 q = parse_qs(urlparse(self.path).query)
                 exclude = (q.get("exclude_sessions", ["false"])[0] or "false").lower() in ("1", "true", "yes")
                 self._json(_records_index(exclude_sessions=exclude))
+                return
+            if path == "/api/records/by-path/events":
+                # Phase 8 item 4: SSE stream of an arbitrary record path so
+                # the shell can descend into a delegate child record whose
+                # root came from a ToolResult(tool='delegate').payload.child_root.
+                # Path safety: resolve, require it exists, refuse traversal
+                # into anything outside the user's substrate tree
+                # (~/.substrate, RUNS, TMP delegate-runs).
+                q = parse_qs(urlparse(self.path).query)
+                raw_path = q.get("path", [""])[0]
+                if not raw_path:
+                    self._error(400, "path query param required")
+                    return
+                raw_since = q.get("since_seq", ["-1"])[0]
+                try:
+                    since_seq = int(raw_since)
+                except ValueError:
+                    self._error(400, f"since_seq must be an integer, got {raw_since!r}")
+                    return
+                self._record_events_by_path(raw_path, since_seq)
                 return
             if path == "/api/bundles":
                 # Sprint 034a: bundle catalog for the rail's four-bucket read
