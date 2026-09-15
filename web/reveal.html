@@ -1786,7 +1786,12 @@ class Component extends DCLogic {
       revealGutterLeft: (S.revealL / (S.revealL + 1) * 100).toFixed(2) + '%',
       revealGrab: (ev) => { ev.preventDefault(); this._gut = { type: 'reveal' }; },
       colGutters: S.colW.slice(0, -1).map((_, i) => { const total = S.colW.reduce((a, b) => a + b, 0); const left = S.colW.slice(0, i + 1).reduce((a, b) => a + b, 0) / total * 100; return { left: left.toFixed(2) + '%', grab: (ev) => { ev.preventDefault(); this._gut = { type: 'col', i: i + 1 }; } }; }),
-      rowGutters: S.rowW.slice(0, -1).map((_, i) => { const total = S.rowW.reduce((a, b) => a + b, 0); const top = S.rowW.slice(0, i + 1).reduce((a, b) => a + b, 0) / total * 100; return { top: top.toFixed(2) + '%', grab: (ev) => { ev.preventDefault(); this._gut = { type: 'row', i: i + 1 }; } }; }), focusedBranch: fp.id === 1 ? 'substrate/fix-race' : 'substrate/' + fp.name, isMainFocused: mainFocused, notMainFocused: !mainFocused,
+      rowGutters: S.rowW.slice(0, -1).map((_, i) => { const total = S.rowW.reduce((a, b) => a + b, 0); const top = S.rowW.slice(0, i + 1).reduce((a, b) => a + b, 0) / total * 100; return { top: top.toFixed(2) + '%', grab: (ev) => { ev.preventDefault(); this._gut = { type: 'row', i: i + 1 }; } }; }), focusedBranch: fp.id === 1 ? 'substrate/fix-race' : 'substrate/' + fp.name,
+      // Every pane's reveal view renders the full machinery lens now
+      // that every pane has its own controller. The old
+      // notMainFocused branch showed only the scripted pane.lines and
+      // is dead.
+      isMainFocused: true, notMainFocused: false,
       singlePane: S.panes.length === 1,
       showStrip: !surf && !S.revealed && S.panes.length > 1,
       showFullHeader: !!surf || S.revealed,
