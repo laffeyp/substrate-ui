@@ -13,11 +13,8 @@
 <body>
 <x-dc>
 <helmet data-dc-atomics><style>body{margin:0;background:#212327}a{color:#82a5c8}a:hover{color:#9db8d6}*{scrollbar-width:thin;scrollbar-color:#33373d transparent}::-webkit-scrollbar{width:5px;height:5px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#33373d;border-radius:3px}::-webkit-scrollbar-thumb:hover{background:#4a4e55}
-@keyframes actglyph{0%{opacity:.35}50%{opacity:1}100%{opacity:.35}}
-.act-pulse{animation:actglyph 1.2s ease-in-out infinite}
-@keyframes actshimmer{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
-.act-bar-live{width:40%;animation:actshimmer 1.6s linear infinite}
-.act-bar-done{width:100%;opacity:.35}</style></helmet>
+@keyframes actglyph{0%{opacity:.4}50%{opacity:1}100%{opacity:.4}}
+.act-pulse{animation:actglyph 1.4s ease-in-out infinite}</style></helmet>
 <div style="height:100vh;display:flex;flex-direction:column;background:#212327;color:#b9bec5;font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;font-size:13px;overflow:hidden">
  <sc-if value="{{ showStrip }}" hint-placeholder-val="{{ false }}">
   <div style="display:flex;align-items:center;gap:6px;padding:7px 16px;background:#26292e;flex:none"><div style="display:flex;gap:6px;flex:none"><span style="width:12px;height:12px;border-radius:50%;background:#4a4e55"></span><span style="width:12px;height:12px;border-radius:50%;background:#4a4e55"></span><span style="width:12px;height:12px;border-radius:50%;background:#4a4e55"></span></div></div>
@@ -175,14 +172,8 @@
     </sc-if>
    </div>
    <sc-if value="{{ activityShow }}" hint-placeholder-val="{{ false }}">
-    <div style="flex:none;padding:0 22px 8px">
-     <div style="font-size:11px;line-height:1.6;color:{{ activityColor }};display:flex;gap:8px;align-items:baseline">
-      <span class="{{ activityPulseClass }}" style="color:{{ activityGlyphColor }}">{{ activityGlyph }}</span>
-      <span>{{ activityText }}</span>
-     </div>
-     <div style="height:2px;margin-top:4px;background:#1a1c20;border-radius:1px;overflow:hidden">
-      <div class="{{ activityBarClass }}" style="height:100%;background:{{ activityBarColor }}"></div>
-     </div>
+    <div style="flex:none;padding:0 22px 8px;font-size:11px;line-height:1.6;color:{{ activityColor }}">
+     <span class="{{ activityPulseClass }}" style="color:{{ activityTurnColor }}">{{ activityTurnWord }}</span><sc-if value="{{ activityRest }}" hint-placeholder-val="{{ false }}"><span> {{ activityRestText }}</span></sc-if>
     </div>
    </sc-if>
    <div style="flex:none;padding:0 22px 16px">
@@ -340,9 +331,8 @@
     </sc-if>
     <sc-if value="{{ notDescended }}" hint-placeholder-val="{{ true }}">
     <sc-if value="{{ activityShow }}" hint-placeholder-val="{{ false }}">
-     <div style="flex:none;padding:0 26px 6px;font-size:11px;line-height:1.6;color:{{ activityColor }};display:flex;gap:8px;align-items:baseline">
-      <span style="color:{{ activityGlyphColor }}">{{ activityGlyph }}</span>
-      <span>{{ activityText }}</span>
+     <div style="flex:none;padding:0 26px 6px;font-size:11px;line-height:1.6;color:{{ activityColor }}">
+      <span class="{{ activityPulseClass }}" style="color:{{ activityTurnColor }}">{{ activityTurnWord }}</span><sc-if value="{{ activityRest }}" hint-placeholder-val="{{ false }}"><span> {{ activityRestText }}</span></sc-if>
      </div>
     </sc-if>
     <div style="flex:none;padding:12px 26px 18px"><div style="display:flex;gap:12px;align-items:center;border-radius:6px;padding:10px 15px;background:#1a1c20"><span style="color:#82a5c8">›</span><input value="{{ promptVal }}" onChange="{{ onPrompt }}" onKeyDown="{{ onPromptKey }}" placeholder="type to talk · ↵ to send" style="flex:1;background:none;border:none;outline:none;color:#e2e5e9;font-family:inherit;font-size:13px"></input></div></div>
@@ -880,15 +870,21 @@ class Component extends DCLogic {
       const liveToolName = outstanding.size ? Array.from(outstanding.values()).pop() : '';
       const umT = typeof lastUM.t === 'number' ? lastUM.t : nowSec;
       const secs = Math.max(0, Math.floor(nowSec - umT));
-      const verb = liveToolName || 'thinking';
-      const turnLabel = turnIdx !== null ? `turn ${turnIdx} · ` : '';
-      const toolLabel = tools === 0 ? '' : ` · ${tools} tool${tools === 1 ? '' : 's'}`;
+      // "turn N" is the head word and pulses. The tail names what the
+      // turn is doing right now: the tool's name when a tool is
+      // running, or nothing (empty) when the model is between tools.
+      // Static "thinking" is dishonest and gone.
+      const turnWord = turnIdx !== null ? `turn ${turnIdx}` : 'turn';
+      const restParts = [];
+      if (liveToolName) restParts.push(liveToolName);
+      restParts.push(`${secs}s`);
+      if (tools > 0) restParts.push(`${tools} tool${tools === 1 ? '' : 's'}`);
+      const restText = restParts.join(' · ');
       return {
-        kind: 'live', verb, seconds: secs,
-        text: `${turnLabel}${verb} · ${secs}s${toolLabel}`,
-        glyph: '◌',
-        glyphColor: '#7fb3b8',
-        color: '#b9bec5',
+        kind: 'live', verb: liveToolName || '', seconds: secs,
+        turnWord, turnColor: '#82a5c8',
+        restText, hasRest: restText.length > 0,
+        color: '#9aa0a8',
         pulseOn: true,
       };
     }
@@ -909,12 +905,14 @@ class Component extends DCLogic {
     const parkReason = (lastPark.payload && lastPark.payload.reason) || '';
     const parkLabel = lastParkKind === 'SessionEnded' ? 'session ended' : `parked${parkReason ? ' (' + parkReason + ')' : ''}`;
     const toolLabel = tools.length === 0 ? 'no tools' : `${tools.length} tool${tools.length === 1 ? '' : 's'}`;
-    const turnLabel = turnIdx !== null ? `turn ${turnIdx} · ` : '';
+    // Recap keeps the same head/tail split so the strip layout does
+    // not change between states — only the pulse stops.
+    const turnWord = turnIdx !== null ? `turn ${turnIdx}` : 'turn';
+    const restText = `${elapsedTxt} · ${toolLabel} · ${parkLabel}`;
     return {
       kind: 'recap',
-      text: `${turnLabel}${elapsedTxt} · ${toolLabel} · ${parkLabel}`,
-      glyph: '·',
-      glyphColor: '#4a4e55',
+      turnWord, turnColor: '#62676f',
+      restText, hasRest: true,
       color: '#62676f',
       pulseOn: false,
     };
@@ -1006,14 +1004,16 @@ class Component extends DCLogic {
       scriptedOn: false,
       liveTranscript: filteredRows,
       // Activity strip above the prompt (live producer / turn recap).
+      // "turn N" is the head word and pulses in the live state; the
+      // tail lists tool name / seconds / tool count. Recap replaces
+      // the tail with elapsed / tool count / park reason.
       activityShow: !!activity,
-      activityText: activity ? activity.text : '',
-      activityGlyph: activity ? activity.glyph : '',
-      activityGlyphColor: activity ? activity.glyphColor : '#4a4e55',
+      activityTurnWord: activity ? activity.turnWord : '',
+      activityTurnColor: activity ? activity.turnColor : '#4a4e55',
+      activityRest: activity ? activity.hasRest : false,
+      activityRestText: activity ? activity.restText : '',
       activityColor: activity ? activity.color : '#62676f',
       activityPulseClass: activity && activity.pulseOn ? 'act-pulse' : '',
-      activityBarClass: activity && activity.pulseOn ? 'act-bar-live' : 'act-bar-done',
-      activityBarColor: activity && activity.pulseOn ? '#7fb3b8' : '#4a4e55',
       liveEmpty: hasSession && rows.length === 0,
       liveSessionLabel: snap && snap.sessionName ? snap.sessionName
         : (snap && snap.sessionId ? snap.sessionId.slice(0, 12) : ''),
