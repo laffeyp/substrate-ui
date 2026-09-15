@@ -112,4 +112,10 @@ export interface Snapshot {
    * order. The transcript is a compact projection of this; the stream
    * lens renders it directly. */
   rawEnvelopes: RecordEnvelope[];
+  /** Phase 8 item 8: streaming tool output keyed by call_id. Each
+   * ToolProgress envelope for a call appends its `chunk` (or on eof,
+   * marks the entry closed). The tool card renders `progressByCallId[cid]`
+   * beneath the running row and seals when the paired ToolResult lands.
+   * Empty for calls that never streamed (calculator, read_file, etc.). */
+  progressByCallId: Record<string, { text: string; eof: boolean }>;
 }
