@@ -113,6 +113,7 @@ export class PaneRegistry {
   submitLine(text: string): Promise<boolean> { return this.active().submitLine(text); }
   endSession(reason: string): Promise<void> { return this.active().endSession(reason); }
   attachExisting(id: string): Promise<void> { return this.active().attachExisting(id); }
+  attachRecordRoot(recordRoot: string): Promise<void> { return this.active().attachRecordRoot(recordRoot); }
   pickDriver(name: string): void { this.active().pickDriver(name); }
   pickBundle(slug: string | null): void { this.active().pickBundle(slug); }
   interruptTurn(tier: "soft" | "hard" = "hard"): Promise<void> { return this.active().interruptTurn(tier); }
