@@ -589,11 +589,11 @@ export class SessionController {
   /** Interrupt the in-flight turn. Server refuses if no turn is
    * running (returns {interrupted: false}). Records the outcome as a
    * transcript row so the UI shows what happened. */
-  async interruptTurn(): Promise<void> {
+  async interruptTurn(tier: "soft" | "hard" = "hard"): Promise<void> {
     const sessionId = this.snap.sessionId;
     if (!sessionId) return;
-    const result = await this.client.fetchJson<{ interrupted?: boolean; landed?: boolean }>(
-      `/api/session/${encodeURIComponent(sessionId)}/interrupt`,
+    const result = await this.client.fetchJson<{ interrupted?: boolean; landed?: boolean; signal?: boolean; tier?: string }>(
+      `/api/session/${encodeURIComponent(sessionId)}/interrupt?tier=${tier}`,
       { method: "POST", body: {} },
     );
     if (!result.ok) {
@@ -606,33 +606,22 @@ export class SessionController {
     }
     const wasInterrupted = result.data?.interrupted === true;
     const landed = result.data?.landed === true;
-    // Substrate's /interrupt cancels the MODEL producer only. During a
-    // tool call the model producer has already completed and the tool
-    // producer is running instead — the registry reports "nothing to
-    // cancel". Detect that specific case by walking the recent
-    // envelope tail: an unpaired ToolCall means a tool is in flight.
+    const isSignal = result.data?.signal === true;
     let text: string;
-    if (wasInterrupted) {
+    if (isSignal) {
+      // Phase 8 item 5 · tier=soft with a live tool: the registry
+      // recorded the signal; the model will read the InterruptRequested
+      // envelope on its next turn (items 6-7) and return.
+      text = "^C — soft interrupt requested; the model will stop after this tool";
+    } else if (wasInterrupted && tier === "hard") {
+      text = "^C — hard interrupt; producer cancelled";
+    } else if (wasInterrupted) {
       text = `^C interrupt (${landed ? "landed" : "dispatched — envelope arriving on /events"})`;
     } else {
-      const tail = this.snap.rawEnvelopes.slice(-40);
-      const openTool = (() => {
-        const outstanding = new Map<string, string>();
-        for (const env of tail) {
-          const p = env.payload || {};
-          if (env.kind === "ToolCall" && typeof p.call_id === "string") outstanding.set(p.call_id, typeof p.tool === "string" ? p.tool : "");
-          if (env.kind === "ToolResult" && typeof p.call_id === "string") outstanding.delete(p.call_id);
-        }
-        if (outstanding.size === 0) return null;
-        const [, tool] = Array.from(outstanding.entries()).pop() as [string, string];
-        return tool || "tool";
-      })();
-      text = openTool
-        ? `^C — a ${openTool} tool call is running; substrate's interrupt only reaches the MODEL producer today. The tool will return on its own or timeout.`
-        : "^C — no turn in flight";
+      text = "^C — no turn in flight";
     }
     this.appendTranscript({ seq: -Math.round(Date.now()) - 6, kind: "Interrupted", role: "system", text });
-    this.emit("TURN_INTERRUPTED", { was_interrupted: wasInterrupted, landed });
+    this.emit("TURN_INTERRUPTED", { was_interrupted: wasInterrupted, landed, tier, signal: isSignal });
   }
 
   disconnect(): void {

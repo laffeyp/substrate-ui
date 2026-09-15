@@ -838,24 +838,23 @@ class SessionRegistry:
         """F14: increment the turn counter after a successful turn."""
         self._next_turn_index[session_id] = self._next_turn_index.get(session_id, 0) + 1
 
-    def interrupt(self, session_id: str) -> dict[str, Any] | None:
-        """Sprint 217d: cancel the running turn's model producer via the v0.3
-        `Runtime.cancel_producer(instance, cause="external", caller=...)`
-        substrate primitive. Reaches the worker thread's event loop through
-        `_running_handles.loop` and schedules a lookup+cancel closure via
-        `call_soon_threadsafe` so the primitive runs on the loop it belongs to
-        (the primitive's own thread-safety contract).
+    def interrupt(
+        self,
+        session_id: str,
+        *,
+        tier: str = "hard",
+    ) -> dict[str, Any] | None:
+        """Sprint 217d + Phase 8 item 5: cancel a running producer through
+        `Runtime.cancel_producer`. See ../substrate/src/substrate/session_registry.py
+        for the full docstring. This copy is the daemon-side runtime path.
 
-        Returns the cancelled producer's `ProducerRef` dict `{kind, instance,
-        parent}` when a cancel was dispatched. Returns `None` when no turn is
-        running for this session (parked, no handle, runtime not yet live) or
-        when the model producer has already completed / never started.
-
-        The dispatch is synchronous from the caller's view up to a 1-second
-        wait for the loop-side closure to complete; the resulting
-        `ProducerCancelled` envelope lands on the record asynchronously
-        (the CancelledError handler in `_producer_task` writes it). The
-        endpoint layer polls the record if it needs to observe the landing.
+        `tier="hard"` walks `kind_by_instance` for `model` then `tool` and
+        cancels the first live one. `tier="soft"` cancels a live model
+        (soft on a model is a graceful stop), but for a live TOOL it does
+        NOT cancel — it returns a synthetic ref `{kind: "signal", instance:
+        "soft", parent: null}` so the caller knows the request landed as a
+        signal. The InterruptRequested envelope that carries the signal to
+        the model is written by phase-8 items 6 and 7 on the producer side.
         """
         import concurrent.futures
 
@@ -866,6 +865,8 @@ class SessionRegistry:
         runtime = handle.runtime
         if loop is None or runtime is None:
             return None
+        if tier not in ("soft", "hard"):
+            raise ValueError(f"tier must be 'soft' or 'hard', got {tier!r}")
 
         fut: concurrent.futures.Future[dict[str, Any] | None] = concurrent.futures.Future()
 
@@ -875,16 +876,25 @@ class SessionRegistry:
                 if st is None:
                     fut.set_result(None)
                     return
-                # Find the live model instance under the loop's own view of
-                # kind_by_instance; the read is consistent because we run on
-                # the loop that mutates it.
+                live_model = None
+                live_tool = None
                 for inst, kind in list(st.kind_by_instance.items()):
-                    if kind == "model":
-                        ref = runtime.cancel_producer(
-                            inst, cause="external", caller="daemon:interrupt"
-                        )
+                    if kind == "model" and live_model is None:
+                        live_model = inst
+                    elif kind == "tool" and live_tool is None:
+                        live_tool = inst
+                caller = f"daemon:interrupt-{tier}"
+                if live_model is not None:
+                    ref = runtime.cancel_producer(live_model, cause="external", caller=caller)
+                    fut.set_result(ref)
+                    return
+                if live_tool is not None:
+                    if tier == "hard":
+                        ref = runtime.cancel_producer(live_tool, cause="external", caller=caller)
                         fut.set_result(ref)
                         return
+                    fut.set_result({"kind": "signal", "instance": "soft", "parent": None})
+                    return
                 fut.set_result(None)
             except Exception as exc:  # noqa: BLE001 — carry to the caller thread
                 fut.set_exception(exc)
