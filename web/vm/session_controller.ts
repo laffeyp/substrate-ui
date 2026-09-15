@@ -107,6 +107,7 @@ const EMPTY_SNAPSHOT: Snapshot = {
   lastError: null,
   topologyGraph: null,
   rawEnvelopes: [],
+  progressByCallId: {},
 };
 
 export class SessionController {
@@ -285,6 +286,7 @@ export class SessionController {
       turnIndex: 0,
       transcript: [],
       rawEnvelopes: [],
+      progressByCallId: {},
       parkReason: null,
       endedReason: null,
     });
@@ -344,6 +346,7 @@ export class SessionController {
       turnIndex: 0,
       transcript: [],
       rawEnvelopes: [],
+      progressByCallId: {},
       parkReason: null,
       endedReason: null,
       connection: "connecting",
@@ -392,6 +395,7 @@ export class SessionController {
       turnIndex: 0,
       transcript: [],
       rawEnvelopes: [],
+      progressByCallId: {},
       parkReason: null,
       endedReason: null,
     });
@@ -745,6 +749,21 @@ export class SessionController {
         });
         return;
       }
+      case "ToolProgress": {
+        // Phase 8 item 8: append a chunk under the ToolCall row's card.
+        // The chunk may be empty on eof (marker only). We build a fresh
+        // progressByCallId map so the setState triggers a re-render.
+        const callId = payload.call_id ? String(payload.call_id) : "";
+        if (!callId) return;
+        const chunk = typeof payload.chunk === "string" ? payload.chunk : "";
+        const eof = payload.eof === true;
+        const prior = this.snap.progressByCallId[callId] ?? { text: "", eof: false };
+        const nextEntry = { text: prior.text + chunk, eof: prior.eof || eof };
+        this.patch({
+          progressByCallId: { ...this.snap.progressByCallId, [callId]: nextEntry },
+        });
+        return;
+      }
       case "ToolResult": {
         // Phase 8 · 21b: carry the output/error onto the row. The
         // matching ToolCall row is looked up by call_id at render.
@@ -764,6 +783,20 @@ export class SessionController {
           text: ok ? `${toolName} → ok` : `${toolName} → err ${err}`,
           toolName, callId, output, error: err, toolOk: ok, toolStep: step,
         });
+        // Seal any ToolProgress stream for this callId — the paired
+        // ToolResult is the definitive close, regardless of whether the
+        // tool emitted an explicit eof=true chunk.
+        if (callId && this.snap.progressByCallId[callId]) {
+          const entry = this.snap.progressByCallId[callId];
+          if (!entry.eof) {
+            this.patch({
+              progressByCallId: {
+                ...this.snap.progressByCallId,
+                [callId]: { text: entry.text, eof: true },
+              },
+            });
+          }
+        }
         return;
       }
       case "Park": {

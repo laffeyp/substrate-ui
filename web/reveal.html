@@ -126,6 +126,10 @@
           <sc-if value="{{ row.hasError }}" hint-placeholder-val="{{ false }}">
            <div style="margin-top:6px;color:#c26058">error {{ row.toolError }}</div>
           </sc-if>
+          <sc-if value="{{ row.streamingShow }}" hint-placeholder-val="{{ false }}">
+           <div style="margin-top:6px;color:#62676f">streaming <sc-if value="{{ row.streamingEof }}" hint-placeholder-val="{{ false }}"><span style="color:#4a4e55">· eof</span></sc-if></div>
+           <div style="background:#1a1c20;border-radius:5px;padding:8px 12px;max-height:220px;overflow:auto;color:#7fb3b8;white-space:pre-wrap;font-family:ui-monospace,'SF Mono',Menlo,monospace">{{ row.streamingText }}</div>
+          </sc-if>
           <div style="color:#4a4e55;margin-top:6px">call_id {{ row.toolCallId }} · step {{ row.toolStep }} · {{ row.toolStatus }} · {{ row.toolBytes }}</div>
          </div>
         </sc-if>
@@ -1019,6 +1023,15 @@ class Component extends DCLogic {
           descPv: '',
         }));
       };
+      // Phase 8 item 8: streaming ToolProgress for this call. The
+      // controller collects chunks under snap.progressByCallId[callId]
+      // and marks eof when the paired ToolResult lands. Show the pane
+      // whenever there's any text — running or just-sealed.
+      const progressMap = (snap && snap.progressByCallId) || {};
+      const progressEntry = (isToolCall && row.callId) ? progressMap[row.callId] : null;
+      const streamingShow = !!(progressEntry && progressEntry.text);
+      const streamingText = progressEntry ? progressEntry.text : '';
+      const streamingEof = !!(progressEntry && progressEntry.eof);
       return {
         glyph, glyphColor, textColor, marginTop, text, blocks, isModel, notModel: !isModel, opacity,
         isTool, notTool,
@@ -1030,6 +1043,7 @@ class Component extends DCLogic {
         openCard: isTool && row.callId ? bindToggleTool(row.callId) : (() => {}),
         descendShow, descendPath,
         descend: descendShow ? bindDescend(descendPath) : (() => {}),
+        streamingShow, streamingText, streamingEof,
       };
     });
     // Only KEEP one row per (ToolCall, ToolResult) pair — the ToolCall
