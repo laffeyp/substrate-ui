@@ -12,7 +12,12 @@
 </head>
 <body>
 <x-dc>
-<helmet data-dc-atomics><style>body{margin:0;background:#212327}a{color:#82a5c8}a:hover{color:#9db8d6}*{scrollbar-width:thin;scrollbar-color:#33373d transparent}::-webkit-scrollbar{width:5px;height:5px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#33373d;border-radius:3px}::-webkit-scrollbar-thumb:hover{background:#4a4e55}</style></helmet>
+<helmet data-dc-atomics><style>body{margin:0;background:#212327}a{color:#82a5c8}a:hover{color:#9db8d6}*{scrollbar-width:thin;scrollbar-color:#33373d transparent}::-webkit-scrollbar{width:5px;height:5px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#33373d;border-radius:3px}::-webkit-scrollbar-thumb:hover{background:#4a4e55}
+@keyframes actglyph{0%{opacity:.35}50%{opacity:1}100%{opacity:.35}}
+.act-pulse{animation:actglyph 1.2s ease-in-out infinite}
+@keyframes actshimmer{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
+.act-bar-live{width:40%;animation:actshimmer 1.6s linear infinite}
+.act-bar-done{width:100%;opacity:.35}</style></helmet>
 <div style="height:100vh;display:flex;flex-direction:column;background:#212327;color:#b9bec5;font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;font-size:13px;overflow:hidden">
  <sc-if value="{{ showStrip }}" hint-placeholder-val="{{ false }}">
   <div style="display:flex;align-items:center;gap:6px;padding:7px 16px;background:#26292e;flex:none"><div style="display:flex;gap:6px;flex:none"><span style="width:12px;height:12px;border-radius:50%;background:#4a4e55"></span><span style="width:12px;height:12px;border-radius:50%;background:#4a4e55"></span><span style="width:12px;height:12px;border-radius:50%;background:#4a4e55"></span></div></div>
@@ -170,9 +175,14 @@
     </sc-if>
    </div>
    <sc-if value="{{ activityShow }}" hint-placeholder-val="{{ false }}">
-    <div style="flex:none;padding:0 22px 8px;font-size:11px;line-height:1.6;color:{{ activityColor }};display:flex;gap:8px;align-items:baseline">
-     <span style="color:{{ activityGlyphColor }}">{{ activityGlyph }}</span>
-     <span>{{ activityText }}</span>
+    <div style="flex:none;padding:0 22px 8px">
+     <div style="font-size:11px;line-height:1.6;color:{{ activityColor }};display:flex;gap:8px;align-items:baseline">
+      <span class="{{ activityPulseClass }}" style="color:{{ activityGlyphColor }}">{{ activityGlyph }}</span>
+      <span>{{ activityText }}</span>
+     </div>
+     <div style="height:2px;margin-top:4px;background:#1a1c20;border-radius:1px;overflow:hidden">
+      <div class="{{ activityBarClass }}" style="height:100%;background:{{ activityBarColor }}"></div>
+     </div>
     </div>
    </sc-if>
    <div style="flex:none;padding:0 22px 16px">
@@ -827,95 +837,78 @@ class Component extends DCLogic {
   }
   _liveActivity(snap) {
     // The activity strip above the prompt has three states.
-    // Live: an unpaired ProducerStarted for `model` or `tool` — name
-    //   the producer and count seconds since it started.
-    // Recap: the most recent envelope is a Park (or SessionEnded);
-    //   walk back to the UserMessage that started that turn, count
-    //   the tools that ran, compute elapsed seconds from the first
-    //   turn-envelope timestamp to the Park.
-    // Empty: no session, no envelopes, or a session that has not run
-    //   its first turn yet.
+    // Live: the most recent UserMessage has no Park after it — a turn
+    //   is running. The verb names what is happening RIGHT NOW: the
+    //   name of the currently-open ToolCall if one is unpaired, else
+    //   "thinking". Seconds count up from the UserMessage; the tool
+    //   counter grows as ToolCalls in this turn accumulate. A CSS
+    //   pulse on the glyph and a shimmer bar under the row read as
+    //   "something is happening" between envelopes.
+    // Recap: the last Park landed after the last UserMessage. Turn is
+    //   done. Report turn index, elapsed, tools, park reason.
+    // Empty: no session or no envelopes.
     if (!snap || !Array.isArray(snap.rawEnvelopes) || !snap.rawEnvelopes.length) return null;
     const envs = snap.rawEnvelopes;
     const nowSec = Date.now() / 1000;
-    // Walk backward for a live producer.
-    const openStarts = new Map(); // instance → { kind, tool, t }
-    for (const env of envs) {
-      const kind = env.kind || '';
-      const inst = env.producer && env.producer.instance;
-      const pkind = (env.payload && env.payload.kind) || '';
-      const t = typeof env.t === 'number' ? env.t : 0;
-      if (kind === 'substrate.ProducerStarted' && inst && pkind) {
-        openStarts.set(inst, { kind: pkind, t });
-      } else if (kind === 'substrate.ProducerCompleted' && inst && openStarts.has(inst)) {
-        openStarts.delete(inst);
-      }
+    // Find the last UserMessage and last Park/SessionEnded by seq.
+    let lastUM = null, lastPark = null, lastParkKind = '';
+    for (let i = envs.length - 1; i >= 0; i--) {
+      const e = envs[i];
+      if (!lastPark && (e.kind === 'Park' || e.kind === 'SessionEnded')) { lastPark = e; lastParkKind = e.kind; }
+      if (!lastUM && e.kind === 'UserMessage') lastUM = e;
+      if (lastUM && lastPark) break;
     }
-    let liveTool = null, liveModel = null;
-    for (const [, info] of openStarts) {
-      if (info.kind === 'tool' && !liveTool) liveTool = info;
-      else if (info.kind === 'model' && !liveModel) liveModel = info;
-    }
-    // Also read the current tool call to name it — the last ToolCall
-    // whose ToolResult has not landed.
-    let liveToolName = '';
-    if (liveTool) {
+    if (!lastUM) return null;
+    const umSeq = typeof lastUM.seq === 'number' ? lastUM.seq : -1;
+    const parkSeq = lastPark && typeof lastPark.seq === 'number' ? lastPark.seq : -1;
+    const turnIsLive = !lastPark || umSeq > parkSeq;
+    const turnIdx = lastUM.payload && typeof lastUM.payload.turn_index === 'number' ? lastUM.payload.turn_index : null;
+    if (turnIsLive) {
+      // Count tools started in this turn.
+      let tools = 0;
       const outstanding = new Map();
-      for (const env of envs) {
-        const p = env.payload || {};
-        if (env.kind === 'ToolCall' && typeof p.call_id === 'string') outstanding.set(p.call_id, typeof p.tool === 'string' ? p.tool : 'tool');
-        if (env.kind === 'ToolResult' && typeof p.call_id === 'string') outstanding.delete(p.call_id);
+      for (const e of envs) {
+        if (typeof e.seq !== 'number' || e.seq < umSeq) continue;
+        const p = e.payload || {};
+        if (e.kind === 'ToolCall' && typeof p.call_id === 'string') {
+          tools++;
+          outstanding.set(p.call_id, typeof p.tool === 'string' ? p.tool : 'tool');
+        } else if (e.kind === 'ToolResult' && typeof p.call_id === 'string') {
+          outstanding.delete(p.call_id);
+        }
       }
-      if (outstanding.size) {
-        const last = Array.from(outstanding.entries()).pop();
-        liveToolName = last[1] || 'tool';
-      }
-    }
-    if (liveTool || liveModel) {
-      const producer = liveTool || liveModel;
-      const secs = Math.max(0, Math.floor(nowSec - (producer.t || nowSec)));
-      const verb = liveTool ? (liveToolName || 'tool') : 'thinking';
+      const liveToolName = outstanding.size ? Array.from(outstanding.values()).pop() : '';
+      const umT = typeof lastUM.t === 'number' ? lastUM.t : nowSec;
+      const secs = Math.max(0, Math.floor(nowSec - umT));
+      const verb = liveToolName || 'thinking';
+      const turnLabel = turnIdx !== null ? `turn ${turnIdx} · ` : '';
+      const toolLabel = tools === 0 ? '' : ` · ${tools} tool${tools === 1 ? '' : 's'}`;
       return {
         kind: 'live', verb, seconds: secs,
-        text: `${verb} · ${secs}s`,
+        text: `${turnLabel}${verb} · ${secs}s${toolLabel}`,
         glyph: '◌',
         glyphColor: '#7fb3b8',
         color: '#b9bec5',
+        pulseOn: true,
       };
     }
-    // No live producer. Build the recap for the most recent completed
-    // turn. A turn runs from a UserMessage to the next Park or
-    // SessionEnded.
-    let parkIdx = -1, parkKind = '';
-    for (let i = envs.length - 1; i >= 0; i--) {
-      if (envs[i].kind === 'Park' || envs[i].kind === 'SessionEnded') {
-        parkIdx = i;
-        parkKind = envs[i].kind;
-        break;
-      }
-    }
-    if (parkIdx < 0) return null;
-    let umIdx = -1;
-    for (let i = parkIdx; i >= 0; i--) {
-      if (envs[i].kind === 'UserMessage') { umIdx = i; break; }
-    }
-    const start = umIdx >= 0 ? envs[umIdx] : envs[0];
-    const end = envs[parkIdx];
+    // Recap for the completed turn between lastUM and lastPark.
     const tools = [];
-    for (let i = umIdx >= 0 ? umIdx + 1 : 0; i <= parkIdx; i++) {
-      if (envs[i].kind === 'ToolCall') {
-        const p = envs[i].payload || {};
+    for (const e of envs) {
+      if (typeof e.seq !== 'number') continue;
+      if (e.seq < umSeq || e.seq > parkSeq) continue;
+      if (e.kind === 'ToolCall') {
+        const p = e.payload || {};
         if (typeof p.tool === 'string') tools.push(p.tool);
       }
     }
-    const startT = typeof start.t === 'number' ? start.t : 0;
-    const endT = typeof end.t === 'number' ? end.t : 0;
+    const startT = typeof lastUM.t === 'number' ? lastUM.t : 0;
+    const endT = typeof lastPark.t === 'number' ? lastPark.t : 0;
     const elapsed = Math.max(0, endT - startT);
     const elapsedTxt = elapsed >= 60 ? `${(elapsed / 60).toFixed(1)}m` : `${elapsed.toFixed(1)}s`;
-    const parkReason = (end.payload && end.payload.reason) || '';
-    const parkLabel = parkKind === 'SessionEnded' ? 'session ended' : `parked${parkReason ? ' (' + parkReason + ')' : ''}`;
+    const parkReason = (lastPark.payload && lastPark.payload.reason) || '';
+    const parkLabel = lastParkKind === 'SessionEnded' ? 'session ended' : `parked${parkReason ? ' (' + parkReason + ')' : ''}`;
     const toolLabel = tools.length === 0 ? 'no tools' : `${tools.length} tool${tools.length === 1 ? '' : 's'}`;
-    const turnIdx = start.payload && typeof start.payload.turn_index === 'number' ? start.payload.turn_index : null;
     const turnLabel = turnIdx !== null ? `turn ${turnIdx} · ` : '';
     return {
       kind: 'recap',
@@ -923,6 +916,7 @@ class Component extends DCLogic {
       glyph: '·',
       glyphColor: '#4a4e55',
       color: '#62676f',
+      pulseOn: false,
     };
   }
   _liveBindingsFor(paneId, S) {
@@ -1017,6 +1011,9 @@ class Component extends DCLogic {
       activityGlyph: activity ? activity.glyph : '',
       activityGlyphColor: activity ? activity.glyphColor : '#4a4e55',
       activityColor: activity ? activity.color : '#62676f',
+      activityPulseClass: activity && activity.pulseOn ? 'act-pulse' : '',
+      activityBarClass: activity && activity.pulseOn ? 'act-bar-live' : 'act-bar-done',
+      activityBarColor: activity && activity.pulseOn ? '#7fb3b8' : '#4a4e55',
       liveEmpty: hasSession && rows.length === 0,
       liveSessionLabel: snap && snap.sessionName ? snap.sessionName
         : (snap && snap.sessionId ? snap.sessionId.slice(0, 12) : ''),
