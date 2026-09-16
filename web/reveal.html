@@ -119,6 +119,10 @@
          <div style="margin:6px 0 8px 24px;background:#26292e;border-radius:0 0 6px 6px;padding:10px 14px;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:11px;line-height:1.7;color:#b9bec5">
           <div style="color:#62676f">args</div>
           <sc-for list="{{ row.toolArgs }}" as="a" hint-placeholder-count="1"><div style="color:#b9bec5">{{ a.i }} <span style="color:#e2e5e9">{{ a.v }}</span></div></sc-for>
+          <sc-if value="{{ row.streamingShow }}" hint-placeholder-val="{{ false }}">
+           <div style="margin-top:8px;color:#62676f">streaming <sc-if value="{{ row.streamingEof }}" hint-placeholder-val="{{ false }}"><span style="color:#4a4e55">· eof</span></sc-if></div>
+           <div style="background:#1a1c20;border-radius:5px;padding:8px 12px;max-height:220px;overflow:auto;color:#7fb3b8;white-space:pre-wrap">{{ row.streamingText }}</div>
+          </sc-if>
           <sc-if value="{{ row.hasResult }}" hint-placeholder-val="{{ true }}">
            <div style="margin-top:8px;color:#62676f">output</div>
            <div style="background:#1a1c20;border-radius:5px;padding:8px 12px;max-height:220px;overflow:auto;color:#9aa0a8;white-space:pre-wrap">{{ row.toolOutput }}</div>
@@ -127,12 +131,6 @@
            <div style="margin-top:6px;color:#c26058">error {{ row.toolError }}</div>
           </sc-if>
           <div style="color:#4a4e55;margin-top:6px">call_id {{ row.toolCallId }} · step {{ row.toolStep }} · {{ row.toolStatus }} · {{ row.toolBytes }}</div>
-         </div>
-        </sc-if>
-        <sc-if value="{{ row.streamingShow }}" hint-placeholder-val="{{ false }}">
-         <div style="margin:4px 0 4px 24px;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:11px;line-height:1.6">
-          <div style="color:#62676f">streaming <sc-if value="{{ row.streamingEof }}" hint-placeholder-val="{{ false }}"><span style="color:#4a4e55">· eof</span></sc-if></div>
-          <div style="background:#1a1c20;border-radius:5px;padding:6px 10px;max-height:180px;overflow:auto;color:#7fb3b8;white-space:pre-wrap">{{ row.streamingText }}</div>
          </div>
         </sc-if>
        </sc-if>
@@ -288,6 +286,10 @@
           <div style="margin:6px 0 8px 24px;background:#26292e;border-radius:0 0 6px 6px;padding:10px 14px;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:11px;line-height:1.7;color:#b9bec5">
            <div style="color:#62676f">args</div>
            <sc-for list="{{ row.toolArgs }}" as="a" hint-placeholder-count="1"><div style="color:#b9bec5">{{ a.i }} <span style="color:#e2e5e9">{{ a.v }}</span></div></sc-for>
+           <sc-if value="{{ row.streamingShow }}" hint-placeholder-val="{{ false }}">
+            <div style="margin-top:8px;color:#62676f">streaming <sc-if value="{{ row.streamingEof }}" hint-placeholder-val="{{ false }}"><span style="color:#4a4e55">· eof</span></sc-if></div>
+            <div style="background:#1a1c20;border-radius:5px;padding:8px 12px;max-height:220px;overflow:auto;color:#7fb3b8;white-space:pre-wrap">{{ row.streamingText }}</div>
+           </sc-if>
            <sc-if value="{{ row.hasResult }}" hint-placeholder-val="{{ true }}">
             <div style="margin-top:8px;color:#62676f">output</div>
             <div style="background:#1a1c20;border-radius:5px;padding:8px 12px;max-height:220px;overflow:auto;color:#9aa0a8;white-space:pre-wrap">{{ row.toolOutput }}</div>
@@ -296,12 +298,6 @@
             <div style="margin-top:6px;color:#c26058">error {{ row.toolError }}</div>
            </sc-if>
            <div style="color:#4a4e55;margin-top:6px">call_id {{ row.toolCallId }} · step {{ row.toolStep }} · {{ row.toolStatus }} · {{ row.toolBytes }}</div>
-          </div>
-         </sc-if>
-         <sc-if value="{{ row.streamingShow }}" hint-placeholder-val="{{ false }}">
-          <div style="margin:4px 0 4px 24px;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:11px;line-height:1.6">
-           <div style="color:#62676f">streaming <sc-if value="{{ row.streamingEof }}" hint-placeholder-val="{{ false }}"><span style="color:#4a4e55">· eof</span></sc-if></div>
-           <div style="background:#1a1c20;border-radius:5px;padding:6px 10px;max-height:180px;overflow:auto;color:#7fb3b8;white-space:pre-wrap">{{ row.streamingText }}</div>
           </div>
          </sc-if>
         </sc-if>
@@ -967,6 +963,11 @@ class Component extends DCLogic {
       // (⚙); a failed result stamps ⚠ onto the CALL row so the arg
       // preview stays legible.
       const isToolCall = row.kind === 'ToolCall';
+      const progressMap = (snap && snap.progressByCallId) || {};
+      const progressEntry = (isToolCall && row.callId) ? progressMap[row.callId] : null;
+      const streamingShow = !!(progressEntry && progressEntry.text);
+      const streamingText = progressEntry ? progressEntry.text : '';
+      const streamingEof = !!(progressEntry && progressEntry.eof);
       let toolCardOpen = false, toolGlyph = '', toolPreview = '', toolArgs = [], toolOutput = '', toolError = '', toolCallId = '', toolStep = '', toolBytes = '', toolStatus = '', toolStatusColor = '#62676f', toolRunning = false;
       let descendShow = false, descendPath = '';
       if (isToolCall && row.callId) {
@@ -1003,7 +1004,15 @@ class Component extends DCLogic {
         toolBytes = paired ? String(toolOutput.length) + ' bytes' : '';
         toolStatus = toolRunning ? 'running' : failed ? 'err · ' + toolError : 'ok';
         toolStatusColor = toolRunning ? '#7fb3b8' : failed ? '#c26058' : '#9aa0a8';
-        toolCardOpen = !!toolOpen[row.callId];
+        // Auto-open a running tool's card so streaming is visible without
+        // a click. A user who explicitly collapses it (toolOpen[cid] === false)
+        // keeps it closed. Otherwise: open while running OR while streaming
+        // chunks are pending. A sealed tool with no explicit state stays
+        // collapsed by default (post-hoc review click).
+        const explicit = toolOpen[row.callId];
+        if (explicit === true) toolCardOpen = true;
+        else if (explicit === false) toolCardOpen = false;
+        else toolCardOpen = toolRunning || streamingShow;
       }
       const isTool = row.role === 'tool' && isToolCall;
       const notTool = !isTool;
@@ -1031,15 +1040,14 @@ class Component extends DCLogic {
           descPv: '',
         }));
       };
-      // Phase 8 item 8: streaming ToolProgress for this call. The
-      // controller collects chunks under snap.progressByCallId[callId]
-      // and marks eof when the paired ToolResult lands. Show the pane
-      // whenever there's any text — running or just-sealed.
-      const progressMap = (snap && snap.progressByCallId) || {};
-      const progressEntry = (isToolCall && row.callId) ? progressMap[row.callId] : null;
-      const streamingShow = !!(progressEntry && progressEntry.text);
-      const streamingText = progressEntry ? progressEntry.text : '';
-      const streamingEof = !!(progressEntry && progressEntry.eof);
+      // The output pane in the card waits for the STREAM to close, not
+      // just for the ToolResult. A streaming tool's ToolResult carries
+      // the same bytes the chunks already delivered; showing both makes
+      // the output panel fill while the streaming pane below it is still
+      // ticking. Rule: if streaming happened, output shows only after
+      // streamingEof; a non-streaming tool shows output the moment the
+      // ToolResult lands.
+      const hasResult = !toolRunning && (!streamingShow || streamingEof);
       return {
         glyph, glyphColor, textColor, marginTop, text, blocks, isModel, notModel: !isModel, opacity,
         isTool, notTool,
@@ -1047,7 +1055,7 @@ class Component extends DCLogic {
         toolPreview, toolCardOpen, cardCaret,
         toolArgs: toolArgs.map((a, i) => ({ i: '[' + i + ']', v: String(a) })),
         toolOutput, toolError, toolCallId, toolStep, toolBytes, toolStatus, toolStatusColor,
-        toolRunning, hasResult: !toolRunning, hasError: !!toolError,
+        toolRunning, hasResult, hasError: !!toolError,
         openCard: isTool && row.callId ? bindToggleTool(row.callId) : (() => {}),
         descendShow, descendPath,
         descend: descendShow ? bindDescend(descendPath) : (() => {}),
