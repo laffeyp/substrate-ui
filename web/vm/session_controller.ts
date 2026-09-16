@@ -801,7 +801,21 @@ export class SessionController {
       }
       case "Park": {
         const reason = String(payload.reason ?? "");
+        const detail = String(payload.detail ?? "");
         this.patch({ parkReason: reason });
+        // A park with a non-happy reason names its cause. `model_error`
+        // is the primary one: the ProducerFailed's `error` field carries
+        // the exception (a network hiccup, a 502 from the provider, a
+        // schema error). Surface it as a warning row so the user sees
+        // WHY the turn parked, not just that it did. `final_answer` and
+        // `interrupt` carry their meaning in the reason and get no detail.
+        if (detail) {
+          const shaped = summariseModelError(detail);
+          this.appendTranscript({
+            seq: env.seq - 0.5, kind: "ModelError", role: "warning",
+            text: `! model_error: ${shaped}`,
+          });
+        }
         this.appendTranscript({
           seq: env.seq, kind: env.kind, role: "park",
           text: `· parked (${reason}) — your turn`,
@@ -881,6 +895,37 @@ export class SessionController {
     for (const listener of this.listeners) listener(this.snap);
   }
 }
+
+/** Pull a readable kernel out of a wrapped model-producer error. The raw
+ * text is a `RuntimeError('<Responder> failed after N attempts: ...')`
+ * carrying a chain of HTTPStatusError + body JSON + Go dial errors from
+ * Ollama. Match the common cases first; fall back to a trimmed original.
+ * The full text stays on the record's Park.detail — this is display shaping. */
+function summariseModelError(raw: string): string {
+  // `dial tcp: lookup <host>: <reason>` — the DNS / connection kernel.
+  const dial = raw.match(/dial tcp: lookup ([^:"'\\]+): ([^"'\\]+)/);
+  if (dial) return `network — could not reach ${dial[1]} (${dial[2].trim()})`;
+  // `Server error 'NNN <Reason>' for url '<url>'`
+  const http = raw.match(/Server error '(\d{3}) ([^']+)'/);
+  if (http) {
+    const [, code, reason] = http;
+    if (code === "429") return `provider rate limited (429 ${reason})`;
+    if (code === "502" || code === "503" || code === "504") return `provider unavailable (${code} ${reason})`;
+    return `provider returned ${code} ${reason}`;
+  }
+  // Timeout signature.
+  if (/(timeout|timed out|deadline exceeded)/i.test(raw)) return `provider timed out — no response after 3 attempts`;
+  // Anti-spin bail (loop guarded).
+  if (/stopped after \d+ failed tool call/i.test(raw)) return `tool bail: model called the same failing tool repeatedly and was stopped`;
+  // Fallback: strip Python-wrapper crust and cap at 200 chars.
+  const stripped = raw
+    .replace(/^RuntimeError\(['"](.+?)['"]\)$/s, "$1")
+    .replace(/\\n/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return stripped.length > 200 ? stripped.slice(0, 200) + "…" : stripped;
+}
+
 
 function rowFrom(s: RawSession, status: SessionRow["status"]): SessionRow {
   const short = (s.session_id ?? "").slice(0, 12);
