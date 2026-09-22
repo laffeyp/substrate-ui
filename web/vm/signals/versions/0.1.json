@@ -1,8 +1,8 @@
 {
   "vocabulary_version": "0.1",
-  "locked": false,
-  "locked_at": null,
-  "locked_by": null,
+  "locked": true,
+  "locked_at": "2026-09-22",
+  "locked_by": "Architect (Peter) ratified 2026-09-22 after the phase-5 shakeout closed 28 flows × 5 runs = 140 driven turns under kimi-k2.7-code:cloud with 129 tags at 5/5, zero warnings, zero blockers, zero dead, zero bugs. Report at captures/shakeout-2026-09-22/report.json. Coverage gate met; the lock is the contract for the reveal shell's SessionController seam from here.",
   "supersedes": null,
   "tag_count": 30,
   "categories": [

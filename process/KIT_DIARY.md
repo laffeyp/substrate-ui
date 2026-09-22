@@ -275,4 +275,113 @@ lessons for the kit sit under the finding-30 series above.
 
 ---
 
-*KIT_DIARY.md for substrate-ui. Sixteen entries. Ten hypotheses: five confirmed (H1, H4, H6 by prior entries; H9, H10 by the SDD arc); four tentative-confirmed (H3, H5, H7, H8); one falsified (H2 — the pure-reader carve-out did not apply to substrate-ui once it was reader-AND-controller). The SDD arc (Sprints 018–032, three days, five vocab bumps, five review passes) instrumented both surfaces of the app under one vocabulary and closed every review finding with an outcome. The diary starts where formal discipline starts — the review-#39 retrofit — not at the project's true beginning, by ruling.*
+### 2026-09-22 — Phase 5 close: v0.1 lock ratified on the reveal shell's SessionController seam
+
+**What happened.** The presentation-model-extract branch's `SessionController`
+grew a locked signal vocabulary from nothing. Sprint 052 wrote the shakeout
+harness. Sprint 053 folded `delegate` back into the daily-driver toolset
+(Sprint 228's card-vs-implementation drift). Sprint 054 defaulted every
+daily-driver session to substrate's shipped `session` bundle. Sprint 245
+grew the delegate tool to fan out to N sessions with a single call under
+three caps (chain depth 5, per-parent 16, tree-total 64). Sprint 055
+wrote the fan-out shakeout flow and made the reveal shell's tool card
+render fan-out output. A full pass at 28 flows × 5 runs closed the coverage
+gate: 129 tags at 5/5, zero warnings, zero blockers, zero dead, zero bugs.
+Architect ratified. Lock flipped to `locked: true` at 2026-09-22.
+
+**What worked.**
+
+- **The shakeout is a real bug finder.** It surfaced six defects across
+  two days of driving, all of which would have shipped otherwise. The
+  delegate-omission bug (Sprint 228 drift) had been in production since
+  2026-08-28; no test caught it because the sprint's composition test
+  was written against the shipped seven-tool set, not the eight-tool
+  spec in the card. The shakeout caught it by driving the model to
+  demonstrate the tool and observing zero ToolCall envelopes. That is
+  the recurring pattern: a test written against the shipped code
+  ratifies the code; a test written against the design ratifies the
+  design.
+- **Every child is a session** collapsed a design proposal from
+  five open questions to zero. The premise sat on top of the substrate
+  primitives already in place (`SessionRegistry.create` + `turn_sync` +
+  `end`; the session_topology; per-session locks; delegate's four
+  existing paths). Everything else derived. Q1 (child spec fields):
+  same as `POST /api/session`. Q2 (failure fold): partial fold, straight
+  from halt-and-articulate. The memo went r1 → r5; passes 3 and 4 fell
+  out once the premise landed.
+- **The five-round memo is the right shape for a research subphase.**
+  Not a plan doc, not a sprint card, one document filled in order:
+  substrate audit, design mapping, prior art, design proposal, then two
+  refinements. Each round supersedes the last, prior rounds stay on
+  disk. The Architect's rulings entered as questions in r3, answers in
+  r4, closed answers under principle in r5. Six commits, one memo,
+  ratifiable.
+
+**What got in the way.**
+
+- **Deterministic-mindset in the first shakeout draft.** I defaulted
+  every Axis A flow to the `deterministic` driver because it booted
+  fast and greened easy. The user caught it immediately — the whole
+  point of the shakeout is to drive real usage, and deterministic
+  produces none of the shapes (streaming envelopes over time, real
+  tool calls, model-emitted null fields, rate-limit envelopes, delegate
+  patterns) that catch bugs. The rework was systemic: `lib/driver.ts`
+  hard-refuses `deterministic`; every flow that opens a session picks
+  the server's declared default. The 5/5 pass under real driver landed
+  only after that reshape.
+- **Reveal-shell caching** hid changes to `web/reveal.html` for a full
+  minute of "why is the bundle picker still there." The dev server
+  served `web/dist/reveal.html`, not `web/reveal.html`; every source
+  edit needed a rebuild plus a no-cache header on the response before
+  Chrome would fetch it fresh. Fix: `Cache-Control: no-store` on
+  `text/html` + JS in `server.py _send`. Standing rule now: the dev
+  server never lets the browser cache HTML.
+- **Sprint 228's card-vs-test drift was invisible for 25 days.** The
+  card specified eight tools including delegate; the commit shipped
+  seven; the test was written against seven; every discipline gate
+  passed. The gap is real: green tests + green ruff + green mypy do
+  not imply green intent. A design-vs-code audit that reads the sprint
+  card and checks each named artifact against the commit would have
+  caught it in 2026-08-28.
+- **Two-cap → three-cap oscillation on the delegation memo.** The
+  Architect walked the cap design from "one integer" to "the two caps
+  substrate already has" to "raise both and add a total." Under-thought
+  API surface iterations wasted three rounds; each round of the memo
+  landed as a new file per the round-N discipline. The final shape
+  (three caps: chain, per-parent, tree-total) is defensible; the
+  research pass came to it slowly because the caps interact.
+
+**What this says for the next kit version.**
+
+44. **The shakeout is not a test suite; it is a design-vs-code audit
+   run through the daily driver.** Its value is not "the code passes"
+   — the code passed the composition tests too. Its value is "the
+   design does what the model observes." Every Axis A + Axis B pass
+   is a driven turn against the current design intent; every defect
+   the log names is a divergence between what the card said and what
+   the code ships. The kit should elevate this pattern: not a
+   discipline gate, a design-audit surface that runs the same way
+   assays do — real driver, real model, real records, coverage grid.
+   Name it the shakeout in the catalog; recommend one per phase close.
+45. **Every-child-is-a-session generalizes.** When a subsystem needs
+   to spawn N parallel workers, ask first: is the existing session
+   primitive the atom? Substrate's answer here was yes — no new
+   topology, no new registry, no new envelope kind on the parent
+   record. The fan-out grew inside the delegate tool because the
+   pieces already composed. The kit should carry this as a
+   generalizable heuristic: before authoring a new topology, walk the
+   session/tool/registry primitives and ask what would compose.
+46. **A memo across four passes (substrate audit → design mapping →
+   prior art → proposal) is the shape when the design question is
+   real.** Not a plan (too early), not a sprint card (too late).
+   Passes 1 and 2 are compulsory; Pass 3 is compulsory when
+   commercial systems have solved this problem; Pass 4 is options +
+   tradeoffs, never a decision. Rulings enter as new rounds. The kit
+   should carry a MEMO template alongside SPRINT_CARD.
+
+| H17 | The shakeout catches design-vs-code drift that discipline gates cannot. | **confirmed** | The delegate omission was in production for 25 days. `check-vocabulary-parity`, mypy strict, ruff, pre-commit hook, sprint 228's own composition test — all green. The shakeout drove the model to demonstrate delegate and observed zero ToolCall envelopes. Design gap becomes a code defect the moment a driven turn surfaces the divergence. |
+| H18 | An "every child is a session" premise collapses the delegate fan-out design space to a single memo round. | **tentative-confirmed** | Memo r2 named the premise. r3 added `max_total_depth` as the fourth item. r4 walked to three caps with sizing grounded in Claude Code + section 20f. r5 closed the two open questions under SDD + substrate principles. No sixth round needed. |
+
+---
+
+*KIT_DIARY.md for substrate-ui. Seventeen entries as of 2026-09-22. Twelve hypotheses: seven confirmed (H1, H4, H6, H9, H10, H15, H17 — the last two rule that green discipline gates do not imply green intent), four tentative-confirmed (H3, H5, H7, H8, H18); one falsified (H2 — the pure-reader carve-out did not apply once substrate-ui became reader-AND-controller). The presentation-model-extract branch closed phase 5 on 2026-09-22 with the v0.1 lock ratified over the SessionController seam; phase 6 (retire the classic tree) is next.*
