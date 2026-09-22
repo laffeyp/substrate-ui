@@ -21,6 +21,7 @@ import type {
   WorkspaceRow,
 } from "./types";
 import type { SubstrateClient, Unsubscribe } from "./client";
+import { emit as sddEmit } from "./instrumentation/sdd";
 
 type Listener = (snap: Snapshot) => void;
 
@@ -139,6 +140,10 @@ export class SessionController {
   }
 
   private emit(tag: string, payload: Record<string, unknown> = {}): void {
+    // Validate against the locked vocabulary at the speaker's mouth.
+    // Unknown tag or missing required payload field throws — the whole
+    // point of the lock.
+    sddEmit(tag, payload);
     const event: ControllerEvent = { tag, payload, at: Date.now() };
     for (const listener of this.eventListeners) listener(event);
   }

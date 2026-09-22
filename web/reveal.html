@@ -53,8 +53,7 @@
        <sc-if value="{{ pn.ddOpen }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;right:0;top:20px;z-index:30;background:#26292e;border:1px solid rgba(255,255,255,.12);border-radius:6px;padding:5px 0;display:flex;flex-direction:column;min-width:180px;box-shadow:0 8px 24px rgba(0,0,0,.4)"><sc-for list="{{ pn.driverOpts }}" as="d" hint-placeholder-count="5"><span onClick="{{ d.pick }}" style="padding:4px 12px;cursor:pointer;font-size:10.5px;color:{{ d.color }};white-space:nowrap" style-hover="background:#2e3138">{{ d.label }}</span></sc-for></span></sc-if></span>
       <span style="flex:0 4 auto;min-width:34px;position:relative;display:inline-block;overflow:visible"><span onClick="{{ pn.toggleWsP }}" style="color:#62676f;border:1px solid rgba(255,255,255,.08);border-radius:4px;padding:0 6px;cursor:pointer;display:inline-block;max-width:100%;box-sizing:border-box;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" style-hover="color:#9aa0a8" title="⌥ {{ pn.branch }}">{{ pn.wsLabel }}</span>
        <sc-if value="{{ pn.wsOpenP }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;right:0;top:20px;z-index:30;background:#26292e;border:1px solid rgba(255,255,255,.12);border-radius:6px;padding:9px 13px;display:block;min-width:270px;box-shadow:0 8px 24px rgba(0,0,0,.4);font-size:10.5px;line-height:1.8;color:#9aa0a8;white-space:nowrap">workspace <span style="color:#e2e5e9">~/code/substrate</span><br>shape <span style="color:#e2e5e9">worktree</span> · branch <span style="color:#e2e5e9">{{ pn.branch }}</span><br><span style="color:#62676f">frozen at seq 1</span></span></sc-if></span>
-      <span style="flex:none;position:relative;display:inline-block"><span onClick="{{ pn.toggleBundle }}" style="color:#9aa0a8;border:1px solid rgba(255,255,255,.08);border-radius:4px;padding:0 6px;cursor:pointer;display:inline-block" style-hover="color:#d7dade" title="bundle · role kit + tool policy">{{ pn.bundleLabel }} ▾</span>
-       <sc-if value="{{ pn.bundleOpenP }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;right:0;top:20px;z-index:30;background:#26292e;border:1px solid rgba(255,255,255,.12);border-radius:6px;padding:5px 0;display:flex;flex-direction:column;min-width:260px;box-shadow:0 8px 24px rgba(0,0,0,.4)"><sc-for list="{{ pn.bundleOpts }}" as="b" hint-placeholder-count="4"><span onClick="{{ b.pick }}" style="padding:5px 12px;cursor:pointer;font-size:10.5px;color:{{ b.color }};white-space:nowrap;display:flex;flex-direction:column;gap:1px" style-hover="background:#2e3138"><span>{{ b.name }} <span style="color:#62676f">· {{ b.slots }} slot</span></span><span style="color:#62676f;font-size:10px">{{ b.desc }}</span></span></sc-for></span></sc-if></span></sc-if>
+      </sc-if>
       <span style="cursor:pointer;flex:none;color:#9aa0a8" style-hover="color:#d7dade" onClick="{{ pn.goRecords }}">records</span>
       <span style="cursor:pointer;flex:none;color:#9aa0a8" style-hover="color:#d7dade" onClick="{{ pn.goStudio }}">studio</span>
       <span onClick="{{ pn.goReveal }}" style="cursor:pointer;flex:none;color:#9aa0a8;background:#3d434c;border-radius:4px;padding:1px 6px;font-weight:600" title="⌃` reveal — expand this session over the window" style-hover="color:#d7dade">{{ pn.revealText }}</span>
@@ -1569,10 +1568,9 @@ class Component extends DCLogic {
       hintW: S.dropHint && (S.dropHint.zone === 'w' || S.dropHint.zone === 'e') ? '50%' : '100%',
       hintH: S.dropHint && (S.dropHint.zone === 'n' || S.dropHint.zone === 's') ? '50%' : (S.dropHint && (S.dropHint.zone === 'w' || S.dropHint.zone === 'e') ? '100%' : '100%'),
       branch: p.id === 1 ? 'substrate/fix-race' : 'substrate/' + p.name,
-      ddOpen: S.ddFor === p.id, wsOpenP: S.wsFor === p.id, bundleOpenP: S.bundleFor === p.id,
-      toggleDd: () => this.setState(s => ({ focused: p.id, ddFor: s.ddFor === p.id ? null : p.id, wsFor: null, bundleFor: null })),
-      toggleWsP: () => this.setState(s => ({ focused: p.id, wsFor: s.wsFor === p.id ? null : p.id, ddFor: null, bundleFor: null })),
-      toggleBundle: () => this.setState(s => ({ focused: p.id, bundleFor: s.bundleFor === p.id ? null : p.id, ddFor: null, wsFor: null })),
+      ddOpen: S.ddFor === p.id, wsOpenP: S.wsFor === p.id,
+      toggleDd: () => this.setState(s => ({ focused: p.id, ddFor: s.ddFor === p.id ? null : p.id, wsFor: null })),
+      toggleWsP: () => this.setState(s => ({ focused: p.id, wsFor: s.wsFor === p.id ? null : p.id, ddFor: null })),
       driverOpts: ((S.driverRoster && S.driverRoster.length) ? S.driverRoster : ['deterministic']).map(m => ({
         label: m, color: m === p.driver ? '#e2e5e9' : '#9aa0a8',
         pick: () => {
@@ -1581,18 +1579,6 @@ class Component extends DCLogic {
           if (vm) vm.pickDriver(m);
         },
       })),
-      bundleLabel: (p.bundle || (S.bundleSlug || 'no bundle')),
-      bundleOpts: [{ name: 'no bundle', description: 'session runs with no bundle', slotCount: 0, slug: null }]
-        .concat((S.bundleRoster || []).map(b => ({ name: b.name, description: b.description, slotCount: b.slotCount, slug: b.name })))
-        .map(b => ({
-          name: b.name, desc: b.description || '', slots: b.slotCount,
-          color: (p.bundle || S.bundleSlug || null) === b.slug ? '#e2e5e9' : '#9aa0a8',
-          pick: () => {
-            this.setState(s => ({ bundleFor: null, panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, { bundle: b.slug }) : x) }));
-            const vm = window.__vm;
-            if (vm && typeof vm.pickBundle === 'function') vm.pickBundle(b.slug);
-          },
-        })),
       caretColor: p.id === S.focused ? '#82a5c8' : '#4a4e55',
       promptHint: p.id === S.focused ? 'type to talk · / for commands' : 'click to focus',
       focus: () => this.setState({ focused: p.id }),
