@@ -1,33 +1,20 @@
 {
-  "name": "substrate-ui",
-  "version": "0.1.0",
-  "description": "The substrate desktop shell. Renders Prototype v7 as a real Electron desktop app; substrate runs in-process via a Python bridge.",
+  "name": "substrate-ui-e2e",
+  "version": "1.0.0",
   "private": true,
-  "main": "electron/main.js",
+  "description": "Live end-to-end test harness for substrate-ui — drives the real reveal shell in real Chrome (Playwright channel:'chrome') against the real server. The observation contract's tooling, scoped to this repo and pinned by package-lock.json so it is reproducible, not an ad-hoc /tmp install. Phase 6 (2026-09-22) retired the classic tree to _deprecated/classic-tree/; the reveal shell is the only entry.",
   "scripts": {
-    "dev": "electron .",
-    "start": "electron .",
-    "bridge": "python3 bridge/main.py",
-    "gen:tags": "node scripts/gen-tags.mjs",
-    "gen:anchors": "node scripts/gen-anchors.mjs",
-    "gen": "node scripts/gen-tags.mjs && node scripts/gen-anchors.mjs",
-    "prebuild": "node scripts/gen-tags.mjs && node scripts/gen-anchors.mjs",
-    "build": "node esbuild.config.mjs",
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
-    "harness:boot": "node tests/harness/e2e_boot.js",
-    "harness:first-pane": "node tests/harness/e2e_first_pane.js"
-  },
-  "license": "PolyForm-Noncommercial-1.0.0",
-  "dependencies": {
-    "react": "18.3.1",
-    "react-dom": "18.3.1"
+    "smoke:vm": "npx tsx harness/vm_smoke.ts",
+    "shakeout": "npx tsx harness/shakeout/run.ts"
   },
   "devDependencies": {
-    "@types/react": "^18.3.12",
-    "@types/react-dom": "^18.3.1",
-    "electron": "^30.0.9",
-    "esbuild": "~0.24.0",
-    "playwright": "^1.63.0",
-    "typescript": "~5.6.3"
+    "@types/node": "^22",
+    "playwright": "^1.49.0",
+    "tsx": "^4.23.12",
+    "typescript": "^5",
+    "vite": "^5"
   }
 }
