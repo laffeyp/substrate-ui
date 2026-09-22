@@ -1,9 +1,12 @@
 import { defineConfig } from "vite";
 import { resolve } from "path";
 
-// Substrate-ui build config. The Python server (substrate-ui/server.py) serves the built
-// output from web/dist/ under the same origin, so /api/* calls resolve without proxying.
-// Two entry points: index.html (the console) and studio.html (the Studio authoring surface).
+// Substrate-ui build config. Phase 6 closed 2026-09-22: the reveal shell
+// is the only entry. The classic shell (index.html) and the Studio
+// (studio.html) moved to `_deprecated/classic-tree/`; their source is
+// intact and re-instatable, but not built. The Python server serves the
+// built output from web/dist/ under the same origin so /api/* calls
+// resolve without proxying.
 export default defineConfig({
   root: "web",
   build: {
@@ -12,8 +15,6 @@ export default defineConfig({
     emptyOutDir: true,
     rollupOptions: {
       input: {
-        main: resolve(__dirname, "web/index.html"),
-        studio: resolve(__dirname, "web/studio.html"),
         reveal: resolve(__dirname, "web/reveal.html"),
       },
     },
