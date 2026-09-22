@@ -92,7 +92,11 @@ const EMPTY_SNAPSHOT: Snapshot = {
   sessionId: null,
   sessionName: null,
   driver: null,
-  bundleSlug: null,
+  // Sprint 054: default to substrate's shipped `session` bundle so every
+  // reveal-shell session opens with the bundle's system-prompt fragments
+  // wired. `substrate/bundles.py` line 72 declares this as the canonical
+  // daily-driver bundle. Callers can still override via openSession({bundle}).
+  bundleSlug: "session",
   workspacePath: null,
   workspaceShape: null,
   turnIndex: 0,
