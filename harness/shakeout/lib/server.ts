@@ -77,6 +77,25 @@ export class ServerHandle {
     process.kill(-this.proc.pid, "SIGCONT");
   }
 
+  /** Immediate SIGKILL — no graceful shutdown, no SessionEnded envelope,
+   * socket RSTs. Use this to simulate a server crash mid-stream; a plain
+   * stop() sends SIGTERM and the server's shutdown handler emits
+   * SessionEnded before dying, which the client handles gracefully. */
+  async kill(): Promise<void> {
+    if (!this.proc) return;
+    const p = this.proc;
+    this.proc = null;
+    if (p.pid) {
+      try { process.kill(-p.pid, "SIGKILL"); }
+      catch { try { p.kill("SIGKILL"); } catch { /* already dead */ } }
+    }
+    await new Promise<void>((resolve) => {
+      p.once("exit", () => resolve());
+      setTimeout(() => resolve(), 2000);
+    });
+    await this.waitPortFree(5000);
+  }
+
   async waitHealthy(timeoutMs: number): Promise<void> {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
