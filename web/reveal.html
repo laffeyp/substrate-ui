@@ -986,7 +986,44 @@ class Component extends DCLogic {
         // the child record via SessionController.attachRecordRoot (item 4).
         const output = paired ? paired.output : null;
         const isDelegate = row.toolName === 'delegate' && output && typeof output === 'object';
-        if (isDelegate) {
+        // Sprint 055: fan-out delegate carries `answers` + `child_roots`
+        // (dicts keyed by child name) instead of the single-child
+        // `answer` + `child_root` strings. Detect and render as the
+        // D72 aggregation shape: one header line + per-child rows.
+        const isDelegateFanout = isDelegate && output && output.answers
+          && typeof output.answers === 'object' && !Array.isArray(output.answers);
+        if (isDelegateFanout) {
+          const answers = output.answers || {};
+          const roots = output.child_roots || {};
+          const failed = output.failed || {};
+          const names = Object.keys({ ...answers, ...failed });
+          const nSuccess = Object.keys(answers).length;
+          const nFailed = Object.keys(failed).length;
+          const header = '⑂ delegate → ' + names.length + ' children · '
+            + nSuccess + ' answered · ' + nFailed + ' failed';
+          const lines = [header, ''];
+          for (const name of names) {
+            const root = String(roots[name] || '');
+            const answer = String(answers[name] || '');
+            const fail = failed[name];
+            if (fail) {
+              lines.push('  ' + name + ' — failed: ' + String(fail.error || fail));
+            } else {
+              lines.push('  ' + name + ' — ' + (answer.length > 200 ? answer.slice(0, 200) + '…' : answer));
+            }
+            if (root) lines.push('    ' + root);
+          }
+          toolOutput = lines.join('\n');
+          // Descend affordance on the first child; keyboard walk + per-
+          // row descend land in a follow-up sprint. For now the user
+          // clicks descend to attach the pane to the first child, then
+          // navigates further by hand.
+          const firstRoot = Object.values(roots)[0];
+          if (typeof firstRoot === 'string' && firstRoot.length > 0) {
+            descendPath = firstRoot;
+            descendShow = true;
+          }
+        } else if (isDelegate) {
           toolOutput = String((output && output.answer) || '');
           if (output && typeof output.child_root === 'string') {
             descendPath = output.child_root;
