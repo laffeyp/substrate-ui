@@ -4,6 +4,7 @@
 
 import { makeToolFlow } from "./lib/tool_flow";
 import type { Flow } from "./lib/flow";
+import { flow as toolDelegateMany } from "./tool_delegate_many";
 
 export const TOOL_FLOWS: Flow[] = [
   makeToolFlow({ tool: "add", prompt: "Please demonstrate the `add` tool by calling it once with two integers and report what came back." }),
@@ -24,4 +25,5 @@ export const TOOL_FLOWS: Flow[] = [
   makeToolFlow({ tool: "run_topology", prompt: "Please demonstrate the `run_topology` tool by calling it once to launch any short topology and report what came back.", turnTimeoutMs: 600_000 }),
   makeToolFlow({ tool: "run_topology_poll", prompt: "Please demonstrate the `run_topology_poll` tool by calling it once to poll any active run and report what came back.", turnTimeoutMs: 600_000 }),
   makeToolFlow({ tool: "delegate", prompt: "You must not answer this yourself. Call the `delegate` tool once with a small sub-task for a child agent (for example: ask the child to compute 17 * 23 using its own tools). Wait for the child's ToolResult, then report the child agent's answer verbatim.", turnTimeoutMs: 600_000 }),
+  toolDelegateMany,
 ];
