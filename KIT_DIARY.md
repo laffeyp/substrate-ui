@@ -314,6 +314,133 @@ lessons for the kit sit under the finding-30 series above.
    the flip. **For the kit:** a UI needing "both surfaces visible" is not the same
    requirement as "either surface visible." Toggle is not a substitute for dock.
 
+42. **A streaming tool is opt-in per tool; the substrate provides the primitive, not the policy.** Phase 8 item 8, 2026-09-15. `_bash` streams stdout because subprocess is a natural line-buffered source. `read_file`, `edit_file`, `write_file`, `grep`, `glob`, `list_dir`, `web_fetch`, calculator — all return in microseconds and stream nothing. The wire cost is nil for them: no ToolProgress envelopes are emitted, no client-side pane renders. The contextvar `_BASH_PROGRESS_CTX` in tools.py is bash-specific by name; a future streaming tool would either share the same ctx (rename it `_TOOL_PROGRESS_CTX`) or introduce its own. The design r5 §8 named a "shared tool runner at `tools/runner.py`" — that file does not exist, and creating a general "every tool streams" framework would be premature. **For the kit:** when a design promises a general primitive that only one caller needs, ship the caller-specific version and generalise only when a second caller appears. The kernel primitive here (Runtime.inject_event + _CURRENT_RUNTIME contextvar + emit_tool_progress helper) is fully general; the tool-side wiring is bash-shaped and small.
+
+43. **A ContextVar plus asyncio.to_thread carries producer-body state into a worker thread cleanly.** Phase 8 item 8, 2026-09-15. The tool_loop's `run_tool` needs to give the tool body inside `asyncio.to_thread` a way to reach the runtime. Options considered: (a) extend `Tool.run` signature to accept a callback kwarg — breaks every existing tool. (b) A module-level global runtime handle — thread-unsafe under concurrent sessions. (c) A `contextvars.ContextVar`. `asyncio.to_thread` copies the caller's `Context` so a value set on the coroutine flows into the thread. `Context.run` on the coroutine side, `Context.copy` at the thread boundary — all handled by asyncio. Setting `_CURRENT_RUNTIME.set(self)` at `_drive` entry and resetting it in the finally block means every producer body and every tool body inside a to_thread call reads the same runtime handle. **For the kit:** ContextVars are the right primitive when a substrate-managed value needs to flow through opaque user code to a worker-thread boundary without changing signatures. Compounds finding 41 (the primitive was already there under a private name) with an adjacent lesson: the Python standard library has the primitive too — reach for stdlib contextvars before inventing a new substrate concept.
+
 ---
 
-*KIT_DIARY.md for substrate-ui. Nine entries. Ten hypotheses: five confirmed (H1, H4, H6 by prior entries; H9, H10 by the SDD arc); four tentative-confirmed (H3, H5, H7, H8); one falsified (H2 — the pure-reader carve-out did not apply to substrate-ui once it was reader-AND-controller). The SDD arc (Sprints 018–032, three days, five vocab bumps, five review passes) instrumented both surfaces of the app under one vocabulary and closed every review finding with an outcome. The diary starts where formal discipline starts — the review-#39 retrofit — not at the project's true beginning, by ruling.*
+40. **A dict output that stringifies to `[object Object]` is a UI silent-loss; the fix is the point where the shape was widened.** Phase 8 item 9 first half, 2026-09-15. The `_liveBindingsFor` row builder in `web/reveal.html:920` used `String(paired.output || '')` on every tool. Calculator tools return int; read_file returns str; delegate returns `{answer, child_root, steps}` — a dict. `String({...})` yields `[object Object]`, and the tool card rendered exactly that for every delegate ToolResult. No fallback, no formatting, no descent path — the child_root was on the wire, unreachable to the UI. The fix at the same site: detect `row.toolName === "delegate"` on a paired ToolResult with an object output; read `output.answer` for the card body text and `output.child_root` for the descend affordance. Every other dict-output tool now falls back to `JSON.stringify(output, null, 2)` — one line of code covers the whole class. **For the kit:** a tool contract that carries a structured payload without a rendering contract in the UI is half-shipped. When a substrate-side tool grows a dict return, audit the row builder in the same commit. The single-string default is comfortable until the moment it isn't; the `[object Object]` in the reveal shell had been shipping for weeks before someone descended into a real delegate.
+
+41. **Item 7's kernel primitive was already there under a private name; item 9's kernel primitive isn't there at all.** Phase 8, 2026-09-15. Item 7 needed a way for the daemon to write an `InterruptRequested` envelope onto a live record. The design pass named three options; reading `substrate/src/substrate/kernel/runtime.py:466` in full revealed that `Runtime._resume_bootstrap` already ran `self._cyc.cycle(_Lifecycle(kind, payload))` — the exact injection shape. `Runtime.inject_event` is a wrapper around that private call plus reserved-kind refusal. Small commit. Item 9's second half needs a way for `SessionRegistry.interrupt(target=record_root)` to reach the CHILD runtime — but `delegate.py` spawns children via `asyncio.run(Runtime(child_root).run(child_topology()))` on the tool producer's worker thread. The child's runtime never registers back with the parent's runtime. There is no `Runtime._children`, no global registry, no way for one runtime to find another. Item 9's second half needs the primitive to be **created**, not exposed. **For the kit:** when a design pass lists several kernel changes, they are not equal cost. A "expose the private path" change is a wrapper; a "the primitive does not exist" change is architecture. Read the private code in the neighbourhood before scoping the sprint — the difference is measured in commits, not story points. Compounds finding 38 (one code path, two mount points) with a substrate-side mirror: the runtime primitive that reaches every existing lifecycle emitter (private) is the same shape the daemon needs (public); one wrapper covers both.
+
+---
+
+37. **A tool output that reads wrong invites two responses — raise the limit, or change what happens at the limit. The second is almost always right.** Phase 8, 2026-09-15. A live Kimi K2.7 `read_file` on a 14169-byte file surfaced `[read_file output was 14169 bytes — too large to inline; narrow the request]`. r1 of the spike (`SPIKE-2026-09-15-read-file-byte-cap.md`) diagnosed the tension between `_MAX_READ_LINES = 2000` and `_MAX_RESULT_BYTES = 12_000` and proposed two sizing knobs — drop the line limit to 500, grow the byte-cap stub a retry message. The user redirected: "the philosophical point is it's too easy for models to not read everything." Reading `current-design-direction/product-spec/PRODUCT-SPEC-2026-08-17-round12.md §5d.1` named the constraint verbatim — "Models are lazy readers; given a big blob, they skim, decide they have enough, and stop" — and the design response, the progressive-disclosure gradient: every read tool caps output, returns an actionable next call, forces the model to keep asking. Reading the whole thing is possible but never automatic. r2 kept the 12 KB cap intact and changed the failure mode: the outer wrap truncates `read_file` output on byte-cap trip and appends the same `read_file(path, <next>) for the rest` marker `read_file` already emits when its own line window doesn't reach EOF. **For the kit:** doing less means changing the contract before changing the size. The instinct to raise a limit papers over the design constraint the limit exists to enforce. Read the spec first, then decide whether the diff is a knob or a contract. The audit trail is doubled — r1 stays on disk unchanged, r2 supersedes — so the misstep and the correction both remain readable.
+
+38. **One code path, two mount points.** Phase 8. The reveal-view transcript rendered only glyphs, no text — the pane-loop terminal-view template read the rich `blocks`/`isModel`/`isTool` shape from `_liveBindingsFor(fp.id, S)`, while the reveal-view template at line 2029 read the top-level `liveTranscript` (the flat `_liveTranscriptRows` shape without those fields). Same defect surfaced on the activity strip when the reveal-view mount still referenced fields I'd renamed from `activityGlyph`/`activityText` to `activityPulseClass`/`activityTurnWord`/`activityTurnColor`. Both fixed by spreading the same `_liveBindingsFor(fp.id, S)` at the top-level return so every mount reads the same rows. **For the kit:** when a UI element mounts in two places, both mounts must bind from the same source. Any divergence — a template referencing an older field name, a code path fed only to one mount — surfaces as "works in one view, broken in the other." The maintenance rule is the single-source spread, not "remember to update both."
+
+39. **A tier tracker that carries state across turns is a UX bug pretending to be a state machine.** Phase 8. The first ESC-tier implementation keyed on `sessionId` — first press = soft, second press = hard, hard sticks. After a hard interrupt landed and the session parked, the next turn's first ESC read `prev='hard'` and fired hard immediately, skipping soft. The second fix keyed on `(sessionId, turnIndex)` so a fresh turn reset to soft. The user redirected again: plain ESC should default to hard; Shift+ESC = soft. The tracker went away entirely — `const tier = e.shiftKey ? 'soft' : 'hard'`. **For the kit:** a stateful two-press escalation reads intuitive on the whiteboard and confusing at the keyboard. A modifier is the shell habit: Shift is "the softer version." Delete the tracker; delete its reset logic; delete every "escalate on second press within N seconds" heuristic. The keyboard state is what the user is pressing now, not what they pressed last.
+
+---
+
+### 2026-09-22 — Phase 5 close: v0.1 lock ratified on the reveal shell's SessionController seam
+
+**What happened.** The presentation-model-extract branch's `SessionController`
+grew a locked signal vocabulary from nothing. Sprint 052 wrote the shakeout
+harness. Sprint 053 folded `delegate` back into the daily-driver toolset
+(Sprint 228's card-vs-implementation drift). Sprint 054 defaulted every
+daily-driver session to substrate's shipped `session` bundle. Sprint 245
+grew the delegate tool to fan out to N sessions with a single call under
+three caps (chain depth 5, per-parent 16, tree-total 64). Sprint 055
+wrote the fan-out shakeout flow and made the reveal shell's tool card
+render fan-out output. A full pass at 28 flows × 5 runs closed the coverage
+gate: 129 tags at 5/5, zero warnings, zero blockers, zero dead, zero bugs.
+Architect ratified. Lock flipped to `locked: true` at 2026-09-22.
+
+**What worked.**
+
+- **The shakeout is a real bug finder.** It surfaced six defects across
+  two days of driving, all of which would have shipped otherwise. The
+  delegate-omission bug (Sprint 228 drift) had been in production since
+  2026-08-28; no test caught it because the sprint's composition test
+  was written against the shipped seven-tool set, not the eight-tool
+  spec in the card. The shakeout caught it by driving the model to
+  demonstrate the tool and observing zero ToolCall envelopes. That is
+  the recurring pattern: a test written against the shipped code
+  ratifies the code; a test written against the design ratifies the
+  design.
+- **Every child is a session** collapsed a design proposal from
+  five open questions to zero. The premise sat on top of the substrate
+  primitives already in place (`SessionRegistry.create` + `turn_sync` +
+  `end`; the session_topology; per-session locks; delegate's four
+  existing paths). Everything else derived. Q1 (child spec fields):
+  same as `POST /api/session`. Q2 (failure fold): partial fold, straight
+  from halt-and-articulate. The memo went r1 → r5; passes 3 and 4 fell
+  out once the premise landed.
+- **The five-round memo is the right shape for a research subphase.**
+  Not a plan doc, not a sprint card, one document filled in order:
+  substrate audit, design mapping, prior art, design proposal, then two
+  refinements. Each round supersedes the last, prior rounds stay on
+  disk. The Architect's rulings entered as questions in r3, answers in
+  r4, closed answers under principle in r5. Six commits, one memo,
+  ratifiable.
+
+**What got in the way.**
+
+- **Deterministic-mindset in the first shakeout draft.** I defaulted
+  every Axis A flow to the `deterministic` driver because it booted
+  fast and greened easy. The user caught it immediately — the whole
+  point of the shakeout is to drive real usage, and deterministic
+  produces none of the shapes (streaming envelopes over time, real
+  tool calls, model-emitted null fields, rate-limit envelopes, delegate
+  patterns) that catch bugs. The rework was systemic: `lib/driver.ts`
+  hard-refuses `deterministic`; every flow that opens a session picks
+  the server's declared default. The 5/5 pass under real driver landed
+  only after that reshape.
+- **Reveal-shell caching** hid changes to `web/reveal.html` for a full
+  minute of "why is the bundle picker still there." The dev server
+  served `web/dist/reveal.html`, not `web/reveal.html`; every source
+  edit needed a rebuild plus a no-cache header on the response before
+  Chrome would fetch it fresh. Fix: `Cache-Control: no-store` on
+  `text/html` + JS in `server.py _send`. Standing rule now: the dev
+  server never lets the browser cache HTML.
+- **Sprint 228's card-vs-test drift was invisible for 25 days.** The
+  card specified eight tools including delegate; the commit shipped
+  seven; the test was written against seven; every discipline gate
+  passed. The gap is real: green tests + green ruff + green mypy do
+  not imply green intent. A design-vs-code audit that reads the sprint
+  card and checks each named artifact against the commit would have
+  caught it in 2026-08-28.
+- **Two-cap → three-cap oscillation on the delegation memo.** The
+  Architect walked the cap design from "one integer" to "the two caps
+  substrate already has" to "raise both and add a total." Under-thought
+  API surface iterations wasted three rounds; each round of the memo
+  landed as a new file per the round-N discipline. The final shape
+  (three caps: chain, per-parent, tree-total) is defensible; the
+  research pass came to it slowly because the caps interact.
+
+**What this says for the next kit version.**
+
+44. **The shakeout is not a test suite; it is a design-vs-code audit
+   run through the daily driver.** Its value is not "the code passes"
+   — the code passed the composition tests too. Its value is "the
+   design does what the model observes." Every Axis A + Axis B pass
+   is a driven turn against the current design intent; every defect
+   the log names is a divergence between what the card said and what
+   the code ships. The kit should elevate this pattern: not a
+   discipline gate, a design-audit surface that runs the same way
+   assays do — real driver, real model, real records, coverage grid.
+   Name it the shakeout in the catalog; recommend one per phase close.
+45. **Every-child-is-a-session generalizes.** When a subsystem needs
+   to spawn N parallel workers, ask first: is the existing session
+   primitive the atom? Substrate's answer here was yes — no new
+   topology, no new registry, no new envelope kind on the parent
+   record. The fan-out grew inside the delegate tool because the
+   pieces already composed. The kit should carry this as a
+   generalizable heuristic: before authoring a new topology, walk the
+   session/tool/registry primitives and ask what would compose.
+46. **A memo across four passes (substrate audit → design mapping →
+   prior art → proposal) is the shape when the design question is
+   real.** Not a plan (too early), not a sprint card (too late).
+   Passes 1 and 2 are compulsory; Pass 3 is compulsory when
+   commercial systems have solved this problem; Pass 4 is options +
+   tradeoffs, never a decision. Rulings enter as new rounds. The kit
+   should carry a MEMO template alongside SPRINT_CARD.
+
+| H17 | The shakeout catches design-vs-code drift that discipline gates cannot. | **confirmed** | The delegate omission was in production for 25 days. `check-vocabulary-parity`, mypy strict, ruff, pre-commit hook, sprint 228's own composition test — all green. The shakeout drove the model to demonstrate delegate and observed zero ToolCall envelopes. Design gap becomes a code defect the moment a driven turn surfaces the divergence. |
+| H18 | An "every child is a session" premise collapses the delegate fan-out design space to a single memo round. | **tentative-confirmed** | Memo r2 named the premise. r3 added `max_total_depth` as the fourth item. r4 walked to three caps with sizing grounded in Claude Code + section 20f. r5 closed the two open questions under SDD + substrate principles. No sixth round needed. |
+
+---
+
+*KIT_DIARY.md for substrate-ui. Seventeen entries as of 2026-09-22. Twelve hypotheses: seven confirmed (H1, H4, H6, H9, H10, H15, H17 — the last two rule that green discipline gates do not imply green intent), four tentative-confirmed (H3, H5, H7, H8, H18); one falsified (H2 — the pure-reader carve-out did not apply once substrate-ui became reader-AND-controller). The presentation-model-extract branch closed phase 5 on 2026-09-22 with the v0.1 lock ratified over the SessionController seam; phase 6 (retire the classic tree) is next.*

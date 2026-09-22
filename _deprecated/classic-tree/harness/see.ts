@@ -1,0 +1,104 @@
+// harness/see.ts — pixel-anchor capture for the reveal shell.
+//
+// Runs a real Chrome, drives the reveal shell into a known state via
+// window.__vm.attachExisting(<sessionId>), then screenshots the
+// stream+graph pane and writes it to captures/see-latest.png so the
+// agent can Read the image and check its own work. No SDD signal
+// harness, no vocabulary emission — just eyes.
+
+import { chromium } from "playwright";
+import path from "node:path";
+import fs from "node:fs";
+
+const BASE = process.env.SUBSTRATE_UI_BASE || "http://127.0.0.1:8765";
+const SESSION_ID = process.env.SUBSTRATE_UI_SEE_SESSION || "";
+const OUT_DIR = path.resolve("captures");
+const OUT_PATH = path.join(OUT_DIR, "see-latest.png");
+
+async function main(): Promise<void> {
+  if (!SESSION_ID) {
+    console.error("SUBSTRATE_UI_SEE_SESSION=<session_id> required.");
+    console.error("Example: SUBSTRATE_UI_SEE_SESSION=s_bba8fe9d9e3645c9b7bdafdc npm run see");
+    process.exit(2);
+  }
+  fs.mkdirSync(OUT_DIR, { recursive: true });
+
+  const browser = await chromium.launch({ channel: "chrome", headless: true });
+  const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  await page.goto(`${BASE}/?session=${SESSION_ID}`, { waitUntil: "load" });
+
+  // Wait for the controller to bind and stream some envelopes; don't
+  // fail on timeout — screenshot whatever is on screen.
+  // tsx transpiles inline function bodies with esbuild helpers that
+  // reference `__name`; that identifier is undefined inside Playwright's
+  // page context. Pass every browser-side script as a raw string so
+  // nothing gets transpiled.
+  const WAIT_ENVELOPES = "() => { var v = window.__vm; return !!(v && v.snapshot && (v.snapshot().rawEnvelopes||[]).length > 0); }";
+  const DIR = process.env.SUBSTRATE_UI_SEE_DIR || "down";
+  const LEVEL = process.env.SUBSTRATE_UI_SEE_LEVEL || "all";
+  const REVEAL = process.env.SUBSTRATE_UI_SEE_REVEAL !== "0";
+  const REVEALED = REVEAL ? "true" : "false";
+  const OPEN_REVEAL = "() => { var root = document.getElementById('dc-root'); if (!root) return; var key = Object.keys(root).find(function(k){return k.indexOf('__reactContainer')===0}); if (!key) return; function walk(f){ if(!f) return null; var i=f.stateNode; if(i && i.logic && typeof i.logic.setState==='function') return i.logic; return walk(f.child)||walk(f.sibling); } var c=root[key]; var cur=c && c.stateNode && c.stateNode.current; var l=walk(cur); if(l) l.setState({revealed:" + REVEALED + ", mode:'stream', dir:'" + DIR + "', level:'" + LEVEL + "'}); }";
+
+  try {
+    await page.waitForFunction(WAIT_ENVELOPES, null, { timeout: 8000 });
+  } catch (_err) { /* screenshot anyway */ }
+  await page.evaluate(OPEN_REVEAL);
+  if (REVEAL) {
+    // Ctrl+` is the canonical reveal toggle. Fire it as a fallback if
+    // setState hasn't landed by the time we take the shot.
+    await page.keyboard.press("Control+`");
+  }
+  await page.waitForTimeout(400);
+  if (DIR === "side") {
+    try { await page.locator('text="→ side"').first().click({ timeout: 2000 }); } catch (_e) { /* ignore */ }
+  }
+  if (LEVEL === "app") {
+    try { await page.locator('span[title*="hide the low-level machinery"]').first().click({ timeout: 2000 }); } catch (_e) { /* ignore */ }
+  }
+  if (process.env.SUBSTRATE_UI_SEE_BUNDLE === "1") {
+    try { await page.locator('span[title*="bundle · role kit"]').first().click({ timeout: 2000 }); } catch (_e) { /* ignore */ }
+  }
+  // Two-pane capture: split the shell right, spawn pane 2's controller,
+  // and attach it to a second session id. Requires
+  // SUBSTRATE_UI_SEE_SESSION2=<id> alongside the primary.
+  const SESSION_2 = process.env.SUBSTRATE_UI_SEE_SESSION2 || "";
+  if (process.env.SUBSTRATE_UI_SEE_STUDIO === "validate" || process.env.SUBSTRATE_UI_SEE_STUDIO === "build") {
+    const STUDIO_OPEN = "(function(){ var root = document.getElementById('dc-root'); if (!root) return; var key = Object.keys(root).find(function(k){return k.indexOf('__reactContainer')===0}); if (!key) return; function walk(f){ if(!f) return null; var i=f.stateNode; if(i && i.logic && typeof i.logic._toggleSurface==='function') return i.logic; return walk(f.child)||walk(f.sibling); } var l=walk(root[key].stateNode.current); if (l) l._toggleSurface('studio'); })()";
+    await page.evaluate(STUDIO_OPEN);
+    await page.waitForTimeout(500);
+    const btn = process.env.SUBSTRATE_UI_SEE_STUDIO === "build" ? 'build & launch ▸' : 'validate';
+    try { await page.locator(`text="${btn}"`).first().click({ timeout: 2000 }); } catch (_e) { /* ignore */ }
+    await page.waitForTimeout(2000);
+  }
+  if (SESSION_2) {
+    await page.keyboard.press("Meta+d");
+    await page.waitForTimeout(600);
+    const ATTACH2 = "(function(){ var root = document.getElementById('dc-root'); if (!root) return 'noroot'; var key = Object.keys(root).find(function(k){return k.indexOf('__reactContainer')===0}); if (!key) return 'nokey'; function walk(f){ if(!f) return null; var i=f.stateNode; if(i && i.logic && typeof i.logic._bindPane==='function') return i.logic; return walk(f.child)||walk(f.sibling); } var c=root[key]; var cur=c && c.stateNode && c.stateNode.current; var l=walk(cur); if(!l) return 'nolog'; var s=l.state; var pane2 = s.panes[s.panes.length-1]; if (!pane2 || pane2.id === 1) return 'nopane2'; var vm = window.__vm; if (vm && typeof vm.get==='function'){ var c2 = vm.get(pane2.id); if (c2 && typeof c2.attachExisting==='function') c2.attachExisting('" + SESSION_2 + "'); } l.setState({ focused: pane2.id, panes: s.panes.map(function(p){ return p.id===pane2.id ? Object.assign({}, p, { unbound:false, ws:'~/code/substrate', shape:'worktree', lines:[] }) : p; }) }); return 'ok:' + s.panes.length; })()";
+    const r = await page.evaluate(ATTACH2);
+    console.log(`  · two-pane attach: ${r}`);
+    await page.waitForTimeout(3500);
+    // Swap focus to pane 1 briefly then back — probes the dc-runtime
+    // list-reconcile behavior on focus change.
+    const FOCUS1 = "(function(){ var root = document.getElementById('dc-root'); if (!root) return; var key = Object.keys(root).find(function(k){return k.indexOf('__reactContainer')===0}); if (!key) return; function walk(f){ if(!f) return null; var i=f.stateNode; if(i && i.logic && typeof i.logic.setState==='function') return i.logic; return walk(f.child)||walk(f.sibling); } var l=walk(root[key].stateNode.current); if (l) l.setState({ focused: 1 }); })()";
+    await page.evaluate(FOCUS1);
+    await page.waitForTimeout(600);
+  }
+  await page.waitForTimeout(800);
+  // Scroll the stream pane by a fraction if the caller asked. The
+  // stream+graph pane's overflow container carries `ref={streamRef}`
+  // which the DC component holds as `this._streamEl`.
+  const SCROLL = process.env.SUBSTRATE_UI_SEE_SCROLL || "";
+  if (SCROLL) {
+    const script = `(() => { var root = document.getElementById('dc-root'); if (!root) return; var key = Object.keys(root).find(k => k.indexOf('__reactContainer')===0); if (!key) return; function walk(f){ if(!f) return null; var i=f.stateNode; if(i && i.logic && i.logic._streamEl) return i.logic._streamEl; return walk(f.child)||walk(f.sibling); } var c=root[key]; var cur=c && c.stateNode && c.stateNode.current; var el=walk(cur); if(el) el.scrollTop = Math.round(el.scrollHeight * ${Number(SCROLL) || 0}); })()`;
+    await page.evaluate(script);
+    await page.waitForTimeout(300);
+  }
+
+  await page.waitForTimeout(500);
+  await page.screenshot({ path: OUT_PATH, fullPage: false });
+  await browser.close();
+  console.log(`captured: ${OUT_PATH}`);
+}
+
+main().catch((err) => { console.error(err); process.exit(1); });
