@@ -479,6 +479,21 @@ def _build_session_topology_from_manifest(
         "list_topologies": make_list_topologies(),
         "list_applications": make_list_applications(_APPLICATIONS),
         "list_sessions": make_list_sessions(_SESSION_REGISTRY),
+        # Sprint 053: fold `delegate` in, closing the Sprint 228 card-vs-implementation
+        # drift the shakeout (sprint 052) surfaced. Sprint 228's card specified eight
+        # substrate-toolkit tools including delegate; commit c455b5a shipped seven.
+        # `make_delegate` is daemon-aware — it takes the session's own responder, the
+        # session registry, and the manifest fields so a delegated child can inherit
+        # a standing session or resolve model names against the daemon's roster.
+        "delegate": make_delegate(
+            responder=responder,
+            root=Path(manifest.workspace),
+            child_suite_factory=full_suite,
+            session_registry=_SESSION_REGISTRY,
+            parent_session_id=manifest.session_id,
+            parent_record_root=Path(manifest.record_root),
+            model_resolver=lambda name: _daemon_driver_resolver(name),
+        ),
     }
     return session_topology(
         driver=responder,
@@ -1223,7 +1238,14 @@ class Handler(BaseHTTPRequestHandler):
         # the earlier draft read `seed` only, so a client following the spec
         # silently sent nothing. Both names accepted; the spec wins on writes.
         seed = str(body.get("seed_text") or body.get("seed") or "")
-        bundle = body.get("bundle")
+        # Sprint 054: default the session bundle to substrate's shipped
+        # `session` bundle when the caller omits it. Without a bundle,
+        # substrate/topologies/session/__init__.py line 896 skips the
+        # bundle_methodology + bundle_personality producers and the daily
+        # driver runs without its intended system-prompt fragments. Callers
+        # can still pass `null` explicitly to opt out; only a MISSING field
+        # defaults.
+        bundle = body.get("bundle", "session")
         # Sprint 223a: `role` per TECH-SPEC §1.6.5. Resolve at create time so
         # a nonexistent role name fails 400 immediately rather than at first
         # `/turn`. The resolver's `RegistrationError` carries the four-layer
