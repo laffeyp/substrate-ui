@@ -1,0 +1,713 @@
+{
+  "writtenAt": "2026-09-21T23:37:46.188Z",
+  "totalFlows": 18,
+  "totalRuns": 18,
+  "flowReports": [
+    {
+      "flow": "tool_add",
+      "runs": 1,
+      "runOks": 1,
+      "coverage": [
+        {
+          "tag": "SESSION_OPEN_REQUESTED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "SESSION_OPEN_ACKED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_SUBMITTED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "STREAM_ENVELOPE_APPENDED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_PARKED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        }
+      ],
+      "defects": []
+    },
+    {
+      "flow": "tool_mul",
+      "runs": 1,
+      "runOks": 1,
+      "coverage": [
+        {
+          "tag": "SESSION_OPEN_REQUESTED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "SESSION_OPEN_ACKED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_SUBMITTED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "STREAM_ENVELOPE_APPENDED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_PARKED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        }
+      ],
+      "defects": []
+    },
+    {
+      "flow": "tool_read_file",
+      "runs": 1,
+      "runOks": 1,
+      "coverage": [
+        {
+          "tag": "SESSION_OPEN_REQUESTED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "SESSION_OPEN_ACKED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_SUBMITTED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "STREAM_ENVELOPE_APPENDED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_PARKED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        }
+      ],
+      "defects": []
+    },
+    {
+      "flow": "tool_list_dir",
+      "runs": 1,
+      "runOks": 1,
+      "coverage": [
+        {
+          "tag": "SESSION_OPEN_REQUESTED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "SESSION_OPEN_ACKED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_SUBMITTED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "STREAM_ENVELOPE_APPENDED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_PARKED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        }
+      ],
+      "defects": []
+    },
+    {
+      "flow": "tool_glob",
+      "runs": 1,
+      "runOks": 1,
+      "coverage": [
+        {
+          "tag": "SESSION_OPEN_REQUESTED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "SESSION_OPEN_ACKED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_SUBMITTED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "STREAM_ENVELOPE_APPENDED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_PARKED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        }
+      ],
+      "defects": []
+    },
+    {
+      "flow": "tool_grep",
+      "runs": 1,
+      "runOks": 1,
+      "coverage": [
+        {
+          "tag": "SESSION_OPEN_REQUESTED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "SESSION_OPEN_ACKED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_SUBMITTED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "STREAM_ENVELOPE_APPENDED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_PARKED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        }
+      ],
+      "defects": []
+    },
+    {
+      "flow": "tool_web_fetch",
+      "runs": 1,
+      "runOks": 1,
+      "coverage": [
+        {
+          "tag": "SESSION_OPEN_REQUESTED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "SESSION_OPEN_ACKED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_SUBMITTED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "STREAM_ENVELOPE_APPENDED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_PARKED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        }
+      ],
+      "defects": []
+    },
+    {
+      "flow": "tool_edit_file",
+      "runs": 1,
+      "runOks": 1,
+      "coverage": [
+        {
+          "tag": "SESSION_OPEN_REQUESTED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "SESSION_OPEN_ACKED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_SUBMITTED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "STREAM_ENVELOPE_APPENDED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_PARKED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        }
+      ],
+      "defects": []
+    },
+    {
+      "flow": "tool_write_file",
+      "runs": 1,
+      "runOks": 1,
+      "coverage": [
+        {
+          "tag": "SESSION_OPEN_REQUESTED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "SESSION_OPEN_ACKED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_SUBMITTED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "STREAM_ENVELOPE_APPENDED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_PARKED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        }
+      ],
+      "defects": []
+    },
+    {
+      "flow": "tool_bash",
+      "runs": 1,
+      "runOks": 1,
+      "coverage": [
+        {
+          "tag": "SESSION_OPEN_REQUESTED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "SESSION_OPEN_ACKED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_SUBMITTED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "STREAM_ENVELOPE_APPENDED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_PARKED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        }
+      ],
+      "defects": []
+    },
+    {
+      "flow": "tool_inspect_record",
+      "runs": 1,
+      "runOks": 1,
+      "coverage": [
+        {
+          "tag": "SESSION_OPEN_REQUESTED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "SESSION_OPEN_ACKED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_SUBMITTED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "STREAM_ENVELOPE_APPENDED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_PARKED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        }
+      ],
+      "defects": []
+    },
+    {
+      "flow": "tool_list_records",
+      "runs": 1,
+      "runOks": 1,
+      "coverage": [
+        {
+          "tag": "SESSION_OPEN_REQUESTED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "SESSION_OPEN_ACKED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_SUBMITTED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "STREAM_ENVELOPE_APPENDED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_PARKED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        }
+      ],
+      "defects": []
+    },
+    {
+      "flow": "tool_list_sessions",
+      "runs": 1,
+      "runOks": 1,
+      "coverage": [
+        {
+          "tag": "SESSION_OPEN_REQUESTED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "SESSION_OPEN_ACKED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_SUBMITTED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "STREAM_ENVELOPE_APPENDED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_PARKED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        }
+      ],
+      "defects": []
+    },
+    {
+      "flow": "tool_list_topologies",
+      "runs": 1,
+      "runOks": 1,
+      "coverage": [
+        {
+          "tag": "SESSION_OPEN_REQUESTED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "SESSION_OPEN_ACKED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_SUBMITTED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "STREAM_ENVELOPE_APPENDED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_PARKED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        }
+      ],
+      "defects": []
+    },
+    {
+      "flow": "tool_list_applications",
+      "runs": 1,
+      "runOks": 1,
+      "coverage": [
+        {
+          "tag": "SESSION_OPEN_REQUESTED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "SESSION_OPEN_ACKED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_SUBMITTED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "STREAM_ENVELOPE_APPENDED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_PARKED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        }
+      ],
+      "defects": []
+    },
+    {
+      "flow": "tool_run_topology",
+      "runs": 1,
+      "runOks": 1,
+      "coverage": [
+        {
+          "tag": "SESSION_OPEN_REQUESTED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "SESSION_OPEN_ACKED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_SUBMITTED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "STREAM_ENVELOPE_APPENDED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_PARKED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        }
+      ],
+      "defects": []
+    },
+    {
+      "flow": "tool_run_topology_poll",
+      "runs": 1,
+      "runOks": 1,
+      "coverage": [
+        {
+          "tag": "SESSION_OPEN_REQUESTED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "SESSION_OPEN_ACKED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_SUBMITTED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "STREAM_ENVELOPE_APPENDED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_PARKED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        }
+      ],
+      "defects": []
+    },
+    {
+      "flow": "tool_delegate",
+      "runs": 1,
+      "runOks": 1,
+      "coverage": [
+        {
+          "tag": "SESSION_OPEN_REQUESTED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "SESSION_OPEN_ACKED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_SUBMITTED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "STREAM_ENVELOPE_APPENDED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_PARKED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        }
+      ],
+      "defects": [
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=delegate",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "tags_at_5_of_5": 90,
+    "tags_at_4_of_5": 0,
+    "tags_below_4": 0,
+    "tags_dead": 0,
+    "total_bugs": 2
+  }
+}
