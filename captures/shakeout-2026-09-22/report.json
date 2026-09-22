@@ -1,35 +1,35 @@
 {
-  "writtenAt": "2026-09-22T01:28:49.504Z",
-  "totalFlows": 27,
-  "totalRuns": 27,
+  "writtenAt": "2026-09-22T06:10:32.789Z",
+  "totalFlows": 28,
+  "totalRuns": 140,
   "flowReports": [
     {
       "flow": "cold_boot",
-      "runs": 1,
-      "runOks": 1,
+      "runs": 5,
+      "runOks": 5,
       "coverage": [
         {
           "tag": "DRIVER_ROSTER_LOADED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "SESSIONS_LOADED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "WORKSPACES_LOADED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "BUNDLE_ROSTER_LOADED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         }
       ],
@@ -37,79 +37,79 @@
     },
     {
       "flow": "chat_one_turn",
-      "runs": 1,
-      "runOks": 1,
+      "runs": 5,
+      "runOks": 5,
       "coverage": [
         {
           "tag": "DRIVER_ROSTER_LOADED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "DRIVER_PICKED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "SESSION_OPEN_REQUESTED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "SESSION_OPEN_ACKED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "STREAM_ATTACHED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "TURN_SUBMITTED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "TURN_ACK",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "STREAM_ENVELOPE_APPENDED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "TURN_PARKED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "SESSION_END_REQUESTED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "SESSION_ENDED_LOCAL",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "STREAM_CLOSED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         }
       ],
@@ -117,19 +117,19 @@
     },
     {
       "flow": "slash_router",
-      "runs": 1,
-      "runOks": 1,
+      "runs": 5,
+      "runOks": 5,
       "coverage": [
         {
           "tag": "SLASH_ROUTED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "SLASH_UNKNOWN",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         }
       ],
@@ -137,19 +137,19 @@
     },
     {
       "flow": "bundle_picked",
-      "runs": 1,
-      "runOks": 1,
+      "runs": 5,
+      "runOks": 5,
       "coverage": [
         {
           "tag": "BUNDLE_ROSTER_LOADED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "BUNDLE_PICKED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         }
       ],
@@ -157,37 +157,37 @@
     },
     {
       "flow": "studio_build",
-      "runs": 1,
-      "runOks": 1,
+      "runs": 5,
+      "runOks": 5,
       "coverage": [
         {
           "tag": "SPEC_VALIDATE_REQUESTED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "SPEC_VALIDATED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "SPEC_BUILD_REQUESTED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "SPEC_BUILT",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "SPEC_BUILD_REJECTED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         }
       ],
@@ -195,25 +195,25 @@
     },
     {
       "flow": "attach_existing",
-      "runs": 1,
-      "runOks": 1,
+      "runs": 5,
+      "runOks": 5,
       "coverage": [
         {
           "tag": "SESSION_ATTACH_STARTED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "STREAM_ATTACHED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "STREAM_ENVELOPE_APPENDED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         }
       ],
@@ -221,19 +221,19 @@
     },
     {
       "flow": "refused_turn",
-      "runs": 1,
-      "runOks": 1,
+      "runs": 5,
+      "runOks": 5,
       "coverage": [
         {
           "tag": "TURN_SUBMITTED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "TURN_REFUSED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         }
       ],
@@ -241,19 +241,19 @@
     },
     {
       "flow": "refused_open",
-      "runs": 1,
-      "runOks": 1,
+      "runs": 5,
+      "runOks": 5,
       "coverage": [
         {
           "tag": "SESSION_OPEN_REQUESTED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "SESSION_OPEN_REFUSED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         }
       ],
@@ -261,72 +261,57 @@
     },
     {
       "flow": "stream_reconnect",
-      "runs": 1,
-      "runOks": 1,
+      "runs": 5,
+      "runOks": 5,
       "coverage": [
         {
           "tag": "STREAM_RECONNECTING",
-          "hits": 0,
-          "runs": 1,
-          "status": "warning"
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
         },
         {
           "tag": "STREAM_ATTACHED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         }
       ],
-      "defects": [
-        {
-          "category": "reconnect_not_signaled",
-          "observed": "SIGSTOP + wait did not fire STREAM_RECONNECTING",
-          "expected": "controller's error handler fires STREAM_RECONNECTING while frozen",
-          "reproduces": true,
-          "severity": "high"
-        },
-        {
-          "category": "reconnect_no_reattach",
-          "observed": "only 1 STREAM_ATTACHED fired",
-          "expected": "at least two — one at open, one on recovery",
-          "reproduces": true,
-          "severity": "high"
-        }
-      ]
+      "defects": []
     },
     {
       "flow": "tool_add",
-      "runs": 1,
-      "runOks": 1,
+      "runs": 5,
+      "runOks": 5,
       "coverage": [
         {
           "tag": "SESSION_OPEN_REQUESTED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "SESSION_OPEN_ACKED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "TURN_SUBMITTED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "STREAM_ENVELOPE_APPENDED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "TURN_PARKED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         }
       ],
@@ -334,37 +319,37 @@
     },
     {
       "flow": "tool_mul",
-      "runs": 1,
-      "runOks": 1,
+      "runs": 5,
+      "runOks": 5,
       "coverage": [
         {
           "tag": "SESSION_OPEN_REQUESTED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "SESSION_OPEN_ACKED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "TURN_SUBMITTED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "STREAM_ENVELOPE_APPENDED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "TURN_PARKED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         }
       ],
@@ -372,37 +357,37 @@
     },
     {
       "flow": "tool_read_file",
-      "runs": 1,
-      "runOks": 1,
+      "runs": 5,
+      "runOks": 5,
       "coverage": [
         {
           "tag": "SESSION_OPEN_REQUESTED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "SESSION_OPEN_ACKED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "TURN_SUBMITTED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "STREAM_ENVELOPE_APPENDED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "TURN_PARKED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         }
       ],
@@ -410,37 +395,37 @@
     },
     {
       "flow": "tool_list_dir",
-      "runs": 1,
-      "runOks": 1,
+      "runs": 5,
+      "runOks": 5,
       "coverage": [
         {
           "tag": "SESSION_OPEN_REQUESTED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "SESSION_OPEN_ACKED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "TURN_SUBMITTED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "STREAM_ENVELOPE_APPENDED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "TURN_PARKED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         }
       ],
@@ -448,37 +433,37 @@
     },
     {
       "flow": "tool_glob",
-      "runs": 1,
-      "runOks": 1,
+      "runs": 5,
+      "runOks": 5,
       "coverage": [
         {
           "tag": "SESSION_OPEN_REQUESTED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "SESSION_OPEN_ACKED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "TURN_SUBMITTED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "STREAM_ENVELOPE_APPENDED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "TURN_PARKED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         }
       ],
@@ -486,37 +471,37 @@
     },
     {
       "flow": "tool_grep",
-      "runs": 1,
-      "runOks": 1,
+      "runs": 5,
+      "runOks": 5,
       "coverage": [
         {
           "tag": "SESSION_OPEN_REQUESTED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "SESSION_OPEN_ACKED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "TURN_SUBMITTED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "STREAM_ENVELOPE_APPENDED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "TURN_PARKED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         }
       ],
@@ -524,37 +509,37 @@
     },
     {
       "flow": "tool_web_fetch",
-      "runs": 1,
-      "runOks": 1,
+      "runs": 5,
+      "runOks": 5,
       "coverage": [
         {
           "tag": "SESSION_OPEN_REQUESTED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "SESSION_OPEN_ACKED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "TURN_SUBMITTED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "STREAM_ENVELOPE_APPENDED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "TURN_PARKED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         }
       ],
@@ -562,37 +547,37 @@
     },
     {
       "flow": "tool_edit_file",
-      "runs": 1,
-      "runOks": 1,
+      "runs": 5,
+      "runOks": 5,
       "coverage": [
         {
           "tag": "SESSION_OPEN_REQUESTED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "SESSION_OPEN_ACKED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "TURN_SUBMITTED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "STREAM_ENVELOPE_APPENDED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "TURN_PARKED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         }
       ],
@@ -600,37 +585,37 @@
     },
     {
       "flow": "tool_write_file",
-      "runs": 1,
-      "runOks": 1,
+      "runs": 5,
+      "runOks": 5,
       "coverage": [
         {
           "tag": "SESSION_OPEN_REQUESTED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "SESSION_OPEN_ACKED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "TURN_SUBMITTED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "STREAM_ENVELOPE_APPENDED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "TURN_PARKED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         }
       ],
@@ -638,37 +623,37 @@
     },
     {
       "flow": "tool_bash",
-      "runs": 1,
-      "runOks": 1,
+      "runs": 5,
+      "runOks": 5,
       "coverage": [
         {
           "tag": "SESSION_OPEN_REQUESTED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "SESSION_OPEN_ACKED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "TURN_SUBMITTED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "STREAM_ENVELOPE_APPENDED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "TURN_PARKED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         }
       ],
@@ -676,37 +661,37 @@
     },
     {
       "flow": "tool_inspect_record",
-      "runs": 1,
-      "runOks": 1,
+      "runs": 5,
+      "runOks": 5,
       "coverage": [
         {
           "tag": "SESSION_OPEN_REQUESTED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "SESSION_OPEN_ACKED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "TURN_SUBMITTED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "STREAM_ENVELOPE_APPENDED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "TURN_PARKED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         }
       ],
@@ -714,37 +699,37 @@
     },
     {
       "flow": "tool_list_records",
-      "runs": 1,
-      "runOks": 1,
+      "runs": 5,
+      "runOks": 5,
       "coverage": [
         {
           "tag": "SESSION_OPEN_REQUESTED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "SESSION_OPEN_ACKED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "TURN_SUBMITTED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "STREAM_ENVELOPE_APPENDED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "TURN_PARKED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         }
       ],
@@ -752,37 +737,37 @@
     },
     {
       "flow": "tool_list_sessions",
-      "runs": 1,
-      "runOks": 1,
+      "runs": 5,
+      "runOks": 5,
       "coverage": [
         {
           "tag": "SESSION_OPEN_REQUESTED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "SESSION_OPEN_ACKED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "TURN_SUBMITTED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "STREAM_ENVELOPE_APPENDED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "TURN_PARKED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         }
       ],
@@ -790,37 +775,37 @@
     },
     {
       "flow": "tool_list_topologies",
-      "runs": 1,
-      "runOks": 1,
+      "runs": 5,
+      "runOks": 5,
       "coverage": [
         {
           "tag": "SESSION_OPEN_REQUESTED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "SESSION_OPEN_ACKED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "TURN_SUBMITTED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "STREAM_ENVELOPE_APPENDED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "TURN_PARKED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         }
       ],
@@ -828,37 +813,37 @@
     },
     {
       "flow": "tool_list_applications",
-      "runs": 1,
-      "runOks": 1,
+      "runs": 5,
+      "runOks": 5,
       "coverage": [
         {
           "tag": "SESSION_OPEN_REQUESTED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "SESSION_OPEN_ACKED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "TURN_SUBMITTED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "STREAM_ENVELOPE_APPENDED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "TURN_PARKED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         }
       ],
@@ -866,37 +851,37 @@
     },
     {
       "flow": "tool_run_topology",
-      "runs": 1,
-      "runOks": 1,
+      "runs": 5,
+      "runOks": 5,
       "coverage": [
         {
           "tag": "SESSION_OPEN_REQUESTED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "SESSION_OPEN_ACKED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "TURN_SUBMITTED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "STREAM_ENVELOPE_APPENDED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "TURN_PARKED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         }
       ],
@@ -904,37 +889,37 @@
     },
     {
       "flow": "tool_run_topology_poll",
-      "runs": 1,
-      "runOks": 1,
+      "runs": 5,
+      "runOks": 5,
       "coverage": [
         {
           "tag": "SESSION_OPEN_REQUESTED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "SESSION_OPEN_ACKED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "TURN_SUBMITTED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "STREAM_ENVELOPE_APPENDED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "TURN_PARKED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         }
       ],
@@ -942,37 +927,75 @@
     },
     {
       "flow": "tool_delegate",
-      "runs": 1,
-      "runOks": 1,
+      "runs": 5,
+      "runOks": 5,
       "coverage": [
         {
           "tag": "SESSION_OPEN_REQUESTED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "SESSION_OPEN_ACKED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "TURN_SUBMITTED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "STREAM_ENVELOPE_APPENDED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         },
         {
           "tag": "TURN_PARKED",
-          "hits": 1,
-          "runs": 1,
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        }
+      ],
+      "defects": []
+    },
+    {
+      "flow": "tool_delegate_many",
+      "runs": 5,
+      "runOks": 5,
+      "coverage": [
+        {
+          "tag": "SESSION_OPEN_REQUESTED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "SESSION_OPEN_ACKED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_SUBMITTED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "STREAM_ENVELOPE_APPENDED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_PARKED",
+          "hits": 5,
+          "runs": 5,
           "status": "green"
         }
       ],
@@ -980,10 +1003,10 @@
     }
   ],
   "summary": {
-    "tags_at_5_of_5": 123,
-    "tags_at_4_of_5": 1,
+    "tags_at_5_of_5": 129,
+    "tags_at_4_of_5": 0,
     "tags_below_4": 0,
     "tags_dead": 0,
-    "total_bugs": 2
+    "total_bugs": 0
   }
 }
