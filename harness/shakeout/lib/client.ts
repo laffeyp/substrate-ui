@@ -48,6 +48,17 @@ export class NodeSubstrateClient implements SubstrateClient {
 
   streamRecord(sessionId: string, sinceSeq: number, handlers: StreamHandlers): Unsubscribe {
     const url = new URL(this.baseUrl + `/api/session/${encodeURIComponent(sessionId)}/events?since_seq=${sinceSeq}`);
+    // Track whether the stream reached its natural terminus (RunFinalised).
+    // The browser's BrowserSubstrateClient distinguishes onError (transient
+    // drop, controller will reconnect) from onClose (terminal, stop
+    // reconnecting) via EventSource.readyState. Node's http.get has no such
+    // state: a socket close fires `response.on("end")` whether the server
+    // said its piece or died mid-stream. Mirror the browser semantic by
+    // watching the envelope payload — anything ending BEFORE RunFinalised
+    // is onError; after, onClose. Matches what handleStreamError vs
+    // handleStreamClose in session_controller.ts expect.
+    let sawRunFinalised = false;
+    let unsubscribed = false;
     const request = http.get({
       hostname: url.hostname,
       port: url.port,
@@ -71,14 +82,23 @@ export class NodeSubstrateClient implements SubstrateClient {
           const dataLine = frame.split("\n").find((line) => line.startsWith("data:"));
           if (!dataLine) continue;
           const payload = dataLine.slice(5).trimStart();
-          try { handlers.onEnvelope(JSON.parse(payload)); }
-          catch (err) { handlers.onError?.(err); }
+          try {
+            const env = JSON.parse(payload);
+            if (env && typeof env === "object" && (env as { kind?: string }).kind === "substrate.RunFinalised") {
+              sawRunFinalised = true;
+            }
+            handlers.onEnvelope(env);
+          } catch (err) { handlers.onError?.(err); }
         }
       });
-      response.on("end", () => { handlers.onClose?.(); });
-      response.on("error", (err) => { handlers.onError?.(err); });
+      response.on("end", () => {
+        if (unsubscribed) return;
+        if (sawRunFinalised) handlers.onClose?.();
+        else handlers.onError?.(new Error("sse socket closed before RunFinalised"));
+      });
+      response.on("error", (err) => { if (!unsubscribed) handlers.onError?.(err); });
     });
-    request.on("error", (err) => { handlers.onError?.(err); });
-    return () => { request.destroy(); };
+    request.on("error", (err) => { if (!unsubscribed) handlers.onError?.(err); });
+    return () => { unsubscribed = true; request.destroy(); };
   }
 }
