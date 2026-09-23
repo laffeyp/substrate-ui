@@ -1,4 +1,4 @@
-// Sprint 072 — Row dispatch by role.
+// Sprint 072/074 — Row dispatch by role.
 //
 // Renders one transcript row keyed on `envelope.callId` (for tool
 // rows) or `envelope.seq` (for everything else). Role-specific glyph
@@ -8,16 +8,20 @@
 //
 // Real subtrees:
 //   role=user, park, ended, warning — full markup as text-only spans.
-// Stubs (fleshed out in later sprints):
-//   role=model — raw-text stub; block parser lands in Sprint 073.
-//   role=tool  — one-line header stub; real ToolCard lands in Sprint 074.
+//   role=model — <ModelReply> with block-parsed content (Sprint 073).
+//   role=tool  — <ToolCard> with args + streaming + output + descend
+//               (Sprint 074).
 
 import * as React from "react";
 import type { TranscriptRow } from "../../vm";
 import { ModelReply } from "./ModelReply";
+import { ToolCard } from "./ToolCard";
 
 export interface RowProps {
   row: TranscriptRow;
+  paired?: TranscriptRow;
+  progressText: string;
+  progressEof: boolean;
 }
 
 interface Style {
@@ -53,11 +57,12 @@ function styleFor(row: TranscriptRow): Style {
   }
 }
 
-const RowInner: React.FC<RowProps> = ({ row }) => {
+const RowInner: React.FC<RowProps> = ({ row, paired, progressText, progressEof }) => {
   const style = styleFor(row);
   const text = row.text ?? "";
   const isModel = row.role === "model";
-  const isTool = row.role === "tool";
+  const isTool = row.role === "tool" && row.kind === "ToolCall";
+  const streamingShow = progressText.length > 0;
   return (
     <div style={{
       marginTop: style.marginTop,
@@ -70,17 +75,13 @@ const RowInner: React.FC<RowProps> = ({ row }) => {
       {isModel ? (
         <ModelReply text={text} />
       ) : isTool ? (
-        // Sprint 072 stub: one-line header matching the current
-        // dc-runtime template's tool-header shape. Real ToolCard lands
-        // in Sprint 074.
-        <span style={{ display: "inline-block", verticalAlign: "top", maxWidth: "calc(100% - 24px)" }}>
-          <span style={{ color: "#9aa0a8", fontFamily: "ui-monospace,'SF Mono',Menlo,monospace" }}>{row.toolName ?? ""}</span>
-          {" "}
-          <span style={{ color: "#b9bec5", fontFamily: "ui-monospace,'SF Mono',Menlo,monospace" }}>{row.args?.[0] ?? ""}</span>
-          <span style={{ color: "#4a4e55" }}>{" · "}</span>
-          <span style={{ color: row.toolOk === false ? "#c26058" : "#9aa0a8", fontFamily: "ui-monospace,'SF Mono',Menlo,monospace" }}>{row.toolOk === false ? "err" : "ok"}</span>
-          <span style={{ color: "#4a4e55", marginLeft: 8 }}>▸</span>
-        </span>
+        <ToolCard
+          call={row}
+          result={paired}
+          progressText={progressText}
+          progressEof={progressEof}
+          streamingShow={streamingShow}
+        />
       ) : (
         <span>{text}</span>
       )}

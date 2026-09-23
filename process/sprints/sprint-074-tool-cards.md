@@ -3,11 +3,27 @@
 ```yaml
 ---
 id: 074
-status: pending
+status: closed
 phase: 8
 pass_kind: functional
+closed_at: 2026-09-23
 ---
 ```
+
+## close (2026-09-23)
+
+`web/reveal/transcript/ToolCard.tsx` — memoized React component with `useState<boolean | undefined>` for the local open flag. `visiblyOpen = openLocal ?? toolRunning`. `useCallback` handler flips visible state. Header + expandable body match `reveal.html:112-133` inline styles verbatim; the body carries `data-tool-card-body="1"` so Sprint 075's caret-pin harness can select it. Descend affordance renders when the paired `ToolResult.output` parses to JSON containing `child_root`.
+
+`web/reveal/transcript/ProgressStream.tsx` — memoized component that renders the streaming pane from `progressText` + `eof`. Isolated from the tool-card body so streaming updates re-render only this pane. Structural guarantee via `React.memo`; the parent stays stable across `ToolProgress` bursts.
+
+`web/reveal/transcript/Transcript.tsx` builds `resultByCallId: Map<string, TranscriptRow>` from the snapshot and threads `paired`, `progressText`, `progressEof` into each `<Row>`. `<Row>` dispatches `role="tool" && kind="ToolCall"` to `<ToolCard>`; `role="tool" && kind="ToolResult"` never reaches Row (filtered out in Transcript).
+
+Dual + observation contract green:
+- **Signal.** No new tags. Parity 30/30.
+- **Artifact.** `web/reveal/transcript/{ToolCard.tsx, ProgressStream.tsx}` land. `Transcript.tsx`, `Row.tsx` modified. Typecheck, lint, build, smoke, test:unit, parity all exit 0.
+- **Observation.** Flag ON `PIXEL_ATOM_TRANSCRIPT=1 npm run pixel:diff` reports 12/12 match. `multi_tool` at 0.37–0.62%, `descended` at 0.76–1.45% (well under 3% real-model tolerance). `error` remains at 0.10–0.41% (under 1% deterministic tolerance).
+
+Rubber Duck: the streaming-vs-open decision (`toolRunning` alone drives auto-open, `streamingShow` drives the streaming pane's visibility inside the card only) mirrors the ruling from tonight's earlier caret work. No new observations.
 
 ## scope
 
