@@ -9,14 +9,19 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint web/",
     "smoke:vm": "npx tsx harness/vm_smoke.ts",
-    "shakeout": "npx tsx harness/shakeout/run.ts"
+    "shakeout": "npx tsx harness/shakeout/run.ts",
+    "pixel:baseline": "npx tsx harness/pixel_baseline.ts",
+    "pixel:diff": "npx tsx harness/pixel_diff.ts"
   },
   "devDependencies": {
     "@types/node": "^22",
+    "@types/pngjs": "^6.0.5",
     "@typescript-eslint/eslint-plugin": "^8.70.1",
     "@typescript-eslint/parser": "^8.70.1",
     "eslint": "^10.11.0",
+    "pixelmatch": "^7.2.0",
     "playwright": "^1.49.0",
+    "pngjs": "^7.0.0",
     "tsx": "^4.23.12",
     "typescript": "^5",
     "vite": "^5"
