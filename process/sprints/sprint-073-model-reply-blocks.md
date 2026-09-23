@@ -3,11 +3,31 @@
 ```yaml
 ---
 id: 073
-status: pending
+status: closed
 phase: 8
 pass_kind: functional
+closed_at: 2026-09-23
 ---
 ```
+
+## close (2026-09-23)
+
+`web/reveal/markdown.ts` — pure module holding `mdInlines`, `mdBlocks`, `renderInline`, `renderBlock`, extracted verbatim from `reveal_component.ts:120-215`. No `this` references. Types: `InlineSegment`, `ParsedBlock`, `RenderedInline`, `RenderedBlock` exported for downstream consumers.
+
+`web/reveal_component.ts` shrinks: the four inline methods become one-line wrappers that call the module. Behaviour preserved for the dc-runtime path.
+
+`web/reveal/transcript/ModelReply.tsx` — memoized React component that consumes `mdBlocks` + `renderBlock` and emits paragraph / code_block / ul / ol / heading markup matching `reveal.html:96-108` inline style strings.
+
+`web/reveal/transcript/Row.tsx` dispatches `role="model"` rows to `<ModelReply>` (replacing the paragraph stub from Sprint 072).
+
+`web/reveal/__tests__/markdown.spec.ts` — 14 test cases via `node:test`; every block kind, every inline segment, every heading level. `npm run test:unit` reports 14/14 pass in 71 ms.
+
+Dual + observation contract green:
+- **Signal.** No new tags. Parity 30/30.
+- **Artifact.** `web/reveal/markdown.ts`, `web/reveal/__tests__/markdown.spec.ts`, `web/reveal/transcript/ModelReply.tsx` land. `reveal_component.ts` and `Row.tsx` modified. `package.json` picks up `test:unit`. Typecheck, lint, build, smoke, parity, unit-test all exit 0.
+- **Observation.** Flag ON `PIXEL_ATOM_TRANSCRIPT=1 npm run pixel:diff` reports 12/12 match at the same tolerance schedule as Sprint 072. `one_turn` and `error` states carry a rendered model reply through the extracted parser; delta is 0.09–0.40% (well under 1% deterministic tolerance).
+
+Rubber Duck: extraction preserved behaviour by design — every regex and every branch in the parser is byte-for-byte the same. Unit tests pin every branch. No new observations.
 
 ## scope
 

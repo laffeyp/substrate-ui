@@ -11,7 +11,8 @@
     "smoke:vm": "npx tsx harness/vm_smoke.ts",
     "shakeout": "npx tsx harness/shakeout/run.ts",
     "pixel:baseline": "npx tsx harness/pixel_baseline.ts",
-    "pixel:diff": "npx tsx harness/pixel_diff.ts"
+    "pixel:diff": "npx tsx harness/pixel_diff.ts",
+    "test:unit": "npx tsx --test web/reveal/__tests__/*.spec.ts"
   },
   "devDependencies": {
     "@types/node": "^22",
