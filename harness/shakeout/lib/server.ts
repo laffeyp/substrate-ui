@@ -19,6 +19,7 @@ export class ServerHandle {
 
   async start(): Promise<void> {
     if (this.proc) return;
+    await this.requirePortFree();
     const fs = await import("node:fs");
     const out = fs.openSync(this.logPath, "a");
     // detached:true puts the child in its own process group so we can
@@ -50,6 +51,26 @@ export class ServerHandle {
     // Belt and braces: if anything is still listening on the port,
     // SIGKILL its group.
     if (p.pid) { try { process.kill(-p.pid, "SIGKILL"); } catch { /* ok */ } }
+  }
+
+  private async requirePortFree(): Promise<void> {
+    const net = await import("node:net");
+    const free = await new Promise<boolean>((resolve) => {
+      const s = net.createServer();
+      s.once("error", () => resolve(false));
+      s.once("listening", () => { s.close(() => resolve(true)); });
+      s.listen(8765, "127.0.0.1");
+    });
+    if (free) return;
+    const { execSync } = await import("node:child_process");
+    let pid = "";
+    try { pid = execSync("lsof -iTCP:8765 -sTCP:LISTEN -t", { encoding: "utf8" }).trim(); }
+    catch { /* lsof returns non-zero if empty */ }
+    throw new Error(
+      `port 8765 already bound${pid ? ` (pid ${pid})` : ""}. ` +
+      `Refusing to start — a squatter subverts every refused/reconnect flow. ` +
+      `Kill it first: kill ${pid || "$(lsof -iTCP:8765 -sTCP:LISTEN -t)"}`
+    );
   }
 
   private async waitPortFree(timeoutMs: number): Promise<void> {
