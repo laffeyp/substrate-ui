@@ -2,7 +2,7 @@
   "vocabulary_version": "0.1",
   "locked": true,
   "locked_at": "2026-09-22",
-  "locked_by": "Architect (Peter) ratified 2026-09-22 after the phase-5 shakeout closed 28 flows × 5 runs = 140 driven turns under kimi-k2.7-code:cloud with 129 tags at 5/5, zero warnings, zero blockers, zero dead, zero bugs. Report at captures/shakeout-2026-09-22/report.json. Coverage gate met; the lock is the contract for the reveal shell's SessionController seam from here.",
+  "locked_by": "Architect (Peter) ratified 2026-09-22 after the phase-5 shakeout closed 28 flows \u00d7 5 runs = 140 driven turns under kimi-k2.7-code:cloud with 129 tags at 5/5, zero warnings, zero blockers, zero dead, zero bugs. Report at captures/shakeout-2026-09-22/report.json. Coverage gate met; the lock is the contract for the reveal shell's SessionController seam from here.",
   "supersedes": null,
   "tag_count": 30,
   "categories": [
@@ -28,7 +28,11 @@
       "name": "SESSION_OPEN_REQUESTED",
       "category": "session",
       "stratum": "event",
-      "payload": ["driver", "workspace", "bundle"],
+      "payload": [
+        "driver",
+        "workspace",
+        "bundle"
+      ],
       "optional_payload": [],
       "note": "SessionController.openSession() entry. Driver is the selected model name; workspace and bundle are nullable if the caller left them unset."
     },
@@ -36,7 +40,11 @@
       "name": "SESSION_OPEN_ACKED",
       "category": "session",
       "stratum": "event",
-      "payload": ["session_id", "name", "driver"],
+      "payload": [
+        "session_id",
+        "name",
+        "driver"
+      ],
       "optional_payload": [],
       "note": "The server returned a session_id on POST /api/session. name is nullable when the server has not yet named the record."
     },
@@ -44,7 +52,10 @@
       "name": "SESSION_OPEN_REFUSED",
       "category": "session",
       "stratum": "incident",
-      "payload": ["failure_class", "detail"],
+      "payload": [
+        "failure_class",
+        "detail"
+      ],
       "optional_payload": [],
       "note": "POST /api/session failed. failure_class is the typed reason from the SubstrateClient; detail is a human string."
     },
@@ -52,7 +63,9 @@
       "name": "SESSION_ATTACH_STARTED",
       "category": "session",
       "stratum": "event",
-      "payload": ["session_id"],
+      "payload": [
+        "session_id"
+      ],
       "optional_payload": [],
       "note": "attachExisting(sessionId) began; the controller is opening the SSE stream against a session it did not itself create."
     },
@@ -60,7 +73,10 @@
       "name": "SESSION_END_REQUESTED",
       "category": "session",
       "stratum": "event",
-      "payload": ["session_id", "reason"],
+      "payload": [
+        "session_id",
+        "reason"
+      ],
       "optional_payload": [],
       "note": "endSession(reason) entry. reason is the caller-supplied label (user_ended, parity_harness_done, etc)."
     },
@@ -68,7 +84,9 @@
       "name": "SESSION_ENDED_LOCAL",
       "category": "session",
       "stratum": "event",
-      "payload": ["reason"],
+      "payload": [
+        "reason"
+      ],
       "optional_payload": [],
       "note": "A SessionEnded envelope reached the controller; snapshot flipped to endedReason. Distinct from SESSION_END_REQUESTED because a session can end without the local caller asking."
     },
@@ -76,7 +94,10 @@
       "name": "DRIVER_ROSTER_LOADED",
       "category": "driver",
       "stratum": "summary",
-      "payload": ["count", "default"],
+      "payload": [
+        "count",
+        "default"
+      ],
       "optional_payload": [],
       "note": "loadDriverRoster() populated snapshot.driverRoster from /api/models. default is nullable when the server names no default."
     },
@@ -84,7 +105,9 @@
       "name": "DRIVER_PICKED",
       "category": "driver",
       "stratum": "event",
-      "payload": ["driver"],
+      "payload": [
+        "driver"
+      ],
       "optional_payload": [],
       "note": "pickDriver(name) was called. The controller records the choice; no server call fires until session-open."
     },
@@ -92,7 +115,9 @@
       "name": "BUNDLE_ROSTER_LOADED",
       "category": "bundle",
       "stratum": "summary",
-      "payload": ["count"],
+      "payload": [
+        "count"
+      ],
       "optional_payload": [],
       "note": "loadBundleRoster() populated snapshot.bundleRoster from /api/bundles."
     },
@@ -100,7 +125,9 @@
       "name": "BUNDLE_PICKED",
       "category": "bundle",
       "stratum": "event",
-      "payload": ["bundle"],
+      "payload": [
+        "bundle"
+      ],
       "optional_payload": [],
       "note": "pickBundle(slug) was called. Records the choice; no server call fires until session-open."
     },
@@ -108,7 +135,9 @@
       "name": "WORKSPACES_LOADED",
       "category": "workspace",
       "stratum": "summary",
-      "payload": ["count"],
+      "payload": [
+        "count"
+      ],
       "optional_payload": [],
       "note": "loadRecentWorkspaces() populated snapshot.recentWorkspaces from /api/workspaces."
     },
@@ -116,7 +145,11 @@
       "name": "TURN_SUBMITTED",
       "category": "turn",
       "stratum": "event",
-      "payload": ["session_id", "turn_index", "text_length"],
+      "payload": [
+        "session_id",
+        "turn_index",
+        "text_length"
+      ],
       "optional_payload": [],
       "note": "sendTurn(text) entry. turn_index counts from zero over the session's lifetime; text_length is the trimmed input character count."
     },
@@ -124,7 +157,9 @@
       "name": "TURN_ACK",
       "category": "turn",
       "stratum": "event",
-      "payload": ["session_id"],
+      "payload": [
+        "session_id"
+      ],
       "optional_payload": [],
       "note": "POST /api/session/<id>/turn returned 200. The envelope stream carries the model's reply from here on."
     },
@@ -132,7 +167,10 @@
       "name": "TURN_REFUSED",
       "category": "turn",
       "stratum": "incident",
-      "payload": ["failure_class", "detail"],
+      "payload": [
+        "failure_class",
+        "detail"
+      ],
       "optional_payload": [],
       "note": "Turn POST failed. failure_class is the typed reason; detail is the human string."
     },
@@ -140,7 +178,9 @@
       "name": "TURN_PARKED",
       "category": "turn",
       "stratum": "event",
-      "payload": ["park_reason"],
+      "payload": [
+        "park_reason"
+      ],
       "optional_payload": [],
       "note": "A Park envelope arrived; the driver is waiting on the human. park_reason names the wait (rate_limit, awaiting_input, etc)."
     },
@@ -148,7 +188,13 @@
       "name": "TURN_INTERRUPTED",
       "category": "turn",
       "stratum": "event",
-      "payload": ["was_interrupted", "landed", "tier", "signal", "scope"],
+      "payload": [
+        "was_interrupted",
+        "landed",
+        "tier",
+        "signal",
+        "scope"
+      ],
       "optional_payload": [],
       "note": "interruptTurn() completed. was_interrupted true when the server killed an in-flight turn; landed is the server's ACK for the interrupt; tier is soft or hard; signal true for Ctrl+C, false for /interrupt; scope names what got interrupted."
     },
@@ -157,7 +203,10 @@
       "category": "stream",
       "stratum": "event",
       "payload": [],
-      "optional_payload": ["session_id", "record_root"],
+      "optional_payload": [
+        "session_id",
+        "record_root"
+      ],
       "note": "SSE onopen; snapshot.connection = 'connected'. Payload carries session_id for a session stream, record_root for a child-record attach. Exactly one of the two is present."
     },
     {
@@ -165,7 +214,10 @@
       "category": "stream",
       "stratum": "event",
       "payload": [],
-      "optional_payload": ["session_id", "record_root"],
+      "optional_payload": [
+        "session_id",
+        "record_root"
+      ],
       "note": "SSE closed cleanly (RunFinalised, session-end, or attach to a new session). Same session_id/record_root branching as STREAM_ATTACHED."
     },
     {
@@ -173,14 +225,20 @@
       "category": "stream",
       "stratum": "event",
       "payload": [],
-      "optional_payload": ["session_id", "record_root"],
+      "optional_payload": [
+        "session_id",
+        "record_root"
+      ],
       "note": "SSE error tripped the 1s reconnect timer. Same session_id/record_root branching as STREAM_ATTACHED."
     },
     {
       "name": "STREAM_ENVELOPE_APPENDED",
       "category": "stream",
       "stratum": "ambient",
-      "payload": ["seq", "kind"],
+      "payload": [
+        "seq",
+        "kind"
+      ],
       "optional_payload": [],
       "note": "One envelope folded into the transcript. seq is the substrate Run's monotonic sequence number; kind is the envelope kind string (UserMessage, ModelReply, ToolCall, etc)."
     },
@@ -188,7 +246,9 @@
       "name": "SESSIONS_LOADED",
       "category": "records",
       "stratum": "summary",
-      "payload": ["count"],
+      "payload": [
+        "count"
+      ],
       "optional_payload": [],
       "note": "loadLiveSessions() populated snapshot.liveSessions from /api/sessions."
     },
@@ -196,7 +256,9 @@
       "name": "CHILD_RECORD_ATTACH_REQUESTED",
       "category": "records",
       "stratum": "event",
-      "payload": ["record_root"],
+      "payload": [
+        "record_root"
+      ],
       "optional_payload": [],
       "note": "attachChildRecord(recordRoot) entry. The controller is subscribing to a child record's stream (a delegate tool call's substrate Run)."
     },
@@ -204,7 +266,10 @@
       "name": "TOPOLOGY_LOADED",
       "category": "topology",
       "stratum": "summary",
-      "payload": ["producer_count", "trigger_count"],
+      "payload": [
+        "producer_count",
+        "trigger_count"
+      ],
       "optional_payload": [],
       "note": "loadTopologyGraph(name) returned. Counts describe the structure of the record's authored topology."
     },
@@ -213,15 +278,21 @@
       "category": "spec",
       "stratum": "event",
       "payload": [],
-      "optional_payload": ["topology_name"],
+      "optional_payload": [
+        "topology_name"
+      ],
       "note": "validateSpec() entry. topology_name is present when the spec names one."
     },
     {
       "name": "SPEC_VALIDATED",
       "category": "spec",
       "stratum": "event",
-      "payload": ["valid"],
-      "optional_payload": ["error"],
+      "payload": [
+        "valid"
+      ],
+      "optional_payload": [
+        "error"
+      ],
       "note": "Server responded to /api/validate. valid is the boolean verdict; error carries the reason on false."
     },
     {
@@ -229,14 +300,18 @@
       "category": "spec",
       "stratum": "event",
       "payload": [],
-      "optional_payload": ["topology_name"],
+      "optional_payload": [
+        "topology_name"
+      ],
       "note": "buildSpec() entry. topology_name is present when the spec names one."
     },
     {
       "name": "SPEC_BUILD_REJECTED",
       "category": "spec",
       "stratum": "incident",
-      "payload": ["reason"],
+      "payload": [
+        "reason"
+      ],
       "optional_payload": [],
       "note": "The server refused the build, or the validator rejected the spec before POST."
     },
@@ -244,15 +319,22 @@
       "name": "SPEC_BUILT",
       "category": "spec",
       "stratum": "event",
-      "payload": ["run_name", "status"],
-      "optional_payload": ["unfired_triggers_count"],
+      "payload": [
+        "run_name",
+        "status"
+      ],
+      "optional_payload": [
+        "unfired_triggers_count"
+      ],
       "note": "The build succeeded and a substrate Run was started. run_name is the record identifier; status is the Run's terminal or in-flight state; unfired_triggers_count is present when at least one trigger in the authored topology never fired."
     },
     {
       "name": "SLASH_ROUTED",
       "category": "slash",
       "stratum": "event",
-      "payload": ["cmd"],
+      "payload": [
+        "cmd"
+      ],
       "optional_payload": [],
       "note": "submitLine() matched a known slash. cmd is the leading token (exit, model, help, clear, interrupt, name, list, tools, workspace, bundle, isolate)."
     },
@@ -260,7 +342,9 @@
       "name": "SLASH_UNKNOWN",
       "category": "slash",
       "stratum": "event",
-      "payload": ["cmd"],
+      "payload": [
+        "cmd"
+      ],
       "optional_payload": [],
       "note": "submitLine() matched no known slash. cmd is the leading token."
     }

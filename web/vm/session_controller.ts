@@ -22,6 +22,7 @@ import type {
 } from "./types";
 import type { SubstrateClient, Unsubscribe } from "./client";
 import { emit as sddEmit } from "./instrumentation/sdd";
+import { EnvelopeKind } from "./kinds";
 
 type Listener = (snap: Snapshot) => void;
 
@@ -313,7 +314,7 @@ export class SessionController {
     // Local echo first so the shell never looks hung during a slow round-trip.
     this.appendTranscript({
       seq: -Math.round(Date.now()),
-      kind: "UserMessage",
+      kind: EnvelopeKind.UserMessage,
       role: "user",
       text: trimmed,
     });
@@ -701,13 +702,13 @@ export class SessionController {
     }
     const payload = env.payload ?? {};
     switch (env.kind) {
-      case "SessionStarted": {
+      case EnvelopeKind.SessionStarted: {
         const driver = payload.driver_model != null ? String(payload.driver_model) : this.snap.driver;
         const bundle = payload.bundle == null ? this.snap.bundleSlug : String(payload.bundle);
         this.patch({ driver, bundleSlug: bundle });
         return;
       }
-      case "UserMessage": {
+      case EnvelopeKind.UserMessage: {
         const text = String(payload.text ?? "");
         // Dedup against the local echo appended in sendTurn.
         const transcript = this.snap.transcript;
@@ -723,7 +724,7 @@ export class SessionController {
         }
         return;
       }
-      case "ModelReply": {
+      case EnvelopeKind.ModelReply: {
         this.appendTranscript({
           seq: env.seq, kind: env.kind, role: "model",
           text: String(payload.text ?? ""),
@@ -740,7 +741,7 @@ export class SessionController {
         this.appendTranscript({ seq: env.seq, kind: env.kind, role: "warning", text });
         return;
       }
-      case "ToolCall": {
+      case EnvelopeKind.ToolCall: {
         // Phase 8 · 21a: carry the tool name, call_id, args, and step
         // onto the row so the shell can preview the first arg and
         // open the card without a second envelope walk.
@@ -773,7 +774,7 @@ export class SessionController {
         });
         return;
       }
-      case "ToolResult": {
+      case EnvelopeKind.ToolResult: {
         // Phase 8 · 21b: carry the output/error onto the row. The
         // matching ToolCall row is looked up by call_id at render.
         const toolName = payload.tool ? String(payload.tool) : "";
@@ -808,7 +809,7 @@ export class SessionController {
         }
         return;
       }
-      case "Park": {
+      case EnvelopeKind.Park: {
         const reason = String(payload.reason ?? "");
         const detail = String(payload.detail ?? "");
         this.patch({ parkReason: reason });
@@ -832,7 +833,7 @@ export class SessionController {
         this.emit("TURN_PARKED", { park_reason: reason });
         return;
       }
-      case "SessionEnded": {
+      case EnvelopeKind.SessionEnded: {
         const reason = String(payload.reason ?? "server_end");
         this.endedEmittedFor = sessionId;
         this.appendTranscript({
