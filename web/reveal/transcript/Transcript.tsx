@@ -11,7 +11,7 @@ import * as React from "react";
 import { useController } from "./useController";
 import { Row } from "./Row";
 import { EnvelopeKind } from "../../vm/kinds";
-import type { TranscriptRow } from "../../vm";
+import type { Snapshot, TranscriptRow } from "../../vm";
 
 export interface TranscriptProps {
   paneId: number;
@@ -23,12 +23,33 @@ function keyForRow(row: TranscriptRow): string {
   return "seq:" + row.seq;
 }
 
+function buildResultByCallId(snapshot: Snapshot): Map<string, TranscriptRow> {
+  const paired = new Map<string, TranscriptRow>();
+  for (const row of snapshot.transcript) {
+    if (row.kind === EnvelopeKind.ToolResult && row.callId) paired.set(row.callId, row);
+  }
+  return paired;
+}
+
 export function Transcript(props: TranscriptProps): React.ReactElement | null {
   const snapshot = useController(props.paneId);
+  const resultByCallId = React.useMemo(() => buildResultByCallId(snapshot), [snapshot.transcript]);
   const rows: TranscriptRow[] = snapshot.transcript.filter((row) => row.kind !== EnvelopeKind.ToolResult);
   return (
     <>
-      {rows.map((row) => <Row key={keyForRow(row)} row={row} />)}
+      {rows.map((row) => {
+        const paired = row.callId ? resultByCallId.get(row.callId) : undefined;
+        const progressEntry = row.callId ? snapshot.progressByCallId[row.callId] : undefined;
+        return (
+          <Row
+            key={keyForRow(row)}
+            row={row}
+            paired={paired}
+            progressText={progressEntry?.text ?? ""}
+            progressEof={progressEntry?.eof ?? false}
+          />
+        );
+      })}
     </>
   );
 }

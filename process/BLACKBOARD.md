@@ -90,6 +90,10 @@
 
 *Agent appends one entry per sprint/increment close. Append-only.*
 
+### Sprint 074 (2026-09-23, closed) — tool cards through React
+
+`web/reveal/transcript/ToolCard.tsx` — memoized React component with local `useState<boolean | undefined>` for the open flag (`openLocal ?? toolRunning` drives visibility; auto-open on `toolRunning` alone; `streamingShow` drives only the streaming pane inside the card). Header + expandable body mirror `reveal.html:112-133` inline styles verbatim; body carries `data-tool-card-body="1"` for the caret-pin harness in Sprint 075. Descend affordance surfaces when the paired `ToolResult.output` parses to JSON with `child_root`. `web/reveal/transcript/ProgressStream.tsx` — memoized streaming pane; isolated so `ToolProgress` re-renders touch only this component. `Transcript.tsx` builds `Map<callId, ToolResult>` from the snapshot and threads `paired`, `progressText`, `progressEof` into each `<Row>`. Under `PIXEL_ATOM_TRANSCRIPT=1`, `npm run pixel:diff` 12/12: `multi_tool` 0.37–0.62%, `descended` 0.76–1.45%, all within 3% real-model tolerance.
+
 ### Sprint 073 (2026-09-23, closed) — model-reply blocks extracted and rendered through React
 
 `web/reveal/markdown.ts` holds `mdInlines`, `mdBlocks`, `renderInline`, `renderBlock` — extracted verbatim from `reveal_component.ts:120-215` (no `this` references; every regex and branch preserved). Types exported for downstream consumers. `reveal_component.ts` swaps the inline methods for one-line wrappers so the dc-runtime path stays byte-identical. `web/reveal/transcript/ModelReply.tsx` — memoized React component that renders paragraph / code_block / ul / ol / heading blocks matching `reveal.html:96-108` inline style strings. `Row.tsx` dispatches `role="model"` to `<ModelReply>`. `web/reveal/__tests__/markdown.spec.ts` covers every block kind and inline segment (14 cases via `node:test`; `npm run test:unit` passes 14/14 in 71 ms). Under `PIXEL_ATOM_TRANSCRIPT=1`, `npm run pixel:diff` 12/12 match. `one_turn` and `error` states now route the model reply through the extracted parser at 0.09–0.40% delta (well under 1% deterministic tolerance).
