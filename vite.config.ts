@@ -80,6 +80,8 @@ export default defineConfig({
     // shims, which re-export the same globals. One React instance,
     // one ReactDOM instance, shared across all three module systems.
     alias: {
+      "react/jsx-runtime": resolve(__dirname, "web/shims/react-jsx-runtime.ts"),
+      "react/jsx-dev-runtime": resolve(__dirname, "web/shims/react-jsx-runtime.ts"),
       "react": resolve(__dirname, "web/shims/react.ts"),
       "react-dom/client": resolve(__dirname, "web/shims/react-dom-client.ts"),
     },

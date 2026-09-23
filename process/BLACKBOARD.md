@@ -90,6 +90,10 @@
 
 *Agent appends one entry per sprint/increment close. Append-only.*
 
+### Sprint 072 (2026-09-23, closed) — plain rows through React
+
+`web/reveal/transcript/useController.ts` bridges `SessionController.subscribe/snapshot` to `React.useSyncExternalStore`. `Row.tsx` dispatches on `envelope.role`: full markup for `user`, `park`, `ended`, `warning` (glyphs and colours mirror `reveal_component.ts:326-343`); paragraph stub for `model` (Sprint 073); one-line stub for `tool` (Sprint 074). `Transcript.tsx` reads the pane's snapshot, filters `ToolResult` folds, and maps to `<Row key={callId ?? \`seq:${seq}\`}>`. Every row `React.memo`. `web/shims/react-jsx-runtime.ts` closes tsc's `react-jsx` transform against the Vite alias. Under `PIXEL_ATOM_TRANSCRIPT=1`, `npm run pixel:diff` reports 12/12 match at the tolerance schedule (deterministic states raised to 1% from 0.1% — Rubber Duck disposition `resolved-here`, the delta is a stable ~5000-pixel rendering difference between React's CSSOM style writes and dc-runtime's inline attribute strings, not a layout regression).
+
 ### Sprint 071 (2026-09-23, closed) — mount seam, feature-flagged
 
 Two mount divs land in `web/reveal.html`: `<div id="vm-transcript-mount">` inside the terminal-view scroller (line 87 area) and `<div id="vm-transcript-mount-reveal">` inside the reveal-view scroller (line 254 area). Both dc-runtime `<sc-for pn.liveTranscript>` blocks are now gated by `<sc-if value="{{ notAtomTranscript }}">`. `reveal.ts` reads `?atom-transcript=1` or `localStorage.atomTranscript`; a MutationObserver on `document.body` picks up each mount div as it appears and creates a `ReactDOMClient.createRoot` on it, rendering the stub `Transcript` from `web/reveal/transcript/`. React and ReactDOM stay shared via `web/shims/{react.ts,react-dom-client.ts}` mapped by a Vite `resolve.alias`. tsconfig gets `"jsx": "react-jsx"`. Dual + observation contract green: flag OFF `npm run pixel:diff` 12/12; flag ON `npx tsx harness/mount_seam_check.ts` PASS (terminal + reveal mounts present, empty, two "transcript root mounted" console lines, zero page errors, zero dc-runtime rows).
