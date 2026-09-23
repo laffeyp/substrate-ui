@@ -34,6 +34,7 @@ declare const ReactDOM: any;
 import {
   EnvelopeKind, TranscriptRole, Surface, GraphMode, RevealLevel, GraphDirection,
 } from "./vm/kinds";
+import { mdBlocks, mdInlines, renderBlock, renderInline } from "./reveal/markdown";
 
 
 class Component extends DCLogic {
@@ -117,102 +118,15 @@ class Component extends DCLogic {
       model_name: String(studioState.model || '').trim(),
     };
   }
-  _mdRenderInline(seg) {
-    // Precompute the CSS variants a template can flow. Every rendered
-    // <span> reads all six style keys, so the template stays flat.
-    const s = { t: seg.t || '', font: 'inherit', bg: 'transparent', color: 'inherit', fw: '400', fs: 'normal', pad: '0', br: '0' };
-    if (seg.code) { s.font = "ui-monospace,'SF Mono',Menlo,monospace"; s.bg = '#1a1c20'; s.color = '#d7dade'; s.pad = '1px 4px'; s.br = '3px'; }
-    if (seg.bold) { s.fw = '600'; s.color = '#e2e5e9'; }
-    if (seg.italic) { s.fs = 'italic'; }
-    return s;
-  }
-  _mdRenderBlock(blk) {
-    // Attach per-kind boolean gates so the template's <sc-if>s stay
-    // simple. Inlines are pre-styled here too.
-    const b = { isP: false, isCode: false, isUl: false, isOl: false, isH: false, hasLang: false, lang: '', text: '', inlines: [], items: [], hSize: '13px' };
-    if (blk.kind === 'p') { b.isP = true; b.inlines = (blk.inlines || []).map(x => this._mdRenderInline(x)); }
-    else if (blk.kind === 'code_block') { b.isCode = true; b.text = blk.text || ''; b.lang = blk.lang || ''; b.hasLang = !!b.lang; }
-    else if (blk.kind === 'ul') { b.isUl = true; b.items = (blk.items || []).map(it => ({ inlines: (it.inlines || []).map(x => this._mdRenderInline(x)) })); }
-    else if (blk.kind === 'ol') { b.isOl = true; b.items = (blk.items || []).map(it => ({ inlines: (it.inlines || []).map(x => this._mdRenderInline(x)) })); }
-    else if (blk.kind === 'heading') { b.isH = true; b.inlines = (blk.inlines || []).map(x => this._mdRenderInline(x)); b.hSize = blk.level === 1 ? '17px' : blk.level === 2 ? '15px' : '13px'; }
-    return b;
-  }
-  _mdInlines(text) {
-    // Tokenize a single line of prose into inline segments so the
-    // template can flow `code`, **bold**, and *italic* at their own
-    // weights and fonts. No HTML injection — every segment renders as
-    // a plain `<span>` with the styling on it.
-    const out = [];
-    const re = /(`[^`]+`)|(\*\*[^*]+\*\*)|(\*[^*]+\*)/g;
-    let last = 0, m;
-    while ((m = re.exec(text)) !== null) {
-      if (m.index > last) out.push({ t: text.slice(last, m.index) });
-      if (m[1]) out.push({ t: m[1].slice(1, -1), code: true });
-      else if (m[2]) out.push({ t: m[2].slice(2, -2), bold: true });
-      else if (m[3]) out.push({ t: m[3].slice(1, -1), italic: true });
-      last = m.index + m[0].length;
-    }
-    if (last < text.length) out.push({ t: text.slice(last) });
-    return out.length ? out : [{ t: text }];
-  }
-  _mdBlocks(text) {
-    // Standard chat-Markdown blocks: paragraph, fenced code block,
-    // unordered list, ordered list, heading. Everything else falls to
-    // a paragraph so no user input is ever dropped.
-    if (!text || typeof text !== 'string') return [];
-    const lines = text.split('\n');
-    const blocks = [];
-    let i = 0;
-    while (i < lines.length) {
-      const line = lines[i];
-      const trimmed = line.trim();
-      const fence = trimmed.match(/^```(\w*)\s*$/);
-      if (fence) {
-        const lang = fence[1] || '';
-        const body = [];
-        i++;
-        while (i < lines.length && !/^```\s*$/.test(lines[i].trim())) { body.push(lines[i]); i++; }
-        if (i < lines.length) i++; // consume closing fence
-        blocks.push({ kind: 'code_block', lang, text: body.join('\n') });
-        continue;
-      }
-      const heading = trimmed.match(/^(#{1,4})\s+(.*)$/);
-      if (heading) {
-        blocks.push({ kind: 'heading', level: heading[1].length, inlines: this._mdInlines(heading[2]) });
-        i++;
-        continue;
-      }
-      const bullet = trimmed.match(/^[-*+]\s+(.*)$/);
-      const ordered = trimmed.match(/^(\d+)\.\s+(.*)$/);
-      if (bullet || ordered) {
-        const kind = bullet ? 'ul' : 'ol';
-        const items = [];
-        while (i < lines.length) {
-          const t = lines[i].trim();
-          const b = t.match(/^[-*+]\s+(.*)$/);
-          const o = t.match(/^(\d+)\.\s+(.*)$/);
-          if (kind === 'ul' && b) items.push({ inlines: this._mdInlines(b[1]) });
-          else if (kind === 'ol' && o) items.push({ inlines: this._mdInlines(o[2]) });
-          else break;
-          i++;
-        }
-        blocks.push({ kind, items });
-        continue;
-      }
-      if (trimmed === '') { i++; continue; }
-      // Gather a paragraph until the next blank line, fence, list, or
-      // heading. Soft newlines join with a space.
-      const buf = [];
-      while (i < lines.length) {
-        const t = lines[i].trim();
-        if (t === '' || /^```/.test(t) || /^#{1,4}\s+/.test(t) || /^[-*+]\s+/.test(t) || /^\d+\.\s+/.test(t)) break;
-        buf.push(lines[i]);
-        i++;
-      }
-      blocks.push({ kind: 'p', inlines: this._mdInlines(buf.join(' ')) });
-    }
-    return blocks;
-  }
+  // Sprint 073 — markdown methods extracted to `web/reveal/markdown.ts`.
+  // The wrappers below preserve the dc-runtime call sites
+  // (`this._mdBlocks(...)`, `this._mdRenderBlock(...)`) while the
+  // implementation lives in one place. Unit tests at
+  // `web/reveal/__tests__/markdown.spec.ts`.
+  _mdRenderInline(seg) { return renderInline(seg); }
+  _mdRenderBlock(blk) { return renderBlock(blk); }
+  _mdInlines(text) { return mdInlines(text); }
+  _mdBlocks(text) { return mdBlocks(text); }
   _liveActivity(snap) {
     // The activity strip above the prompt has three states.
     // Live: the most recent UserMessage has no Park after it — a turn

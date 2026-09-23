@@ -14,6 +14,7 @@
 
 import * as React from "react";
 import type { TranscriptRow } from "../../vm";
+import { ModelReply } from "./ModelReply";
 
 export interface RowProps {
   row: TranscriptRow;
@@ -67,15 +68,7 @@ const RowInner: React.FC<RowProps> = ({ row }) => {
     }}>
       <span style={{ color: style.glyphColor, marginRight: 6, verticalAlign: "top" }}>{style.glyph}</span>
       {isModel ? (
-        // Sprint 072 stub: render the reply as one paragraph-block
-        // that matches dc-runtime's <sc-if blk.isP> shape for the
-        // pixel-baseline `one_turn` state. Real markdown parsing
-        // lands in Sprint 073.
-        <span style={{ display: "inline-block", verticalAlign: "top", maxWidth: "calc(100% - 24px)" }}>
-          <div style={{ margin: "0 0 10px" }}>
-            <span style={{ fontFamily: "inherit", background: "transparent", color: "inherit", fontWeight: "normal", fontStyle: "normal", padding: 0, borderRadius: 0 }}>{text}</span>
-          </div>
-        </span>
+        <ModelReply text={text} />
       ) : isTool ? (
         // Sprint 072 stub: one-line header matching the current
         // dc-runtime template's tool-header shape. Real ToolCard lands

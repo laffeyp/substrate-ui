@@ -90,6 +90,10 @@
 
 *Agent appends one entry per sprint/increment close. Append-only.*
 
+### Sprint 073 (2026-09-23, closed) — model-reply blocks extracted and rendered through React
+
+`web/reveal/markdown.ts` holds `mdInlines`, `mdBlocks`, `renderInline`, `renderBlock` — extracted verbatim from `reveal_component.ts:120-215` (no `this` references; every regex and branch preserved). Types exported for downstream consumers. `reveal_component.ts` swaps the inline methods for one-line wrappers so the dc-runtime path stays byte-identical. `web/reveal/transcript/ModelReply.tsx` — memoized React component that renders paragraph / code_block / ul / ol / heading blocks matching `reveal.html:96-108` inline style strings. `Row.tsx` dispatches `role="model"` to `<ModelReply>`. `web/reveal/__tests__/markdown.spec.ts` covers every block kind and inline segment (14 cases via `node:test`; `npm run test:unit` passes 14/14 in 71 ms). Under `PIXEL_ATOM_TRANSCRIPT=1`, `npm run pixel:diff` 12/12 match. `one_turn` and `error` states now route the model reply through the extracted parser at 0.09–0.40% delta (well under 1% deterministic tolerance).
+
 ### Sprint 072 (2026-09-23, closed) — plain rows through React
 
 `web/reveal/transcript/useController.ts` bridges `SessionController.subscribe/snapshot` to `React.useSyncExternalStore`. `Row.tsx` dispatches on `envelope.role`: full markup for `user`, `park`, `ended`, `warning` (glyphs and colours mirror `reveal_component.ts:326-343`); paragraph stub for `model` (Sprint 073); one-line stub for `tool` (Sprint 074). `Transcript.tsx` reads the pane's snapshot, filters `ToolResult` folds, and maps to `<Row key={callId ?? \`seq:${seq}\`}>`. Every row `React.memo`. `web/shims/react-jsx-runtime.ts` closes tsc's `react-jsx` transform against the Vite alias. Under `PIXEL_ATOM_TRANSCRIPT=1`, `npm run pixel:diff` reports 12/12 match at the tolerance schedule (deterministic states raised to 1% from 0.1% — Rubber Duck disposition `resolved-here`, the delta is a stable ~5000-pixel rendering difference between React's CSSOM style writes and dc-runtime's inline attribute strings, not a layout regression).
