@@ -72,6 +72,18 @@ export default defineConfig({
       },
     },
   },
+  resolve: {
+    // React ships as UMD globals from CDN so dc-runtime (support.js)
+    // can read `window.React` at parse time. Vite-bundled code
+    // (reveal.ts, reveal_component.ts, and Phase 8's transcript
+    // subtree) imports `react` and `react-dom/client` through these
+    // shims, which re-export the same globals. One React instance,
+    // one ReactDOM instance, shared across all three module systems.
+    alias: {
+      "react": resolve(__dirname, "web/shims/react.ts"),
+      "react-dom/client": resolve(__dirname, "web/shims/react-dom-client.ts"),
+    },
+  },
   server: {
     port: 5173,
     proxy: {

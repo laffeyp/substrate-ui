@@ -85,6 +85,8 @@
    </sc-if>
    <sc-if value="{{ notDescended }}" hint-placeholder-val="{{ true }}">
    <div id="vm-transcript" ref="{{ termScrollRef }}" onScroll="{{ onTermScroll }}" style="flex:1;overflow-y:auto;overflow-x:hidden;padding:16px 22px;line-height:2;font-size:{{ fontSize }}px;min-width:0">
+    <div id="vm-transcript-mount"></div>
+    <sc-if value="{{ notAtomTranscript }}" hint-placeholder-val="{{ true }}">
     <sc-if value="{{ pn.liveOn }}" hint-placeholder-val="{{ true }}">
      <div style="color:#62676f;font-size:11px;padding-bottom:6px">session {{ pn.liveSessionLabel }} · {{ pn.liveEventCount }} events · {{ pn.liveConnection }}</div>
      <sc-for list="{{ pn.liveTranscript }}" as="row" hint-placeholder-count="0">
@@ -170,6 +172,7 @@
      <div style="margin-top:8px"><span style="color:#82a5c8">›</span> <span style="color:#e2e5e9">{{ sl.text }}</span><div style="color:#62676f;font-size:11px">queued — prototype only; the real app resumes the parked run in-process (registry turn)</div></div>
     </sc-for>
     </sc-if>
+    </sc-if>
    </div>
    <sc-if value="{{ activityShow }}" hint-placeholder-val="{{ false }}">
     <div style="flex:none;padding:0 22px 8px;font-size:11px;line-height:1.6;color:{{ activityColor }}">
@@ -249,6 +252,8 @@
     </sc-if>
     <sc-if value="{{ notDescended }}" hint-placeholder-val="{{ true }}">
     <div onClick="{{ focusTranscript }}" ref="{{ revScrollRef }}" onScroll="{{ onRevScroll }}" style="flex:1;overflow-y:auto;overflow-x:hidden;padding:20px 26px;line-height:1.95;font-size:{{ fontSize }}px;min-width:0">
+     <div id="vm-transcript-mount-reveal"></div>
+     <sc-if value="{{ notAtomTranscript }}" hint-placeholder-val="{{ true }}">
      <sc-if value="{{ liveOn }}" hint-placeholder-val="{{ true }}">
       <div style="color:#62676f;font-size:11px;padding-bottom:8px">session {{ liveSessionLabel }} · {{ liveEventCount }} events · {{ liveConnection }}</div>
       <sc-for list="{{ liveTranscript }}" as="row" hint-placeholder-count="0">
@@ -316,6 +321,7 @@
      <div style="color:#62676f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:{{ fdBash }}">  ⚙ bash pytest -k metering -n 8 ················ <span style="color:#9aa0a8">24 passed ✓</span></div>
      <div style="margin-top:8px;max-width:560px;opacity:{{ fdAns }}">The race was in _emit_log — unlocked deque shared by two producers. Kernel lock added; reviewer-a signed off.</div>
      <div style="margin-top:10px;color:#82a5c8;opacity:{{ fdPark }}">◐ parked</div>
+     </sc-if>
      </sc-if>
     </div>
     </sc-if>
