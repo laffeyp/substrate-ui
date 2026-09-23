@@ -3,11 +3,23 @@
 ```yaml
 ---
 id: 071
-status: pending
+status: closed
 phase: 8
 pass_kind: architecture
+closed_at: 2026-09-23
 ---
 ```
+
+## close (2026-09-23)
+
+Two mount divs land in `web/reveal.html` — `<div id="vm-transcript-mount">` inside the terminal-view scroller and `<div id="vm-transcript-mount-reveal">` inside the reveal-view scroller. Each dc-runtime `<sc-for pn.liveTranscript>` block is now wrapped in `<sc-if value="{{ notAtomTranscript }}">`. `reveal.ts` reads the flag from `?atom-transcript=1` or `localStorage.atomTranscript`; a `MutationObserver` on `document.body` catches each mount div as it enters the DOM and creates a `ReactDOMClient.createRoot` on it, rendering the stub `<Transcript paneId={focused} view="terminal"|"reveal" />` that returns null. React and ReactDOM come from the same `window.React` / `window.ReactDOM` UMD instances dc-runtime already uses — bridged through `web/shims/react.ts` and `web/shims/react-dom-client.ts`, mapped by a Vite `resolve.alias`. tsconfig gains `"jsx": "react-jsx"`.
+
+Dual + observation contract green:
+- **Signal.** No new tags. Parity gate 30/30 green.
+- **Artifact.** `web/reveal/transcript/{index.ts,Transcript.tsx}`, `web/shims/{react.ts,react-dom-client.ts}` land. `reveal.html`, `reveal.ts`, `reveal_component.ts`, `tsconfig.json`, `vite.config.ts` modified. `npm run typecheck`, `npm run lint`, `npm run build`, `npm run smoke:vm` all exit 0.
+- **Observation.** Flag OFF: `npm run pixel:diff` reports "12/12 match baseline". Flag ON (`harness/mount_seam_check.ts`): terminal mount present + empty, reveal mount present + empty after `⌃\`` toggle, two `[reveal] transcript root mounted` console lines, zero page errors, zero dc-runtime transcript rows visible.
+
+Rubber Duck: the MutationObserver design surfaced a subtlety — the reveal-view mount only appears when the user toggles reveal; the check must exercise the toggle to prove both roots attach. Resolved-here by ordering the observation-contract assertions: terminal first (default state), then toggle, then reveal.
 
 ## scope
 

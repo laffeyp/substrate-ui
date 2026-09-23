@@ -1655,6 +1655,19 @@ class Component extends DCLogic {
       recordsColor: surf === Surface.Records ? '#e2e5e9' : '#9aa0a8',
       studioColor: surf === Surface.Studio ? '#e2e5e9' : '#9aa0a8',
       showTerminal: !surf && !state.revealed, showRevealed: !surf && state.revealed,
+      // Sprint 071 feature flag: when the URL param `atom-transcript=1`
+      // is set (or localStorage.atomTranscript truthy), the React
+      // atom-transcript mount owns the transcript region; the
+      // dc-runtime path (this template's <sc-for pn.liveTranscript>)
+      // renders nothing. `notAtomTranscript` gates the dc-runtime
+      // path so both scrollers stay clean under the flag.
+      notAtomTranscript: !((() => {
+        try {
+          if (window.location.search.indexOf('atom-transcript=1') !== -1) return true;
+          if (window.localStorage && window.localStorage.atomTranscript) return true;
+        } catch (_) { /* private mode, etc. */ }
+        return false;
+      })()),
       showRecords: surf === Surface.Records, showAssay: surf === Surface.Assay, showStudio: surf === Surface.Studio,
       toggleReveal: () => this.setState(s => ({ revealed: !s.revealed, surface: null })),
       revealLabel: state.revealed ? '⌃` terminal' : '⌃` reveal',

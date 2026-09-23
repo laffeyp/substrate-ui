@@ -7,8 +7,26 @@
 // binding lands here one feature at a time; the template edits sit
 // next to each corresponding controller field.
 
+import * as React from "react";
+import * as ReactDOMClient from "react-dom/client";
 import type { Snapshot } from "./vm";
 import { BrowserSubstrateClient, PaneRegistry } from "./vm";
+import { Transcript } from "./reveal/transcript";
+
+// Sprint 071 feature flag. When `?atom-transcript=1` is in the URL
+// or `localStorage.atomTranscript` is truthy, the reveal shell mounts
+// the React atom transcript at `#vm-transcript-mount` (terminal view)
+// and `#vm-transcript-mount-reveal` (reveal view). When neither flag
+// is set, the dc-runtime template renders the transcript as it did
+// before Phase 8 opened. The gate is stable per session; the shell
+// does not toggle roots mid-session.
+function isAtomTranscriptEnabled(): boolean {
+  try {
+    if (window.location.search.indexOf("atom-transcript=1") !== -1) return true;
+    if (window.localStorage && window.localStorage.getItem("atomTranscript")) return true;
+  } catch (_) { /* private mode */ }
+  return false;
+}
 
 interface DCLogicHandle {
   state: Record<string, unknown>;
@@ -170,6 +188,40 @@ function boot(): void {
     ev.preventDefault();
     controller.interruptTurn();
   });
+
+  // Sprint 071 — mount the React atom-transcript roots if the flag
+  // is on. The dc-runtime template still owns the scroll container;
+  // React mounts inside two leaf `<div>`s dc-runtime treats as opaque:
+  //   #vm-transcript-mount         (terminal view; always present)
+  //   #vm-transcript-mount-reveal  (reveal view; appears only when
+  //                                  the user toggles reveal via ⌃`)
+  // A MutationObserver on `<body>` catches each mount div the moment
+  // it first attaches to the DOM and creates its React root once.
+  if (isAtomTranscriptEnabled()) {
+    const mounted = new Set<string>();
+    const focusedId = () => {
+      if (!component) return 1;
+      const st = component.state as { focused?: number };
+      return st.focused ?? 1;
+    };
+    const tryMount = (id: string, view: "terminal" | "reveal") => {
+      if (mounted.has(id)) return;
+      const host = document.getElementById(id);
+      if (!host) return;
+      mounted.add(id);
+      ReactDOMClient.createRoot(host).render(
+        React.createElement(Transcript, { paneId: focusedId(), view }),
+      );
+      console.info(`[reveal] transcript root mounted (${view})`);
+    };
+    const check = () => {
+      tryMount("vm-transcript-mount", "terminal");
+      tryMount("vm-transcript-mount-reveal", "reveal");
+    };
+    check();
+    const observer = new MutationObserver(check);
+    observer.observe(document.body, { childList: true, subtree: true });
+  }
 
   console.info("[reveal] SessionController booted. Read window.__vm.snapshot() in DevTools.");
 }
