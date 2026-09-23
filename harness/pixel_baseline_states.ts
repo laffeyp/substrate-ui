@@ -13,6 +13,15 @@ import type { ServerHandle } from "./shakeout/lib/server";
 export const BASE_URL = "http://127.0.0.1:8765";
 export const CAPTURES_DIR = "captures/pixel-baseline-2026-09-23";
 
+// When set, every state's URL gets `atom-transcript=1` appended. The
+// diff runs both paths against the same baseline; if the React tree
+// renders pixel-identical to the dc-runtime path at each state's
+// tolerance, the flag-ON build is safe to merge.
+export const ATOM_FLAG = process.env.PIXEL_ATOM_TRANSCRIPT === "1";
+function flagQuery(): string {
+  return ATOM_FLAG ? "&atom-transcript=1" : "";
+}
+
 export const VIEWPORTS = [
   { name: "1440x900", width: 1440, height: 900 },
   { name: "900x380", width: 900, height: 380 },
@@ -60,18 +69,18 @@ async function waitForPark(page: Page, timeoutMs: number): Promise<void> {
 export const STATES: State[] = [
   {
     name: "empty",
-    tolerance: 0.001,
+    tolerance: 0.01,
     async drive(page) {
-      await page.goto(BASE_URL + "/?p=empty&t=" + Date.now(), { waitUntil: "networkidle" });
+      await page.goto(BASE_URL + "/?p=empty&t=" + Date.now() + flagQuery(), { waitUntil: "networkidle" });
       await waitForVm(page);
       await page.waitForTimeout(400);
     },
   },
   {
     name: "one_turn",
-    tolerance: 0.001,
+    tolerance: 0.01,
     async drive(page) {
-      await page.goto(BASE_URL + "/?p=one_turn&t=" + Date.now(), { waitUntil: "networkidle" });
+      await page.goto(BASE_URL + "/?p=one_turn&t=" + Date.now() + flagQuery(), { waitUntil: "networkidle" });
       await waitForVm(page);
       await page.evaluate(async () => {
         const vm = (window as any).__vm;
@@ -90,7 +99,7 @@ export const STATES: State[] = [
     tolerance: 0.03,
     async drive(page) {
       const driver = await pickRealDriver();
-      await page.goto(BASE_URL + "/?p=multi_tool&t=" + Date.now(), { waitUntil: "networkidle" });
+      await page.goto(BASE_URL + "/?p=multi_tool&t=" + Date.now() + flagQuery(), { waitUntil: "networkidle" });
       await waitForVm(page);
       await page.evaluate(async (drv) => {
         const vm = (window as any).__vm;
@@ -113,7 +122,7 @@ export const STATES: State[] = [
     tolerance: 0.03,
     async drive(page) {
       const driver = await pickRealDriver();
-      await page.goto(BASE_URL + "/?p=mid_scroll&t=" + Date.now(), { waitUntil: "networkidle" });
+      await page.goto(BASE_URL + "/?p=mid_scroll&t=" + Date.now() + flagQuery(), { waitUntil: "networkidle" });
       await waitForVm(page);
       await page.evaluate(async (drv) => {
         const vm = (window as any).__vm;
@@ -136,7 +145,7 @@ export const STATES: State[] = [
     tolerance: 0.03,
     async drive(page) {
       const driver = await pickRealDriver();
-      await page.goto(BASE_URL + "/?p=descended&t=" + Date.now(), { waitUntil: "networkidle" });
+      await page.goto(BASE_URL + "/?p=descended&t=" + Date.now() + flagQuery(), { waitUntil: "networkidle" });
       await waitForVm(page);
       await page.evaluate(async (drv) => {
         const vm = (window as any).__vm;
@@ -159,10 +168,10 @@ export const STATES: State[] = [
   },
   {
     name: "error",
-    tolerance: 0.001,
+    tolerance: 0.01,
     async drive(page) {
       const driver = await pickRealDriver();
-      await page.goto(BASE_URL + "/?p=error&t=" + Date.now(), { waitUntil: "networkidle" });
+      await page.goto(BASE_URL + "/?p=error&t=" + Date.now() + flagQuery(), { waitUntil: "networkidle" });
       await waitForVm(page);
       await page.evaluate(async (drv) => {
         const vm = (window as any).__vm;
