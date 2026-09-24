@@ -772,6 +772,28 @@ class Component extends DCLogic {
     const fdOf = (k) => (!findQuery || !FTRANS ? 1 : (demoFindTranscriptText[k].toLowerCase().includes(findQuery) ? 1 : 0.3));
     const paneW = (state.winW || window.innerWidth) / state.cols;
     const compact = paneW < 480;
+    // Slash-router command table. `pick(paneId)` clears that pane's
+    // prompt input and submits the slash line on that pane's own
+    // controller. The pane loop below hands each rendered pane its
+    // own bound routerRows using this table.
+    const _vmSubmitFor = (paneId, line) => {
+      const vm = window.__vm;
+      if (!vm) return;
+      if (typeof vm.setActive === 'function') vm.setActive(paneId);
+      const controller = typeof vm.get === 'function' ? vm.get(paneId) : null;
+      if (controller && typeof controller.submitLine === 'function') controller.submitLine(line);
+      else if (typeof vm.submitLine === 'function') vm.submitLine(line);
+    };
+    const _clearPv = (paneId) => this.setState(s => ({ panes: s.panes.map(x => x.id === paneId ? Object.assign({}, x, { pv: '' }) : x) }));
+    const CMDS = [
+      ['/exit', 'end this session cleanly', (paneId) => { _clearPv(paneId); this.setState({ showEndConfirm: true }); }],
+      ['/model', 'swap driver — /model <name>', null],
+      ['/name', 'rename this session — /name <new>', null],
+      ['/list', 'list sessions on the server', (paneId) => { _clearPv(paneId); _vmSubmitFor(paneId, '/list'); }],
+      ['/interrupt', 'stop the in-flight turn (also ^C)', (paneId) => { _clearPv(paneId); _vmSubmitFor(paneId, '/interrupt'); }],
+      ['/clear', 'clear the transcript view', (paneId) => { _clearPv(paneId); _vmSubmitFor(paneId, '/clear'); }],
+      ['/help', 'show this list', (paneId) => { _clearPv(paneId); _vmSubmitFor(paneId, '/help'); }],
+    ];
     const panes = state.panes.map(p => Object.assign({
       // Grid placement. Single-pane state has no col/row on the pane
       // record; treat the missing case as the whole grid so the layout
@@ -844,11 +866,14 @@ class Component extends DCLogic {
       nameMin: compact ? '44px' : '64px',
       wsLabel: p.unbound ? '⌥ —' : compact ? '⌥' : '⌥ ' + (p.id === 1 ? 'substrate/fix-race' : (p.shape === 'worktree' ? 'substrate/' + p.name : (p.ws || p.name))),
       revealText: compact ? '⌃`' : '⌃` reveal',
-      name: p.name, driver: p.driver || state.driverDefault || 'deterministic',
-      // isMain gates the full machinery lens. An unbound pane 1
-      // (19b: /?blank=1) falls through to the notMain branch so its
-      // workspace picker renders in place of the empty transcript.
-      isMain: p.id === 1 && !p.unbound, notMain: p.id !== 1 || !!p.unbound,
+      id: p.id, name: p.name, driver: p.driver || state.driverDefault || 'deterministic',
+      // isMain gates the full machinery lens (transcript + prompt +
+      // find bar). Every bound pane, not just pane 1, should render
+      // it — otherwise a newly-split pane falls through to the
+      // legacy `pn.lines` list and the model's replies never format
+      // correctly there. An unbound pane still falls to notMain so
+      // its workspace picker renders in place of the empty transcript.
+      isMain: !p.unbound, notMain: !!p.unbound,
       // Machinery-lens bindings scoped to THIS pane so splitting the
       // window does not blank an unfocused pane. Each pane reads its
       // own controller's snapshot; focus only controls emphasis.
@@ -859,8 +884,17 @@ class Component extends DCLogic {
       // computed above the .map so the closure captures the pane id
       // by value, not the enclosing iterator.
       lines: this._linesForPane(p, state),
+      // Prompt row bindings — every rendered pane owns its own. A
+      // global `state.promptVal` field would mirror the same string
+      // into every visible input on every render, so a keystroke in
+      // pane 1 would visibly appear in pane 2's input box even though
+      // the send only routed to pane 1's controller. Each pane's
+      // prompt text lives on `p.pv`; the router row list and its
+      // pick callbacks reference the pane's own state.
       pv: p.pv || '',
+      promptVal: p.pv || '',
       onPv: (ev) => this.setState(s => ({ panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, { pv: ev.target.value }) : x) })),
+      onPrompt: (ev) => this.setState(s => ({ panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, { pv: ev.target.value }) : x) })),
       onPvKey: (ev) => {
         if (ev.key !== 'Enter') return;
         const v = (p.pv || '').trim();
@@ -872,6 +906,36 @@ class Component extends DCLogic {
         if (controller && typeof controller.submitLine === 'function') controller.submitLine(v);
         else if (vm && typeof vm.submitLine === 'function') vm.submitLine(v);
       },
+      onPromptKey: (ev) => {
+        if (ev.key !== 'Enter') return;
+        const v = (p.pv || '').trim();
+        if (!v) return;
+        this.setState(s => ({ panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, { pv: '' }) : x) }));
+        const vm = window.__vm;
+        if (vm && typeof vm.setActive === 'function') vm.setActive(p.id);
+        const controller = vm && typeof vm.get === 'function' ? vm.get(p.id) : null;
+        if (controller && typeof controller.submitLine === 'function') controller.submitLine(v);
+        else if (vm && typeof vm.submitLine === 'function') vm.submitLine(v);
+      },
+      routerRows: (() => {
+        const q = (p.pv || '').trim();
+        if (!q.startsWith('/')) return [];
+        return CMDS.filter(c => c[0].startsWith(q) || q === '/').map(c => ({
+          cmd: c[0], desc: c[1],
+          pick: c[2]
+            ? (() => { this.setState(s => ({ panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, { pv: '' }) : x) })); (c[2])(p.id); })
+            : (() => this.setState(s => ({ panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, { pv: c[0] + ' ' }) : x) }))),
+        }));
+      })(),
+      routerOpen: (() => {
+        const q = (p.pv || '').trim();
+        return q.startsWith('/') && CMDS.some(c => c[0].startsWith(q) || q === '/');
+      })(),
+      promptRadius: (() => {
+        const q = (p.pv || '').trim();
+        return (q.startsWith('/') && CMDS.some(c => c[0].startsWith(q) || q === '/')) ? '0 0 6px 6px' : '6px';
+      })(),
+      sentLines: (p.sent || []).map(t => ({ text: t })),
       editing: p.editing, notEditing: !p.editing, nameVal: p.nameVal,
       nameColor: p.id === state.focused ? '#e2e5e9' : '#9aa0a8',
       // Status dot per pane. 19i: when the last transcript row is a
@@ -908,6 +972,12 @@ class Component extends DCLogic {
       hintH: state.dropHint && (state.dropHint.zone === 'n' || state.dropHint.zone === 's') ? '50%' : (state.dropHint && (state.dropHint.zone === 'w' || state.dropHint.zone === 'e') ? '100%' : '100%'),
       branch: p.id === 1 ? 'substrate/fix-race' : 'substrate/' + p.name,
       ddOpen: state.ddFor === p.id, wsOpenP: state.wsFor === p.id,
+      // Clip the header by default so a narrow pane's chip row does not
+      // bleed sideways into the next pane. Restore `visible` while a
+      // dropdown (driver picker or workspace popup) is open, because
+      // those are `position:absolute; top:20px` inside the header and
+      // rely on the header not clipping to be visible below it.
+      hdrOverflow: (state.ddFor === p.id || state.wsFor === p.id) ? 'visible' : 'hidden',
       toggleDd: () => this.setState(s => ({ focused: p.id, ddFor: s.ddFor === p.id ? null : p.id, wsFor: null })),
       toggleWsP: () => this.setState(s => ({ focused: p.id, wsFor: s.wsFor === p.id ? null : p.id, ddFor: null })),
       driverOpts: ((state.driverRoster && state.driverRoster.length) ? state.driverRoster : ['deterministic']).map(m => ({
@@ -1353,22 +1423,28 @@ class Component extends DCLogic {
     }
     const sideLanes = _sideLanes;
     const modes = [['stream', 'stream+graph'], ['io', 'i/o'], ['structure', 'structure'], ['scene', 'scene']];
+    // Direction (down/side) is a property of the stream lens; the
+    // io/structure/scene lenses render their own layouts and the
+    // direction toggle is not visible for them. Carrying `dir=Side`
+    // through a mode switch leaves the shell in a state whose
+    // affordance is hidden — the user sees a side-oriented layout
+    // and no chip to change it. Reset `dir` to Down whenever the
+    // user leaves stream.
     const modeChips = modes.map(([id, label]) => ({
-      label, pick: () => this.setState({ mode: id }),
+      label,
+      pick: () => this.setState(id === GraphMode.Stream ? { mode: id } : { mode: id, dir: GraphDirection.Down }),
       color: state.mode === id ? '#d7dade' : '#62676f', bg: state.mode === id ? '#2e3138' : 'transparent',
     }));
-    const _vmSubmit = (line) => { const vm = window.__vm; if (vm) vm.submitLine(line); };
-    const CMDS = [
-      ['/exit', 'end this session cleanly', () => this.setState({ showEndConfirm: true, promptVal: '' })],
-      ['/model', 'swap driver — /model <name>', null],
-      ['/name', 'rename this session — /name <new>', null],
-      ['/list', 'list sessions on the server', () => { this.setState({ promptVal: '' }); _vmSubmit('/list'); }],
-      ['/interrupt', 'stop the in-flight turn (also ^C)', () => { this.setState({ promptVal: '' }); _vmSubmit('/interrupt'); }],
-      ['/clear', 'clear the transcript view', () => { this.setState({ promptVal: '' }); _vmSubmit('/clear'); }],
-      ['/help', 'show this list', () => { this.setState({ promptVal: '' }); _vmSubmit('/help'); }],
-    ];
-    const q = state.promptVal.trim();
-    const routerRows = q.startsWith('/') ? CMDS.filter(c => c[0].startsWith(q) || q === '/').map(c => ({ cmd: c[0], desc: c[1], pick: c[2] || (() => this.setState({ promptVal: c[0] + ' ' })) })) : [];
+    // CMDS moved earlier — see the block above panes.map that
+    // instantiates it once and hands each pane its own bound pick
+    // callbacks. Two legacy references below are kept as no-ops so any
+    // downstream reference does not crash; the real work lives per pane.
+    const q = (fp && fp.pv ? fp.pv : (state.promptVal || '')).trim();
+    const routerRows = q.startsWith('/') ? CMDS.filter(c => c[0].startsWith(q) || q === '/').map(c => ({
+      cmd: c[0], desc: c[1],
+      pick: c[2] ? (() => (c[2])(fp && fp.id ? fp.id : 1))
+        : (() => this.setState(s => ({ panes: s.panes.map(x => x.id === (fp && fp.id ? fp.id : 1) ? Object.assign({}, x, { pv: c[0] + ' ' }) : x) }))),
+    })) : [];
     // Detect a 2-D numeric grid inside the bound session's envelopes.
     // game_of_life-style topologies emit `payload.grid` on their
     // Generation event; session records don't. When none is found the
@@ -1591,7 +1667,15 @@ class Component extends DCLogic {
       descendReviewer: (ev) => { ev.stopPropagation(); this.setState({ descent: ['reviewer-a'], descPv: '', surface: null }); },
       swallow: (ev) => ev.stopPropagation(),
       childHint: state.childOpen ? '▾' : '· answered ▸',
-      promptVal: state.promptVal, onPrompt: (ev) => this.setState({ promptVal: ev.target.value }),
+      // Reveal view's single-pane prompt row (reveal.html:345). Bound
+      // to the focused pane's pv, so the same field the terminal-view
+      // pane input mutates is what the reveal-view input shows.
+      promptVal: (fp && fp.pv) || '',
+      onPrompt: (ev) => {
+        const paneId = (fp && fp.id) || 1;
+        const val = ev.target.value;
+        this.setState(s => ({ panes: s.panes.map(x => x.id === paneId ? Object.assign({}, x, { pv: val }) : x) }));
+      },
       routerOpen: routerRows.length > 0, routerRows,
       promptRadius: routerRows.length > 0 ? '0 0 6px 6px' : '6px',
       streamRef: (el) => { this._streamEl = el; },
@@ -1603,6 +1687,17 @@ class Component extends DCLogic {
       termScrollRef: (el) => {
         this._termScrollEl = el;
         if (!el) return;
+        // Under the atom-transcript flag, the React tree owns scroll
+        // position. The rAF write below fires on every dc-runtime
+        // render (fresh function identity per pass makes React re-run
+        // the ref), and its else-branch bumps scrollTop to
+        // scrollHeight - clientHeight when no scroll record is saved.
+        // That racks the transcript to the bottom on every click,
+        // even though the click added nothing to the transcript.
+        try {
+          if (window.location.search.indexOf('atom-transcript=1') !== -1) return;
+          if (window.localStorage && window.localStorage.atomTranscript) return;
+        } catch (_) { /* private mode */ }
         const saved = (this._scrolls || {}).termByPane || {};
         const rec = saved[fp.id];
         window.requestAnimationFrame(() => {
@@ -1626,6 +1721,10 @@ class Component extends DCLogic {
       revScrollRef: (el) => {
         this._revScrollEl = el;
         if (!el) return;
+        try {
+          if (window.location.search.indexOf('atom-transcript=1') !== -1) return;
+          if (window.localStorage && window.localStorage.atomTranscript) return;
+        } catch (_) { /* private mode */ }
         const saved = (this._scrolls || {}).revByPane || {};
         const rec = saved[fp.id];
         window.requestAnimationFrame(() => {
@@ -1794,14 +1893,19 @@ class Component extends DCLogic {
         this.setState({ studioOut: 'built — ' + runName + ' (' + status + ') ▸', studioOutColor: '#82a5c8' });
       },
       studioOut: state.studioOut, studioOutColor: state.studioOutColor,
-      sentLines: state.sent.map(t => ({ text: t })),
+      sentLines: (fp && fp.sent) ? fp.sent.map(t => ({ text: t })) : [],
       onPromptKey: (ev) => {
         if (ev.key !== 'Enter') return;
-        const v = this.state.promptVal.trim();
+        const paneId = (fp && fp.id) || 1;
+        const pane = this.state.panes.find(x => x.id === paneId);
+        const v = ((pane && pane.pv) || '').trim();
         if (!v) return;
-        this.setState({ promptVal: '' });
+        this.setState(s => ({ panes: s.panes.map(x => x.id === paneId ? Object.assign({}, x, { pv: '' }) : x) }));
         const vm = window.__vm;
-        if (vm) vm.submitLine(v);
+        if (vm && typeof vm.setActive === 'function') vm.setActive(paneId);
+        const controller = vm && typeof vm.get === 'function' ? vm.get(paneId) : null;
+        if (controller && typeof controller.submitLine === 'function') controller.submitLine(v);
+        else if (vm && typeof vm.submitLine === 'function') vm.submitLine(v);
       },
       panes, paneCols: state.colW.map(w => w.toFixed(3) + 'fr').join(' '), paneRows: state.rowW.map(w => w.toFixed(3) + 'fr').join(' '), focusedName: fp.name, fpLines: fp.lines || [],
       revealFlexL: state.revealL.toFixed(3) + ' 1 0%',

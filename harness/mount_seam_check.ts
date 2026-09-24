@@ -32,18 +32,24 @@ async function main(): Promise<void> {
     await page.waitForFunction(() => (window as any).__vm != null, undefined, { timeout: 10_000 });
     await page.waitForTimeout(500);
 
-    // 1. Terminal view (default): mount exists, empty, no dc-runtime rows.
-    const termMount = await page.$("#vm-transcript-mount");
+    // 1. Terminal view (default): mount exists, contains the atom
+    //    root div; the atom root has at least one child (the
+    //    Transcript's wrapper). No dc-runtime rows present.
+    const termMount = await page.$('[data-vm-transcript-mount="terminal"][data-pane-id="1"]');
     if (!termMount) failures.push("terminal-view mount div not found");
-    const termChildren = await page.evaluate(() => {
-      const host = document.getElementById("vm-transcript-mount");
-      return host ? host.childElementCount : -1;
+    const termShape = await page.evaluate(() => {
+      const host = document.querySelector<HTMLElement>('[data-vm-transcript-mount="terminal"][data-pane-id="1"]');
+      const inner = host?.querySelector("[data-vm-atom-root]");
+      return {
+        hostChildren: host?.childElementCount ?? -1,
+        innerExists: !!inner,
+        innerChildren: inner?.childElementCount ?? -1,
+      };
     });
-    if (termChildren !== 0) {
-      failures.push(`terminal mount has ${termChildren} children; expected 0 (Transcript stub renders null)`);
-    }
+    if (termShape.hostChildren < 1) failures.push(`terminal mount has ${termShape.hostChildren} children; expected atom root`);
+    if (!termShape.innerExists) failures.push("terminal atom root [data-vm-atom-root] not mounted");
     const anyDcRowTerm = await page.evaluate(() => {
-      const scroller = document.getElementById("vm-transcript");
+      const scroller = document.querySelector<HTMLElement>('[data-vm-transcript-scroller="1"]');
       if (!scroller) return false;
       const rows = scroller.querySelectorAll('div[style*="max-width:840px"]');
       return rows.length > 0;
@@ -58,21 +64,27 @@ async function main(): Promise<void> {
     await page.keyboard.up("Control");
     await page.waitForTimeout(500);
 
-    const revMount = await page.$("#vm-transcript-mount-reveal");
+    const revMount = await page.$('[data-vm-transcript-mount="reveal"][data-pane-id="1"]');
     if (!revMount) failures.push("reveal-view mount div not found after toggling reveal");
-    const revChildren = await page.evaluate(() => {
-      const host = document.getElementById("vm-transcript-mount-reveal");
-      return host ? host.childElementCount : -1;
+    const revShape = await page.evaluate(() => {
+      const host = document.querySelector<HTMLElement>('[data-vm-transcript-mount="reveal"][data-pane-id="1"]');
+      const inner = host?.querySelector("[data-vm-atom-root]");
+      return {
+        hostChildren: host?.childElementCount ?? -1,
+        innerExists: !!inner,
+      };
     });
-    if (revChildren !== 0) {
-      failures.push(`reveal mount has ${revChildren} children; expected 0 (Transcript stub renders null)`);
-    }
+    if (revShape.hostChildren < 1) failures.push(`reveal mount has ${revShape.hostChildren} children; expected atom root`);
+    if (!revShape.innerExists) failures.push("reveal atom root [data-vm-atom-root] not mounted");
 
-    // 3. Both React roots mounted, one console line each.
+    // 3. Both React roots mounted (may re-mount as dc-runtime
+    // re-renders clear the outer mount div; the observer re-attaches
+    // the inner root each time). At least one line per view.
     const mountedLines = consoleLines.filter((line) => line.includes("transcript root mounted"));
-    if (mountedLines.length !== 2) {
-      failures.push(`expected 2 "transcript root mounted" console lines, got ${mountedLines.length}`);
-    }
+    const terminalLines = mountedLines.filter((line) => line.includes("terminal")).length;
+    const revealLines = mountedLines.filter((line) => line.includes("reveal")).length;
+    if (terminalLines < 1) failures.push(`expected ≥1 "transcript root mounted (terminal)" console lines, got ${terminalLines}`);
+    if (revealLines < 1) failures.push(`expected ≥1 "transcript root mounted (reveal)" console lines, got ${revealLines}`);
 
     if (pageErrors.length !== 0) {
       failures.push(`page errors: ${pageErrors.join("; ")}`);
