@@ -15,6 +15,12 @@ import { flow as refusedOpen } from "./refused_open";
 import { flow as refusedTurn } from "./refused_turn";
 import { flow as attachExisting } from "./attach_existing";
 import { flow as streamReconnect } from "./stream_reconnect";
+import { flow as caretPin } from "./caret_pin";
+import { flow as paneSplit } from "./pane_split";
+import { flow as paneHeaderClip } from "./pane_header_clip";
+import { flow as panePromptIsolation } from "./pane_prompt_isolation";
+import { flow as revealModeDirection } from "./reveal_mode_direction";
+import { flow as modelReplyRender } from "./model_reply_render";
 import { TOOL_FLOWS } from "./tools_index";
 import { join } from "node:path";
 
@@ -30,6 +36,12 @@ const AXIS_A: Flow[] = [
   refusedTurn,
   refusedOpen,
   streamReconnect,
+  caretPin,
+  paneSplit,
+  paneHeaderClip,
+  panePromptIsolation,
+  revealModeDirection,
+  modelReplyRender,
 ];
 const AXIS_B: Flow[] = TOOL_FLOWS;
 const FLOWS: Flow[] = [

@@ -141,14 +141,16 @@ function boot(): void {
             const termBottom = scrolls?.termByPane?.[paneId]?.atBottom ?? true;
             const revBottom = scrolls?.revByPane?.[paneId]?.atBottom ?? true;
             if (termBottom) {
-              const el = document.getElementById("vm-transcript");
+              const el = document.querySelector<HTMLElement>(`[data-vm-transcript-scroller="${paneId}"]`);
               if (el) el.scrollTop = el.scrollHeight;
             }
             if (revBottom) {
-              // The reveal-view transcript container has no id; find it
-              // by class-adjacent structure. The pane loop keeps only
-              // one such container mounted at a time.
-              const el = document.querySelector<HTMLDivElement>('[style*="line-height:1.95"]');
+              // The reveal-view scroller has no data attribute of its
+              // own; find it by scanning the reveal-view mount's
+              // parent. The pane loop keeps only one such mount per
+              // pane mounted at a time.
+              const mount = document.querySelector<HTMLElement>(`[data-vm-transcript-mount="reveal"][data-pane-id="${paneId}"]`);
+              const el = mount?.parentElement as HTMLElement | null;
               if (el) el.scrollTop = el.scrollHeight;
             }
           });
@@ -189,34 +191,61 @@ function boot(): void {
     controller.interruptTurn();
   });
 
-  // Sprint 071 — mount the React atom-transcript roots if the flag
-  // is on. The dc-runtime template still owns the scroll container;
-  // React mounts inside two leaf `<div>`s dc-runtime treats as opaque:
-  //   #vm-transcript-mount         (terminal view; always present)
-  //   #vm-transcript-mount-reveal  (reveal view; appears only when
-  //                                  the user toggles reveal via ⌃`)
-  // A MutationObserver on `<body>` catches each mount div the moment
-  // it first attaches to the DOM and creates its React root once.
+  // Sprint 071 mount seam + Sprint 075 re-attach.
+  //
+  // dc-runtime's React reconciler treats `<div id="vm-transcript-mount">
+  // </div>` as an empty node and, on every state update, replaces the
+  // element's children with nothing — erasing whatever my createRoot
+  // wrote. Fix: on every mutation, re-mount into a *nested* holder
+  // that dc-runtime never sees. dc-runtime creates the mount div;
+  // reveal.ts creates a sibling `<div data-vm-atom-root>` inside it
+  // via direct DOM API and calls createRoot on that inner div. When
+  // dc-runtime clears the outer mount div's children, the observer
+  // re-attaches the inner div and re-creates its React root.
   if (isAtomTranscriptEnabled()) {
-    const mounted = new Set<string>();
-    const focusedId = () => {
-      if (!component) return 1;
-      const st = component.state as { focused?: number };
-      return st.focused ?? 1;
+    interface Attached { host: HTMLElement; root: ReactDOMClient.Root; inner: HTMLElement; paneId: number; view: "terminal" | "reveal"; }
+    // Keyed by "<view>:<paneId>". Each pane renders its own mount div
+    // (reveal.html iterates `<sc-for panes>`), so a single React root
+    // per pane per view is right. Using #getElementById here would
+    // return only the first-emitted mount and leave every other pane
+    // blank — the very regression the pane_split flow catches.
+    const attached = new Map<string, Attached>();
+    const keyFor = (view: "terminal" | "reveal", paneId: number) => `${view}:${paneId}`;
+    const readPaneId = (host: HTMLElement): number => {
+      const raw = host.getAttribute("data-pane-id");
+      const n = raw ? Number(raw) : NaN;
+      return Number.isFinite(n) ? n : 1;
     };
-    const tryMount = (id: string, view: "terminal" | "reveal") => {
-      if (mounted.has(id)) return;
-      const host = document.getElementById(id);
-      if (!host) return;
-      mounted.add(id);
-      ReactDOMClient.createRoot(host).render(
-        React.createElement(Transcript, { paneId: focusedId(), view }),
-      );
-      console.info(`[reveal] transcript root mounted (${view})`);
+    const attachOne = (host: HTMLElement, view: "terminal" | "reveal") => {
+      const paneId = readPaneId(host);
+      const key = keyFor(view, paneId);
+      const existing = attached.get(key);
+      if (existing && existing.host === host && host.contains(existing.inner)) return;
+      if (existing) {
+        try { existing.root.unmount(); } catch (_) { /* already gone */ }
+      }
+      const inner = document.createElement("div");
+      inner.setAttribute("data-vm-atom-root", view);
+      inner.setAttribute("data-pane-id", String(paneId));
+      host.appendChild(inner);
+      const root = ReactDOMClient.createRoot(inner);
+      root.render(React.createElement(Transcript, { paneId, view }));
+      attached.set(key, { host, root, inner, paneId, view });
+      console.info(`[reveal] transcript root mounted (${view}, pane ${paneId})`);
     };
     const check = () => {
-      tryMount("vm-transcript-mount", "terminal");
-      tryMount("vm-transcript-mount-reveal", "reveal");
+      const seen = new Set<string>();
+      const terms = document.querySelectorAll<HTMLElement>('[data-vm-transcript-mount="terminal"]');
+      terms.forEach((host) => { seen.add(keyFor("terminal", readPaneId(host))); attachOne(host, "terminal"); });
+      const revs = document.querySelectorAll<HTMLElement>('[data-vm-transcript-mount="reveal"]');
+      revs.forEach((host) => { seen.add(keyFor("reveal", readPaneId(host))); attachOne(host, "reveal"); });
+      // Retire roots for panes that no longer have a mount in the DOM.
+      for (const [key, rec] of attached) {
+        if (!seen.has(key)) {
+          try { rec.root.unmount(); } catch (_) { /* already gone */ }
+          attached.delete(key);
+        }
+      }
     };
     check();
     const observer = new MutationObserver(check);

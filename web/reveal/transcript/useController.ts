@@ -11,11 +11,11 @@ import { useCallback, useSyncExternalStore } from "react";
 import type { Snapshot } from "../../vm";
 
 interface ControllerLike {
-  subscribe(listener: (snap: Snapshot) => void): () => void;
   snapshot(): Snapshot;
 }
 interface RegistryLike {
   get(paneId: number): ControllerLike | null;
+  subscribe(listener: (paneId: number, snap: Snapshot) => void): () => void;
 }
 
 const EMPTY_SNAPSHOT: Snapshot = {
@@ -42,18 +42,27 @@ const EMPTY_SNAPSHOT: Snapshot = {
 };
 
 export function useController(paneId: number): Snapshot {
-  const registry = (window as unknown as { __vm?: RegistryLike }).__vm ?? null;
-  const controller = registry?.get(paneId) ?? null;
+  // Subscribe at the registry level, filter by pane id. Reading
+  // controller fresh in getSnapshot means a late-arriving spawn is
+  // picked up on the next fire; a controller-level subscription
+  // that captured `null` at first render never recovered.
   const subscribe = useCallback(
     (onChange: () => void) => {
-      if (!controller) return () => undefined;
-      return controller.subscribe(() => onChange());
+      const registry = (window as unknown as { __vm?: RegistryLike }).__vm ?? null;
+      if (!registry) return () => undefined;
+      return registry.subscribe((updatedPaneId) => {
+        if (updatedPaneId === paneId) onChange();
+      });
     },
-    [controller],
+    [paneId],
   );
   const getSnapshot = useCallback(
-    () => (controller ? controller.snapshot() : EMPTY_SNAPSHOT),
-    [controller],
+    () => {
+      const registry = (window as unknown as { __vm?: RegistryLike }).__vm ?? null;
+      const controller = registry?.get(paneId) ?? null;
+      return controller ? controller.snapshot() : EMPTY_SNAPSHOT;
+    },
+    [paneId],
   );
   return useSyncExternalStore(subscribe, getSnapshot);
 }
