@@ -408,6 +408,39 @@ The common cause across all five: I never *measured* `scrollTop`, `header.top`, 
 | H19 | For behaviour-touching bugs, no fix authoring lands before a measurement probe records the quantity in question. | **new (tentative)** | Five caret attempts across one session, all reverted. The first probe run answered the question in seconds. |
 | H20 | Template systems without per-atom identity (React.memo equivalents) hit a ceiling on identity-sensitive UI requirements. | **new (tentative)** | dc-runtime's `renderVals` returns a fresh flat prop bag per setState; `sc-for` keys by index; no memoization primitive exists. The caret pin needs all three. Phase 8 migrates only the transcript because that is where the ceiling bites. |
 
+### 2026-09-24 — Sprint 075 closed, and five defect classes fixed on the way
+
+**What Sprint 075 was.** The atom-transcript React tree was already mounted on the terminal-view scroller for pane 1. Sprint 075 was meant to add the scroll anchor. It became instead a shakeout of every place the multi-pane assumption had gone unverified.
+
+**Defect classes surfaced, in the order I found them.**
+
+1. **Duplicate HTML ids.** `reveal.html:87-88` sat inside `<sc-for panes>`, so N panes emitted N `<div id="vm-transcript-mount">`. `document.getElementById` returned the first only; every subsequent pane's transcript was blank. Fix: data-* attributes with pane id, `querySelectorAll` iteration, one React root per pane.
+
+2. **Legacy notMain fallback.** `isMain: p.id === 1 && !p.unbound` sent every pane besides pane 1 to the demo-only `pn.lines` branch. Bound panes now hit the full transcript region.
+
+3. **Global input mirroring.** `state.promptVal` was one field. Every pane's `<input>` re-rendered with the same value on every keystroke. The prompt row's `promptVal / onPrompt / onPromptKey / routerRows / routerOpen / promptRadius / sentLines` moved to per-pane provider bindings backed by `p.pv`.
+
+4. **jsx-runtime shim signature mismatch (the class of error the user asked me to enumerate).** `web/shims/react-jsx-runtime.ts` fell back to `React.createElement` when `React.jsx` was absent on the UMD global. Signatures differ: `jsx(type, config, key)` vs `createElement(type, props, ...children)`. The bundled `_jsx("div", {children:[<span/>]}, 0)` landed `0` (the key) as a positional child, overwriting `props.children`. Every ModelReply paragraph rendered as its map index — literally `"0"`. Fix: a `translate` helper that extracts `children`, attaches `key` to `rest`, and spreads `children` as trailing positional args. Class audit: `react.ts` and `react-dom-client.ts` are direct pass-throughs of primary React 18 UMD symbols with no `??` fallback; no other instances in the codebase.
+
+5. **Tool card open-state churn.** My initial fix was React `useState` + `onClick`. The atom root re-mounted on every dc-runtime commit (dc-runtime's own reconciler clears my mount div's children; my MutationObserver rebuilt the root), losing the open flag. Native `<details>`/`<summary>` owns the toggle now, with an `openByCallId` module-level Map to preserve open flags across remounts and `open={isOpen}` to keep a snapshot tick from flipping the card closed against the user. The browser's own layout puts the body below the summary without any scrollTop math.
+
+**Ancillary regressions caught the same session.** Workspace label's tall `⌥` glyph pushed its bounding box 2px above the driver chip; all header chips normalized to `display:inline-flex · align-items:center · height:14px`. Header row now clips (`overflow:hidden`) while a dropdown is closed and returns to `visible` while one is open, so narrow panes no longer bleed their chip rows sideways. Reveal-view direction resets to Down on `mode !== stream`; carrying `dir=Side` through a mode switch left the shell in a side-oriented layout with no visible toggle.
+
+**How the jsx-runtime bug was actually found.** I added one `console.info` inside `ModelReplyInner` that logged the `text` prop and `blocks`. Both correct. That meant the bug was between React's render and DOM commit, not in my code. Looking at the compiled JS showed `u("span", {..., children: s.t}, e)` — key as third arg. Reading the shim showed `?? react.createElement` — different signature. Ten minutes of code-reading beat any amount of speculation. H19 (measure before authoring) held again.
+
+**How the notMain regression was found.** The user said "text formatting is incorrect in any new pane". I opened Chrome, split a pane, and saw the legacy `pn.lines` demo array in the second pane instead of the transcript. Once seen, the diagnosis was one grep away (`isMain: p.id === 1`). This is the shape H19 keeps producing: symptom in Chrome → one measurement in DOM or code → identified cause.
+
+**Kit lesson (H21, new).** A multi-pane assumption has to be verified at first pane-split, not deferred. Three separate defects (duplicate mount ids, global prompt, notMain fallback) all had the same shape: a field or DOM node that assumed one pane, quietly rendered N copies once the split lands, and stayed invisible until the user opened a second pane by hand. The signal is that a new template uses a top-level `renderVals` field where the pane loop uses `pn.*`; the fix is per-pane. Adding a `pane_split_transcript`-style flow to the shakeout as soon as any per-pane surface lands would have caught all three in one run.
+
+**Kit lesson (H22, new).** A UMD-fallback shim is one line of `??` away from becoming a signature-remap bug. The fix isn't "delete the fallback" — it's "if the primary symbol isn't callable with the caller's signature, translate the call, don't pass it through." Applies to any shim shim'ing a library that has both a legacy and a modern entry point.
+
+| H21 | Multi-pane defects live in fields that assume one pane. A `pane_split_transcript`-style flow catches them at first split. | **new (tentative)** | Three defects fixed this session (mount id, prompt, notMain) all shared the shape. `pane_split_transcript` written after the first was found; the other two produced defects the flow would have caught if it had existed earlier. |
+| H22 | UMD-fallback shims with `??` between primary and legacy signatures are a translation problem, not a passthrough. | **new (tentative)** | `react-jsx-runtime.ts` fell back to a differently-shaped `createElement`; every JSX call rendered as literal `"0"`. `translate` wrapper closes the class. |
+
+**Verification.** Every gate green: typecheck, lint, 14/14 unit, 30/30 parity, 11/11 smoke:vm, mount_seam PASS, 12/12 pixel:diff flag-off, 12/12 pixel:diff flag-on, `caret_pin` 5/5 at 1px, full shakeout 30 flows × 5 runs = 150 driven turns, 159 tags at 5/5 coverage, zero defects.
+
+Six new shakeout flows registered in `harness/shakeout/run.ts:AXIS_A`: `pane_split_transcript`, `pane_header_clip`, `pane_prompt_isolation`, `reveal_mode_direction`, `model_reply_render`, and the pre-existing `caret_pin` moved to 5/5. Each anchors one of the five defect classes above.
+
 ---
 
-*KIT_DIARY.md for substrate-ui. Eighteen entries as of 2026-09-23. Fourteen hypotheses: seven confirmed (H1, H4, H6, H9, H10, H15, H17), four tentative-confirmed (H3, H5, H7, H8, H18), two new tentative (H19, H20), one falsified (H2). Phase 5 closed on 2026-09-22 with the v0.1 lock; Phase 6 (retire the classic tree) closed the same day; Phase 7 (reveal-shell hardening) closed today with Sprints 058–062; Phase 8 (transcript atom migration) opened today with six sprint cards on disk.*
+*KIT_DIARY.md for substrate-ui. Nineteen entries as of 2026-09-24. Sixteen hypotheses: seven confirmed (H1, H4, H6, H9, H10, H15, H17), four tentative-confirmed (H3, H5, H7, H8, H18), four new tentative (H19, H20, H21, H22), one falsified (H2). Phase 5 closed 2026-09-22 with the v0.1 lock; Phase 6 (retire the classic tree) closed the same day; Phase 7 (reveal-shell hardening) closed 2026-09-23 with Sprints 058–062; Phase 8 (transcript atom migration) — Sprints 070–075 landed; Sprint 076 (retire the dc-runtime transcript path) is next.*
