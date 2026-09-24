@@ -18,6 +18,21 @@ open http://127.0.0.1:8765/                                # the console
 No build step, no framework, no CDN. It opens on the bundled demo records immediately — pick one from
 the rail and the graph + stream light up. **Running it** below has the fuller notes (tests, fixtures).
 
+### As a desktop app (Electron)
+
+Phase 9 (in progress) wraps the console as a macOS .app. Prerequisites: `uv` on `PATH` and
+`substrate` importable from the substrate venv next door. Then:
+
+```bash
+npm install                                                # first time
+npm run electron                                           # spawns server + opens window
+```
+
+The Electron main process spawns `uv run python server.py` in a detached process group, waits
+for `http://127.0.0.1:8765/` to answer, then loads the reveal shell into a Chromium window
+with `titleBarStyle: hiddenInset`. Closing the window kills the server subprocess (no orphan).
+Sprint 079 replaces the fixed 8765 with `--port 0` + readback so multiple installs coexist.
+
 **Deployment boundary (read before changing the bind address):** `POST /api/agent` spawns a live
 tool-using agent with the UNGATED tool suite — real `bash`, `edit_file`, `write_file` on the host,
 at any workspace path the request names. That autonomy is the product posture (approval gating is

@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "description": "Live end-to-end test harness for substrate-ui — drives the real reveal shell in real Chrome (Playwright channel:'chrome') against the real server. The observation contract's tooling, scoped to this repo and pinned by package-lock.json so it is reproducible, not an ad-hoc /tmp install. Phase 6 (2026-09-22) retired the classic tree to _deprecated/classic-tree/; the reveal shell is the only entry.",
+  "main": "electron/main.js",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && npm run lint && vite build",
@@ -12,7 +13,8 @@
     "shakeout": "npx tsx harness/shakeout/run.ts",
     "pixel:baseline": "npx tsx harness/pixel_baseline.ts",
     "pixel:diff": "npx tsx harness/pixel_diff.ts",
-    "test:unit": "npx tsx --test web/reveal/__tests__/*.spec.ts"
+    "test:unit": "npx tsx --test web/reveal/__tests__/*.spec.ts",
+    "electron": "electron ."
   },
   "devDependencies": {
     "@types/node": "^22",
