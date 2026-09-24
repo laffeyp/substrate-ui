@@ -3,7 +3,24 @@
 ```yaml
 ---
 id: 075
-status: pending
+status: closed
+closed_at: 2026-09-24
+closed_by: agent
+closed_note: |
+  Shape shifted mid-sprint. The original scoped a `useScrollAnchor`
+  React hook that would pin an atom-relative scroll offset. Native
+  <details>/<summary> solves the same problem without a hook —
+  the browser lays the body below the summary by DOM construction
+  and `scrollTop` never mutates. Sprint 075 closed instead on the
+  four defects that surfaced from bringing the atom transcript
+  across every pane: duplicate mount ids, notMain fallback, global
+  prompt input, jsx-runtime signature mismatch, tool card open-state
+  churn. Six regression flows landed (pane_split_transcript,
+  pane_header_clip, pane_prompt_isolation, reveal_mode_direction,
+  model_reply_render, caret_pin). All gates green including the
+  30-flow shakeout at 5 runs each. useScrollAnchor.ts sits on disk
+  unimported per hard rule 12; native <details> supersedes it.
+  See BLACKBOARD sprint-tail 2026-09-24 and KIT_DIARY entry #19.
 phase: 8
 pass_kind: functional
 ---
