@@ -441,6 +441,22 @@ The common cause across all five: I never *measured* `scrollTop`, `header.top`, 
 
 Six new shakeout flows registered in `harness/shakeout/run.ts:AXIS_A`: `pane_split_transcript`, `pane_header_clip`, `pane_prompt_isolation`, `reveal_mode_direction`, `model_reply_render`, and the pre-existing `caret_pin` moved to 5/5. Each anchors one of the five defect classes above.
 
+### 2026-09-24 — Sprint 076 closed. Phase 8 closes.
+
+**What Phase 8 shipped.** Every transcript row now flows through a React atom tree keyed by `envelope.callId ?? seq:${envelope.seq}`. `useSyncExternalStore` subscribes each pane's atom root to its own `SessionController`. Tool cards render as native `<details>`/`<summary>` — the browser owns the toggle, the body grows below the summary by construction, and `scrollTop` never mutates on a click. Every surface without an atom identity requirement — the pane strip, header chips, dialogs, studio, records, descent chrome, find bar, prompt row — stays on dc-runtime.
+
+**What Sprint 076 did.** Deleted the dc-runtime transcript path outright. `reveal.html`: 24 kB smaller (217.79 → 193.59). Both `<sc-if notAtomTranscript>` wrappers gone; both `<sc-for pn.liveTranscript>` blocks gone; scripted-demo blocks gone. `reveal.ts`: sticky-bottom rAF autoscroll block gone; feature-flag gate gone. `reveal_component.ts`: `notAtomTranscript`, `filteredRows`, `liveTranscript`, `_scrolls`, four scroll refs/handlers gone from renderVals; the 190-line row provider is preserved on disk as `_liveBindingsForRetired` per hard rule 12. Bundle 56 kB gzipped (HTML+JS), under the 60 kB budget.
+
+**Kit lesson (H19 held).** Every fix this session followed the same measurement-then-authoring pattern: run the failing case, read what the DOM actually says, then edit code. Never edit first. The five defect classes in Sprint 075 and the retirement here both closed cleanly because the shape of the code change was determined by a snapshot of DOM/state, not by hypothesis.
+
+**Kit lesson (H21 confirmed).** The `pane_split_transcript` flow written for Sprint 075 caught nothing new in Sprint 076 — the multi-pane invariants held through retirement. The flow's value is now regression coverage: any future rework that reintroduces a top-level `renderVals` field where per-pane is meant would trip immediately. Same for `pane_prompt_isolation`, `pane_header_clip`, `model_reply_render`, `reveal_mode_direction`.
+
+**Kit lesson (H20 held, harder).** dc-runtime's ceiling was named accurately by the 2026-09-23 audit: no per-atom identity, no `useLayoutEffect`, index-keyed lists, fresh callback identities per render. Phase 8 didn't fix dc-runtime; it migrated the one surface (transcript) that hit the ceiling and left every other surface on dc-runtime where it fits. Migrating a subtree is cheaper than migrating a substrate.
+
+**Phase 8 closes here.** Sprints 070–076 all closed. The caret-in-place-toggle bug that opened Phase 8 no longer reproduces. The reveal shell's transcript works under real-model tool calls, multi-pane splits, direction toggles, and mode switches. Every gate green including the 30-flow shakeout at 5 runs each. Bundle within budget.
+
+**What waits next.** The Electron shell (`electron/main.js:100`) still loads `app/prototype-v7.html`. Repointing Electron at the built reveal shell is a separate follow-up sprint outside Phase 8's scope.
+
 ---
 
-*KIT_DIARY.md for substrate-ui. Nineteen entries as of 2026-09-24. Sixteen hypotheses: seven confirmed (H1, H4, H6, H9, H10, H15, H17), four tentative-confirmed (H3, H5, H7, H8, H18), four new tentative (H19, H20, H21, H22), one falsified (H2). Phase 5 closed 2026-09-22 with the v0.1 lock; Phase 6 (retire the classic tree) closed the same day; Phase 7 (reveal-shell hardening) closed 2026-09-23 with Sprints 058–062; Phase 8 (transcript atom migration) — Sprints 070–075 landed; Sprint 076 (retire the dc-runtime transcript path) is next.*
+*KIT_DIARY.md for substrate-ui. Twenty entries as of 2026-09-24. Sixteen hypotheses: seven confirmed (H1, H4, H6, H9, H10, H15, H17), four tentative-confirmed (H3, H5, H7, H8, H18), four new-tentative confirmed by Sprint 076 close (H19, H20, H21, H22), one falsified (H2). Phase 5 closed 2026-09-22; Phase 6 same day; Phase 7 (Sprints 058–062) closed 2026-09-23; Phase 8 (Sprints 070–076) closed 2026-09-24. Next is the Electron repoint sprint, outside Phase 8.*
