@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.10.1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>Autonomous build topology</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    html {
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    svg {
+      height: auto;
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      white-space: pre-wrap;
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      border: none;
+      border-top: 1px solid #1a1a1a;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">Autonomous build topology</h1>
+</header>
+<h1 id="autonomous-build-topology">Autonomous build topology</h1>
+<p>The autonomous build topology is the session topology with a few
+modifications.</p>
+<ol type="1">
+<li>The input is fixed. It consists of a roadmap, a series of sprint
+cards, and a prompt.</li>
+</ol>
+<p>The prompt has two parts. One part is fixed. It describes general
+best practices. The other part is specific to the project.</p>
+<ol start="2" type="1">
+<li><p>Every time the session topology would return to the user, instead
+there is an automatic response that anticipates generally all common
+model replies, which usually have nothing to do with the actual content
+but take a specific form. So generally it will say things like if there
+is a question, the answer is best practices. It will simply redirect to
+very basic things. Every time the session topology would return and wait
+for a user prompt, this prompt will be injected instead.</p></li>
+<li><p>The only follow-up to this will be that eventually, every n turns
+will trigger a review instead of simply continuing. There will be a
+standing reviewer topology. That standing reviewer topology will be
+opened up and instantiated at the same time as the autonomous build
+topology. In essence, it is a real part of the autonomous build
+topology. Every n times the topology needs user input, instead of
+responding with the auto-reply, it will NOT respond to the model at all.
+It will let it park and then feed a prompt to the standing reviewer to
+produce a review on the most recent work since the last review. It would
+just be a fixed prompt. Once the reviewer is complete, it returns the
+review not directly to the other model but to the system topology. That
+system topology takes that review text and appends these three words to
+it after a couple of dashes: analyze, verify, apply.</p></li>
+<li><p>The autonomous build topology will normally be instantiated from
+a user driving the normal session topology. The user will tell the agent
+running the session topology to start the autonomous build topology,
+generally after working with that same agent to generate the roadmap and
+the sprint cards via SDD. Once ready, the part of the prompt to the
+autonomous build topology that is a variable will be constructed. It
+just gives it context about the project. And then the autonomous build
+topology will be kicked off.</p></li>
+<li><p>The point of the review process is to correct the drift. It will
+not be a normal review process. It will be a drift correction process
+against the roadmap, against the original intention and sprints, against
+SDD, and against software engineering best practices as well as the
+existing conventions of the project, if not starting from
+scratch.</p></li>
+<li><p>The reviewer can be specifically told that it can suggest changes
+to the project and new sprint cards, or changes in direction, or even
+generate a new roadmap and new sprint cards if necessary. This will be
+an option we will experiment with. It won’t necessarily be the default,
+but it is an incredibly important thing to add, and will solve a lot of
+problems with drift once you get towards the final sprints.</p></li>
+<li><p>In terms of the ending condition, the ending condition is the
+last sprint card being completed or the agent being unable to make
+progress in a specific measured way. Then the autonomous build topology
+will return to the session topology that invoked it. It should not be
+assumed that the autonomous build topology is actually building entire
+full projects, by the way. It could get a roadmap for an epic, and only
+those sprint cards that live in that epic. Then these session topologies
+will be long-lived, and the user will interact with it. The session
+topology may spin up shorter-lived autonomous build topologies for the
+actual work of building the software. Or not, depending on what the user
+wants to do. But “one shot” autonomous build topologies should not be
+assumed at first.</p></li>
+<li><p>Of course, this should not be built fundamentally as if it needs
+to be invoked by a session topology. It should be able to be invoked as
+its own topology at any time in any context.</p></li>
+<li><p>Anything not specifically mentioned here should be assumed to
+function the exact same as the session topology, where that makes
+sense.</p></li>
+<li><p>The build process for this will be to completely copy the session
+topology and then modify it.</p></li>
+</ol>
+</body>
+</html>
