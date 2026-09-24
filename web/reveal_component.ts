@@ -1907,7 +1907,7 @@ class Component extends DCLogic {
         if (controller && typeof controller.submitLine === 'function') controller.submitLine(v);
         else if (vm && typeof vm.submitLine === 'function') vm.submitLine(v);
       },
-      panes, paneCols: state.colW.map(w => w.toFixed(3) + 'fr').join(' '), paneRows: state.rowW.map(w => w.toFixed(3) + 'fr').join(' '), focusedName: fp.name, fpLines: fp.lines || [],
+      panes, paneCols: state.colW.map(w => w.toFixed(3) + 'fr').join(' '), paneRows: state.rowW.map(w => w.toFixed(3) + 'fr').join(' '), focusedName: fp.name, focusedId: fp.id, fpLines: fp.lines || [],
       revealFlexL: state.revealL.toFixed(3) + ' 1 0%',
       revealGutterLeft: (state.revealL / (state.revealL + 1) * 100).toFixed(2) + '%',
       revealGrab: (ev) => { ev.preventDefault(); this._gut = { type: 'reveal' }; },

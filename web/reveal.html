@@ -252,7 +252,7 @@
     </sc-if>
     <sc-if value="{{ notDescended }}" hint-placeholder-val="{{ true }}">
     <div onClick="{{ focusTranscript }}" ref="{{ revScrollRef }}" onScroll="{{ onRevScroll }}" style="flex:1;overflow-y:auto;overflow-x:hidden;padding:20px 26px;line-height:1.95;font-size:{{ fontSize }}px;min-width:0">
-     <div data-vm-transcript-mount="reveal" data-pane-id="{{ pn.id }}"></div>
+     <div data-vm-transcript-mount="reveal" data-pane-id="{{ focusedId }}"></div>
      <sc-if value="{{ notAtomTranscript }}" hint-placeholder-val="{{ true }}">
      <sc-if value="{{ liveOn }}" hint-placeholder-val="{{ true }}">
       <div style="color:#62676f;font-size:11px;padding-bottom:8px">session {{ liveSessionLabel }} · {{ liveEventCount }} events · {{ liveConnection }}</div>
