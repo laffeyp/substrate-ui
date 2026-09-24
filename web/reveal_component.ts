@@ -220,14 +220,26 @@ class Component extends DCLogic {
     };
   }
   _liveBindingsFor(paneId, state) {
+    // Sprint 076 retirement: dc-runtime no longer renders transcript
+    // rows. This helper now surfaces the activity strip alone (the
+    // producer/turn recap above the prompt row). Every transcript
+    // row goes through the React atom tree at web/reveal/transcript/.
+    const snap = (state.controllerSnapshots || {})[paneId] || null;
+    const activity = this._liveActivity(snap);
+    return {
+      activityShow: !!activity,
+      activityTurnWord: activity ? activity.turnWord : '',
+      activityTurnColor: activity ? activity.turnColor : '#4a4e55',
+      activityRest: activity ? activity.hasRest : false,
+      activityRestText: activity ? activity.restText : '',
+      activityColor: activity ? activity.color : '#62676f',
+      activityPulseClass: activity && activity.pulseOn ? 'act-pulse' : '',
+    };
+  }
+  _liveBindingsForRetired(paneId, state) {
     const snap = (state.controllerSnapshots || {})[paneId] || null;
     const transcript = (snap && Array.isArray(snap.transcript)) ? snap.transcript : [];
-    // 19h/19k/19l — matches bright, non-matches dim to .35. Applies to
-    // transcript scope (findScope === 'transcript') when the find bar
-    // is open with a non-empty query.
     const findQ = (state.findOpen && state.findScope === 'transcript' ? (state.findQ || '') : '').toLowerCase();
-    // 21c: a ToolCall whose paired ToolResult (same call_id) has not
-    // arrived is a live tool. Pair by call_id in one pass.
     const resultByCallId = new Map();
     for (const row of transcript) {
       if (row.kind === EnvelopeKind.ToolResult && row.callId) resultByCallId.set(row.callId, row);
@@ -1645,19 +1657,6 @@ class Component extends DCLogic {
       recordsColor: surf === Surface.Records ? '#e2e5e9' : '#9aa0a8',
       studioColor: surf === Surface.Studio ? '#e2e5e9' : '#9aa0a8',
       showTerminal: !surf && !state.revealed, showRevealed: !surf && state.revealed,
-      // Sprint 071 feature flag: when the URL param `atom-transcript=1`
-      // is set (or localStorage.atomTranscript truthy), the React
-      // atom-transcript mount owns the transcript region; the
-      // dc-runtime path (this template's <sc-for pn.liveTranscript>)
-      // renders nothing. `notAtomTranscript` gates the dc-runtime
-      // path so both scrollers stay clean under the flag.
-      notAtomTranscript: !((() => {
-        try {
-          if (window.location.search.indexOf('atom-transcript=1') !== -1) return true;
-          if (window.localStorage && window.localStorage.atomTranscript) return true;
-        } catch (_) { /* private mode, etc. */ }
-        return false;
-      })()),
       showRecords: surf === Surface.Records, showAssay: surf === Surface.Assay, showStudio: surf === Surface.Studio,
       toggleReveal: () => this.setState(s => ({ revealed: !s.revealed, surface: null })),
       revealLabel: state.revealed ? '⌃` terminal' : '⌃` reveal',
@@ -1679,72 +1678,11 @@ class Component extends DCLogic {
       routerOpen: routerRows.length > 0, routerRows,
       promptRadius: routerRows.length > 0 ? '0 0 6px 6px' : '6px',
       streamRef: (el) => { this._streamEl = el; },
-      // Terminal vs reveal transcript scroll — remember scrollTop per
-      // pane per view, sticky-bottom only when the user is already
-      // there. The container's `ref` callback fires whenever the div
-      // mounts; a view switch re-mounts it, so this is where the saved
-      // position lands.
-      termScrollRef: (el) => {
-        this._termScrollEl = el;
-        if (!el) return;
-        // Under the atom-transcript flag, the React tree owns scroll
-        // position. The rAF write below fires on every dc-runtime
-        // render (fresh function identity per pass makes React re-run
-        // the ref), and its else-branch bumps scrollTop to
-        // scrollHeight - clientHeight when no scroll record is saved.
-        // That racks the transcript to the bottom on every click,
-        // even though the click added nothing to the transcript.
-        try {
-          if (window.location.search.indexOf('atom-transcript=1') !== -1) return;
-          if (window.localStorage && window.localStorage.atomTranscript) return;
-        } catch (_) { /* private mode */ }
-        const saved = (this._scrolls || {}).termByPane || {};
-        const rec = saved[fp.id];
-        window.requestAnimationFrame(() => {
-          if (!this._termScrollEl) return;
-          if (rec) {
-            this._termScrollEl.scrollTop = rec.atBottom
-              ? Math.max(0, this._termScrollEl.scrollHeight - this._termScrollEl.clientHeight)
-              : rec.scrollTop;
-          } else {
-            this._termScrollEl.scrollTop = Math.max(0, this._termScrollEl.scrollHeight - this._termScrollEl.clientHeight);
-          }
-        });
-      },
-      onTermScroll: (ev) => {
-        const el = ev.target;
-        if (!this._scrolls) this._scrolls = { termByPane: {}, revByPane: {} };
-        if (!this._scrolls.termByPane) this._scrolls.termByPane = {};
-        const nearBottom = (el.scrollHeight - el.scrollTop - el.clientHeight) < 40;
-        this._scrolls.termByPane[fp.id] = { scrollTop: el.scrollTop, atBottom: nearBottom };
-      },
-      revScrollRef: (el) => {
-        this._revScrollEl = el;
-        if (!el) return;
-        try {
-          if (window.location.search.indexOf('atom-transcript=1') !== -1) return;
-          if (window.localStorage && window.localStorage.atomTranscript) return;
-        } catch (_) { /* private mode */ }
-        const saved = (this._scrolls || {}).revByPane || {};
-        const rec = saved[fp.id];
-        window.requestAnimationFrame(() => {
-          if (!this._revScrollEl) return;
-          if (rec) {
-            this._revScrollEl.scrollTop = rec.atBottom
-              ? Math.max(0, this._revScrollEl.scrollHeight - this._revScrollEl.clientHeight)
-              : rec.scrollTop;
-          } else {
-            this._revScrollEl.scrollTop = Math.max(0, this._revScrollEl.scrollHeight - this._revScrollEl.clientHeight);
-          }
-        });
-      },
-      onRevScroll: (ev) => {
-        const el = ev.target;
-        if (!this._scrolls) this._scrolls = { termByPane: {}, revByPane: {} };
-        if (!this._scrolls.revByPane) this._scrolls.revByPane = {};
-        const nearBottom = (el.scrollHeight - el.scrollTop - el.clientHeight) < 40;
-        this._scrolls.revByPane[fp.id] = { scrollTop: el.scrollTop, atBottom: nearBottom };
-      },
+      // Transcript scroll used to live here (Sprint 076 retired
+      // the pane's dc-runtime scroll ref / onScroll bindings). The
+      // atom transcript React tree at web/reveal/transcript/ owns
+      // scroll position now; the reveal.html template no longer
+      // emits any ref/onScroll on the transcript scroller.
       graphRef: (el) => { this._graphEl = el; },
       onStreamScroll: (ev) => {
         if (this._syncing || this.state.dir !== 'side') return;

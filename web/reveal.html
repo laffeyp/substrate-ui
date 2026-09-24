@@ -84,95 +84,8 @@
     <sc-if value="{{ descNotTalkable }}" hint-placeholder-val="{{ false }}"><div style="flex:none;padding:0 22px 16px;font-size:11px;color:#4a4e55">this topology takes no messages — watching · esc to leave</div></sc-if>
    </sc-if>
    <sc-if value="{{ notDescended }}" hint-placeholder-val="{{ true }}">
-   <div data-vm-transcript-scroller="{{ pn.id }}" ref="{{ termScrollRef }}" onScroll="{{ onTermScroll }}" style="flex:1;overflow-y:auto;overflow-x:hidden;padding:16px 22px;line-height:2;font-size:{{ fontSize }}px;min-width:0">
+   <div data-vm-transcript-scroller="{{ pn.id }}" style="flex:1;overflow-y:auto;overflow-x:hidden;padding:16px 22px;line-height:2;font-size:{{ fontSize }}px;min-width:0">
     <div data-vm-transcript-mount="terminal" data-pane-id="{{ pn.id }}"></div>
-    <sc-if value="{{ notAtomTranscript }}" hint-placeholder-val="{{ true }}">
-    <sc-if value="{{ pn.liveOn }}" hint-placeholder-val="{{ true }}">
-     <div style="color:#62676f;font-size:11px;padding-bottom:6px">session {{ pn.liveSessionLabel }} · {{ pn.liveEventCount }} events · {{ pn.liveConnection }}</div>
-     <sc-for list="{{ pn.liveTranscript }}" as="row" hint-placeholder-count="0">
-      <div style="margin-top:{{ row.marginTop }};color:{{ row.textColor }};white-space:normal;max-width:840px;overflow-wrap:anywhere;opacity:{{ row.opacity }}">
-       <span style="color:{{ row.glyphColor }};margin-right:6px;vertical-align:top">{{ row.glyph }}</span>
-       <sc-if value="{{ row.isModel }}" hint-placeholder-val="{{ false }}">
-        <span style="display:inline-block;vertical-align:top;max-width:calc(100% - 24px)">
-         <sc-for list="{{ row.blocks }}" as="blk" hint-placeholder-count="1">
-          <sc-if value="{{ blk.isP }}" hint-placeholder-val="{{ true }}"><div style="margin:0 0 10px">
-           <sc-for list="{{ blk.inlines }}" as="ii" hint-placeholder-count="1"><span style="font-family:{{ ii.font }};background:{{ ii.bg }};color:{{ ii.color }};font-weight:{{ ii.fw }};font-style:{{ ii.fs }};padding:{{ ii.pad }};border-radius:{{ ii.br }}">{{ ii.t }}</span></sc-for>
-          </div></sc-if>
-          <sc-if value="{{ blk.isCode }}" hint-placeholder-val="{{ false }}"><div style="margin:0 0 12px;background:#1a1c20;border-radius:6px;padding:10px 14px;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:12px;color:#b9bec5;overflow-x:auto"><sc-if value="{{ blk.hasLang }}" hint-placeholder-val="{{ false }}"><div style="color:#62676f;font-size:10px;text-transform:lowercase;margin-bottom:6px">{{ blk.lang }}</div></sc-if><pre style="margin:0;white-space:pre-wrap;font:inherit;color:inherit">{{ blk.text }}</pre></div></sc-if>
-          <sc-if value="{{ blk.isUl }}" hint-placeholder-val="{{ false }}"><ul style="margin:0 0 10px;padding-left:20px">
-           <sc-for list="{{ blk.items }}" as="it" hint-placeholder-count="1"><li style="margin:0 0 4px"><sc-for list="{{ it.inlines }}" as="ii" hint-placeholder-count="1"><span style="font-family:{{ ii.font }};background:{{ ii.bg }};color:{{ ii.color }};font-weight:{{ ii.fw }};font-style:{{ ii.fs }};padding:{{ ii.pad }};border-radius:{{ ii.br }}">{{ ii.t }}</span></sc-for></li></sc-for>
-          </ul></sc-if>
-          <sc-if value="{{ blk.isOl }}" hint-placeholder-val="{{ false }}"><ol style="margin:0 0 10px;padding-left:22px">
-           <sc-for list="{{ blk.items }}" as="it" hint-placeholder-count="1"><li style="margin:0 0 4px"><sc-for list="{{ it.inlines }}" as="ii" hint-placeholder-count="1"><span style="font-family:{{ ii.font }};background:{{ ii.bg }};color:{{ ii.color }};font-weight:{{ ii.fw }};font-style:{{ ii.fs }};padding:{{ ii.pad }};border-radius:{{ ii.br }}">{{ ii.t }}</span></sc-for></li></sc-for>
-          </ol></sc-if>
-          <sc-if value="{{ blk.isH }}" hint-placeholder-val="{{ false }}"><div style="font-size:{{ blk.hSize }};font-weight:600;color:#e2e5e9;margin:16px 0 6px">
-           <sc-for list="{{ blk.inlines }}" as="ii" hint-placeholder-count="1"><span style="font-family:{{ ii.font }};background:{{ ii.bg }};color:{{ ii.color }};font-weight:{{ ii.fw }};font-style:{{ ii.fs }};padding:{{ ii.pad }};border-radius:{{ ii.br }}">{{ ii.t }}</span></sc-for>
-          </div></sc-if>
-         </sc-for>
-        </span>
-       </sc-if>
-       <sc-if value="{{ row.isTool }}" hint-placeholder-val="{{ false }}">
-        <span style="cursor:pointer;display:inline-block;max-width:calc(100% - 24px);vertical-align:top" onClick="{{ row.openCard }}"><span style="color:#9aa0a8;font-family:ui-monospace,'SF Mono',Menlo,monospace">{{ row.toolName }}</span> <span style="color:#b9bec5;font-family:ui-monospace,'SF Mono',Menlo,monospace">{{ row.toolPreview }}</span> <span style="color:#4a4e55"> · </span><span style="color:{{ row.toolStatusColor }};font-family:ui-monospace,'SF Mono',Menlo,monospace">{{ row.toolStatus }}</span> <span style="color:#4a4e55;margin-left:8px">{{ row.cardCaret }}</span></span><sc-if value="{{ row.descendShow }}" hint-placeholder-val="{{ false }}"> <span onClick="{{ row.descend }}" style="cursor:pointer;color:#a08fc9;margin-left:8px" title="descend into the child record — the pane's stream switches to the delegate's own envelopes">· descend ⏎</span></sc-if>
-        <sc-if value="{{ row.toolCardOpen }}" hint-placeholder-val="{{ false }}">
-         <div style="margin:6px 0 8px 24px;background:#26292e;border-radius:0 0 6px 6px;padding:10px 14px;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:11px;line-height:1.7;color:#b9bec5">
-          <div style="color:#62676f">args</div>
-          <sc-for list="{{ row.toolArgs }}" as="a" hint-placeholder-count="1"><div style="color:#b9bec5">{{ a.i }} <span style="color:#e2e5e9">{{ a.v }}</span></div></sc-for>
-          <sc-if value="{{ row.streamingShow }}" hint-placeholder-val="{{ false }}">
-           <div style="margin-top:8px;color:#62676f">streaming <sc-if value="{{ row.streamingEof }}" hint-placeholder-val="{{ false }}"><span style="color:#4a4e55">· eof</span></sc-if></div>
-           <div style="background:#1a1c20;border-radius:5px;padding:8px 12px;max-height:220px;overflow:auto;color:#7fb3b8;white-space:pre-wrap">{{ row.streamingText }}</div>
-          </sc-if>
-          <sc-if value="{{ row.hasResult }}" hint-placeholder-val="{{ true }}">
-           <div style="margin-top:8px;color:#62676f">output</div>
-           <div style="background:#1a1c20;border-radius:5px;padding:8px 12px;max-height:220px;overflow:auto;color:#9aa0a8;white-space:pre-wrap">{{ row.toolOutput }}</div>
-          </sc-if>
-          <sc-if value="{{ row.hasError }}" hint-placeholder-val="{{ false }}">
-           <div style="margin-top:6px;color:#c26058">error {{ row.toolError }}</div>
-          </sc-if>
-          <div style="color:#4a4e55;margin-top:6px">call_id {{ row.toolCallId }} · step {{ row.toolStep }} · {{ row.toolStatus }} · {{ row.toolBytes }}</div>
-         </div>
-        </sc-if>
-       </sc-if>
-       <sc-if value="{{ row.notTool }}" hint-placeholder-val="{{ true }}"><sc-if value="{{ row.notModel }}" hint-placeholder-val="{{ true }}"><span>{{ row.text }}</span></sc-if></sc-if>
-      </div>
-     </sc-for>
-     <sc-if value="{{ pn.liveEmpty }}" hint-placeholder-val="{{ true }}">
-      <div style="color:#4a4e55;font-size:11.5px">◐ ready — type below to send your first turn</div>
-     </sc-if>
-    </sc-if>
-    <sc-if value="{{ pn.scriptedOn }}" hint-placeholder-val="{{ false }}">
-    <div style="color:#62676f;opacity:{{ fdIntro }}">session fix-race-in-metering resumed · turn 9 · record 01M1684 · 244 events</div>
-    <div style="margin-top:12px;opacity:{{ fdU1 }}"><span style="color:#82a5c8">›</span> <span style="color:#e2e5e9">the metering test flakes under load — find and fix the race</span></div>
-    <div style="color:#62676f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:{{ fdGrep }}">  ⚙ grep "meter_lock" src/ ······································ 14 matches</div>
-    <div style="color:#62676f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:{{ fdRead }}">  ⚙ read_file src/substrate/metering.py ························ 312 lines</div>
-    <div style="color:#62676f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:{{ fdEdit }}">  ⚙ edit_file src/substrate/metering.py ························ ok</div>
-    <div style="margin-top:10px;opacity:{{ fdU2 }}"><span style="color:#82a5c8">›</span> <span style="color:#e2e5e9">have someone review the locking change before we land it</span></div>
-    <div style="color:#a08fc9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:{{ fdDel }}"><span style="cursor:pointer" onClick="{{ toggleChild }}">  ⑂ delegate → reviewer-a "review the locking change" {{ childHint }}</span> <span onClick="{{ descendReviewer }}" style="cursor:pointer;color:#62676f" title="descend into the child — talk to it (D70)">· descend ⏎</span></div>
-    <sc-if value="{{ childOpen }}" hint-placeholder-val="{{ false }}">
-     <div style="margin:6px 0 6px 34px;border-left:2px solid #665f7d;background:#1a1c20;border-radius:0 6px 6px 0;max-width:min(720px,calc(100% - 34px));overflow:hidden">
-      <div style="display:flex;gap:12px;padding:7px 14px;font-size:11px;background:#26292e;min-width:0"><span style="color:#a08fc9;flex:none">⑂ child</span><span style="color:#9aa0a8;flex:none">reviewer-a · standing</span><span style="color:#62676f;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0" title="record delegate_child_3e366fe6_c0">record delegate_child_3e366fe6_c0</span><span style="margin-left:auto;color:#62676f;flex:none">depth 1/2 · done</span></div>
-      <div style="padding:10px 14px;font-size:12px;line-height:1.9;color:#62676f;min-width:0"><div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">⚙ read_file src/substrate/metering.py ·· 312 lines</div><div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">⚙ grep "acquire" src/substrate/kernel/ ·· 6 matches</div><div style="color:#9aa0a8">folded back: "lock scope is right — add a comment on why the deque needs the kernel lock"</div></div>
-     </div>
-    </sc-if>
-    <div style="color:#62676f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:{{ fdBash }}">  ⚙ bash pytest -k metering -n 8 ································ <span style="color:#9aa0a8">24 passed ✓</span></div>
-    <div style="margin-top:10px;color:#b9bec5;max-width:700px;opacity:{{ fdAns }}">The race was in _emit_log — an unlocked deque shared by two producers. Wrapped it in the kernel lock; reviewer-a signed off. 24/24 green under -n 8.</div>
-    <div style="margin-top:10px;opacity:{{ fdU1 }}"><span style="color:#82a5c8">›</span> <span style="color:#e2e5e9">get three independent takes on the stripe floor — different models</span></div>
-    <div style="color:#a08fc9;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" onClick="{{ toggleFan }}">  ⑂ delegate → 3 children "derive the stripe floor independently" · 2 running · 1 parked {{ fanHint }}</div>
-    <sc-if value="{{ fanOpen }}" hint-placeholder-val="{{ false }}">
-     <div style="margin:4px 0 4px 34px;border-left:2px solid #665f7d;padding:2px 0 2px 14px;display:flex;flex-direction:column;gap:2px;font-size:12px">
-      <sc-for list="{{ fanRows }}" as="fr" hint-placeholder-count="3">
-       <div onClick="{{ fr.go }}" style="display:flex;gap:10px;align-items:baseline;cursor:pointer;padding:1px 8px;margin:0 -8px;border-radius:4px;white-space:nowrap;overflow:hidden" style-hover="background:#2e3138"><span style="color:#a08fc9;flex:none">⑂ {{ fr.name }}</span><span style="color:#9aa0a8;flex:none">{{ fr.driver }}</span><span style="color:#62676f;overflow:hidden;text-overflow:ellipsis">{{ fr.meta }}</span><span style="color:{{ fr.stC }};flex:none">{{ fr.st }}</span><span style="margin-left:auto;color:#62676f;flex:none">descend ⏎</span></div>
-      </sc-for>
-      <div style="color:#4a4e55;font-size:10.5px">results fold back as one ToolResult when all three finish</div>
-     </div>
-    </sc-if>
-    <sc-if value="{{ simRL }}" hint-placeholder-val="{{ false }}"><div style="color:#4a4e55">  ◌ rate-limited — retry 3/6 in 14s · kimi-k2 (api)</div></sc-if>
-    <div style="margin-top:12px;color:#82a5c8;opacity:{{ fdPark }}">◐ parked</div>
-    <sc-if value="{{ isEnded }}" hint-placeholder-val="{{ false }}"><div style="margin-top:8px;color:#62676f">◇ SessionEnded — record finalised · 246 events · ✓ clean · view in records</div></sc-if>
-    <sc-for list="{{ pn.sentLines }}" as="sl" hint-placeholder-count="0">
-     <div style="margin-top:8px"><span style="color:#82a5c8">›</span> <span style="color:#e2e5e9">{{ sl.text }}</span><div style="color:#62676f;font-size:11px">queued — prototype only; the real app resumes the parked run in-process (registry turn)</div></div>
-    </sc-for>
-    </sc-if>
-    </sc-if>
    </div>
    <sc-if value="{{ activityShow }}" hint-placeholder-val="{{ false }}">
     <div style="flex:none;padding:0 22px 8px;font-size:11px;line-height:1.6;color:{{ activityColor }}">
@@ -251,78 +164,8 @@
      </div>
     </sc-if>
     <sc-if value="{{ notDescended }}" hint-placeholder-val="{{ true }}">
-    <div onClick="{{ focusTranscript }}" ref="{{ revScrollRef }}" onScroll="{{ onRevScroll }}" style="flex:1;overflow-y:auto;overflow-x:hidden;padding:20px 26px;line-height:1.95;font-size:{{ fontSize }}px;min-width:0">
+    <div onClick="{{ focusTranscript }}" style="flex:1;overflow-y:auto;overflow-x:hidden;padding:20px 26px;line-height:1.95;font-size:{{ fontSize }}px;min-width:0">
      <div data-vm-transcript-mount="reveal" data-pane-id="{{ focusedId }}"></div>
-     <sc-if value="{{ notAtomTranscript }}" hint-placeholder-val="{{ true }}">
-     <sc-if value="{{ liveOn }}" hint-placeholder-val="{{ true }}">
-      <div style="color:#62676f;font-size:11px;padding-bottom:8px">session {{ liveSessionLabel }} · {{ liveEventCount }} events · {{ liveConnection }}</div>
-      <sc-for list="{{ liveTranscript }}" as="row" hint-placeholder-count="0">
-       <div style="margin-top:{{ row.marginTop }};color:{{ row.textColor }};white-space:normal;max-width:840px;overflow-wrap:anywhere;opacity:{{ row.opacity }}">
-        <span style="color:{{ row.glyphColor }};margin-right:6px;vertical-align:top">{{ row.glyph }}</span>
-        <sc-if value="{{ row.isModel }}" hint-placeholder-val="{{ false }}">
-         <span style="display:inline-block;vertical-align:top;max-width:calc(100% - 24px)">
-          <sc-for list="{{ row.blocks }}" as="blk" hint-placeholder-count="1">
-           <sc-if value="{{ blk.isP }}" hint-placeholder-val="{{ true }}"><div style="margin:0 0 10px">
-            <sc-for list="{{ blk.inlines }}" as="ii" hint-placeholder-count="1"><span style="font-family:{{ ii.font }};background:{{ ii.bg }};color:{{ ii.color }};font-weight:{{ ii.fw }};font-style:{{ ii.fs }};padding:{{ ii.pad }};border-radius:{{ ii.br }}">{{ ii.t }}</span></sc-for>
-           </div></sc-if>
-           <sc-if value="{{ blk.isCode }}" hint-placeholder-val="{{ false }}"><div style="margin:0 0 12px;background:#1a1c20;border-radius:6px;padding:10px 14px;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:12px;color:#b9bec5;overflow-x:auto"><sc-if value="{{ blk.hasLang }}" hint-placeholder-val="{{ false }}"><div style="color:#62676f;font-size:10px;text-transform:lowercase;margin-bottom:6px">{{ blk.lang }}</div></sc-if><pre style="margin:0;white-space:pre-wrap;font:inherit;color:inherit">{{ blk.text }}</pre></div></sc-if>
-           <sc-if value="{{ blk.isUl }}" hint-placeholder-val="{{ false }}"><ul style="margin:0 0 10px;padding-left:20px">
-            <sc-for list="{{ blk.items }}" as="it" hint-placeholder-count="1"><li style="margin:0 0 4px"><sc-for list="{{ it.inlines }}" as="ii" hint-placeholder-count="1"><span style="font-family:{{ ii.font }};background:{{ ii.bg }};color:{{ ii.color }};font-weight:{{ ii.fw }};font-style:{{ ii.fs }};padding:{{ ii.pad }};border-radius:{{ ii.br }}">{{ ii.t }}</span></sc-for></li></sc-for>
-           </ul></sc-if>
-           <sc-if value="{{ blk.isOl }}" hint-placeholder-val="{{ false }}"><ol style="margin:0 0 10px;padding-left:22px">
-            <sc-for list="{{ blk.items }}" as="it" hint-placeholder-count="1"><li style="margin:0 0 4px"><sc-for list="{{ it.inlines }}" as="ii" hint-placeholder-count="1"><span style="font-family:{{ ii.font }};background:{{ ii.bg }};color:{{ ii.color }};font-weight:{{ ii.fw }};font-style:{{ ii.fs }};padding:{{ ii.pad }};border-radius:{{ ii.br }}">{{ ii.t }}</span></sc-for></li></sc-for>
-           </ol></sc-if>
-           <sc-if value="{{ blk.isH }}" hint-placeholder-val="{{ false }}"><div style="font-size:{{ blk.hSize }};font-weight:600;color:#e2e5e9;margin:16px 0 6px">
-            <sc-for list="{{ blk.inlines }}" as="ii" hint-placeholder-count="1"><span style="font-family:{{ ii.font }};background:{{ ii.bg }};color:{{ ii.color }};font-weight:{{ ii.fw }};font-style:{{ ii.fs }};padding:{{ ii.pad }};border-radius:{{ ii.br }}">{{ ii.t }}</span></sc-for>
-           </div></sc-if>
-          </sc-for>
-         </span>
-        </sc-if>
-        <sc-if value="{{ row.isTool }}" hint-placeholder-val="{{ false }}">
-         <span style="cursor:pointer;display:inline-block;max-width:calc(100% - 24px);vertical-align:top" onClick="{{ row.openCard }}"><span style="color:#9aa0a8;font-family:ui-monospace,'SF Mono',Menlo,monospace">{{ row.toolName }}</span> <span style="color:#b9bec5;font-family:ui-monospace,'SF Mono',Menlo,monospace">{{ row.toolPreview }}</span> <span style="color:#4a4e55"> · </span><span style="color:{{ row.toolStatusColor }};font-family:ui-monospace,'SF Mono',Menlo,monospace">{{ row.toolStatus }}</span> <span style="color:#4a4e55;margin-left:8px">{{ row.cardCaret }}</span></span><sc-if value="{{ row.descendShow }}" hint-placeholder-val="{{ false }}"> <span onClick="{{ row.descend }}" style="cursor:pointer;color:#a08fc9;margin-left:8px" title="descend into the child record — the pane's stream switches to the delegate's own envelopes">· descend ⏎</span></sc-if>
-         <sc-if value="{{ row.toolCardOpen }}" hint-placeholder-val="{{ false }}">
-          <div style="margin:6px 0 8px 24px;background:#26292e;border-radius:0 0 6px 6px;padding:10px 14px;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:11px;line-height:1.7;color:#b9bec5">
-           <div style="color:#62676f">args</div>
-           <sc-for list="{{ row.toolArgs }}" as="a" hint-placeholder-count="1"><div style="color:#b9bec5">{{ a.i }} <span style="color:#e2e5e9">{{ a.v }}</span></div></sc-for>
-           <sc-if value="{{ row.streamingShow }}" hint-placeholder-val="{{ false }}">
-            <div style="margin-top:8px;color:#62676f">streaming <sc-if value="{{ row.streamingEof }}" hint-placeholder-val="{{ false }}"><span style="color:#4a4e55">· eof</span></sc-if></div>
-            <div style="background:#1a1c20;border-radius:5px;padding:8px 12px;max-height:220px;overflow:auto;color:#7fb3b8;white-space:pre-wrap">{{ row.streamingText }}</div>
-           </sc-if>
-           <sc-if value="{{ row.hasResult }}" hint-placeholder-val="{{ true }}">
-            <div style="margin-top:8px;color:#62676f">output</div>
-            <div style="background:#1a1c20;border-radius:5px;padding:8px 12px;max-height:220px;overflow:auto;color:#9aa0a8;white-space:pre-wrap">{{ row.toolOutput }}</div>
-           </sc-if>
-           <sc-if value="{{ row.hasError }}" hint-placeholder-val="{{ false }}">
-            <div style="margin-top:6px;color:#c26058">error {{ row.toolError }}</div>
-           </sc-if>
-           <div style="color:#4a4e55;margin-top:6px">call_id {{ row.toolCallId }} · step {{ row.toolStep }} · {{ row.toolStatus }} · {{ row.toolBytes }}</div>
-          </div>
-         </sc-if>
-        </sc-if>
-        <sc-if value="{{ row.notTool }}" hint-placeholder-val="{{ true }}"><sc-if value="{{ row.notModel }}" hint-placeholder-val="{{ true }}"><span>{{ row.text }}</span></sc-if></sc-if>
-       </div>
-      </sc-for>
-      <sc-if value="{{ liveEmpty }}" hint-placeholder-val="{{ true }}">
-       <div style="color:#4a4e55;font-size:11.5px">◐ ready — type below to send your first turn</div>
-      </sc-if>
-     </sc-if>
-     <sc-if value="{{ scriptedOn }}" hint-placeholder-val="{{ false }}">
-     <div style="opacity:{{ fdU1 }}"><span style="color:#82a5c8">›</span> <span style="color:#e2e5e9">the metering test flakes under load — find and fix the race</span></div>
-     <div style="color:#62676f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:{{ fdGrep }}">  ⚙ grep "meter_lock" src/ ····················· 14 matches</div>
-     <div style="color:#62676f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:{{ fdRead }}">  ⚙ read_file metering.py ······················ 312 lines</div>
-     <div style="color:#62676f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:{{ fdEdit }}">  ⚙ edit_file metering.py ······················ ok</div>
-     <div style="color:#a08fc9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:{{ fdDel }}"><span style="cursor:pointer" onClick="{{ toggleChild }}">  ⑂ delegate → reviewer-a ······················ {{ childHint }}</span> <span onClick="{{ descendReviewer }}" style="cursor:pointer;color:#62676f" title="descend into the child — talk to it (D70)">· descend ⏎</span></div>
-     <sc-if value="{{ childOpen }}" hint-placeholder-val="{{ false }}">
-      <div style="margin:6px 0 6px 24px;border-left:2px solid #665f7d;background:#1a1c20;border-radius:0 6px 6px 0;max-width:min(720px,calc(100% - 24px));overflow:hidden">
-       <div style="display:flex;gap:12px;padding:7px 14px;font-size:11px;background:#26292e;min-width:0"><span style="color:#a08fc9;flex:none">⑂ child</span><span style="color:#9aa0a8;flex:none">reviewer-a · standing</span><span style="color:#62676f;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0" title="record delegate_child_3e366fe6_c0">record delegate_child_3e366fe6_c0</span><span style="margin-left:auto;color:#62676f;flex:none">depth 1/2 · done</span></div>
-       <div style="padding:10px 14px;font-size:12px;line-height:1.9;color:#62676f;min-width:0"><div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">⚙ read_file src/substrate/metering.py ·· 312 lines</div><div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">⚙ grep "acquire" src/substrate/kernel/ ·· 6 matches</div><div style="color:#9aa0a8">folded back: "lock scope is right — add a comment on why the deque needs the kernel lock"</div></div>
-      </div>
-     </sc-if>
-     <div style="color:#62676f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:{{ fdBash }}">  ⚙ bash pytest -k metering -n 8 ················ <span style="color:#9aa0a8">24 passed ✓</span></div>
-     <div style="margin-top:8px;max-width:560px;opacity:{{ fdAns }}">The race was in _emit_log — unlocked deque shared by two producers. Kernel lock added; reviewer-a signed off.</div>
-     <div style="margin-top:10px;color:#82a5c8;opacity:{{ fdPark }}">◐ parked</div>
-     </sc-if>
-     </sc-if>
     </div>
     </sc-if>
     </sc-if>

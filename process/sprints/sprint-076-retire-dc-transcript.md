@@ -3,7 +3,29 @@
 ```yaml
 ---
 id: 076
-status: pending
+status: closed
+closed_at: 2026-09-24
+closed_by: agent
+closed_note: |
+  dc-runtime transcript path retired. reveal.html: 217.79 kB → 193.59 kB
+  (raw), 45.98 kB → 42.74 kB gzipped. Bundle JS 13.21 kB gzipped
+  (unchanged). Total 56 kB gzipped, under the 60 kB Phase 8 budget.
+  All gates green: typecheck, lint, 14/14 unit, 30/30 parity, 11/11
+  smoke:vm, mount_seam PASS, pixel:diff 12/12 flag-off, 12/12
+  flag-on, caret_pin 5/5, full shakeout 30 flows × 5 runs = 150
+  driven turns, 158 tags at 5/5 + one at 4/5 (real-model cadence),
+  zero blockers, zero bugs. `_liveBindingsFor`'s row-provider body
+  renamed to `_liveBindingsForRetired` (hard rule 12: no deletions,
+  audit trail preserved on disk); active `_liveBindingsFor` returns
+  only the activity strip. `notAtomTranscript`, `filteredRows`,
+  `liveTranscript`, `_scrolls`, `_termScrollEl`, `_revScrollEl`,
+  `termScrollRef`, `revScrollRef`, `onTermScroll`, `onRevScroll`
+  removed from renderVals. reveal.html: <sc-if notAtomTranscript>
+  wrappers, <sc-for pn.liveTranscript> blocks, scripted-demo blocks
+  gone from both terminal-view and reveal-view. reveal.ts: sticky-
+  bottom autoscroll block gone; `isAtomTranscriptEnabled` gate
+  gone; atom-transcript React root mounts unconditionally per pane.
+  Phase 8 closes here.
 phase: 8
 pass_kind: architecture
 ---
