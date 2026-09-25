@@ -717,6 +717,11 @@ def _recent_workspaces() -> list[dict[str, str]]:
     return [seen[path_value] for path_value in order]
 
 
+# Module-level HOST/PORT default to the env values so existing
+# call-sites (bin/substrate-ui, tests, external scripts) keep working
+# without touching. main() reads --host / --port CLI flags and
+# overrides these values before binding; --port 0 asks the OS for
+# an ephemeral port that the readback line prints for Electron.
 HOST, PORT = (
     os.environ.get("SUBSTRATE_UI_HOST", "127.0.0.1"),
     int(os.environ.get("SUBSTRATE_UI_PORT", "8765")),
@@ -3020,6 +3025,20 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main() -> None:
+    global HOST, PORT
+    # Sprint 079: --port / --host CLI flags. --port 0 binds an
+    # ephemeral port; the readback line printed before serve_forever
+    # is what Electron (electron/main.js) matches to learn the bound
+    # port. Default is the env-derived module-level HOST/PORT so any
+    # caller that used SUBSTRATE_UI_PORT before continues to work.
+    import argparse
+    parser = argparse.ArgumentParser(description="substrate-ui HTTP server")
+    parser.add_argument("--host", default=HOST, help="bind host (default: %(default)s)")
+    parser.add_argument("--port", type=int, default=PORT,
+                        help="bind port; 0 = ephemeral (default: %(default)s)")
+    args = parser.parse_args()
+    HOST = args.host
+    PORT = args.port
     WEB.mkdir(exist_ok=True)
     # Sprint 211: boot-scan the on-disk session catalog. Rebuilds the in-memory
     # SessionRegistry from ~/.substrate/sessions/*/manifest.json, checking every
@@ -3073,8 +3092,18 @@ def main() -> None:
         pass
     uds_srv = _UnixHTTPServer(str(uds_path), Handler)
     summary += f"; UDS at {uds_path}"
-    print(summary)
     srv = ThreadingHTTPServer((HOST, PORT), Handler)
+    # Sprint 079: bound-port readback for the Electron main process.
+    # ThreadingHTTPServer((HOST, 0), ...) picks an ephemeral port; the
+    # actual bound value lives on srv.server_address. Print it as the
+    # first stdout line, flushed, so electron/main.js can match
+    # /^substrate-ui port=(\d+)$/ deterministically before any other
+    # output. PORT is refreshed too so the summary line below prints
+    # the real value.
+    PORT = srv.server_address[1]
+    print(f"substrate-ui port={PORT}", flush=True)
+    summary = summary.replace(f"http://{HOST}:{args.port}", f"http://{HOST}:{PORT}", 1)
+    print(summary)
     threading.Thread(target=uds_srv.serve_forever, daemon=True).start()
 
     def _sigterm_handler(_signum: int, _frame: Any) -> None:
