@@ -207,6 +207,7 @@ function boot(): void {
   interface NativeBridge {
     isElectron?: boolean;
     onMenuCommand?: (cb: (command: string, payload: unknown) => void) => (() => void);
+    onDeepLink?: (cb: (url: string) => void) => (() => void);
   }
   const nativeBridge = (window as unknown as { native?: NativeBridge }).native;
   if (nativeBridge?.onMenuCommand) {
@@ -236,6 +237,18 @@ function boot(): void {
       } else if (command === "close-window") {
         // Handled main-side; nothing renderer needs to do.
       }
+    });
+  }
+
+  // Sprint 081 — deep-link wire-up. The second of the two OS-
+  // integration touch points named in PLAN v2 §2.3. Guarded so
+  // plain-browser tabs no-op.
+  if (nativeBridge?.onDeepLink) {
+    nativeBridge.onDeepLink((url) => {
+      const match = url.match(/^substrate:\/\/record\/(.+)$/);
+      if (!match) return;
+      const recordRoot = decodeURIComponent(match[1]);
+      controller.attachRecordRoot(recordRoot).catch(() => undefined);
     });
   }
 
