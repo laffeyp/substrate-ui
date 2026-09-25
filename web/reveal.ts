@@ -212,9 +212,16 @@ function boot(): void {
   const nativeBridge = (window as unknown as { native?: NativeBridge }).native;
   if (nativeBridge?.onMenuCommand) {
     nativeBridge.onMenuCommand((command, payload) => {
-      if (!component) return;
+      // Under a slow first boot (fresh Chromium userData) the
+      // closure-captured `component` above may still be null when
+      // a menu event fires. Re-reach the component at dispatch
+      // time so the wire-up doesn't depend on bind() winning
+      // before the OS delivers.
+      const live = component ?? reachComponent();
+      if (!live) return;
+      component = live;
       if (command === "new-session") {
-        const logic = component as unknown as {
+        const logic = live as unknown as {
           state: { panes: { id: number; unbound?: boolean }[] };
           _split?: (dir: string) => void;
           _bindPane?: (id: number, ws: string) => void;
@@ -227,8 +234,8 @@ function boot(): void {
           }
         }
       } else if (command === "toggle-reveal") {
-        component.setState({
-          revealed: !((component.state as { revealed?: boolean }).revealed),
+        live.setState({
+          revealed: !((live.state as { revealed?: boolean }).revealed),
           surface: null,
         });
       } else if (command === "open-record") {

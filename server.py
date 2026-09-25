@@ -3129,6 +3129,30 @@ def main() -> None:
         sys.exit(0)
 
     signal.signal(signal.SIGTERM, _sigterm_handler)
+
+    # Sprint 082: parent-death watchdog. Electron's main process
+    # normally SIGTERMs us cleanly via the process group. When
+    # Electron is hard-terminated (Playwright's _electron.launch +
+    # app.close(), for example), the SIGTERM never fires and this
+    # subprocess becomes an orphan holding its port. The watchdog
+    # thread polls getppid() and initiates shutdown once we
+    # re-parent to init (pid 1).
+    parent_pid_at_start = os.getppid()
+
+    def _ppid_watchdog() -> None:
+        while not _SHUTDOWN_STARTED.is_set():
+            time.sleep(1)
+            ppid = os.getppid()
+            if ppid != parent_pid_at_start and ppid == 1:
+                print(
+                    f"parent process died (was {parent_pid_at_start}, now reparented to init); shutting down",
+                    flush=True,
+                )
+                _sigterm_handler(0, None)
+                return
+
+    threading.Thread(target=_ppid_watchdog, daemon=True).start()
+
     try:
         srv.serve_forever()
     except KeyboardInterrupt:

@@ -14,7 +14,8 @@
     "pixel:baseline": "npx tsx harness/pixel_baseline.ts",
     "pixel:diff": "npx tsx harness/pixel_diff.ts",
     "test:unit": "npx tsx --test web/reveal/__tests__/*.spec.ts",
-    "electron": "electron ."
+    "electron": "electron .",
+    "electron:smoke": "SHAKEOUT_AXIS=C SHAKEOUT_RUNS=1 npx tsx harness/shakeout/run.ts"
   },
   "devDependencies": {
     "@types/node": "^22",
