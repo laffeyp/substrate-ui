@@ -15,10 +15,15 @@ const { spawn } = require("node:child_process");
 const http = require("node:http");
 const path = require("node:path");
 
-const PORT = 8765;
+// Sprint 079: --port 0 asks server.py to bind an ephemeral port.
+// The bound value comes back as the first stdout line matching
+// /^substrate-ui port=(\d+)$/. main() waits up to READBACK_TIMEOUT_MS
+// for that line before polling the health endpoint on the parsed port.
+const READBACK_TIMEOUT_MS = 5_000;
 const HEALTH_TIMEOUT_MS = 15_000;
 const HEALTH_POLL_MS = 200;
 const KILL_GRACE_MS = 3_000;
+const PORT_READBACK_RE = /^substrate-ui port=(\d+)$/m;
 
 // substrate-ui/ sits next to substrate/. The uv workspace lives in
 // substrate/; we launch from there so `uv run python` resolves
@@ -28,6 +33,8 @@ const SERVER_PATH = path.resolve(__dirname, "..", "server.py");
 
 let mainWindow = null;
 let serverProc = null;
+let serverPort = null;
+let stdoutBuf = "";
 
 function log(...args) { process.stderr.write("[electron] " + args.join(" ") + "\n"); }
 
@@ -49,14 +56,22 @@ function killServerGroup() {
 }
 
 function spawnServer() {
-  log("spawning server: uv run python " + SERVER_PATH);
-  serverProc = spawn("uv", ["run", "python", SERVER_PATH], {
+  log("spawning server: uv run python " + SERVER_PATH + " --port 0");
+  serverProc = spawn("uv", ["run", "python", SERVER_PATH, "--port", "0"], {
     cwd: SUBSTRATE_ROOT,
     stdio: ["ignore", "pipe", "pipe"],
     detached: true,
     env: { ...process.env, PYTHONUNBUFFERED: "1" },
   });
-  serverProc.stdout.on("data", (chunk) => process.stderr.write("[server] " + chunk));
+  serverProc.stdout.on("data", (chunk) => {
+    const text = chunk.toString();
+    process.stderr.write("[server] " + text);
+    if (serverPort === null) {
+      stdoutBuf += text;
+      const match = stdoutBuf.match(PORT_READBACK_RE);
+      if (match) serverPort = Number(match[1]);
+    }
+  });
   serverProc.stderr.on("data", (chunk) => process.stderr.write("[server-stderr] " + chunk));
   serverProc.on("exit", (code, signal) => {
     log("server exited code=" + code + " signal=" + signal);
@@ -66,10 +81,21 @@ function spawnServer() {
   });
 }
 
-function pollHealth(deadline) {
+function waitForPortReadback(deadline) {
+  return new Promise((resolve, reject) => {
+    const tick = () => {
+      if (serverPort !== null) resolve(serverPort);
+      else if (Date.now() > deadline) reject(new Error("port readback timed out after " + READBACK_TIMEOUT_MS + "ms"));
+      else setTimeout(tick, 50);
+    };
+    tick();
+  });
+}
+
+function pollHealth(port, deadline) {
   return new Promise((resolve, reject) => {
     const attempt = () => {
-      const req = http.get({ host: "127.0.0.1", port: PORT, path: "/", timeout: 500 }, (res) => {
+      const req = http.get({ host: "127.0.0.1", port, path: "/", timeout: 500 }, (res) => {
         res.resume();
         if (res.statusCode === 200) resolve();
         else retry();
@@ -101,7 +127,7 @@ function createWindow() {
       webSecurity: true,
     },
   });
-  mainWindow.loadURL("http://127.0.0.1:" + PORT + "/?atom-transcript=1");
+  mainWindow.loadURL("http://127.0.0.1:" + serverPort + "/?atom-transcript=1");
   if (process.env.SUBSTRATE_UI_DEBUG === "1") {
     mainWindow.webContents.openDevTools({ mode: "detach" });
   }
@@ -110,10 +136,12 @@ function createWindow() {
 app.whenReady().then(async () => {
   spawnServer();
   try {
-    await pollHealth(Date.now() + HEALTH_TIMEOUT_MS);
-    log("server up on http://127.0.0.1:" + PORT);
+    const port = await waitForPortReadback(Date.now() + READBACK_TIMEOUT_MS);
+    log("server bound port=" + port);
+    await pollHealth(port, Date.now() + HEALTH_TIMEOUT_MS);
+    log("server up on http://127.0.0.1:" + port);
   } catch (err) {
-    log("health-check failed: " + err.message);
+    log("startup failed: " + err.message);
     log("check that `uv` and `substrate` are on PATH (see README)");
     killServerGroup();
     app.quit();
