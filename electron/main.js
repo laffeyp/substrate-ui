@@ -36,6 +36,13 @@ let mainWindow = null;
 let serverProc = null;
 let serverPort = null;
 let stdoutBuf = "";
+// Sprint 081 — buffered-pending dispatch for deep-links that fire
+// before the renderer is ready. Reuses the pattern the 2026-09-12
+// electron/main.js:51-72 used (see _deprecated/electron-bridge-
+// 2026-09-12/main.js). rendererReady flips true on did-finish-load;
+// pending deep-links flush in order at that moment.
+let rendererReady = false;
+const pendingDeepLinks = [];
 
 function log(...args) { process.stderr.write("[electron] " + args.join(" ") + "\n"); }
 
@@ -112,6 +119,14 @@ function pollHealth(port, deadline) {
   });
 }
 
+function forwardDeepLink(url) {
+  if (rendererReady && mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send("deep-link", url);
+  } else {
+    pendingDeepLinks.push(url);
+  }
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1440,
@@ -128,10 +143,49 @@ function createWindow() {
       webSecurity: true,
     },
   });
+  mainWindow.webContents.on("did-finish-load", () => {
+    rendererReady = true;
+    if (pendingDeepLinks.length > 0) {
+      log("flushing " + pendingDeepLinks.length + " buffered deep-link(s)");
+      for (const url of pendingDeepLinks) mainWindow.webContents.send("deep-link", url);
+      pendingDeepLinks.length = 0;
+    }
+  });
   mainWindow.loadURL("http://127.0.0.1:" + serverPort + "/?atom-transcript=1");
   if (process.env.SUBSTRATE_UI_DEBUG === "1") {
     mainWindow.webContents.openDevTools({ mode: "detach" });
   }
+}
+
+// Sprint 081 — deep-link protocol handler. Register substrate:// so
+// `open substrate://record/<id>` from anywhere on the system opens
+// the app (or focuses it if already running) and hands the URL to
+// the renderer. macOS delivers via app.on("open-url"); Windows and
+// Linux via app.on("second-instance") on argv. For a shipping
+// installer, an Info.plist entry via electron-forge completes the
+// system-registered handshake; dev-mode setAsDefaultProtocolClient
+// is enough for the exit test that emits open-url from main.
+app.setAsDefaultProtocolClient("substrate");
+app.on("open-url", (event, url) => {
+  event.preventDefault();
+  forwardDeepLink(url);
+});
+// Single-instance lock so a second `open substrate://...` focuses
+// the existing window and hands off its argv-carried URL rather
+// than launching a second app.
+const singleInstanceLock = app.requestSingleInstanceLock();
+if (!singleInstanceLock) {
+  app.quit();
+} else {
+  app.on("second-instance", (_e, argv) => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
+    for (const arg of argv) {
+      if (typeof arg === "string" && arg.startsWith("substrate://")) forwardDeepLink(arg);
+    }
+  });
 }
 
 app.whenReady().then(async () => {

@@ -19,15 +19,25 @@ const { contextBridge, ipcRenderer } = require("electron");
 // IpcRendererEvent stays inside the preload per the Electron 44
 // security guide's approved contextBridge pattern.
 const menuListeners = new Set();
+const deepLinkListeners = new Set();
+
 ipcRenderer.on("menu:new-session", (_e, p) => dispatchMenu("new-session", p));
 ipcRenderer.on("menu:open-record", (_e, p) => dispatchMenu("open-record", p));
 ipcRenderer.on("menu:close-window", (_e, p) => dispatchMenu("close-window", p));
 ipcRenderer.on("menu:toggle-reveal", (_e, p) => dispatchMenu("toggle-reveal", p));
+ipcRenderer.on("deep-link", (_e, url) => dispatchDeepLink(url));
 
 function dispatchMenu(command, payload) {
   for (const cb of menuListeners) {
     try { cb(command, payload); }
     catch (err) { console.error("[native] menu listener threw", err); }
+  }
+}
+
+function dispatchDeepLink(url) {
+  for (const cb of deepLinkListeners) {
+    try { cb(url); }
+    catch (err) { console.error("[native] deep-link listener threw", err); }
   }
 }
 
@@ -37,6 +47,10 @@ contextBridge.exposeInMainWorld("native", {
   onMenuCommand: (cb) => {
     menuListeners.add(cb);
     return () => menuListeners.delete(cb);
+  },
+  onDeepLink: (cb) => {
+    deepLinkListeners.add(cb);
+    return () => deepLinkListeners.delete(cb);
   },
 });
 
