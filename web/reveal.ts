@@ -199,6 +199,46 @@ function boot(): void {
   const observer = new MutationObserver(check);
   observer.observe(document.body, { childList: true, subtree: true });
 
+  // Sprint 080 — native menu wire-up. Only present when running
+  // inside Electron. In a plain Chrome tab window.native is
+  // undefined and the block no-ops. The two OS-integration touch
+  // points named in PLAN v2 §2.3 land here (menu) and in the deep-
+  // link addition Sprint 081 makes.
+  interface NativeBridge {
+    isElectron?: boolean;
+    onMenuCommand?: (cb: (command: string, payload: unknown) => void) => (() => void);
+  }
+  const nativeBridge = (window as unknown as { native?: NativeBridge }).native;
+  if (nativeBridge?.onMenuCommand) {
+    nativeBridge.onMenuCommand((command, payload) => {
+      if (!component) return;
+      if (command === "new-session") {
+        const logic = component as unknown as {
+          state: { panes: { id: number; unbound?: boolean }[] };
+          _split?: (dir: string) => void;
+          _bindPane?: (id: number, ws: string) => void;
+        };
+        if (typeof logic._split === "function") {
+          logic._split("right");
+          const newest = logic.state.panes[logic.state.panes.length - 1];
+          if (newest?.unbound && typeof logic._bindPane === "function") {
+            logic._bindPane(newest.id, "~/.substrate/sandbox");
+          }
+        }
+      } else if (command === "toggle-reveal") {
+        component.setState({
+          revealed: !((component.state as { revealed?: boolean }).revealed),
+          surface: null,
+        });
+      } else if (command === "open-record") {
+        const rec = payload as { path?: string } | null;
+        if (rec?.path) controller.attachRecordRoot(rec.path).catch(() => undefined);
+      } else if (command === "close-window") {
+        // Handled main-side; nothing renderer needs to do.
+      }
+    });
+  }
+
   console.info("[reveal] SessionController booted. Read window.__vm.snapshot() in DevTools.");
 }
 
