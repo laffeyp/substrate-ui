@@ -14,6 +14,7 @@ const { app, BrowserWindow } = require("electron");
 const { spawn } = require("node:child_process");
 const http = require("node:http");
 const path = require("node:path");
+const { installMenu } = require("./menu");
 
 // Sprint 079: --port 0 asks server.py to bind an ephemeral port.
 // The bound value comes back as the first stdout line matching
@@ -148,6 +149,7 @@ app.whenReady().then(async () => {
     return;
   }
   createWindow();
+  installMenu(() => mainWindow);
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
