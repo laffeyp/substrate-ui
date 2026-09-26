@@ -60,6 +60,10 @@ interface OpenSessionAck {
 interface ModelsRoster {
   models: string[];
   default: string;
+  cli?: string[];
+  ollama_cloud?: string[];
+  ollama_local?: string[];
+  testing?: string[];
 }
 
 interface SessionBuckets {
@@ -106,6 +110,7 @@ const EMPTY_SNAPSHOT: Snapshot = {
   endedReason: null,
   driverRoster: [],
   driverDefault: null,
+  driverGroups: [],
   liveSessions: [],
   recentWorkspaces: [],
   bundleRoster: [],
@@ -164,7 +169,20 @@ export class SessionController {
     const roster = rawModels.filter((m) => m !== "deterministic");
     const rawDefault = typeof result.data.default === "string" ? result.data.default : null;
     const defaultDriver = rawDefault === "deterministic" ? (roster[0] ?? null) : rawDefault;
-    this.patch({ driverRoster: roster, driverDefault: defaultDriver });
+    // Sprint 084 — grouped roster for the sectioned picker. Server returns
+    // cli / ollama_cloud / ollama_local / testing arrays alongside the flat
+    // `models` list. Groups render as headers in the dropdown; empty groups
+    // drop out. Legacy `driverRoster` stays flat for pickDriver + other
+    // consumers that expect a bare list.
+    const cli = Array.isArray(result.data.cli) ? result.data.cli : [];
+    const ollamaCloud = Array.isArray(result.data.ollama_cloud) ? result.data.ollama_cloud : [];
+    const ollamaLocal = Array.isArray(result.data.ollama_local) ? result.data.ollama_local : [];
+    const driverGroups = [
+      { label: "cli agents", entries: cli },
+      { label: "ollama · cloud", entries: ollamaCloud },
+      { label: "ollama · local", entries: ollamaLocal },
+    ].filter((grp) => grp.entries.length > 0);
+    this.patch({ driverRoster: roster, driverDefault: defaultDriver, driverGroups });
     this.emit("DRIVER_ROSTER_LOADED", { count: roster.length, default: defaultDriver });
   }
 

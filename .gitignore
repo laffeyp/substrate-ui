@@ -27,3 +27,8 @@ captures/e2e-*.jsonl
 
 # archived run records (runtime artifacts, not source)
 runs/.archive-*/
+
+# aider's per-invocation chat log (Sprint 084 CLI probes wrote one)
+.aider.chat.history.md
+.aider.input.history
+.aider.tags.cache.v*

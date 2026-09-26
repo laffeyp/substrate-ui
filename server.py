@@ -174,10 +174,10 @@ def _daemon_driver_resolver(name: str, params: dict[str, Any] | None = None) -> 
     if name == "deterministic":
         # DeterministicResponder is stateful; skip cache entirely.
         return DeterministicResponder(seed=0)
-    if name == "claude":
-        responder: Any = CliResponder(["claude", "-p"], name="claude")
-    elif name == "gemini":
-        responder = CliResponder(["gemini", "-p"], name="gemini")
+    if name in KNOWN_CLI_ADAPTERS:
+        # One catalog, one source of truth. Adding a CLI adapter here
+        # requires only the KNOWN_CLI_ADAPTERS entry above.
+        responder: Any = CliResponder(KNOWN_CLI_ADAPTERS[name], name=name)
     else:
         p = params or {}
         # Sprint 051: num_ctx must match the model's advertised context, not
@@ -585,10 +585,32 @@ def _agent_params(q: dict[str, list[str]]) -> tuple[bool, int, float]:
     return think, max_tokens, timeout
 
 
+# Sprint 084 — the CLI-adapter catalog. Every entry names a CLI Substrate
+# knows how to speak with (argv shape that reads a prompt as the final
+# positional arg and prints the reply on stdout). Detection at roster time
+# is `shutil.which(command[0])`; only present binaries surface. Adding a
+# new CLI adapter is one entry here plus (if the argv shape needs a
+# different flag) the same entry consulted by `_daemon_driver_resolver`.
+# The catalog IS the source of truth — no other file names CLI presets.
+KNOWN_CLI_ADAPTERS: dict[str, list[str]] = {
+    "claude":       ["claude", "-p"],
+    "codex":        ["codex", "exec"],
+    "aider":        ["aider", "--message"],
+    "cursor-agent": ["cursor-agent", "-p"],
+    "opencode":     ["opencode", "run"],
+}  # gemini removed 2026-09-25 — the Gemini CLI is deprecated upstream.
+
+
 def _agent_models() -> dict[str, object]:
-    """The drivers the terminal can pick: local Ollama models (read live) + the CLI presets
-    (claude/gemini) + the CI stand-in. Ollama tags are best-effort (empty if the daemon is down — the
-    UI still offers the CLI + deterministic). The default is the biggest local OSS model if present."""
+    """The drivers the terminal can pick — live-probed on both sides.
+    Ollama tags come from `http://localhost:11434/api/tags`. CLI adapters
+    come from `shutil.which(cmd[0])` against every entry in
+    KNOWN_CLI_ADAPTERS. The dropdown reflects what is actually on the box:
+    nothing installed → empty CLI section + empty Ollama section (with
+    deterministic still in Testing for harness pins). The default is a
+    verified-agentic Ollama cloud tag if one is present, else the first
+    installed CLI, else the first Ollama tag, else deterministic."""
+    import shutil
     import urllib.request as _u
 
     ollama: list[str] = []
@@ -598,18 +620,22 @@ def _agent_models() -> dict[str, object]:
         ollama = sorted(
             str(m.get("name", "")) for m in tags.get("models", []) if m.get("name")
         )
-    except Exception:  # noqa: BLE001 — no ollama / daemon down: still offer claude/gemini/deterministic
+    except Exception:  # noqa: BLE001 — no ollama / daemon down: CLI + deterministic still surface
         ollama = []
-    # Default to a VERIFIED AGENTIC model, not the biggest coder. The agency assay (RESEARCH R-16/R-17)
-    # found the top coder qwen3-coder:480b WRITE-SPINS — it is the worst agent — so shipping it as the
-    # default is a bug. Prefer thinking+tools models that self-verify (write->run->check), scored
-    # agency 100: kimi/glm/nemotron/deepseek-v4-pro. Fall back to any local model, else deterministic.
-    # Refreshed 2026-08-31 against live Ollama Cloud: kimi-k2.6 retired
-    # in favour of kimi-k2.7-code (thinking + tools, ~1.5s to first token
-    # on hi-in-three-words probe); glm-5.1 → glm-5.2. Order = preference.
-    # Harnesses that must not pay cloud tokens open the terminal with
-    # ?driver=deterministic (terminal.ts reads window.location.search) —
-    # that wins over this server-side default without needing a restart.
+    # Ollama's cloud tags use two conventions: `:cloud` (simple) and
+    # `:<size>-cloud` (the newer variant tag, e.g. `qwen3-coder:480b-cloud`).
+    # Both are Ollama-hosted models; the tag string is what tells us so.
+    def _is_cloud(tag: str) -> bool:
+        suffix = tag.rsplit(":", 1)[-1] if ":" in tag else ""
+        return suffix == "cloud" or suffix.endswith("-cloud")
+    ollama_cloud = [t for t in ollama if _is_cloud(t)]
+    ollama_local = [t for t in ollama if not _is_cloud(t)]
+    cli = sorted(name for name, cmd in KNOWN_CLI_ADAPTERS.items() if shutil.which(cmd[0]))
+    # Preference order for the default — see agency assay R-16/R-17. Fall
+    # through: verified-agentic cloud → first installed CLI → first Ollama
+    # tag → deterministic. Harnesses that must not pay cloud tokens open
+    # the terminal with ?driver=deterministic (reveal.ts reads
+    # window.location.search) — that wins over this server-side default.
     prefer = [
         "kimi-k2.7-code:cloud",
         "glm-5.2:cloud",
@@ -617,11 +643,15 @@ def _agent_models() -> dict[str, object]:
         "deepseek-v4-pro:cloud",
     ]
     default = next(
-        (m for m in prefer if m in ollama), ollama[0] if ollama else "deterministic"
+        (m for m in prefer if m in ollama),
+        cli[0] if cli else (ollama[0] if ollama else "deterministic"),
     )
     return {
-        "models": [*ollama, "claude", "gemini", "deterministic"],
-        "cli": ["claude", "gemini"],
+        "models": [*ollama, *cli, "deterministic"],  # flat list — legacy consumers
+        "cli": cli,
+        "ollama_cloud": ollama_cloud,
+        "ollama_local": ollama_local,
+        "testing": ["deterministic"],
         "default": default,
     }
 
@@ -2434,17 +2464,17 @@ class Handler(BaseHTTPRequestHandler):
                 max_steps=24,
             )
             label = "agent_" + re.sub(r"[^A-Za-z0-9]+", "-", model_name.split(":")[0])
-        elif model in ("claude", "gemini", "cli"):
-            # a command-line model/agent drives the loop (CliResponder). `claude`/`gemini` are presets;
-            # `cli` takes an arbitrary `?command=...`. Substrate provides the tools, so even a plain
-            # prompt->text CLI (gemini) is a tool-using agent here. (gemini needs its own auth to run.)
+        elif model in KNOWN_CLI_ADAPTERS or model == "cli":
+            # a command-line model/agent drives the loop (CliResponder). Preset names
+            # (claude, gemini, codex, aider, ...) resolve through KNOWN_CLI_ADAPTERS;
+            # `cli` takes an arbitrary `?command=...`. Substrate provides the tools,
+            # so even a plain prompt->text CLI becomes a tool-using agent here.
             task = q.get("task", [""])[0] or "Use the available tools to help."
-            preset = {"claude": ["claude", "-p"], "gemini": ["gemini", "-p"]}
-            cmd = preset.get(model) or q.get("command", [""])[0].split()
+            cmd = KNOWN_CLI_ADAPTERS.get(model) or q.get("command", [""])[0].split()
             if not cmd:
                 self._error(
                     400,
-                    "cli agent needs a command (model=claude|gemini, or ?command=...)",
+                    "cli agent needs a command (model=<preset in KNOWN_CLI_ADAPTERS>, or ?command=...)",
                 )
                 return
             responder = CliResponder(cmd, name=model, timeout=max(timeout, 600.0))

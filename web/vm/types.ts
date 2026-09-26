@@ -102,6 +102,11 @@ export interface Snapshot {
   endedReason: string | null;
   driverRoster: string[];
   driverDefault: string | null;
+  /** Sprint 084 — grouped roster for the sectioned picker. Populated by
+   *  loadDriverRoster from the server's cli / ollama_cloud / ollama_local
+   *  live probes. Empty groups drop out. `driverRoster` above remains the
+   *  flat legacy list for pickDriver and other consumers. */
+  driverGroups: { label: string; entries: string[] }[];
   liveSessions: SessionRow[];
   recentWorkspaces: WorkspaceRow[];
   bundleRoster: BundleRow[];
