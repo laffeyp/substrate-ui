@@ -508,9 +508,10 @@ class Component extends DCLogic {
   }
   _closePane(paneId) {
     // Sprint 085 followup — Cmd-W: end this pane's session (like /exit)
-    // then remove the pane from the layout. On the last remaining pane
-    // ask Electron to close the window; in a plain browser tab leave
-    // the last pane alone.
+    // then remove the pane from the layout, absorbing its cells back
+    // into the neighbour that shares its closing edge. On the last
+    // remaining pane ask Electron to close the window; in a plain
+    // browser tab leave the last pane alone.
     const vm = window.__vm;
     const controller = vm && typeof vm.get === "function" ? vm.get(paneId) : null;
     if (controller && controller.snapshot().sessionId) {
@@ -518,16 +519,55 @@ class Component extends DCLogic {
     }
     if (vm && typeof vm.drop === "function") vm.drop(paneId);
     this.setState(s => {
+      const closed = s.panes.find(p => p.id === paneId);
       const remaining = s.panes.filter(p => p.id !== paneId);
       if (remaining.length === 0) {
         const native = window.native;
         if (native && typeof native.closeWindow === "function") native.closeWindow();
         return {};
       }
-      // Refocus the first remaining pane; grid layout stays as-is
-      // (freed cells become gaps, harmless — user can split into them
-      // again or close more panes).
-      return { panes: remaining, focused: remaining[0].id };
+      // Single-pane collapse: reset the grid to one cell and hand it
+      // to the remaining pane. Simplest correct outcome for the split-
+      // once-then-close-once case Peter hit.
+      if (remaining.length === 1) {
+        const only = Object.assign({}, remaining[0], { col: 1, row: 1, cw: 1, rh: 1 });
+        return {
+          panes: [only], focused: only.id,
+          cols: 1, rows: 1, colW: [1], rowW: [1],
+        };
+      }
+      // Multi-pane case: find the ONE remaining pane whose rectangle
+      // shares the closed pane's exact edge along one axis, and grow
+      // it to absorb the freed region. Falls to "leave a gap" if no
+      // neighbour aligns exactly (rare with strict binary splits).
+      const cCol = (closed && closed.col) || 1;
+      const cRow = (closed && closed.row) || 1;
+      const cCw  = (closed && closed.cw)  || 1;
+      const cRh  = (closed && closed.rh)  || 1;
+      const grown = remaining.map(p => Object.assign({}, p));
+      const absorb = grown.find(p => {
+        // Right-neighbour of the closed cell absorbs its column span.
+        if (p.row === cRow && p.rh === cRh && p.col + p.cw === cCol) return true;
+        // Left-neighbour absorbs to the left.
+        if (p.row === cRow && p.rh === cRh && cCol + cCw === p.col) return true;
+        // Top-neighbour absorbs downwards.
+        if (p.col === cCol && p.cw === cCw && p.row + p.rh === cRow) return true;
+        // Bottom-neighbour absorbs upwards.
+        if (p.col === cCol && p.cw === cCw && cRow + cRh === p.row) return true;
+        return false;
+      });
+      if (absorb) {
+        if (absorb.row === cRow && absorb.rh === cRh && absorb.col + absorb.cw === cCol) {
+          absorb.cw += cCw;
+        } else if (absorb.row === cRow && absorb.rh === cRh && cCol + cCw === absorb.col) {
+          absorb.col = cCol; absorb.cw += cCw;
+        } else if (absorb.col === cCol && absorb.cw === cCw && absorb.row + absorb.rh === cRow) {
+          absorb.rh += cRh;
+        } else {
+          absorb.row = cRow; absorb.rh += cRh;
+        }
+      }
+      return { panes: grown, focused: grown[0].id };
     });
   }
 
