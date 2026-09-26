@@ -637,16 +637,7 @@ KNOWN_CLI_ADAPTERS: dict[str, dict[str, list[str] | None]] = {
         "logout_command": ["cursor-agent", "logout"],
         "status_command": None,       # cursor-agent has no status subcommand
     },
-    "opencode":     {
-        "command": ["opencode", "run"],
-        # opencode's `auth login` is a full TUI walk (provider picker,
-        # method picker, credential entry). Sprint 085c AuthPromptCard
-        # is a real ANSI terminal that handles arrow-key navigation +
-        # cursor moves + SGR, so the walk renders and drives correctly.
-        "login_command": ["opencode", "auth", "login"],
-        "logout_command": ["opencode", "auth", "logout"],
-        "status_command": ["opencode", "auth", "list"],
-    },
+    # opencode removed 2026-09-25 — Peter's ruling: not our business.
     # aider removed 2026-09-25 — no login command exists (aider takes
     # OPENAI_API_KEY / ANTHROPIC_API_KEY / --api-key PROVIDER=KEY per
     # invocation). Peter's ruling: not supported until the API-key
