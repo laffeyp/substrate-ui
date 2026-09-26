@@ -48,6 +48,19 @@ export const flow: Flow = {
     }
 
     for (const driver of cli) {
+      // Sprint 085a — probe the server's status endpoint. Not authed →
+      // skip the turn drive and record an observation, not a defect.
+      // A box with claude authed but codex/aider/cursor-agent/opencode
+      // unauthed then reports honestly.
+      try {
+        const statusRes = await fetch(`${BASE_URL}/api/cli/${driver}/status`);
+        const status = (await statusRes.json()) as { authed: boolean | null };
+        if (status.authed === false) {
+          // Legitimate skip. Emit a marker so the report shows it was seen.
+          emitted.push({ tag: "DRIVER_ROSTER_LOADED", payload: { driver, skipped: "auth_required" } });
+          continue;
+        }
+      } catch { /* status probe unreachable — try the turn anyway */ }
       const client = new NodeSubstrateClient(BASE_URL);
       const controller = new SessionController(client);
       controller.onEvent((ev) => emitted.push({ tag: ev.tag, payload: ev.payload }));
