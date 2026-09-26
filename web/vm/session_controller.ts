@@ -288,6 +288,23 @@ export class SessionController {
   ): Promise<{ rows: SessionRow[]; total: number; offset: number; limit: number }> {
     const url = `/api/sessions/by-workspace?path=${encodeURIComponent(workspacePath)}`
       + `&offset=${offset}&limit=${limit}`;
+    return this.fetchPaged(url, offset, limit);
+  }
+
+  /** Sprint 086 followup — GET /api/sessions/isolated?offset=&limit=.
+   *  Paginated across every session whose workspace path matches the
+   *  sandbox regex (per-session sandboxes + /tmp + /var/folders +
+   *  walkthrough/harness fixtures). Same paged response shape as
+   *  loadSessionsByWorkspace so callers share one load-more path. */
+  async loadIsolatedSessions(
+    offset: number, limit: number,
+  ): Promise<{ rows: SessionRow[]; total: number; offset: number; limit: number }> {
+    return this.fetchPaged(`/api/sessions/isolated?offset=${offset}&limit=${limit}`, offset, limit);
+  }
+
+  private async fetchPaged(
+    url: string, offset: number, limit: number,
+  ): Promise<{ rows: SessionRow[]; total: number; offset: number; limit: number }> {
     const result = await this.client.fetchJson<{ rows: RawSession[]; total: number; offset: number; limit: number }>(url);
     if (!result.ok) return { rows: [], total: 0, offset, limit };
     const raw = result.data;

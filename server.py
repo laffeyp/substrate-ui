@@ -3389,6 +3389,36 @@ class Handler(BaseHTTPRequestHandler):
                 page = merged[offset : offset + limit]
                 self._json({"rows": page, "total": total, "offset": offset, "limit": limit})
                 return
+            # Sprint 086 followup — paginated isolated-sessions bucket.
+            # Matches every session whose workspace path looks like a
+            # session sandbox or a temp dir (the same regex
+            # _recent_workspaces uses to strip them from the workspace
+            # list). Same paged response shape as by-workspace so the
+            # client's load-more flow works unchanged.
+            if path == "/api/sessions/isolated":
+                import re as _re
+                q = parse_qs(urlparse(self.path).query)
+                try:
+                    offset = max(0, int(q.get("offset", ["0"])[0]))
+                    limit  = max(1, min(500, int(q.get("limit", ["50"])[0])))
+                except ValueError:
+                    self._error(400, "offset and limit must be integers"); return
+                sandbox_re = _re.compile(
+                    r"(\.substrate/sessions/|^/var/folders/|^/tmp/|substrate-walkthrough-|substrate-harness-)"
+                )
+                snap = _list_sessions_snapshot()
+                merged: list[dict[str, Any]] = []
+                for bucket_name in ("live", "parked", "interrupted", "ended"):
+                    for row in snap.get(bucket_name, []):
+                        if not isinstance(row, dict): continue
+                        ws = row.get("workspace")
+                        if isinstance(ws, str) and sandbox_re.search(ws):
+                            merged.append({**row, "status": bucket_name})
+                merged.sort(key=lambda r: (r.get("created_at") or 0), reverse=True)
+                total = len(merged)
+                page = merged[offset : offset + limit]
+                self._json({"rows": page, "total": total, "offset": offset, "limit": limit})
+                return
             if path == "/api/worktree_diff":  # what the agent changed in a session worktree
                 wt = parse_qs(urlparse(self.path).query).get("path", [""])[0]
                 try:
