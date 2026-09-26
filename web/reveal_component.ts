@@ -963,7 +963,14 @@ class Component extends DCLogic {
         // ~/.substrate/sessions/<id>/workspace. Path stays empty so
         // openSession sends no workspace field and substrate uses its
         // own default.
-        rows.push({ path: 'per session sandbox', meta: 'substrate manages · isolated', kind: 'default' });
+        // Per-session-sandbox row: expandable via the server's
+        // synthesized `~/.substrate/sessions/` workspace (returned by
+        // /api/workspaces with shape='per-session-sandboxes').
+        // by-workspace with that path collapses every per-session
+        // sandbox session under one paginated result.
+        const perSessionRow = (state.recentWorkspaces || []).find(r => r && r.shape === 'per-session-sandboxes');
+        const perSessionPath = perSessionRow ? perSessionRow.path : '';
+        rows.push({ path: 'per session sandbox', meta: 'substrate manages · isolated', kind: 'default', expandable: !!perSessionPath, expandPath: perSessionPath });
         if (inheritPath) rows.push({ path: inheritPath, meta: 'inherit · from ' + (inheritFrom.name || 'split'), kind: 'inherit' });
         rows.push({ path: '~/.substrate/sandbox', meta: 'sandbox · shared across sessions', kind: 'sandbox', expandable: true });
         for (const r of userFolders.slice(0, 2)) rows.push({ path: r.path, meta: 'recent', kind: 'recent', expandable: true });
@@ -1001,8 +1008,9 @@ class Component extends DCLogic {
           }
         };
         return rows.map((row, i) => {
-          const expanded = !!(row.expandable && pickerExpanded[row.path]);
-          const paged = row.expandable ? pickerPaged[row.path] : null;
+          const expandKey = row.expandPath || row.path;
+          const expanded = !!(row.expandable && pickerExpanded[expandKey]);
+          const paged = row.expandable ? pickerPaged[expandKey] : null;
           const sessions = (expanded && paged)
             ? paged.rows.slice(0, 5).map(s => ({
                 sessionIdShort: (s.sessionId || '').slice(0, 12),
@@ -1022,7 +1030,7 @@ class Component extends DCLogic {
             key: row.key || (i === selIdx ? '↵' : ''),
             expanded, notExpanded: !expanded,
             chevron: row.expandable ? (expanded ? '▾' : '▸') : ' ',
-            toggleExpand: row.expandable ? ((ev) => { if (ev && typeof ev.stopPropagation === 'function') ev.stopPropagation(); _pickerToggle(row.path); }) : (() => undefined),
+            toggleExpand: row.expandable ? ((ev) => { if (ev && typeof ev.stopPropagation === 'function') ev.stopPropagation(); _pickerToggle(expandKey); }) : (() => undefined),
             sessions,
             pick: () => {
               if (row.kind === 'choose') { this._pickFolder(p.id); return; }
