@@ -61,6 +61,7 @@ interface ModelsRoster {
   models: string[];
   default: string;
   cli?: string[];
+  cli_login_supported?: string[];
   ollama_cloud?: string[];
   ollama_local?: string[];
   testing?: string[];
@@ -129,6 +130,10 @@ export class SessionController {
   private lastSeq = -1;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private endedEmittedFor: string | null = null;
+  /** Sprint 085 followup — subset of driverGroups.cli that the
+   *  AuthPromptCard supports (server sends cli_login_supported).
+   *  pickDriver only fires the card for names in this list. */
+  private cliLoginSupported: string[] = [];
 
   constructor(private readonly client: SubstrateClient) {}
 
@@ -175,6 +180,8 @@ export class SessionController {
     // drop out. Legacy `driverRoster` stays flat for pickDriver + other
     // consumers that expect a bare list.
     const cli = Array.isArray(result.data.cli) ? result.data.cli : [];
+    const cliLoginSupported = Array.isArray(result.data.cli_login_supported)
+      ? result.data.cli_login_supported : cli;
     const ollamaCloud = Array.isArray(result.data.ollama_cloud) ? result.data.ollama_cloud : [];
     const ollamaLocal = Array.isArray(result.data.ollama_local) ? result.data.ollama_local : [];
     const driverGroups = [
@@ -182,6 +189,7 @@ export class SessionController {
       { label: "ollama · cloud", entries: ollamaCloud },
       { label: "ollama · local", entries: ollamaLocal },
     ].filter((grp) => grp.entries.length > 0);
+    this.cliLoginSupported = cliLoginSupported;
     this.patch({ driverRoster: roster, driverDefault: defaultDriver, driverGroups });
     this.emit("DRIVER_ROSTER_LOADED", { count: roster.length, default: defaultDriver });
   }
@@ -466,8 +474,11 @@ export class SessionController {
     // forget; a status probe failure or an authed CLI both leave the
     // transcript alone. The list of catalog CLI names is small; a
     // cross-check against driverGroups.cli avoids probing Ollama tags.
-    const cliGroup = this.snap.driverGroups.find((grp) => grp.label === "cli agents");
-    if (cliGroup && cliGroup.entries.includes(name)) {
+    // Only fire the auth card for CLIs whose login flow fits the
+    // AuthPromptCard's text-stream shape. Server ships that subset as
+    // cli_login_supported; opencode is a driver but its TUI login walk
+    // is out of scope.
+    if (this.cliLoginSupported.includes(name)) {
       this.maybeOpenAuthPrompt(name);
     }
   }

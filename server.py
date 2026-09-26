@@ -608,9 +608,11 @@ KNOWN_CLI_ADAPTERS: dict[str, dict[str, list[str] | None]] = {
     # runs for a turn (prompt appended as final positional arg).
     # `login_command` spawns the CLI's own interactive login flow —
     # Substrate hosts it inside a pty and streams the stdout into a
-    # transcript card. `logout_command` clears stored creds.
-    # `status_command` reports authed state; None means the CLI has no
-    # notion of "logged out" (aider — auth is per-invocation env).
+    # transcript card. Only URL-based OAuth flows fit the current card;
+    # login_command:None means the CLI is selectable as a driver but
+    # no auth card fires (opencode: TUI login walk; will surface via
+    # the future API-key dropdown section). `logout_command` clears
+    # stored creds. `status_command` reports authed state.
     "claude":       {
         "command": ["claude", "-p"],
         "login_command": ["claude", "auth", "login"],
@@ -626,12 +628,6 @@ KNOWN_CLI_ADAPTERS: dict[str, dict[str, list[str] | None]] = {
         "logout_command": ["codex", "logout"],
         "status_command": ["codex", "login", "status"],
     },
-    "aider":        {
-        "command": ["aider", "--message"],
-        "login_command": None,       # env-per-invocation; no login flow
-        "logout_command": None,
-        "status_command": None,
-    },
     "cursor-agent": {
         "command": ["cursor-agent", "-p"],
         # NO_OPEN_BROWSER=1 keeps the auth URL in stdout instead of also
@@ -639,15 +635,27 @@ KNOWN_CLI_ADAPTERS: dict[str, dict[str, list[str] | None]] = {
         # click for the user.
         "login_command": ["cursor-agent", "login"],
         "logout_command": ["cursor-agent", "logout"],
-        "status_command": None,       # cursor-agent has no status subcommand; probe by trying a call
+        "status_command": None,       # cursor-agent has no status subcommand
     },
     "opencode":     {
         "command": ["opencode", "run"],
-        "login_command": ["opencode", "auth", "login"],
+        # opencode's `auth login` is a full TUI walk (provider picker,
+        # method picker, credential entry). The AuthPromptCard renders a
+        # text stream, not a full terminal, so the walk garbles under
+        # stripAnsi. Dropped from the login-card path 2026-09-25;
+        # opencode returns to the auth flow via the future API-key
+        # dropdown section. `logout_command` kept so a logged-in user
+        # can clear via /api/cli/opencode/logout.
+        "login_command": None,
         "logout_command": ["opencode", "auth", "logout"],
         "status_command": ["opencode", "auth", "list"],
     },
-}  # gemini removed 2026-09-25 — the Gemini CLI is deprecated upstream.
+    # aider removed 2026-09-25 — no login command exists (aider takes
+    # OPENAI_API_KEY / ANTHROPIC_API_KEY / --api-key PROVIDER=KEY per
+    # invocation). Peter's ruling: not supported until the API-key
+    # dropdown section lands.
+    # gemini removed 2026-09-25 — the Gemini CLI is deprecated upstream.
+}
 
 
 _MODEL_THINKING_CACHE: dict[str, bool] = {}
@@ -894,6 +902,12 @@ def _agent_models() -> dict[str, object]:
         name for name, entry in KNOWN_CLI_ADAPTERS.items()
         if (cmd := entry.get("command")) and isinstance(cmd, list) and shutil.which(cmd[0])
     )
+    # Sprint 085 followup — subset of cli entries with a login_command
+    # the AuthPromptCard can host. Opencode is present as a driver but
+    # its TUI login does not fit the text-stream card; excluded here.
+    cli_login_supported = sorted(
+        name for name in cli if KNOWN_CLI_ADAPTERS[name].get("login_command")
+    )
     # Preference order for the default — see agency assay R-16/R-17. Fall
     # through: verified-agentic cloud → first installed CLI → first Ollama
     # tag → deterministic. Harnesses that must not pay cloud tokens open
@@ -912,6 +926,7 @@ def _agent_models() -> dict[str, object]:
     return {
         "models": [*ollama, *cli, "deterministic"],  # flat list — legacy consumers
         "cli": cli,
+        "cli_login_supported": cli_login_supported,
         "ollama_cloud": ollama_cloud,
         "ollama_local": ollama_local,
         "testing": ["deterministic"],
