@@ -10,7 +10,7 @@
 //
 // Sprint 079 replaces the hard-coded 8765 with --port 0 + readback.
 
-const { app, BrowserWindow, shell, ipcMain } = require("electron");
+const { app, BrowserWindow, shell, ipcMain, dialog } = require("electron");
 const { spawn } = require("node:child_process");
 const http = require("node:http");
 const path = require("node:path");
@@ -240,4 +240,19 @@ app.on("before-quit", killServerGroup);
 // when Cmd-W closes the last remaining pane.
 ipcMain.on("native:close-window", () => {
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.close();
+});
+
+// Sprint 086 — Records surface "Add workspace" folder picker.
+// Returns the chosen path or null on cancel. Same shape as
+// menu:open-record's dialog, but the picked path is a workspace not
+// a record.
+ipcMain.handle("native:pick-folder", async () => {
+  const win = mainWindow;
+  const r = await dialog.showOpenDialog(win, {
+    title: "Add workspace",
+    properties: ["openDirectory"],
+    buttonLabel: "Add",
+  });
+  if (r.canceled || r.filePaths.length === 0) return null;
+  return r.filePaths[0];
 });

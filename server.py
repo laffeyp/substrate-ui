@@ -950,6 +950,68 @@ def _list_sessions_snapshot() -> dict[str, list[dict[str, Any]]]:
     return buckets
 
 
+_RECENT_WORKSPACES_MAX = 64
+
+
+def _classify_workspace_shape(path: str) -> str:
+    """Best-effort shape classification for a user-picked workspace path.
+    `worktree` = a directory that looks like a git working tree; `sandbox`
+    = a directory under a known sandbox root; `path` = anything else."""
+    from pathlib import Path as _Path
+    p = _Path(path)
+    try:
+        if (p / ".git").exists():
+            return "worktree"
+    except OSError:
+        pass
+    home_sandbox = _Path.home() / ".substrate" / "sandbox"
+    if path == str(home_sandbox) or path == "~/.substrate/sandbox":
+        return "sandbox"
+    return "path"
+
+
+def _remember_workspace(path: str) -> None:
+    """Append `path` to ~/.substrate/recent-workspaces.json if it is a
+    real user directory (not a session sandbox, not a temp path). LRU
+    trimmed to _RECENT_WORKSPACES_MAX. Idempotent — the same path
+    landed twice deduplicates. Called from POST /api/session after a
+    successful open and from POST /api/workspaces when the user picks
+    a folder through the OS dialog."""
+    import re as _re
+    from pathlib import Path as _Path
+    if not isinstance(path, str) or not path:
+        return
+    sandbox_re = _re.compile(
+        r"(\.substrate/sessions/|^/var/folders/|^/tmp/|substrate-walkthrough-|substrate-harness-|^/$)"
+    )
+    if sandbox_re.search(path):
+        return
+    file = _Path.home() / ".substrate" / "recent-workspaces.json"
+    try:
+        file.parent.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        return
+    existing: list[dict[str, str]] = []
+    if file.exists():
+        try:
+            data = msgspec.json.decode(file.read_bytes())
+            if isinstance(data, list):
+                existing = [
+                    row for row in data
+                    if isinstance(row, dict) and isinstance(row.get("path"), str)
+                ]
+        except Exception:  # noqa: BLE001 — malformed file → rewrite
+            existing = []
+    # LRU: move-to-front on hit, else prepend.
+    without = [row for row in existing if row.get("path") != path]
+    shape = _classify_workspace_shape(path)
+    updated = [{"path": path, "shape": shape}, *without][:_RECENT_WORKSPACES_MAX]
+    try:
+        file.write_bytes(msgspec.json.encode(updated))
+    except OSError:
+        return
+
+
 def _recent_workspaces() -> list[dict[str, str]]:
     """Recent workspace paths for the picker. Reads
     `~/.substrate/recent-workspaces.json` when present; otherwise
@@ -1438,6 +1500,16 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/runs/clear":
                 self._clear_runs()
                 return
+            # Sprint 086 — user picks a folder via the OS dialog; add it
+            # to ~/.substrate/recent-workspaces.json so the Records
+            # surface offers it.
+            if path == "/api/workspaces":
+                body = self._read_json_body()
+                ws_path = body.get("path")
+                if not isinstance(ws_path, str) or not ws_path:
+                    self._error(400, "workspace add: {path: string} required"); return
+                _remember_workspace(ws_path)
+                self._json({"ok": True, "workspaces": _recent_workspaces()}); return
             # Sprint 085a — CLI auth-in-transcript control endpoints.
             if path.startswith("/api/cli/") and path.endswith("/pty/start"):
                 cli_name = path[len("/api/cli/") : -len("/pty/start")]
@@ -1723,6 +1795,10 @@ class Handler(BaseHTTPRequestHandler):
                 return
             self._error(500, f"{type(exc).__name__}: {exc}")
             return
+        # Sprint 086 — remember this workspace on session open so the
+        # Records surface can offer it as a bindable row later.
+        # `_remember_workspace` skips session-sandbox and temp paths.
+        _remember_workspace(manifest.workspace)
         # Sprint 032c: re-read the manifest post-validation (set_driver_params
         # rolls it forward with the validated dict). driver_params on the
         # response so the UI can echo it in the header without a GET.
@@ -3284,6 +3360,34 @@ class Handler(BaseHTTPRequestHandler):
                 # workspace fields across live sessions when there is no
                 # ~/.substrate/recent-workspaces.json.
                 self._json(_recent_workspaces())
+                return
+            # Sprint 086 — paginated per-workspace session listing.
+            # `?path=<workspace>&offset=<n>&limit=<m>` returns the newest
+            # `limit` sessions (default 50) whose workspace path matches
+            # exactly, starting at `offset`. Sort key is created_at desc.
+            # Response: {rows: [...], total: <n>}. Records surface uses
+            # this to render a scrollable per-workspace list without the
+            # legacy 8-item cap.
+            if path == "/api/sessions/by-workspace":
+                q = parse_qs(urlparse(self.path).query)
+                target = (q.get("path", [""])[0] or "").strip()
+                if not target:
+                    self._error(400, "path=<workspace> required"); return
+                try:
+                    offset = max(0, int(q.get("offset", ["0"])[0]))
+                    limit  = max(1, min(500, int(q.get("limit", ["50"])[0])))
+                except ValueError:
+                    self._error(400, "offset and limit must be integers"); return
+                snap = _list_sessions_snapshot()
+                merged: list[dict[str, Any]] = []
+                for bucket_name in ("live", "parked", "interrupted", "ended"):
+                    for row in snap.get(bucket_name, []):
+                        if isinstance(row, dict) and row.get("workspace") == target:
+                            merged.append({**row, "status": bucket_name})
+                merged.sort(key=lambda r: (r.get("created_at") or 0), reverse=True)
+                total = len(merged)
+                page = merged[offset : offset + limit]
+                self._json({"rows": page, "total": total, "offset": offset, "limit": limit})
                 return
             if path == "/api/worktree_diff":  # what the agent changed in a session worktree
                 wt = parse_qs(urlparse(self.path).query).get("path", [""])[0]
