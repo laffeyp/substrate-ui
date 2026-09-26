@@ -264,6 +264,12 @@ function boot(): void {
       } else if (command === "open-record") {
         const rec = payload as { path?: string } | null;
         if (rec?.path) controller.attachRecordRoot(rec.path).catch(() => undefined);
+      } else if (command === "close-pane") {
+        const logic = live as unknown as {
+          state: { focused: number; panes: { id: number }[] };
+          _closePane?: (id: number) => void;
+        };
+        if (typeof logic._closePane === "function") logic._closePane(logic.state.focused);
       } else if (command === "close-window") {
         // Handled main-side; nothing renderer needs to do.
       }
