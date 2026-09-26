@@ -304,6 +304,10 @@ export class SessionController {
     const ack = result.data;
     this.lastSeq = -1;
     this.endedEmittedFor = null;
+    // Sprint 085b follow-up: AuthPrompt rows persist across session boundaries
+    // as a receipt that the user authenticated a CLI. Every other row type
+    // is session-bound and clears with the session.
+    const carryOver = this.snap.transcript.filter((row) => row.kind === "AuthPrompt");
     this.patch({
       sessionId: ack.session_id,
       sessionName: ack.name ?? null,
@@ -312,7 +316,7 @@ export class SessionController {
       workspacePath: ack.workspace ?? null,
       workspaceShape: ack.workspace_shape ?? null,
       turnIndex: 0,
-      transcript: [],
+      transcript: carryOver,
       rawEnvelopes: [],
       progressByCallId: {},
       parkReason: null,

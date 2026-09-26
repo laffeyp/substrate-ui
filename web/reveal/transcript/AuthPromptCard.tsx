@@ -178,17 +178,18 @@ const AuthPromptCardInner: React.FC<Props> = ({ cli }) => {
             }}>cancel</button>
         </div>
       ) : (
-        <div style={{ marginTop: 8, display: "flex", gap: 8 }}>
+        <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ color: MUTED, fontSize: 11 }}>
+            {state.postAuth?.authed ? "ready to pick a session" : "not authenticated yet"}
+          </span>
           <button
             onClick={() => void start()}
             style={{
+              marginLeft: "auto",
               background: "transparent", color: LINK, border: `1px solid ${CARD_BORDER}`,
               borderRadius: 4, padding: "4px 10px", cursor: "pointer",
               fontSize: 11, fontFamily: "inherit",
             }}>retry</button>
-          <span style={{ color: MUTED, fontSize: 11, alignSelf: "center" }}>
-            {state.postAuth?.authed ? "ready to pick a session" : "not authenticated yet"}
-          </span>
         </div>
       )}
     </div>
