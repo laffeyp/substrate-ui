@@ -60,7 +60,7 @@ class Component extends DCLogic {
     // cannot be intercepted) is expected to open /?blank=1 as a
     // bookmark or menu action; the picker state itself carries the
     // frame.
-    panes: [(function(){ var blank = false; try { blank = /[?&]blank=1(?:&|$)/.test(window.location.search); } catch(_e){} return { id: 1, name: 'pane-1', driver: null, editing: false, nameVal: '', unbound: blank }; })()],
+    panes: [{ id: 1, name: 'pane-1', driver: null, editing: false, nameVal: '', unbound: true }],
     focused: 1, cols: 1, rows: 1, colW: [1], rowW: [1], revealL: 1.15, ddFor: null, wsFor: null, allSessions: [], dropHint: null,
     descent: [], descPv: '', descExtra: {}, fanOpen: false, fanSel: 0, findOpen: false, findQ: '', findScope: 'transcript', nestedDescent: false,
     showSettings: false, showExport: false, showEndConfirm: false, ended: false, frDone: false, theme: 'dark', fontOverride: null, settingsNote: '',
@@ -499,16 +499,24 @@ class Component extends DCLogic {
     }
     return { id, name: 'pane-' + id, driver: defaultDriver, unbound: true, wsQ: '', editing: false, nameVal: '', pv: '', lines: [] };
   }
-  _bindPane(id, ws) {
+  _bindPane(id, ws, opts) {
     this.setState(s => {
       const pane = s.panes.find(p => p.id === id); if (!pane || !pane.unbound) return {};
-      // ONE rule (D68 corollary): bind a folder — git repo ⇒ worktree, else flat; sandbox for ~/.substrate
-      const shape = ws === '~/.substrate/sandbox' ? 'sandbox' : 'flat';
+      // Kinds: 'default' = fresh per-session sandbox (substrate mints
+      // ~/.substrate/sessions/<id>/workspace); 'sandbox' = the shared
+      // ~/.substrate/sandbox; 'flat' = any user-picked directory.
+      const isDefault = !!(opts && opts.isDefault);
+      const shape = isDefault ? 'isolated' : (ws === '~/.substrate/sandbox' ? 'sandbox' : 'flat');
+      // Session open elsewhere reads pane.ws. Empty ws leaves the
+      // workspace field off the POST so substrate falls back to its
+      // per-session isolated default.
+      const boundWs = isDefault ? '' : ws;
+      const displayWs = isDefault ? 'fresh per-session sandbox' : ws;
       const lines = [
-        { t: 'session ' + pane.name + ' started · driver ' + pane.driver + ' · ' + ws + (shape === 'worktree' ? ' · worktree substrate/' + pane.name : ' · ' + shape), c: '#62676f' },
+        { t: 'session ' + pane.name + ' started · driver ' + pane.driver + ' · ' + displayWs + (shape === 'worktree' ? ' · worktree substrate/' + pane.name : ' · ' + shape), c: '#62676f' },
         { t: '◐ parked — awaiting your first message', c: '#82a5c8' }];
-      return { panes: s.panes.map(p => p.id === id ? Object.assign({}, p, { unbound: false, ws, shape, lines }) : p),
-        allSessions: [...(s.allSessions || []), { id, name: pane.name, driver: pane.driver, ws }] };
+      return { panes: s.panes.map(p => p.id === id ? Object.assign({}, p, { unbound: false, ws: boundWs, shape, lines }) : p),
+        allSessions: [...(s.allSessions || []), { id, name: pane.name, driver: pane.driver, ws: boundWs }] };
     });
   }
   _closePane(paneId) {
@@ -916,16 +924,34 @@ class Component extends DCLogic {
       // do not swamp the picker (D66f expects a curated list).
       wsRows: (() => {
         if (!p.unbound) return [];
-        const isSandbox = (path) => typeof path === 'string' && /(\.substrate\/sessions\/[^/]+\/workspace$|^\/var\/folders\/|^\/tmp\/|substrate-walkthrough-|substrate-harness-)/.test(path);
-        const recents = ((state.recentWorkspaces || []).filter(r => !isSandbox(r.path)));
-        // Sprint 086b — inherit row only when the parent pane has a
-        // real bound workspace. No fake placeholder fallback.
+        // Sprint 086b — picker offers only pickable workspaces:
+        //   default (per-session isolated), inherit-from-parent (when
+        //   applicable), sandbox, any user-added folders, choose folder…
+        // Every server-side row that is a per-session-sandbox
+        // collapse, a temp-fixture path, or an on-disk artifact
+        // stays out of the picker (those live on the Records surface).
+        const skip = (r) => (
+          !r || typeof r.path !== 'string' || !r.path
+          || r.shape === 'per-session-sandboxes'
+          || /\.substrate\/sessions\//.test(r.path)
+          || /^\/var\/folders\//.test(r.path)
+          || /^\/tmp\//.test(r.path)
+          || /substrate-walkthrough-/.test(r.path)
+          || /substrate-harness-/.test(r.path)
+          || r.path === '~/.substrate/sandbox' || r.path.endsWith('/.substrate/sandbox')
+        );
+        const userFolders = ((state.recentWorkspaces || []).filter(r => !skip(r)));
         const inheritFrom = this.state.panes.find(pp => pp.id !== p.id && !pp.unbound && !!pp.ws);
         const inheritPath = inheritFrom ? inheritFrom.ws : null;
         const rows = [];
+        // Default row: substrate mints a fresh per-session sandbox at
+        // ~/.substrate/sessions/<id>/workspace. Path stays empty so
+        // openSession sends no workspace field and substrate uses its
+        // own default.
+        rows.push({ path: '(default — fresh per-session sandbox)', meta: 'substrate manages · isolated', kind: 'default' });
         if (inheritPath) rows.push({ path: inheritPath, meta: 'inherit · from ' + (inheritFrom.name || 'split'), kind: 'inherit' });
-        for (const r of recents) rows.push({ path: r.path, meta: 'recent · ' + r.shape, kind: 'recent' });
-        if (!recents.some(r => r.shape === 'sandbox')) rows.push({ path: '~/.substrate/sandbox', meta: 'sandbox', kind: 'sandbox' });
+        rows.push({ path: '~/.substrate/sandbox', meta: 'sandbox · shared across sessions', kind: 'sandbox' });
+        for (const r of userFolders) rows.push({ path: r.path, meta: r.shape, kind: 'recent' });
         rows.push({ path: 'choose folder…', meta: '', kind: 'choose', key: '⌘O' });
         if (p.wsQ) rows.unshift({ path: p.wsQ, meta: 'typed — ↵ binds + starts', kind: 'typed', key: '↵' });
         const selIdx = Math.max(0, Math.min(p.wsSelIdx || 0, rows.length - 1));
@@ -935,6 +961,7 @@ class Component extends DCLogic {
           key: row.key || (i === selIdx ? '↵' : ''),
           pick: () => {
             if (row.kind === 'choose') { this._pickFolder(p.id); return; }
+            if (row.kind === 'default') { this._bindPane(p.id, '', { isDefault: true }); return; }
             this._bindPane(p.id, row.path);
           },
         }));
@@ -945,13 +972,23 @@ class Component extends DCLogic {
         // Keyboard nav — ↑↓ moves through the row list, ⇥ completes the
         // typed path against the first recent, ↵ binds the current row.
         const wsRows = ((studioState) => {
-          const isSandbox = (path) => typeof path === 'string' && /(\.substrate\/sessions\/[^/]+\/workspace$|^\/var\/folders\/|^\/tmp\/|substrate-walkthrough-|substrate-harness-)/.test(path);
-          const recents = ((studioState.recentWorkspaces || []).filter(r => !isSandbox(r.path)));
+          const skip = (r) => (
+            !r || typeof r.path !== 'string' || !r.path
+            || r.shape === 'per-session-sandboxes'
+            || /\.substrate\/sessions\//.test(r.path)
+            || /^\/var\/folders\//.test(r.path)
+            || /^\/tmp\//.test(r.path)
+            || /substrate-walkthrough-/.test(r.path)
+            || /substrate-harness-/.test(r.path)
+            || r.path === '~/.substrate/sandbox' || r.path.endsWith('/.substrate/sandbox')
+          );
+          const userFolders = ((studioState.recentWorkspaces || []).filter(r => !skip(r)));
           const inheritFrom = studioState.panes.find(pp => pp.id !== p.id && !pp.unbound && !!pp.ws);
           const rows = [];
+          rows.push({ path: '(default — fresh per-session sandbox)', kind: 'default' });
           if (inheritFrom) rows.push({ path: inheritFrom.ws, kind: 'inherit' });
-          for (const r of recents) rows.push({ path: r.path, kind: 'recent' });
-          if (!recents.some(r => r.shape === 'sandbox')) rows.push({ path: '~/.substrate/sandbox', kind: 'sandbox' });
+          rows.push({ path: '~/.substrate/sandbox', kind: 'sandbox' });
+          for (const r of userFolders) rows.push({ path: r.path, kind: 'recent' });
           rows.push({ path: 'choose folder…', kind: 'choose' });
           if (p.wsQ) rows.unshift({ path: p.wsQ, kind: 'typed' });
           return rows;
@@ -968,6 +1005,7 @@ class Component extends DCLogic {
           const row = wsRows[cur];
           if (!row) return;
           if (row.kind === 'choose') { this._pickFolder(p.id); return; }
+          if (row.kind === 'default') { this._bindPane(p.id, '', { isDefault: true }); return; }
           this._bindPane(p.id, row.path);
         }
       },

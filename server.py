@@ -982,10 +982,15 @@ def _sessions_dir_root() -> str:
     return str(_Path.home() / ".substrate" / "sessions")
 
 def _is_per_session_sandbox(path: str) -> bool:
+    """Anywhere under ~/.substrate/sessions/. Covers every shape
+    substrate has ever produced: top-level `<id>/workspace`, nested
+    `<id>/workspace/delegate-runs/fan-<id>/workspace`, legacy
+    `default`/`adhoc-<x>` bare paths. Everything under that root
+    collapses under one Records row."""
     import re as _re
     global _PER_SESSION_SANDBOX_RE
     if _PER_SESSION_SANDBOX_RE is None:
-        _PER_SESSION_SANDBOX_RE = _re.compile(r"\.substrate/sessions/[^/]+/workspace$")
+        _PER_SESSION_SANDBOX_RE = _re.compile(r"\.substrate/sessions/")
     return isinstance(path, str) and bool(_PER_SESSION_SANDBOX_RE.search(path))
 
 def _is_test_fixture_workspace(path: str) -> bool:
@@ -1081,6 +1086,8 @@ def _recent_workspaces() -> list[dict[str, str]]:
         if not isinstance(path, str) or not path:
             return
         cp = _canonical_workspace(path)
+        if not cp:
+            return
         if cp in seen:
             return
         seen[cp] = {"path": cp, "shape": shape}
