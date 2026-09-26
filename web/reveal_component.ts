@@ -1759,10 +1759,20 @@ class Component extends DCLogic {
       when: _relTime(r.createdAt),
       pick: () => {
         const vm = window.__vm;
-        if (vm && r.sessionId) {
-          this.setState({ surface: null });
-          vm.attachExisting(r.sessionId);
-        }
+        if (!vm || !r.sessionId) return;
+        // Mark the focused pane bound before attach so the terminal
+        // template renders the transcript branch instead of the
+        // workspace picker. Uses the record's own workspace path +
+        // shape so the header labels match the loaded session.
+        const wsPath = (typeof r.workspacePath === 'string' && r.workspacePath) ? r.workspacePath : '';
+        const wsShape = (typeof r.workspaceShape === 'string' && r.workspaceShape) ? r.workspaceShape : 'flat';
+        this.setState(s => ({
+          surface: null,
+          panes: s.panes.map(pn => pn.id === s.focused
+            ? Object.assign({}, pn, { unbound: false, ws: wsPath, shape: wsShape, name: r.name || pn.name, lines: [] })
+            : pn),
+        }));
+        vm.attachExisting(r.sessionId);
       },
     });
     // Sprint 086 — collapsible workspaces with paginated session lists.
