@@ -761,7 +761,20 @@ class Component extends DCLogic {
     emitted.forEach(k => { if (!consumed.has(k)) errs.push('emitted kind ' + k + ' is neither consumed nor terminal'); });
     return errs;
   }
-  _toggleSurface(name) { this.setState(s => ({ surface: s.surface === name ? null : name })); }
+  _toggleSurface(name) {
+    this.setState(s => ({ surface: s.surface === name ? null : name }));
+    // Sprint 085 followup — refresh the Records-surface data on every
+    // open. Boot's one-shot loadLiveSessions can miss (network hiccup,
+    // server not ready, silent catch) and leave the page as a wall of
+    // workspace headers with no session rows under them.
+    if (name === 'records') {
+      const vm = window.__vm;
+      if (vm) {
+        if (typeof vm.loadLiveSessions === 'function') vm.loadLiveSessions().catch(() => undefined);
+        if (typeof vm.loadRecentWorkspaces === 'function') vm.loadRecentWorkspaces().catch(() => undefined);
+      }
+    }
+  }
   renderVals() {
     const state = this.state;
     const fp = state.panes.find(p => p.id === state.focused) || state.panes[0];
@@ -1132,7 +1145,14 @@ class Component extends DCLogic {
           return { panes, focused: from, dropHint: null };
         });
       },
-      goRecords: () => this.setState({ focused: p.id, surface: Surface.Records }),
+      goRecords: () => {
+        this.setState({ focused: p.id, surface: Surface.Records });
+        const vm = window.__vm;
+        if (vm) {
+          if (typeof vm.loadLiveSessions === 'function') vm.loadLiveSessions().catch(() => undefined);
+          if (typeof vm.loadRecentWorkspaces === 'function') vm.loadRecentWorkspaces().catch(() => undefined);
+        }
+      },
       goStudio: () => this.setState({ focused: p.id, surface: Surface.Studio }),
       goReveal: () => this.setState({ focused: p.id, revealed: true, surface: null }),
       startEdit: () => this.setState(s => ({ panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, { editing: true, nameVal: x.name }) : x) })),
