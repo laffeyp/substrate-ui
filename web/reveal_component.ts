@@ -665,7 +665,7 @@ class Component extends DCLogic {
     };
     document.addEventListener("mousedown", this._ddOutside, true);
     this._kd = (e) => {
-      if (e.ctrlKey && e.key === '\u0060') { e.preventDefault(); this.setState(s => ({ revealed: !s.revealed, surface: null })); }
+      if (e.ctrlKey && e.key === '\u0060') { e.preventDefault(); if (this.state.panes.some(p => p.unbound)) return; this.setState(s => ({ revealed: !s.revealed, surface: null })); }
       if (e.metaKey && (e.key === 'd' || e.key === 'D')) { e.preventDefault(); this._split(e.shiftKey ? 'down' : 'right'); }
       if (e.metaKey && (e.key === 'f' || e.key === 'F')) { e.preventDefault(); this.setState(s => ({ findOpen: !s.findOpen, findQ: '' })); }
       if (e.metaKey && e.key === ',') { e.preventDefault(); this.setState({ showSettings: true }); }
@@ -1945,7 +1945,7 @@ class Component extends DCLogic {
       studioColor: surf === Surface.Studio ? '#e2e5e9' : '#9aa0a8',
       showTerminal: !surf && !state.revealed, showRevealed: !surf && state.revealed,
       showRecords: surf === Surface.Records, showAssay: surf === Surface.Assay, showStudio: surf === Surface.Studio,
-      toggleReveal: () => this.setState(s => ({ revealed: !s.revealed, surface: null })),
+      toggleReveal: () => { if (this.state.panes.some(p => p.unbound)) return; this.setState(s => ({ revealed: !s.revealed, surface: null })); },
       revealLabel: state.revealed ? '⌃` terminal' : '⌃` reveal',
       revealBtnColor: state.revealed && !surf ? '#212327' : '#9aa0a8', revealBtnBg: state.revealed && !surf ? '#82a5c8' : '#3d434c',
       fontSize: state.fontOverride ?? this.props.transcriptFontSize ?? 13,
