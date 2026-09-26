@@ -990,7 +990,14 @@ class Component extends DCLogic {
       // those are `position:absolute; top:20px` inside the header and
       // rely on the header not clipping to be visible below it.
       hdrOverflow: (state.ddFor === p.id || state.wsFor === p.id) ? 'visible' : 'hidden',
-      toggleDd: () => this.setState(s => ({ focused: p.id, ddFor: s.ddFor === p.id ? null : p.id, wsFor: null })),
+      toggleDd: () => {
+        // Sprint 085 followup — freeze picker once this pane has a bound
+        // session. Switching driver mid-session triggers auth flows for
+        // a driver the session is not using.
+        const paneSnap = (state.controllerSnapshots || {})[p.id];
+        if (paneSnap && paneSnap.sessionId) return;
+        this.setState(s => ({ focused: p.id, ddFor: s.ddFor === p.id ? null : p.id, wsFor: null }));
+      },
       toggleWsP: () => this.setState(s => ({ focused: p.id, wsFor: s.wsFor === p.id ? null : p.id, ddFor: null })),
       driverOpts: (() => {
         // Sprint 084 — sectioned driver picker. Header rows carry
@@ -1683,7 +1690,13 @@ class Component extends DCLogic {
           }))
         : (state.allSessions || []).map(x => { const open = state.panes.some(pp => pp.id === x.id); const nm = (state.panes.find(pp => pp.id === x.id) || x).name; return { name: nm, meta: x.driver + ' · worktree substrate/' + nm, where: open ? 'open in a pane ▸' : 'no pane — still yours' }; })
       ),
-      fpDdOpen: state.ddFor === fp.id && state.revealed, fpToggleDd: () => this.setState(s => ({ ddFor: s.ddFor === fp.id ? null : fp.id, wsFor: null })),
+      fpDdOpen: state.ddFor === fp.id && state.revealed, fpToggleDd: () => {
+        // Sprint 085 followup — freeze picker once the focused pane's
+        // session is bound. Same reason as the per-pane toggle above.
+        const focusedSnap = (state.controllerSnapshots || {})[fp.id];
+        if (focusedSnap && focusedSnap.sessionId) return;
+        this.setState(s => ({ ddFor: s.ddFor === fp.id ? null : fp.id, wsFor: null }));
+      },
       fpWsOpen: state.wsFor === fp.id && state.revealed, fpToggleWs: () => this.setState(s => ({ wsFor: s.wsFor === fp.id ? null : fp.id, ddFor: null })),
       fpDriverOpts: (() => {
         const groups = (state.driverGroups && state.driverGroups.length)

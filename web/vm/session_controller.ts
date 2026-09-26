@@ -453,6 +453,11 @@ export class SessionController {
   }
 
   pickDriver(name: string): void {
+    // Sprint 085 followup — freeze the picker once a session is bound.
+    // Switching driver mid-session would trigger auth flows for a driver
+    // the session is not using; the session's driver is fixed at open.
+    // Users end the session (or open a new pane) to switch drivers.
+    if (this.snap.sessionId) return;
     this.patch({ driver: name });
     this.emit("DRIVER_PICKED", { driver: name });
     // Sprint 085b — if a CLI driver was picked and it's not authed,
