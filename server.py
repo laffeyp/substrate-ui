@@ -856,7 +856,10 @@ def _agent_models() -> dict[str, object]:
         return suffix == "cloud" or suffix.endswith("-cloud")
     ollama_cloud = [t for t in ollama if _is_cloud(t)]
     ollama_local = [t for t in ollama if not _is_cloud(t)]
-    cli = sorted(name for name, cmd in KNOWN_CLI_ADAPTERS.items() if shutil.which(cmd[0]))
+    cli = sorted(
+        name for name, entry in KNOWN_CLI_ADAPTERS.items()
+        if (cmd := entry.get("command")) and isinstance(cmd, list) and shutil.which(cmd[0])
+    )
     # Preference order for the default — see agency assay R-16/R-17. Fall
     # through: verified-agentic cloud → first installed CLI → first Ollama
     # tag → deterministic. Harnesses that must not pay cloud tokens open

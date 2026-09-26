@@ -451,6 +451,39 @@ export class SessionController {
   pickDriver(name: string): void {
     this.patch({ driver: name });
     this.emit("DRIVER_PICKED", { driver: name });
+    // Sprint 085b — if a CLI driver was picked and it's not authed,
+    // open the AuthPromptCard in the transcript so the user can
+    // complete the CLI's own login flow inside Substrate. Fire-and-
+    // forget; a status probe failure or an authed CLI both leave the
+    // transcript alone. The list of catalog CLI names is small; a
+    // cross-check against driverGroups.cli avoids probing Ollama tags.
+    const cliGroup = this.snap.driverGroups.find((grp) => grp.label === "cli agents");
+    if (cliGroup && cliGroup.entries.includes(name)) {
+      this.maybeOpenAuthPrompt(name);
+    }
+  }
+
+  private async maybeOpenAuthPrompt(cli: string): Promise<void> {
+    try {
+      const res = await this.client.fetchJson<{ authed: boolean | null }>(
+        `/api/cli/${encodeURIComponent(cli)}/status`,
+      );
+      if (!res.ok) return;
+      if (res.data.authed === false) this.openAuthPrompt(cli);
+    } catch { /* status probe unreachable — silent */ }
+  }
+
+  openAuthPrompt(cli: string): void {
+    // AuthPrompt transcript row. Row.tsx dispatches on kind="AuthPrompt"
+    // to render AuthPromptCard, which owns the pty lifecycle
+    // (POST /api/cli/<cli>/pty/start, GET stream, POST stdin, POST close).
+    // Negative seq keeps the row above any envelope-derived rows.
+    this.appendTranscript({
+      seq: -Math.round(Date.now()) - 7,
+      kind: "AuthPrompt",
+      role: "system",
+      text: cli,
+    });
   }
 
   /** Choose the bundle openSession will pass unless overridden. Null
