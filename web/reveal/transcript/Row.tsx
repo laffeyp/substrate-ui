@@ -16,6 +16,7 @@ import * as React from "react";
 import type { TranscriptRow } from "../../vm";
 import { ModelReply } from "./ModelReply";
 import { ToolCard } from "./ToolCard";
+import { AuthPromptCard } from "./AuthPromptCard";
 
 export interface RowProps {
   row: TranscriptRow;
@@ -62,6 +63,9 @@ const RowInner: React.FC<RowProps> = ({ row, paired, progressText, progressEof }
   const text = row.text ?? "";
   const isModel = row.role === "model";
   const isTool = row.role === "tool" && row.kind === "ToolCall";
+  // Sprint 085b — AuthPrompt row renders AuthPromptCard using `text`
+  // as the CLI name (openAuthPrompt writes {kind:"AuthPrompt", role:"system", text:cli}).
+  const isAuthPrompt = row.role === "system" && row.kind === "AuthPrompt";
   const streamingShow = progressText.length > 0;
   return (
     <div style={{
@@ -82,6 +86,8 @@ const RowInner: React.FC<RowProps> = ({ row, paired, progressText, progressEof }
           progressEof={progressEof}
           streamingShow={streamingShow}
         />
+      ) : isAuthPrompt ? (
+        <AuthPromptCard cli={text} />
       ) : (
         <span>{text}</span>
       )}
