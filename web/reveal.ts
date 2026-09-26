@@ -257,10 +257,13 @@ function boot(): void {
           }
         }
       } else if (command === "toggle-reveal") {
-        live.setState({
-          revealed: !((live.state as { revealed?: boolean }).revealed),
-          surface: null,
-        });
+        // Sprint 086b — reveal toggle is a no-op while any pane is
+        // still on its workspace picker. The picker only renders in
+        // the terminal grid; toggling to reveal would hide it and
+        // strand the user with no way to bind the pane.
+        const s = live.state as { revealed?: boolean; panes?: { unbound?: boolean }[] };
+        if ((s.panes || []).some((pn) => pn.unbound)) return;
+        live.setState({ revealed: !s.revealed, surface: null });
       } else if (command === "open-record") {
         const rec = payload as { path?: string } | null;
         if (rec?.path) controller.attachRecordRoot(rec.path).catch(() => undefined);
