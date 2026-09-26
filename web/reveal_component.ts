@@ -1759,27 +1759,49 @@ class Component extends DCLogic {
     // Sessions whose workspace path is neither a recent workspace nor
     // an isolated sandbox share this bucket too.
     if (_sessionsByWorkspace.size > 0) {
-      const isolatedRows = [];
-      for (const rows of _sessionsByWorkspace.values()) isolatedRows.push(...rows);
-      isolatedRows.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-      const totalIsolated = isolatedRows.length;
-      // Isolated bucket is synthetic (no real workspace path) so the
-      // pagination endpoint does not apply. Render up to 100 rows
-      // client-side when expanded; that is enough for a browsable
-      // history without loading thousands of divs at once.
+      const totalIsolatedInMemory = Array.from(_sessionsByWorkspace.values()).reduce((n, rows) => n + rows.length, 0);
+      // Isolated bucket paginates through /api/sessions/isolated so
+      // "browse via workspace filters" is not a thing users need to
+      // do — the load-more button here works the same as it does on
+      // real workspaces.
       const isolatedKey = '(isolated sessions)';
       const expanded = !!_expandedWs[isolatedKey];
-      const shownRows = expanded ? isolatedRows.slice(0, 100) : [];
+      const paged = _pagedByWs[isolatedKey];
+      const rows = expanded && paged ? paged.rows : [];
+      // Prefer the paginated total once we have it (authoritative);
+      // fall back to the in-memory count from the initial /api/session
+      // load until the first page arrives.
+      const total = paged ? paged.total : totalIsolatedInMemory;
       _workspaceGroups.push({
         path: 'isolated sessions',
         shapeLabel: 'each in its own .substrate sandbox',
-        sessions: shownRows.map(_mapSession),
-        countLabel: totalIsolated === 1 ? '1 session' : `${totalIsolated} sessions`,
+        sessions: rows.map(_mapSession),
+        countLabel: total === 1 ? '1 session' : `${total} sessions`,
         expanded, notExpanded: !expanded, chevron: expanded ? '▾' : '▸',
-        toggleExpand: () => this.setState(s => ({ expandedWs: Object.assign({}, s.expandedWs, { [isolatedKey]: !(s.expandedWs || {})[isolatedKey] }) })),
-        hasMore: expanded && totalIsolated > shownRows.length,
-        loadMore: () => undefined,
-        remainingLabel: totalIsolated > shownRows.length ? `+ ${totalIsolated - shownRows.length} more not shown (browse via workspace filters)` : '',
+        toggleExpand: () => {
+          this.setState(s => ({ expandedWs: Object.assign({}, s.expandedWs, { [isolatedKey]: !(s.expandedWs || {})[isolatedKey] }) }));
+          if (!_expandedWs[isolatedKey]) {
+            const vm = window.__vm;
+            if (vm && typeof vm.loadIsolatedSessions === 'function' && !_pagedByWs[isolatedKey]) {
+              vm.loadIsolatedSessions(0, 50).then((r) => {
+                this.setState(s => ({ pagedByWs: Object.assign({}, s.pagedByWs, { [isolatedKey]: { rows: r.rows, total: r.total } }) }));
+              }).catch(() => undefined);
+            }
+          }
+        },
+        hasMore: !!(expanded && paged && paged.rows.length < paged.total),
+        loadMore: () => {
+          const vm = window.__vm;
+          if (!vm || typeof vm.loadIsolatedSessions !== 'function') return;
+          const current = (_pagedByWs[isolatedKey] && _pagedByWs[isolatedKey].rows) || [];
+          vm.loadIsolatedSessions(current.length, 50).then((r) => {
+            this.setState(s => {
+              const prev = (s.pagedByWs || {})[isolatedKey] || { rows: [], total: r.total };
+              return { pagedByWs: Object.assign({}, s.pagedByWs, { [isolatedKey]: { rows: [...prev.rows, ...r.rows], total: r.total } }) };
+            });
+          }).catch(() => undefined);
+        },
+        remainingLabel: paged ? `load next ${Math.min(50, Math.max(0, paged.total - paged.rows.length))}` : '',
       });
     }
     // (_hasVmSession hoisted with _vmSnap at renderVals top.)
