@@ -951,7 +951,7 @@ class Component extends DCLogic {
         rows.push({ path: 'per session sandbox', meta: 'substrate manages · isolated', kind: 'default' });
         if (inheritPath) rows.push({ path: inheritPath, meta: 'inherit · from ' + (inheritFrom.name || 'split'), kind: 'inherit' });
         rows.push({ path: '~/.substrate/sandbox', meta: 'sandbox · shared across sessions', kind: 'sandbox' });
-        for (const r of userFolders) rows.push({ path: r.path, meta: 'recent', kind: 'recent' });
+        for (const r of userFolders.slice(0, 2)) rows.push({ path: r.path, meta: 'recent', kind: 'recent' });
         rows.push({ path: 'choose folder…', meta: '', kind: 'choose', key: '⌘O' });
         if (p.wsQ) rows.unshift({ path: p.wsQ, meta: 'typed — ↵ binds + starts', kind: 'typed', key: '↵' });
         const selIdx = Math.max(0, Math.min(p.wsSelIdx || 0, rows.length - 1));
@@ -988,7 +988,7 @@ class Component extends DCLogic {
           rows.push({ path: 'per session sandbox', kind: 'default' });
           if (inheritFrom) rows.push({ path: inheritFrom.ws, kind: 'inherit' });
           rows.push({ path: '~/.substrate/sandbox', kind: 'sandbox' });
-          for (const r of userFolders) rows.push({ path: r.path, kind: 'recent' });
+          for (const r of userFolders.slice(0, 2)) rows.push({ path: r.path, kind: 'recent' });
           rows.push({ path: 'choose folder…', kind: 'choose' });
           if (p.wsQ) rows.unshift({ path: p.wsQ, kind: 'typed' });
           return rows;
