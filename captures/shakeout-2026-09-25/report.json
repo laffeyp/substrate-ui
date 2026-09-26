@@ -1,0 +1,128 @@
+{
+  "writtenAt": "2026-09-25T01:26:05.970Z",
+  "totalFlows": 3,
+  "totalRuns": 15,
+  "flowReports": [
+    {
+      "flow": "electron_smoke",
+      "runs": 5,
+      "runOks": 5,
+      "coverage": [
+        {
+          "tag": "SESSION_OPEN_REQUESTED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "SESSION_OPEN_ACKED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_SUBMITTED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "STREAM_ENVELOPE_APPENDED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_PARKED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        }
+      ],
+      "defects": []
+    },
+    {
+      "flow": "electron_menu",
+      "runs": 5,
+      "runOks": 5,
+      "coverage": [
+        {
+          "tag": "SESSION_OPEN_REQUESTED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "SESSION_OPEN_ACKED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_SUBMITTED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "STREAM_ENVELOPE_APPENDED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_PARKED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        }
+      ],
+      "defects": []
+    },
+    {
+      "flow": "electron_deeplink",
+      "runs": 5,
+      "runOks": 5,
+      "coverage": [
+        {
+          "tag": "SESSION_OPEN_REQUESTED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "SESSION_OPEN_ACKED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_SUBMITTED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "STREAM_ENVELOPE_APPENDED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_PARKED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        }
+      ],
+      "defects": []
+    }
+  ],
+  "summary": {
+    "tags_at_5_of_5": 15,
+    "tags_at_4_of_5": 0,
+    "tags_below_4": 0,
+    "tags_dead": 0,
+    "total_bugs": 0
+  }
+}

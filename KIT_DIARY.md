@@ -22,6 +22,16 @@
 
 ## Entries
 
+### 2026-09-24 — Sprint 083 closes the Phase 9 polish with one lesson on the paper-trail gap
+
+**Context.** Peter opened `npm run electron` after Phase 9's wrapping code (Sprints 077–082 per the plan) landed and reported four issues: fake dot triads collide with real macOS traffic-lights; workspace dropdown misaligns in reveal-view; top-bar height doubles when toggling reveal; top-bar not draggable. Diagnosis: all four are one cause — the reveal shell was authored for a browser tab and never yielded the `hiddenInset` region to Chromium's real traffic-lights. Sprint 083 was one coordinated fix: `?electron=1` URL param → `data-electron="1"` on body → one scoped `<style>` node with four rules. Eight new data attributes in `reveal.html`. Behavior probe confirmed every issue closed; static gates green; plain-Chrome shell unchanged.
+
+**H24 (new): the wrapping's design-shell contract needs to be authored, not discovered on first launch.** Phase 9's plan §6 R5 named exactly the `hiddenInset` + `trafficLightPosition` misalignment as Sprint 078's exit criterion — a screenshot check that the header chip row from Phase 8's `pane_header_clip` flow still passed with top edges aligned. Sprint 078 did not include that check in the code Peter reported was on disk. Sprint 083 caught the miss on manual launch. **Class**: an exit criterion the plan names but the sprint card omits is not automatically an assertion — the criterion has to be encoded, not just referenced. Next kit version: for behavior-touching sprints, the sprint-card template should include a "plan-cross-check" line that names each planning-doc criterion the sprint is expected to close, and marks each one either "encoded in exit test at line X" or "deferred to sprint Y." A criterion with neither is a hole.
+
+**H25 (new): a post-compaction agent will manufacture ceremony against evidence it has not checked.** Opening Sprint 083, I claimed Sprints 077–082 lacked a paper trail because no `sprints/sprint-07N-*.md` files existed, and filed a surfaced-for-review entry demanding an Architect ruling on retro-cards. Peter called it out; `git log --oneline -- electron/` showed the sprint commits carrying full scope, deliverables, exit gates in their bodies. Git IS the artifact for this project's Electron series. My reading of hard rule 3 was rigid — "a sprint card is a `.md` file under `sprints/`" — and did not consult the actual convention the commits establish. Both retracted (BLACKBOARD, sprint-083 closed_note, this entry). **Class**: after a compaction, the agent should verify a claimed absence against the git tree, not against a subdirectory listing, before surfacing anything. And should never surface a "ruling requested" that the memory rule against prescribing next work already forbids.
+
+---
+
 ### 2026-09-12 — Sprints 025-027 close Epic G: one lesson on card-vs-vocabulary drift
 
 **Context.** Sprints 025 (records surface), 026 (assay surface), and 027 (studio surface) landed the pane-scoped summoned-surface layer per Layer 1 §Surface. Every harness green; 30/30 regression at close.

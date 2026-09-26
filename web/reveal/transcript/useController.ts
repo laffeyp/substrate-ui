@@ -31,6 +31,7 @@ const EMPTY_SNAPSHOT: Snapshot = {
   endedReason: null,
   driverRoster: [],
   driverDefault: null,
+  driverGroups: [],
   liveSessions: [],
   recentWorkspaces: [],
   bundleRoster: [],

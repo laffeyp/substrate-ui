@@ -992,14 +992,33 @@ class Component extends DCLogic {
       hdrOverflow: (state.ddFor === p.id || state.wsFor === p.id) ? 'visible' : 'hidden',
       toggleDd: () => this.setState(s => ({ focused: p.id, ddFor: s.ddFor === p.id ? null : p.id, wsFor: null })),
       toggleWsP: () => this.setState(s => ({ focused: p.id, wsFor: s.wsFor === p.id ? null : p.id, ddFor: null })),
-      driverOpts: ((state.driverRoster && state.driverRoster.length) ? state.driverRoster : ['deterministic']).map(m => ({
-        label: m, color: m === p.driver ? '#e2e5e9' : '#9aa0a8',
-        pick: () => {
-          this.setState(s => ({ ddFor: null, panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, { driver: m }) : x) }));
-          const vm = window.__vm;
-          if (vm) vm.pickDriver(m);
-        },
-      })),
+      driverOpts: (() => {
+        // Sprint 084 — sectioned driver picker. Header rows carry
+        // `isHeader:true`; the template renders headers as uppercase
+        // labels and item rows as clickable pickers. The `notHeader`
+        // twin lets dc-runtime's sc-if pick the right span shape.
+        const groups = (state.driverGroups && state.driverGroups.length)
+          ? state.driverGroups
+          : [{ label: '', entries: (state.driverRoster && state.driverRoster.length) ? state.driverRoster : ['deterministic'] }];
+        const items: Array<{ label: string; color: string; isHeader: boolean; notHeader: boolean; pick: () => void }> = [];
+        const noop = () => undefined;
+        for (const grp of groups) {
+          if (grp.label) items.push({ label: grp.label, color: '#62676f', isHeader: true, notHeader: false, pick: noop });
+          for (const m of grp.entries) {
+            items.push({
+              label: m,
+              color: m === p.driver ? '#e2e5e9' : '#9aa0a8',
+              isHeader: false, notHeader: true,
+              pick: () => {
+                this.setState(s => ({ ddFor: null, panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, { driver: m }) : x) }));
+                const vm = window.__vm;
+                if (vm) vm.pickDriver(m);
+              },
+            });
+          }
+        }
+        return items;
+      })(),
       caretColor: p.id === state.focused ? '#82a5c8' : '#4a4e55',
       promptHint: p.id === state.focused ? 'type to talk · / for commands' : 'click to focus',
       focus: () => this.setState({ focused: p.id }),
@@ -1461,22 +1480,35 @@ class Component extends DCLogic {
     // game_of_life-style topologies emit `payload.grid` on their
     // Generation event; session records don't. When none is found the
     // scene lens shows an empty state.
+    // Scene lens grid detection. Wrapped end-to-end so any malformed
+    // payload — non-array grid, ragged rows, Proxy that throws on
+    // property access, oversized matrix — falls to the empty-state
+    // message instead of taking the renderer down. Cap at
+    // SCENE_MAX_CELLS to keep a 500×500 game_of_life grid from hanging
+    // paint (Peter's 2026-09-25 crash under Electron: attached record
+    // carried a grid larger than Chromium could render as 250k divs
+    // before the OS killed the renderer; the window disappeared).
+    const SCENE_MAX_CELLS = 400; // 20×20 upper bound
     const _findGrid = () => {
-      const envs = (_vmSnap && Array.isArray(_vmSnap.rawEnvelopes)) ? _vmSnap.rawEnvelopes : [];
-      for (let i = envs.length - 1; i >= 0; i--) {
-        const p = envs[i] && envs[i].payload;
-        if (!p) continue;
-        const candidate = p.grid || p.cells || p.matrix;
-        if (Array.isArray(candidate) && candidate.length
-            && Array.isArray(candidate[0])
-            && typeof candidate[0][0] === 'number') {
+      try {
+        const envs = (_vmSnap && Array.isArray(_vmSnap.rawEnvelopes)) ? _vmSnap.rawEnvelopes : [];
+        for (let i = envs.length - 1; i >= 0; i--) {
+          const p = envs[i] && envs[i].payload;
+          if (!p) continue;
+          const candidate = p.grid || p.cells || p.matrix;
+          if (!Array.isArray(candidate) || !candidate.length) continue;
+          if (!Array.isArray(candidate[0])) continue;
+          if (typeof candidate[0][0] !== 'number') continue;
+          const rows = candidate.length;
+          const cols = candidate[0].length;
+          if (rows * cols > SCENE_MAX_CELLS) return null;
           return candidate;
         }
-      }
+      } catch (_) { /* malformed payload — fall to empty state */ }
       return null;
     };
     const _liveGrid = _findGrid();
-    const graphGrid = _liveGrid || [];
+    const graphGrid: number[][] = Array.isArray(_liveGrid) ? _liveGrid : [];
     const surf = state.surface;
     // The assay surface reads the controller's assay listing once
     // loadAssays lands (deferred until substrate exposes the projection
@@ -1653,7 +1685,29 @@ class Component extends DCLogic {
       ),
       fpDdOpen: state.ddFor === fp.id && state.revealed, fpToggleDd: () => this.setState(s => ({ ddFor: s.ddFor === fp.id ? null : fp.id, wsFor: null })),
       fpWsOpen: state.wsFor === fp.id && state.revealed, fpToggleWs: () => this.setState(s => ({ wsFor: s.wsFor === fp.id ? null : fp.id, ddFor: null })),
-      fpDriverOpts: ((state.driverRoster && state.driverRoster.length) ? state.driverRoster : ['deterministic']).map(m => ({ label: m, color: m === fp.driver ? '#e2e5e9' : '#9aa0a8', pick: () => { this.setState(s => ({ ddFor: null, panes: s.panes.map(x => x.id === fp.id ? Object.assign({}, x, { driver: m }) : x) })); const vm = window.__vm; if (vm) vm.pickDriver(m); } })),
+      fpDriverOpts: (() => {
+        const groups = (state.driverGroups && state.driverGroups.length)
+          ? state.driverGroups
+          : [{ label: '', entries: (state.driverRoster && state.driverRoster.length) ? state.driverRoster : ['deterministic'] }];
+        const items: Array<{ label: string; color: string; isHeader: boolean; notHeader: boolean; pick: () => void }> = [];
+        const noop = () => undefined;
+        for (const grp of groups) {
+          if (grp.label) items.push({ label: grp.label, color: '#62676f', isHeader: true, notHeader: false, pick: noop });
+          for (const m of grp.entries) {
+            items.push({
+              label: m,
+              color: m === fp.driver ? '#e2e5e9' : '#9aa0a8',
+              isHeader: false, notHeader: true,
+              pick: () => {
+                this.setState(s => ({ ddFor: null, panes: s.panes.map(x => x.id === fp.id ? Object.assign({}, x, { driver: m }) : x) }));
+                const vm = window.__vm;
+                if (vm) vm.pickDriver(m);
+              },
+            });
+          }
+        }
+        return items;
+      })(),
       recordsColor: surf === Surface.Records ? '#e2e5e9' : '#9aa0a8',
       studioColor: surf === Surface.Studio ? '#e2e5e9' : '#9aa0a8',
       showTerminal: !surf && !state.revealed, showRevealed: !surf && state.revealed,
@@ -1736,7 +1790,11 @@ class Component extends DCLogic {
       sceneRows: graphGrid.length,
       sceneCols: (graphGrid[0] && graphGrid[0].length) || 0,
       sceneGridCols: `repeat(${(graphGrid[0] && graphGrid[0].length) || 12}, 1fr)`,
-      sceneCells: graphGrid.flat().map(v => ({ bg: v ? '#82a5c8' : '#1a1c20' })),
+      sceneCells: (() => {
+        try {
+          return graphGrid.flat().map((v) => ({ bg: v ? '#82a5c8' : '#1a1c20' }));
+        } catch (_) { return []; }
+      })(),
       arms,
       topoName: state.topoName, updTopoName: (ev) => this.setState({ topoName: ev.target.value }),
       prodRows: state.prods.map((p, i) => ({

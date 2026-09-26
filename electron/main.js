@@ -134,7 +134,7 @@ function createWindow() {
     title: "substrate",
     backgroundColor: "#212327",
     titleBarStyle: "hiddenInset",
-    trafficLightPosition: { x: 12, y: 16 },
+    trafficLightPosition: { x: 12, y: 13 },
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -151,7 +151,7 @@ function createWindow() {
       pendingDeepLinks.length = 0;
     }
   });
-  mainWindow.loadURL("http://127.0.0.1:" + serverPort + "/?atom-transcript=1");
+  mainWindow.loadURL("http://127.0.0.1:" + serverPort + "/?atom-transcript=1&electron=1");
   if (process.env.SUBSTRATE_UI_DEBUG === "1") {
     mainWindow.webContents.openDevTools({ mode: "detach" });
   }

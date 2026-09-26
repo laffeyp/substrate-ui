@@ -58,6 +58,7 @@ function computeStatePatch(snap: Snapshot): Record<string, unknown> {
     controllerSnapshot: snap,
     driverRoster: snap.driverRoster,
     driverDefault: snap.driverDefault,
+    driverGroups: snap.driverGroups,
     recentWorkspaces: snap.recentWorkspaces,
     liveSessionsFromServer: snap.liveSessions,
     bundleRoster: snap.bundleRoster,
@@ -92,6 +93,28 @@ function boot(): void {
   const attachId = params.get("session");
   if (attachId) {
     controller.attachExisting(attachId).catch(() => undefined);
+  }
+
+  // Sprint 083 — Electron top-bar cooperation. `?electron=1` (set by
+  // electron/main.js loadURL) flips body[data-electron="1"]. A single
+  // scoped stylesheet then hides the decorative dot triads (Chromium
+  // draws the real traffic-lights over that same inset under
+  // titleBarStyle:'hiddenInset'), left-pads the four top-bar
+  // containers by 78px to yield the inset, and marks the containers
+  // draggable while keeping interactive descendants no-drag.
+  if (params.get("electron") === "1") {
+    document.body.setAttribute("data-electron", "1");
+    const style = document.createElement("style");
+    style.setAttribute("data-electron-shell", "1");
+    style.textContent = [
+      'body[data-electron="1"] [data-fake-lights]{display:none!important}',
+      'body[data-electron="1"] [data-top-bar]{padding-left:78px!important;min-height:38px!important;box-sizing:border-box!important;-webkit-app-region:drag}',
+      'body[data-electron="1"] [data-top-bar] input,',
+      'body[data-electron="1"] [data-top-bar] button,',
+      'body[data-electron="1"] [data-top-bar] [style*="cursor:pointer"],',
+      'body[data-electron="1"] [data-top-bar] [style*="cursor: pointer"]{-webkit-app-region:no-drag}',
+    ].join("\n");
+    document.head.appendChild(style);
   }
 
   let component: DCLogicHandle | null = null;
