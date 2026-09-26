@@ -466,18 +466,15 @@ export class SessionController {
     // the session is not using; the session's driver is fixed at open.
     // Users end the session (or open a new pane) to switch drivers.
     if (this.snap.sessionId) return;
-    this.patch({ driver: name });
+    // Sprint 085c — sweep any AuthPromptCard for the previous driver.
+    // Before a session is bound the card is speculative; switching
+    // drivers should replace the card, not stack a new one on top.
+    // Unmount fires the card's cleanup which POSTs pty/close server-side.
+    const swept = this.snap.transcript.filter((row) => row.kind !== "AuthPrompt");
+    this.patch({ driver: name, transcript: swept });
     this.emit("DRIVER_PICKED", { driver: name });
-    // Sprint 085b — if a CLI driver was picked and it's not authed,
-    // open the AuthPromptCard in the transcript so the user can
-    // complete the CLI's own login flow inside Substrate. Fire-and-
-    // forget; a status probe failure or an authed CLI both leave the
-    // transcript alone. The list of catalog CLI names is small; a
-    // cross-check against driverGroups.cli avoids probing Ollama tags.
     // Only fire the auth card for CLIs whose login flow fits the
-    // AuthPromptCard's text-stream shape. Server ships that subset as
-    // cli_login_supported; opencode is a driver but its TUI login walk
-    // is out of scope.
+    // AuthPromptCard shape. Server ships that subset as cli_login_supported.
     if (this.cliLoginSupported.includes(name)) {
       this.maybeOpenAuthPrompt(name);
     }

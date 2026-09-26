@@ -640,13 +640,10 @@ KNOWN_CLI_ADAPTERS: dict[str, dict[str, list[str] | None]] = {
     "opencode":     {
         "command": ["opencode", "run"],
         # opencode's `auth login` is a full TUI walk (provider picker,
-        # method picker, credential entry). The AuthPromptCard renders a
-        # text stream, not a full terminal, so the walk garbles under
-        # stripAnsi. Dropped from the login-card path 2026-09-25;
-        # opencode returns to the auth flow via the future API-key
-        # dropdown section. `logout_command` kept so a logged-in user
-        # can clear via /api/cli/opencode/logout.
-        "login_command": None,
+        # method picker, credential entry). Sprint 085c AuthPromptCard
+        # is a real ANSI terminal that handles arrow-key navigation +
+        # cursor moves + SGR, so the walk renders and drives correctly.
+        "login_command": ["opencode", "auth", "login"],
         "logout_command": ["opencode", "auth", "logout"],
         "status_command": ["opencode", "auth", "list"],
     },
