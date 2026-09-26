@@ -10,7 +10,7 @@
 //
 // Sprint 079 replaces the hard-coded 8765 with --port 0 + readback.
 
-const { app, BrowserWindow, shell } = require("electron");
+const { app, BrowserWindow, shell, ipcMain } = require("electron");
 const { spawn } = require("node:child_process");
 const http = require("node:http");
 const path = require("node:path");
@@ -235,3 +235,9 @@ app.on("window-all-closed", () => {
 });
 
 app.on("before-quit", killServerGroup);
+
+// Sprint 085 followup — renderer asks main to close the current window
+// when Cmd-W closes the last remaining pane.
+ipcMain.on("native:close-window", () => {
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.close();
+});

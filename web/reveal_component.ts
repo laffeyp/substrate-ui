@@ -506,6 +506,31 @@ class Component extends DCLogic {
         allSessions: [...(s.allSessions || []), { id, name: pane.name, driver: pane.driver, ws }] };
     });
   }
+  _closePane(paneId) {
+    // Sprint 085 followup — Cmd-W: end this pane's session (like /exit)
+    // then remove the pane from the layout. On the last remaining pane
+    // ask Electron to close the window; in a plain browser tab leave
+    // the last pane alone.
+    const vm = window.__vm;
+    const controller = vm && typeof vm.get === "function" ? vm.get(paneId) : null;
+    if (controller && controller.snapshot().sessionId) {
+      controller.endSession("user_close").catch(() => undefined);
+    }
+    if (vm && typeof vm.drop === "function") vm.drop(paneId);
+    this.setState(s => {
+      const remaining = s.panes.filter(p => p.id !== paneId);
+      if (remaining.length === 0) {
+        const native = window.native;
+        if (native && typeof native.closeWindow === "function") native.closeWindow();
+        return {};
+      }
+      // Refocus the first remaining pane; grid layout stays as-is
+      // (freed cells become gaps, harmless — user can split into them
+      // again or close more panes).
+      return { panes: remaining, focused: remaining[0].id };
+    });
+  }
+
   _split(dir) {
     // Each split adds exactly one pane, up to a hard cap of eight.
     // The focused pane's cell is halved along the requested axis; the
@@ -573,6 +598,20 @@ class Component extends DCLogic {
     // events. A live tool that takes 12s emits no envelopes for 12s;
     // without a tick the counter reads its start value the whole time.
     this._activityTick = window.setInterval(() => this.forceUpdate(), 500);
+    // Sprint 085 followup — close driver/workspace dropdowns on
+    // outside click. Each dropdown wrapper span in reveal.html carries
+    // data-dropdown-region; a mousedown outside any of them clears
+    // ddFor + wsFor. The chip that toggles the dropdown sits INSIDE
+    // the same wrapper, so clicking the chip does not trigger the
+    // outside-close (chip's own onClick fires the toggle).
+    this._ddOutside = (ev) => {
+      const s = this.state;
+      if (!s.ddFor && !s.wsFor) return;
+      const target = ev.target;
+      if (target instanceof Element && target.closest("[data-dropdown-region]")) return;
+      this.setState({ ddFor: null, wsFor: null });
+    };
+    document.addEventListener("mousedown", this._ddOutside, true);
     this._kd = (e) => {
       if (e.ctrlKey && e.key === '\u0060') { e.preventDefault(); this.setState(s => ({ revealed: !s.revealed, surface: null })); }
       if (e.metaKey && (e.key === 'd' || e.key === 'D')) { e.preventDefault(); this._split(e.shiftKey ? 'down' : 'right'); }
@@ -663,7 +702,7 @@ class Component extends DCLogic {
     }
     if (changed('view') && pv && (pv === 'revealed') !== state.revealed) this.setState({ revealed: pv === 'revealed', surface: null });
   }
-  componentWillUnmount() { window.removeEventListener('keydown', this._kd); window.removeEventListener('mousemove', this._mm); window.removeEventListener('mouseup', this._mu); window.removeEventListener('resize', this._rs); if (this._activityTick) { window.clearInterval(this._activityTick); this._activityTick = null; } }
+  componentWillUnmount() { window.removeEventListener('keydown', this._kd); window.removeEventListener('mousemove', this._mm); window.removeEventListener('mouseup', this._mu); window.removeEventListener('resize', this._rs); if (this._ddOutside) document.removeEventListener('mousedown', this._ddOutside, true); if (this._activityTick) { window.clearInterval(this._activityTick); this._activityTick = null; } }
   _upd(arrKey, i, field) { return (ev) => this.setState(s => { const arr = s[arrKey].map((x, j) => j === i ? Object.assign({}, x, { [field]: ev.target.value }) : x); return { [arrKey]: arr }; }); }
   _rm(arrKey, i) { return () => this.setState(s => ({ [arrKey]: s[arrKey].filter((x, j) => j !== i) })); }
   _validate() {

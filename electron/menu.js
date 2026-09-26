@@ -58,9 +58,20 @@ function buildTemplate(getWin) {
         },
         { type: "separator" },
         {
+          // Sprint 085 followup — Cmd-W closes the focused PANE, not
+          // the window (standard tab-close convention). The renderer
+          // ends the pane's session (like /exit) then removes the pane
+          // from the layout; if it was the last pane it falls back to
+          // closing the window.
+          id: "menu-close-pane",
+          label: "Close Pane",
+          accelerator: "CmdOrCtrl+W",
+          click: () => send(getWin(), "close-pane"),
+        },
+        {
           id: "menu-close-window",
           label: "Close Window",
-          accelerator: "CmdOrCtrl+W",
+          accelerator: "CmdOrCtrl+Shift+W",
           click: () => { const win = getWin(); if (win) win.close(); },
         },
       ],

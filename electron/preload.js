@@ -23,6 +23,7 @@ const deepLinkListeners = new Set();
 
 ipcRenderer.on("menu:new-session", (_e, p) => dispatchMenu("new-session", p));
 ipcRenderer.on("menu:open-record", (_e, p) => dispatchMenu("open-record", p));
+ipcRenderer.on("menu:close-pane", (_e, p) => dispatchMenu("close-pane", p));
 ipcRenderer.on("menu:close-window", (_e, p) => dispatchMenu("close-window", p));
 ipcRenderer.on("menu:toggle-reveal", (_e, p) => dispatchMenu("toggle-reveal", p));
 ipcRenderer.on("deep-link", (_e, url) => dispatchDeepLink(url));
@@ -52,5 +53,8 @@ contextBridge.exposeInMainWorld("native", {
     deepLinkListeners.add(cb);
     return () => deepLinkListeners.delete(cb);
   },
+  // Sprint 085 followup — renderer-triggered window close, used when
+  // Cmd-W closes the last remaining pane and the app should exit.
+  closeWindow: () => ipcRenderer.send("native:close-window"),
 });
 
