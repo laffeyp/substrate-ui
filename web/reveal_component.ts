@@ -502,26 +502,18 @@ class Component extends DCLogic {
   _bindPane(id, ws, opts) {
     this.setState(s => {
       const pane = s.panes.find(p => p.id === id); if (!pane || !pane.unbound) return {};
-      // Kinds: default = per-session sandbox (substrate mints
-      // ~/.substrate/sessions/<id>/workspace); sandbox = shared
-      // ~/.substrate/sandbox; flat = user-picked directory
-      // (internal name only; never surfaced to the user).
+      // Kinds: 'default' = fresh per-session sandbox (substrate mints
+      // ~/.substrate/sessions/<id>/workspace); 'sandbox' = the shared
+      // ~/.substrate/sandbox; 'flat' = any user-picked directory.
       const isDefault = !!(opts && opts.isDefault);
       const shape = isDefault ? 'isolated' : (ws === '~/.substrate/sandbox' ? 'sandbox' : 'flat');
       // Session open elsewhere reads pane.ws. Empty ws leaves the
-      // workspace field off the POST so substrate mints its own
-      // per-session sandbox.
+      // workspace field off the POST so substrate falls back to its
+      // per-session isolated default.
       const boundWs = isDefault ? '' : ws;
-      const displayWs = isDefault ? 'per session sandbox' : ws;
-      // User-visible suffix: worktree shows a branch; sandbox stays
-      // named; the internal 'flat' kind gets no suffix at all so
-      // nothing in the UI reads that word.
-      const suffix = shape === 'worktree' ? ' · worktree substrate/' + pane.name
-        : shape === 'sandbox' ? ' · sandbox'
-        : shape === 'isolated' ? ''
-        : '';
+      const displayWs = isDefault ? 'fresh per-session sandbox' : ws;
       const lines = [
-        { t: 'session ' + pane.name + ' started · driver ' + pane.driver + ' · ' + displayWs + suffix, c: '#62676f' },
+        { t: 'session ' + pane.name + ' started · driver ' + pane.driver + ' · ' + displayWs + (shape === 'worktree' ? ' · worktree substrate/' + pane.name : ' · ' + shape), c: '#62676f' },
         { t: '◐ parked — awaiting your first message', c: '#82a5c8' }];
       return { panes: s.panes.map(p => p.id === id ? Object.assign({}, p, { unbound: false, ws: boundWs, shape, lines }) : p),
         allSessions: [...(s.allSessions || []), { id, name: pane.name, driver: pane.driver, ws: boundWs }] };
@@ -952,16 +944,14 @@ class Component extends DCLogic {
         const inheritFrom = this.state.panes.find(pp => pp.id !== p.id && !pp.unbound && !!pp.ws);
         const inheritPath = inheritFrom ? inheritFrom.ws : null;
         const rows = [];
-        // First row: substrate mints a per-session sandbox at
+        // Default row: substrate mints a fresh per-session sandbox at
         // ~/.substrate/sessions/<id>/workspace. Path stays empty so
-        // openSession sends no workspace field.
-        rows.push({ path: 'per session sandbox', meta: '', kind: 'default' });
+        // openSession sends no workspace field and substrate uses its
+        // own default.
+        rows.push({ path: '(default — fresh per-session sandbox)', meta: 'substrate manages · isolated', kind: 'default' });
         if (inheritPath) rows.push({ path: inheritPath, meta: 'inherit · from ' + (inheritFrom.name || 'split'), kind: 'inherit' });
-        rows.push({ path: '~/.substrate/sandbox', meta: 'shared scratch', kind: 'sandbox' });
-        for (const r of userFolders) {
-          const shapeLabel = r.shape === 'worktree' ? 'git' : '';
-          rows.push({ path: r.path, meta: shapeLabel, kind: 'recent' });
-        }
+        rows.push({ path: '~/.substrate/sandbox', meta: 'sandbox · shared across sessions', kind: 'sandbox' });
+        for (const r of userFolders) rows.push({ path: r.path, meta: r.shape, kind: 'recent' });
         rows.push({ path: 'choose folder…', meta: '', kind: 'choose', key: '⌘O' });
         if (p.wsQ) rows.unshift({ path: p.wsQ, meta: 'typed — ↵ binds + starts', kind: 'typed', key: '↵' });
         const selIdx = Math.max(0, Math.min(p.wsSelIdx || 0, rows.length - 1));
@@ -995,7 +985,7 @@ class Component extends DCLogic {
           const userFolders = ((studioState.recentWorkspaces || []).filter(r => !skip(r)));
           const inheritFrom = studioState.panes.find(pp => pp.id !== p.id && !pp.unbound && !!pp.ws);
           const rows = [];
-          rows.push({ path: 'per session sandbox', kind: 'default' });
+          rows.push({ path: '(default — fresh per-session sandbox)', kind: 'default' });
           if (inheritFrom) rows.push({ path: inheritFrom.ws, kind: 'inherit' });
           rows.push({ path: '~/.substrate/sandbox', kind: 'sandbox' });
           for (const r of userFolders) rows.push({ path: r.path, kind: 'recent' });
@@ -1129,11 +1119,8 @@ class Component extends DCLogic {
       hintW: state.dropHint && (state.dropHint.zone === 'w' || state.dropHint.zone === 'e') ? '50%' : '100%',
       hintH: state.dropHint && (state.dropHint.zone === 'n' || state.dropHint.zone === 's') ? '50%' : (state.dropHint && (state.dropHint.zone === 'w' || state.dropHint.zone === 'e') ? '100%' : '100%'),
       branch: p.shape === 'worktree' ? 'substrate/' + (p.name || 'main') : (p.ws || ''),
-      wsPath: p.ws || 'per session sandbox',
-      wsShape: p.shape === 'worktree' ? 'git worktree'
-        : p.shape === 'sandbox' ? 'shared sandbox'
-        : p.shape === 'isolated' ? 'per session sandbox'
-        : 'directory',
+      wsPath: p.ws || '~/.substrate/sandbox',
+      wsShape: p.shape || 'sandbox',
       ddOpen: state.ddFor === p.id, wsOpenP: state.wsFor === p.id,
       // Clip the header by default so a narrow pane's chip row does not
       // bleed sideways into the next pane. Restore `visible` while a
@@ -1812,10 +1799,10 @@ class Component extends DCLogic {
       const total = paged ? paged.total : totalInMemory;
       _workspaceGroups.push({
         path: ws.path,
-        shapeLabel: ws.shape === 'worktree' ? 'git worktree'
-          : ws.shape === 'sandbox' ? 'shared sandbox'
-          : ws.shape === 'per-session-sandboxes' ? 'per session sandboxes · substrate-managed'
-          : 'directory',
+        shapeLabel: ws.shape === 'worktree' ? 'git · sessions get worktrees'
+          : ws.shape === 'sandbox' ? 'sandbox'
+          : ws.shape === 'per-session-sandboxes' ? 'per-session sandboxes · substrate-managed'
+          : ws.shape,
         sessions: shownRows.map(_mapSession),
         countLabel: total === 1 ? '1 session' : `${total} sessions`,
         expanded, notExpanded: !expanded, chevron: expanded ? '▾' : '▸',
@@ -2155,11 +2142,8 @@ class Component extends DCLogic {
       revealGrab: (ev) => { ev.preventDefault(); this._gut = { type: 'reveal' }; },
       colGutters: state.colW.slice(0, -1).map((_, i) => { const total = state.colW.reduce((a, b) => a + b, 0); const left = state.colW.slice(0, i + 1).reduce((a, b) => a + b, 0) / total * 100; return { left: left.toFixed(2) + '%', grab: (ev) => { ev.preventDefault(); this._gut = { type: 'col', i: i + 1 }; } }; }),
       rowGutters: state.rowW.slice(0, -1).map((_, i) => { const total = state.rowW.reduce((a, b) => a + b, 0); const top = state.rowW.slice(0, i + 1).reduce((a, b) => a + b, 0) / total * 100; return { top: top.toFixed(2) + '%', grab: (ev) => { ev.preventDefault(); this._gut = { type: 'row', i: i + 1 }; } }; }), focusedBranch: fp.shape === 'worktree' ? 'substrate/' + (fp.name || 'main') : (fp.ws || ''),
-      focusedWorkspace: fp.ws || 'per session sandbox',
-      focusedShape: fp.shape === 'worktree' ? 'git worktree'
-        : fp.shape === 'sandbox' ? 'shared sandbox'
-        : fp.shape === 'isolated' ? 'per session sandbox'
-        : 'directory',
+      focusedWorkspace: fp.ws || '~/.substrate/sandbox',
+      focusedShape: fp.shape || 'sandbox',
       // Every pane's reveal view renders the full machinery lens now
       // that every pane has its own controller. The old
       // notMainFocused branch showed only the scripted pane.lines and
