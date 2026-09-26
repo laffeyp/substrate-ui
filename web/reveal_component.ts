@@ -948,7 +948,7 @@ class Component extends DCLogic {
         // ~/.substrate/sessions/<id>/workspace. Path stays empty so
         // openSession sends no workspace field and substrate uses its
         // own default.
-        rows.push({ path: 'per session sandbox', meta: '', kind: 'default' });
+        rows.push({ path: 'per session sandbox', meta: 'substrate manages · isolated', kind: 'default' });
         if (inheritPath) rows.push({ path: inheritPath, meta: 'inherit · from ' + (inheritFrom.name || 'split'), kind: 'inherit' });
         rows.push({ path: '~/.substrate/sandbox', meta: 'sandbox · shared across sessions', kind: 'sandbox' });
         for (const r of userFolders) rows.push({ path: r.path, meta: 'recent', kind: 'recent' });
