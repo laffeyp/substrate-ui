@@ -951,7 +951,7 @@ class Component extends DCLogic {
         rows.push({ path: 'per session sandbox', meta: '', kind: 'default' });
         if (inheritPath) rows.push({ path: inheritPath, meta: 'inherit · from ' + (inheritFrom.name || 'split'), kind: 'inherit' });
         rows.push({ path: '~/.substrate/sandbox', meta: 'sandbox · shared across sessions', kind: 'sandbox' });
-        for (const r of userFolders) rows.push({ path: r.path, meta: '', kind: 'recent' });
+        for (const r of userFolders) rows.push({ path: r.path, meta: 'recent', kind: 'recent' });
         rows.push({ path: 'choose folder…', meta: '', kind: 'choose', key: '⌘O' });
         if (p.wsQ) rows.unshift({ path: p.wsQ, meta: 'typed — ↵ binds + starts', kind: 'typed', key: '↵' });
         const selIdx = Math.max(0, Math.min(p.wsSelIdx || 0, rows.length - 1));
