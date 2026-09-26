@@ -205,14 +205,20 @@ def _daemon_driver_resolver(name: str, params: dict[str, Any] | None = None) -> 
         except Exception:  # noqa: BLE001 — /api/show unreachable → fall back
             advertised = 32768
         num_ctx_default = min(advertised, 262144)
+        # Sprint 085 followup — think capability is per model. Ollama returns
+        # 400 "model does not support thinking" when think:true is sent to
+        # a non-thinking model (e.g. huihui_ai/qwen2.5-coder-abliterate:7b).
+        # Sprint 045 defaulted think=True across the board for the cloud
+        # reasoning models; that broke local coder models. Probe the
+        # model's capabilities via /api/show and let it decide.
+        think_default = _model_supports_thinking(name)
         responder = OllamaResponder(
             model=name,
-            # Sprint 045: thinking defaults ON. The daily-driver is a real
-            # reasoning workflow, not a benchmark path — kimi-k2.7-code,
-            # glm-5.2, and nemotron-3-super all produce measurably better
-            # answers with think=True. Callers who need it off pass it
-            # explicitly (or /set think off mid-session).
-            think=bool(p.get("think", True)),
+            # Cloud reasoning models (kimi/glm/nemotron/deepseek-v4) advertise
+            # `thinking` in /api/show capabilities and get think=True by
+            # default. Coder models (qwen2.5-coder, etc) do not and get
+            # think=False. Explicit driver_params["think"] wins over the probe.
+            think=bool(p.get("think", think_default)),
             max_tokens=int(p.get("max_tokens", 0)),
             num_ctx=int(p.get("num_ctx", num_ctx_default)),
             timeout=float(p.get("timeout", 300.0)),
@@ -642,6 +648,34 @@ KNOWN_CLI_ADAPTERS: dict[str, dict[str, list[str] | None]] = {
         "status_command": ["opencode", "auth", "list"],
     },
 }  # gemini removed 2026-09-25 — the Gemini CLI is deprecated upstream.
+
+
+_MODEL_THINKING_CACHE: dict[str, bool] = {}
+
+
+def _model_supports_thinking(name: str) -> bool:
+    """Probe Ollama's /api/show for the model's capabilities; returns True iff
+    "thinking" is in the capabilities list. Cached per-model for the process
+    lifetime — capabilities don't change without a re-pull. Falls back to True
+    on any probe failure so the daily cloud reasoning path (kimi/glm/nemotron)
+    keeps its Sprint 045 default when Ollama's probe is unreachable."""
+    if name in _MODEL_THINKING_CACHE:
+        return _MODEL_THINKING_CACHE[name]
+    import urllib.request as _u
+    try:
+        req = _u.Request(  # noqa: S310 - localhost
+            "http://localhost:11434/api/show",
+            data=msgspec.json.encode({"name": name}),
+            headers={"Content-Type": "application/json"},
+        )
+        with _u.urlopen(req, timeout=3) as r:  # noqa: S310
+            info = msgspec.json.decode(r.read())
+        caps = info.get("capabilities") or []
+        result = "thinking" in caps
+    except Exception:  # noqa: BLE001 — Ollama unreachable → keep the Sprint 045 default
+        result = True
+    _MODEL_THINKING_CACHE[name] = result
+    return result
 
 
 def _cli_command(name: str) -> list[str] | None:
