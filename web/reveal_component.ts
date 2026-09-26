@@ -509,9 +509,10 @@ class Component extends DCLogic {
   _closePane(paneId) {
     // Sprint 085 followup — Cmd-W: end this pane's session (like /exit)
     // then remove the pane from the layout, absorbing its cells back
-    // into the neighbour that shares its closing edge. On the last
-    // remaining pane ask Electron to close the window; in a plain
-    // browser tab leave the last pane alone.
+    // into the neighbour that shares its closing edge. Cmd-W on the
+    // last remaining pane does nothing — the pane stays open. The app
+    // never closes from Cmd-W; use Cmd-Shift-W for that.
+    if (this.state.panes.length <= 1) return;
     const vm = window.__vm;
     const controller = vm && typeof vm.get === "function" ? vm.get(paneId) : null;
     if (controller && controller.snapshot().sessionId) {
@@ -521,11 +522,9 @@ class Component extends DCLogic {
     this.setState(s => {
       const closed = s.panes.find(p => p.id === paneId);
       const remaining = s.panes.filter(p => p.id !== paneId);
-      if (remaining.length === 0) {
-        const native = window.native;
-        if (native && typeof native.closeWindow === "function") native.closeWindow();
-        return {};
-      }
+      // Guard again inside setState in case a race added/removed panes
+      // between the outer check and the state resolve.
+      if (remaining.length === 0) return {};
       // Single-pane collapse: reset the grid to one cell and hand it
       // to the remaining pane. Simplest correct outcome for the split-
       // once-then-close-once case Peter hit.
