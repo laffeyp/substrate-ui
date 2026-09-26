@@ -10,7 +10,7 @@
 //
 // Sprint 079 replaces the hard-coded 8765 with --port 0 + readback.
 
-const { app, BrowserWindow } = require("electron");
+const { app, BrowserWindow, shell } = require("electron");
 const { spawn } = require("node:child_process");
 const http = require("node:http");
 const path = require("node:path");
@@ -150,6 +150,26 @@ function createWindow() {
       for (const url of pendingDeepLinks) mainWindow.webContents.send("deep-link", url);
       pendingDeepLinks.length = 0;
     }
+  });
+  // Sprint 085b follow-up: route external links to the OS default browser
+  // instead of spawning a new Electron window. The AuthPromptCard renders
+  // OAuth URLs (codex device page, cursor login page, opencode provider
+  // pages) as <a target="_blank">; users already have their vendor logins
+  // in Safari/Chrome/Firefox. Anything not on the app's own origin gets
+  // shell.openExternal + deny.
+  const isExternal = (url) => {
+    if (!/^https?:\/\//i.test(url)) return false;
+    try {
+      const app_origin = new URL("http://127.0.0.1:" + serverPort).origin;
+      return new URL(url).origin !== app_origin;
+    } catch (_) { return true; }
+  };
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (isExternal(url)) shell.openExternal(url);
+    return { action: "deny" };
+  });
+  mainWindow.webContents.on("will-navigate", (event, url) => {
+    if (isExternal(url)) { event.preventDefault(); shell.openExternal(url); }
   });
   mainWindow.loadURL("http://127.0.0.1:" + serverPort + "/?atom-transcript=1&electron=1");
   if (process.env.SUBSTRATE_UI_DEBUG === "1") {
