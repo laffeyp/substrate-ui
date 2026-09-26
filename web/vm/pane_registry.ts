@@ -118,6 +118,7 @@ export class PaneRegistry {
   attachRecordRoot(recordRoot: string): Promise<void> { return this.active().attachRecordRoot(recordRoot); }
   pickDriver(name: string): void { this.active().pickDriver(name); }
   pickBundle(slug: string | null): void { this.active().pickBundle(slug); }
+  pickWorkspace(path: string | null): void { this.active().pickWorkspace(path); }
   interruptTurn(tier: "soft" | "hard" = "hard", recordRoot?: string): Promise<void> { return this.active().interruptTurn(tier, recordRoot); }
   validateSpec(spec: Record<string, unknown>): Promise<{ valid: boolean; error?: string }> { return this.active().validateSpec(spec); }
   buildSpec(spec: Record<string, unknown>): Promise<{ ok: boolean; run?: Record<string, unknown>; error?: string }> { return this.active().buildSpec(spec); }

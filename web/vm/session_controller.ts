@@ -334,7 +334,13 @@ export class SessionController {
       ?? "deterministic";
     const body: Record<string, unknown> = { driver };
     if (request.driverParams) body.driver_params = request.driverParams;
-    if (request.workspace) body.workspace = request.workspace;
+    // Sprint 086 followup — the picker sets snap.workspacePath via
+    // pickWorkspace when the user picks a real folder. Fall back to
+    // that if the caller passed no explicit request.workspace, so a
+    // sendTurn() with no args opens the session in the picked folder
+    // instead of substrate's default per-session sandbox.
+    const workspace = request.workspace ?? this.snap.workspacePath ?? undefined;
+    if (workspace) body.workspace = workspace;
     if (request.workspaceShape) body.workspace_shape = request.workspaceShape;
     const bundle = request.bundle ?? this.snap.bundleSlug;
     if (bundle) body.bundle = bundle;
@@ -550,6 +556,15 @@ export class SessionController {
     if (this.snap.sessionId) return;
     this.patch({ bundleSlug: slug });
     this.emit("BUNDLE_PICKED", { bundle: slug });
+  }
+
+  /** Sprint 086 followup — thread the picker's chosen workspace into
+   *  the controller so the next openSession sends it as the workspace
+   *  field. Empty string clears (falls back to substrate's per-session
+   *  sandbox default). Silent no-op once a session is bound. */
+  pickWorkspace(path: string | null): void {
+    if (this.snap.sessionId) return;
+    this.patch({ workspacePath: (path ?? "") || null });
   }
 
   /** Post an authored topology spec to /api/validate. Returns

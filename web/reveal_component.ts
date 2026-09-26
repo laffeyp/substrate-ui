@@ -463,22 +463,31 @@ class Component extends DCLogic {
     return out;
   }
   async _pickFolder(paneId) {
-    // ⌘O — a native folder picker. `showDirectoryPicker` is the File
-    // System Access API: it names a directory WITHOUT uploading every
-    // file inside it. Not every browser has it; when it is missing, we
-    // do NOT fall back to <input webkitdirectory> — that prompt reads
-    // as "upload every file in the folder", which is the wrong verb.
-    // Instead we focus the type-a-path input and leave a status note
-    // so the user knows to type.
-    if (typeof window.showDirectoryPicker === 'function') {
+    // Prefer Electron's native folder dialog — returns the folder's
+    // real absolute path, which the session actually opens in.
+    // The old showDirectoryPicker path returned only the folder's
+    // basename ('substrate-ui'), which caused every "choose folder"
+    // session to silently fall back to a per-session sandbox and
+    // never persist.
+    const native = window.native;
+    if (native && typeof native.pickFolder === 'function') {
       try {
-        const handle = await window.showDirectoryPicker({ id: 'substrate-workspace', mode: 'read' });
-        if (handle && handle.name) this._bindPane(paneId, handle.name);
-      } catch (_e) { /* user cancelled */ }
+        const path = await native.pickFolder();
+        if (!path) return; // user cancelled
+        // Persist to ~/.substrate/recent-workspaces.json.
+        const vm = window.__vm;
+        if (vm && typeof vm.addWorkspace === 'function') {
+          await vm.addWorkspace(path);
+        }
+        // Bind the pane's UI state AND thread the workspace into the
+        // controller so the next openSession picks it up.
+        if (vm && typeof vm.pickWorkspace === 'function') vm.pickWorkspace(path);
+        this._bindPane(paneId, path);
+      } catch (_e) { /* dialog failed */ }
       return;
     }
-    // Fallback: focus the input, drop a hint. No upload dialog.
-    this.setState(st => ({ panes: st.panes.map(p => p.id === paneId ? Object.assign({}, p, { wsQ: '', wsHint: 'this browser has no folder picker — type the path here' }) : p) }));
+    // Non-Electron fallback: focus the type-a-path input.
+    this.setState(st => ({ panes: st.panes.map(p => p.id === paneId ? Object.assign({}, p, { wsQ: '', wsHint: 'no native folder picker — type the path here' }) : p) }));
     setTimeout(() => {
       const el = document.querySelector('input[placeholder^="type a path"]');
       if (el) el.focus();
@@ -962,6 +971,14 @@ class Component extends DCLogic {
           pick: () => {
             if (row.kind === 'choose') { this._pickFolder(p.id); return; }
             if (row.kind === 'default') { this._bindPane(p.id, '', { isDefault: true }); return; }
+            const vm = window.__vm;
+            if (vm && typeof vm.pickWorkspace === 'function') vm.pickWorkspace(row.path);
+            // Typed rows and recent/sandbox/inherit rows all persist
+            // to the recent-workspaces list so a folder you use once
+            // shows up next boot without re-picking.
+            if (vm && typeof vm.addWorkspace === 'function' && row.path !== '~/.substrate/sandbox') {
+              void vm.addWorkspace(row.path);
+            }
             this._bindPane(p.id, row.path);
           },
         }));
@@ -1006,6 +1023,11 @@ class Component extends DCLogic {
           if (!row) return;
           if (row.kind === 'choose') { this._pickFolder(p.id); return; }
           if (row.kind === 'default') { this._bindPane(p.id, '', { isDefault: true }); return; }
+          const vm = window.__vm;
+          if (vm && typeof vm.pickWorkspace === 'function') vm.pickWorkspace(row.path);
+          if (vm && typeof vm.addWorkspace === 'function' && row.path !== '~/.substrate/sandbox') {
+            void vm.addWorkspace(row.path);
+          }
           this._bindPane(p.id, row.path);
         }
       },
