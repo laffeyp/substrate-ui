@@ -948,10 +948,10 @@ class Component extends DCLogic {
         // ~/.substrate/sessions/<id>/workspace. Path stays empty so
         // openSession sends no workspace field and substrate uses its
         // own default.
-        rows.push({ path: '(default — fresh per-session sandbox)', meta: 'substrate manages · isolated', kind: 'default' });
+        rows.push({ path: 'per session sandbox', meta: '', kind: 'default' });
         if (inheritPath) rows.push({ path: inheritPath, meta: 'inherit · from ' + (inheritFrom.name || 'split'), kind: 'inherit' });
         rows.push({ path: '~/.substrate/sandbox', meta: 'sandbox · shared across sessions', kind: 'sandbox' });
-        for (const r of userFolders) rows.push({ path: r.path, meta: r.shape, kind: 'recent' });
+        for (const r of userFolders) rows.push({ path: r.path, meta: '', kind: 'recent' });
         rows.push({ path: 'choose folder…', meta: '', kind: 'choose', key: '⌘O' });
         if (p.wsQ) rows.unshift({ path: p.wsQ, meta: 'typed — ↵ binds + starts', kind: 'typed', key: '↵' });
         const selIdx = Math.max(0, Math.min(p.wsSelIdx || 0, rows.length - 1));
@@ -985,7 +985,7 @@ class Component extends DCLogic {
           const userFolders = ((studioState.recentWorkspaces || []).filter(r => !skip(r)));
           const inheritFrom = studioState.panes.find(pp => pp.id !== p.id && !pp.unbound && !!pp.ws);
           const rows = [];
-          rows.push({ path: '(default — fresh per-session sandbox)', kind: 'default' });
+          rows.push({ path: 'per session sandbox', kind: 'default' });
           if (inheritFrom) rows.push({ path: inheritFrom.ws, kind: 'inherit' });
           rows.push({ path: '~/.substrate/sandbox', kind: 'sandbox' });
           for (const r of userFolders) rows.push({ path: r.path, kind: 'recent' });
