@@ -56,5 +56,8 @@ contextBridge.exposeInMainWorld("native", {
   // Sprint 085 followup — renderer-triggered window close, used when
   // Cmd-W closes the last remaining pane and the app should exit.
   closeWindow: () => ipcRenderer.send("native:close-window"),
+  // Sprint 086 — folder picker for "Add workspace" on the Records
+  // surface. Returns the picked path or null on cancel.
+  pickFolder: () => ipcRenderer.invoke("native:pick-folder"),
 });
 

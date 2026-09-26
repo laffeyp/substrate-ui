@@ -263,6 +263,40 @@ export class SessionController {
     this.emit("WORKSPACES_LOADED", { count: rows.length });
   }
 
+  /** Sprint 086 — POST /api/workspaces {path}. Server appends the path
+   *  to ~/.substrate/recent-workspaces.json (LRU, dedup) after classifying
+   *  its shape. Response carries the fresh workspace list, which this
+   *  patches into snapshot.recentWorkspaces on success. */
+  async addWorkspace(path: string): Promise<void> {
+    const result = await this.client.fetchJson<{ ok: boolean; workspaces?: RecentWorkspaceRow[] }>(
+      "/api/workspaces", { method: "POST", body: JSON.stringify({ path }) },
+    );
+    if (!result.ok || !result.data?.ok) return;
+    const rows: WorkspaceRow[] = Array.isArray(result.data.workspaces)
+      ? result.data.workspaces.filter((r): r is RecentWorkspaceRow => !!r && typeof r.path === "string")
+        .map((r) => ({ path: r.path, shape: r.shape ?? "flat" }))
+      : [];
+    this.patch({ recentWorkspaces: rows });
+  }
+
+  /** Sprint 086 — GET /api/sessions/by-workspace?path=&offset=&limit=.
+   *  Newest-first paginated session list for one workspace. Returns
+   *  {rows: SessionRow[], total, offset, limit}. Does not touch
+   *  Snapshot; the caller owns pagination state. */
+  async loadSessionsByWorkspace(
+    workspacePath: string, offset: number, limit: number,
+  ): Promise<{ rows: SessionRow[]; total: number; offset: number; limit: number }> {
+    const url = `/api/sessions/by-workspace?path=${encodeURIComponent(workspacePath)}`
+      + `&offset=${offset}&limit=${limit}`;
+    const result = await this.client.fetchJson<{ rows: RawSession[]; total: number; offset: number; limit: number }>(url);
+    if (!result.ok) return { rows: [], total: 0, offset, limit };
+    const raw = result.data;
+    const rows = Array.isArray(raw.rows)
+      ? raw.rows.map((s) => rowFrom(s, (s as unknown as { status?: SessionRow["status"] }).status ?? "ended"))
+      : [];
+    return { rows, total: raw.total ?? 0, offset: raw.offset ?? offset, limit: raw.limit ?? limit };
+  }
+
   async loadBundleRoster(): Promise<void> {
     const result = await this.client.fetchJson<RawBundleRow[]>("/api/bundles");
     if (!result.ok) { this.patch({ lastError: `bundle_roster: ${result.detail}` }); return; }

@@ -107,6 +107,8 @@ export class PaneRegistry {
   loadDriverRoster(): Promise<void> { return this.active().loadDriverRoster(); }
   loadLiveSessions(): Promise<void> { return this.active().loadLiveSessions(); }
   loadRecentWorkspaces(): Promise<void> { return this.active().loadRecentWorkspaces(); }
+  addWorkspace(path: string): Promise<void> { return this.active().addWorkspace(path); }
+  loadSessionsByWorkspace(path: string, offset: number, limit: number) { return this.active().loadSessionsByWorkspace(path, offset, limit); }
   loadBundleRoster(): Promise<void> { return this.active().loadBundleRoster(); }
   openSession(req?: OpenSessionRequest): Promise<void> { return this.active().openSession(req); }
   sendTurn(text: string): Promise<void> { return this.active().sendTurn(text); }

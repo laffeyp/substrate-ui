@@ -63,7 +63,12 @@ class Component extends DCLogic {
     panes: [(function(){ var blank = false; try { blank = /[?&]blank=1(?:&|$)/.test(window.location.search); } catch(_e){} return { id: 1, name: 'pane-1', driver: null, editing: false, nameVal: '', unbound: blank }; })()],
     focused: 1, cols: 1, rows: 1, colW: [1], rowW: [1], revealL: 1.15, ddFor: null, wsFor: null, allSessions: [], dropHint: null,
     descent: [], descPv: '', descExtra: {}, fanOpen: false, fanSel: 0, findOpen: false, findQ: '', findScope: 'transcript', nestedDescent: false,
-    showSettings: false, showExport: false, showEndConfirm: false, ended: false, frDone: false, theme: 'dark', fontOverride: null, settingsNote: '' };
+    showSettings: false, showExport: false, showEndConfirm: false, ended: false, frDone: false, theme: 'dark', fontOverride: null, settingsNote: '',
+  // Sprint 086 — Records surface: per-workspace expand state and
+  // paginated session buffers. Empty means "not expanded, not fetched
+  // yet". On expand, loadSessionsByWorkspace(path, 0, 50) fills
+  // pagedByWs[path]. Load-more button fires at offset = current length.
+  expandedWs: {}, pagedByWs: {}, addWsBusy: false };
   _buildStudioSpec() {
     // Studio state → server spec. Mirrors the shape web/studio.ts posts
     // to /api/validate + /api/build. Fields are the ones builder.py
@@ -1696,23 +1701,57 @@ class Component extends DCLogic {
         }
       },
     });
+    // Sprint 086 — collapsible workspaces with paginated session lists.
+    // The initial preview shows session count only; expanding fires a
+    // paginated fetch (loadSessionsByWorkspace) and renders the paged
+    // rows in a scrollable container. Load-more appends the next page.
+    const _pagedByWs = state.pagedByWs || {};
+    const _expandedWs = state.expandedWs || {};
+    const _toggleExpand = (path) => {
+      this.setState(s => ({ expandedWs: Object.assign({}, s.expandedWs, { [path]: !(s.expandedWs || {})[path] }) }));
+      // On expand: fetch first page unless already fetched.
+      if (!_expandedWs[path]) {
+        const vm = window.__vm;
+        if (vm && typeof vm.loadSessionsByWorkspace === 'function' && !_pagedByWs[path]) {
+          vm.loadSessionsByWorkspace(path, 0, 50).then((r) => {
+            this.setState(s => ({ pagedByWs: Object.assign({}, s.pagedByWs, { [path]: { rows: r.rows, total: r.total } }) }));
+          }).catch(() => undefined);
+        }
+      }
+    };
+    const _loadMoreForWs = (path) => {
+      const vm = window.__vm;
+      if (!vm || typeof vm.loadSessionsByWorkspace !== 'function') return;
+      const current = (_pagedByWs[path] && _pagedByWs[path].rows) || [];
+      vm.loadSessionsByWorkspace(path, current.length, 50).then((r) => {
+        this.setState(s => {
+          const prev = (s.pagedByWs || {})[path] || { rows: [], total: r.total };
+          return { pagedByWs: Object.assign({}, s.pagedByWs, { [path]: { rows: [...prev.rows, ...r.rows], total: r.total } }) };
+        });
+      }).catch(() => undefined);
+    };
     const _workspaceGroups = [];
     for (const ws of _workspaces) {
-      const rows = (_sessionsByWorkspace.get(ws.path) || []).slice(0, _SESSIONS_PER_WORKSPACE);
-      const totalUnderWs = (_sessionsByWorkspace.get(ws.path) || []).length;
+      const bucket = _sessionsByWorkspace.get(ws.path) || [];
+      const totalUnderWs = bucket.length;
       _sessionsByWorkspace.delete(ws.path);
-      // Skip workspaces with zero sessions unless it's the sandbox
-      // fallback — the sandbox row is always useful as a bind target.
-      if (rows.length === 0 && ws.shape !== 'sandbox') continue;
+      if (totalUnderWs === 0 && ws.shape !== 'sandbox') continue;
+      const paged = _pagedByWs[ws.path];
+      const expanded = !!_expandedWs[ws.path];
+      const shownRows = expanded && paged ? paged.rows : bucket.slice(0, 0); // hidden until expanded
+      const total = paged ? paged.total : totalUnderWs;
       _workspaceGroups.push({
         path: ws.path,
         shapeLabel: ws.shape === 'worktree' ? 'git · sessions get worktrees'
           : ws.shape === 'sandbox' ? 'sandbox'
           : ws.shape,
-        sessions: rows.map(_mapSession),
-        moreCount: Math.max(0, totalUnderWs - rows.length),
-        hasMore: totalUnderWs > rows.length,
-        empty: rows.length === 0,
+        sessions: shownRows.map(_mapSession),
+        countLabel: total === 1 ? '1 session' : `${total} sessions`,
+        expanded, notExpanded: !expanded, chevron: expanded ? '▾' : '▸',
+        toggleExpand: () => _toggleExpand(ws.path),
+        hasMore: expanded && paged && paged.rows.length < paged.total,
+        loadMore: () => _loadMoreForWs(ws.path),
+        remainingLabel: paged ? `load next ${Math.min(50, Math.max(0, paged.total - paged.rows.length))}` : '',
       });
     }
     // Everything else lands under "isolated sessions" — most sessions
@@ -1724,14 +1763,23 @@ class Component extends DCLogic {
       for (const rows of _sessionsByWorkspace.values()) isolatedRows.push(...rows);
       isolatedRows.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
       const totalIsolated = isolatedRows.length;
-      const shown = isolatedRows.slice(0, _SESSIONS_PER_WORKSPACE);
+      // Isolated bucket is synthetic (no real workspace path) so the
+      // pagination endpoint does not apply. Render up to 100 rows
+      // client-side when expanded; that is enough for a browsable
+      // history without loading thousands of divs at once.
+      const isolatedKey = '(isolated sessions)';
+      const expanded = !!_expandedWs[isolatedKey];
+      const shownRows = expanded ? isolatedRows.slice(0, 100) : [];
       _workspaceGroups.push({
         path: 'isolated sessions',
-        shapeLabel: `${totalIsolated} session${totalIsolated === 1 ? '' : 's'} — each in its own .substrate sandbox`,
-        sessions: shown.map(_mapSession),
-        moreCount: Math.max(0, totalIsolated - shown.length),
-        hasMore: totalIsolated > shown.length,
-        empty: shown.length === 0,
+        shapeLabel: 'each in its own .substrate sandbox',
+        sessions: shownRows.map(_mapSession),
+        countLabel: totalIsolated === 1 ? '1 session' : `${totalIsolated} sessions`,
+        expanded, notExpanded: !expanded, chevron: expanded ? '▾' : '▸',
+        toggleExpand: () => this.setState(s => ({ expandedWs: Object.assign({}, s.expandedWs, { [isolatedKey]: !(s.expandedWs || {})[isolatedKey] }) })),
+        hasMore: expanded && totalIsolated > shownRows.length,
+        loadMore: () => undefined,
+        remainingLabel: totalIsolated > shownRows.length ? `+ ${totalIsolated - shownRows.length} more not shown (browse via workspace filters)` : '',
       });
     }
     // (_hasVmSession hoisted with _vmSnap at renderVals top.)
@@ -1755,6 +1803,32 @@ class Component extends DCLogic {
     return {
       workspaceGroups: _workspaceGroups,
       workspaceGroupsEmpty: _workspaceGroups.length === 0,
+      // Sprint 086 — "Add workspace" button opens the OS folder picker
+      // via Electron's native.pickFolder(); the picked path POSTs to
+      // /api/workspaces and the reload reflects it in the records list.
+      // In a plain browser tab window.native is undefined; the button
+      // hides via addWorkspaceAvailable.
+      addWorkspaceAvailable: !!(window.native && typeof window.native.pickFolder === 'function'),
+      addWorkspaceBusy: !!state.addWsBusy,
+      addWorkspace: async () => {
+        const native = window.native;
+        if (!native || typeof native.pickFolder !== 'function') return;
+        this.setState({ addWsBusy: true });
+        try {
+          const picked = await native.pickFolder();
+          if (picked) {
+            const vm = window.__vm;
+            if (vm && typeof vm.addWorkspace === 'function') {
+              await vm.addWorkspace(picked);
+              // Refresh live sessions so the new workspace's row picks
+              // up any pre-existing sessions in it.
+              if (typeof vm.loadLiveSessions === 'function') vm.loadLiveSessions().catch(() => undefined);
+            }
+          }
+        } finally {
+          this.setState({ addWsBusy: false });
+        }
+      },
       topoProducerRows: (_vmSnap && _vmSnap.topologyGraph && _vmSnap.topologyGraph.producers ? _vmSnap.topologyGraph.producers : []).map(p => ({
         name: p.kind,
         emits: (p.emits && p.emits.length ? p.emits.join(', ') : '(no emissions)'),

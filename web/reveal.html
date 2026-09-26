@@ -309,30 +309,38 @@
  <sc-if value="{{ showRecords }}" hint-placeholder-val="{{ false }}">
   <div style="flex:1;overflow:auto;background:#212327;padding:22px 40px">
    <div style="max-width:760px">
-    <div style="font-size:10px;letter-spacing:.14em;color:#62676f;margin-bottom:10px">WORKSPACES</div>
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+     <div style="font-size:10px;letter-spacing:.14em;color:#62676f">WORKSPACES</div>
+     <sc-if value="{{ addWorkspaceAvailable }}" hint-placeholder-val="{{ true }}"><span onClick="{{ addWorkspace }}" style="margin-left:auto;font-size:10.5px;color:#82a5c8;border:1px solid rgba(255,255,255,.09);border-radius:4px;padding:2px 9px;cursor:pointer;user-select:none" style-hover="color:#a0c0e0">+ add workspace</span></sc-if>
+    </div>
     <sc-for list="{{ workspaceGroups }}" as="ws" hint-placeholder-count="1">
      <div style="margin-top:16px">
-      <div style="color:#d7dade;font-size:13px">{{ ws.path }} <span style="color:#62676f;font-size:11px">{{ ws.shapeLabel }}</span></div>
-      <sc-for list="{{ ws.sessions }}" as="s" hint-placeholder-count="1">
-       <div onClick="{{ s.pick }}" style="margin:6px 0 0 16px;padding:8px 14px;font-size:12px;display:flex;gap:9px;align-items:center;border-radius:6px;cursor:pointer" style-hover="background:#26292e">
-        <span style="width:7px;height:7px;border-radius:50%;background:{{ s.dotColor }};flex:none"></span>
-        <span style="color:#e2e5e9">{{ s.name }}</span>
-        <span style="color:#62676f;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ s.statusLabel }} · {{ s.driver }} · {{ s.when }}</span>
-        <span style="margin-left:auto;color:#62676f;font-size:11px;flex:none">{{ s.sessionIdShort }} · open ▸</span>
+      <div onClick="{{ ws.toggleExpand }}" style="color:#d7dade;font-size:13px;cursor:pointer;display:flex;align-items:baseline;gap:8px" style-hover="color:#e2e5e9">
+       <span style="color:#62676f;font-size:11px;width:12px">{{ ws.chevron }}</span>
+       <span>{{ ws.path }}</span>
+       <span style="color:#62676f;font-size:11px">{{ ws.shapeLabel }}</span>
+       <span style="margin-left:auto;color:#62676f;font-size:11px">{{ ws.countLabel }}</span>
+      </div>
+      <sc-if value="{{ ws.expanded }}" hint-placeholder-val="{{ false }}">
+       <div style="margin:6px 0 0 20px;max-height:340px;overflow-y:auto;border:1px solid rgba(255,255,255,.05);border-radius:6px;background:rgba(0,0,0,.12);padding:4px 0">
+        <sc-for list="{{ ws.sessions }}" as="s" hint-placeholder-count="1">
+         <div onClick="{{ s.pick }}" style="padding:8px 14px;font-size:12px;display:flex;gap:9px;align-items:center;cursor:pointer" style-hover="background:#26292e">
+          <span style="width:7px;height:7px;border-radius:50%;background:{{ s.dotColor }};flex:none"></span>
+          <span style="color:#e2e5e9">{{ s.name }}</span>
+          <span style="color:#62676f;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ s.statusLabel }} · {{ s.driver }} · {{ s.when }}</span>
+          <span style="margin-left:auto;color:#62676f;font-size:11px;flex:none">{{ s.sessionIdShort }} · open ▸</span>
+         </div>
+        </sc-for>
+        <sc-if value="{{ ws.hasMore }}" hint-placeholder-val="{{ false }}">
+         <div onClick="{{ ws.loadMore }}" style="padding:8px 14px;color:#82a5c8;font-size:11.5px;cursor:pointer;text-align:center" style-hover="background:#26292e">{{ ws.remainingLabel }}</div>
+        </sc-if>
        </div>
-      </sc-for>
-      <sc-if value="{{ ws.hasMore }}" hint-placeholder-val="{{ false }}">
-       <div style="margin:6px 0 0 16px;padding:4px 14px;color:#4a4e55;font-size:11px">+ {{ ws.moreCount }} more</div>
       </sc-if>
      </div>
     </sc-for>
     <sc-if value="{{ workspaceGroupsEmpty }}" hint-placeholder-val="{{ false }}">
-     <div style="padding:8px 14px;color:#62676f;font-size:11.5px">no workspaces on record — bind one below</div>
+     <div style="padding:8px 14px;color:#62676f;font-size:11.5px">no workspaces on record — open one via + add workspace</div>
     </sc-if>
-    <div style="font-size:10px;letter-spacing:.14em;color:#62676f;margin:22px 0 8px;border-top:1px solid rgba(255,255,255,.055);padding-top:14px">ASSAYS</div>
-    <div style="padding:8px 14px;background:#1a1c20;border-radius:6px;cursor:pointer;display:flex;gap:12px" style-hover="background:#26292e" onClick="{{ openAssay }}"><span style="color:#e2e5e9">rev_kimi_vs_glm</span><span style="color:#62676f;font-size:11px">4 arms × 32 cases × 3 trials · 384 cells · finding ready · open ▸</span></div>
-    <div style="padding:8px 14px;margin-top:4px;display:flex;gap:12px;color:#9aa0a8"><span>coding_cells</span><span style="color:#62676f;font-size:11px">4 arms · 2840 cells</span></div>
-    <div style="font-size:11px;color:#62676f;margin-top:22px;border-top:1px solid rgba(255,255,255,.055);padding-top:12px">raw records — the debug pile, collapsed ▸ &nbsp;&nbsp;·&nbsp;&nbsp; + session prompts for a workspace (default: where you opened substrate)</div>
    </div>
   </div>
  </sc-if>
