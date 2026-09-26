@@ -177,7 +177,9 @@ def _daemon_driver_resolver(name: str, params: dict[str, Any] | None = None) -> 
     if name in KNOWN_CLI_ADAPTERS:
         # One catalog, one source of truth. Adding a CLI adapter here
         # requires only the KNOWN_CLI_ADAPTERS entry above.
-        responder: Any = CliResponder(KNOWN_CLI_ADAPTERS[name], name=name)
+        cli_cmd = _cli_command(name)
+        assert cli_cmd is not None
+        responder: Any = CliResponder(cli_cmd, name=name)
     else:
         p = params or {}
         # Sprint 051: num_ctx must match the model's advertised context, not
@@ -592,13 +594,237 @@ def _agent_params(q: dict[str, list[str]]) -> tuple[bool, int, float]:
 # new CLI adapter is one entry here plus (if the argv shape needs a
 # different flag) the same entry consulted by `_daemon_driver_resolver`.
 # The catalog IS the source of truth — no other file names CLI presets.
-KNOWN_CLI_ADAPTERS: dict[str, list[str]] = {
-    "claude":       ["claude", "-p"],
-    "codex":        ["codex", "exec"],
-    "aider":        ["aider", "--message"],
-    "cursor-agent": ["cursor-agent", "-p"],
-    "opencode":     ["opencode", "run"],
+KNOWN_CLI_ADAPTERS: dict[str, dict[str, list[str] | None]] = {
+    # Sprint 085 — catalog widened from [cmd, flag] to a dict with the
+    # full auth lifecycle. Every value verified live on peterlaffey@
+    # 2026-09-25 (see process/planning/RESEARCH-2026-09-25-cli-adapter-
+    # login-flow-in-substrate-v2.md). `command` is what CliResponder
+    # runs for a turn (prompt appended as final positional arg).
+    # `login_command` spawns the CLI's own interactive login flow —
+    # Substrate hosts it inside a pty and streams the stdout into a
+    # transcript card. `logout_command` clears stored creds.
+    # `status_command` reports authed state; None means the CLI has no
+    # notion of "logged out" (aider — auth is per-invocation env).
+    "claude":       {
+        "command": ["claude", "-p"],
+        "login_command": ["claude", "auth", "login"],
+        "logout_command": ["claude", "auth", "logout"],
+        "status_command": ["claude", "auth", "status"],
+    },
+    "codex":        {
+        "command": ["codex", "exec"],
+        # `--device-auth` prints URL + one-time code to stdout without
+        # spawning a local callback server, so the pty renders cleanly
+        # even when Substrate is sandboxed.
+        "login_command": ["codex", "login", "--device-auth"],
+        "logout_command": ["codex", "logout"],
+        "status_command": ["codex", "login", "status"],
+    },
+    "aider":        {
+        "command": ["aider", "--message"],
+        "login_command": None,       # env-per-invocation; no login flow
+        "logout_command": None,
+        "status_command": None,
+    },
+    "cursor-agent": {
+        "command": ["cursor-agent", "-p"],
+        # NO_OPEN_BROWSER=1 keeps the auth URL in stdout instead of also
+        # spawning an OS browser open — the pty renders the URL as a
+        # click for the user.
+        "login_command": ["cursor-agent", "login"],
+        "logout_command": ["cursor-agent", "logout"],
+        "status_command": None,       # cursor-agent has no status subcommand; probe by trying a call
+    },
+    "opencode":     {
+        "command": ["opencode", "run"],
+        "login_command": ["opencode", "auth", "login"],
+        "logout_command": ["opencode", "auth", "logout"],
+        "status_command": ["opencode", "auth", "list"],
+    },
 }  # gemini removed 2026-09-25 — the Gemini CLI is deprecated upstream.
+
+
+def _cli_command(name: str) -> list[str] | None:
+    entry = KNOWN_CLI_ADAPTERS.get(name)
+    if entry is None:
+        return None
+    cmd = entry["command"]
+    assert isinstance(cmd, list)
+    return cmd
+
+
+# ── Sprint 085a — CLI adapter auth-in-transcript (pty side) ─────────────────
+# Substrate spawns the CLI's own login command inside a pseudo-terminal and
+# streams its stdout into a transcript card. The card's stdin routes back to
+# the pty. Everything below runs inside the substrate-ui HTTP server; the
+# renderer talks to it via /api/cli/<name>/pty/{start,stream,stdin,close}
+# and /api/cli/<name>/{status,logout}. See
+# process/planning/RESEARCH-2026-09-25-cli-adapter-login-flow-in-substrate-v2.md
+# for the per-CLI verified behavior.
+
+_CLI_PTY_LOCK = threading.Lock()
+_CLI_PTY_SESSIONS: dict[str, dict[str, Any]] = {}
+_CLI_PTY_MAX_BUFFER = 512 * 1024  # 512KB per session — plenty for a login walk
+
+
+def _cli_status(cli_name: str, timeout: float = 5.0) -> dict[str, Any]:
+    """Probe a CLI's authed state. Returns {authed: bool, raw: str, detail?: str}.
+    A CLI with no status_command returns {authed: None} — caller decides."""
+    entry = KNOWN_CLI_ADAPTERS.get(cli_name)
+    if entry is None:
+        return {"authed": None, "raw": "", "detail": "unknown cli"}
+    status_cmd = entry.get("status_command")
+    if not status_cmd:
+        return {"authed": None, "raw": "", "detail": "no status_command"}
+    assert isinstance(status_cmd, list)
+    try:
+        proc = subprocess.run(  # noqa: S603 — operator-chosen CLI in the catalog
+            status_cmd, capture_output=True, text=True, timeout=timeout
+        )
+    except subprocess.TimeoutExpired:
+        return {"authed": False, "raw": "", "detail": "status probe timed out"}
+    except FileNotFoundError:
+        return {"authed": False, "raw": "", "detail": "cli binary not found"}
+    combined = (proc.stdout + proc.stderr).strip()
+    # Per-CLI parse. Small, explicit — the research doc §2 verified each shape.
+    if cli_name == "claude":
+        # Emits JSON; loggedIn:true means authed.
+        try:
+            j = msgspec.json.decode(proc.stdout.encode())
+            return {"authed": bool(j.get("loggedIn")), "raw": combined}
+        except (msgspec.DecodeError, ValueError):
+            return {"authed": False, "raw": combined}
+    if cli_name == "codex":
+        # `codex login status` prints "Not logged in" when unauthed.
+        return {"authed": "Not logged in" not in combined, "raw": combined}
+    if cli_name == "opencode":
+        # `opencode auth list` prints "0 credentials" when nothing configured.
+        return {"authed": "0 credentials" not in combined, "raw": combined}
+    return {"authed": None, "raw": combined, "detail": "no parser"}
+
+
+def _cli_pty_start(cli_name: str) -> str:
+    """Fork a pty, spawn the CLI's login_command, return the session id.
+    Bytes accumulate in a rolling buffer; the SSE stream reads from index 0
+    on connect (so late subscribers see backlog + growth) and truncates at
+    _CLI_PTY_MAX_BUFFER. Non-blocking master fd; a background thread drains."""
+    import fcntl
+    import pty
+    import select as _select
+
+    entry = KNOWN_CLI_ADAPTERS.get(cli_name)
+    if entry is None:
+        raise ValueError(f"unknown cli {cli_name!r}")
+    login_cmd = entry.get("login_command")
+    if not login_cmd:
+        raise ValueError(f"cli {cli_name!r} has no login_command")
+    assert isinstance(login_cmd, list)
+
+    master_fd, slave_fd = pty.openpty()
+    flag = fcntl.fcntl(master_fd, fcntl.F_GETFL)
+    fcntl.fcntl(master_fd, fcntl.F_SETFL, flag | os.O_NONBLOCK)
+
+    env = dict(os.environ)
+    # cursor-agent: keep the URL in stdout instead of also auto-opening the browser.
+    if cli_name == "cursor-agent":
+        env["NO_OPEN_BROWSER"] = "1"
+
+    proc = subprocess.Popen(  # noqa: S603 — operator-chosen CLI in the catalog
+        login_cmd,
+        stdin=slave_fd, stdout=slave_fd, stderr=slave_fd,
+        close_fds=True, env=env, start_new_session=True,
+    )
+    os.close(slave_fd)
+
+    sid = uuid.uuid4().hex
+    session: dict[str, Any] = {
+        "proc": proc,
+        "master_fd": master_fd,
+        "output_bytes": bytearray(),
+        "closed": False,
+        "exit_code": None,
+        "cli": cli_name,
+        "lock": threading.Lock(),
+    }
+    with _CLI_PTY_LOCK:
+        _CLI_PTY_SESSIONS[sid] = session
+
+    def _drain() -> None:
+        while True:
+            try:
+                r, _, _ = _select.select([master_fd], [], [], 0.2)
+                if master_fd in r:
+                    try:
+                        chunk = os.read(master_fd, 4096)
+                    except OSError:
+                        chunk = b""
+                    if chunk:
+                        with session["lock"]:
+                            session["output_bytes"].extend(chunk)
+                            # Cap the buffer — drop from the front on overflow.
+                            over = len(session["output_bytes"]) - _CLI_PTY_MAX_BUFFER
+                            if over > 0:
+                                del session["output_bytes"][:over]
+                    else:
+                        break
+                if proc.poll() is not None:
+                    # Final drain before exit.
+                    try:
+                        rest = os.read(master_fd, 65536)
+                    except OSError:
+                        rest = b""
+                    if rest:
+                        with session["lock"]:
+                            session["output_bytes"].extend(rest)
+                    break
+            except Exception:  # noqa: BLE001 — pty reads can fail in odd ways; end the drain
+                break
+        with session["lock"]:
+            session["closed"] = True
+            session["exit_code"] = proc.returncode
+        try:
+            os.close(master_fd)
+        except OSError:
+            pass
+
+    threading.Thread(target=_drain, daemon=True, name=f"cli-pty-{sid}").start()
+    return sid
+
+
+def _cli_pty_write(sid: str, data: bytes) -> bool:
+    """Forward user keystrokes to the pty's master fd. Returns False if the
+    session is gone or closed."""
+    with _CLI_PTY_LOCK:
+        session = _CLI_PTY_SESSIONS.get(sid)
+    if session is None:
+        return False
+    with session["lock"]:
+        if session["closed"]:
+            return False
+        master_fd = session["master_fd"]
+    try:
+        os.write(master_fd, data)
+        return True
+    except OSError:
+        return False
+
+
+def _cli_pty_close(sid: str) -> bool:
+    """Kill the pty session. Idempotent."""
+    with _CLI_PTY_LOCK:
+        session = _CLI_PTY_SESSIONS.get(sid)
+    if session is None:
+        return False
+    proc = session["proc"]
+    if proc.poll() is None:
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+        except OSError:
+            try:
+                proc.terminate()
+            except OSError:
+                pass
+    return True
 
 
 def _agent_models() -> dict[str, object]:
@@ -1172,6 +1398,21 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/runs/clear":
                 self._clear_runs()
                 return
+            # Sprint 085a — CLI auth-in-transcript control endpoints.
+            if path.startswith("/api/cli/") and path.endswith("/pty/start"):
+                cli_name = path[len("/api/cli/") : -len("/pty/start")]
+                self._cli_pty_start_endpoint(cli_name); return
+            if path.startswith("/api/cli/") and "/pty/stdin/" in path:
+                head, _, sid = path.rpartition("/pty/stdin/")
+                cli_name = head[len("/api/cli/") :]
+                self._cli_pty_stdin_endpoint(cli_name, sid); return
+            if path.startswith("/api/cli/") and "/pty/close/" in path:
+                head, _, sid = path.rpartition("/pty/close/")
+                cli_name = head[len("/api/cli/") :]
+                self._cli_pty_close_endpoint(cli_name, sid); return
+            if path.startswith("/api/cli/") and path.endswith("/logout"):
+                cli_name = path[len("/api/cli/") : -len("/logout")]
+                self._cli_logout_endpoint(cli_name); return
             self._error(404, f"no control endpoint {path!r}")
         except Exception as exc:  # noqa: BLE001 — top-level do_POST boundary: a runaway inside any endpoint must become a JSON 500, not kill the daemon thread.
             self._error(500, f"{type(exc).__name__}: {exc}")
@@ -1195,6 +1436,86 @@ class Handler(BaseHTTPRequestHandler):
                 except OSError:
                     kept += 1
         self._json({"removed": removed, "kept": kept})
+
+    # ── Sprint 085a — CLI auth-in-transcript endpoints ─────────────────
+    def _cli_pty_start_endpoint(self, cli_name: str) -> None:
+        try:
+            sid = _cli_pty_start(cli_name)
+        except ValueError as exc:
+            self._error(400, str(exc)); return
+        except FileNotFoundError:
+            self._error(404, f"cli {cli_name!r} binary not found"); return
+        self._json({"sid": sid, "cli": cli_name})
+
+    def _cli_pty_stream_endpoint(self, cli_name: str, sid: str) -> None:
+        import base64 as _b64
+        with _CLI_PTY_LOCK:
+            session = _CLI_PTY_SESSIONS.get(sid)
+        if session is None or session["cli"] != cli_name:
+            self._error(404, f"unknown pty session {sid!r} for cli {cli_name!r}"); return
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("X-Accel-Buffering", "no")
+        self.end_headers()
+        emitted = 0
+        try:
+            while True:
+                with session["lock"]:
+                    total = len(session["output_bytes"])
+                    closed = session["closed"]
+                    exit_code = session["exit_code"]
+                    chunk = bytes(session["output_bytes"][emitted:total]) if total > emitted else b""
+                if chunk:
+                    frame = b"data: " + _b64.b64encode(chunk) + b"\n\n"
+                    self.wfile.write(frame); self.wfile.flush()
+                    emitted = total
+                if closed:
+                    exit_frame = b"event: exit\ndata: " + msgspec.json.encode(
+                        {"exit_code": exit_code}
+                    ) + b"\n\n"
+                    self.wfile.write(exit_frame); self.wfile.flush()
+                    return
+                time.sleep(0.15)
+        except (BrokenPipeError, ConnectionResetError, OSError):
+            return
+
+    def _cli_pty_stdin_endpoint(self, cli_name: str, sid: str) -> None:
+        with _CLI_PTY_LOCK:
+            session = _CLI_PTY_SESSIONS.get(sid)
+        if session is None or session["cli"] != cli_name:
+            self._error(404, f"unknown pty session {sid!r} for cli {cli_name!r}"); return
+        length = int(self.headers.get("Content-Length", "0") or "0")
+        data = self.rfile.read(length) if length > 0 else b""
+        ok = _cli_pty_write(sid, data)
+        self._json({"ok": ok, "wrote": len(data) if ok else 0})
+
+    def _cli_pty_close_endpoint(self, cli_name: str, sid: str) -> None:
+        with _CLI_PTY_LOCK:
+            session = _CLI_PTY_SESSIONS.get(sid)
+        if session is None or session["cli"] != cli_name:
+            self._error(404, f"unknown pty session {sid!r} for cli {cli_name!r}"); return
+        _cli_pty_close(sid)
+        self._json({"ok": True})
+
+    def _cli_logout_endpoint(self, cli_name: str) -> None:
+        entry = KNOWN_CLI_ADAPTERS.get(cli_name)
+        if entry is None:
+            self._error(404, f"unknown cli {cli_name!r}"); return
+        logout_cmd = entry.get("logout_command")
+        if not logout_cmd:
+            self._error(400, f"cli {cli_name!r} has no logout_command"); return
+        assert isinstance(logout_cmd, list)
+        try:
+            proc = subprocess.run(logout_cmd, capture_output=True, text=True, timeout=15)  # noqa: S603
+        except (subprocess.TimeoutExpired, FileNotFoundError) as exc:
+            self._error(500, f"logout failed: {exc}"); return
+        self._json({
+            "ok": proc.returncode == 0,
+            "exit_code": proc.returncode,
+            "stdout": proc.stdout,
+            "stderr": proc.stderr,
+        })
 
     def _read_json_body(self) -> dict[str, Any]:
         length = int(self.headers.get("Content-Length", "0") or "0")
@@ -2470,7 +2791,7 @@ class Handler(BaseHTTPRequestHandler):
             # `cli` takes an arbitrary `?command=...`. Substrate provides the tools,
             # so even a plain prompt->text CLI becomes a tool-using agent here.
             task = q.get("task", [""])[0] or "Use the available tools to help."
-            cmd = KNOWN_CLI_ADAPTERS.get(model) or q.get("command", [""])[0].split()
+            cmd = _cli_command(model) if model in KNOWN_CLI_ADAPTERS else q.get("command", [""])[0].split()
             if not cmd:
                 self._error(
                     400,
@@ -2906,6 +3227,16 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if path == "/api/models":
                 self._json(_agent_models())
+                return
+            # Sprint 085a — CLI auth read endpoints.
+            if path.startswith("/api/cli/") and path.endswith("/status"):
+                cli_name = path[len("/api/cli/") : -len("/status")]
+                self._json(_cli_status(cli_name))
+                return
+            if path.startswith("/api/cli/") and "/pty/stream/" in path:
+                head, _, sid = path.rpartition("/pty/stream/")
+                cli_name = head[len("/api/cli/") :]
+                self._cli_pty_stream_endpoint(cli_name, sid)
                 return
             if path == "/api/workspaces":
                 # Phase-4 addition: read-only listing of workspace paths a
