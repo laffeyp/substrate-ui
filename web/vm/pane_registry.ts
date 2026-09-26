@@ -109,7 +109,6 @@ export class PaneRegistry {
   loadRecentWorkspaces(): Promise<void> { return this.active().loadRecentWorkspaces(); }
   addWorkspace(path: string): Promise<void> { return this.active().addWorkspace(path); }
   loadSessionsByWorkspace(path: string, offset: number, limit: number) { return this.active().loadSessionsByWorkspace(path, offset, limit); }
-  loadIsolatedSessions(offset: number, limit: number) { return this.active().loadIsolatedSessions(offset, limit); }
   loadBundleRoster(): Promise<void> { return this.active().loadBundleRoster(); }
   openSession(req?: OpenSessionRequest): Promise<void> { return this.active().openSession(req); }
   sendTurn(text: string): Promise<void> { return this.active().sendTurn(text); }

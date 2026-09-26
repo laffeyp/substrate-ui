@@ -953,6 +953,48 @@ def _list_sessions_snapshot() -> dict[str, list[dict[str, Any]]]:
 _RECENT_WORKSPACES_MAX = 64
 
 
+def _canonical_workspace(path: str) -> str:
+    """Sprint 086b — one string per real directory. Expands `~`,
+    resolves an absolute path, strips trailing slash. Two Records rows
+    that pointed at the same directory (`~/.substrate/sandbox` vs
+    `/Users/peterlaffey/.substrate/sandbox`) now dedupe. Sessions and
+    workspaces both store this form so exact-string filters do not
+    miss matches."""
+    from pathlib import Path as _Path
+    if not isinstance(path, str) or not path:
+        return path
+    try:
+        expanded = _Path(path).expanduser()
+        return str(expanded).rstrip("/") or "/"
+    except (OSError, RuntimeError):
+        return path
+
+
+# Session per-workspace bucket: sessions whose workspace looks like a
+# per-session sandbox (`<home>/.substrate/sessions/<id>/workspace`)
+# get collapsed under a single Records row rooted at the parent dir.
+# Test-fixture debris (walkthrough, harness, /tmp, /var/folders) is
+# hidden entirely — it is dev artifact, not user work.
+_PER_SESSION_SANDBOX_RE = None  # lazy-compiled below
+
+def _sessions_dir_root() -> str:
+    from pathlib import Path as _Path
+    return str(_Path.home() / ".substrate" / "sessions")
+
+def _is_per_session_sandbox(path: str) -> bool:
+    import re as _re
+    global _PER_SESSION_SANDBOX_RE
+    if _PER_SESSION_SANDBOX_RE is None:
+        _PER_SESSION_SANDBOX_RE = _re.compile(r"\.substrate/sessions/[^/]+/workspace$")
+    return isinstance(path, str) and bool(_PER_SESSION_SANDBOX_RE.search(path))
+
+def _is_test_fixture_workspace(path: str) -> bool:
+    import re as _re
+    if not isinstance(path, str):
+        return False
+    return bool(_re.search(r"(^/var/folders/|^/tmp/|substrate-walkthrough-|substrate-harness-)", path))
+
+
 def _classify_workspace_shape(path: str) -> str:
     """Best-effort shape classification for a user-picked workspace path.
     `worktree` = a directory that looks like a git working tree; `sandbox`
@@ -971,20 +1013,20 @@ def _classify_workspace_shape(path: str) -> str:
 
 
 def _remember_workspace(path: str) -> None:
-    """Append `path` to ~/.substrate/recent-workspaces.json if it is a
-    real user directory (not a session sandbox, not a temp path). LRU
-    trimmed to _RECENT_WORKSPACES_MAX. Idempotent — the same path
-    landed twice deduplicates. Called from POST /api/session after a
-    successful open and from POST /api/workspaces when the user picks
-    a folder through the OS dialog."""
-    import re as _re
+    """Append the canonical form of `path` to
+    `~/.substrate/recent-workspaces.json`. LRU trimmed to
+    _RECENT_WORKSPACES_MAX. Idempotent — the same directory landed via
+    a tilde form and an absolute form both resolve to one canonical
+    row. Called from POST /api/session after a successful open and
+    from POST /api/workspaces when the user picks a folder through
+    the OS dialog. Per-session sandboxes are skipped — those collapse
+    under one synthesized row rooted at `_sessions_dir_root()`; the
+    recent-workspaces file is for USER-picked directories only."""
     from pathlib import Path as _Path
     if not isinstance(path, str) or not path:
         return
-    sandbox_re = _re.compile(
-        r"(\.substrate/sessions/|^/var/folders/|^/tmp/|substrate-walkthrough-|substrate-harness-|^/$)"
-    )
-    if sandbox_re.search(path):
+    canonical = _canonical_workspace(path)
+    if _is_per_session_sandbox(canonical):
         return
     file = _Path.home() / ".substrate" / "recent-workspaces.json"
     try:
@@ -1002,10 +1044,19 @@ def _remember_workspace(path: str) -> None:
                 ]
         except Exception:  # noqa: BLE001 — malformed file → rewrite
             existing = []
-    # LRU: move-to-front on hit, else prepend.
-    without = [row for row in existing if row.get("path") != path]
-    shape = _classify_workspace_shape(path)
-    updated = [{"path": path, "shape": shape}, *without][:_RECENT_WORKSPACES_MAX]
+    # Canonicalize existing entries too so an old tilde form on disk
+    # collapses with the newly-added absolute form.
+    canonicalized = []
+    canonical_seen: set[str] = set()
+    for row in existing:
+        cp = _canonical_workspace(str(row["path"]))
+        if cp in canonical_seen:
+            continue
+        canonical_seen.add(cp)
+        canonicalized.append({"path": cp, "shape": row.get("shape") or _classify_workspace_shape(cp)})
+    without = [row for row in canonicalized if row["path"] != canonical]
+    shape = _classify_workspace_shape(canonical)
+    updated = [{"path": canonical, "shape": shape}, *without][:_RECENT_WORKSPACES_MAX]
     try:
         file.write_bytes(msgspec.json.encode(updated))
     except OSError:
@@ -1013,15 +1064,28 @@ def _remember_workspace(path: str) -> None:
 
 
 def _recent_workspaces() -> list[dict[str, str]]:
-    """Recent workspace paths for the picker. Reads
-    `~/.substrate/recent-workspaces.json` when present; otherwise
-    derives distinct (workspace, workspace_shape) pairs off every live
-    session's manifest, newest first. A stable sandbox path always
-    sits at the tail so a fresh user has at least one bindable row."""
+    """One row per distinct canonical directory a session ever ran in,
+    plus every entry the user has recorded via the folder picker in
+    `~/.substrate/recent-workspaces.json`. Per-session sandboxes
+    (`~/.substrate/sessions/<id>/workspace`) collapse under one
+    synthesized row at `<home>/.substrate/sessions/` — that row is
+    the scroll bucket for sessions where the user never picked a
+    workspace. Test-fixture paths (walkthrough, harness, /tmp,
+    /var/folders) appear as their own rows too; nothing is hidden.
+    A stable `~/.substrate/sandbox` row always exists so a fresh
+    box has one bindable target."""
     from pathlib import Path as _Path
-    home_file = _Path.home() / ".substrate" / "recent-workspaces.json"
     seen: dict[str, dict[str, str]] = {}
     order: list[str] = []
+    def _add(path: str, shape: str) -> None:
+        if not isinstance(path, str) or not path:
+            return
+        cp = _canonical_workspace(path)
+        if cp in seen:
+            return
+        seen[cp] = {"path": cp, "shape": shape}
+        order.append(cp)
+    home_file = _Path.home() / ".substrate" / "recent-workspaces.json"
     if home_file.exists():
         try:
             data = msgspec.json.decode(home_file.read_bytes())
@@ -1029,50 +1093,39 @@ def _recent_workspaces() -> list[dict[str, str]]:
                 for row in data:
                     if not isinstance(row, dict):
                         continue
-                    path_value = row.get("path")
-                    shape_value = row.get("shape")
-                    if not isinstance(path_value, str) or not isinstance(shape_value, str):
-                        continue
-                    if path_value in seen:
-                        continue
-                    seen[path_value] = {"path": path_value, "shape": shape_value}
-                    order.append(path_value)
-        except Exception:  # noqa: BLE001 — file malformed / unreadable, fall through to sessions
-            seen.clear()
-            order.clear()
-    if not order:
-        # Fall back to distinct workspaces across live session manifests.
-        # Session-scoped sandboxes (~/.substrate/sessions/<id>/workspace)
-        # and pytest temp workspaces (/tmp, /var/folders, walkthrough/
-        # harness fixtures) are not user-level workspaces; the picker
-        # surfaces the user's own repos, not the runtime's per-run
-        # scratch dirs. Collapse them.
-        import re as _re
-        _sandbox_re = _re.compile(
-            r"(\.substrate/sessions/|^/var/folders/|^/tmp/|substrate-walkthrough-|substrate-harness-|^/$)"
-        )
-        try:
-            sessions = _list_sessions_snapshot()
-        except Exception:  # noqa: BLE001
-            sessions = {"live": [], "parked": [], "interrupted": [], "ended": []}
-        rows: list[tuple[str, str]] = []
-        for bucket in ("live", "parked", "interrupted", "ended"):
-            for entry in sessions.get(bucket, []):
-                workspace = entry.get("workspace") if isinstance(entry, dict) else None
-                shape = entry.get("workspace_shape") if isinstance(entry, dict) else None
-                if isinstance(workspace, str) and isinstance(shape, str):
-                    rows.append((workspace, shape))
-        for workspace, shape in rows:
-            if workspace in seen or _sandbox_re.search(workspace):
+                    p, s = row.get("path"), row.get("shape")
+                    if isinstance(p, str) and isinstance(s, str):
+                        _add(p, s)
+        except Exception:  # noqa: BLE001 — file malformed / unreadable, keep going
+            pass
+    # Derive every distinct workspace across every session bucket.
+    # Per-session sandboxes collapse under one synthesized row; every
+    # other path (real folders, test fixtures) appears as-is.
+    per_session_seen = False
+    try:
+        sessions = _list_sessions_snapshot()
+    except Exception:  # noqa: BLE001
+        sessions = {"live": [], "parked": [], "interrupted": [], "ended": []}
+    for bucket in ("live", "parked", "interrupted", "ended"):
+        for entry in sessions.get(bucket, []):
+            if not isinstance(entry, dict):
                 continue
-            seen[workspace] = {"path": workspace, "shape": shape}
-            order.append(workspace)
-    # Always append the sandbox as a last-resort bindable path.
+            workspace = entry.get("workspace")
+            if not isinstance(workspace, str) or not workspace:
+                continue
+            canonical = _canonical_workspace(workspace)
+            if _is_per_session_sandbox(canonical):
+                per_session_seen = True
+                continue
+            shape = entry.get("workspace_shape") if isinstance(entry.get("workspace_shape"), str) else _classify_workspace_shape(canonical)
+            _add(canonical, shape or "path")
+    # Synthesized per-session sandbox row — one for the collective set.
+    if per_session_seen:
+        _add(_sessions_dir_root(), "per-session-sandboxes")
+    # Stable sandbox row so a fresh user has one bindable target.
     sandbox = str(_Path.home() / ".substrate" / "sandbox")
-    if sandbox not in seen:
-        seen[sandbox] = {"path": sandbox, "shape": "sandbox"}
-        order.append(sandbox)
-    return [seen[path_value] for path_value in order]
+    _add(sandbox, "sandbox")
+    return [seen[canonical] for canonical in order]
 
 
 # Module-level HOST/PORT default to the env values so existing
@@ -3378,42 +3431,26 @@ class Handler(BaseHTTPRequestHandler):
                     limit  = max(1, min(500, int(q.get("limit", ["50"])[0])))
                 except ValueError:
                     self._error(400, "offset and limit must be integers"); return
+                target_c = _canonical_workspace(target)
+                sessions_root_c = _canonical_workspace(_sessions_dir_root())
                 snap = _list_sessions_snapshot()
                 merged: list[dict[str, Any]] = []
                 for bucket_name in ("live", "parked", "interrupted", "ended"):
                     for row in snap.get(bucket_name, []):
-                        if isinstance(row, dict) and row.get("workspace") == target:
-                            merged.append({**row, "status": bucket_name})
-                merged.sort(key=lambda r: (r.get("created_at") or 0), reverse=True)
-                total = len(merged)
-                page = merged[offset : offset + limit]
-                self._json({"rows": page, "total": total, "offset": offset, "limit": limit})
-                return
-            # Sprint 086 followup — paginated isolated-sessions bucket.
-            # Matches every session whose workspace path looks like a
-            # session sandbox or a temp dir (the same regex
-            # _recent_workspaces uses to strip them from the workspace
-            # list). Same paged response shape as by-workspace so the
-            # client's load-more flow works unchanged.
-            if path == "/api/sessions/isolated":
-                import re as _re
-                q = parse_qs(urlparse(self.path).query)
-                try:
-                    offset = max(0, int(q.get("offset", ["0"])[0]))
-                    limit  = max(1, min(500, int(q.get("limit", ["50"])[0])))
-                except ValueError:
-                    self._error(400, "offset and limit must be integers"); return
-                sandbox_re = _re.compile(
-                    r"(\.substrate/sessions/|^/var/folders/|^/tmp/|substrate-walkthrough-|substrate-harness-)"
-                )
-                snap = _list_sessions_snapshot()
-                merged: list[dict[str, Any]] = []
-                for bucket_name in ("live", "parked", "interrupted", "ended"):
-                    for row in snap.get(bucket_name, []):
-                        if not isinstance(row, dict): continue
+                        if not isinstance(row, dict):
+                            continue
                         ws = row.get("workspace")
-                        if isinstance(ws, str) and sandbox_re.search(ws):
-                            merged.append({**row, "status": bucket_name})
+                        if not isinstance(ws, str):
+                            continue
+                        ws_c = _canonical_workspace(ws)
+                        # Per-session sandbox root collapses every
+                        # <root>/<id>/workspace under one query target.
+                        matches = (
+                            ws_c == target_c
+                            or (target_c == sessions_root_c and _is_per_session_sandbox(ws_c))
+                        )
+                        if matches:
+                            merged.append({**row, "workspace": ws_c, "status": bucket_name})
                 merged.sort(key=lambda r: (r.get("created_at") or 0), reverse=True)
                 total = len(merged)
                 page = merged[offset : offset + limit]

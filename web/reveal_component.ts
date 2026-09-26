@@ -50,7 +50,7 @@ class Component extends DCLogic {
     // `driverName` in the top strip reads the pane's driver at render
     // time; null here means "read from the controller default."
     driverName: null, driverOpen: false, wsOpen: false,
-    nsOpen: false, nsName: '', nsWorkspace: '~/code/substrate', nsIsolate: false, nsStatus: '',
+    nsOpen: false, nsName: '', nsWorkspace: '~/.substrate/sandbox', nsIsolate: false, nsStatus: '',
     // Pane driver stays null until the controller's /api/models roster
     // lands; then reveal.ts (or the picker) fills it with the server's
     // real default. Anything set at boot would be a guess.
@@ -503,7 +503,7 @@ class Component extends DCLogic {
     this.setState(s => {
       const pane = s.panes.find(p => p.id === id); if (!pane || !pane.unbound) return {};
       // ONE rule (D68 corollary): bind a folder — git repo ⇒ worktree, else flat; sandbox for ~/.substrate
-      const shape = (ws === '~/code/substrate' || ws === '~/code/swebench-repro') ? 'worktree' : ws === '~/.substrate/sandbox' ? 'sandbox' : 'flat';
+      const shape = ws === '~/.substrate/sandbox' ? 'sandbox' : 'flat';
       const lines = [
         { t: 'session ' + pane.name + ' started · driver ' + pane.driver + ' · ' + ws + (shape === 'worktree' ? ' · worktree substrate/' + pane.name : ' · ' + shape), c: '#62676f' },
         { t: '◐ parked — awaiting your first message', c: '#82a5c8' }];
@@ -918,8 +918,10 @@ class Component extends DCLogic {
         if (!p.unbound) return [];
         const isSandbox = (path) => typeof path === 'string' && /(\.substrate\/sessions\/[^/]+\/workspace$|^\/var\/folders\/|^\/tmp\/|substrate-walkthrough-|substrate-harness-)/.test(path);
         const recents = ((state.recentWorkspaces || []).filter(r => !isSandbox(r.path)));
-        const inheritFrom = this.state.panes.find(pp => pp.id !== p.id && !pp.unbound);
-        const inheritPath = inheritFrom ? (inheritFrom.ws || '~/code/substrate') : null;
+        // Sprint 086b — inherit row only when the parent pane has a
+        // real bound workspace. No fake placeholder fallback.
+        const inheritFrom = this.state.panes.find(pp => pp.id !== p.id && !pp.unbound && !!pp.ws);
+        const inheritPath = inheritFrom ? inheritFrom.ws : null;
         const rows = [];
         if (inheritPath) rows.push({ path: inheritPath, meta: 'inherit · from ' + (inheritFrom.name || 'split'), kind: 'inherit' });
         for (const r of recents) rows.push({ path: r.path, meta: 'recent · ' + r.shape, kind: 'recent' });
@@ -945,9 +947,9 @@ class Component extends DCLogic {
         const wsRows = ((studioState) => {
           const isSandbox = (path) => typeof path === 'string' && /(\.substrate\/sessions\/[^/]+\/workspace$|^\/var\/folders\/|^\/tmp\/|substrate-walkthrough-|substrate-harness-)/.test(path);
           const recents = ((studioState.recentWorkspaces || []).filter(r => !isSandbox(r.path)));
-          const inheritFrom = studioState.panes.find(pp => pp.id !== p.id && !pp.unbound);
+          const inheritFrom = studioState.panes.find(pp => pp.id !== p.id && !pp.unbound && !!pp.ws);
           const rows = [];
-          if (inheritFrom) rows.push({ path: inheritFrom.ws || '~/code/substrate', kind: 'inherit' });
+          if (inheritFrom) rows.push({ path: inheritFrom.ws, kind: 'inherit' });
           for (const r of recents) rows.push({ path: r.path, kind: 'recent' });
           if (!recents.some(r => r.shape === 'sandbox')) rows.push({ path: '~/.substrate/sandbox', kind: 'sandbox' });
           rows.push({ path: 'choose folder…', kind: 'choose' });
@@ -972,7 +974,7 @@ class Component extends DCLogic {
       showChips: paneW >= 340,
       hdrGap: compact ? '5px' : '8px',
       nameMin: compact ? '44px' : '64px',
-      wsLabel: p.unbound ? '⌥ —' : compact ? '⌥' : '⌥ ' + (p.id === 1 ? 'substrate/fix-race' : (p.shape === 'worktree' ? 'substrate/' + p.name : (p.ws || p.name))),
+      wsLabel: p.unbound ? '⌥ —' : compact ? '⌥' : '⌥ ' + (p.shape === 'worktree' ? 'substrate/' + (p.name || 'main') : (p.ws || p.name || '')),
       revealText: compact ? '⌃`' : '⌃` reveal',
       id: p.id, name: p.name, driver: p.driver || state.driverDefault || 'deterministic',
       // isMain gates the full machinery lens (transcript + prompt +
@@ -1078,7 +1080,9 @@ class Component extends DCLogic {
       hintL: state.dropHint && state.dropHint.zone === 'e' ? '50%' : '0', hintT: state.dropHint && state.dropHint.zone === 's' ? '50%' : '0',
       hintW: state.dropHint && (state.dropHint.zone === 'w' || state.dropHint.zone === 'e') ? '50%' : '100%',
       hintH: state.dropHint && (state.dropHint.zone === 'n' || state.dropHint.zone === 's') ? '50%' : (state.dropHint && (state.dropHint.zone === 'w' || state.dropHint.zone === 'e') ? '100%' : '100%'),
-      branch: p.id === 1 ? 'substrate/fix-race' : 'substrate/' + p.name,
+      branch: p.shape === 'worktree' ? 'substrate/' + (p.name || 'main') : (p.ws || ''),
+      wsPath: p.ws || '~/.substrate/sandbox',
+      wsShape: p.shape || 'sandbox',
       ddOpen: state.ddFor === p.id, wsOpenP: state.wsFor === p.id,
       // Clip the header by default so a narrow pane's chip row does not
       // bleed sideways into the next pane. Restore `visible` while a
@@ -1730,80 +1734,64 @@ class Component extends DCLogic {
         });
       }).catch(() => undefined);
     };
+    // Sprint 086b — canonicalize on the client side too. The map key
+    // above uses whatever form the server stored on the session; the
+    // recent-workspaces list uses canonical form. Group by canonical
+    // path so tilde/absolute variants collapse.
+    const _perSessionSandboxRe = /\.substrate\/sessions\/[^/]+\/workspace$/;
+    const _countByCanonical = new Map();
+    for (const [rawPath, rows] of _sessionsByWorkspace) {
+      // Per-session sandbox sessions all collect under the synthesized
+      // sessions-root workspace (server _recent_workspaces adds that
+      // row); every other session groups under its canonical directory.
+      const isSessionSandbox = typeof rawPath === 'string' && _perSessionSandboxRe.test(rawPath);
+      const key = isSessionSandbox ? '__PER_SESSION_SANDBOXES__' : rawPath;
+      const prev = _countByCanonical.get(key) || 0;
+      _countByCanonical.set(key, prev + rows.length);
+    }
+    const _perSessionSandboxRoot = (_workspaces.find(w => w.shape === 'per-session-sandboxes') || {}).path;
     const _workspaceGroups = [];
     for (const ws of _workspaces) {
-      const bucket = _sessionsByWorkspace.get(ws.path) || [];
-      const totalUnderWs = bucket.length;
-      _sessionsByWorkspace.delete(ws.path);
-      if (totalUnderWs === 0 && ws.shape !== 'sandbox') continue;
+      const isPerSessionRoot = ws.shape === 'per-session-sandboxes';
+      const countKey = isPerSessionRoot ? '__PER_SESSION_SANDBOXES__' : ws.path;
+      const totalInMemory = _countByCanonical.get(countKey) || 0;
       const paged = _pagedByWs[ws.path];
       const expanded = !!_expandedWs[ws.path];
-      const shownRows = expanded && paged ? paged.rows : bucket.slice(0, 0); // hidden until expanded
-      const total = paged ? paged.total : totalUnderWs;
+      const shownRows = expanded && paged ? paged.rows : [];
+      const total = paged ? paged.total : totalInMemory;
       _workspaceGroups.push({
         path: ws.path,
         shapeLabel: ws.shape === 'worktree' ? 'git · sessions get worktrees'
           : ws.shape === 'sandbox' ? 'sandbox'
+          : ws.shape === 'per-session-sandboxes' ? 'per-session sandboxes · substrate-managed'
           : ws.shape,
         sessions: shownRows.map(_mapSession),
         countLabel: total === 1 ? '1 session' : `${total} sessions`,
         expanded, notExpanded: !expanded, chevron: expanded ? '▾' : '▸',
         toggleExpand: () => _toggleExpand(ws.path),
-        hasMore: expanded && paged && paged.rows.length < paged.total,
+        hasMore: !!(expanded && paged && paged.rows.length < paged.total),
         loadMore: () => _loadMoreForWs(ws.path),
+        loadMoreOnScroll: (ev) => {
+          if (!expanded || !paged || paged.rows.length >= paged.total) return;
+          const el = ev.target;
+          if (!el || typeof el.scrollTop !== 'number') return;
+          const remaining = el.scrollHeight - (el.scrollTop + el.clientHeight);
+          if (remaining < 100) _loadMoreForWs(ws.path);
+        },
         remainingLabel: paged ? `load next ${Math.min(50, Math.max(0, paged.total - paged.rows.length))}` : '',
       });
     }
+    void _perSessionSandboxRoot; // available for future use
     // Everything else lands under "isolated sessions" — most sessions
     // in a fresh install run in a per-session sandbox and belong here.
     // Sessions whose workspace path is neither a recent workspace nor
     // an isolated sandbox share this bucket too.
-    if (_sessionsByWorkspace.size > 0) {
-      const totalIsolatedInMemory = Array.from(_sessionsByWorkspace.values()).reduce((n, rows) => n + rows.length, 0);
-      // Isolated bucket paginates through /api/sessions/isolated so
-      // "browse via workspace filters" is not a thing users need to
-      // do — the load-more button here works the same as it does on
-      // real workspaces.
-      const isolatedKey = '(isolated sessions)';
-      const expanded = !!_expandedWs[isolatedKey];
-      const paged = _pagedByWs[isolatedKey];
-      const rows = expanded && paged ? paged.rows : [];
-      // Prefer the paginated total once we have it (authoritative);
-      // fall back to the in-memory count from the initial /api/session
-      // load until the first page arrives.
-      const total = paged ? paged.total : totalIsolatedInMemory;
-      _workspaceGroups.push({
-        path: 'isolated sessions',
-        shapeLabel: 'each in its own .substrate sandbox',
-        sessions: rows.map(_mapSession),
-        countLabel: total === 1 ? '1 session' : `${total} sessions`,
-        expanded, notExpanded: !expanded, chevron: expanded ? '▾' : '▸',
-        toggleExpand: () => {
-          this.setState(s => ({ expandedWs: Object.assign({}, s.expandedWs, { [isolatedKey]: !(s.expandedWs || {})[isolatedKey] }) }));
-          if (!_expandedWs[isolatedKey]) {
-            const vm = window.__vm;
-            if (vm && typeof vm.loadIsolatedSessions === 'function' && !_pagedByWs[isolatedKey]) {
-              vm.loadIsolatedSessions(0, 50).then((r) => {
-                this.setState(s => ({ pagedByWs: Object.assign({}, s.pagedByWs, { [isolatedKey]: { rows: r.rows, total: r.total } }) }));
-              }).catch(() => undefined);
-            }
-          }
-        },
-        hasMore: !!(expanded && paged && paged.rows.length < paged.total),
-        loadMore: () => {
-          const vm = window.__vm;
-          if (!vm || typeof vm.loadIsolatedSessions !== 'function') return;
-          const current = (_pagedByWs[isolatedKey] && _pagedByWs[isolatedKey].rows) || [];
-          vm.loadIsolatedSessions(current.length, 50).then((r) => {
-            this.setState(s => {
-              const prev = (s.pagedByWs || {})[isolatedKey] || { rows: [], total: r.total };
-              return { pagedByWs: Object.assign({}, s.pagedByWs, { [isolatedKey]: { rows: [...prev.rows, ...r.rows], total: r.total } }) };
-            });
-          }).catch(() => undefined);
-        },
-        remainingLabel: paged ? `load next ${Math.min(50, Math.max(0, paged.total - paged.rows.length))}` : '',
-      });
-    }
+    // Sprint 086b — no isolated-sessions bucket. Server's
+    // _recent_workspaces already synthesizes a `~/.substrate/sessions/`
+    // row that collapses every per-session sandbox under one
+    // paginated entry, so per-session sandbox sessions surface via
+    // the by-workspace endpoint with `path=<sessions_root>` — the
+    // same load-more code path every real workspace uses.
     // (_hasVmSession hoisted with _vmSnap at renderVals top.)
     const _vmTranscript = (_vmSnap && Array.isArray(_vmSnap.transcript)) ? _vmSnap.transcript : [];
     const _liveTranscriptRows = _vmTranscript.map(row => {
@@ -2115,7 +2103,9 @@ class Component extends DCLogic {
       revealGutterLeft: (state.revealL / (state.revealL + 1) * 100).toFixed(2) + '%',
       revealGrab: (ev) => { ev.preventDefault(); this._gut = { type: 'reveal' }; },
       colGutters: state.colW.slice(0, -1).map((_, i) => { const total = state.colW.reduce((a, b) => a + b, 0); const left = state.colW.slice(0, i + 1).reduce((a, b) => a + b, 0) / total * 100; return { left: left.toFixed(2) + '%', grab: (ev) => { ev.preventDefault(); this._gut = { type: 'col', i: i + 1 }; } }; }),
-      rowGutters: state.rowW.slice(0, -1).map((_, i) => { const total = state.rowW.reduce((a, b) => a + b, 0); const top = state.rowW.slice(0, i + 1).reduce((a, b) => a + b, 0) / total * 100; return { top: top.toFixed(2) + '%', grab: (ev) => { ev.preventDefault(); this._gut = { type: 'row', i: i + 1 }; } }; }), focusedBranch: fp.id === 1 ? 'substrate/fix-race' : 'substrate/' + fp.name,
+      rowGutters: state.rowW.slice(0, -1).map((_, i) => { const total = state.rowW.reduce((a, b) => a + b, 0); const top = state.rowW.slice(0, i + 1).reduce((a, b) => a + b, 0) / total * 100; return { top: top.toFixed(2) + '%', grab: (ev) => { ev.preventDefault(); this._gut = { type: 'row', i: i + 1 }; } }; }), focusedBranch: fp.shape === 'worktree' ? 'substrate/' + (fp.name || 'main') : (fp.ws || ''),
+      focusedWorkspace: fp.ws || '~/.substrate/sandbox',
+      focusedShape: fp.shape || 'sandbox',
       // Every pane's reveal view renders the full machinery lens now
       // that every pane has its own controller. The old
       // notMainFocused branch showed only the scripted pane.lines and
@@ -2136,7 +2126,7 @@ class Component extends DCLogic {
       closeNs: () => this.setState({ nsOpen: false, nsStatus: '' }),
       nsName: state.nsName, updNsName: (ev) => this.setState({ nsName: ev.target.value }),
       nsWorkspace: state.nsWorkspace, updNsWorkspace: (ev) => this.setState({ nsWorkspace: ev.target.value }),
-      nsShape: (() => { const w = state.nsWorkspace.trim(); if (!w) return 'sandbox — ~/.substrate/sessions/<id>/workspace/'; if (w === '~/code/substrate') return 'git repo → worktree on branch substrate/<session-name>'; return 'plain directory → flat (same tree, same reflexes)'; })(),
+      nsShape: (() => { const w = state.nsWorkspace.trim(); if (!w) return 'sandbox — ~/.substrate/sessions/<id>/workspace/'; return 'plain directory → flat (same tree, same reflexes)'; })(),
       nsIsolate: state.nsIsolate, toggleNsIsolate: () => this.setState(s => ({ nsIsolate: !s.nsIsolate })),
       nsIsoBox: state.nsIsolate ? '#82a5c8' : 'transparent', nsIsoBorder: state.nsIsolate ? '#82a5c8' : '#4a4e55',
       nsStatus: state.nsStatus, nsStatusColor: state.nsStatus.startsWith('created') ? '#82a5c8' : '#9aa0a8',
