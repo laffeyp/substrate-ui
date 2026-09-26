@@ -68,7 +68,13 @@ class Component extends DCLogic {
   // paginated session buffers. Empty means "not expanded, not fetched
   // yet". On expand, loadSessionsByWorkspace(path, 0, 50) fills
   // pagedByWs[path]. Load-more button fires at offset = current length.
-  expandedWs: {}, pagedByWs: {}, addWsBusy: false };
+  expandedWs: {}, pagedByWs: {}, addWsBusy: false,
+  // Sprint 086 followup — workspace picker's per-row expand state
+  // (independent of Records surface). Expanding a row fetches the
+  // most recent 5 sessions from that workspace and lists them
+  // beneath so the user can attach to an existing one instead of
+  // starting fresh.
+  pickerExpandedWs: {}, pickerPagedByWs: {} };
   _buildStudioSpec() {
     // Studio state → server spec. Mirrors the shape web/studio.ts posts
     // to /api/validate + /api/build. Fields are the ones builder.py
@@ -959,29 +965,77 @@ class Component extends DCLogic {
         // own default.
         rows.push({ path: 'per session sandbox', meta: 'substrate manages · isolated', kind: 'default' });
         if (inheritPath) rows.push({ path: inheritPath, meta: 'inherit · from ' + (inheritFrom.name || 'split'), kind: 'inherit' });
-        rows.push({ path: '~/.substrate/sandbox', meta: 'sandbox · shared across sessions', kind: 'sandbox' });
-        for (const r of userFolders.slice(0, 2)) rows.push({ path: r.path, meta: 'recent', kind: 'recent' });
+        rows.push({ path: '~/.substrate/sandbox', meta: 'sandbox · shared across sessions', kind: 'sandbox', expandable: true });
+        for (const r of userFolders.slice(0, 2)) rows.push({ path: r.path, meta: 'recent', kind: 'recent', expandable: true });
         rows.push({ path: 'choose folder…', meta: '', kind: 'choose', key: '⌘O' });
         if (p.wsQ) rows.unshift({ path: p.wsQ, meta: 'typed — ↵ binds + starts', kind: 'typed', key: '↵' });
         const selIdx = Math.max(0, Math.min(p.wsSelIdx || 0, rows.length - 1));
-        return rows.map((row, i) => Object.assign({}, row, {
-          c: i === selIdx ? '#e2e5e9' : '#b9bec5',
-          bg: i === selIdx ? '#2e3138' : 'transparent',
-          key: row.key || (i === selIdx ? '↵' : ''),
-          pick: () => {
-            if (row.kind === 'choose') { this._pickFolder(p.id); return; }
-            if (row.kind === 'default') { this._bindPane(p.id, '', { isDefault: true }); return; }
+        const pickerExpanded = state.pickerExpandedWs || {};
+        const pickerPaged = state.pickerPagedByWs || {};
+        // Session-attach handler for the expanded sub-rows. Mirrors
+        // the Records surface's pick: mark pane bound before attach so
+        // the transcript branch renders.
+        const _attachToExisting = (paneId, s) => {
+          const vm = window.__vm;
+          if (!vm || !s.sessionId) return;
+          const wsPath = (typeof s.workspacePath === 'string' && s.workspacePath) ? s.workspacePath : '';
+          const wsShape = (typeof s.workspaceShape === 'string' && s.workspaceShape) ? s.workspaceShape : 'flat';
+          this.setState(st => ({
+            panes: st.panes.map(pn => pn.id === paneId
+              ? Object.assign({}, pn, { unbound: false, ws: wsPath, shape: wsShape, name: s.name || pn.name, lines: [] })
+              : pn),
+          }));
+          vm.attachExisting(s.sessionId);
+        };
+        // Toggle expand on an expandable row. On expand: fire
+        // loadSessionsByWorkspace(path, 0, 5) if not yet fetched.
+        const _pickerToggle = (path) => {
+          this.setState(st => ({ pickerExpandedWs: Object.assign({}, st.pickerExpandedWs, { [path]: !(st.pickerExpandedWs || {})[path] }) }));
+          if (!pickerExpanded[path]) {
             const vm = window.__vm;
-            if (vm && typeof vm.pickWorkspace === 'function') vm.pickWorkspace(row.path);
-            // Typed rows and recent/sandbox/inherit rows all persist
-            // to the recent-workspaces list so a folder you use once
-            // shows up next boot without re-picking.
-            if (vm && typeof vm.addWorkspace === 'function' && row.path !== '~/.substrate/sandbox') {
-              void vm.addWorkspace(row.path);
+            if (vm && typeof vm.loadSessionsByWorkspace === 'function' && !pickerPaged[path]) {
+              vm.loadSessionsByWorkspace(path, 0, 5).then((r) => {
+                this.setState(st => ({ pickerPagedByWs: Object.assign({}, st.pickerPagedByWs, { [path]: { rows: r.rows, total: r.total } }) }));
+              }).catch(() => undefined);
             }
-            this._bindPane(p.id, row.path);
-          },
-        }));
+          }
+        };
+        return rows.map((row, i) => {
+          const expanded = !!(row.expandable && pickerExpanded[row.path]);
+          const paged = row.expandable ? pickerPaged[row.path] : null;
+          const sessions = (expanded && paged)
+            ? paged.rows.slice(0, 5).map(s => ({
+                sessionIdShort: (s.sessionId || '').slice(0, 12),
+                name: s.name || (s.sessionId || '').slice(0, 8),
+                driver: s.driver || '?',
+                statusLabel: s.status === 'live' ? '● running'
+                  : s.status === 'parked' ? '◐ parked'
+                  : s.status === 'interrupted' ? '! interrupted'
+                  : '◇ ended',
+                dotColor: s.status === 'live' ? '#7fb3b8' : s.status === 'parked' ? '#82a5c8' : s.status === 'interrupted' ? '#c26058' : '#4a4e55',
+                pick: () => _attachToExisting(p.id, s),
+              }))
+            : [];
+          return Object.assign({}, row, {
+            c: i === selIdx ? '#e2e5e9' : '#b9bec5',
+            bg: i === selIdx ? '#2e3138' : 'transparent',
+            key: row.key || (i === selIdx ? '↵' : ''),
+            expanded, notExpanded: !expanded,
+            chevron: row.expandable ? (expanded ? '▾' : '▸') : ' ',
+            toggleExpand: row.expandable ? ((ev) => { if (ev && typeof ev.stopPropagation === 'function') ev.stopPropagation(); _pickerToggle(row.path); }) : (() => undefined),
+            sessions,
+            pick: () => {
+              if (row.kind === 'choose') { this._pickFolder(p.id); return; }
+              if (row.kind === 'default') { this._bindPane(p.id, '', { isDefault: true }); return; }
+              const vm = window.__vm;
+              if (vm && typeof vm.pickWorkspace === 'function') vm.pickWorkspace(row.path);
+              if (vm && typeof vm.addWorkspace === 'function' && row.path !== '~/.substrate/sandbox') {
+                void vm.addWorkspace(row.path);
+              }
+              this._bindPane(p.id, row.path);
+            },
+          });
+        });
       })(),
       wsQ: p.wsQ || '',
       onWsQ: (ev) => this.setState(st => ({ panes: st.panes.map(x => x.id === p.id ? Object.assign({}, x, { wsQ: ev.target.value, wsSelIdx: 0 }) : x) })),
