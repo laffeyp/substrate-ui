@@ -22,6 +22,7 @@ import { flow as panePromptIsolation } from "./pane_prompt_isolation";
 import { flow as revealModeDirection } from "./reveal_mode_direction";
 import { flow as modelReplyRender } from "./model_reply_render";
 import { flow as cliDiscovery } from "./cli_discovery";
+import { flow as cliVersionPicker } from "./cli_version_picker";
 import { flow as electronSmoke } from "./electron_smoke";
 import { flow as electronMenu } from "./electron_menu";
 import { flow as electronDeeplink } from "./electron_deeplink";
@@ -51,6 +52,7 @@ const AXIS_A: Flow[] = [
   revealModeDirection,
   modelReplyRender,
   cliDiscovery,
+  cliVersionPicker,
 ];
 const AXIS_B: Flow[] = TOOL_FLOWS;
 const AXIS_C: Flow[] = [
