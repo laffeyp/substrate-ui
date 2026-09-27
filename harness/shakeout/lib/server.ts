@@ -30,7 +30,7 @@ export class ServerHandle {
       detached: true,
       stdio: ["ignore", out, out],
     });
-    await this.waitHealthy(5000);
+    await this.waitHealthy(30000);
   }
 
   async stop(): Promise<void> {

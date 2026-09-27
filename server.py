@@ -1901,12 +1901,9 @@ class Handler(BaseHTTPRequestHandler):
                 return
             self._error(404, f"unknown session_id {session_id!r}")
             return
-        if manifest.status == STATUS_ENDED:
-            self._json(
-                {"ok": False, "status": STATUS_ENDED, "error": SESSION_ENDED_MID_DELEGATE},
-                410,
-            )
-            return
+        # Sprint follow-up 2026-09-25: ended sessions are resumable now.
+        # turn_sync flips STATUS_ENDED to STATUS_PARKED under the lock and
+        # continues the record. Do not pre-reject at the server layer.
         try:
             body = self._read_json_body()
         except ValueError as exc:

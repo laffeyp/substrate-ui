@@ -710,18 +710,27 @@ class SessionRegistry:
         manifest = self._manifests.get(session_id)
         if manifest is None:
             raise KeyError(f"unknown session_id {session_id!r}")
+        # Peter's ruling 2026-09-25: an "ended" session must still accept
+        # new turns. Flip the status to "parked" and let Runtime.resume
+        # continue against the same record. The record IS the conversation;
+        # nothing about the SessionEnded envelope prevents another turn from
+        # appending — substrate's earlier refusal was policy, not physics.
         if manifest.status == STATUS_ENDED:
-            raise SessionEndedMidTurn(
-                f"session {session_id!r} has ended (status='ended'); cannot resume"
-            )
+            manifest = _replace(manifest, status=STATUS_PARKED)
+            self._manifests[session_id] = manifest
+            _atomic_write_json(Path(manifest.record_root).parent / _MANIFEST_FILENAME, _manifest_to_dict(manifest))
         threading_lock = self._turn_threading_locks.setdefault(session_id, threading.Lock())
         with threading_lock:
-            # Re-check manifest under the lock — an intervening turn may have ended it.
+            # Re-check manifest under the lock — an intervening turn may have flipped it.
             live_manifest = self._manifests.get(session_id)
-            if live_manifest is None or live_manifest.status == STATUS_ENDED:
+            if live_manifest is None:
                 raise SessionEndedMidTurn(
-                    f"session {session_id!r} ended before the turn started"
+                    f"session {session_id!r} vanished before the turn started"
                 )
+            if live_manifest.status == STATUS_ENDED:
+                live_manifest = _replace(live_manifest, status=STATUS_PARKED)
+                self._manifests[session_id] = live_manifest
+                _atomic_write_json(Path(live_manifest.record_root).parent / _MANIFEST_FILENAME, _manifest_to_dict(live_manifest))
             record_root = Path(live_manifest.record_root)
             # Sprint 214a: `resume_event_builder` runs UNDER the lock so record-derived
             # state (like next turn_index computed from the reviewer's tail) is atomic

@@ -39,6 +39,34 @@ export const flow: Flow = {
       await page.waitForFunction(() => (window as unknown as { __vm?: unknown }).__vm != null, undefined, { timeout: 10_000 });
       await page.waitForTimeout(300);
 
+      // Pane 1 defaults to unbound and the reveal toggle refuses to
+      // flip while the focused pane is unbound (the workspace picker
+      // owns the view). Bind pane 1 to the sandbox before pressing
+      // Ctrl-` so the reveal branch actually paints.
+      await page.evaluate(() => {
+        const root = document.getElementById("dc-root") as (HTMLElement & Record<string, unknown>) | null;
+        if (!root) return;
+        const key = Object.keys(root).find((k) => k.startsWith("__reactContainer"));
+        if (!key) return;
+        const stack: unknown[] = [(root[key] as { stateNode?: { current?: unknown } })?.stateNode?.current];
+        while (stack.length > 0) {
+          const cursor = stack.pop();
+          if (!cursor) continue;
+          const inst = (cursor as { stateNode?: { logic?: { state?: { panes?: { id: number; unbound?: boolean }[] }; _bindPane?: (id: number, ws: string) => void } } }).stateNode;
+          const cand = inst?.logic;
+          if (cand && cand.state && Array.isArray(cand.state.panes) && typeof cand._bindPane === "function") {
+            const p1 = cand.state.panes[0];
+            if (p1?.unbound) cand._bindPane(p1.id, "~/.substrate/sandbox");
+            return;
+          }
+          const c = (cursor as { child?: unknown }).child;
+          const s = (cursor as { sibling?: unknown }).sibling;
+          if (s) stack.push(s);
+          if (c) stack.push(c);
+        }
+      });
+      await page.waitForTimeout(150);
+
       // Ctrl+` toggles reveal view; wait for the mode-chip row to paint.
       await page.keyboard.down("Control");
       await page.keyboard.press("`");
