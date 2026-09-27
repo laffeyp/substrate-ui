@@ -61,7 +61,7 @@ class Component extends DCLogic {
     // bookmark or menu action; the picker state itself carries the
     // frame.
     panes: [{ id: 1, name: 'pane-1', driver: null, editing: false, nameVal: '', unbound: true }],
-    focused: 1, cols: 1, rows: 1, colW: [1], rowW: [1], revealL: 1.15, ddFor: null, wsFor: null, allSessions: [], dropHint: null,
+    focused: 1, cols: 1, rows: 1, colW: [1], rowW: [1], revealL: 1.15, ddFor: null, wsFor: null, driverExpandedCli: null, allSessions: [], dropHint: null,
     descent: [], descPv: '', descExtra: {}, fanOpen: false, fanSel: 0, findOpen: false, findQ: '', findScope: 'transcript', nestedDescent: false,
     showSettings: false, showExport: false, showEndConfirm: false, ended: false, frDone: false, theme: 'dark', fontOverride: null, settingsNote: '',
   // Sprint 086 — Records surface: per-workspace expand state and
@@ -596,6 +596,72 @@ class Component extends DCLogic {
       }
       return { panes: grown, focused: grown[0].id };
     });
+  }
+
+  _buildDriverOpts(state, paneId, currentDriver) {
+    // Sprint 084 — sectioned driver picker. Header rows carry
+    // `isHeader:true`; the template renders headers as uppercase
+    // labels and item rows as clickable pickers.
+    // Sprint 087 — CLI rows expose a caret when the CLI has a curated
+    // version list on the server. Clicking the caret expands a nested
+    // list of versions in place; clicking a version records the pick
+    // and closes the whole dropdown. Ollama tags carry their own
+    // model in the row name — no version picker for those.
+    const groups = (state.driverGroups && state.driverGroups.length)
+      ? state.driverGroups
+      : [{ label: '', entries: (state.driverRoster && state.driverRoster.length) ? state.driverRoster : ['deterministic'] }];
+    const cliVersions = state.cliVersions || {};
+    const chosenVersions = state.driverVersion || {};
+    const items = [];
+    const noop = () => undefined;
+    for (const grp of groups) {
+      if (grp.label) items.push({
+        label: grp.label, color: '#62676f',
+        isHeader: true, notHeader: false, expandable: false, notExpandable: true,
+        expanded: false, notExpanded: true, chevron: ' ', versions: [], pick: noop, toggleExpand: noop,
+      });
+      for (const m of grp.entries) {
+        const versionEntry = cliVersions[m];
+        const hasVersions = !!(versionEntry && Array.isArray(versionEntry.versions) && versionEntry.versions.length > 0);
+        const expanded = state.driverExpandedCli === m;
+        const chosen = chosenVersions[m] || (versionEntry ? versionEntry.default : null);
+        const versions = (hasVersions && expanded)
+          ? versionEntry.versions.map((v) => ({
+              label: v.label,
+              color: v.id === chosen ? '#e2e5e9' : '#9aa0a8',
+              pick: () => {
+                this.setState((s) => ({
+                  ddFor: null, driverExpandedCli: null,
+                  panes: s.panes.map((x) => x.id === paneId ? Object.assign({}, x, { driver: m }) : x),
+                }));
+                const vm = window.__vm;
+                if (vm) {
+                  vm.pickDriver(m);
+                  if (typeof vm.pickDriverVersion === 'function') vm.pickDriverVersion(m, v.id);
+                }
+              },
+            }))
+          : [];
+        items.push({
+          label: m,
+          color: m === currentDriver ? '#e2e5e9' : '#9aa0a8',
+          isHeader: false, notHeader: true,
+          expandable: hasVersions, notExpandable: !hasVersions,
+          expanded, notExpanded: !expanded,
+          chevron: hasVersions ? (expanded ? '▾' : '▸') : ' ',
+          versions,
+          toggleExpand: hasVersions
+            ? (ev) => { if (ev && typeof ev.stopPropagation === 'function') ev.stopPropagation(); this.setState((s) => ({ driverExpandedCli: s.driverExpandedCli === m ? null : m })); }
+            : noop,
+          pick: () => {
+            this.setState((s) => ({ ddFor: null, driverExpandedCli: null, panes: s.panes.map((x) => x.id === paneId ? Object.assign({}, x, { driver: m }) : x) }));
+            const vm = window.__vm;
+            if (vm) vm.pickDriver(m);
+          },
+        });
+      }
+    }
+    return items;
   }
 
   _split(dir) {
@@ -1235,33 +1301,7 @@ class Component extends DCLogic {
         this.setState(s => ({ focused: p.id, ddFor: s.ddFor === p.id ? null : p.id, wsFor: null }));
       },
       toggleWsP: () => this.setState(s => ({ focused: p.id, wsFor: s.wsFor === p.id ? null : p.id, ddFor: null })),
-      driverOpts: (() => {
-        // Sprint 084 — sectioned driver picker. Header rows carry
-        // `isHeader:true`; the template renders headers as uppercase
-        // labels and item rows as clickable pickers. The `notHeader`
-        // twin lets dc-runtime's sc-if pick the right span shape.
-        const groups = (state.driverGroups && state.driverGroups.length)
-          ? state.driverGroups
-          : [{ label: '', entries: (state.driverRoster && state.driverRoster.length) ? state.driverRoster : ['deterministic'] }];
-        const items: Array<{ label: string; color: string; isHeader: boolean; notHeader: boolean; pick: () => void }> = [];
-        const noop = () => undefined;
-        for (const grp of groups) {
-          if (grp.label) items.push({ label: grp.label, color: '#62676f', isHeader: true, notHeader: false, pick: noop });
-          for (const m of grp.entries) {
-            items.push({
-              label: m,
-              color: m === p.driver ? '#e2e5e9' : '#9aa0a8',
-              isHeader: false, notHeader: true,
-              pick: () => {
-                this.setState(s => ({ ddFor: null, panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, { driver: m }) : x) }));
-                const vm = window.__vm;
-                if (vm) vm.pickDriver(m);
-              },
-            });
-          }
-        }
-        return items;
-      })(),
+      driverOpts: this._buildDriverOpts(state, p.id, p.driver),
       caretColor: p.id === state.focused ? '#82a5c8' : '#4a4e55',
       promptHint: p.id === state.focused ? 'type to talk · / for commands' : 'click to focus',
       focus: () => this.setState({ focused: p.id }),
@@ -2026,29 +2066,7 @@ class Component extends DCLogic {
         this.setState(s => ({ ddFor: s.ddFor === fp.id ? null : fp.id, wsFor: null }));
       },
       fpWsOpen: state.wsFor === fp.id && state.revealed, fpToggleWs: () => this.setState(s => ({ wsFor: s.wsFor === fp.id ? null : fp.id, ddFor: null })),
-      fpDriverOpts: (() => {
-        const groups = (state.driverGroups && state.driverGroups.length)
-          ? state.driverGroups
-          : [{ label: '', entries: (state.driverRoster && state.driverRoster.length) ? state.driverRoster : ['deterministic'] }];
-        const items: Array<{ label: string; color: string; isHeader: boolean; notHeader: boolean; pick: () => void }> = [];
-        const noop = () => undefined;
-        for (const grp of groups) {
-          if (grp.label) items.push({ label: grp.label, color: '#62676f', isHeader: true, notHeader: false, pick: noop });
-          for (const m of grp.entries) {
-            items.push({
-              label: m,
-              color: m === fp.driver ? '#e2e5e9' : '#9aa0a8',
-              isHeader: false, notHeader: true,
-              pick: () => {
-                this.setState(s => ({ ddFor: null, panes: s.panes.map(x => x.id === fp.id ? Object.assign({}, x, { driver: m }) : x) }));
-                const vm = window.__vm;
-                if (vm) vm.pickDriver(m);
-              },
-            });
-          }
-        }
-        return items;
-      })(),
+      fpDriverOpts: this._buildDriverOpts(state, fp.id, fp.driver),
       recordsColor: surf === Surface.Records ? '#e2e5e9' : '#9aa0a8',
       studioColor: surf === Surface.Studio ? '#e2e5e9' : '#9aa0a8',
       showTerminal: !surf && !state.revealed, showRevealed: !surf && state.revealed,

@@ -59,6 +59,8 @@ function computeStatePatch(snap: Snapshot): Record<string, unknown> {
     driverRoster: snap.driverRoster,
     driverDefault: snap.driverDefault,
     driverGroups: snap.driverGroups,
+    cliVersions: snap.cliVersions,
+    driverVersion: snap.driverVersion,
     recentWorkspaces: snap.recentWorkspaces,
     liveSessionsFromServer: snap.liveSessions,
     bundleRoster: snap.bundleRoster,

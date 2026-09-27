@@ -112,6 +112,17 @@
       "note": "pickDriver(name) was called. The controller records the choice; no server call fires until session-open."
     },
     {
+      "name": "DRIVER_VERSION_PICKED",
+      "category": "driver",
+      "stratum": "event",
+      "payload": [
+        "driver",
+        "version"
+      ],
+      "optional_payload": [],
+      "note": "pickDriverVersion(driver, versionId) was called. version is null when the pick is cleared and the server will fall back to the CLI's default_version. Only meaningful for CLI drivers; ollama tags carry their model in the driver name."
+    },
+    {
       "name": "BUNDLE_ROSTER_LOADED",
       "category": "bundle",
       "stratum": "summary",

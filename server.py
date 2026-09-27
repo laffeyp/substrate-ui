@@ -177,9 +177,20 @@ def _daemon_driver_resolver(name: str, params: dict[str, Any] | None = None) -> 
     if name in KNOWN_CLI_ADAPTERS:
         # One catalog, one source of truth. Adding a CLI adapter here
         # requires only the KNOWN_CLI_ADAPTERS entry above.
-        cli_cmd = _cli_command(name)
+        # Sprint 087: params may name a specific model version via
+        # `driver_version`. The cache key already folds params in, so
+        # two versions of the same CLI cache as two Responders.
+        version = None
+        if isinstance(params, dict):
+            raw = params.get("driver_version")
+            if isinstance(raw, str) and raw:
+                version = raw
+        cli_cmd = _cli_command(name, version=version)
         assert cli_cmd is not None
-        responder: Any = CliResponder(cli_cmd, name=name)
+        # Responder.name carries the version too so log lines and
+        # error messages point at the exact model that failed.
+        display_name = f"{name}:{version}" if version else name
+        responder: Any = CliResponder(cli_cmd, name=display_name)
     else:
         p = params or {}
         # Sprint 051: num_ctx must match the model's advertised context, not
@@ -600,7 +611,7 @@ def _agent_params(q: dict[str, list[str]]) -> tuple[bool, int, float]:
 # new CLI adapter is one entry here plus (if the argv shape needs a
 # different flag) the same entry consulted by `_daemon_driver_resolver`.
 # The catalog IS the source of truth — no other file names CLI presets.
-KNOWN_CLI_ADAPTERS: dict[str, dict[str, list[str] | None]] = {
+KNOWN_CLI_ADAPTERS: dict[str, Any] = {
     # Sprint 085 — catalog widened from [cmd, flag] to a dict with the
     # full auth lifecycle. Every value verified live on peterlaffey@
     # 2026-09-25 (see process/planning/RESEARCH-2026-09-25-cli-adapter-
@@ -613,11 +624,30 @@ KNOWN_CLI_ADAPTERS: dict[str, dict[str, list[str] | None]] = {
     # no auth card fires (opencode: TUI login walk; will surface via
     # the future API-key dropdown section). `logout_command` clears
     # stored creds. `status_command` reports authed state.
+    #
+    # Sprint 087 (2026-09-27) — `versions` names the curated model
+    # picks the dropdown exposes per CLI. Each entry:
+    #   id     — stable identifier the client sends back as
+    #            driver_version; also feeds cache keys.
+    #   label  — short display string for the dropdown row.
+    #   flag   — argv fragment appended after `command`. Verified via
+    #            each CLI's `--help` on 2026-09-27.
+    # `default_version`: the id picked when the client sends no
+    # driver_version. Passing None as the version sends no flag —
+    # the CLI picks its own default. Adding a version to the picker
+    # is one row in this list; no other file names CLI versions.
     "claude":       {
         "command": ["claude", "-p"],
         "login_command": ["claude", "auth", "login"],
         "logout_command": ["claude", "auth", "logout"],
         "status_command": ["claude", "auth", "status"],
+        "versions": [
+            {"id": "sonnet", "label": "Sonnet (latest)", "flag": ["--model", "sonnet"]},
+            {"id": "opus",   "label": "Opus (latest)",   "flag": ["--model", "opus"]},
+            {"id": "fable",  "label": "Fable (latest)",  "flag": ["--model", "fable"]},
+            {"id": "haiku",  "label": "Haiku (latest)",  "flag": ["--model", "haiku"]},
+        ],
+        "default_version": "sonnet",
     },
     "codex":        {
         "command": ["codex", "exec"],
@@ -627,6 +657,14 @@ KNOWN_CLI_ADAPTERS: dict[str, dict[str, list[str] | None]] = {
         "login_command": ["codex", "login", "--device-auth"],
         "logout_command": ["codex", "logout"],
         "status_command": ["codex", "login", "status"],
+        "versions": [
+            {"id": "gpt-5-codex", "label": "GPT-5 Codex", "flag": ["-m", "gpt-5-codex"]},
+            {"id": "gpt-5",       "label": "GPT-5",       "flag": ["-m", "gpt-5"]},
+            {"id": "gpt-5-mini",  "label": "GPT-5 Mini",  "flag": ["-m", "gpt-5-mini"]},
+            {"id": "o3",          "label": "o3",          "flag": ["-m", "o3"]},
+            {"id": "o4-mini",     "label": "o4-mini",     "flag": ["-m", "o4-mini"]},
+        ],
+        "default_version": "gpt-5-codex",
     },
     "cursor-agent": {
         "command": ["cursor-agent", "-p"],
@@ -636,6 +674,16 @@ KNOWN_CLI_ADAPTERS: dict[str, dict[str, list[str] | None]] = {
         "login_command": ["cursor-agent", "login"],
         "logout_command": ["cursor-agent", "logout"],
         "status_command": None,       # cursor-agent has no status subcommand
+        "versions": [
+            {"id": "sonnet-4",          "label": "Sonnet 4",          "flag": ["--model", "sonnet-4"]},
+            {"id": "sonnet-4-thinking", "label": "Sonnet 4 Thinking", "flag": ["--model", "sonnet-4-thinking"]},
+            {"id": "opus-4",            "label": "Opus 4",            "flag": ["--model", "opus-4"]},
+            {"id": "gpt-5",             "label": "GPT-5",             "flag": ["--model", "gpt-5"]},
+            {"id": "gpt-5-fast",        "label": "GPT-5 Fast",        "flag": ["--model", "gpt-5-fast"]},
+            {"id": "o3",                "label": "o3",                "flag": ["--model", "o3"]},
+            {"id": "gemini-2.5-pro",    "label": "Gemini 2.5 Pro",    "flag": ["--model", "gemini-2.5-pro"]},
+        ],
+        "default_version": "sonnet-4",
     },
     # opencode removed 2026-09-25 — Peter's ruling: not our business.
     # aider removed 2026-09-25 — no login command exists (aider takes
@@ -674,13 +722,28 @@ def _model_supports_thinking(name: str) -> bool:
     return result
 
 
-def _cli_command(name: str) -> list[str] | None:
+def _cli_command(name: str, version: str | None = None) -> list[str] | None:
+    """Argv for a CLI adapter. `version` selects an entry from the
+    catalog's `versions` list; its `flag` is appended after the base
+    command. version=None sends no flag — the CLI picks its own
+    default. An unknown version id falls back to the catalog's
+    default_version; if that too is unknown, no flag is appended.
+    """
     entry = KNOWN_CLI_ADAPTERS.get(name)
     if entry is None:
         return None
-    cmd = entry["command"]
-    assert isinstance(cmd, list)
-    return cmd
+    cmd = list(entry["command"])
+    versions = entry.get("versions") or []
+    if version is None:
+        return cmd
+    match = next((v for v in versions if v.get("id") == version), None)
+    if match is None:
+        default_id = entry.get("default_version")
+        match = next((v for v in versions if v.get("id") == default_id), None)
+    if match is None:
+        return cmd
+    flag = match.get("flag") or []
+    return cmd + list(flag)
 
 
 # ── Sprint 085a — CLI adapter auth-in-transcript (pty side) ─────────────────
@@ -911,10 +974,24 @@ def _agent_models() -> dict[str, object]:
         (m for m in prefer if m in ollama),
         cli[0] if cli else (ollama[0] if ollama else "deterministic"),
     )
+    # Sprint 087 — per-CLI curated version list. Client dropdown reads
+    # this and renders a caret; picking a version sends driver_version
+    # back on openSession. Only installed CLIs are exposed.
+    cli_versions: dict[str, dict[str, Any]] = {}
+    for name in cli:
+        entry = KNOWN_CLI_ADAPTERS[name]
+        versions = entry.get("versions") or []
+        if not versions:
+            continue
+        cli_versions[name] = {
+            "versions": [{"id": v["id"], "label": v["label"]} for v in versions],
+            "default": entry.get("default_version"),
+        }
     return {
         "models": [*ollama, *cli, "deterministic"],  # flat list — legacy consumers
         "cli": cli,
         "cli_login_supported": cli_login_supported,
+        "cli_versions": cli_versions,
         "ollama_cloud": ollama_cloud,
         "ollama_local": ollama_local,
         "testing": ["deterministic"],
