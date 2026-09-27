@@ -680,7 +680,7 @@ class Component extends DCLogic {
     };
     document.addEventListener("mousedown", this._ddOutside, true);
     this._kd = (e) => {
-      if (e.ctrlKey && e.key === '\u0060') { e.preventDefault(); if (this.state.panes.some(p => p.unbound)) return; this.setState(s => ({ revealed: !s.revealed, surface: null })); }
+      if (e.ctrlKey && e.key === '\u0060') { e.preventDefault(); const s=this.state; if (!s.revealed) { const fp=s.panes.find(p=>p.id===s.focused); if (fp && fp.unbound) return; } this.setState(st => ({ revealed: !st.revealed, surface: null })); }
       if (e.metaKey && (e.key === 'd' || e.key === 'D')) { e.preventDefault(); this._split(e.shiftKey ? 'down' : 'right'); }
       if (e.metaKey && (e.key === 'f' || e.key === 'F')) { e.preventDefault(); this.setState(s => ({ findOpen: !s.findOpen, findQ: '' })); }
       if (e.metaKey && e.key === ',') { e.preventDefault(); this.setState({ showSettings: true }); }
@@ -1105,7 +1105,21 @@ class Component extends DCLogic {
       // legacy `pn.lines` list and the model's replies never format
       // correctly there. An unbound pane still falls to notMain so
       // its workspace picker renders in place of the empty transcript.
-      isMain: !p.unbound, notMain: !!p.unbound,
+      // isMain flips as soon as the pane's controller has an open
+      // session, regardless of the local `unbound` flag. Boot state
+      // (no session, unbound) still falls to notMain and shows the
+      // workspace picker; the moment openSession lands, the
+      // transcript+mount UI takes over. This is what pane-split /
+      // model-reply smoke tests exercise — they call openSession on
+      // the controller without ever hitting _bindPane.
+      isMain: (() => {
+        const s = (state.controllerSnapshots || {})[p.id];
+        return !!(s && s.sessionId) || !p.unbound;
+      })(),
+      notMain: (() => {
+        const s = (state.controllerSnapshots || {})[p.id];
+        return !((s && s.sessionId) || !p.unbound);
+      })(),
       // Machinery-lens bindings scoped to THIS pane so splitting the
       // window does not blank an unfocused pane. Each pane reads its
       // own controller's snapshot; focus only controls emphasis.
@@ -2039,7 +2053,18 @@ class Component extends DCLogic {
       studioColor: surf === Surface.Studio ? '#e2e5e9' : '#9aa0a8',
       showTerminal: !surf && !state.revealed, showRevealed: !surf && state.revealed,
       showRecords: surf === Surface.Records, showAssay: surf === Surface.Assay, showStudio: surf === Surface.Studio,
-      toggleReveal: () => { if (this.state.panes.some(p => p.unbound)) return; this.setState(s => ({ revealed: !s.revealed, surface: null })); },
+      toggleReveal: () => {
+        // Reveal → terminal always works. Terminal → reveal blocks only
+        // when the focused pane is still on its workspace picker (that
+        // picker only renders in the terminal view — toggling away would
+        // strand the user).
+        const s = this.state;
+        if (!s.revealed) {
+          const focusedPane = s.panes.find(p => p.id === s.focused);
+          if (focusedPane && focusedPane.unbound) return;
+        }
+        this.setState(st => ({ revealed: !st.revealed, surface: null }));
+      },
       revealLabel: state.revealed ? '⌃` terminal' : '⌃` reveal',
       revealBtnColor: state.revealed && !surf ? '#212327' : '#9aa0a8', revealBtnBg: state.revealed && !surf ? '#82a5c8' : '#3d434c',
       fontSize: state.fontOverride ?? this.props.transcriptFontSize ?? 13,

@@ -56,6 +56,8 @@ export const flow: Flow = {
           if (c) stack.push(c);
         }
         if (!logic) throw new Error("no logic");
+        const pane1 = logic.state.panes[0];
+        if (pane1.unbound) logic._bindPane(pane1.id, "~/.substrate/sandbox");
         logic._split("right");
         const newest = logic.state.panes[logic.state.panes.length - 1];
         if (newest.unbound) logic._bindPane(newest.id, "~/.substrate/sandbox");

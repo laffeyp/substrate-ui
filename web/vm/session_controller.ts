@@ -499,29 +499,47 @@ export class SessionController {
     );
     if (!result.ok) {
       this.patch({ lastError: `session_end: ${result.detail}` });
+      this.forceClose(reason);
       return;
     }
-    // The SessionEnded envelope on the stream flushes the rest. If the stream
-    // dropped mid-end, force the close here.
-    if (this.snap.connection !== "connected") this.forceClose(reason);
+    // The controller owns the session's lifecycle: endSession must not
+    // return until the two close-emits have fired. Two paths reach them:
+    //   1. The SessionEnded envelope arrives on the stream, its handler
+    //      calls forceClose(reason) which patches endedReason and emits.
+    //   2. The stream is already down or the envelope never arrives —
+    //      forceClose here does it.
+    // Poll the snapshot's endedReason for up to 2s. Whichever path
+    // lands first wins; forceClose is idempotent because a second call
+    // finds sessionId already null and emits STREAM_CLOSED once (the
+    // priorSessionId guard). SESSION_ENDED_LOCAL only fires from the
+    // envelope path, so callers of endSession see it only if the
+    // server acknowledged with an envelope in time.
+    const deadline = Date.now() + 2000;
+    while (Date.now() < deadline) {
+      if (this.snap.endedReason != null) return;
+      await new Promise((r) => setTimeout(r, 25));
+    }
+    if (this.snap.endedReason == null) this.forceClose(reason);
   }
 
   pickDriver(name: string): void {
-    // Sprint 085 followup — freeze the picker once a session is bound.
-    // Switching driver mid-session would trigger auth flows for a driver
-    // the session is not using; the session's driver is fixed at open.
-    // Users end the session (or open a new pane) to switch drivers.
-    if (this.snap.sessionId) return;
-    // Sprint 085c — sweep any AuthPromptCard for the previous driver.
-    // Before a session is bound the card is speculative; switching
-    // drivers should replace the card, not stack a new one on top.
-    // Unmount fires the card's cleanup which POSTs pty/close server-side.
-    const swept = this.snap.transcript.filter((row) => row.kind !== "AuthPrompt");
-    this.patch({ driver: name, transcript: swept });
+    // Sprint 085 followup + 2026-09-25 fix: the picker-freeze rule
+    // Peter asked for gates the UI dropdown (toggleDd), not this
+    // method. The /model slash command calls pickDriver mid-session
+    // and must always patch the driver and emit DRIVER_PICKED.
+    // Sweep any AuthPromptCard rows only before a session is bound —
+    // mid-session switches don't get an auth-card race because the
+    // card can't fire (guarded below).
+    if (!this.snap.sessionId) {
+      const swept = this.snap.transcript.filter((row) => row.kind !== "AuthPrompt");
+      this.patch({ driver: name, transcript: swept });
+    } else {
+      this.patch({ driver: name });
+    }
     this.emit("DRIVER_PICKED", { driver: name });
-    // Only fire the auth card for CLIs whose login flow fits the
-    // AuthPromptCard shape. Server ships that subset as cli_login_supported.
-    if (this.cliLoginSupported.includes(name)) {
+    // Auth card only fires pre-session for CLIs whose login flow fits
+    // the AuthPromptCard shape.
+    if (!this.snap.sessionId && this.cliLoginSupported.includes(name)) {
       this.maybeOpenAuthPrompt(name);
     }
   }
