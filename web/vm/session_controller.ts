@@ -62,7 +62,10 @@ interface ModelsRoster {
   default: string;
   cli?: string[];
   cli_login_supported?: string[];
-  cli_versions?: Record<string, { versions: { id: string; label: string }[]; default: string | null }>;
+  cli_versions?: Record<string, {
+    families: { id: string; label: string; default_pin: string | null; pins: { id: string; label: string }[] }[];
+    default_family: string | null;
+  }>;
   ollama_cloud?: string[];
   ollama_local?: string[];
   testing?: string[];

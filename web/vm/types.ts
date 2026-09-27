@@ -107,15 +107,19 @@ export interface Snapshot {
    *  live probes. Empty groups drop out. `driverRoster` above remains the
    *  flat legacy list for pickDriver and other consumers. */
   driverGroups: { label: string; entries: string[] }[];
-  /** Sprint 087 — per-CLI curated model versions. Server sends
-   *  `cli_versions: {claude: {versions: [{id,label}], default: "sonnet"}, ...}`.
-   *  A CLI without a versions entry has no version picker. Null when
-   *  loadDriverRoster has not run yet. */
-  cliVersions: Record<string, { versions: { id: string; label: string }[]; default: string | null }> | null;
-  /** Sprint 087 — the current pick per CLI. Absent key = default (server
-   *  substitutes default_version, or the CLI's own default if none set).
-   *  pickDriverVersion writes here; openSession folds this into
-   *  driver_params.driver_version. */
+  /** Sprint 087b — two-level per-CLI model tree. Server sends
+   *  `cli_versions: {claude: {families:[{id,label,default_pin,pins:[{id,label}]}], default_family}, ...}`.
+   *  Family row expands into its pins. A CLI without families has no
+   *  version picker. Null when loadDriverRoster has not run yet. */
+  cliVersions: Record<string, {
+    families: { id: string; label: string; default_pin: string | null; pins: { id: string; label: string }[] }[];
+    default_family: string | null;
+  }> | null;
+  /** Sprint 087 — the current pick per CLI. The value is either a
+   *  family id or a pin id; the server resolves either shape.
+   *  Absent key = default (server substitutes default_family →
+   *  default_pin). pickDriverVersion writes here; openSession folds
+   *  this into driver_params.driver_version. */
   driverVersion: Record<string, string>;
   liveSessions: SessionRow[];
   recentWorkspaces: WorkspaceRow[];

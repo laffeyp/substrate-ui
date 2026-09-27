@@ -8,6 +8,8 @@ card when picked up. Append-only-ish; mark items done/promoted rather than delet
 
 ## Actionable (small fixes)
 
+- **[2026-09-27] Post-ship cockpit directions — see `process/planning/FUTURE-DIRECTIONS-2026-09-27-cockpit-post-ship.md`.** Five threads captured from Peter's Sprint 087c dictation: Studio rewrite (topology dropdown + read-only shape display, or hide for ship), Records keyboard nav (↑↓ walks workspaces, enter opens, ↑↓ walks sessions, enter attaches), workspace picker (immediate ↑↓ on pane open + real-filesystem autocomplete + drop the "fills nearest recent" glyph the placeholder still promises), every existing topology session-runnable + terminating, and the long-term multi-pane topology viewer (session pane spawns sub-topologies, each opens as its own pane with a topology-specific left half + standard stream/graph/IO/scene right half; control stays in the session pane).
+
 - **[2026-06-22] [DONE — sprint 011] Inspector should work on the OUTPUT ARTIFACTS (I/O pane).** Each
   output artifact row is now clickable -> `inspectEvent(seq)` (cursor + hover), filling the inspector
   with its full content, like a stream event. Gated in e2e §16.

@@ -636,18 +636,56 @@ KNOWN_CLI_ADAPTERS: dict[str, Any] = {
     # driver_version. Passing None as the version sends no flag —
     # the CLI picks its own default. Adding a version to the picker
     # is one row in this list; no other file names CLI versions.
+    # Sprint 087c (2026-09-27) — versions are LIVE-PROBED per CLI when
+    # the CLI exposes a listing command (see `list_command` below).
+    # Anthropic's `claude` and OpenAI's `codex` publish no such
+    # command today, so those two carry a curated fallback here and
+    # the `/api/models` payload marks them `"source": "curated"`.
+    # Cursor's `cursor-agent --list-models` is a real listing command;
+    # its result marks `"source": "live"` when the probe succeeds.
+    # `versions` is the FALLBACK for the two curated CLIs. The
+    # runtime pipeline is: `_probe_cli_versions(name)` → live command
+    # (if any) → parsed tree → else this fallback. Editing the
+    # curated fallback stays a hand-maintained step; live-listed
+    # CLIs never touch this block.
     "claude":       {
         "command": ["claude", "-p"],
         "login_command": ["claude", "auth", "login"],
         "logout_command": ["claude", "auth", "logout"],
         "status_command": ["claude", "auth", "status"],
+        # No `list_command`: `claude --help` shows no models subcommand
+        # (2026-09-27) and a bogus `--model` returns
+        # `[claude-code:unrecognized_model]` without listing valid
+        # choices. Fallback is curated by hand.
         "versions": [
-            {"id": "sonnet", "label": "Sonnet (latest)", "flag": ["--model", "sonnet"]},
-            {"id": "opus",   "label": "Opus (latest)",   "flag": ["--model", "opus"]},
-            {"id": "fable",  "label": "Fable (latest)",  "flag": ["--model", "fable"]},
-            {"id": "haiku",  "label": "Haiku (latest)",  "flag": ["--model", "haiku"]},
+            {"id": "opus", "label": "Opus", "default_pin": "opus-4-8", "pins": [
+                {"id": "opus-4-8", "label": "4.8", "flag": ["--model", "claude-opus-4-8"]},
+                {"id": "opus-4-7", "label": "4.7", "flag": ["--model", "claude-opus-4-7"]},
+                {"id": "opus-4-6", "label": "4.6", "flag": ["--model", "claude-opus-4-6"]},
+                {"id": "opus-4-5", "label": "4.5", "flag": ["--model", "claude-opus-4-5"]},
+                {"id": "opus-4-1", "label": "4.1", "flag": ["--model", "claude-opus-4-1"]},
+                {"id": "opus-4",   "label": "4",   "flag": ["--model", "claude-opus-4"]},
+                {"id": "opus-3",   "label": "3",   "flag": ["--model", "claude-3-opus"]},
+            ]},
+            {"id": "sonnet", "label": "Sonnet", "default_pin": "sonnet-4-6", "pins": [
+                {"id": "sonnet-4-6", "label": "4.6", "flag": ["--model", "claude-sonnet-4-6"]},
+                {"id": "sonnet-4-5", "label": "4.5", "flag": ["--model", "claude-sonnet-4-5"]},
+                {"id": "sonnet-4",   "label": "4",   "flag": ["--model", "claude-sonnet-4"]},
+                {"id": "sonnet-3-7", "label": "3.7", "flag": ["--model", "claude-3-7-sonnet"]},
+                {"id": "sonnet-3-5", "label": "3.5", "flag": ["--model", "claude-3-5-sonnet"]},
+                {"id": "sonnet-3",   "label": "3",   "flag": ["--model", "claude-3-sonnet"]},
+            ]},
+            {"id": "haiku", "label": "Haiku", "default_pin": "haiku-4-5", "pins": [
+                {"id": "haiku-4-5", "label": "4.5", "flag": ["--model", "claude-haiku-4-5"]},
+                {"id": "haiku-3-5", "label": "3.5", "flag": ["--model", "claude-3-5-haiku"]},
+                {"id": "haiku-3",   "label": "3",   "flag": ["--model", "claude-3-haiku"]},
+            ]},
+            {"id": "fable", "label": "Fable", "default_pin": "fable-5-1", "pins": [
+                {"id": "fable-5-1", "label": "5.1", "flag": ["--model", "claude-fable-5-1"]},
+                {"id": "fable-5",   "label": "5",   "flag": ["--model", "claude-fable-5"]},
+            ]},
         ],
-        "default_version": "sonnet",
+        "default_family": "opus",
     },
     "codex":        {
         "command": ["codex", "exec"],
@@ -657,14 +695,26 @@ KNOWN_CLI_ADAPTERS: dict[str, Any] = {
         "login_command": ["codex", "login", "--device-auth"],
         "logout_command": ["codex", "logout"],
         "status_command": ["codex", "login", "status"],
+        # No `list_command`: codex.js has no `list-models` subcommand;
+        # its embedded catalog is only reachable by binary inspection,
+        # which we don't do. Fallback is curated by hand.
         "versions": [
-            {"id": "gpt-5-codex", "label": "GPT-5 Codex", "flag": ["-m", "gpt-5-codex"]},
-            {"id": "gpt-5",       "label": "GPT-5",       "flag": ["-m", "gpt-5"]},
-            {"id": "gpt-5-mini",  "label": "GPT-5 Mini",  "flag": ["-m", "gpt-5-mini"]},
-            {"id": "o3",          "label": "o3",          "flag": ["-m", "o3"]},
-            {"id": "o4-mini",     "label": "o4-mini",     "flag": ["-m", "o4-mini"]},
+            {"id": "gpt-6",       "label": "GPT-6",       "default_pin": "gpt-6-astra", "pins": [
+                {"id": "gpt-6-astra", "label": "Astra", "flag": ["-m", "gpt-6-astra"]},
+                {"id": "gpt-6-sol",   "label": "Sol",   "flag": ["-m", "gpt-6-sol"]},
+                {"id": "gpt-6-luna",  "label": "Luna",  "flag": ["-m", "gpt-6-luna"]},
+            ]},
+            {"id": "gpt-5-6",     "label": "GPT-5.6",     "default_pin": "gpt-5-6-sol", "pins": [
+                {"id": "gpt-5-6-sol",   "label": "Sol",   "flag": ["-m", "gpt-5.6-sol"]},
+                {"id": "gpt-5-6-terra", "label": "Terra", "flag": ["-m", "gpt-5.6-terra"]},
+                {"id": "gpt-5-6-luna",  "label": "Luna",  "flag": ["-m", "gpt-5.6-luna"]},
+            ]},
+            {"id": "gpt-5",       "label": "GPT-5",       "default_pin": "gpt-5-5", "pins": [
+                {"id": "gpt-5-5", "label": "5.5", "flag": ["-m", "gpt-5.5"]},
+                {"id": "gpt-5-4", "label": "5.4", "flag": ["-m", "gpt-5.4"]},
+            ]},
         ],
-        "default_version": "gpt-5-codex",
+        "default_family": "gpt-6",
     },
     "cursor-agent": {
         "command": ["cursor-agent", "-p"],
@@ -674,16 +724,25 @@ KNOWN_CLI_ADAPTERS: dict[str, Any] = {
         "login_command": ["cursor-agent", "login"],
         "logout_command": ["cursor-agent", "logout"],
         "status_command": None,       # cursor-agent has no status subcommand
+        # LIVE listing available: `cursor-agent --list-models` prints
+        # the account's supported models when authed. The probe
+        # invokes it with a short timeout; on any failure (unauthed,
+        # network) the fallback below applies with source="curated".
+        "list_command": ["cursor-agent", "--list-models"],
         "versions": [
-            {"id": "sonnet-4",          "label": "Sonnet 4",          "flag": ["--model", "sonnet-4"]},
-            {"id": "sonnet-4-thinking", "label": "Sonnet 4 Thinking", "flag": ["--model", "sonnet-4-thinking"]},
-            {"id": "opus-4",            "label": "Opus 4",            "flag": ["--model", "opus-4"]},
-            {"id": "gpt-5",             "label": "GPT-5",             "flag": ["--model", "gpt-5"]},
-            {"id": "gpt-5-fast",        "label": "GPT-5 Fast",        "flag": ["--model", "gpt-5-fast"]},
-            {"id": "o3",                "label": "o3",                "flag": ["--model", "o3"]},
-            {"id": "gemini-2.5-pro",    "label": "Gemini 2.5 Pro",    "flag": ["--model", "gemini-2.5-pro"]},
+            {"id": "sonnet",   "label": "Sonnet",   "default_pin": "sonnet-4-thinking", "pins": [
+                {"id": "sonnet-4-thinking", "label": "4 thinking", "flag": ["--model", "sonnet-4-thinking"]},
+                {"id": "sonnet-4",          "label": "4",          "flag": ["--model", "sonnet-4"]},
+            ]},
+            {"id": "opus",     "label": "Opus",     "default_pin": "opus-4", "pins": [
+                {"id": "opus-4", "label": "4", "flag": ["--model", "opus-4"]},
+            ]},
+            {"id": "gpt",      "label": "GPT",      "default_pin": "gpt-5-5", "pins": [
+                {"id": "gpt-5-5", "label": "5.5", "flag": ["--model", "gpt-5.5"]},
+                {"id": "gpt-5",   "label": "5",   "flag": ["--model", "gpt-5"]},
+            ]},
         ],
-        "default_version": "sonnet-4",
+        "default_family": "sonnet",
     },
     # opencode removed 2026-09-25 — Peter's ruling: not our business.
     # aider removed 2026-09-25 — no login command exists (aider takes
@@ -722,27 +781,171 @@ def _model_supports_thinking(name: str) -> bool:
     return result
 
 
+def _resolve_pin(entry: dict[str, Any], version: str | None) -> dict[str, Any] | None:
+    """Walk the CLI catalog's family tree to find the pin whose flag we
+    append. `version` may be:
+      - None                → default_family → its default_pin.
+      - a family id         → that family's default_pin.
+      - a pin id            → that pin (searched across every family).
+    Returns the pin dict (with `flag`), or None when nothing matches.
+    """
+    families = entry.get("versions") or []
+
+    def _pin_by_id(family: dict[str, Any], pin_id: str) -> dict[str, Any] | None:
+        return next((p for p in (family.get("pins") or []) if p.get("id") == pin_id), None)
+
+    def _family_default(family: dict[str, Any]) -> dict[str, Any] | None:
+        return _pin_by_id(family, family.get("default_pin", ""))
+
+    if version is None:
+        default_family_id = entry.get("default_family")
+        family = next((f for f in families if f.get("id") == default_family_id), None)
+        return _family_default(family) if family else None
+    for family in families:
+        if family.get("id") == version:
+            return _family_default(family)
+        pin = _pin_by_id(family, version)
+        if pin is not None:
+            return pin
+    return None
+
+
+# Sprint 087c — live-probe cache for per-CLI version lists. The
+# `/api/models` handler asks _probe_cli_versions(name) for each
+# installed CLI; the result is cached per-process for VERSION_CACHE_TTL_S
+# seconds. Users who log a CLI in/out and want the picker to refresh
+# right away can restart the daemon; a longer-lived cache-bust hook
+# (e.g. clear on POST /api/cli/<name>/logout) is a follow-up.
+_VERSION_CACHE: dict[str, dict[str, Any]] = {}
+_VERSION_CACHE_AT: dict[str, float] = {}
+_VERSION_CACHE_TTL_S = 300.0
+
+
+def _parse_cursor_agent_list_models(text: str) -> dict[str, Any] | None:
+    """Best-effort parser for `cursor-agent --list-models`. Cursor's own
+    docs describe the output as a plain list of ids, one per line, in
+    the shape `<id>[ (default)]`. We collect ids, drop anything that
+    doesn't look like a slug, and group by family prefix (segment
+    before the first dash-number). Returns None on empty or
+    unparseable output — the caller falls back to curated.
+    """
+    if not text:
+        return None
+    ids: list[str] = []
+    default: str | None = None
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        # Trim any "(default)" or trailing whitespace marker.
+        head = line.split()[0]
+        if not head or not head[0].isalpha():
+            continue
+        # Drop labels like "Available models:".
+        if head.endswith(":"):
+            continue
+        ids.append(head)
+        if "(default)" in line and default is None:
+            default = head
+    if not ids:
+        return None
+    # Group by family: the prefix up to and including the first digit.
+    families: dict[str, list[str]] = {}
+    def _family_key(mid: str) -> str:
+        parts = mid.split("-")
+        if not parts:
+            return mid
+        return parts[0]
+    for mid in ids:
+        families.setdefault(_family_key(mid), []).append(mid)
+    fam_list = []
+    for key, pins in families.items():
+        fam_list.append({
+            "id": key,
+            "label": key.capitalize(),
+            "default_pin": pins[0],
+            "pins": [{"id": p, "label": p, "flag": ["--model", p]} for p in pins],
+        })
+    return {
+        "families": fam_list,
+        "default_family": fam_list[0]["id"] if fam_list else None,
+        "source": "live",
+        "default_pin_id": default,
+    }
+
+
+def _probe_cli_versions(name: str) -> dict[str, Any]:
+    """Return the version tree for one CLI. Live-probes when the
+    catalog entry names a `list_command` and the CLI accepts it;
+    otherwise returns the curated fallback with source="curated".
+    Cached per-process for _VERSION_CACHE_TTL_S seconds."""
+    now = time.monotonic()
+    cached_at = _VERSION_CACHE_AT.get(name, 0.0)
+    if now - cached_at < _VERSION_CACHE_TTL_S and name in _VERSION_CACHE:
+        return _VERSION_CACHE[name]
+    entry = KNOWN_CLI_ADAPTERS.get(name) or {}
+    curated_families = entry.get("versions") or []
+    curated_default_family = entry.get("default_family")
+    curated = {
+        "families": [
+            {
+                "id": f["id"],
+                "label": f["label"],
+                "default_pin": f.get("default_pin"),
+                "pins": [
+                    # Preserve `flag` so _resolve_pin below can build
+                    # the argv from this tree without going back to
+                    # KNOWN_CLI_ADAPTERS.
+                    {"id": p["id"], "label": p["label"], "flag": p.get("flag") or []}
+                    for p in (f.get("pins") or [])
+                ],
+            }
+            for f in curated_families
+        ],
+        "default_family": curated_default_family,
+        "source": "curated",
+    }
+    list_cmd = entry.get("list_command")
+    if isinstance(list_cmd, list) and list_cmd:
+        try:
+            proc = subprocess.run(  # noqa: S603 — operator-configured CLI probe
+                list_cmd, capture_output=True, text=True, timeout=6.0
+            )
+            if proc.returncode == 0 and proc.stdout.strip():
+                parsed = None
+                if name == "cursor-agent":
+                    parsed = _parse_cursor_agent_list_models(proc.stdout)
+                if parsed and parsed.get("families"):
+                    _VERSION_CACHE[name] = parsed
+                    _VERSION_CACHE_AT[name] = now
+                    return parsed
+        except (OSError, subprocess.SubprocessError):
+            pass  # fall through to curated
+    _VERSION_CACHE[name] = curated
+    _VERSION_CACHE_AT[name] = now
+    return curated
+
+
 def _cli_command(name: str, version: str | None = None) -> list[str] | None:
-    """Argv for a CLI adapter. `version` selects an entry from the
-    catalog's `versions` list; its `flag` is appended after the base
-    command. version=None sends no flag — the CLI picks its own
-    default. An unknown version id falls back to the catalog's
-    default_version; if that too is unknown, no flag is appended.
+    """Argv for a CLI adapter. Reads the LIVE version tree from
+    _probe_cli_versions so a client that picks a live-listed pin id
+    resolves against the same tree the picker rendered — not a stale
+    curated snapshot. `version` selects a family or a pin from that
+    tree; the resolved pin's flag is appended after the base command.
+    Missing entry / no pin resolved → base command only.
     """
     entry = KNOWN_CLI_ADAPTERS.get(name)
     if entry is None:
         return None
     cmd = list(entry["command"])
-    versions = entry.get("versions") or []
-    if version is None:
+    tree = _probe_cli_versions(name)
+    # `_resolve_pin` works on any shape whose families carry pins with
+    # `id` and `flag`; both the curated and the live tree do.
+    pin = _resolve_pin({"versions": tree.get("families", []),
+                        "default_family": tree.get("default_family")}, version)
+    if pin is None:
         return cmd
-    match = next((v for v in versions if v.get("id") == version), None)
-    if match is None:
-        default_id = entry.get("default_version")
-        match = next((v for v in versions if v.get("id") == default_id), None)
-    if match is None:
-        return cmd
-    flag = match.get("flag") or []
+    flag = pin.get("flag") or []
     return cmd + list(flag)
 
 
@@ -974,19 +1177,17 @@ def _agent_models() -> dict[str, object]:
         (m for m in prefer if m in ollama),
         cli[0] if cli else (ollama[0] if ollama else "deterministic"),
     )
-    # Sprint 087 — per-CLI curated version list. Client dropdown reads
-    # this and renders a caret; picking a version sends driver_version
-    # back on openSession. Only installed CLIs are exposed.
+    # Sprint 087c — LIVE per-CLI version probe. Each entry carries
+    # source="live" when the CLI's own list command answered, or
+    # source="curated" when we fell back. The dropdown reads both
+    # branches identically; the source flag is data the daemon summary
+    # and future UI banners can surface ("Cursor list from account",
+    # "Claude list curated 2026-09-27").
     cli_versions: dict[str, dict[str, Any]] = {}
     for name in cli:
-        entry = KNOWN_CLI_ADAPTERS[name]
-        versions = entry.get("versions") or []
-        if not versions:
-            continue
-        cli_versions[name] = {
-            "versions": [{"id": v["id"], "label": v["label"]} for v in versions],
-            "default": entry.get("default_version"),
-        }
+        tree = _probe_cli_versions(name)
+        if tree.get("families"):
+            cli_versions[name] = tree
     return {
         "models": [*ollama, *cli, "deterministic"],  # flat list — legacy consumers
         "cli": cli,
@@ -3715,20 +3916,36 @@ def main() -> None:
     from substrate.topologies.applications.registry import load_manifests
 
     _APPLICATIONS = load_manifests(on_error="skip")
-    skipped = registry.boot_scan()
-    manifests = registry.list_all()
+    # Sprint 087b — session boot-scan runs in the background. On this
+    # box the scan walks ~4k session dirs and re-derives status for each
+    # by tailing the record log; that blocked the port readback for
+    # 5–15 s and kept Electron from ever painting. The registry's
+    # _manifests dict is a plain dict[str, Manifest]; CPython's GIL
+    # makes single-key reads/writes atomic, so a request landing mid-
+    # scan sees whatever entries the scan has added so far. /api/session
+    # returns a partial list until the scan completes; the client's
+    # Records view reloads on demand.
     summary = (
         f"substrate-ui read-API server on http://{HOST}:{PORT}  "
-        f"(records: {', '.join(bundled.names())}; "
-        f"sessions: {len(manifests)} — "
-        f"{sum(1 for m in manifests if m.status == 'parked')} parked, "
-        f"{sum(1 for m in manifests if m.status == 'interrupted')} interrupted, "
-        f"{sum(1 for m in manifests if m.status == 'ended')} ended)"
+        f"(records: {', '.join(bundled.names())}; sessions: scanning in background)"
     )
-    if skipped:
-        summary += f"; SKIPPED {len(skipped)} unparseable manifest(s): {', '.join(skipped[:5])}"
-        if len(skipped) > 5:
-            summary += f" ... (+{len(skipped) - 5} more)"
+
+    def _run_boot_scan() -> None:
+        started = time.monotonic()
+        skipped = registry.boot_scan()
+        manifests = registry.list_all()
+        elapsed = time.monotonic() - started
+        note = (
+            f"boot_scan: {len(manifests)} manifest(s) in {elapsed:.2f}s — "
+            f"{sum(1 for m in manifests if m.status == 'parked')} parked, "
+            f"{sum(1 for m in manifests if m.status == 'interrupted')} interrupted, "
+            f"{sum(1 for m in manifests if m.status == 'ended')} ended"
+        )
+        if skipped:
+            note += f"; SKIPPED {len(skipped)} unparseable manifest(s): {', '.join(skipped[:5])}"
+            if len(skipped) > 5:
+                note += f" ... (+{len(skipped) - 5} more)"
+        print(note, flush=True)
     # Sprint 217e: bind a UDS listener alongside the TCP one. TECH-SPEC §6
     # names `~/.substrate/daemon.sock` as the primary transport, with TCP as
     # fallback. Both sockets share the same `Handler`; the CLI tries UDS first.
@@ -3758,6 +3975,7 @@ def main() -> None:
     summary = summary.replace(f"http://{HOST}:{args.port}", f"http://{HOST}:{PORT}", 1)
     print(summary)
     threading.Thread(target=uds_srv.serve_forever, daemon=True).start()
+    threading.Thread(target=_run_boot_scan, daemon=True, name="boot_scan").start()
 
     def _sigterm_handler(_signum: int, _frame: Any) -> None:
         # Sprint 215d: a second SIGTERM during shutdown is a no-op.
