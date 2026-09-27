@@ -32,6 +32,21 @@ const PORT_READBACK_RE = /^substrate-ui port=(\d+)$/m;
 const SUBSTRATE_ROOT = path.resolve(__dirname, "..", "..", "substrate");
 const SERVER_PATH = path.resolve(__dirname, "..", "server.py");
 
+// Sprint 088 — when the .app is packaged, `Contents/Resources/python/`
+// carries a self-contained python-build-standalone runtime with
+// substrate + msgspec already installed. Use it directly instead of
+// `uv run python`; end-users have no `uv` on their box. In dev
+// (running from source, no packaged Resources dir), fall back to
+// `uv run python` as before.
+const BUNDLED_PY = process.resourcesPath
+  ? path.join(process.resourcesPath, "python", "bin", "python3")
+  : null;
+const PACKAGED_SERVER = process.resourcesPath
+  ? path.join(process.resourcesPath, "app.asar.unpacked", "server.py")
+  : null;
+const fs = require("node:fs");
+const HAS_BUNDLED_RUNTIME = !!BUNDLED_PY && fs.existsSync(BUNDLED_PY);
+
 let mainWindow = null;
 let serverProc = null;
 let serverPort = null;
@@ -64,9 +79,20 @@ function killServerGroup() {
 }
 
 function spawnServer() {
-  log("spawning server: uv run python " + SERVER_PATH + " --port 0");
-  serverProc = spawn("uv", ["run", "python", SERVER_PATH, "--port", "0"], {
-    cwd: SUBSTRATE_ROOT,
+  // Two launch paths — packaged vs dev — differ only in the executable
+  // and the working directory. Packaged: the bundled Python at
+  // Contents/Resources/python/bin/python3 runs server.py sitting in the
+  // same Resources tree (server.py lives inside asar-unpacked so it
+  // has an absolute filesystem path for the interpreter to open). Dev:
+  // fall back to `uv run python` against the sibling substrate repo.
+  const exe = HAS_BUNDLED_RUNTIME ? BUNDLED_PY : "uv";
+  const args = HAS_BUNDLED_RUNTIME
+    ? [PACKAGED_SERVER, "--port", "0"]
+    : ["run", "python", SERVER_PATH, "--port", "0"];
+  const cwd = HAS_BUNDLED_RUNTIME ? process.resourcesPath : SUBSTRATE_ROOT;
+  log("spawning server: " + exe + " " + args.join(" ") + " (cwd=" + cwd + ")");
+  serverProc = spawn(exe, args, {
+    cwd,
     stdio: ["ignore", "pipe", "pipe"],
     detached: true,
     env: { ...process.env, PYTHONUNBUFFERED: "1" },

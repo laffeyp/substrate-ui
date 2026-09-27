@@ -15,9 +15,13 @@
     "pixel:diff": "npx tsx harness/pixel_diff.ts",
     "test:unit": "npx tsx --test web/reveal/__tests__/*.spec.ts",
     "electron": "electron .",
-    "electron:smoke": "SHAKEOUT_AXIS=C SHAKEOUT_RUNS=1 npx tsx harness/shakeout/run.ts"
+    "electron:smoke": "SHAKEOUT_AXIS=C SHAKEOUT_RUNS=1 npx tsx harness/shakeout/run.ts",
+    "pack:runtime": "bash scripts/fetch-python-runtime.sh",
+    "pack:dev": "npm run build && npm run pack:runtime && electron-builder --mac --config electron-builder.config.js -c.mac.identity=null -c.mac.notarize=false",
+    "dist": "npm run build && npm run pack:runtime && electron-builder --mac --config electron-builder.config.js"
   },
   "devDependencies": {
+    "@electron/notarize": "^3.1.1",
     "@types/node": "^22",
     "@types/pngjs": "^6.0.5",
     "@types/react": "^19.3.0",
@@ -25,6 +29,7 @@
     "@typescript-eslint/eslint-plugin": "^8.70.1",
     "@typescript-eslint/parser": "^8.70.1",
     "electron": "^44.4.5",
+    "electron-builder": "^26.15.3",
     "eslint": "^10.11.0",
     "pixelmatch": "^7.2.0",
     "playwright": "^1.49.0",
