@@ -61,7 +61,7 @@ class Component extends DCLogic {
     // bookmark or menu action; the picker state itself carries the
     // frame.
     panes: [{ id: 1, name: 'pane-1', driver: null, editing: false, nameVal: '', unbound: true }],
-    focused: 1, cols: 1, rows: 1, colW: [1], rowW: [1], revealL: 1.15, ddFor: null, wsFor: null, driverExpandedCli: null, allSessions: [], dropHint: null,
+    focused: 1, cols: 1, rows: 1, colW: [1], rowW: [1], revealL: 1.15, ddFor: null, wsFor: null, driverExpandedCli: null, driverExpandedFamily: null, allSessions: [], dropHint: null,
     descent: [], descPv: '', descExtra: {}, fanOpen: false, fanSel: 0, findOpen: false, findQ: '', findScope: 'transcript', nestedDescent: false,
     showSettings: false, showExport: false, showEndConfirm: false, ended: false, frDone: false, theme: 'dark', fontOverride: null, settingsNote: '',
   // Sprint 086 — Records surface: per-workspace expand state and
@@ -599,66 +599,85 @@ class Component extends DCLogic {
   }
 
   _buildDriverOpts(state, paneId, currentDriver) {
-    // Sprint 084 — sectioned driver picker. Header rows carry
-    // `isHeader:true`; the template renders headers as uppercase
-    // labels and item rows as clickable pickers.
-    // Sprint 087 — CLI rows expose a caret when the CLI has a curated
-    // version list on the server. Clicking the caret expands a nested
-    // list of versions in place; clicking a version records the pick
-    // and closes the whole dropdown. Ollama tags carry their own
-    // model in the row name — no version picker for those.
+    // Sprint 087b — three-tier dropdown: CLI row (level 0) expands
+    // into families (level 1), each family expands into pins
+    // (level 2). Every row is its own pick — clicking the CLI label
+    // picks the CLI's default family+pin, clicking a family label
+    // picks that family's default pin, clicking a pin label pins
+    // exactly. Rows carry `indent` (px) so one flat template can
+    // draw all three levels. Caret points inward: ◂ collapsed,
+    // ▾ expanded.
     const groups = (state.driverGroups && state.driverGroups.length)
       ? state.driverGroups
       : [{ label: '', entries: (state.driverRoster && state.driverRoster.length) ? state.driverRoster : ['deterministic'] }];
     const cliVersions = state.cliVersions || {};
-    const chosenVersions = state.driverVersion || {};
     const items = [];
     const noop = () => undefined;
+    const pickDriverAndVersion = (cli, versionId) => {
+      this.setState((s) => ({
+        ddFor: null, driverExpandedCli: null, driverExpandedFamily: null,
+        panes: s.panes.map((x) => x.id === paneId ? Object.assign({}, x, { driver: cli }) : x),
+      }));
+      const vm = window.__vm;
+      if (vm) {
+        vm.pickDriver(cli);
+        if (typeof vm.pickDriverVersion === 'function') vm.pickDriverVersion(cli, versionId);
+      }
+    };
     for (const grp of groups) {
       if (grp.label) items.push({
-        label: grp.label, color: '#62676f',
-        isHeader: true, notHeader: false, expandable: false, notExpandable: true,
-        expanded: false, notExpanded: true, chevron: ' ', versions: [], pick: noop, toggleExpand: noop,
+        label: grp.label, color: '#62676f', indent: 12,
+        isHeader: true, notHeader: false, expandable: false,
+        chevron: ' ', pick: noop, toggleExpand: noop,
       });
-      for (const m of grp.entries) {
-        const versionEntry = cliVersions[m];
-        const hasVersions = !!(versionEntry && Array.isArray(versionEntry.versions) && versionEntry.versions.length > 0);
-        const expanded = state.driverExpandedCli === m;
-        const chosen = chosenVersions[m] || (versionEntry ? versionEntry.default : null);
-        const versions = (hasVersions && expanded)
-          ? versionEntry.versions.map((v) => ({
-              label: v.label,
-              color: v.id === chosen ? '#e2e5e9' : '#9aa0a8',
-              pick: () => {
-                this.setState((s) => ({
-                  ddFor: null, driverExpandedCli: null,
-                  panes: s.panes.map((x) => x.id === paneId ? Object.assign({}, x, { driver: m }) : x),
-                }));
-                const vm = window.__vm;
-                if (vm) {
-                  vm.pickDriver(m);
-                  if (typeof vm.pickDriverVersion === 'function') vm.pickDriverVersion(m, v.id);
-                }
-              },
-            }))
-          : [];
+      for (const cli of grp.entries) {
+        const tree = cliVersions[cli];
+        const families = tree && Array.isArray(tree.families) ? tree.families : [];
+        const cliHasChildren = families.length > 0;
+        const cliExpanded = state.driverExpandedCli === cli;
         items.push({
-          label: m,
-          color: m === currentDriver ? '#e2e5e9' : '#9aa0a8',
+          label: cli,
+          color: cli === currentDriver ? '#e2e5e9' : '#9aa0a8',
+          indent: 12,
           isHeader: false, notHeader: true,
-          expandable: hasVersions, notExpandable: !hasVersions,
-          expanded, notExpanded: !expanded,
-          chevron: hasVersions ? (expanded ? '▾' : '▸') : ' ',
-          versions,
-          toggleExpand: hasVersions
-            ? (ev) => { if (ev && typeof ev.stopPropagation === 'function') ev.stopPropagation(); this.setState((s) => ({ driverExpandedCli: s.driverExpandedCli === m ? null : m })); }
+          expandable: cliHasChildren,
+          chevron: cliHasChildren ? (cliExpanded ? '▾' : '◂') : ' ',
+          toggleExpand: cliHasChildren
+            ? (ev) => { if (ev && typeof ev.stopPropagation === 'function') ev.stopPropagation(); this.setState((s) => ({ driverExpandedCli: s.driverExpandedCli === cli ? null : cli, driverExpandedFamily: null })); }
             : noop,
-          pick: () => {
-            this.setState((s) => ({ ddFor: null, driverExpandedCli: null, panes: s.panes.map((x) => x.id === paneId ? Object.assign({}, x, { driver: m }) : x) }));
-            const vm = window.__vm;
-            if (vm) vm.pickDriver(m);
-          },
+          pick: () => pickDriverAndVersion(cli, null),
         });
+        if (!cliExpanded) continue;
+        for (const fam of families) {
+          const pins = Array.isArray(fam.pins) ? fam.pins : [];
+          const famHasChildren = pins.length > 0;
+          const famExpanded = state.driverExpandedFamily === (cli + ':' + fam.id);
+          items.push({
+            label: fam.label,
+            color: '#b9bec5',
+            indent: 28,
+            isHeader: false, notHeader: true,
+            expandable: famHasChildren,
+            chevron: famHasChildren ? (famExpanded ? '▾' : '◂') : ' ',
+            toggleExpand: famHasChildren
+              ? (ev) => { if (ev && typeof ev.stopPropagation === 'function') ev.stopPropagation(); this.setState((s) => ({ driverExpandedFamily: s.driverExpandedFamily === (cli + ':' + fam.id) ? null : (cli + ':' + fam.id) })); }
+              : noop,
+            pick: () => pickDriverAndVersion(cli, fam.id),
+          });
+          if (!famExpanded) continue;
+          for (const pin of pins) {
+            items.push({
+              label: pin.label,
+              color: '#9aa0a8',
+              indent: 44,
+              isHeader: false, notHeader: true,
+              expandable: false,
+              chevron: ' ',
+              toggleExpand: noop,
+              pick: () => pickDriverAndVersion(cli, pin.id),
+            });
+          }
+        }
       }
     }
     return items;
