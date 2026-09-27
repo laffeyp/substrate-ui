@@ -58,6 +58,20 @@ The end state is that a session pane can spin up other topologies and each one o
 
 The terminal-pane surface therefore evolves from "chat with one session" into "the ultimate topology viewer." Every named-topology shape gets its rendering module; the framework routes envelopes into that module by kind + payload.
 
+## 6. Auto-mode as a session-topology switch
+
+The autonomous-build topology under active development is, in shape, the session topology with the human loop replaced by an auto-driver. Corollary: the ordinary session topology can carry a **button that flips it into auto mode**. Same topology, same views, same records — one toggle in the header. Every session becomes optionally autonomous without duplicating the shape.
+
+## 7. First-run demo mode
+
+Every first-time user needs a way in. The workspace picker gets an extra top row: **Demo mode**. It stays there until the user actually picks it — never auto-dismissed, never hidden after N sessions. Sticky by design so the escape hatch is always visible.
+
+What happens on pick: substrate loads a scripted interaction. It types a real prompt into the session's own input — something like *"What is this? What is substrate? What tools do you have?"* — and hits send. Whatever agent the user chose in the session topology answers, which means the user immediately watches the model itself explain the surface they're looking at, in the same chat box they'll use for real work. The demo is *them*, running for the first time.
+
+After that first scripted turn lands the user drops straight into a normal session — same pane, same driver, same workspace (whatever demo mode used). No hand-off screen, no "welcome" modal.
+
+Future refinement (research thread, not scope): per-model prompt variants. One prompt won't land equally across Claude / GPT / open-source; there's real work in figuring out the shape of an explanation prompt that works uniformly. For the first ship, one prompt is fine.
+
 ---
 
 *These are direction, not scope. When the current shipping wave closes, they become sprint cards.*

@@ -526,11 +526,19 @@ class SessionRegistry:
         if session_id not in self._manifests:
             raise KeyError(f"unknown session_id {session_id!r}")
         if params is not None:
+            # Sprint 087c — `driver_version` names the CLI model pick
+            # from the version picker. The daemon's driver resolver
+            # (server.py `_daemon_driver_resolver`) reads it and
+            # appends the corresponding flag to the CLI argv. Rejecting
+            # it as "unknown" here was the reason the picker looked
+            # dead: openSession failed at validation, no session
+            # opened.
             allowed: dict[str, type | tuple[type, ...]] = {
                 "think": bool,
                 "max_tokens": int,
                 "timeout": (int, float),
                 "num_ctx": int,
+                "driver_version": str,
             }
             unknown = set(params.keys()) - set(allowed.keys())
             if unknown:
@@ -545,7 +553,7 @@ class SessionRegistry:
                 # bool is a subclass of int; guard bool-vs-int mixups first.
                 if key == "think" and not isinstance(value, bool):
                     raise ValueError(f"driver_params.think must be a bool; got {type(value).__name__}")
-                if key != "think" and isinstance(value, bool):
+                if key in ("max_tokens", "timeout", "num_ctx") and isinstance(value, bool):
                     raise ValueError(f"driver_params.{key} must be numeric, not bool")
                 if not isinstance(value, expected):
                     exp_name = expected.__name__ if isinstance(expected, type) else "|".join(t.__name__ for t in expected)
