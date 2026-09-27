@@ -598,6 +598,40 @@ class Component extends DCLogic {
     });
   }
 
+  _resolveDriverLabel(state, driver) {
+    // Sprint 087c follow-up — the chip shows the resolved model
+    // spelling, not just the CLI name. Ollama tags already carry the
+    // model in `driver`, so this is a no-op for them. For CLIs we
+    // walk cliVersions to find the family + pin that match the
+    // current pick (either an explicit driverVersion or the CLI's
+    // default_family → default_pin), and return
+    //   "<cli> <family label> <pin label>"
+    // Everything lowercase — matches the section-header case Peter
+    // set for "cli agents" and mirrors the CLI names themselves.
+    const base = String(driver || '').toLowerCase();
+    if (!base) return base;
+    const tree = (state.cliVersions || {})[driver];
+    if (!tree || !Array.isArray(tree.families) || tree.families.length === 0) return base;
+    const pickedId = (state.driverVersion || {})[driver] || tree.default_family;
+    if (!pickedId) return base;
+    for (const fam of tree.families) {
+      if (fam.id === pickedId) {
+        // Family-level pick — use the family's default pin for the
+        // full label so the chip always names the exact pin the
+        // server will run.
+        const defPin = (fam.pins || []).find((p) => p.id === fam.default_pin);
+        const famLabel = String(fam.label || '').toLowerCase();
+        const pinLabel = defPin ? String(defPin.label || '').toLowerCase() : '';
+        return [base, famLabel, pinLabel].filter(Boolean).join(' ');
+      }
+      const pin = (fam.pins || []).find((p) => p.id === pickedId);
+      if (pin) {
+        return [base, String(fam.label || '').toLowerCase(), String(pin.label || '').toLowerCase()].filter(Boolean).join(' ');
+      }
+    }
+    return base;
+  }
+
   _buildDriverOpts(state, paneId, currentDriver) {
     // Sprint 087b — three-tier dropdown: CLI row (level 0) expands
     // into families (level 1), each family expands into pins
@@ -636,7 +670,7 @@ class Component extends DCLogic {
         const cliHasChildren = families.length > 0;
         const cliExpanded = state.driverExpandedCli === cli;
         items.push({
-          label: cli,
+          label: String(cli).toLowerCase(),
           color: cli === currentDriver ? '#e2e5e9' : '#9aa0a8',
           indent: 12,
           isHeader: false, notHeader: true,
@@ -653,7 +687,7 @@ class Component extends DCLogic {
           const famHasChildren = pins.length > 0;
           const famExpanded = state.driverExpandedFamily === (cli + ':' + fam.id);
           items.push({
-            label: fam.label,
+            label: String(fam.label || '').toLowerCase(),
             color: '#b9bec5',
             indent: 28,
             isHeader: false, notHeader: true,
@@ -667,7 +701,7 @@ class Component extends DCLogic {
           if (!famExpanded) continue;
           for (const pin of pins) {
             items.push({
-              label: pin.label,
+              label: String(pin.label || '').toLowerCase(),
               color: '#9aa0a8',
               indent: 44,
               isHeader: false, notHeader: true,
@@ -1184,6 +1218,7 @@ class Component extends DCLogic {
       wsLabel: p.unbound ? '⌥ —' : compact ? '⌥' : '⌥ ' + (p.shape === 'worktree' ? 'substrate/' + (p.name || 'main') : (p.ws || p.name || '')),
       revealText: compact ? '⌃`' : '⌃` reveal',
       id: p.id, name: p.name, driver: p.driver || state.driverDefault || 'deterministic',
+      driverLabel: this._resolveDriverLabel(state, p.driver || state.driverDefault || 'deterministic'),
       // isMain gates the full machinery lens (transcript + prompt +
       // find bar). Every bound pane, not just pane 1, should render
       // it — otherwise a newly-split pane falls through to the
@@ -2309,7 +2344,7 @@ class Component extends DCLogic {
       showStrip: !surf && !state.revealed && state.panes.length > 1,
       showFullHeader: !!surf || state.revealed,
       splitRight: () => this._split('right'),
-      driverName: fp.driver || state.driverDefault || 'deterministic', driverOpen: state.driverOpen,
+      driverName: this._resolveDriverLabel(state, fp.driver || state.driverDefault || 'deterministic'), driverOpen: state.driverOpen,
       toggleDriverMenu: () => this.setState(s => ({ driverOpen: !s.driverOpen, wsOpen: false })),
       driverOptions: ['kimi-k2', 'deepseek-r1:8b', 'qwen3-coder:480b-cloud', 'nemotron-3-super', 'claude (cli)', 'gemini (cli)', 'deterministic'].map(m => ({
         label: m, color: m === fp.driver ? '#e2e5e9' : '#9aa0a8',
