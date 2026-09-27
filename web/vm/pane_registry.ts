@@ -117,6 +117,7 @@ export class PaneRegistry {
   attachExisting(id: string): Promise<void> { return this.active().attachExisting(id); }
   attachRecordRoot(recordRoot: string): Promise<void> { return this.active().attachRecordRoot(recordRoot); }
   pickDriver(name: string): void { this.active().pickDriver(name); }
+  pickDriverVersion(driver: string, versionId: string | null): void { this.active().pickDriverVersion(driver, versionId); }
   pickBundle(slug: string | null): void { this.active().pickBundle(slug); }
   pickWorkspace(path: string | null): void { this.active().pickWorkspace(path); }
   interruptTurn(tier: "soft" | "hard" = "hard", recordRoot?: string): Promise<void> { return this.active().interruptTurn(tier, recordRoot); }

@@ -62,6 +62,7 @@ interface ModelsRoster {
   default: string;
   cli?: string[];
   cli_login_supported?: string[];
+  cli_versions?: Record<string, { versions: { id: string; label: string }[]; default: string | null }>;
   ollama_cloud?: string[];
   ollama_local?: string[];
   testing?: string[];
@@ -112,6 +113,8 @@ const EMPTY_SNAPSHOT: Snapshot = {
   driverRoster: [],
   driverDefault: null,
   driverGroups: [],
+  cliVersions: null,
+  driverVersion: {},
   liveSessions: [],
   recentWorkspaces: [],
   bundleRoster: [],
@@ -190,8 +193,27 @@ export class SessionController {
       { label: "ollama · local", entries: ollamaLocal },
     ].filter((grp) => grp.entries.length > 0);
     this.cliLoginSupported = cliLoginSupported;
-    this.patch({ driverRoster: roster, driverDefault: defaultDriver, driverGroups });
+    // Sprint 087 — per-CLI curated version catalog. Only CLIs installed
+    // on this box (and thus present in `cli`) appear here.
+    const cliVersions = (result.data.cli_versions && typeof result.data.cli_versions === "object")
+      ? result.data.cli_versions
+      : null;
+    this.patch({ driverRoster: roster, driverDefault: defaultDriver, driverGroups, cliVersions });
     this.emit("DRIVER_ROSTER_LOADED", { count: roster.length, default: defaultDriver });
+  }
+
+  /** Sprint 087 — record which model version to run for a CLI. The
+   *  choice is scoped by CLI name because two CLIs may share a version
+   *  id ("gpt-5" is a codex value AND a cursor-agent value). openSession
+   *  reads snap.driverVersion[driver] and folds it into
+   *  driver_params.driver_version. Passing null clears the pick and the
+   *  server falls back to the CLI's default_version. */
+  pickDriverVersion(driver: string, versionId: string | null): void {
+    const next = { ...this.snap.driverVersion };
+    if (versionId == null) delete next[driver];
+    else next[driver] = versionId;
+    this.patch({ driverVersion: next });
+    this.emit("DRIVER_VERSION_PICKED", { driver, version: versionId });
   }
 
   async loadLiveSessions(): Promise<void> {
@@ -333,7 +355,17 @@ export class SessionController {
       ?? this.snap.driverDefault
       ?? "deterministic";
     const body: Record<string, unknown> = { driver };
-    if (request.driverParams) body.driver_params = request.driverParams;
+    // Sprint 087 — fold the per-CLI version pick into driver_params
+    // before the request goes out. An explicit driver_params.driver_version
+    // from the caller wins; otherwise snap.driverVersion[driver] fills it
+    // in. The server's _daemon_driver_resolver reads params.driver_version
+    // and appends the corresponding flag to the CLI argv.
+    const chosenVersion = this.snap.driverVersion[driver];
+    const params: Record<string, unknown> = { ...(request.driverParams ?? {}) };
+    if (chosenVersion && params.driver_version == null) {
+      params.driver_version = chosenVersion;
+    }
+    if (Object.keys(params).length > 0) body.driver_params = params;
     // Sprint 086 followup — the picker sets snap.workspacePath via
     // pickWorkspace when the user picks a real folder. Fall back to
     // that if the caller passed no explicit request.workspace, so a
