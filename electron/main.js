@@ -10,7 +10,7 @@
 //
 // Sprint 079 replaces the hard-coded 8765 with --port 0 + readback.
 
-const { app, BrowserWindow, shell, ipcMain, dialog } = require("electron");
+const { app, BrowserWindow, shell, ipcMain, dialog, screen } = require("electron");
 const { spawn } = require("node:child_process");
 const http = require("node:http");
 const path = require("node:path");
@@ -154,9 +154,19 @@ function forwardDeepLink(url) {
 }
 
 function createWindow() {
+  // Sprint 088 — the reveal shell breaks below a certain floor. Lock
+  // the MINIMUM to a third of the primary display's work area; the
+  // user can grow the window from there, never shrink past it. Work
+  // area excludes menu bar + dock. Called at window-create time so a
+  // fresh monitor arrangement takes effect on next launch.
+  const workArea = screen.getPrimaryDisplay().workAreaSize;
+  const minW = Math.floor(workArea.width / 3);
+  const minH = Math.floor(workArea.height / 3);
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 900,
+    minWidth: minW,
+    minHeight: minH,
     title: "substrate",
     backgroundColor: "#212327",
     titleBarStyle: "hiddenInset",

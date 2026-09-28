@@ -2361,9 +2361,22 @@ class Component extends DCLogic {
       nsStatus: state.nsStatus, nsStatusColor: state.nsStatus.startsWith('created') ? '#82a5c8' : '#9aa0a8',
       createNs: () => { const w = this.state.nsWorkspace.trim(); if (w && !w.startsWith('/') && !w.startsWith('~')) { this.setState({ nsStatus: 'workspace must be an absolute path (or blank for the sandbox)' }); return; } this.setState({ nsStatus: 'created (prototype — the real app POSTs /api/session and the rail picks it up)' }); },
       logoDot: state.ended ? '#4a4e55' : '#62676f', // session status (D31); gray once finalised
-      footRecord: descended ? 'record ' + dChild.rec + ' · ⑂ depth ' + state.descent.length + '/2' : mainFocused ? (state.ended ? 'record 01M1684 · 246 events · finalised' : 'record 01M1684 · 244 events') : fp.unbound ? 'unbound — pick a workspace' : 'record ' + fp.name + ' · 2 events',
+      // Sprint 088c — footRecord + footStatus were both prototype
+      // literals: `record 01M1684 · 244 events` and ` · clean` are
+      // hardcoded, never change with real state. Show only what we
+      // actually derive: descend depth when descending; the pane's
+      // real session name otherwise; nothing when unbound. Status
+      // reads the real live/finalised bit without the "clean" suffix
+      // (which had no not-clean branch).
+      footRecord: descended
+        ? '⑂ depth ' + state.descent.length + '/2'
+        : fp.unbound
+          ? 'unbound — pick a workspace'
+          : fp.name
+            ? 'session ' + fp.name
+            : '',
       footHint: surf ? 'esc back to session' : descended ? 'esc climbs one level' : '⌃` toggles the reveal',
-      footStatus: (this.props.simulateRateLimit ?? false) ? '◌ rate-limited · retry 3/6 in 14s' : state.ended ? '● finalised · ✓ clean' : '● live · clean',
+      footStatus: (this.props.simulateRateLimit ?? false) ? '◌ rate-limited · retry 3/6 in 14s' : state.ended ? '● finalised' : '● live',
       footStatusColor: (this.props.simulateRateLimit ?? false) ? '#7fb3b8' : state.ended ? '#62676f' : '#82a5c8',
       // ── descend (turn 20) ──
       descended, notDescended: !descended, descLines, descCrumbs, descAncestors,

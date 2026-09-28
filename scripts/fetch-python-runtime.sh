@@ -13,7 +13,6 @@
 set -euo pipefail
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
-SUBSTRATE_REPO="$(cd "$REPO/.." && pwd)/substrate"
 OUT="$REPO/build/python"
 
 PY_TAG="20250918"
@@ -23,13 +22,16 @@ FLAVOR="install_only_stripped"
 ASSET="cpython-${PY_VER}+${PY_TAG}-${ARCH}-${FLAVOR}.tar.gz"
 URL="https://github.com/astral-sh/python-build-standalone/releases/download/${PY_TAG}/${ASSET}"
 
-if [ ! -d "$SUBSTRATE_REPO" ]; then
-  echo "[fetch-python-runtime] substrate repo not found at $SUBSTRATE_REPO" >&2
-  exit 1
-fi
+# Sprint 088c — pin the substrate dependency to a published PyPI wheel.
+# No sibling checkout needed; anyone building the .dmg only needs the
+# substrate-ui repo. Bumping the substrate release is a two-step
+# ritual: `python -m build && twine upload` in the substrate repo,
+# then edit SUBSTRATE_VERSION here and rerun.
+SUBSTRATE_VERSION="1.1.0"
 
 echo "[fetch-python-runtime] target: $OUT"
 echo "[fetch-python-runtime] runtime: $ASSET"
+echo "[fetch-python-runtime] substrate: substrate-kernel==${SUBSTRATE_VERSION}"
 
 # 1. Fresh tree — bundling reproducibly needs no leftover state.
 rm -rf "$OUT"
@@ -49,12 +51,15 @@ if [ ! -x "$PY" ]; then
   exit 1
 fi
 
-# 3. Install substrate into the runtime's site-packages. No separate
-#    venv — python-build-standalone binaries are relocatable and
-#    already isolated from the host's Python.
-echo "[fetch-python-runtime] installing substrate + deps into runtime"
+# 3. Install substrate into the runtime's site-packages from PyPI. No
+#    separate venv — python-build-standalone binaries are relocatable
+#    and already isolated from the host's Python. Pinning the wheel
+#    from PyPI (not the sibling source tree) makes the .dmg build
+#    reproducible: everyone who runs this script installs the same
+#    bytes.
+echo "[fetch-python-runtime] installing substrate-kernel==${SUBSTRATE_VERSION} + deps"
 "$PY" -m pip install --upgrade pip
-"$PY" -m pip install "$SUBSTRATE_REPO"
+"$PY" -m pip install "substrate-kernel==${SUBSTRATE_VERSION}"
 # `msgspec` is a substrate runtime dep and ships a .so for arm64.
 # The install above pulls it in; the .so lives in
 # lib/python3.13/site-packages/msgspec/*.so and gets codesigned by
