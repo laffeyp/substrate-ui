@@ -38,7 +38,7 @@ FLAVOR="install_only_stripped"
 ASSET="cpython-${PY_VER}+${PY_TAG}-${ARCH}-${FLAVOR}.tar.gz"
 URL="https://github.com/astral-sh/python-build-standalone/releases/download/${PY_TAG}/${ASSET}"
 
-SUBSTRATE_VERSION="1.1.0"
+SUBSTRATE_VERSION="1.1.1"
 # The substrate checkout source mode runs against. Its uv.lock is the
 # dependency set the packaged runtime installs (review § F3).
 SUBSTRATE_REPO="$(cd "$REPO/../substrate" && pwd)"

@@ -14,7 +14,7 @@
     "pixel:baseline": "npx tsx harness/pixel_baseline.ts",
     "pixel:diff": "npx tsx harness/pixel_diff.ts",
     "test:unit": "npx tsx --test web/reveal/__tests__/*.spec.ts",
-    "electron": "electron .",
+    "electron": "SUBSTRATE_HOME=$HOME/.substrate-dev electron .",
     "electron:smoke": "SHAKEOUT_AXIS=C SHAKEOUT_RUNS=1 npx tsx harness/shakeout/run.ts",
     "smoke:packaged": "npx tsx harness/shakeout/packaged_app_smoke.ts",
     "pack:runtime": "bash scripts/fetch-python-runtime.sh",
