@@ -193,80 +193,60 @@ def test_delete_during_in_flight_turn_waits_for_the_turn_to_finish(
     assert after_body["error"] == SESSION_ENDED_MID_DELEGATE
 
 
-# ── Finding 2 — SSE past a finalised record does not hang ────────────
+# ── Finding 2, revised 2026-09-29 — SSE past a RunFinalised follows a resume ──
 
-def test_sse_reconnect_past_runfinalised_returns_cleanly(
+def test_sse_reconnect_past_runfinalised_follows_resumed_growth(
     base: str, tmp_path: Path
 ) -> None:
-    """A client reconnecting with `since_seq >= runfinalised_seq` used to
-    hit the seq filter on every envelope, `finalised` stayed False, and
-    the poll loop spun forever until an external timeout. The finalisation
-    kind check now runs before the seq filter.
+    """Ended sessions are resumable: turn_sync flips ended -> parked and the
+    run continues on the same record. A client that reattaches with
+    `since_seq` at or past the old RunFinalised must therefore stay open and
+    receive the resumed turn's envelopes. The original finding-2 fold closed
+    the stream on any RunFinalised, which cut a resumed turn off before its
+    first envelope (the "picking up an ended session starts a new one" bug,
+    2026-09-29). Only a RunFinalised past the cursor ends the stream now.
 
-    Ollama is not required here — a synthetic RunFinalised envelope is
-    hand-appended to the record so the assertion pins the SSE ordering
-    invariant without depending on driver availability. The session
-    topology's own end-on-exit path is exercised by the SSE tests in
-    `test_server_session_sse.py`; this test isolates the ordering bug.
+    Ollama is not required: a synthetic RunFinalised, then a synthetic
+    envelope after it, are framed onto the record by hand.
     """
     from substrate import api as substrate_api
+    from substrate.record import framing
 
     created = _create(base, tmp_path / "wsp", name="past-final")
     sid = created["session_id"]
-    # Fire one turn so the record has real envelopes.
     _post_json(base + f"/api/session/{sid}/turn", {"text": "priming"})
     record_root = Path(server._SESSION_REGISTRY.get(sid).record_root)
     envs = list(substrate_api.read_record(record_root))
     assert envs, "expected the priming turn to have written envelopes"
-    tail_seq = max(int(e["seq"]) for e in envs)
-    # Append a synthetic RunFinalised envelope directly to the open segment.
-    # (The daemon does not finalise a session record on POST /turn; this test
-    # only cares about the SSE reader's ordering behavior past a RunFinalised
-    # seq, so a hand-appended envelope is the cheapest fixture.)
     segments = sorted(record_root.glob("events-*.jsonl"))
     if not segments:
         pytest.skip("no open segment on record; segment naming has drifted")
-    finalised_seq = tail_seq + 1
-    # Frame the envelope through the real framer so `framing.recover` accepts
-    # it. A hand-written `json.dumps(env) + "\n"` has no CRC — recover treats
-    # it as the torn cut point, discards the line, and the SSE reader never
-    # sees the RunFinalised. That was the pre-fix flake: the test timeout
-    # (5s) was racing against the reader's poll interval, masking a bad
-    # fixture. `framing.frame` gives every downstream reader the same bytes
-    # a real writer would.
-    from substrate.record import framing
-
-    frame_bytes = framing.frame(
-        {
-            "seq": finalised_seq,
-            "kind": "substrate.RunFinalised",
-            "payload": {"reason": "test-injected"},
-        }
-    )
+    finalised_seq = max(int(e["seq"]) for e in envs) + 1
     with segments[-1].open("ab") as fp:
-        fp.write(frame_bytes)
+        fp.write(framing.frame({"seq": finalised_seq, "kind": "substrate.RunFinalised", "payload": {"reason": "test-injected"}}))
 
-    # Reader opens with since_seq at or past the finalised seq. The old shape
-    # spun forever; the fold breaks out cleanly and returns whatever it read.
-    deadline = time.time() + 5.0
     result: dict = {}
+    opened = threading.Event()
 
     def _reader() -> None:
         try:
-            with urlopen(
-                base + f"/api/session/{sid}/events?since_seq={finalised_seq}",
-                timeout=5,
-            ) as resp:
+            with urlopen(base + f"/api/session/{sid}/events?since_seq={finalised_seq}", timeout=10) as resp:
+                opened.set()
                 result["chunk"] = resp.read1(65536)
         except Exception as exc:  # noqa: BLE001 — timeout/close is the failure mode
             result["error"] = repr(exc)
+            opened.set()
 
     reader_thread = threading.Thread(target=_reader, daemon=True)
     reader_thread.start()
-    reader_thread.join(timeout=deadline - time.time())
-    # The reader thread must have exited (i.e. the server didn't spin
-    # forever on the finalised record). Content of `chunk` is not asserted
-    # — the ordering invariant is what this test locks.
-    assert not reader_thread.is_alive(), (
-        "SSE reader did not exit — finalisation-past-since_seq hang regressed"
+    assert opened.wait(5), "SSE reader never connected"
+    time.sleep(0.5)
+    assert reader_thread.is_alive(), (
+        "stream closed on a RunFinalised at/before since_seq: " + repr(result)
     )
+    # The resumed turn's first envelope, after the old RunFinalised.
+    with segments[-1].open("ab") as fp:
+        fp.write(framing.frame({"seq": finalised_seq + 1, "kind": "UserMessage", "payload": {"text": "resumed"}}))
+    reader_thread.join(timeout=5)
+    assert "chunk" in result, "reader got no data after the resume: " + repr(result)
+    assert b'"resumed"' in result["chunk"], result["chunk"][:400]

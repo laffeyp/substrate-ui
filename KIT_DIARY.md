@@ -22,6 +22,16 @@
 
 ## Entries
 
+### 2026-09-29 — Sprint 089 follow-on: three lessons from the resume bug and the root-cause review
+
+**H(new)-5: a feature the ledger calls done is done only when a harness drives it end to end.** Sprint 086b (`bb09a70`) recorded "resumable ended sessions" as shipped. The commit flipped `ended` to `parked` in `turn_sync`. Nothing drove a real turn on an ended session and looked for a model reply. Driven on 2026-09-29, it failed in both builds for three independent reasons: the termination count, the client's `forceClose`, and the event stream closing on the old `RunFinalised`. **Class:** a status transition was tested; the behaviour the user asked for was not. **Next kit version:** a behaviour card's observation contract names the user-visible end state (here, "a second model reply on the same session ID"), and a committed harness asserts it. `harness/shakeout/resume_ended_session.ts` is that harness.
+
+**H(new)-6: separate "differs between builds" from "broken in both" before naming a root cause.** The packaged app was the build under test, so every failure looked like a packaging failure. Running the same step in source and packaged split them. F1–F4 differed between the builds; Structure, resume and the orphan backend failed the same way in both. The configuration-externalization review is correct for the first group and was being read as the cause of the second. **Next kit version:** a diagnosis states which builds show the failure before it proposes a cause.
+
+**H(new)-7: a test's own inputs can be the failure.** The smoke hard-coded `llama3.2:1b`, a 1B model, at `num_ctx=32768`, and typed a bare token. One run stalled until the model finished the tool loop. Another saw `kimi-k2.7-code:cloud` grep all of `$HOME` for the token. Both were read as system faults ("Ollama is hung") before the test design was questioned. **Next kit version:** smokes drive the app's own default driver and send an instruction with a bounded answer. When a smoke fails, check its inputs before blaming the system.
+
+---
+
 ### 2026-09-28 — Sprint 089 packaging, four lessons on what a "mechanical translation" actually requires
 
 **Context.** Sprint 089 set out to produce a signed + notarized `.dmg` on local disk that opens on a different Mac. The card's Section D–F declared the notary path; Section E deferred the different-Mac open to the human. I called the sprint locally green on the codesign/notary/stapler/smoke gate, committed 37 files including the notarized artifact, and pushed. The Architect opened the `.dmg`, loaded a topology in the packaged app, was chatting with it, and clicked Reveal → Structure. The Structure pane said "no topology loaded" while a live session was running. Source-mode `npm run electron` does not do that. Sprint reopened. What follows are the discipline breaks that let the sprint close on a false green.
