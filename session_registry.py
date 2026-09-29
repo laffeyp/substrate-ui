@@ -69,7 +69,7 @@ STATUS_PARKED: SessionStatus = "parked"
 STATUS_INTERRUPTED: SessionStatus = "interrupted"
 STATUS_ENDED: SessionStatus = "ended"
 
-_SESSIONS_BASE_DEFAULT = Path.home() / ".substrate" / "sessions"
+_SESSIONS_BASE_DEFAULT = api.substrate_home() / "sessions"
 _BY_NAME_FILENAME = "by-name.json"
 _BY_NAME_LOCK_FILENAME = ".by-name.lock"
 _MANIFEST_FILENAME = "manifest.json"

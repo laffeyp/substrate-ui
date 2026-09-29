@@ -245,7 +245,7 @@ def _load_daemon_config(config_path: Path | None = None) -> dict[str, Any]:
     """
     import tomllib
 
-    path = config_path if config_path is not None else Path.home() / ".substrate" / "config.toml"
+    path = config_path if config_path is not None else api.substrate_home() / "config.toml"
     defaults: dict[str, Any] = {"turn_queue_cap": 4}
     if not path.exists():
         return defaults
@@ -1295,8 +1295,7 @@ def _canonical_workspace(path: str) -> str:
 _PER_SESSION_SANDBOX_RE = None  # lazy-compiled below
 
 def _sessions_dir_root() -> str:
-    from pathlib import Path as _Path
-    return str(_Path.home() / ".substrate" / "sessions")
+    return str(api.substrate_home() / "sessions")
 
 def _is_per_session_sandbox(path: str) -> bool:
     """Anywhere under ~/.substrate/sessions/. Covers every shape
@@ -1328,7 +1327,7 @@ def _classify_workspace_shape(path: str) -> str:
             return "worktree"
     except OSError:
         pass
-    home_sandbox = _Path.home() / ".substrate" / "sandbox"
+    home_sandbox = api.substrate_home() / "sandbox"
     if path == str(home_sandbox) or path == "~/.substrate/sandbox":
         return "sandbox"
     return "path"
@@ -1350,7 +1349,7 @@ def _remember_workspace(path: str) -> None:
     canonical = _canonical_workspace(path)
     if _is_per_session_sandbox(canonical):
         return
-    file = _Path.home() / ".substrate" / "recent-workspaces.json"
+    file = api.substrate_home() / "recent-workspaces.json"
     try:
         file.parent.mkdir(parents=True, exist_ok=True)
     except OSError:
@@ -1409,7 +1408,7 @@ def _recent_workspaces() -> list[dict[str, str]]:
             return
         seen[cp] = {"path": cp, "shape": shape}
         order.append(cp)
-    home_file = _Path.home() / ".substrate" / "recent-workspaces.json"
+    home_file = api.substrate_home() / "recent-workspaces.json"
     if home_file.exists():
         try:
             data = msgspec.json.decode(home_file.read_bytes())
@@ -1447,7 +1446,7 @@ def _recent_workspaces() -> list[dict[str, str]]:
     if per_session_seen:
         _add(_sessions_dir_root(), "per-session-sandboxes")
     # Stable sandbox row so a fresh user has one bindable target.
-    sandbox = str(_Path.home() / ".substrate" / "sandbox")
+    sandbox = str(api.substrate_home() / "sandbox")
     _add(sandbox, "sandbox")
     return [seen[canonical] for canonical in order]
 
@@ -1468,7 +1467,7 @@ _WEB_SRC = Path(__file__).resolve().parent / "web"
 _WEB_DIST = _WEB_SRC / "dist"
 WEB = _WEB_DIST if _WEB_DIST.is_dir() else _WEB_SRC
 TERMINAL_V1 = Path(__file__).resolve().parent / "terminal-v1" / "web"  # sub-project (A10) — currently empty; round-1 archived to _deprecated/terminal-v1-round1/
-RUNS = Path.home() / ".substrate" / "runs"  # generated/live records (failed/paused/broken demos).
+RUNS = api.substrate_home() / "runs"  # generated/live records (failed/paused/broken demos).
 # Was `Path(__file__).resolve().parent / "runs"`. In the packaged .app, that
 # resolves inside `Contents/Resources/app.asar.unpacked/`, which macOS refuses
 # to write to on a notarized bundle installed under /Applications — every
@@ -1484,7 +1483,7 @@ RUNS.mkdir(parents=True, exist_ok=True)
 # per-conversation agent workspaces — a DEDICATED session dir, never the server cwd (a scribble-in-the-
 # repo footgun the cockpit hit live). A bare `?workspace=<name>` resolves under here; an absolute path
 # is a project the user picked. Git-worktree-per-session isolation is the next step (Galley/Sculptor).
-_SESSIONS_BASE = Path.home() / ".substrate" / "sessions"
+_SESSIONS_BASE = api.substrate_home() / "sessions"
 
 
 def _session_worktree(repo: Path, session_id: str) -> tuple[Path, str]:
@@ -2717,7 +2716,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         allowed_roots = [
             RUNS.resolve(),
-            (_Path.home() / ".substrate" / "sessions").resolve(),
+            (api.substrate_home() / "sessions").resolve(),
             _Path("/tmp").resolve(),
             _Path("/var/folders").resolve(),
         ]
@@ -4012,7 +4011,7 @@ def main() -> None:
     # The UDS path is fixed at `~/.substrate/daemon.sock` unless
     # `SUBSTRATE_DAEMON_SOCK` overrides it (tests pass a tmp path).
     uds_path = Path(
-        os.environ.get("SUBSTRATE_DAEMON_SOCK", str(Path.home() / ".substrate" / "daemon.sock"))
+        os.environ.get("SUBSTRATE_DAEMON_SOCK", str(api.substrate_home() / "daemon.sock"))
     )
     uds_path.parent.mkdir(parents=True, exist_ok=True)
     # Stale socket file from a crashed prior daemon: unlink so bind can succeed.
