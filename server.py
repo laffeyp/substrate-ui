@@ -1429,9 +1429,19 @@ _WEB_SRC = Path(__file__).resolve().parent / "web"
 _WEB_DIST = _WEB_SRC / "dist"
 WEB = _WEB_DIST if _WEB_DIST.is_dir() else _WEB_SRC
 TERMINAL_V1 = Path(__file__).resolve().parent / "terminal-v1" / "web"  # sub-project (A10) — currently empty; round-1 archived to _deprecated/terminal-v1-round1/
-RUNS = (
-    Path(__file__).resolve().parent / "runs"
-)  # generated/live records (failed/paused/broken demos)
+RUNS = Path.home() / ".substrate" / "runs"  # generated/live records (failed/paused/broken demos).
+# Was `Path(__file__).resolve().parent / "runs"`. In the packaged .app, that
+# resolves inside `Contents/Resources/app.asar.unpacked/`, which macOS refuses
+# to write to on a notarized bundle installed under /Applications — every
+# launch/build/resume/delegate wrote `PermissionError: [Errno 1] Operation not
+# permitted`, the HTTP layer answered `"status":"incomplete"`, and every view
+# that reads a record (Structure among them) found nothing. `~/.substrate/`
+# is where sessions already live; keeping `runs/` alongside them puts every
+# writable-record path in the same tree, in both source and packaged mode.
+# Review 2026-09-28 § F1. (Full `app.getPath('userData')` isolation is a
+# follow-on for F8; that would also move `~/.substrate/sessions/` and the
+# daemon socket, a larger cross-project change.)
+RUNS.mkdir(parents=True, exist_ok=True)
 # per-conversation agent workspaces — a DEDICATED session dir, never the server cwd (a scribble-in-the-
 # repo footgun the cockpit hit live). A bare `?workspace=<name>` resolves under here; an absolute path
 # is a project the user picked. Git-worktree-per-session isolation is the next step (Galley/Sculptor).
@@ -3893,7 +3903,14 @@ def main() -> None:
     args = parser.parse_args()
     HOST = args.host
     PORT = args.port
-    WEB.mkdir(exist_ok=True)
+    # WEB is served static from the bundle in packaged mode; the .app is
+    # read-only. This mkdir is a no-op when `web/dist/` already exists
+    # (the normal case, since electron-builder unpacks it), and would
+    # EPERM otherwise. Guard so a stale build doesn't crash boot.
+    try:
+        WEB.mkdir(exist_ok=True)
+    except OSError:
+        pass
     # Sprint 211: boot-scan the on-disk session catalog. Rebuilds the in-memory
     # SessionRegistry from ~/.substrate/sessions/*/manifest.json, checking every
     # record's true status (hot segment → interrupted; RunFinalised → ended;

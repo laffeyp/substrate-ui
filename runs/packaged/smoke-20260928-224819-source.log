@@ -1,0 +1,27 @@
+packaged_app_smoke: page.waitForFunction: Timeout 180000ms exceeded.
+    at run (/Users/peterlaffey/Documents/Claude/Projects/Agent Orchestration/substrate-ui/harness/shakeout/packaged_app_smoke.ts:305:15)
+    at async main (/Users/peterlaffey/Documents/Claude/Projects/Agent Orchestration/substrate-ui/harness/shakeout/packaged_app_smoke.ts:110:3)
+--- captured stderr ---
+[electron] PATH restored from /bin/zsh (1196 chars)
+[electron] spawning server: uv run python /Users/peterlaffey/Documents/Claude/Projects/Agent Orchestration/substrate-ui/server.py --port 0 (cwd=/Users/peterlaffey/Documents/Claude/Projects/Agent Orchestration/substrate)
+[server] substrate-ui port=58121
+substrate-ui read-API server on http://127.0.0.1:58121  (records: adversarial_pair, best_of_n_verified, code_review, daily, debate, fanout_review, game_of_life, game_of_life_glider, intel_asymmetry, natural_conversation, natural_conversation_bare, pair_coding_chunked, prisoners_dilemma, recursive_decomposition, research_sweep, session, swebench_repair, tool_loop; sessions: scanning in background); UDS at /Users/peterlaffey/.substrate/daemon.sock
+[electron] server bound port=58121
+[electron] server up on http://127.0.0.1:58121
+[server] boot_scan: 3130 manifest(s) in 8.46s — 1 parked, 36 interrupted, 3092 ended
+
+--- renderer console ---
+[error] Error: <path> attribute d: Expected moveto path command ('M' or 'm'), "{{ ed.d }}".
+[info] [reveal] transcript root mounted (terminal, pane 1)
+[info] [reveal] transcript root mounted (reveal, pane 1)
+[info] [reveal] SessionController booted. Read window.__vm.snapshot() in DevTools.
+[warning] %cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Content Security
+  Policy set or a policy with "unsafe-eval" enabled. This exposes users of
+  this app to unnecessary security risks.
+
+For more information and help, consult
+https://electronjs.org/docs/tutorial/security.
+This warning will not show up
+once the app is packaged.
+[info] [reveal] transcript root mounted (terminal, pane 1)
+[error] Failed to load resource: the server responded with a status of 404 (Not Found)

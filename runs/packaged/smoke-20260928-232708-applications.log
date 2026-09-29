@@ -1,0 +1,17 @@
+packaged_app_smoke: page.waitForFunction: Timeout 180000ms exceeded.
+    at run (/Users/peterlaffey/Documents/Claude/Projects/Agent Orchestration/substrate-ui/harness/shakeout/packaged_app_smoke.ts:315:15)
+    at async main (/Users/peterlaffey/Documents/Claude/Projects/Agent Orchestration/substrate-ui/harness/shakeout/packaged_app_smoke.ts:115:3)
+--- captured stderr ---
+[server] substrate-ui port=60943
+substrate-ui read-API server on http://127.0.0.1:60943  (records: adversarial_pair, best_of_n_verified, code_review, daily, debate, fanout_review, game_of_life, game_of_life_glider, intel_asymmetry, natural_conversation, natural_conversation_bare, pair_coding_chunked, prisoners_dilemma, recursive_decomposition, research_sweep, session, swebench_repair, tool_loop; sessions: scanning in background); UDS at /Users/peterlaffey/.substrate/daemon.sock
+[electron] server bound port=60943
+[electron] server up on http://127.0.0.1:60943
+[server] boot_scan: 3138 manifest(s) in 6.71s — 0 parked, 37 interrupted, 3100 ended
+
+--- renderer console ---
+[error] Error: <path> attribute d: Expected moveto path command ('M' or 'm'), "{{ ed.d }}".
+[info] [reveal] transcript root mounted (terminal, pane 1)
+[info] [reveal] transcript root mounted (reveal, pane 1)
+[info] [reveal] SessionController booted. Read window.__vm.snapshot() in DevTools.
+[info] [reveal] transcript root mounted (terminal, pane 1)
+[error] Failed to load resource: the server responded with a status of 404 (Not Found)

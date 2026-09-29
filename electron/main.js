@@ -16,6 +16,15 @@ const http = require("node:http");
 const path = require("node:path");
 const { installMenu } = require("./menu");
 
+// F7. Electron reads app.getName() from package.json's `productName`,
+// falling back to `name`. This package.json's `name` is
+// `substrate-ui-e2e`, which is the ORM registry name for the test
+// harness — not what the user sees. Force the runtime name to
+// `Substrate` before any `app.getPath('logs' | 'userData' | ...)`
+// call so the paths land under `~/Library/Logs/Substrate/`,
+// `~/Library/Application Support/Substrate/`, etc.
+app.setName("Substrate");
+
 // Sprint 079: --port 0 asks server.py to bind an ephemeral port.
 // The bound value comes back as the first stdout line matching
 // /^substrate-ui port=(\d+)$/. main() waits up to READBACK_TIMEOUT_MS
@@ -23,8 +32,78 @@ const { installMenu } = require("./menu");
 const READBACK_TIMEOUT_MS = 5_000;
 const HEALTH_TIMEOUT_MS = 15_000;
 const HEALTH_POLL_MS = 200;
-const KILL_GRACE_MS = 3_000;
+// server.py's SIGTERM handler runs `_shutdown_all_sessions(per_session_timeout=10.0)`.
+// With N live sessions this budget can approach N*10s. 3s SIGKILL grace cut
+// clean shutdowns short and left sessions `interrupted` on next boot (Review
+// 2026-09-28 § F9). Give the server enough time to finish its own
+// shutdown work; still hard-cap so a wedged daemon can't hold the app open.
+const KILL_GRACE_MS = 45_000;
 const PORT_READBACK_RE = /^substrate-ui port=(\d+)$/m;
+
+const fs = require("node:fs");
+
+// F2. GUI-launched apps on macOS get launchd's default PATH
+// (/usr/bin:/bin:/usr/sbin:/sbin) — not the user's shell PATH. That
+// makes `shutil.which("claude" | "codex" | "cursor-agent")` fail from
+// server.py and any bash tool the agent runs lose `uv`, `node`, `npm`
+// and Homebrew tools. Restore the shell PATH by asking the user's
+// login shell for it. Sync call, ~50ms, only runs when the shell
+// PATH looks longer than launchd's. Runs BEFORE spawnServer so the
+// child inherits it.
+// An interactive login shell can print anything from its rc files
+// (banners, prompt-plugin notices), so the PATH is bracketed by markers
+// and extracted — the method sindresorhus/shell-env uses.
+// DISABLE_AUTO_UPDATE stops oh-my-zsh from prompting during the probe.
+const PATH_MARK = "__SUBSTRATE_PATH__";
+function restoreShellPath() {
+  try {
+    const shell = process.env.SHELL || "/bin/zsh";
+    const out = require("node:child_process").spawnSync(
+      shell, ["-ilc", `printf '${PATH_MARK}%s${PATH_MARK}' "$PATH"`],
+      { encoding: "utf8", timeout: 5_000, env: { ...process.env, DISABLE_AUTO_UPDATE: "true" } },
+    );
+    const m = typeof out.stdout === "string" ? out.stdout.match(new RegExp(PATH_MARK + "(.*)" + PATH_MARK)) : null;
+    if (m && m[1] && m[1].length > (process.env.PATH || "").length) {
+      process.env.PATH = m[1];
+      log("PATH restored from " + shell + " (" + m[1].length + " chars)");
+    } else {
+      log("PATH not restored (shell exit " + out.status + (out.error ? ", " + out.error.message : "") + ")");
+    }
+  } catch (err) { log("PATH restore failed: " + err.message); }
+}
+
+// F7. Route stderr into a per-user log so a Finder-launched app leaves
+// a trace when it fails. Path: app.getPath('logs')/substrate.log,
+// which resolves to ~/Library/Logs/Substrate/. Runs in packaged mode
+// only — source-mode terminals keep their live console AND the
+// terminal still receives every line because the wrapper calls the
+// original write.
+function setupLogFile() {
+  if (!app.isPackaged) return null;
+  let logsDir, logPath;
+  try {
+    logsDir = app.getPath("logs");
+  } catch (err) {
+    process.stderr.write("[electron] setupLogFile: app.getPath('logs') threw: " + err.message + "\n");
+    return null;
+  }
+  try {
+    fs.mkdirSync(logsDir, { recursive: true });
+    logPath = path.join(logsDir, "substrate.log");
+    const stream = fs.createWriteStream(logPath, { flags: "a" });
+    stream.write("\n=== " + new Date().toISOString() + " app boot ===\n");
+    const origWrite = process.stderr.write.bind(process.stderr);
+    process.stderr.write = (chunk, ...rest) => {
+      try { stream.write(chunk); } catch { /* stream closed */ }
+      return origWrite(chunk, ...rest);
+    };
+    process.stderr.write("[electron] log file: " + logPath + "\n");
+    return logPath;
+  } catch (err) {
+    process.stderr.write("[electron] setupLogFile: mkdir/stream failed at " + logsDir + ": " + err.message + "\n");
+    return null;
+  }
+}
 
 // Two launch paths — source and packaged — differ in every path.
 // Source: substrate-ui/ sits next to substrate/; `uv run python`
@@ -55,8 +134,13 @@ const pendingDeepLinks = [];
 
 function log(...args) { process.stderr.write("[electron] " + args.join(" ") + "\n"); }
 
+// Set from serverProc's "exit" event. ChildProcess.killed only turns
+// true when ChildProcess.kill() is used; the group kill below uses
+// process.kill(-pid), so `killed` never reflects a real exit.
+let serverExited = false;
+
 function killServerGroup() {
-  if (!serverProc || serverProc.killed || !serverProc.pid) return;
+  if (!serverProc || serverExited || !serverProc.pid) return;
   const pid = serverProc.pid;
   try {
     // Negative pid targets the process group. detached: true at
@@ -65,7 +149,8 @@ function killServerGroup() {
     // harness/shakeout/lib/server.ts:22-45.
     process.kill(-pid, "SIGTERM");
     setTimeout(() => {
-      if (serverProc && !serverProc.killed) {
+      if (!serverExited) {
+        log("server still running " + KILL_GRACE_MS + "ms after SIGTERM; SIGKILL");
         try { process.kill(-pid, "SIGKILL"); } catch (_) { /* already gone */ }
       }
     }, KILL_GRACE_MS);
@@ -116,6 +201,7 @@ function spawnServer() {
   });
   serverProc.stderr.on("data", (chunk) => process.stderr.write("[server-stderr] " + chunk));
   serverProc.on("exit", (code, signal) => {
+    serverExited = true;
     log("server exited code=" + code + " signal=" + signal);
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send("server:dead", { code, signal });
@@ -253,6 +339,8 @@ if (!singleInstanceLock) {
 }
 
 app.whenReady().then(async () => {
+  setupLogFile();
+  restoreShellPath();
   spawnServer();
   try {
     const port = await waitForPortReadback(Date.now() + READBACK_TIMEOUT_MS);
@@ -261,7 +349,16 @@ app.whenReady().then(async () => {
     log("server up on http://127.0.0.1:" + port);
   } catch (err) {
     log("startup failed: " + err.message);
-    log("check that `uv` and `substrate` are on PATH (see README)");
+    // F7. On a packaged Finder-launched app, a silent quit leaves the
+    // user with nothing. Show a dialog naming the failure + the log
+    // path. Source-mode / terminal launches also get the dialog but
+    // still see the traceback in the terminal.
+    const logsDir = (() => { try { return app.getPath("logs"); } catch { return null; } })();
+    const logHint = logsDir ? "\n\nLog: " + path.join(logsDir, "substrate.log") : "";
+    dialog.showErrorBox(
+      "Substrate could not start",
+      "The backend server did not come up.\n\n" + err.message + logHint,
+    );
     killServerGroup();
     app.quit();
     return;
@@ -273,12 +370,33 @@ app.whenReady().then(async () => {
   });
 });
 
+// F6. macOS lifecycle: closing every window does NOT quit the app;
+// clicking the Dock icon fires `activate` and reopens a window. The
+// window's server MUST outlive the window — otherwise `activate`
+// recreates the window pointing at a dead port. Kill the server only
+// on real quit (Cmd-Q → `before-quit`) or on non-macOS platforms.
+// Review 2026-09-28 § F6.
 app.on("window-all-closed", () => {
-  killServerGroup();
   if (process.platform !== "darwin") app.quit();
 });
 
-app.on("before-quit", killServerGroup);
+// Quit waits for the backend. The server's SIGTERM handler ends every
+// live session (up to 10 s each) and walks the whole session catalog;
+// with ~3000 sessions that outlasts an immediate Electron exit, which
+// left the server finishing its shutdown unsupervised after the app
+// was gone (packaged smoke, 2026-09-28). Hold the first quit, SIGTERM
+// the group, and quit for real once the server exits — or once
+// killServerGroup's SIGKILL fallback lands after KILL_GRACE_MS.
+let quitAfterServer = false;
+app.on("before-quit", (event) => {
+  if (!serverProc || serverExited) return;
+  event.preventDefault();
+  if (quitAfterServer) return;
+  quitAfterServer = true;
+  log("quit requested; waiting for server shutdown");
+  serverProc.once("exit", () => app.quit());
+  killServerGroup();
+});
 
 // Sprint 085 followup — renderer asks main to close the current window
 // when Cmd-W closes the last remaining pane.
