@@ -514,7 +514,7 @@ def _build_session_topology_from_manifest(
             model_resolver=lambda name: _daemon_driver_resolver(name),
         ),
     }
-    return session_topology(
+    topo = session_topology(
         driver=responder,
         driver_name=manifest.driver,
         driver_context_tokens=resolve_driver_context_tokens(manifest.driver, responder),
@@ -534,6 +534,45 @@ def _build_session_topology_from_manifest(
         script=None,
         first_turn_user_message=first_turn_user_message,
     )
+    # Resuming an ended session. session_topology terminates on
+    # threshold_count("SessionEnded", 1), and the runtime restores event
+    # counts from the whole record on resume — so a record that already
+    # holds a SessionEnded finalised the resumed run straight after the
+    # new UserMessage, before the model ran (turn_sync's ended->parked
+    # flip, bb09a70, never produced a reply). Count the SessionEnded
+    # events already on the record and finalise only on the next one.
+    prior_ended = _count_record_kind(Path(manifest.record_root), "SessionEnded")
+    if prior_ended == 0:
+        return topo
+    return _with_session_end_threshold(topo, prior_ended + 1)
+
+
+def _count_record_kind(record_root: Path, kind: str) -> int:
+    """Number of `kind` envelopes on the record at `record_root` (0 if none yet)."""
+    if not record_root.exists():
+        return 0
+    return sum(1 for env in api.read_record(record_root) if env.get("kind") == kind)
+
+
+def _with_session_end_threshold(topo: Any, threshold: int) -> Any:
+    """Wrap a session_topology builder so its termination finalises on the
+    `threshold`-th SessionEnded instead of the first. Same composition as
+    session_topology's own: pause on Park awaiting a UserMessage, or end."""
+    from substrate.topologies.session import PARK, SESSION_ENDED, USER_MESSAGE
+
+    def wrapped(b: Any) -> None:
+        topo(b)
+        b.termination(
+            api.any_of(
+                api.pause_await_input(
+                    when=lambda tctx: tctx.event is not None and tctx.event.kind == PARK,
+                    resume_condition=USER_MESSAGE,
+                ),
+                api.threshold_count(SESSION_ENDED, threshold),
+            )
+        )
+
+    return wrapped
 
 
 def _responder_for(spec: dict[str, object]) -> object:
@@ -2758,17 +2797,21 @@ class Handler(BaseHTTPRequestHandler):
             while not finalised:
                 for env in follower.read_new():
                     seq = int(env.get("seq", -1))
-                    # Piece-B review finding 2: check the finalisation kind
-                    # BEFORE the seq filter, else a client reconnecting with
-                    # `since_seq >= runfinalised_seq` sees every envelope
-                    # discarded, `finalised` never flips, and the loop polls
-                    # forever. `LiveRecord.follow(until_finalised=True)` gets
-                    # this ordering right; the manual reimplementation had not.
+                    # Only a RunFinalised PAST the client's cursor ends the
+                    # stream. Ended sessions are resumable (turn_sync flips
+                    # ended -> parked and the run continues on the same
+                    # record), so a RunFinalised at or before since_seq is
+                    # history: a client that reattaches after it to follow a
+                    # resumed turn must stay open for that turn's envelopes.
+                    # (Piece-B review finding 2 closed the stream on any
+                    # RunFinalised to stop a post-finalisation reconnect from
+                    # polling forever; with resume, waiting — with the 15 s
+                    # keep-alive, until the client hangs up — is correct.)
+                    if seq <= since_seq:
+                        continue
                     is_final = env.get("kind") == api.RUN_FINALISED
                     if is_final:
                         finalised = True
-                    if seq <= since_seq and not is_final:
-                        continue
                     # Piece-B review finding 15: msgspec.json.encode returns
                     # bytes; the earlier .decode()+concat+.encode() shape was
                     # three needless round trips per envelope.
@@ -3994,19 +4037,26 @@ def main() -> None:
     threading.Thread(target=uds_srv.serve_forever, daemon=True).start()
     threading.Thread(target=_run_boot_scan, daemon=True, name="boot_scan").start()
 
+    def _say(msg: str) -> None:
+        # stdout is a pipe to Electron. Once Electron is gone, print()
+        # raises BrokenPipeError; shutdown must not die on its own log line.
+        try:
+            print(msg, flush=True)
+        except OSError:
+            pass
+
     def _sigterm_handler(_signum: int, _frame: Any) -> None:
         # Sprint 215d: a second SIGTERM during shutdown is a no-op.
         if _SHUTDOWN_STARTED.is_set():
             return
         _SHUTDOWN_STARTED.set()
-        print("SIGTERM received; ending sessions cleanly...", flush=True)
+        _say("SIGTERM received; ending sessions cleanly...")
         outcome = _shutdown_all_sessions(per_session_timeout=10.0)
-        print(
+        _say(
             f"shutdown: ended={outcome['ended']} "
             f"skipped_fresh={outcome['skipped_fresh']} "
             f"skipped_ended={outcome['skipped_ended']} "
-            f"failed={outcome['failed']}",
-            flush=True,
+            f"failed={outcome['failed']}"
         )
         srv.shutdown()
         uds_srv.shutdown()
@@ -4032,12 +4082,17 @@ def main() -> None:
             time.sleep(1)
             ppid = os.getppid()
             if ppid != parent_pid_at_start and ppid == 1:
-                print(
-                    f"parent process died (was {parent_pid_at_start}, now reparented to init); shutting down",
-                    flush=True,
-                )
-                _sigterm_handler(0, None)
-                return
+                # The print used to raise BrokenPipeError here (the pipe's
+                # reader, Electron, is the process that died), killing this
+                # thread before shutdown; an orphaned backend then held its
+                # port and ~/.substrate indefinitely (seen 2026-09-29, pid
+                # 38409). _say swallows that, and the handler's sys.exit
+                # only ends this thread, so exit the process explicitly.
+                _say(f"parent process died (was {parent_pid_at_start}, now reparented to init); shutting down")
+                try:
+                    _sigterm_handler(0, None)
+                finally:
+                    os._exit(0)
 
     threading.Thread(target=_ppid_watchdog, daemon=True).start()
 

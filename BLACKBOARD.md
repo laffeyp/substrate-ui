@@ -355,6 +355,21 @@
 
 *Agent maintains. Last 10 increment closes; older roll into ## Built as compressed paragraphs.*
 
+### Sprint 089 (2026-09-29 — resuming ended sessions fixed; config-externalization review verified)
+- **Resume fix: in source, `dist-electron` and `/Applications`.** Reported: pick an ended session up, the old transcript shows, typing starts a new session. Three shared-code causes, the same in both builds:
+  - **Server, session end rule.** `session_topology` finalises on `threshold_count(SessionEnded, 1)`, and the runtime counts the whole record on resume. A resumed ended session finalised right after the new `UserMessage` (measured: `final_seq` 45 → 50, no model run). `server.py` `_with_session_end_threshold` now installs the threshold at prior `SessionEnded` count + 1.
+  - **Client.** The `SessionEnded` handler called `forceClose`, clearing `sessionId`, so `sendTurn` opened a new session. `closeStreamOnEnd` keeps the session bound, and `sendTurn` reopens the stream before posting to an ended session. An explicit `endSession` still unbinds.
+  - **Server, event stream.** `_session_events` closed on any `RunFinalised`, including one at or before `since_seq`. Only a `RunFinalised` past the cursor ends the stream now. The piece-B finding-2 test was rewritten to the new contract.
+- **Evidence.** New harness `harness/shakeout/resume_ended_session.ts` (temp `HOME`): end, re-attach, type. It passes in source, `dist-electron` and `/Applications`, each with the same session ID, replies `["ok","yes"]` and status `parked`. Full server suite: 18 failed and 188 passed, identical with and without the change. The 18 failures predate it.
+- **Installed.** `/Applications/Substrate.app` is build 1790667186. The previous build is in the Trash as `Substrate-1790661508-replaced-20260929-003716.app`.
+- **Orphan backend. Written, untested, not in the installed build.** Pid 38409 was a backend from an earlier build, parent `launchd`, listening on port 62149. The parent-death watchdog `print`s to the dead Electron pipe, and the `BrokenPipeError` kills it before shutdown. `server.py` now routes shutdown lines through `_say`, which ignores `OSError`, and the watchdog calls `os._exit(0)` after shutdown. The parent-death test was stopped before it ran. Pid 38409 was left running.
+- **Review verified.** `process/reviews/REVIEW-2026-09-29-configuration-externalization-the-missing-packaging-step-RESPONSE.md`:
+  - The diagnosis is correct for F1–F4, the source/packaged divergence. It does not cover the Structure, resume, orphan and F6 failures, which are shared-code defects.
+  - Ten citation and code errors are listed, among them the role-prompt row (the shipped prompts resolve relative to the package) and "Ardito et al." (actually Ghammam et al.).
+  - One claim withdrawn: shared `~/.substrate` is by design, one app per machine.
+- **To do, recorded in that response.** `substrate_home()` / `$SUBSTRATE_HOME` so `npm run electron` uses `~/.substrate-dev`. It covers 22 hard-coded sites and needs `substrate-kernel` 1.1.1.
+- **Not started.** The pre-packaging worktree at `85e5b11` (substrate `18aef5a0`).
+
 ### Sprint 089 (2026-09-28, late — implementer handover; source and packaged pass the same real-model smoke; not committed, not notarized)
 - **Response to the review.** `process/reviews/REVIEW-2026-09-28-packaging-vs-electron-standard-RESPONSE.md`, verdict per finding.
 - **Changed this pass.**

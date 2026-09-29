@@ -422,6 +422,13 @@ export class SessionController {
     if (!this.snap.sessionId) await this.openSession();
     const sessionId = this.snap.sessionId;
     if (!sessionId) return;
+    // Resuming an ended session: reopen the stream after the last seq we
+    // hold (past the old RunFinalised, so the server keeps it open) before
+    // the turn posts, so the resumed turn streams in live.
+    if (this.snap.endedReason != null) {
+      this.patch({ endedReason: null });
+      this.attachStream(sessionId);
+    }
     // Local echo first so the shell never looks hung during a slow round-trip.
     this.appendTranscript({
       seq: -Math.round(Date.now()),
@@ -540,21 +547,22 @@ export class SessionController {
     // The controller owns the session's lifecycle: endSession must not
     // return until the two close-emits have fired. Two paths reach them:
     //   1. The SessionEnded envelope arrives on the stream, its handler
-    //      calls forceClose(reason) which patches endedReason and emits.
+    //      calls closeStreamOnEnd(reason), which patches endedReason and emits.
     //   2. The stream is already down or the envelope never arrives —
     //      forceClose here does it.
-    // Poll the snapshot's endedReason for up to 2s. Whichever path
-    // lands first wins; forceClose is idempotent because a second call
-    // finds sessionId already null and emits STREAM_CLOSED once (the
-    // priorSessionId guard). SESSION_ENDED_LOCAL only fires from the
+    // Poll the snapshot's endedReason for up to 2s, then forceClose to
+    // unbind. STREAM_CLOSED fires once: closeStreamOnEnd emits it only
+    // from the call that actually closed an open stream. SESSION_ENDED_LOCAL only fires from the
     // envelope path, so callers of endSession see it only if the
     // server acknowledged with an envelope in time.
     const deadline = Date.now() + 2000;
     while (Date.now() < deadline) {
-      if (this.snap.endedReason != null) return;
+      if (this.snap.endedReason != null) break;
       await new Promise((r) => setTimeout(r, 25));
     }
-    if (this.snap.endedReason == null) this.forceClose(reason);
+    // The SessionEnded envelope only closes the stream (the session stays
+    // resumable when reached by attach). An explicit end also unbinds.
+    this.forceClose(reason);
   }
 
   pickDriver(name: string): void {
@@ -1023,7 +1031,7 @@ export class SessionController {
           seq: env.seq, kind: env.kind, role: "ended",
           text: `session ended (${reason})`,
         });
-        this.forceClose(reason);
+        this.closeStreamOnEnd(reason);
         this.emit("SESSION_ENDED_LOCAL", { reason });
         return;
       }
@@ -1062,21 +1070,28 @@ export class SessionController {
     }
   }
 
-  private forceClose(reason: string): void {
-    const priorSessionId = this.snap.sessionId;
+  /** Close the stream on a SessionEnded and keep the session bound. An
+   * ended session stays resumable (Peter's ruling 2026-09-25, server-side
+   * in session_registry.turn_sync): the next sendTurn reopens the stream
+   * and the server resumes the same record. Attaching an ended session
+   * replays its SessionEnded; clearing sessionId here made the next typed
+   * line open a brand-new session and wipe the replayed transcript. */
+  private closeStreamOnEnd(reason: string): void {
+    const sessionId = this.snap.sessionId;
+    const hadStream = this.unsubscribeStream != null;
     if (this.unsubscribeStream) { this.unsubscribeStream(); this.unsubscribeStream = null; }
     if (this.reconnectTimer) { clearTimeout(this.reconnectTimer); this.reconnectTimer = null; }
-    this.patch({
-      sessionId: null,
-      sessionName: null,
-      turnIndex: 0,
-      connection: "closed" as ConnectionState,
-      endedReason: reason,
-    });
-    // Emit STREAM_CLOSED here so a force-close on SessionEnded still
-    // fires the tag; the client-side onClose callback races the
-    // patched snapshot and its guard short-circuits.
-    if (priorSessionId) this.emit("STREAM_CLOSED", { session_id: priorSessionId });
+    this.patch({ connection: "closed" as ConnectionState, endedReason: reason });
+    // Emit STREAM_CLOSED once, when this call is the one that closed it;
+    // the client-side onClose callback races the patched snapshot.
+    if (hadStream && sessionId) this.emit("STREAM_CLOSED", { session_id: sessionId });
+  }
+
+  /** Close the stream and unbind the session — an explicit endSession.
+   * The next typed line opens a new session. */
+  private forceClose(reason: string): void {
+    this.closeStreamOnEnd(reason);
+    this.patch({ sessionId: null, sessionName: null, turnIndex: 0 });
   }
 
   private appendTranscript(row: TranscriptRow): void {
