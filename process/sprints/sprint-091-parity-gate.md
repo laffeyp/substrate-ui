@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 091
-status: pending
+status: done
 opened_at: 2026-09-29
 phase: config-externalization
 pass_kind: observation
