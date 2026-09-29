@@ -26,11 +26,20 @@ const HEALTH_POLL_MS = 200;
 const KILL_GRACE_MS = 3_000;
 const PORT_READBACK_RE = /^substrate-ui port=(\d+)$/m;
 
-// substrate-ui/ sits next to substrate/. The uv workspace lives in
-// substrate/; we launch from there so `uv run python` resolves
-// the substrate venv.
-const SUBSTRATE_ROOT = path.resolve(__dirname, "..", "..", "substrate");
-const SERVER_PATH = path.resolve(__dirname, "..", "server.py");
+// Two launch paths — source and packaged — differ in every path.
+// Source: substrate-ui/ sits next to substrate/; `uv run python`
+// resolves the substrate venv from the sibling repo.
+// Packaged: the app is signed and installed under /Applications; the
+// bundled Python interpreter sits at Contents/Helpers/python3 and
+// server.py sits at Contents/Resources/app.asar.unpacked/server.py.
+// Nothing outside the bundle is referenced when packaged — a user's
+// Mac has no sibling substrate/ checkout.
+//
+// `app.isPackaged` is Electron's own API for this test. `process.
+// resourcesPath` is NOT — it points inside Electron's own dev bundle
+// during source-mode runs (Sprint 088 detection bug, 2026-09-27).
+const SOURCE_SUBSTRATE_ROOT = path.resolve(__dirname, "..", "..", "substrate");
+const SOURCE_SERVER_PATH = path.resolve(__dirname, "..", "server.py");
 
 let mainWindow = null;
 let serverProc = null;
@@ -64,12 +73,37 @@ function killServerGroup() {
 }
 
 function spawnServer() {
-  log("spawning server: uv run python " + SERVER_PATH + " --port 0");
-  serverProc = spawn("uv", ["run", "python", SERVER_PATH, "--port", "0"], {
-    cwd: SUBSTRATE_ROOT,
+  // Packaged vs source: Electron's `app.isPackaged` is the one right
+  // test. Sprint 089 A1.
+  let exe, args, cwd;
+  if (app.isPackaged) {
+    // Bundled interpreter at Contents/Resources/python/bin/python3
+    // (Sprint 089 B3 explicitly deferred moving it to Contents/
+    // Helpers/ for the first pass; accept the placement deviation).
+    // server.py at Contents/Resources/app.asar.unpacked/server.py.
+    // Working directory is Contents/Resources so CPython's home-
+    // directory resolution finds its stdlib.
+    const resDir = process.resourcesPath;
+    exe = path.join(resDir, "python", "bin", "python3");
+    args = [path.join(resDir, "app.asar.unpacked", "server.py"), "--port", "0"];
+    cwd = resDir;
+  } else {
+    exe = "uv";
+    args = ["run", "python", SOURCE_SERVER_PATH, "--port", "0"];
+    cwd = SOURCE_SUBSTRATE_ROOT;
+  }
+  log("spawning server: " + exe + " " + args.join(" ") + " (cwd=" + cwd + ")");
+  serverProc = spawn(exe, args, {
+    cwd,
     stdio: ["ignore", "pipe", "pipe"],
     detached: true,
-    env: { ...process.env, PYTHONUNBUFFERED: "1" },
+    // PYTHONDONTWRITEBYTECODE: Apple's `xcode/embedding-nonstandard-
+    // code-structures-in-a-bundle` names Python's default `.pyc`
+    // write next to `.py` files as breaking the seal on the code
+    // signature. Suppress writes entirely inside the packaged .app.
+    // Source-mode gets it too — cheap, prevents `__pycache__` litter
+    // in the checkout. Sprint 089 A2.
+    env: { ...process.env, PYTHONUNBUFFERED: "1", PYTHONDONTWRITEBYTECODE: "1" },
   });
   serverProc.stdout.on("data", (chunk) => {
     const text = chunk.toString();

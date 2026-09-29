@@ -1,0 +1,2775 @@
+{
+  "writtenAt": "2026-09-26T07:38:30.990Z",
+  "totalFlows": 35,
+  "totalRuns": 175,
+  "flowReports": [
+    {
+      "flow": "cold_boot",
+      "runs": 5,
+      "runOks": 5,
+      "coverage": [
+        {
+          "tag": "DRIVER_ROSTER_LOADED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "SESSIONS_LOADED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "WORKSPACES_LOADED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "BUNDLE_ROSTER_LOADED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        }
+      ],
+      "defects": []
+    },
+    {
+      "flow": "chat_one_turn",
+      "runs": 5,
+      "runOks": 5,
+      "coverage": [
+        {
+          "tag": "DRIVER_ROSTER_LOADED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "DRIVER_PICKED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "SESSION_OPEN_REQUESTED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "SESSION_OPEN_ACKED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "STREAM_ATTACHED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_SUBMITTED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_ACK",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "STREAM_ENVELOPE_APPENDED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_PARKED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "SESSION_END_REQUESTED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "SESSION_ENDED_LOCAL",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "STREAM_CLOSED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        }
+      ],
+      "defects": []
+    },
+    {
+      "flow": "slash_router",
+      "runs": 5,
+      "runOks": 5,
+      "coverage": [
+        {
+          "tag": "SLASH_ROUTED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "SLASH_UNKNOWN",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        }
+      ],
+      "defects": []
+    },
+    {
+      "flow": "bundle_picked",
+      "runs": 5,
+      "runOks": 5,
+      "coverage": [
+        {
+          "tag": "BUNDLE_ROSTER_LOADED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "BUNDLE_PICKED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        }
+      ],
+      "defects": []
+    },
+    {
+      "flow": "studio_build",
+      "runs": 5,
+      "runOks": 5,
+      "coverage": [
+        {
+          "tag": "SPEC_VALIDATE_REQUESTED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "SPEC_VALIDATED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "SPEC_BUILD_REQUESTED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "SPEC_BUILT",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "SPEC_BUILD_REJECTED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        }
+      ],
+      "defects": []
+    },
+    {
+      "flow": "attach_existing",
+      "runs": 5,
+      "runOks": 5,
+      "coverage": [
+        {
+          "tag": "SESSION_ATTACH_STARTED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "STREAM_ATTACHED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "STREAM_ENVELOPE_APPENDED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        }
+      ],
+      "defects": []
+    },
+    {
+      "flow": "refused_turn",
+      "runs": 5,
+      "runOks": 5,
+      "coverage": [
+        {
+          "tag": "TURN_SUBMITTED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_REFUSED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        }
+      ],
+      "defects": []
+    },
+    {
+      "flow": "refused_open",
+      "runs": 5,
+      "runOks": 5,
+      "coverage": [
+        {
+          "tag": "SESSION_OPEN_REQUESTED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "SESSION_OPEN_REFUSED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        }
+      ],
+      "defects": []
+    },
+    {
+      "flow": "stream_reconnect",
+      "runs": 5,
+      "runOks": 4,
+      "coverage": [
+        {
+          "tag": "STREAM_RECONNECTING",
+          "hits": 4,
+          "runs": 5,
+          "status": "warning"
+        },
+        {
+          "tag": "STREAM_ATTACHED",
+          "hits": 4,
+          "runs": 5,
+          "status": "warning"
+        }
+      ],
+      "defects": []
+    },
+    {
+      "flow": "caret_pin",
+      "runs": 5,
+      "runOks": 0,
+      "coverage": [
+        {
+          "tag": "SESSION_OPEN_REQUESTED",
+          "hits": 0,
+          "runs": 5,
+          "status": "dead"
+        },
+        {
+          "tag": "SESSION_OPEN_ACKED",
+          "hits": 0,
+          "runs": 5,
+          "status": "dead"
+        },
+        {
+          "tag": "TURN_SUBMITTED",
+          "hits": 0,
+          "runs": 5,
+          "status": "dead"
+        },
+        {
+          "tag": "STREAM_ENVELOPE_APPENDED",
+          "hits": 0,
+          "runs": 5,
+          "status": "dead"
+        },
+        {
+          "tag": "TURN_PARKED",
+          "hits": 0,
+          "runs": 5,
+          "status": "dead"
+        }
+      ],
+      "defects": []
+    },
+    {
+      "flow": "pane_split_transcript",
+      "runs": 5,
+      "runOks": 0,
+      "coverage": [
+        {
+          "tag": "SESSION_OPEN_REQUESTED",
+          "hits": 0,
+          "runs": 5,
+          "status": "dead"
+        },
+        {
+          "tag": "SESSION_OPEN_ACKED",
+          "hits": 0,
+          "runs": 5,
+          "status": "dead"
+        },
+        {
+          "tag": "TURN_SUBMITTED",
+          "hits": 0,
+          "runs": 5,
+          "status": "dead"
+        },
+        {
+          "tag": "STREAM_ENVELOPE_APPENDED",
+          "hits": 0,
+          "runs": 5,
+          "status": "dead"
+        },
+        {
+          "tag": "TURN_PARKED",
+          "hits": 0,
+          "runs": 5,
+          "status": "dead"
+        }
+      ],
+      "defects": []
+    },
+    {
+      "flow": "pane_header_clip",
+      "runs": 5,
+      "runOks": 0,
+      "coverage": [
+        {
+          "tag": "SESSION_OPEN_REQUESTED",
+          "hits": 0,
+          "runs": 5,
+          "status": "dead"
+        },
+        {
+          "tag": "SESSION_OPEN_ACKED",
+          "hits": 0,
+          "runs": 5,
+          "status": "dead"
+        },
+        {
+          "tag": "TURN_SUBMITTED",
+          "hits": 0,
+          "runs": 5,
+          "status": "dead"
+        },
+        {
+          "tag": "STREAM_ENVELOPE_APPENDED",
+          "hits": 0,
+          "runs": 5,
+          "status": "dead"
+        },
+        {
+          "tag": "TURN_PARKED",
+          "hits": 0,
+          "runs": 5,
+          "status": "dead"
+        }
+      ],
+      "defects": []
+    },
+    {
+      "flow": "pane_prompt_isolation",
+      "runs": 5,
+      "runOks": 0,
+      "coverage": [
+        {
+          "tag": "SESSION_OPEN_REQUESTED",
+          "hits": 0,
+          "runs": 5,
+          "status": "dead"
+        },
+        {
+          "tag": "SESSION_OPEN_ACKED",
+          "hits": 0,
+          "runs": 5,
+          "status": "dead"
+        },
+        {
+          "tag": "TURN_SUBMITTED",
+          "hits": 0,
+          "runs": 5,
+          "status": "dead"
+        },
+        {
+          "tag": "STREAM_ENVELOPE_APPENDED",
+          "hits": 0,
+          "runs": 5,
+          "status": "dead"
+        },
+        {
+          "tag": "TURN_PARKED",
+          "hits": 0,
+          "runs": 5,
+          "status": "dead"
+        }
+      ],
+      "defects": []
+    },
+    {
+      "flow": "reveal_mode_direction",
+      "runs": 5,
+      "runOks": 0,
+      "coverage": [
+        {
+          "tag": "SESSION_OPEN_REQUESTED",
+          "hits": 0,
+          "runs": 5,
+          "status": "dead"
+        },
+        {
+          "tag": "SESSION_OPEN_ACKED",
+          "hits": 0,
+          "runs": 5,
+          "status": "dead"
+        },
+        {
+          "tag": "TURN_SUBMITTED",
+          "hits": 0,
+          "runs": 5,
+          "status": "dead"
+        },
+        {
+          "tag": "STREAM_ENVELOPE_APPENDED",
+          "hits": 0,
+          "runs": 5,
+          "status": "dead"
+        },
+        {
+          "tag": "TURN_PARKED",
+          "hits": 0,
+          "runs": 5,
+          "status": "dead"
+        }
+      ],
+      "defects": []
+    },
+    {
+      "flow": "model_reply_render",
+      "runs": 5,
+      "runOks": 0,
+      "coverage": [
+        {
+          "tag": "SESSION_OPEN_REQUESTED",
+          "hits": 0,
+          "runs": 5,
+          "status": "dead"
+        },
+        {
+          "tag": "SESSION_OPEN_ACKED",
+          "hits": 0,
+          "runs": 5,
+          "status": "dead"
+        },
+        {
+          "tag": "TURN_SUBMITTED",
+          "hits": 0,
+          "runs": 5,
+          "status": "dead"
+        },
+        {
+          "tag": "STREAM_ENVELOPE_APPENDED",
+          "hits": 0,
+          "runs": 5,
+          "status": "dead"
+        },
+        {
+          "tag": "TURN_PARKED",
+          "hits": 0,
+          "runs": 5,
+          "status": "dead"
+        }
+      ],
+      "defects": []
+    },
+    {
+      "flow": "cli_discovery",
+      "runs": 5,
+      "runOks": 5,
+      "coverage": [
+        {
+          "tag": "DRIVER_ROSTER_LOADED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "DRIVER_PICKED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "SESSION_OPEN_REQUESTED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "SESSION_OPEN_ACKED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "STREAM_ATTACHED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_SUBMITTED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_ACK",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "STREAM_ENVELOPE_APPENDED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_PARKED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "SESSION_END_REQUESTED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "SESSION_ENDED_LOCAL",
+          "hits": 0,
+          "runs": 5,
+          "status": "dead"
+        },
+        {
+          "tag": "STREAM_CLOSED",
+          "hits": 0,
+          "runs": 5,
+          "status": "dead"
+        }
+      ],
+      "defects": [
+        {
+          "category": "cli_no_park",
+          "observed": "driver claude did not park within 60000ms",
+          "expected": "every detected CLI drives one turn to Park",
+          "reproduces": true,
+          "severity": "high"
+        },
+        {
+          "category": "cli_empty_reply",
+          "observed": "driver claude returned no ModelReply text",
+          "expected": "the CLI produced non-empty stdout",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "cli_empty_reply",
+          "observed": "driver cursor-agent returned no ModelReply text",
+          "expected": "the CLI produced non-empty stdout",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "cli_no_park",
+          "observed": "driver claude did not park within 60000ms",
+          "expected": "every detected CLI drives one turn to Park",
+          "reproduces": true,
+          "severity": "high"
+        },
+        {
+          "category": "cli_empty_reply",
+          "observed": "driver claude returned no ModelReply text",
+          "expected": "the CLI produced non-empty stdout",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "cli_empty_reply",
+          "observed": "driver cursor-agent returned no ModelReply text",
+          "expected": "the CLI produced non-empty stdout",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "cli_no_park",
+          "observed": "driver claude did not park within 60000ms",
+          "expected": "every detected CLI drives one turn to Park",
+          "reproduces": true,
+          "severity": "high"
+        },
+        {
+          "category": "cli_empty_reply",
+          "observed": "driver claude returned no ModelReply text",
+          "expected": "the CLI produced non-empty stdout",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "cli_empty_reply",
+          "observed": "driver cursor-agent returned no ModelReply text",
+          "expected": "the CLI produced non-empty stdout",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "cli_no_park",
+          "observed": "driver claude did not park within 60000ms",
+          "expected": "every detected CLI drives one turn to Park",
+          "reproduces": true,
+          "severity": "high"
+        },
+        {
+          "category": "cli_empty_reply",
+          "observed": "driver claude returned no ModelReply text",
+          "expected": "the CLI produced non-empty stdout",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "cli_empty_reply",
+          "observed": "driver cursor-agent returned no ModelReply text",
+          "expected": "the CLI produced non-empty stdout",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "cli_no_park",
+          "observed": "driver claude did not park within 60000ms",
+          "expected": "every detected CLI drives one turn to Park",
+          "reproduces": true,
+          "severity": "high"
+        },
+        {
+          "category": "cli_empty_reply",
+          "observed": "driver claude returned no ModelReply text",
+          "expected": "the CLI produced non-empty stdout",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "cli_empty_reply",
+          "observed": "driver cursor-agent returned no ModelReply text",
+          "expected": "the CLI produced non-empty stdout",
+          "reproduces": false,
+          "severity": "high"
+        }
+      ]
+    },
+    {
+      "flow": "tool_add",
+      "runs": 5,
+      "runOks": 5,
+      "coverage": [
+        {
+          "tag": "SESSION_OPEN_REQUESTED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "SESSION_OPEN_ACKED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_SUBMITTED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "STREAM_ENVELOPE_APPENDED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_PARKED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        }
+      ],
+      "defects": [
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=add",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=add",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=add",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=add",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=add",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        }
+      ]
+    },
+    {
+      "flow": "tool_mul",
+      "runs": 5,
+      "runOks": 5,
+      "coverage": [
+        {
+          "tag": "SESSION_OPEN_REQUESTED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "SESSION_OPEN_ACKED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_SUBMITTED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "STREAM_ENVELOPE_APPENDED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_PARKED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        }
+      ],
+      "defects": [
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=mul",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=mul",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=mul",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=mul",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=mul",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        }
+      ]
+    },
+    {
+      "flow": "tool_read_file",
+      "runs": 5,
+      "runOks": 5,
+      "coverage": [
+        {
+          "tag": "SESSION_OPEN_REQUESTED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "SESSION_OPEN_ACKED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_SUBMITTED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "STREAM_ENVELOPE_APPENDED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_PARKED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        }
+      ],
+      "defects": [
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=read_file",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=read_file",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=read_file",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=read_file",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=read_file",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        }
+      ]
+    },
+    {
+      "flow": "tool_list_dir",
+      "runs": 5,
+      "runOks": 5,
+      "coverage": [
+        {
+          "tag": "SESSION_OPEN_REQUESTED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "SESSION_OPEN_ACKED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_SUBMITTED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "STREAM_ENVELOPE_APPENDED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_PARKED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        }
+      ],
+      "defects": [
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=list_dir",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=list_dir",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=list_dir",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=list_dir",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=list_dir",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        }
+      ]
+    },
+    {
+      "flow": "tool_glob",
+      "runs": 5,
+      "runOks": 5,
+      "coverage": [
+        {
+          "tag": "SESSION_OPEN_REQUESTED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "SESSION_OPEN_ACKED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_SUBMITTED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "STREAM_ENVELOPE_APPENDED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_PARKED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        }
+      ],
+      "defects": [
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=glob",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=glob",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=glob",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=glob",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=glob",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        }
+      ]
+    },
+    {
+      "flow": "tool_grep",
+      "runs": 5,
+      "runOks": 5,
+      "coverage": [
+        {
+          "tag": "SESSION_OPEN_REQUESTED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "SESSION_OPEN_ACKED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_SUBMITTED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "STREAM_ENVELOPE_APPENDED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_PARKED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        }
+      ],
+      "defects": [
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=grep",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=grep",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=grep",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=grep",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=grep",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        }
+      ]
+    },
+    {
+      "flow": "tool_web_fetch",
+      "runs": 5,
+      "runOks": 5,
+      "coverage": [
+        {
+          "tag": "SESSION_OPEN_REQUESTED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "SESSION_OPEN_ACKED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_SUBMITTED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "STREAM_ENVELOPE_APPENDED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_PARKED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        }
+      ],
+      "defects": [
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=web_fetch",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=web_fetch",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=web_fetch",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=web_fetch",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=web_fetch",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        }
+      ]
+    },
+    {
+      "flow": "tool_edit_file",
+      "runs": 5,
+      "runOks": 5,
+      "coverage": [
+        {
+          "tag": "SESSION_OPEN_REQUESTED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "SESSION_OPEN_ACKED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_SUBMITTED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "STREAM_ENVELOPE_APPENDED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_PARKED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        }
+      ],
+      "defects": [
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=edit_file",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=edit_file",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=edit_file",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=edit_file",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=edit_file",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        }
+      ]
+    },
+    {
+      "flow": "tool_write_file",
+      "runs": 5,
+      "runOks": 5,
+      "coverage": [
+        {
+          "tag": "SESSION_OPEN_REQUESTED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "SESSION_OPEN_ACKED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_SUBMITTED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "STREAM_ENVELOPE_APPENDED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_PARKED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        }
+      ],
+      "defects": [
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=write_file",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=write_file",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=write_file",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=write_file",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=write_file",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        }
+      ]
+    },
+    {
+      "flow": "tool_bash",
+      "runs": 5,
+      "runOks": 5,
+      "coverage": [
+        {
+          "tag": "SESSION_OPEN_REQUESTED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "SESSION_OPEN_ACKED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_SUBMITTED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "STREAM_ENVELOPE_APPENDED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_PARKED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        }
+      ],
+      "defects": [
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=bash",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=bash",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=bash",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=bash",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=bash",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        }
+      ]
+    },
+    {
+      "flow": "tool_inspect_record",
+      "runs": 5,
+      "runOks": 5,
+      "coverage": [
+        {
+          "tag": "SESSION_OPEN_REQUESTED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "SESSION_OPEN_ACKED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_SUBMITTED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "STREAM_ENVELOPE_APPENDED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_PARKED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        }
+      ],
+      "defects": [
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=inspect_record",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=inspect_record",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=inspect_record",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=inspect_record",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=inspect_record",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        }
+      ]
+    },
+    {
+      "flow": "tool_list_records",
+      "runs": 5,
+      "runOks": 5,
+      "coverage": [
+        {
+          "tag": "SESSION_OPEN_REQUESTED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "SESSION_OPEN_ACKED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_SUBMITTED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "STREAM_ENVELOPE_APPENDED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_PARKED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        }
+      ],
+      "defects": [
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=list_records",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=list_records",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=list_records",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=list_records",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=list_records",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        }
+      ]
+    },
+    {
+      "flow": "tool_list_sessions",
+      "runs": 5,
+      "runOks": 5,
+      "coverage": [
+        {
+          "tag": "SESSION_OPEN_REQUESTED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "SESSION_OPEN_ACKED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_SUBMITTED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "STREAM_ENVELOPE_APPENDED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_PARKED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        }
+      ],
+      "defects": [
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=list_sessions",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=list_sessions",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=list_sessions",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=list_sessions",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=list_sessions",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        }
+      ]
+    },
+    {
+      "flow": "tool_list_topologies",
+      "runs": 5,
+      "runOks": 5,
+      "coverage": [
+        {
+          "tag": "SESSION_OPEN_REQUESTED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "SESSION_OPEN_ACKED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_SUBMITTED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "STREAM_ENVELOPE_APPENDED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_PARKED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        }
+      ],
+      "defects": [
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=list_topologies",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=list_topologies",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=list_topologies",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=list_topologies",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=list_topologies",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        }
+      ]
+    },
+    {
+      "flow": "tool_list_applications",
+      "runs": 5,
+      "runOks": 5,
+      "coverage": [
+        {
+          "tag": "SESSION_OPEN_REQUESTED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "SESSION_OPEN_ACKED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_SUBMITTED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "STREAM_ENVELOPE_APPENDED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_PARKED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        }
+      ],
+      "defects": [
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=list_applications",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=list_applications",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=list_applications",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=list_applications",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=list_applications",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        }
+      ]
+    },
+    {
+      "flow": "tool_run_topology",
+      "runs": 5,
+      "runOks": 5,
+      "coverage": [
+        {
+          "tag": "SESSION_OPEN_REQUESTED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "SESSION_OPEN_ACKED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_SUBMITTED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "STREAM_ENVELOPE_APPENDED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_PARKED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        }
+      ],
+      "defects": [
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=run_topology",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=run_topology",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=run_topology",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=run_topology",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=run_topology",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        }
+      ]
+    },
+    {
+      "flow": "tool_run_topology_poll",
+      "runs": 5,
+      "runOks": 5,
+      "coverage": [
+        {
+          "tag": "SESSION_OPEN_REQUESTED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "SESSION_OPEN_ACKED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_SUBMITTED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "STREAM_ENVELOPE_APPENDED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_PARKED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        }
+      ],
+      "defects": [
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=run_topology_poll",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=run_topology_poll",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=run_topology_poll",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=run_topology_poll",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=run_topology_poll",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        }
+      ]
+    },
+    {
+      "flow": "tool_delegate",
+      "runs": 5,
+      "runOks": 5,
+      "coverage": [
+        {
+          "tag": "SESSION_OPEN_REQUESTED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "SESSION_OPEN_ACKED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_SUBMITTED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "STREAM_ENVELOPE_APPENDED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_PARKED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        }
+      ],
+      "defects": [
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=delegate",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=delegate",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=delegate",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=delegate",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "wrong_tool_called",
+          "observed": "model called: (none)",
+          "expected": "at least one ToolCall with tool_name=delegate",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_tool_result",
+          "observed": "no ToolResult envelope",
+          "expected": "paired ToolResult follows every ToolCall",
+          "reproduces": false,
+          "severity": "high"
+        }
+      ]
+    },
+    {
+      "flow": "tool_delegate_many",
+      "runs": 5,
+      "runOks": 5,
+      "coverage": [
+        {
+          "tag": "SESSION_OPEN_REQUESTED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "SESSION_OPEN_ACKED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_SUBMITTED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "STREAM_ENVELOPE_APPENDED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_PARKED",
+          "hits": 5,
+          "runs": 5,
+          "status": "green"
+        }
+      ],
+      "defects": [
+        {
+          "category": "no_delegate_call",
+          "observed": "the model did not call delegate at all",
+          "expected": "one ToolCall(tool=delegate) with a children list of three",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_delegate_result",
+          "observed": "no ToolResult envelope for delegate",
+          "expected": "one paired ToolResult with answers and child_roots",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_delegate_call",
+          "observed": "the model did not call delegate at all",
+          "expected": "one ToolCall(tool=delegate) with a children list of three",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_delegate_result",
+          "observed": "no ToolResult envelope for delegate",
+          "expected": "one paired ToolResult with answers and child_roots",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_delegate_call",
+          "observed": "the model did not call delegate at all",
+          "expected": "one ToolCall(tool=delegate) with a children list of three",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_delegate_result",
+          "observed": "no ToolResult envelope for delegate",
+          "expected": "one paired ToolResult with answers and child_roots",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_delegate_call",
+          "observed": "the model did not call delegate at all",
+          "expected": "one ToolCall(tool=delegate) with a children list of three",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_delegate_result",
+          "observed": "no ToolResult envelope for delegate",
+          "expected": "one paired ToolResult with answers and child_roots",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_delegate_call",
+          "observed": "the model did not call delegate at all",
+          "expected": "one ToolCall(tool=delegate) with a children list of three",
+          "reproduces": false,
+          "severity": "high"
+        },
+        {
+          "category": "no_delegate_result",
+          "observed": "no ToolResult envelope for delegate",
+          "expected": "one paired ToolResult with answers and child_roots",
+          "reproduces": false,
+          "severity": "high"
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "tags_at_5_of_5": 137,
+    "tags_at_4_of_5": 2,
+    "tags_below_4": 0,
+    "tags_dead": 32,
+    "total_bugs": 205
+  }
+}

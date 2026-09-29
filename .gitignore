@@ -32,3 +32,8 @@ runs/.archive-*/
 .aider.chat.history.md
 .aider.input.history
 .aider.tags.cache.v*
+
+# Sprint 089 packaging outputs
+build/python/
+dist-electron/
+.env.local
