@@ -11,7 +11,8 @@ const REPO_ROOT = join(__dirname, "..", "..", "..");
 const SUBSTRATE_ROOT = join(REPO_ROOT, "..", "substrate");
 const SERVER_PATH = join(REPO_ROOT, "server.py");
 
-export const BASE_URL = "http://127.0.0.1:8765";
+const PORT = Number(process.env.SHAKEOUT_PORT || "8765");
+export const BASE_URL = `http://127.0.0.1:${PORT}`;
 
 export class ServerHandle {
   private proc: ChildProcess | null = null;
@@ -25,7 +26,7 @@ export class ServerHandle {
     // detached:true puts the child in its own process group so we can
     // signal the whole group (uv + python). Killing only uv leaves the
     // python child running and holding port 8765.
-    this.proc = spawn("uv", ["run", "python", SERVER_PATH], {
+    this.proc = spawn("uv", ["run", "python", SERVER_PATH, "--port", String(PORT)], {
       cwd: SUBSTRATE_ROOT,
       detached: true,
       stdio: ["ignore", out, out],
@@ -59,17 +60,17 @@ export class ServerHandle {
       const s = net.createServer();
       s.once("error", () => resolve(false));
       s.once("listening", () => { s.close(() => resolve(true)); });
-      s.listen(8765, "127.0.0.1");
+      s.listen(PORT, "127.0.0.1");
     });
     if (free) return;
     const { execSync } = await import("node:child_process");
     let pid = "";
-    try { pid = execSync("lsof -iTCP:8765 -sTCP:LISTEN -t", { encoding: "utf8" }).trim(); }
+    try { pid = execSync(`lsof -iTCP:${PORT} -sTCP:LISTEN -t`, { encoding: "utf8" }).trim(); }
     catch { /* lsof returns non-zero if empty */ }
     throw new Error(
-      `port 8765 already bound${pid ? ` (pid ${pid})` : ""}. ` +
+      `port ${PORT} already bound${pid ? ` (pid ${pid})` : ""}. ` +
       `Refusing to start — a squatter subverts every refused/reconnect flow. ` +
-      `Kill it first: kill ${pid || "$(lsof -iTCP:8765 -sTCP:LISTEN -t)"}`
+      `Kill it first: kill ${pid || `$(lsof -iTCP:${PORT} -sTCP:LISTEN -t)`}`
     );
   }
 
@@ -81,7 +82,7 @@ export class ServerHandle {
         const s = net.createServer();
         s.once("error", () => resolve(false));
         s.once("listening", () => { s.close(() => resolve(true)); });
-        s.listen(8765, "127.0.0.1");
+        s.listen(PORT, "127.0.0.1");
       });
       if (free) return;
       await sleep(100);

@@ -2,7 +2,7 @@
 // Shakeout runner. Walks every flow, runs each N times, writes a
 // report. Owns the server.
 
-import { ServerHandle } from "./lib/server";
+import { ServerHandle, BASE_URL } from "./lib/server";
 import type { Flow, EmittedRecord, Defect } from "./lib/flow";
 import { assembleFullReport, writeReport, printSummary, exitCodeFor } from "./lib/report";
 import type { RunResult, FlowResult } from "./lib/report";
@@ -100,7 +100,7 @@ async function runOne(flow: Flow, server: ServerHandle, runIndex: number): Promi
 async function main(): Promise<void> {
   const server = new ServerHandle();
   await server.start();
-  console.log(`[shakeout] server up on http://127.0.0.1:8765`);
+  console.log(`[shakeout] server up on ${BASE_URL}`);
 
   const flowResults: FlowResult[] = [];
   try {
