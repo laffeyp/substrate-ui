@@ -110,6 +110,25 @@ A confirmed-good record is the regression fixture (technique 38). When the perce
 
 ---
 
+## External SDK bridge mappings
+
+Per AGENTS.md hard rule against `bridge_mapping_required`. Reverse-engineer the SDK's actual public API surface here BEFORE any sprint authors code that imports it. Workers given only spec prose consistently invent symbols that don't exist (soundfield rounds 13, 20-26).
+
+### Apple App Store Connect API — notarization credentials
+
+The three non-secret identifiers Sprint 089's Section D + `electron-builder.config.js`'s `mac.notarize: true` block read from the environment. This file is the canonical home so a compact summary can never rewrite them from a plausible-looking hallucination (2026-09-28 issuer-UUID drift, filed on drift watchlist).
+
+- **Team ID (Developer ID Application identity):** `ZVL8XB9XGU` — Green Rose Systems, LLC. The `identity` field in `electron-builder.config.js` mac block. Not a secret.
+- **App Store Connect API key ID:** `C3977SD347`. Passed to `notarytool` / `electron-builder` as `APPLE_API_KEY_ID`. The value equals the substring between `AuthKey_` and `.p8` in the key filename. Not a secret.
+- **App Store Connect issuer UUID:** `ce7e5b05-566f-4024-bdfc-e7de968b3218`. Passed as `APPLE_API_ISSUER`. One UUID per Apple developer organization; visible at App Store Connect → Users and Access → Integrations → App Store Connect API (top of the page). Not a secret.
+- **Private key file (the ONLY secret):** `~/.appstoreconnect/private_keys/AuthKey_C3977SD347.p8`. Passed as `APPLE_API_KEY`. `chmod 600`. Never commits.
+- **Invocation shape:** `APPLE_API_KEY=~/.appstoreconnect/private_keys/AuthKey_C3977SD347.p8 APPLE_API_KEY_ID=C3977SD347 APPLE_API_ISSUER=ce7e5b05-566f-4024-bdfc-e7de968b3218 npm run dist`.
+- **Verification (auth alone, no submission):** `xcrun notarytool history --key <p8> --key-id <id> --issuer <uuid>` returns a list rather than HTTP 401.
+
+If the C3977SD347 key ever rotates: the new `.p8` lands at `~/.appstoreconnect/private_keys/AuthKey_<NEW_ID>.p8`, this section gets an amended entry (never overwritten — rule 12), and `electron-builder`'s environment picks up the new `APPLE_API_KEY_ID` at the next dist run. The issuer UUID and team ID do not rotate on key rotation.
+
+---
+
 ## Custom techniques (inherited from the parent project)
 
 The Substrate project's CT-1..CT-5 (parallel teams, originals-over-summaries, worktree isolation, best-of-N, conformance-as-spine) apply here when relevant. The load-bearing one for this UI: **independent review via the duplex-pipe reviewer** (`../REVIEW_RUNBOOK.md`) at every natural review point — this is the UI's standing dual-contract grader, held #30–#38 and #39.

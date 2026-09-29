@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!--
+      Sprint 089 C3 — minimal entitlements plist. Apple: "Don't
+      include an entitlement if the value is false." Start with only
+      what's demonstrably required.
+
+      allow-jit is required for V8's TurboFan JIT compiler that
+      Chromium (Electron's renderer) uses.
+
+      The following exceptions are deliberately absent for the first
+      pass and added back only if a specific runtime failure demands
+      them (Sprint 088 carried them for stale reasons):
+
+      - com.apple.security.cs.disable-library-validation
+      - com.apple.security.cs.allow-dyld-environment-variables
+      - com.apple.security.cs.allow-unsigned-executable-memory
+
+      Every .so extension module in the bundled Python runtime is
+      re-signed with our Developer ID identity by electron-builder's
+      osx-sign walk, so library-validation should pass without the
+      exception. If a specific .so still fails to load, investigate
+      that specific file rather than lower the app-wide guard.
+    -->
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+
+    <!-- Chromium's renderer process allocates writable-then-executable
+         memory for V8's JIT. allow-jit alone is insufficient on modern
+         macOS; the renderer helper also requires allow-unsigned-
+         executable-memory. Without it, Substrate Helper (Renderer) is
+         killed by the sandbox at launch with a tccd.system / lsd.modifydb
+         denial and the whole .app dies with no window. Verified on
+         macOS 26 arm64, 2026-09-28. -->
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+
+    <!-- Network access — the daemon binds 127.0.0.1 and talks to
+         Ollama, Anthropic, OpenAI. -->
+    <key>com.apple.security.network.client</key>
+    <true/>
+    <key>com.apple.security.network.server</key>
+    <true/>
+</dict>
+</plist>

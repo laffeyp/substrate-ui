@@ -207,7 +207,8 @@ produce a review on the most recent work since the last review. It would
 just be a fixed prompt. Once the reviewer is complete, it returns the
 review not directly to the other model but to the system topology. That
 system topology takes that review text and appends these three words to
-it after a couple of dashes: analyze, verify, apply.</p></li>
+it after a couple of dashes: analyze, verify, apply. And then returns it
+to the autonomous build topology.</p></li>
 <li><p>The autonomous build topology will normally be instantiated from
 a user driving the normal session topology. The user will tell the agent
 running the session topology to start the autonomous build topology,
@@ -248,6 +249,14 @@ function the exact same as the session topology, where that makes
 sense.</p></li>
 <li><p>The build process for this will be to completely copy the session
 topology and then modify it.</p></li>
+<li><p>The SDD kit is completely tied to the autonomous build topology
+and to the standing reviewer topology in this scenario. It is given to
+them and it is part of the prompt that they must read it. However, some
+of the SDD kit implies waiting for the user and stuff like that. So we
+may need a streamlined version for the autonomous build topology, with
+any language on halting, waiting, or surfacing to the user removed. And
+perhaps replaced with strengthened language about building
+autonomously.</p></li>
 </ol>
 </body>
 </html>

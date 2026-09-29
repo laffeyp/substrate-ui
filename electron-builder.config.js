@@ -1,0 +1,107 @@
+// Sprint 089 — Mac packaging config, rebuilt from Apple's docs after
+// Sprint 088's config produced a non-launchable .app.
+//
+// Design anchor:
+//   process/planning/RESEARCH-2026-09-28-mac-packaging-from-apple-primary-sources-v2.md
+//   process/sprints/sprint-089-mac-packaging-per-apple-rules.md
+//
+// Boundary of this config: it produces dist-electron/*.dmg on local
+// disk. Hosting the .dmg is handed off; this config does not upload,
+// does not publish, does not autoupdate. Notarization happens
+// internally via the notarize block — Apple credentials come from
+// APPLE_API_KEY / APPLE_API_KEY_ID / APPLE_API_ISSUER in the
+// environment.
+//
+// Notary submission path (per Apple's customizing-the-notarization-
+// workflow doc): the signed .app is zipped, submitted to notary,
+// the ticket is stapled onto the .app, and then the .dmg is built
+// around the stapled .app. electron-builder handles this whole
+// sequence when `mac.notarize: true` is set.
+
+/** @type {import("electron-builder").Configuration} */
+module.exports = {
+  appId: "com.greenrosesystems.substrate",
+  productName: "Substrate",
+  copyright: "Copyright © 2026 Green Rose Systems, LLC",
+  asar: true,
+
+  // server.py opens its sibling .py files by name — Python's import
+  // system needs them on disk, not inside asar. All four go to
+  // Contents/Resources/app.asar.unpacked/ (Sprint 088's bug: only
+  // session_registry.py was listed; the other three caused
+  // ModuleNotFoundError at first launch).
+  asarUnpack: [
+    "server.py",
+    "session_registry.py",
+    "session_errors.py",
+    "builder.py",
+    "demo_topologies.py",
+    // Python's http server serves the reveal shell from disk via
+    // `Path(__file__).parent / "web" / "dist"`. Inside asar the
+    // files are compressed archive members Python can't stat.
+    // asarUnpack pulls them to Contents/Resources/app.asar.unpacked/
+    // so the server finds them where it expects.
+    "web/dist/**",
+  ],
+
+  files: [
+    "electron/**/*",
+    "web/dist/**/*",
+    "server.py",
+    "session_registry.py",
+    "session_errors.py",
+    "builder.py",
+    "demo_topologies.py",
+    "package.json",
+    "!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}",
+    "!**/node_modules/*/{test,__tests__,tests,powered-test,example,examples}",
+    "!**/node_modules/*.d.ts",
+    "!**/node_modules/.bin",
+    "!**/*.{iml,o,hprof,orig,pyc,pyo,rbc,swp,csproj,sln,xproj}",
+    "!.editorconfig",
+    "!**/._*",
+    "!**/{.DS_Store,.git,.hg,.svn,CVS,RCS,SCCS,.gitignore,.gitattributes}",
+    "!**/{__pycache__,thumbs.db,.flowconfig,.idea,.vs,.nyc_output}",
+  ],
+
+  // The bundled Python runtime lands in Contents/Resources/python/.
+  // scripts/fetch-python-runtime.sh materialises it under
+  // build/python/ before this config runs.
+  extraResources: [
+    { from: "build/python", to: "python", filter: ["**/*"] },
+  ],
+
+  directories: {
+    output: "dist-electron",
+    buildResources: "build",
+  },
+
+  mac: {
+    category: "public.app-category.developer-tools",
+    target: [
+      { target: "dmg", arch: ["arm64"] },
+    ],
+    // Apple's seven-bullet notarization requirements: hardened runtime
+    // on, entitlements plist attached, secure timestamp (default), no
+    // get-task-allow (enforced by the entitlements file itself).
+    hardenedRuntime: true,
+    gatekeeperAssess: false,
+    entitlements: "build/entitlements.mac.plist",
+    entitlementsInherit: "build/entitlements.mac.plist",
+    // Team-name form. electron-builder strips the "Developer ID
+    // Application: " prefix itself; passing the full common name
+    // errors out (Sprint 088 trip-up).
+    identity: "Green Rose Systems, LLC (ZVL8XB9XGU)",
+    notarize: true,
+  },
+
+  dmg: {
+    title: "${productName} ${version}",
+    iconSize: 96,
+    window: { width: 540, height: 380 },
+    contents: [
+      { x: 140, y: 200, type: "file" },
+      { x: 400, y: 200, type: "link", path: "/Applications" },
+    ],
+  },
+};
