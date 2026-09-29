@@ -882,6 +882,13 @@ export class SessionController {
         const driver = payload.driver_model != null ? String(payload.driver_model) : this.snap.driver;
         const bundle = payload.bundle == null ? this.snap.bundleSlug : String(payload.bundle);
         this.patch({ driver, bundleSlug: bundle });
+        // The open-time loadTopologyGraph (openSession) runs before the
+        // session's first turn creates its record, so it 404s. This
+        // envelope is read off that record, so the record now exists:
+        // fetch the graph here if nothing loaded it yet.
+        if (!this.snap.topologyGraph) {
+          this.loadTopologyGraph(sessionId).catch(() => undefined);
+        }
         return;
       }
       case EnvelopeKind.UserMessage: {

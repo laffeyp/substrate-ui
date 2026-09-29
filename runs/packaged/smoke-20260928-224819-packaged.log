@@ -1,0 +1,21 @@
+packaged_app_smoke: page.waitForFunction: Timeout 180000ms exceeded.
+    at run (/Users/peterlaffey/Documents/Claude/Projects/Agent Orchestration/substrate-ui/harness/shakeout/packaged_app_smoke.ts:305:15)
+    at async main (/Users/peterlaffey/Documents/Claude/Projects/Agent Orchestration/substrate-ui/harness/shakeout/packaged_app_smoke.ts:110:3)
+--- captured stderr ---
+[server] substrate-ui port=58234
+substrate-ui read-API server on http://127.0.0.1:58234  (records: adversarial_pair, best_of_n_verified, code_review, daily, debate, fanout_review, game_of_life, game_of_life_glider, intel_asymmetry, natural_conversation, natural_conversation_bare, pair_coding_chunked, prisoners_dilemma, recursive_decomposition, research_sweep, session, swebench_repair, tool_loop; sessions: scanning in background); UDS at /Users/peterlaffey/.substrate/daemon.sock
+[electron] server bound port=58234
+[electron] server up on http://127.0.0.1:58234
+[server] boot_scan: 3131 manifest(s) in 41.11s — 1 parked, 37 interrupted, 3092 ended
+
+--- renderer console ---
+[error] Error: <path> attribute d: Expected moveto path command ('M' or 'm'), "{{ ed.d }}".
+[info] [reveal] transcript root mounted (terminal, pane 1)
+[info] [reveal] transcript root mounted (reveal, pane 1)
+[info] [reveal] SessionController booted. Read window.__vm.snapshot() in DevTools.
+[info] [reveal] transcript root mounted (terminal, pane 1)
+[error] Failed to load resource: the server responded with a status of 404 (Not Found)
+packaged_app_smoke: orphan python3 of this bundle after close:
+69080 /Users/peterlaffey/Documents/Claude/Projects/Agent Orchestration/substrate-ui/dist-electron/mac-arm64/Substrate.app/Contents/Resources/python/bin/python3 /Users/peterlaffey/Documents/Claude/Projects/Agent Orchestration/substrate-ui/dist-electron/mac-arm64/Substrate.app/Contents/Resources/app.asar.unpacked/server.py --port 0
+73454 /Users/peterlaffey/Documents/Claude/Projects/Agent Orchestration/substrate-ui/dist-electron/mac-arm64/Substrate.app/Contents/Resources/python/bin/python3 /Users/peterlaffey/Documents/Claude/Projects/Agent Orchestration/substrate-ui/dist-electron/mac-arm64/Substrate.app/Contents/Resources/app.asar.unpacked/server.py --port 0
+97956 /Users/peterlaffey/Documents/Claude/Projects/Agent Orchestration/substrate-ui/dist-electron/mac-arm64/Substrate.app/Contents/Resources/python/bin/python3 /Users/peterlaffey/Documents/Claude/Projects/Agent Orchestration/substrate-ui/dist-electron/mac-arm64/Substrate.app/Contents/Resources/app.asar.unpacked/server.py --port 0

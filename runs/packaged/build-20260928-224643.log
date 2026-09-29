@@ -1,0 +1,114 @@
+
+> substrate-ui-e2e@1.1.0 build
+> tsc --noEmit && npm run lint && vite build
+
+
+> substrate-ui-e2e@1.1.0 lint
+> eslint web/
+
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+vite v5.4.21 building for production...
+<script src="./support.js"> in "/reveal.html" can't be bundled without type="module" attribute
+transforming...
+✓ 25 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/reveal.html                215.41 kB │ gzip: 47.45 kB
+dist/assets/reveal-sPwsq7Qd.js   56.20 kB │ gzip: 17.56 kB
+✓ built in 140ms
+
+> substrate-ui-e2e@1.1.0 pack:runtime
+> bash scripts/fetch-python-runtime.sh
+
+[fetch-python-runtime] target: /Users/peterlaffey/Documents/Claude/Projects/Agent Orchestration/substrate-ui/build/python
+[fetch-python-runtime] runtime: cpython-3.14.4+20260414-aarch64-apple-darwin-install_only_stripped.tar.gz
+[fetch-python-runtime] substrate: substrate-kernel==1.1.0
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0
+ 43 17.4M   43 7790k    0     0  13.6M      0  0:00:01 --:--:--  0:00:01 13.6M100 17.4M  100 17.4M    0     0  20.8M      0 --:--:-- --:--:-- --:--:-- 35.0M
+[fetch-python-runtime] locked requirements: 16 pins from /Users/peterlaffey/Documents/Claude/Projects/Agent Orchestration/substrate/uv.lock
+Ignoring colorama: markers 'sys_platform == "win32"' don't match your environment
+Collecting anyio==4.13.0 (from -r /var/folders/zy/6l9pgpls6fz1wmkf6m_5ct8m0000gn/T/substrate-reqs-XXXXXX.LzgOEFtRhM.txt (line 3))
+  Downloading anyio-4.13.0-py3-none-any.whl.metadata (4.5 kB)
+Collecting certifi==2026.5.20 (from -r /var/folders/zy/6l9pgpls6fz1wmkf6m_5ct8m0000gn/T/substrate-reqs-XXXXXX.LzgOEFtRhM.txt (line 5))
+  Downloading certifi-2026.5.20-py3-none-any.whl.metadata (2.5 kB)
+Collecting click==8.4.1 (from -r /var/folders/zy/6l9pgpls6fz1wmkf6m_5ct8m0000gn/T/substrate-reqs-XXXXXX.LzgOEFtRhM.txt (line 9))
+  Downloading click-8.4.1-py3-none-any.whl.metadata (2.6 kB)
+Collecting h11==0.16.0 (from -r /var/folders/zy/6l9pgpls6fz1wmkf6m_5ct8m0000gn/T/substrate-reqs-XXXXXX.LzgOEFtRhM.txt (line 13))
+  Downloading h11-0.16.0-py3-none-any.whl.metadata (8.3 kB)
+Collecting httpcore==1.0.9 (from -r /var/folders/zy/6l9pgpls6fz1wmkf6m_5ct8m0000gn/T/substrate-reqs-XXXXXX.LzgOEFtRhM.txt (line 15))
+  Downloading httpcore-1.0.9-py3-none-any.whl.metadata (21 kB)
+Collecting httpx==0.28.1 (from -r /var/folders/zy/6l9pgpls6fz1wmkf6m_5ct8m0000gn/T/substrate-reqs-XXXXXX.LzgOEFtRhM.txt (line 17))
+  Downloading httpx-0.28.1-py3-none-any.whl.metadata (7.1 kB)
+Collecting idna==3.18 (from -r /var/folders/zy/6l9pgpls6fz1wmkf6m_5ct8m0000gn/T/substrate-reqs-XXXXXX.LzgOEFtRhM.txt (line 19))
+  Downloading idna-3.18-py3-none-any.whl.metadata (6.1 kB)
+Collecting markdown-it-py==4.2.0 (from -r /var/folders/zy/6l9pgpls6fz1wmkf6m_5ct8m0000gn/T/substrate-reqs-XXXXXX.LzgOEFtRhM.txt (line 23))
+  Downloading markdown_it_py-4.2.0-py3-none-any.whl.metadata (7.4 kB)
+Collecting mdurl==0.1.2 (from -r /var/folders/zy/6l9pgpls6fz1wmkf6m_5ct8m0000gn/T/substrate-reqs-XXXXXX.LzgOEFtRhM.txt (line 25))
+  Downloading mdurl-0.1.2-py3-none-any.whl.metadata (1.6 kB)
+Collecting msgspec==0.21.1 (from -r /var/folders/zy/6l9pgpls6fz1wmkf6m_5ct8m0000gn/T/substrate-reqs-XXXXXX.LzgOEFtRhM.txt (line 27))
+  Downloading msgspec-0.21.1-cp314-cp314-macosx_11_0_arm64.whl.metadata (5.8 kB)
+Collecting pygments==2.20.0 (from -r /var/folders/zy/6l9pgpls6fz1wmkf6m_5ct8m0000gn/T/substrate-reqs-XXXXXX.LzgOEFtRhM.txt (line 29))
+  Downloading pygments-2.20.0-py3-none-any.whl.metadata (2.5 kB)
+Collecting python-ulid==3.1.0 (from -r /var/folders/zy/6l9pgpls6fz1wmkf6m_5ct8m0000gn/T/substrate-reqs-XXXXXX.LzgOEFtRhM.txt (line 31))
+  Downloading python_ulid-3.1.0-py3-none-any.whl.metadata (5.8 kB)
+Collecting rfc8785==0.1.4 (from -r /var/folders/zy/6l9pgpls6fz1wmkf6m_5ct8m0000gn/T/substrate-reqs-XXXXXX.LzgOEFtRhM.txt (line 33))
+  Downloading rfc8785-0.1.4-py3-none-any.whl.metadata (3.4 kB)
+Collecting rich==15.0.0 (from -r /var/folders/zy/6l9pgpls6fz1wmkf6m_5ct8m0000gn/T/substrate-reqs-XXXXXX.LzgOEFtRhM.txt (line 35))
+  Downloading rich-15.0.0-py3-none-any.whl.metadata (18 kB)
+Collecting typing-extensions==4.15.0 (from -r /var/folders/zy/6l9pgpls6fz1wmkf6m_5ct8m0000gn/T/substrate-reqs-XXXXXX.LzgOEFtRhM.txt (line 37))
+  Downloading typing_extensions-4.15.0-py3-none-any.whl.metadata (3.3 kB)
+Downloading anyio-4.13.0-py3-none-any.whl (114 kB)
+Downloading certifi-2026.5.20-py3-none-any.whl (134 kB)
+Downloading click-8.4.1-py3-none-any.whl (116 kB)
+Downloading h11-0.16.0-py3-none-any.whl (37 kB)
+Downloading httpcore-1.0.9-py3-none-any.whl (78 kB)
+Downloading httpx-0.28.1-py3-none-any.whl (73 kB)
+Downloading idna-3.18-py3-none-any.whl (65 kB)
+Downloading markdown_it_py-4.2.0-py3-none-any.whl (91 kB)
+Downloading mdurl-0.1.2-py3-none-any.whl (10.0 kB)
+Downloading msgspec-0.21.1-cp314-cp314-macosx_11_0_arm64.whl (188 kB)
+Downloading pygments-2.20.0-py3-none-any.whl (1.2 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.2/1.2 MB 25.0 MB/s  0:00:00
+Downloading python_ulid-3.1.0-py3-none-any.whl (11 kB)
+Downloading rfc8785-0.1.4-py3-none-any.whl (9.2 kB)
+Downloading rich-15.0.0-py3-none-any.whl (310 kB)
+Downloading typing_extensions-4.15.0-py3-none-any.whl (44 kB)
+Installing collected packages: typing-extensions, rich, rfc8785, python-ulid, pygments, msgspec, mdurl, markdown-it-py, idna, httpx, httpcore, h11, click, certifi, anyio
+
+Successfully installed anyio-4.13.0 certifi-2026.5.20 click-8.4.1 h11-0.16.0 httpcore-1.0.9 httpx-0.28.1 idna-3.18 markdown-it-py-4.2.0 mdurl-0.1.2 msgspec-0.21.1 pygments-2.20.0 python-ulid-3.1.0 rfc8785-0.1.4 rich-15.0.0 typing-extensions-4.15.0
+
+[notice] A new release of pip is available: 26.0.1 -> 26.2.1
+[notice] To update, run: /Users/peterlaffey/Documents/Claude/Projects/Agent Orchestration/substrate-ui/build/python/bin/python3 -m pip install --upgrade pip
+Collecting substrate-kernel==1.1.0
+  Downloading substrate_kernel-1.1.0-py3-none-any.whl.metadata (9.7 kB)
+Downloading substrate_kernel-1.1.0-py3-none-any.whl (664 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 664.5/664.5 kB 9.4 MB/s  0:00:00
+Installing collected packages: substrate-kernel
+Successfully installed substrate-kernel-1.1.0
+
+[notice] A new release of pip is available: 26.0.1 -> 26.2.1
+[notice] To update, run: /Users/peterlaffey/Documents/Claude/Projects/Agent Orchestration/substrate-ui/build/python/bin/python3 -m pip install --upgrade pip
+No broken requirements found.
+[fetch-python-runtime] ready — 40M, 986 files at /Users/peterlaffey/Documents/Claude/Projects/Agent Orchestration/substrate-ui/build/python
+imports ok: /Users/peterlaffey/Documents/Claude/Projects/Agent Orchestration/substrate-ui/build/python/lib/python3.14/site-packages/substrate/__init__.py
+[fetch-python-runtime] adapters import gate ok (3 modules)
+  • electron-builder  version=26.15.3 os=25.5.0
+  • loaded configuration  file=/Users/peterlaffey/Documents/Claude/Projects/Agent Orchestration/substrate-ui/electron-builder.config.js
+  • author is missed in the package.json  appPackageFile=/Users/peterlaffey/Documents/Claude/Projects/Agent Orchestration/substrate-ui/package.json
+  • executing @electron/rebuild  electronVersion=44.4.5 arch=arm64 buildFromSource=false workspaceRoot=/Users/peterlaffey/Documents/Claude/Projects/Agent Orchestration/substrate-ui projectDir=./ appDir=./
+  • installing native dependencies  arch=arm64
+  • completed installing native dependencies
+  • packaging       platform=darwin arch=arm64 electron=44.4.5 appOutDir=dist-electron/mac-arm64
+  • downloaded      label=electron progress=100%
+  • downloaded electron zip extracted successfully  output=/Users/peterlaffey/Documents/Claude/Projects/Agent Orchestration/substrate-ui/dist-electron/mac-arm64
+  • searching for node modules  pm=npm searchDir=/Users/peterlaffey/Documents/Claude/Projects/Agent Orchestration/substrate-ui
+  • searching for node modules  pm=traversal searchDir=/Users/peterlaffey/Documents/Claude/Projects/Agent Orchestration/substrate-ui
+  • using manual traversal of node_modules to build dependency tree
+  • no node modules returned while searching directories  searchDirectories=[""]
+  • default Electron icon is used  reason=application icon is not set
+  • signing         file=dist-electron/mac-arm64/Substrate.app platform=darwin type=distribution identityName=Developer ID Application: Green Rose Systems, LLC (ZVL8XB9XGU) identityHash=6841D9383C52F6519E5B825259E362CDB4CA11E8 provisioningProfile=none
+  • skipped macOS notarization  reason=`notarize` options were set explicitly `false`
+  • building        target=DMG arch=arm64 file=dist-electron/Substrate-1.1.0-arm64.dmg
+  • building block map  blockMapFile=dist-electron/Substrate-1.1.0-arm64.dmg.blockmap

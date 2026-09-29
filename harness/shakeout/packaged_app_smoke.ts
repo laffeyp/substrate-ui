@@ -44,7 +44,21 @@
 // Behavior verified:
 //   - The prompt input accepts real keyboard input.
 //   - The typed literal appears in the transcript DOM.
-//   - Teardown leaves no orphan python3 child process.
+//   - The turn runs on a real model: the app's own default driver
+//     (`default` in /api/models; SMOKE_DRIVER overrides) and parks.
+//   - After the turn, the pane's topologyGraph holds producers — the
+//     field Reveal → Structure renders (reveal_component.ts:2092-2093,
+//     "no topology loaded" when empty). Review 2026-09-28 / postmortem § 11.
+//   - Launched with launchd's PATH (/usr/bin:/bin:/usr/sbin:/sbin), as a
+//     Finder launch is, every CLI driver found on the harness's own PATH
+//     still appears in the driver roster (review § F2).
+//   - Teardown leaves no orphan python3 child of THIS bundle. The sweep
+//     matches this bundle's absolute path only; another Substrate.app
+//     running on the machine is never touched.
+//
+// SMOKE_TARGET=source runs the same steps against `electron .` from the
+// source tree (bundle preconditions skipped) — the source half of the
+// source-vs-packaged parity check.
 
 import { _electron as electron } from "playwright";
 import { execFileSync, spawnSync } from "node:child_process";
@@ -53,11 +67,25 @@ import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 
 const REPO_ROOT = resolve(__dirname, "..", "..");
-const APP_ROOT = join(REPO_ROOT, "dist-electron", "mac-arm64", "Substrate.app");
+// SMOKE_APP points the smoke at another copy of the bundle, e.g. the
+// installed /Applications/Substrate.app.
+const APP_ROOT = process.env.SMOKE_APP || join(REPO_ROOT, "dist-electron", "mac-arm64", "Substrate.app");
 const APP_EXE = join(APP_ROOT, "Contents", "MacOS", "Substrate");
 const APP_RESOURCES = join(APP_ROOT, "Contents", "Resources");
 const EXPECTED_TEAM = "ZVL8XB9XGU";
-const TYPED_LITERAL = "packaged-smoke-" + Date.now().toString(36);
+// A plain instruction with a one-word answer. A bare token invites a
+// real model to investigate it: on 2026-09-28 kimi-k2.7-code:cloud made
+// ten tool calls and then grepped all of $HOME for the token, outlasting
+// the park wait. The unique suffix keeps the transcript check exact.
+const TYPED_LITERAL = "reply with the single word ok and use no tools (smoke " + Date.now().toString(36) + ")";
+const TARGET = process.env.SMOKE_TARGET === "source" ? "source" : "packaged";
+// Empty = use the app's own default driver (`default` in /api/models),
+// the one a user gets. SMOKE_DRIVER overrides.
+const DRIVER_OVERRIDE = process.env.SMOKE_DRIVER || "";
+let DRIVER = "";
+const LAUNCHD_PATH = "/usr/bin:/bin:/usr/sbin:/sbin";
+const BUNDLED_PY = join(APP_RESOURCES, "python", "bin", "python3");
+const CLI_NAMES = ["claude", "codex", "cursor-agent"];
 
 type Fail = (msg: string) => never;
 const die: Fail = (msg) => {
@@ -80,7 +108,18 @@ function newestMtime(paths: string[]): { path: string; mtimeMs: number } {
   return best;
 }
 
+// CLIs the harness's own shell PATH can see. A Finder-launched app must
+// see the same set once main.js restores the shell PATH.
+function clisOnHarnessPath(): string[] {
+  return CLI_NAMES.filter((n) => spawnSync("/usr/bin/which", [n], { encoding: "utf8" }).status === 0);
+}
+
 async function main(): Promise<void> {
+  if (TARGET === "packaged") await checkBundle();
+  await run();
+}
+
+async function checkBundle(): Promise<void> {
   // 1. Bundle exists.
   if (!existsSync(APP_EXE)) die("no packaged binary at " + APP_EXE + " — run `npm run pack:dev` first");
 
@@ -114,18 +153,30 @@ async function main(): Promise<void> {
   if (!csOut.includes("TeamIdentifier=" + EXPECTED_TEAM)) {
     die("wrong team: expected TeamIdentifier=" + EXPECTED_TEAM + "\n" + csOut);
   }
+}
+
+async function run(): Promise<void> {
+  const expectedClis = clisOnHarnessPath();
 
   // 4. Launch. Fresh user-data-dir sidesteps main.js's single-instance
-  //    lock so a running dev instance does not block the smoke.
+  //    lock so a running dev instance does not block the smoke. The
+  //    packaged target gets launchd's PATH, as a Finder launch does;
+  //    the source target keeps the shell PATH `npm run electron` has.
   const userDataDir = mkdtempSync(join(tmpdir(), "packaged-smoke-"));
   const stderrChunks: string[] = [];
   const consoleChunks: string[] = [];
 
-  const app = await electron.launch({
-    executablePath: APP_EXE,
-    args: ["--user-data-dir=" + userDataDir],
-    timeout: 30_000,
-  });
+  const app = TARGET === "packaged"
+    ? await electron.launch({
+      executablePath: APP_EXE,
+      args: ["--user-data-dir=" + userDataDir],
+      env: { ...process.env, PATH: LAUNCHD_PATH } as Record<string, string>,
+      timeout: 30_000,
+    })
+    : await electron.launch({
+      args: [REPO_ROOT, "--user-data-dir=" + userDataDir],
+      timeout: 30_000,
+    });
 
   const mainPid = app.process().pid;
   app.process().stderr?.on("data", (b) => stderrChunks.push(b.toString("utf8")));
@@ -139,8 +190,12 @@ async function main(): Promise<void> {
       rp: string;
       packaged: boolean;
     };
-    if (!resPath.packaged) die("app.isPackaged=false — Electron thinks it is running from source");
-    if (resPath.rp !== APP_RESOURCES) die("wrong resourcesPath: " + resPath.rp + " (expected " + APP_RESOURCES + ")");
+    if (TARGET === "packaged") {
+      if (!resPath.packaged) die("app.isPackaged=false — Electron thinks it is running from source");
+      if (resPath.rp !== APP_RESOURCES) die("wrong resourcesPath: " + resPath.rp + " (expected " + APP_RESOURCES + ")");
+    } else if (resPath.packaged) {
+      die("SMOKE_TARGET=source but app.isPackaged=true");
+    }
 
     const win = await app.firstWindow({ timeout: 20_000 });
     win.on("console", (m) => consoleChunks.push("[" + m.type() + "] " + m.text()));
@@ -199,8 +254,10 @@ async function main(): Promise<void> {
     );
 
     // 9. Drive session open through __vm (roster + pick + open only —
-    //    the input path is what we want to exercise for real).
-    await win.evaluate(async () => {
+    //    the input path is what we want to exercise for real). The
+    //    driver is a real model; the roster must carry it and every CLI
+    //    the harness's shell can see.
+    const roster = await win.evaluate(async (override) => {
       const vm = (window as unknown as { __vm: { get(id: number): unknown; spawn(id: number): unknown } }).__vm;
       const c = (vm.get(1) ?? vm.spawn(1)) as {
         loadDriverRoster: () => Promise<void>;
@@ -208,9 +265,21 @@ async function main(): Promise<void> {
         openSession: (o: { driver: string }) => Promise<void>;
       };
       await c.loadDriverRoster();
-      c.pickDriver("deterministic");
-      await c.openSession({ driver: "deterministic" });
-    });
+      const r = await fetch("/api/models").then((res) => res.json()) as { models?: string[]; cli?: string[]; default?: string };
+      const driver = override || r.default || "";
+      if (driver) {
+        c.pickDriver(driver);
+        await c.openSession({ driver });
+      }
+      return { models: r.models ?? [], cli: r.cli ?? [], driver };
+    }, DRIVER_OVERRIDE);
+    DRIVER = roster.driver;
+    if (!DRIVER) die("/api/models returned no default driver and SMOKE_DRIVER is unset");
+    if (!roster.models.includes(DRIVER) && !roster.cli.includes(DRIVER)) die("driver " + DRIVER + " not in /api/models roster (models or cli)");
+    const missingClis = expectedClis.filter((n) => !roster.cli.includes(n));
+    if (missingClis.length > 0) {
+      die("CLI drivers visible on the harness PATH but missing from the app's roster: " + missingClis.join(", ") + " (app cli=" + JSON.stringify(roster.cli) + ")");
+    }
 
     // 10. Real keyboard input. Focus the prompt input, type the
     //    literal, press Enter. This is the path pane_prompt_isolation.ts
@@ -245,6 +314,22 @@ async function main(): Promise<void> {
       { timeout: 15_000 },
     );
 
+    // 11. The real-model turn parks, and the pane's topologyGraph —
+    //     what Reveal → Structure renders — holds producers.
+    await win.waitForFunction(
+      () => (window as unknown as { __vm: { get(id: number): { snapshot(): { parkReason: unknown } } } }).__vm.get(1).snapshot().parkReason != null,
+      undefined,
+      { timeout: 180_000 },
+    );
+    await win.waitForFunction(
+      () => {
+        const g = (window as unknown as { __vm: { get(id: number): { snapshot(): { topologyGraph: { producers: unknown[] } | null } } } }).__vm.get(1).snapshot().topologyGraph;
+        return g != null && g.producers.length > 0;
+      },
+      undefined,
+      { timeout: 15_000 },
+    ).catch(() => die("Structure data empty after a parked turn: topologyGraph has no producers (the pane would say \"no topology loaded\")"));
+
     exitCode = 0;
   } catch (err) {
     process.stderr.write("packaged_app_smoke: " + (err instanceof Error ? err.stack ?? err.message : String(err)) + "\n");
@@ -271,21 +356,27 @@ async function main(): Promise<void> {
     //     then SIGKILL any bundled-python survivor. This is a smoke,
     //     not a teardown test — leaving a daemon running would poison
     //     the next run's port bind and mask the real bug next time.
+    //     The match is this bundle's absolute interpreter path — never a
+    //     bare "Contents/Resources/python/bin/python3", which would also
+    //     match an installed /Applications/Substrate.app in use.
     await new Promise((r) => setTimeout(r, 2_000));
-    try {
-      const survivors = execFileSync("pgrep", ["-fl", "Contents/Resources/python/bin/python3"], { encoding: "utf8" });
-      if (survivors.trim().length > 0) {
-        process.stderr.write("packaged_app_smoke: cleaning up " + survivors.trim().split("\n").length + " lingering python3 child(ren)\n");
-        spawnSync("pkill", ["-9", "-f", "Contents/Resources/python/bin/python3"]);
+    if (TARGET === "packaged") {
+      try {
+        const survivors = execFileSync("pgrep", ["-fl", BUNDLED_PY], { encoding: "utf8" });
+        if (survivors.trim().length > 0) {
+          process.stderr.write("packaged_app_smoke: orphan python3 of this bundle after close:\n" + survivors);
+          spawnSync("pkill", ["-9", "-f", BUNDLED_PY]);
+          if (exitCode === 0) exitCode = 4;
+        }
+      } catch {
+        // pgrep exits 1 when nothing matches — the pass case.
       }
-    } catch {
-      // pgrep exits 1 when nothing matches — the pass case.
     }
     try { rmSync(userDataDir, { recursive: true, force: true }); } catch { /* best-effort */ }
   }
 
   if (exitCode === 0) {
-    process.stdout.write("packaged_app_smoke: ok — typed " + TYPED_LITERAL + " landed in input and appeared in transcript (main pid " + String(mainPid) + ")\n");
+    process.stdout.write("packaged_app_smoke[" + TARGET + "]: ok — typed " + TYPED_LITERAL + " reached the transcript, " + DRIVER + " turn parked, Structure graph populated, cli roster " + JSON.stringify(expectedClis) + " (main pid " + String(mainPid) + ")\n");
   }
   process.exit(exitCode);
 }

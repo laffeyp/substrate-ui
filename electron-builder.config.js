@@ -76,6 +76,24 @@ module.exports = {
     buildResources: "build",
   },
 
+  // Declare `substrate://` in the bundle's Info.plist. Electron's
+  // `app.setAsDefaultProtocolClient` documentation: "On macOS, you can
+  // only register protocols that have been added to your app's
+  // info.plist, which cannot be modified at runtime." The runtime call
+  // in electron/main.js is source-mode-only without this. Review
+  // 2026-09-28 § F5.
+  protocols: [
+    { name: "Substrate deep-link", schemes: ["substrate"], role: "Editor" },
+  ],
+
+  // Every new signed build gets a CFBundleVersion strictly greater
+  // than the last (Apple's monotonically-increasing build-string
+  // requirement, per review 2026-09-28 § F10). Epoch seconds keeps it
+  // unique across every rebuild without a manual bump.
+  // CFBundleShortVersionString stays at 1.1.0 (product-visible
+  // version); only the internal build number ticks.
+  buildVersion: String(Math.floor(Date.now() / 1000)),
+
   mac: {
     category: "public.app-category.developer-tools",
     target: [

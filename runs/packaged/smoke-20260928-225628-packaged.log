@@ -1,0 +1,2 @@
+packaged_app_smoke: orphan python3 of this bundle after close:
+991 /Users/peterlaffey/Documents/Claude/Projects/Agent Orchestration/substrate-ui/dist-electron/mac-arm64/Substrate.app/Contents/Resources/python/bin/python3 /Users/peterlaffey/Documents/Claude/Projects/Agent Orchestration/substrate-ui/dist-electron/mac-arm64/Substrate.app/Contents/Resources/app.asar.unpacked/server.py --port 0
