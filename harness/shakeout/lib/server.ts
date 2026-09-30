@@ -6,6 +6,8 @@
 import { spawn, ChildProcess } from "node:child_process";
 import { setTimeout as sleep } from "node:timers/promises";
 import { join } from "node:path";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
 
 const REPO_ROOT = join(__dirname, "..", "..", "..");
 const SUBSTRATE_ROOT = join(REPO_ROOT, "..", "substrate");
@@ -17,6 +19,11 @@ export const BASE_URL = `http://127.0.0.1:${PORT}`;
 export class ServerHandle {
   private proc: ChildProcess | null = null;
   private logPath = "/tmp/shakeout-server.log";
+  readonly substrateHome: string;
+
+  constructor() {
+    this.substrateHome = mkdtempSync(join(tmpdir(), "shakeout-home-"));
+  }
 
   async start(): Promise<void> {
     if (this.proc) return;
@@ -30,6 +37,7 @@ export class ServerHandle {
       cwd: SUBSTRATE_ROOT,
       detached: true,
       stdio: ["ignore", out, out],
+      env: { ...process.env, SUBSTRATE_HOME: this.substrateHome },
     });
     await this.waitHealthy(30000);
   }
