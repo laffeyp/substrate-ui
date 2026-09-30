@@ -23,7 +23,7 @@ const { installMenu } = require("./menu");
 // `Substrate` before any `app.getPath('logs' | 'userData' | ...)`
 // call so the paths land under `~/Library/Logs/Substrate/`,
 // `~/Library/Application Support/Substrate/`, etc.
-app.setName("Substrate");
+app.setName(process.env.SUBSTRATE_HOME ? "Substrate Dev" : "Substrate");
 
 // Sprint 079: --port 0 asks server.py to bind an ephemeral port.
 // The bound value comes back as the first stdout line matching
