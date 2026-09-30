@@ -1735,17 +1735,11 @@ _PROJECTIONS = {
 
 # ── the assay seam: a results file (arms x cases x trials) read as ONE arm comparison ──────────
 # Read-only projections, like the record ones, but at the ABOVE-a-run altitude: many records compared.
-BENCH_RESULTS = Path(
-    os.environ.get(
-        "BENCH_RESULTS",
-        str(
-            Path(__file__).resolve().parent.parent
-            / "substrate"
-            / "process"
-            / "bench_results"
-        ),
-    )
-)
+def _bench_results() -> Path:
+    raw = os.environ.get("BENCH_RESULTS")
+    if raw:
+        return Path(raw)
+    return api.substrate_home() / "bench_results"
 
 
 def _assays_index() -> list[dict[str, object]]:
@@ -1753,9 +1747,10 @@ def _assays_index() -> list[dict[str, object]]:
     from substrate.assay.cells import read_meta, read_rows
 
     out: list[dict[str, object]] = []
-    if not BENCH_RESULTS.exists():
+    br = _bench_results()
+    if not br.exists():
         return out
-    for cells in sorted(BENCH_RESULTS.glob("*.jsonl")):
+    for cells in sorted(br.glob("*.jsonl")):
         try:
             meta, rows = read_meta(cells), read_rows(cells)
         except Exception:  # noqa: BLE001 — a malformed/partial file shows empty, never crashes the rail
@@ -1785,7 +1780,7 @@ def _assay_report(name: str) -> dict[str, object]:
     """The arm matrix: report_from_cells -> the per-arm read (both currencies, deltas, margin-verdict)."""
     from substrate.assay.cells import report_from_cells
 
-    cells = BENCH_RESULTS / f"{name}.jsonl"
+    cells = _bench_results() / f"{name}.jsonl"
     if not _SAFE_RECORD_NAME.match(name) or not cells.exists():
         return {"error": f"no assay {name!r}"}
     mtime = cells.stat().st_mtime
