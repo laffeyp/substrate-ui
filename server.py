@@ -1398,13 +1398,15 @@ def _recent_workspaces() -> list[dict[str, str]]:
     from pathlib import Path as _Path
     seen: dict[str, dict[str, str]] = {}
     order: list[str] = []
-    def _add(path: str, shape: str) -> None:
+    def _add(path: str, shape: str, *, must_exist: bool = True) -> None:
         if not isinstance(path, str) or not path:
             return
         cp = _canonical_workspace(path)
         if not cp:
             return
         if cp in seen:
+            return
+        if must_exist and not _Path(cp).is_dir():
             return
         seen[cp] = {"path": cp, "shape": shape}
         order.append(cp)
@@ -1444,10 +1446,10 @@ def _recent_workspaces() -> list[dict[str, str]]:
             _add(canonical, shape or "path")
     # Synthesized per-session sandbox row — one for the collective set.
     if per_session_seen:
-        _add(_sessions_dir_root(), "per-session-sandboxes")
+        _add(_sessions_dir_root(), "per-session-sandboxes", must_exist=False)
     # Stable sandbox row so a fresh user has one bindable target.
     sandbox = str(api.substrate_home() / "sandbox")
-    _add(sandbox, "sandbox")
+    _add(sandbox, "sandbox", must_exist=False)
     return [seen[canonical] for canonical in order]
 
 
