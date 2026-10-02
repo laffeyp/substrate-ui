@@ -7,7 +7,8 @@
 #
 # The script:
 #   1. Downloads a pinned python-build-standalone release.
-#   2. Installs substrate-kernel==1.1.0 from PyPI into site-packages.
+#   2. Builds the kernel wheel from ../substrate and installs it into site-packages
+#      (Sprint 100: from the commit, never from PyPI).
 #   3. Consolidates the stdlib into a single lib/python${PY_NODOT}.zip archive
 #      via CPython's default zipimport convention (Apple docs on
 #      minimizing file count; local test 2026-09-28 confirmed CPython
@@ -38,7 +39,6 @@ FLAVOR="install_only_stripped"
 ASSET="cpython-${PY_VER}+${PY_TAG}-${ARCH}-${FLAVOR}.tar.gz"
 URL="https://github.com/astral-sh/python-build-standalone/releases/download/${PY_TAG}/${ASSET}"
 
-SUBSTRATE_VERSION="1.1.1"
 # The substrate checkout source mode runs against. Its uv.lock is the
 # dependency set the packaged runtime installs (review § F3).
 SUBSTRATE_REPO="$(cd "$REPO/../substrate" && pwd)"
@@ -48,34 +48,39 @@ if [ "$DEV_PY_VER" != "$PY_VER" ]; then
   echo "[fetch-python-runtime] source mode runs Python $DEV_PY_VER; this script bundles $PY_VER. Update PY_VER/PY_TAG to match." >&2
   exit 1
 fi
-# The PyPI wheel must be the code source mode runs. Source mode imports
-# ../substrate/src; refuse to bundle v$SUBSTRATE_VERSION if that tree
-# has moved past the tag.
-# VERIFICATION builds (UI sprint 097): SUBSTRATE_WHEEL=<wheel built from ../substrate's working
-# tree> bundles that wheel instead of the PyPI release, so a packaged build of uncommitted code can
-# be gated before a release exists. The runtime is marked VERIFICATION_BUILD and scripts/release.sh
-# refuses to ship it. Unset, the drift guards below apply in full.
-if [ -n "${SUBSTRATE_WHEEL:-}" ]; then
-  echo "[fetch-python-runtime] VERIFICATION BUILD: bundling $SUBSTRATE_WHEEL, not substrate-kernel==${SUBSTRATE_VERSION} from PyPI. Not releasable." >&2
+
+# Sprint 100: the kernel comes from the ../substrate commit, not from PyPI. Sprint 089 pinned
+# substrate-kernel==<version> from PyPI, so the app could only be built, tested and installed
+# with kernel code that had already been published: testing waited on a release. Humble &
+# Farley, Continuous Delivery (2010), ch. 5: the deployment pipeline starts from version
+# control, and publishing is a later, separate step. PyPI is how other people get the kernel
+# library; it is not an input to this app.
+#
+#   clean ../substrate (src/ and pyproject.toml): the wheel is built from `git archive HEAD`,
+#     so it holds exactly the committed kernel. Releasable.
+#   uncommitted kernel edits: the wheel is built from the working tree, so a packaged build of
+#     work in progress can be tested; the runtime is marked VERIFICATION_BUILD and
+#     scripts/release.sh refuses it.
+KERNEL_COMMIT="$(git -C "$SUBSTRATE_REPO" rev-parse HEAD)"
+KERNEL_VERSION="$(grep -E '^version = ' "$SUBSTRATE_REPO/pyproject.toml" | cut -d'"' -f2)"
+KERNEL_DIRTY="$(git -C "$SUBSTRATE_REPO" status --porcelain -- src/ pyproject.toml)"
+WHEEL_TMP="$(mktemp -d -t substrate-wheel-XXXXXX)"
+if [ -z "$KERNEL_DIRTY" ]; then
+  mkdir -p "$WHEEL_TMP/src"
+  git -C "$SUBSTRATE_REPO" archive --format=tar HEAD | tar -x -C "$WHEEL_TMP/src"
+  ( cd "$WHEEL_TMP/src" && uv build --wheel --quiet -o "$WHEEL_TMP/dist" )
+  KERNEL_RELEASABLE=true
+else
+  echo "[fetch-python-runtime] VERIFICATION BUILD: ../substrate has uncommitted kernel changes; building from the working tree. Not releasable:" >&2
+  echo "$KERNEL_DIRTY" >&2
+  ( cd "$SUBSTRATE_REPO" && uv build --wheel --quiet -o "$WHEEL_TMP/dist" )
+  KERNEL_RELEASABLE=false
 fi
-DRIFT="$(git -C "$SUBSTRATE_REPO" rev-list --count "v${SUBSTRATE_VERSION}..HEAD" -- src/)"
-if [ "$DRIFT" != "0" ] && [ -z "${SUBSTRATE_WHEEL:-}" ]; then
-  echo "[fetch-python-runtime] ../substrate/src has $DRIFT commit(s) past v${SUBSTRATE_VERSION}; source mode runs code the PyPI wheel lacks. Release and bump SUBSTRATE_VERSION first." >&2
-  exit 1
-fi
-# Sprint 098: uncommitted kernel edits are drift too. Source mode imports the working tree,
-# so an uncommitted change runs in source mode and is missing from the wheel; the commit
-# count above cannot see it.
-DIRTY="$(git -C "$SUBSTRATE_REPO" status --porcelain -- src/)"
-if [ -n "$DIRTY" ] && [ -z "${SUBSTRATE_WHEEL:-}" ]; then
-  echo "[fetch-python-runtime] ../substrate/src has uncommitted changes; source mode runs code the PyPI wheel lacks:" >&2
-  echo "$DIRTY" >&2
-  exit 1
-fi
+KERNEL_WHEEL="$(ls "$WHEEL_TMP"/dist/*.whl)"
 
 echo "[fetch-python-runtime] target: $OUT"
 echo "[fetch-python-runtime] runtime: $ASSET"
-echo "[fetch-python-runtime] substrate: substrate-kernel==${SUBSTRATE_VERSION}"
+echo "[fetch-python-runtime] substrate: kernel $KERNEL_VERSION at ${KERNEL_COMMIT:0:12} (releasable: $KERNEL_RELEASABLE)"
 
 # 1. Fresh tree.
 rm -rf "$OUT"
@@ -83,7 +88,7 @@ mkdir -p "$OUT"
 
 # 2. Download + extract python-build-standalone.
 TARBALL="$(mktemp -t pbs-XXXXXX).tar.gz"
-trap 'rm -f "$TARBALL"' EXIT
+trap 'rm -rf "$TARBALL" "$WHEEL_TMP"' EXIT
 curl -fL --retry 3 --retry-delay 2 -o "$TARBALL" "$URL"
 tar -xzf "$TARBALL" -C "$OUT" --strip-components=1
 
@@ -103,11 +108,13 @@ REQS="$(mktemp -t substrate-reqs-XXXXXX).txt"
     --extra openai-compat --no-hashes --format requirements-txt ) > "$REQS"
 echo "[fetch-python-runtime] locked requirements: $(grep -c '==' "$REQS") pins from $SUBSTRATE_REPO/uv.lock"
 "$PY" -m pip install --no-cache-dir --no-deps -r "$REQS"
-if [ -n "${SUBSTRATE_WHEEL:-}" ]; then
-  "$PY" -m pip install --no-cache-dir --no-deps "$SUBSTRATE_WHEEL"
-  echo "verification build: $SUBSTRATE_WHEEL" > "$OUT/VERIFICATION_BUILD"
-else
-  "$PY" -m pip install --no-cache-dir --no-deps "substrate-kernel==${SUBSTRATE_VERSION}"
+"$PY" -m pip install --no-cache-dir --no-deps "$KERNEL_WHEEL"
+# Provenance travels inside the bundle (Contents/Resources/python/KERNEL_SOURCE);
+# electron-builder.config.js copies it into Info.plist.
+printf '{"commit": "%s", "version": "%s", "releasable": %s}\n' \
+  "$KERNEL_COMMIT" "$KERNEL_VERSION" "$KERNEL_RELEASABLE" > "$OUT/KERNEL_SOURCE"
+if [ "$KERNEL_RELEASABLE" != true ]; then
+  echo "verification build: uncommitted kernel changes on top of $KERNEL_COMMIT" > "$OUT/VERIFICATION_BUILD"
 fi
 "$PY" -m pip check
 rm -f "$REQS"

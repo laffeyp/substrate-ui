@@ -12,7 +12,8 @@
 # Stages, each a hard gate:
 #   1. both trees clean (substrate-ui; substrate/src)
 #   2. tests: substrate-ui pytest, generated envelope kinds current, tsc + eslint + vite build
-#   3. bundled runtime (scripts/fetch-python-runtime.sh: Python + kernel version + drift guard)
+#   3. bundled runtime (scripts/fetch-python-runtime.sh: Python + the kernel wheel built from
+#      ../substrate's HEAD; sprint 100: no PyPI release needed to build, test or install)
 #   4. electron-builder: sign (and notarize with --notarize); commits recorded in Info.plist
 #   5. codesign --verify --deep --strict on the built bundle
 #   6. smoke:packaged (real-model turn, Structure, quit), shakeout:packaged (Axis A) and the
@@ -40,16 +41,16 @@ STAMP="$(date +%Y%m%d-%H%M%S)"
 
 say "1/7 clean trees"
 UI_DIRTY="$(git -C "$REPO" status --porcelain)"
-K_DIRTY="$(git -C "$KERNEL" status --porcelain -- src/)"
+K_DIRTY="$(git -C "$KERNEL" status --porcelain -- src/ pyproject.toml)"
 if [ -n "$UI_DIRTY" ] || [ -n "$K_DIRTY" ]; then
   echo "[release] refusing: a release builds from commits, not a working tree." >&2
   [ -n "$UI_DIRTY" ] && { echo "  substrate-ui:" >&2; echo "$UI_DIRTY" | sed 's/^/    /' >&2; }
-  [ -n "$K_DIRTY" ] && { echo "  substrate/src:" >&2; echo "$K_DIRTY" | sed 's/^/    /' >&2; }
+  [ -n "$K_DIRTY" ] && { echo "  substrate (src/, pyproject.toml):" >&2; echo "$K_DIRTY" | sed 's/^/    /' >&2; }
   exit 1
 fi
 export SUBSTRATE_UI_COMMIT="$(git -C "$REPO" rev-parse HEAD)"
-export SUBSTRATE_KERNEL_VERSION="$(grep -E '^SUBSTRATE_VERSION=' "$REPO/scripts/fetch-python-runtime.sh" | cut -d'"' -f2)"
-say "    substrate-ui $SUBSTRATE_UI_COMMIT, kernel $SUBSTRATE_KERNEL_VERSION"
+KERNEL_COMMIT="$(git -C "$KERNEL" rev-parse HEAD)"
+say "    substrate-ui $SUBSTRATE_UI_COMMIT, kernel $KERNEL_COMMIT"
 
 say "2/7 tests and web build"
 (cd "$REPO" && uv run --project "$KERNEL" python scripts/gen_kinds.py --check)
@@ -61,6 +62,8 @@ say "3/7 bundled runtime"
   || { tail -20 "$LOG_DIR/release-$STAMP-runtime.log" >&2; exit 1; }
 
 [ -f "$REPO/build/python/VERIFICATION_BUILD" ] && { echo "[release] refusing: build/python is a verification build ($(cat "$REPO/build/python/VERIFICATION_BUILD"))" >&2; exit 1; }
+grep -q "\"commit\": \"$KERNEL_COMMIT\"" "$REPO/build/python/KERNEL_SOURCE" \
+  || { echo "[release] build/python/KERNEL_SOURCE does not name kernel $KERNEL_COMMIT" >&2; exit 1; }
 say "4/7 electron-builder (notarize=$NOTARIZE)"
 (cd "$REPO" && npx electron-builder --mac --config electron-builder.config.js -c.mac.notarize="$NOTARIZE") \
   > "$LOG_DIR/release-$STAMP-build.log" 2>&1 || { tail -30 "$LOG_DIR/release-$STAMP-build.log" >&2; exit 1; }
@@ -69,6 +72,8 @@ say "5/7 signature"
 codesign --verify --deep --strict "$APP"
 /usr/libexec/PlistBuddy -c "Print SubstrateUICommit" "$APP/Contents/Info.plist" | grep -qx "$SUBSTRATE_UI_COMMIT" \
   || { echo "[release] Info.plist does not record commit $SUBSTRATE_UI_COMMIT" >&2; exit 1; }
+/usr/libexec/PlistBuddy -c "Print SubstrateKernelCommit" "$APP/Contents/Info.plist" | grep -qx "$KERNEL_COMMIT" \
+  || { echo "[release] Info.plist does not record kernel commit $KERNEL_COMMIT" >&2; exit 1; }
 
 say "6/7 gates against the built bundle"
 (cd "$REPO" && SMOKE_APP="$APP" npx tsx harness/shakeout/packaged_app_smoke.ts) | tee "$LOG_DIR/release-$STAMP-smoke.log"
