@@ -1,0 +1,17 @@
+  • electron-builder  version=26.15.3 os=25.5.0
+  • loaded configuration  file=/Users/peterlaffey/Documents/Claude/Projects/Agent Orchestration/substrate-ui/electron-builder.config.js
+  • author is missed in the package.json  appPackageFile=/Users/peterlaffey/Documents/Claude/Projects/Agent Orchestration/substrate-ui/package.json
+  • executing @electron/rebuild  electronVersion=44.4.5 arch=arm64 buildFromSource=false workspaceRoot=/Users/peterlaffey/Documents/Claude/Projects/Agent Orchestration/substrate-ui projectDir=./ appDir=./
+  • installing native dependencies  arch=arm64
+  • completed installing native dependencies
+  • packaging       platform=darwin arch=arm64 electron=44.4.5 appOutDir=dist-electron/mac-arm64
+  • downloaded      label=electron progress=100%
+  • downloaded electron zip extracted successfully  output=/Users/peterlaffey/Documents/Claude/Projects/Agent Orchestration/substrate-ui/dist-electron/mac-arm64
+  • searching for node modules  pm=npm searchDir=/Users/peterlaffey/Documents/Claude/Projects/Agent Orchestration/substrate-ui
+  • searching for node modules  pm=traversal searchDir=/Users/peterlaffey/Documents/Claude/Projects/Agent Orchestration/substrate-ui
+  • using manual traversal of node_modules to build dependency tree
+  • no node modules returned while searching directories  searchDirectories=[""]
+  • signing         file=dist-electron/mac-arm64/Substrate.app platform=darwin type=distribution identityName=Developer ID Application: Green Rose Systems, LLC (ZVL8XB9XGU) identityHash=6841D9383C52F6519E5B825259E362CDB4CA11E8 provisioningProfile=none
+  • skipped macOS notarization  reason=`notarize` options were set explicitly `false`
+  • building        target=DMG arch=arm64 file=dist-electron/Substrate-1.1.0-arm64.dmg
+  • building block map  blockMapFile=dist-electron/Substrate-1.1.0-arm64.dmg.blockmap
