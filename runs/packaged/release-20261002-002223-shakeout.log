@@ -1,0 +1,96 @@
+[shakeout] server up on http://127.0.0.1:55343
+
+[shakeout] flow: cold_boot × 1
+  · run 0 … ok (12ms, 4 emits)
+
+[shakeout] flow: chat_one_turn × 1
+  · run 0 … ok (1261ms, 58 emits)
+
+[shakeout] flow: slash_router × 1
+  · run 0 … ok (2043ms, 25 emits)
+
+[shakeout] flow: bundle_picked × 1
+  · run 0 … ok (8ms, 2 emits)
+
+[shakeout] flow: studio_build × 1
+  · run 0 … ok (69ms, 8 emits)
+
+[shakeout] flow: attach_existing × 1
+  · run 0 … ok (3729ms, 45 emits)
+
+[shakeout] flow: refused_turn × 1
+  · run 0 … ok (1037ms, 7 emits)
+
+[shakeout] flow: refused_open × 1
+  · run 0 … ok (990ms, 2 emits)
+
+[shakeout] flow: stream_reconnect × 1
+  · run 0 … ok (11298ms, 60 emits)
+
+[shakeout] flow: caret_pin × 1
+[caret_pin] page console error: Error: <path> attribute d: Expected moveto path command ('M' or 'm'), "{{ ed.d }}".
+[caret_pin] page console error: Failed to load resource: the server responded with a status of 404 (Not Found)
+[caret_pin] page console error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
+[caret_pin] DOM shape: {
+  "scrollerExists": true,
+  "scrollerChildren": 1,
+  "mountExists": true,
+  "mountChildren": 1,
+  "mountInnerHTMLLen": 10146,
+  "cursorPointerSpans": 5,
+  "cursorPointerTexts": [
+    "kimi-k2.7-code:cloud ▾",
+    "⌥ —",
+    "records",
+    "studio",
+    "⌃` reveal"
+  ],
+  "scrollerInnerHTMLLen": 10237,
+  "transcriptRowCount": 9
+}
+  · run 0 … ok (7677ms, 5 emits)
+
+[shakeout] flow: pane_split_transcript × 1
+  · run 0 … ok (1748ms, 5 emits)
+
+[shakeout] flow: pane_header_clip × 1
+  · run 0 … ok (949ms, 5 emits)
+
+[shakeout] flow: pane_prompt_isolation × 1
+  · run 0 … ok (1102ms, 5 emits)
+
+[shakeout] flow: reveal_mode_direction × 1
+  · run 0 … ok (2975ms, 5 emits)
+
+[shakeout] flow: model_reply_render × 1
+  · run 0 … ok (1578ms, 5 emits)
+
+[shakeout] flow: cli_discovery × 1
+  · run 0 … ok (5528ms, 58 emits)
+
+[shakeout] flow: cli_version_picker × 1
+  · run 0 … ok (3222ms, 44 emits)
+
+shakeout report — 2026-10-02T07:26:47.282Z
+flows: 17, runs: 17
+  cold_boot — ok 1/1, tags green 4 / warn 0 / blocker 0 / dead 0, bugs 0
+  chat_one_turn — ok 1/1, tags green 12 / warn 0 / blocker 0 / dead 0, bugs 0
+  slash_router — ok 1/1, tags green 2 / warn 0 / blocker 0 / dead 0, bugs 0
+  bundle_picked — ok 1/1, tags green 2 / warn 0 / blocker 0 / dead 0, bugs 0
+  studio_build — ok 1/1, tags green 5 / warn 0 / blocker 0 / dead 0, bugs 0
+  attach_existing — ok 1/1, tags green 3 / warn 0 / blocker 0 / dead 0, bugs 0
+  refused_turn — ok 1/1, tags green 2 / warn 0 / blocker 0 / dead 0, bugs 0
+  refused_open — ok 1/1, tags green 2 / warn 0 / blocker 0 / dead 0, bugs 0
+  stream_reconnect — ok 1/1, tags green 2 / warn 0 / blocker 0 / dead 0, bugs 0
+  caret_pin — ok 1/1, tags green 5 / warn 0 / blocker 0 / dead 0, bugs 0
+  pane_split_transcript — ok 1/1, tags green 5 / warn 0 / blocker 0 / dead 0, bugs 0
+  pane_header_clip — ok 1/1, tags green 5 / warn 0 / blocker 0 / dead 0, bugs 0
+  pane_prompt_isolation — ok 1/1, tags green 5 / warn 0 / blocker 0 / dead 0, bugs 0
+  reveal_mode_direction — ok 1/1, tags green 5 / warn 0 / blocker 0 / dead 0, bugs 0
+  model_reply_render — ok 1/1, tags green 5 / warn 0 / blocker 0 / dead 0, bugs 0
+  cli_discovery — ok 1/1, tags green 12 / warn 0 / blocker 0 / dead 0, bugs 0
+  cli_version_picker — ok 1/1, tags green 5 / warn 0 / blocker 0 / dead 0, bugs 0
+
+summary — tags 5/5: 81, 4/5: 0, below: 0, dead: 0, bugs: 0
+
+[shakeout] report written to /Users/peterlaffey/Documents/Claude/Projects/Agent Orchestration/substrate-ui/captures/shakeout-2026-10-02/report.json
