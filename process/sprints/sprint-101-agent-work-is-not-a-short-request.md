@@ -52,8 +52,8 @@ All tiers, after the last change:
 
 The realmodel failure was `test_ensemble_real_disagreement_and_cancel`: three `llama3.2:1b` samples at temperature 0.9 all said "empathy.". That test sets `max_tokens=64` itself. It passed 5 of 5 on rerun; it measures sampling, and one run in six agreed.
 
-## open (Architect)
+## decided (Architect, 2026-10-02)
 
-Cancelling a turn after a long stretch with no progress (heartbeat): recorded in BLACKBOARD Open questions.
+No turn is cancelled for lack of progress. A turn ends when it finishes or when the user interrupts it.
 
 Committed: kernel `9dfa71d9`; substrate-ui in the commit carrying this card.

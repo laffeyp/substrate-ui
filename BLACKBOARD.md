@@ -108,7 +108,7 @@
 
 ## Decisions
 
-- **2026-10-02 user** — Agent work has no wall-clock limit. "models can work for some time … Claude Code is basically the standard. Nothing can work for 20 minutes, you know what I mean? It doesn't just like... you have to cancel it." Cancelling after a long stretch without progress is "like a future decision" (Open questions). Sprint 101.
+- **2026-10-02 user** — Agent work has no wall-clock limit. "models can work for some time … Claude Code is basically the standard. Nothing can work for 20 minutes, you know what I mean? It doesn't just like... you have to cancel it." No turn is cancelled for lack of progress either: "we're not canceling a turn after a long stretch with no progress. I already made that decision." A turn ends when it finishes or when the user interrupts it. Sprint 101.
 
 - **2026-10-01 user** — "Testing the app should not depend on a release. Let's make it not happen." Sprint 100: the bundled kernel is built from the `../substrate` commit, not installed from PyPI; a PyPI release no longer gates any app build, test or install.
 
@@ -773,7 +773,6 @@ Twelve PNGs at `captures/pixel-baseline-2026-09-23/`: six states (`empty`, `one_
 
 *Anyone may append.*
 
-- **2026-10-02 — Cancel a turn after a long stretch with no progress?** The Architect's future decision. The model to weigh is Temporal's heartbeat timeout: progress is ToolCall, ToolResult, ToolProgress and model output arriving, and a turn that shows none for N minutes ends. Until decided, a turn ends when it finishes or when the user interrupts it. `process/planning/CLASS-2026-10-02-agent-work-modelled-as-a-short-request.md`.
 - **2026-10-01 — Kernel 1.1.2 to PyPI?** Answered for the app by Sprint 100: the app bundles the kernel from the commit, so nothing in substrate-ui waits on PyPI. Publishing remains a question about the library's other users only, and stays the Architect's (outward-facing).
 - **2026-10-01 — The 147 session dirs in the real `~/.substrate/sessions`.** Created on 2026-10-01, before `substrate/tests/conftest.py` isolated the state root; provenance is mixed between leaking tests and the Architect's own use. Untouched. User-only: they are the Architect's data.
 
