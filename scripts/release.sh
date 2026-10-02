@@ -11,7 +11,8 @@
 #
 # Stages, each a hard gate:
 #   1. both trees clean (substrate-ui; substrate/src)
-#   2. tests: substrate-ui pytest, generated envelope kinds current, tsc + eslint + vite build
+#   2. tests: substrate-ui pytest, generated envelope kinds current, tsc + eslint + vite build,
+#      client unit specs (test:unit)
 #   3. bundled runtime (scripts/fetch-python-runtime.sh: Python + the kernel wheel built from
 #      ../substrate's HEAD; sprint 100: no PyPI release needed to build, test or install)
 #   4. electron-builder: sign (and notarize with --notarize); commits recorded in Info.plist
@@ -56,6 +57,7 @@ say "2/7 tests and web build"
 (cd "$REPO" && uv run --project "$KERNEL" python scripts/gen_kinds.py --check)
 (cd "$REPO" && uv run --project "$KERNEL" python -m pytest tests/ -q -p no:cacheprovider)
 (cd "$REPO" && npm run build)
+(cd "$REPO" && npm run test:unit)  # UI sprint 101: the client specs had no gate
 
 say "3/7 bundled runtime"
 (cd "$REPO" && bash scripts/fetch-python-runtime.sh) > "$LOG_DIR/release-$STAMP-runtime.log" 2>&1 \

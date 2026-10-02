@@ -10,6 +10,8 @@
 
 *Agent + Architect. Halts, partials, comprehension affirmations, Rubber Duck observations marked `surfaced`.*
 
+- **2026-10-02 Claude — Class H: agent work modelled as a short request.** Turn 28 died at the daemon's 600 s cap. The model was not working: its bash call had started a background server that held the tool's output pipe, and the tool's read loop had no deadline. The cap removed the symptom and could not stop the thread. The strip kept counting under the red error, and the bash card showed turn 9's result because call ids restart each turn. Sprint 101: no wall-clock limits on model work, a real per-call bash deadline with process-group kill, failure states with exits (manifest, turn index, timeout parks, shutdown interrupts, the strip shows "ended"), calls keyed `callId@seq`, and the output cap raised to the context window (Ollama counts reasoning against it). Class doc: `process/planning/CLASS-2026-10-02-agent-work-modelled-as-a-short-request.md`. Said in chat the same turn.
+
 - **2026-10-02 Claude — The transcript has not followed the bottom since 2026-09-24.** The Architect reported no sticky/free scrolling in build 1790925851. The 2026-09-15 behaviour (`83b20bd`: follow the tail only when already at the bottom; keep each pane's position across view switches) was deleted by Sprint 076 as "superseded by `useScrollAnchor`". Meanwhile the hook's own comments assign follow-bottom to the `reveal.ts` code 076 deleted, and the hook pins the topmost row forever. Sprint 075's sticky invariant never had a check; Sprint 092 recorded "Sticky-bottom terminal pinning" with no observation run; the 093–099 review did not re-verify it. No gate measures scroll position after a row arrives. Postmortem: `process/planning/POSTMORTEM-2026-10-02-transcript-follow-bottom-regression.md`. Said in chat the same turn.
 
 - **2026-10-01 Claude — Sprint 099: two copies of one module, two copies of one board.** substrate-ui kept its own `session_registry.py`; it drifted 33 hunks from the kernel's, and the kernel's delegate caught an exception class the daemon never raised. The same fork existed in the records: `BLACKBOARD.md` and `KIT_DIARY.md` at root and in `process/`, each holding closes the other lacked, with hypothesis IDs H17–H22 assigned twice. Both are now one file each. The realmodel tier then caught three defects behind green fast tiers: a tool reporting a missing record as an empty one, a judge whose verdict was a hash, and token caps that loud truncation turned into failures. Said in chat the same turn.
@@ -106,6 +108,8 @@
 
 ## Decisions
 
+- **2026-10-02 user** — Agent work has no wall-clock limit. "models can work for some time … Claude Code is basically the standard. Nothing can work for 20 minutes, you know what I mean? It doesn't just like... you have to cancel it." Cancelling after a long stretch without progress is "like a future decision" (Open questions). Sprint 101.
+
 - **2026-10-01 user** — "Testing the app should not depend on a release. Let's make it not happen." Sprint 100: the bundled kernel is built from the `../substrate` commit, not installed from PyPI; a PyPI release no longer gates any app build, test or install.
 
 - **2026-10-01 user** — Commit. "commit for sure, update blackboard and kit diary." Both repos committed the same day: kernel `0e2b7176` (47 changed files, 3 new tests), substrate-ui in the commit that carries this entry. The kernel 1.1.2 release and the 147 session dirs were not answered; both sit in `## Open questions`.
@@ -153,6 +157,12 @@
 ### Rolled from Sprint tail and merged from process/BLACKBOARD.md (2026-10-01, newest first)
 
 *Sprint tail had grown to 33 blocks reaching Sprint 001, and a second board at `process/BLACKBOARD.md` had taken writes since 2026-06-18 (Sep 23–25 closes for Sprints 070–076, 083, 084, 085a–c existed only there). These blocks moved verbatim, not compressed, so no fact is lost. The `process/` copy is at `_deprecated/process-BLACKBOARD-2026-10-01.md`.*
+
+#### Sprint 093 (2026-10-01, closed) — state root at use time; hermetic tests (roadmap classes A + B)
+- **093a** `server.py`, `session_registry.py`: `RUNS` / `_SESSIONS_BASE` / `_SESSIONS_BASE_DEFAULT` replaced by `_runs_dir()` / `_sessions_base()` and a construction-time registry default; import-time `RUNS.mkdir` removed. **093b** `tests/conftest.py` sets a fresh `SUBSTRATE_HOME` at conftest import (always, even over a dev shell's `~/.substrate-dev`); six tests patch the accessor. `test_agent_endpoint_reports_the_per_conversation_workspace` hard-coded `/.substrate/sessions/` and passed only because of the leak; it now checks the resolved root. **093c** `_is_temp_workspace` refuses temp-directory paths by class at write (`_remember_workspace`) and at read (`_recent_workspaces`); `tests/test_workspace_temp_paths_093c.py` (4 tests).
+- **Checks run.** Full suite under a throwaway `HOME`: `$HOME/.substrate` absent (baseline: 30 dirs + 1 record); failure set identical to the 18-test baseline; 4 new tests pass. A live launch with `SUBSTRATE_HOME=<tmp>` finalised and wrote its record under `<tmp>/runs/`. The live `~/.substrate/recent-workspaces.json` was purged from 64 rows to 4; backup at `recent-workspaces.json.bak-2026-10-01`.
+- **Not done.** No signed build carries this (sprint 098). Not committed.
+- **Cards.** Retroactive placeholders filed for the cardless Sprint 092 A/B/C work (`process/sprints/sprint-092a/b/c-*.md`), plus forward placeholders 094–098 for roadmap classes D, F, E, G, C.
 
 #### Review of Sprints 086b–092 (2026-10-01) — bugs re-filed as instances of seven practice classes
 - **Technique: appeal to prior authority.** Each bug was matched to the established practice it violates, and that practice's canonical source was fetched and quoted. The source is the external check surface; the bug list is checked against it, not against memory. Roadmap: `process/planning/ROADMAP-2026-10-01-engineering-practice-classes.md`.
@@ -763,6 +773,7 @@ Twelve PNGs at `captures/pixel-baseline-2026-09-23/`: six states (`empty`, `one_
 
 *Anyone may append.*
 
+- **2026-10-02 — Cancel a turn after a long stretch with no progress?** The Architect's future decision. The model to weigh is Temporal's heartbeat timeout: progress is ToolCall, ToolResult, ToolProgress and model output arriving, and a turn that shows none for N minutes ends. Until decided, a turn ends when it finishes or when the user interrupts it. `process/planning/CLASS-2026-10-02-agent-work-modelled-as-a-short-request.md`.
 - **2026-10-01 — Kernel 1.1.2 to PyPI?** Answered for the app by Sprint 100: the app bundles the kernel from the commit, so nothing in substrate-ui waits on PyPI. Publishing remains a question about the library's other users only, and stays the Architect's (outward-facing).
 - **2026-10-01 — The 147 session dirs in the real `~/.substrate/sessions`.** Created on 2026-10-01, before `substrate/tests/conftest.py` isolated the state root; provenance is mixed between leaking tests and the Architect's own use. Untouched. User-only: they are the Architect's data.
 
@@ -809,6 +820,10 @@ Twelve PNGs at `captures/pixel-baseline-2026-09-23/`: six states (`empty`, `one_
 ## Sprint tail
 
 *Agent maintains. Last 10 increment closes; older roll into ## Built as compressed paragraphs.*
+
+### Sprint 101 (2026-10-02, closed) — agent work is not a short request (class H, new)
+- Removed default wall-clock limits on model work (turn, delegate, CLI waits, Ollama and CLI calls); `num_predict` defaults to `num_ctx`. bash: per-call `timeout_s` (120/600), process-group kill on deadline and cancel, separate stderr reader, background children no longer block. Failure states: manifest `running` during a turn; a failed turn's status and index from the record; a caller's timeout parks the turn; shutdown interrupts running turns; the activity strip shows failed turns as ended (`web/reveal/activity.ts`). Tool calls keyed `callId@seq`. `test:unit` gates releases.
+- Gates: kernel 1,210 / 3 skipped; UI 215; client specs 20/20; realmodel 40/41 (ensemble agreement, stochastic, 5/5 on rerun). Card: `process/sprints/sprint-101-agent-work-is-not-a-short-request.md`.
 
 ### Sprint 100 (2026-10-01, closed) — the app's kernel comes from the commit, not PyPI (roadmap class C)
 - `fetch-python-runtime.sh` builds the kernel wheel from `git archive HEAD` of a clean `../substrate` (releasable) or from its working tree (`VERIFICATION_BUILD`, refused by `release.sh`); `SUBSTRATE_VERSION`, the PyPI install and `SUBSTRATE_WHEEL` are gone. `KERNEL_SOURCE` ships in the bundle and Info.plist (`SubstrateKernelCommit`).
@@ -864,9 +879,3 @@ Twelve PNGs at `captures/pixel-baseline-2026-09-23/`: six states (`empty`, `one_
 - **Orphans: class fixed.** The watchdog watched only its direct parent; in source mode that is `uv`, which outlives Electron. Electron now passes `SUBSTRATE_PARENT_PID`; the backend exits ~3 s after app death with `uv` in between. 15 orphaned backends from Sep 28–30 (incl. pid 38409) were stopped; 24 of 26 processes ignored SIGTERM (old code) and took SIGKILL. The live `/Applications` backend was left alone.
 - **Single-instance:** `whenReady` returns when the lock was not acquired (Electron's documented shape).
 - **Open:** startup time unmeasured (card `process/sprints/sprint-094-disposability.md`). Suite: 192 passed, same 18 failures. Not committed.
-
-### Sprint 093 (2026-10-01, closed) — state root at use time; hermetic tests (roadmap classes A + B)
-- **093a** `server.py`, `session_registry.py`: `RUNS` / `_SESSIONS_BASE` / `_SESSIONS_BASE_DEFAULT` replaced by `_runs_dir()` / `_sessions_base()` and a construction-time registry default; import-time `RUNS.mkdir` removed. **093b** `tests/conftest.py` sets a fresh `SUBSTRATE_HOME` at conftest import (always, even over a dev shell's `~/.substrate-dev`); six tests patch the accessor. `test_agent_endpoint_reports_the_per_conversation_workspace` hard-coded `/.substrate/sessions/` and passed only because of the leak; it now checks the resolved root. **093c** `_is_temp_workspace` refuses temp-directory paths by class at write (`_remember_workspace`) and at read (`_recent_workspaces`); `tests/test_workspace_temp_paths_093c.py` (4 tests).
-- **Checks run.** Full suite under a throwaway `HOME`: `$HOME/.substrate` absent (baseline: 30 dirs + 1 record); failure set identical to the 18-test baseline; 4 new tests pass. A live launch with `SUBSTRATE_HOME=<tmp>` finalised and wrote its record under `<tmp>/runs/`. The live `~/.substrate/recent-workspaces.json` was purged from 64 rows to 4; backup at `recent-workspaces.json.bak-2026-10-01`.
-- **Not done.** No signed build carries this (sprint 098). Not committed.
-- **Cards.** Retroactive placeholders filed for the cardless Sprint 092 A/B/C work (`process/sprints/sprint-092a/b/c-*.md`), plus forward placeholders 094–098 for roadmap classes D, F, E, G, C.

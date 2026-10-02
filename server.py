@@ -231,7 +231,7 @@ def _daemon_driver_resolver(name: str, params: dict[str, Any] | None = None) -> 
             think=bool(p.get("think", think_default)),
             max_tokens=int(p.get("max_tokens", 0)),
             num_ctx=int(p.get("num_ctx", num_ctx_default)),
-            timeout=float(p.get("timeout", 300.0)),
+            timeout=float(p["timeout"]) if p.get("timeout") is not None else None,
         )
     _RESPONDER_CACHE[key] = responder
     return responder
@@ -297,6 +297,14 @@ def _shutdown_all_sessions(*, per_session_timeout: float = 10.0) -> dict[str, in
         if manifest.status in (SessionStatus.ENDED, SessionStatus.INTERRUPTED):
             result["skipped_ended"] += 1
             continue
+        if manifest.status == SessionStatus.RUNNING:
+            # UI sprint 101: turns have no time limit, so a running turn can hold the session's
+            # lock past any shutdown grace. Stop it the way ctrl+c does (the turn parks, and the
+            # record says it was interrupted), then end the session below.
+            try:
+                _SESSION_REGISTRY.interrupt(manifest.session_id, tier="hard")
+            except Exception as exc:  # noqa: BLE001 — best-effort; the end below still runs
+                traceback.print_exception(exc)
         try:
             _SESSION_REGISTRY.turn_sync(
                 manifest.session_id,
@@ -579,7 +587,7 @@ def _responder_for(spec: dict[str, object]) -> object:
     seeded — the default; no network, replay-stable) or 'ollama' (a real local LLM; loud failure if
     Ollama is not running — never a silent stub)."""
     if str(spec.get("responder") or "deterministic").lower() == "ollama":
-        return OllamaResponder(model=str(spec.get("model_name") or "llama3.2"), timeout=300.0)
+        return OllamaResponder(model=str(spec.get("model_name") or "llama3.2"))
     return DeterministicResponder(seed=int(spec.get("seed", 0)))  # type: ignore[arg-type]
 
 
@@ -634,11 +642,13 @@ def _is_live(name: str) -> bool:
     return False
 
 
-def _agent_params(q: dict[str, list[str]]) -> tuple[bool, int, float]:
-    """(think, max_tokens, timeout) from the request; max_tokens 0 = uncapped."""
+def _agent_params(q: dict[str, list[str]]) -> tuple[bool, int, float | None]:
+    """(think, max_tokens, timeout) from the request; max_tokens 0 = the responder default;
+    no `timeout` = no limit on how long the model works (UI sprint 101)."""
     think = q.get("think", ["false"])[0].lower() in ("1", "true", "on")
     max_tokens = int(q.get("max_tokens", ["0"])[0] or 0)
-    timeout = float(q.get("timeout", ["300"])[0] or 300)
+    raw_timeout = q.get("timeout", [""])[0]
+    timeout = float(raw_timeout) if raw_timeout else None
     return think, max_tokens, timeout
 
 
@@ -2409,7 +2419,6 @@ class Handler(BaseHTTPRequestHandler):
                 updated_manifest, root_after = _SESSION_REGISTRY.turn_sync(
                     session_id,
                     resume_event_builder=_build,
-                    timeout_seconds=600.0,
                 )
             except Exception as exc:
                 if isinstance(exc, SessionEndedMidTurn):
@@ -3260,7 +3269,7 @@ class Handler(BaseHTTPRequestHandler):
 
         try:
             updated_manifest, root_after = _SESSION_REGISTRY.turn_sync(
-                session_id, resume_event_builder=_build, timeout_seconds=600.0
+                session_id, resume_event_builder=_build
             )
         except SessionEndedMidTurn:
             self._json(
@@ -3367,7 +3376,7 @@ class Handler(BaseHTTPRequestHandler):
                     "cli agent needs a command (model=<preset in KNOWN_CLI_ADAPTERS>, or ?command=...)",
                 )
                 return
-            responder = CliResponder(cmd, name=model, timeout=max(timeout, 600.0))
+            responder = CliResponder(cmd, name=model, timeout=timeout)
             topo = tool_loop_topology(
                 model=responder,
                 walkthrough=True,
