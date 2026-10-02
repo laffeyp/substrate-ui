@@ -3060,6 +3060,7 @@ class Handler(BaseHTTPRequestHandler):
         record_root = Path(handle["record_root"])
         elapsed_seconds = time.time() - float(handle["started_at"])
         status = "running"
+        ended = False  # the record shows how the run ended (finalised, or torn = failed)
         output: Any = None
         if record_root.exists():
             try:
@@ -3067,9 +3068,11 @@ class Handler(BaseHTTPRequestHandler):
             except Exception:  # noqa: BLE001 — torn record while the background run is mid-write; treat as running until stable.
                 envelopes = []
                 status = "failed"
+                ended = True
             else:
                 if envelopes and envelopes[-1].get("kind") == api.RUN_FINALISED:
                     status = "finalised"
+                    ended = True
                     # Extract the application terminal envelope's payload as `output`
                     # (Solved / Verdict / Synthesis). One tail scan; nothing exotic.
                     for env in reversed(envelopes):
@@ -3081,7 +3084,7 @@ class Handler(BaseHTTPRequestHandler):
         # UI sprint 102: the worker thread ended and the record never finalised (or never
         # appeared): the run failed. Before, this read "running" forever.
         thread = handle.get("thread")
-        if status == "running" and thread is not None and not thread.is_alive():
+        if not ended and thread is not None and not thread.is_alive():
             if "result_status" in handle:  # it returned: paused, finalised or failed, as the run says
                 status = str(handle["result_status"])
             else:
