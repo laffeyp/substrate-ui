@@ -24,3 +24,4 @@ class: C (Humble & Farley, "only build your binaries once"; Apple TN2206, sealed
 - `cli_version_picker` hangs 15 minutes in packaged mode, as it did in source mode in sprint 091, where it was recorded as "model latency". A 15-minute hang is a defect. `cli_discovery` reports 1–3 defects per run. Neither diagnosed.
 
 - **Closed 2026-10-01.** `cli_version_picker` and `cli_discovery`: `sprint-098a-open-items-closed.md`. The full pipeline run still waits on the commit and the kernel 1.1.2 release.
+- **Sprint 100, 2026-10-01.** The full pipeline ran from commits with no PyPI release: the runtime now builds the kernel from `../substrate` HEAD. `sprint-100-kernel-from-the-commit.md`.

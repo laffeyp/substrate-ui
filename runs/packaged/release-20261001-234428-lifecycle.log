@@ -1,0 +1,10 @@
+ok   F6 all windows closed (0 left)
+ok   F6 backend still serving after the last window closed
+ok   F6 activate reopened a window on the same backend (port 54495)
+ok   F6 one backend, unchanged (before 83301, after 83301)
+ok   F5 deep link attached the record and streamed its events (launch_game_of_life_36b22c9aace3)
+ok   F6 no backend left after quit
+ok   F7 error dialog shown (Substrate could not start)
+ok   F7 dialog names the log file in packaged mode
+ok   F7 no backend left behind
+lifecycle_gates: all passed
