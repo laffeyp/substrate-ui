@@ -19,6 +19,14 @@
 // sequence when `mac.notarize: true` is set.
 
 /** @type {import("electron-builder").Configuration} */
+const KERNEL_SOURCE = (() => {
+  try {
+    return JSON.parse(require("node:fs").readFileSync(require("node:path").join(__dirname, "build", "python", "KERNEL_SOURCE"), "utf8"));
+  } catch {
+    return { commit: "unrecorded", version: "unrecorded", releasable: false };
+  }
+})();
+
 module.exports = {
   appId: "com.greenrosesystems.substrate",
   productName: "Substrate",
@@ -120,10 +128,14 @@ module.exports = {
     notarize: true,
     // Sprint 098: the build records the commits it was built from, in Info.plist, BEFORE
     // signing (a change to a signed bundle breaks its seal, Apple TN2206). scripts/release.sh
-    // sets these; a build made outside it says "unrecorded".
+    // sets SUBSTRATE_UI_COMMIT; a build made outside it says "unrecorded". Sprint 100: the
+    // kernel fields come from build/python/KERNEL_SOURCE, which fetch-python-runtime.sh writes
+    // for every build, so pack:dev records the kernel commit too.
     extendInfo: {
       SubstrateUICommit: process.env.SUBSTRATE_UI_COMMIT || "unrecorded",
-      SubstrateKernelVersion: process.env.SUBSTRATE_KERNEL_VERSION || "unrecorded",
+      SubstrateKernelCommit: KERNEL_SOURCE.commit,
+      SubstrateKernelVersion: KERNEL_SOURCE.version,
+      SubstrateKernelReleasable: String(KERNEL_SOURCE.releasable),
     },
   },
 
