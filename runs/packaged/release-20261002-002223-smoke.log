@@ -1,0 +1,2 @@
+timing {"target":"packaged","state":"/var/folders/zy/6l9pgpls6fz1wmkf6m_5ct8m0000gn/T/smoke-state-6OXYcK","driver":"kimi-k2.7-code:cloud","window_created":2752,"prompt_visible":3180,"turn_sent":4350,"turn_parked":5632,"structure_populated":5635,"quit_to_backend_gone_ms":643,"backends_before_quit":1,"backends_after_quit":0}
+packaged_app_smoke[packaged]: ok — typed reply with the single word ok and use no tools (smoke muqn2ksz) reached the transcript, kimi-k2.7-code:cloud turn parked, Structure graph populated, cli roster ["claude","codex","cursor-agent"] (main pid 15474)
