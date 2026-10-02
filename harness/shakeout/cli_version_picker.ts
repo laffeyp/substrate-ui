@@ -72,6 +72,7 @@ export const flow: Flow = {
       // here so we exercise the raw shape.
       const client = new NodeSubstrateClient(BASE_URL);
       try {
+        emitted.push({ tag: "SESSION_OPEN_REQUESTED", payload: { driver, pick: pickId } });
         const create = await client.fetchJson<{ session_id: string }>("/api/session", {
           method: "POST",
           body: {
@@ -95,7 +96,7 @@ export const flow: Flow = {
 
         const turnRes = await client.fetchJson<unknown>(
           `/api/session/${encodeURIComponent(sid)}/turn`,
-          { method: "POST", body: { text: "in five words, what model are you?" } },
+          { method: "POST", body: { text: "in five words, what model are you?" }, timeoutMs: PARK_TIMEOUT_MS },
         );
         if (!turnRes.ok) {
           defects.push({
@@ -109,28 +110,28 @@ export const flow: Flow = {
           emitted.push({ tag: "TURN_SUBMITTED", payload: { session_id: sid, pick: pickId } });
         }
 
-        // Poll events until the session parks or we exceed the deadline.
-        const deadline = Date.now() + PARK_TIMEOUT_MS;
+        // Read the session's SSE stream (the endpoint IS a stream; UI sprint 097 — the flow used
+        // to fetch it as a JSON page, with a max_wait_ms the endpoint does not have, and hung)
+        // until it parks, or the deadline passes.
         let sawModelReply = false;
         let sawPark = false;
-        let sinceSeq = 0;
-        while (Date.now() < deadline && !sawPark) {
-          const evRes = await client.fetchJson<{ events: { seq: number; kind: string; payload: Record<string, unknown> }[] }>(
-            `/api/session/${encodeURIComponent(sid)}/events?since_seq=${sinceSeq}&max_wait_ms=5000`,
-          );
-          if (!evRes.ok) break;
-          for (const ev of evRes.data.events) {
-            sinceSeq = Math.max(sinceSeq, ev.seq + 1);
-            emitted.push({ tag: "STREAM_ENVELOPE_APPENDED", payload: { kind: ev.kind } });
-            if (ev.kind === "ModelReply") {
-              const text = typeof ev.payload?.text === "string" ? ev.payload.text : "";
-              if (text.trim().length > 0) sawModelReply = true;
-            }
-            if (ev.kind === "substrate.TerminationMatched" || ev.kind === "SessionEnded") {
-              sawPark = true;
-            }
-          }
-        }
+        await new Promise<void>((resolve) => {
+          const timer = setTimeout(() => { stop(); resolve(); }, PARK_TIMEOUT_MS);
+          const stop = client.streamRecord(sid, -1, {
+            onEnvelope: (env: { kind?: string; payload?: Record<string, unknown> }) => {
+              emitted.push({ tag: "STREAM_ENVELOPE_APPENDED", payload: { kind: env.kind } });
+              if (env.kind === "ModelReply") {
+                const text = typeof env.payload?.text === "string" ? env.payload.text : "";
+                if (text.trim().length > 0) sawModelReply = true;
+              }
+              if (env.kind === "Park" || env.kind === "SessionEnded") {
+                sawPark = true;
+                clearTimeout(timer); stop(); resolve();
+              }
+            },
+            onError: () => { /* keep waiting until the deadline */ },
+          });
+        });
         if (sawPark) emitted.push({ tag: "TURN_PARKED", payload: { session_id: sid, pick: pickId } });
         if (!sawModelReply) {
           defects.push({

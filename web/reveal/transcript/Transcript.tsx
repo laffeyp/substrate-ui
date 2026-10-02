@@ -10,6 +10,7 @@
 import * as React from "react";
 import { useController } from "./useController";
 import { Row } from "./Row";
+import { useScrollAnchor } from "./useScrollAnchor";
 import { EnvelopeKind } from "../../vm/kinds";
 import type { Snapshot, TranscriptRow } from "../../vm";
 
@@ -33,10 +34,11 @@ function buildResultByCallId(snapshot: Snapshot): Map<string, TranscriptRow> {
 
 export function Transcript(props: TranscriptProps): React.ReactElement | null {
   const snapshot = useController(props.paneId);
+  const { registerRow, attachTo } = useScrollAnchor();
   const resultByCallId = React.useMemo(() => buildResultByCallId(snapshot), [snapshot.transcript]);
   const rows: TranscriptRow[] = snapshot.transcript.filter((row) => row.kind !== EnvelopeKind.ToolResult);
   return (
-    <>
+    <div ref={attachTo}>
       {rows.map((row) => {
         const paired = row.callId ? resultByCallId.get(row.callId) : undefined;
         const progressEntry = row.callId ? snapshot.progressByCallId[row.callId] : undefined;
@@ -47,9 +49,10 @@ export function Transcript(props: TranscriptProps): React.ReactElement | null {
             paired={paired}
             progressText={progressEntry?.text ?? ""}
             progressEof={progressEntry?.eof ?? false}
+            registerRow={registerRow}
           />
         );
       })}
-    </>
+    </div>
   );
 }

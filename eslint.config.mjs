@@ -13,11 +13,13 @@
 
 import tsParser from "@typescript-eslint/parser";
 
+// Sprint 096: the banned literals are every generated envelope kind, read from the generated
+// file, so the list can no longer drift from the kernel (it used to be a third hand copy).
+import { readFileSync } from "node:fs";
 const restrictedKindLiterals = [
-  "UserMessage", "ModelReply", "ToolCall", "ToolResult", "Park",
-  "SessionStarted", "SessionEnded", "ProducerFailed", "PromptFragment",
-  "RunFinalised",
-];
+  ...readFileSync(new URL("./web/vm/envelope_kinds.gen.ts", import.meta.url), "utf8")
+    .matchAll(/^\s+\w+: "([^"]+)",$/gm),
+].map((m) => m[1].replace(/[.]/g, "\\."));
 
 export default [
   {

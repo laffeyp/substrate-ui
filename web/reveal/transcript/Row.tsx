@@ -23,6 +23,7 @@ export interface RowProps {
   paired?: TranscriptRow;
   progressText: string;
   progressEof: boolean;
+  registerRow?: (seq: number, el: HTMLElement | null) => void;
 }
 
 interface Style {
@@ -58,17 +59,19 @@ function styleFor(row: TranscriptRow): Style {
   }
 }
 
-const RowInner: React.FC<RowProps> = ({ row, paired, progressText, progressEof }) => {
+const RowInner: React.FC<RowProps> = ({ row, paired, progressText, progressEof, registerRow }) => {
   const style = styleFor(row);
   const text = row.text ?? "";
   const isModel = row.role === "model";
   const isTool = row.role === "tool" && row.kind === "ToolCall";
-  // Sprint 085b — AuthPrompt row renders AuthPromptCard using `text`
-  // as the CLI name (openAuthPrompt writes {kind:"AuthPrompt", role:"system", text:cli}).
   const isAuthPrompt = row.role === "system" && row.kind === "AuthPrompt";
   const streamingShow = progressText.length > 0;
+  const refCb = React.useCallback(
+    (el: HTMLDivElement | null) => { registerRow?.(row.seq, el); },
+    [registerRow, row.seq],
+  );
   return (
-    <div style={{
+    <div ref={refCb} style={{
       marginTop: style.marginTop,
       color: style.textColor,
       whiteSpace: "normal",

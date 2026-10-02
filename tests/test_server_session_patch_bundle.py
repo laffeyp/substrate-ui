@@ -24,7 +24,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import server  # noqa: E402
-from session_registry import SessionRegistry  # noqa: E402
+from substrate.session_registry import SessionRegistry  # noqa: E402
 
 
 @pytest.fixture
@@ -113,7 +113,7 @@ def test_patch_bundle_unknown_name_returns_400(base: str, tmp_path: Path) -> Non
     assert status == 400, body
     assert "does-not-exist" in body["error"] or "bundle" in body["error"]
     manifest = server._SESSION_REGISTRY.get(sid)
-    assert manifest.bundle is None
+    assert manifest.bundle == "session"  # unchanged: the sprint-054 default, not the rejected name
 
 
 def test_patch_bundle_non_string_non_null_returns_400(base: str, tmp_path: Path) -> None:

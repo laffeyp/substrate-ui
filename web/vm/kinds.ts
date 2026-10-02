@@ -8,22 +8,11 @@
 // spell the strings once at declaration; every reference elsewhere is
 // `EnvelopeKind.UserMessage`, greppable and refactor-safe.
 
-/* eslint-disable no-restricted-syntax */
-
-export const EnvelopeKind = {
-  UserMessage: "UserMessage",
-  ModelReply: "ModelReply",
-  ToolCall: "ToolCall",
-  ToolResult: "ToolResult",
-  Park: "Park",
-  SessionStarted: "SessionStarted",
-  SessionEnded: "SessionEnded",
-  ProducerFailed: "ProducerFailed",
-  PromptFragment: "PromptFragment",
-  RunFinalised: "RunFinalised",
-} as const;
-
-export type EnvelopeKindValue = typeof EnvelopeKind[keyof typeof EnvelopeKind];
+// Envelope kinds are GENERATED from the kernel (Sprint 096, scripts/gen_kinds.py): the
+// hand-kept copy that used to live here drifted (`"RunFinalised"` vs the kernel's
+// `"substrate.RunFinalised"`, Sep 23 to Oct 1). Edit the kernel, then regenerate.
+export { EnvelopeKind } from "./envelope_kinds.gen";
+export type { EnvelopeKindValue } from "./envelope_kinds.gen";
 
 export const TranscriptRole = {
   User: "user",

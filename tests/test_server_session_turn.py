@@ -33,7 +33,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import server  # noqa: E402
-from session_registry import SessionRegistry  # noqa: E402
+from substrate.session_registry import SessionRegistry  # noqa: E402
 
 from substrate import api  # noqa: E402
 # TECHNIQUE #38 — F-API-4 test primitives operate on the record path directly.

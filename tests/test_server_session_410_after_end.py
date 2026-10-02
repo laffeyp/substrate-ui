@@ -30,7 +30,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import server  # noqa: E402
 from session_errors import SESSION_ENDED_MID_DELEGATE  # noqa: E402
-from session_registry import SessionRegistry  # noqa: E402
+from substrate.session_registry import SessionRegistry  # noqa: E402
 
 
 @pytest.fixture
@@ -99,20 +99,17 @@ def test_turn_after_delete_returns_410_not_404(base: str, tmp_path: Path) -> Non
     }
 
 
-def test_turn_after_end_returns_410(base: str, tmp_path: Path) -> None:
-    """POST /end flips the manifest to status='ended' AND leaves the manifest
-    present. /turn on that manifest returns 410 at the pre-lock check.
-    """
+def test_turn_after_end_resumes_the_session(base: str, tmp_path: Path) -> None:
+    """Architect ruling 2026-09-25: POST /end leaves the session resumable; the next /turn
+    returns 200 on the SAME session and parks again. (Asserted 410 until Sprint 097; the
+    ruling and Sprint 089's resume fix changed the contract.)"""
     sid = _create(base, tmp_path / "wsp", "ended")
     _post_json(base + f"/api/session/{sid}/turn", {"text": "priming"})
     _post_json(base + f"/api/session/{sid}/end", None)
-    status, body = _post_json(base + f"/api/session/{sid}/turn", {"text": "no"})
-    assert status == 410
-    assert body == {
-        "ok": False,
-        "status": "ended",
-        "error": SESSION_ENDED_MID_DELEGATE,
-    }
+    status, body = _post_json(base + f"/api/session/{sid}/turn", {"text": "again"})
+    assert status == 200, body
+    assert body.get("status") == "parked", body
+    assert server._SESSION_REGISTRY.get(sid).status == "parked"
 
 
 def test_turn_on_never_existed_session_still_returns_404(base: str) -> None:

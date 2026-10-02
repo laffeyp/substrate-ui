@@ -27,7 +27,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import server  # noqa: E402
-from session_registry import SessionRegistry  # noqa: E402
+from substrate.session_registry import SessionRegistry  # noqa: E402
 
 
 @pytest.fixture
@@ -191,7 +191,8 @@ def test_resolver_returns_distinct_responders_per_params(base: str, tmp_path: Pa
     assert responder_thinking is responder_thinking_again, "same params must hit the cache"
     # The thinking Responder actually carries think=True on the OllamaResponder.
     assert getattr(responder_thinking, "_think", False) is True
-    assert getattr(responder_default, "_think", True) is False
+    # Sprint 045: the default follows the model's thinking support, not a fixed False.
+    assert getattr(responder_default, "_think", None) is server._model_supports_thinking("kimi-k2.6:cloud")
 
 
 def test_workspace_and_seed_still_deferred(base: str, tmp_path: Path) -> None:

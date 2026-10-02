@@ -86,6 +86,32 @@ function blockElement(block: RenderedBlock, key: number): React.ReactElement | n
       </div>
     );
   }
+  if (block.isTable) {
+    return (
+      <table key={key} style={{ margin: "0 0 12px", borderCollapse: "collapse", fontSize: 12, color: "#b9bec5" }}>
+        <thead>
+          <tr>
+            {block.tableHeaders.map((cell, ci) => (
+              <th key={ci} style={{ borderBottom: "1px solid #2e3138", padding: "4px 10px", textAlign: "left", fontWeight: 600, color: "#e2e5e9" }}>
+                {cell.map(inlineSpan)}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {block.tableRows.map((row, ri) => (
+            <tr key={ri}>
+              {row.map((cell, ci) => (
+                <td key={ci} style={{ borderBottom: "1px solid #1a1c20", padding: "4px 10px" }}>
+                  {cell.map(inlineSpan)}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    );
+  }
   return null;
 }
 

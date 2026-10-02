@@ -1,0 +1,2 @@
+# _deprecated/ holds archived code kept for the audit trail; it is not built, shipped or tested.
+extend-exclude = ["_deprecated"]

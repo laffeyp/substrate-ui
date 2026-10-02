@@ -165,8 +165,8 @@ function boot(): void {
     if (ev.key !== "c" && ev.key !== "C") return;
     if (!(ev.ctrlKey || ev.metaKey)) return;
     const active = document.activeElement;
-    if (!active || active.tagName !== "INPUT") return;
-    const input = active as HTMLInputElement;
+    if (!active || (active.tagName !== "INPUT" && active.tagName !== "TEXTAREA")) return;
+    const input = active as HTMLInputElement | HTMLTextAreaElement;
     if (typeof input.selectionStart === "number"
       && typeof input.selectionEnd === "number"
       && input.selectionStart !== input.selectionEnd) return;

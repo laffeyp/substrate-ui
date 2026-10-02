@@ -51,9 +51,25 @@ fi
 # The PyPI wheel must be the code source mode runs. Source mode imports
 # ../substrate/src; refuse to bundle v$SUBSTRATE_VERSION if that tree
 # has moved past the tag.
+# VERIFICATION builds (UI sprint 097): SUBSTRATE_WHEEL=<wheel built from ../substrate's working
+# tree> bundles that wheel instead of the PyPI release, so a packaged build of uncommitted code can
+# be gated before a release exists. The runtime is marked VERIFICATION_BUILD and scripts/release.sh
+# refuses to ship it. Unset, the drift guards below apply in full.
+if [ -n "${SUBSTRATE_WHEEL:-}" ]; then
+  echo "[fetch-python-runtime] VERIFICATION BUILD: bundling $SUBSTRATE_WHEEL, not substrate-kernel==${SUBSTRATE_VERSION} from PyPI. Not releasable." >&2
+fi
 DRIFT="$(git -C "$SUBSTRATE_REPO" rev-list --count "v${SUBSTRATE_VERSION}..HEAD" -- src/)"
-if [ "$DRIFT" != "0" ]; then
+if [ "$DRIFT" != "0" ] && [ -z "${SUBSTRATE_WHEEL:-}" ]; then
   echo "[fetch-python-runtime] ../substrate/src has $DRIFT commit(s) past v${SUBSTRATE_VERSION}; source mode runs code the PyPI wheel lacks. Release and bump SUBSTRATE_VERSION first." >&2
+  exit 1
+fi
+# Sprint 098: uncommitted kernel edits are drift too. Source mode imports the working tree,
+# so an uncommitted change runs in source mode and is missing from the wheel; the commit
+# count above cannot see it.
+DIRTY="$(git -C "$SUBSTRATE_REPO" status --porcelain -- src/)"
+if [ -n "$DIRTY" ] && [ -z "${SUBSTRATE_WHEEL:-}" ]; then
+  echo "[fetch-python-runtime] ../substrate/src has uncommitted changes; source mode runs code the PyPI wheel lacks:" >&2
+  echo "$DIRTY" >&2
   exit 1
 fi
 
@@ -87,7 +103,12 @@ REQS="$(mktemp -t substrate-reqs-XXXXXX).txt"
     --extra openai-compat --no-hashes --format requirements-txt ) > "$REQS"
 echo "[fetch-python-runtime] locked requirements: $(grep -c '==' "$REQS") pins from $SUBSTRATE_REPO/uv.lock"
 "$PY" -m pip install --no-cache-dir --no-deps -r "$REQS"
-"$PY" -m pip install --no-cache-dir --no-deps "substrate-kernel==${SUBSTRATE_VERSION}"
+if [ -n "${SUBSTRATE_WHEEL:-}" ]; then
+  "$PY" -m pip install --no-cache-dir --no-deps "$SUBSTRATE_WHEEL"
+  echo "verification build: $SUBSTRATE_WHEEL" > "$OUT/VERIFICATION_BUILD"
+else
+  "$PY" -m pip install --no-cache-dir --no-deps "substrate-kernel==${SUBSTRATE_VERSION}"
+fi
 "$PY" -m pip check
 rm -f "$REQS"
 
@@ -104,6 +125,11 @@ find "$OUT" -type d \( -name "tests" -o -name "test" \) -prune -exec rm -rf {} +
 #    (contains .so files that zipimport cannot load), tests, idlelib,
 #    turtledemo.
 STDLIB="$OUT/lib/python${PY_MINOR}"
+# Precompile before zipping (UI sprint 097). The packaged backend recompiled every module on every
+# launch: no .pyc shipped and PYTHONDONTWRITEBYTECODE forbids writing one (Apple: a write inside the
+# bundle breaks the seal). Measured 0.52 s to port readback packaged vs 0.10 s in source. zipimport
+# only reads LEGACY .pyc files sitting beside their source (-b); unchecked-hash = no mtime checks.
+"$PY" -m compileall -q -b -j 0 --invalidation-mode unchecked-hash -x "/(test|tests|idlelib|turtledemo)/" "$STDLIB" >/dev/null || true
 ( cd "$STDLIB" && zip -q -r "$OUT/lib/python${PY_NODOT}.zip" . \
     -x "site-packages/*" "lib-dynload/*" "*__pycache__/*" \
        "test/*" "tests/*" "idlelib/*" "turtledemo/*" )
@@ -135,6 +161,7 @@ mv "$SP/msgspec" "$KEEP/msgspec"
 mv "$SP"/msgspec-*.dist-info "$KEEP/"
 mv "$SP/substrate" "$KEEP/substrate"
 mv "$SP"/substrate_kernel-*.dist-info "$KEEP/"
+"$PY" -m compileall -q -b -j 0 --invalidation-mode unchecked-hash "$SP" >/dev/null || true
 ( cd "$SP" && zip -q -r ./_bundle.zip . -x "_bundle.zip" )
 for entry in $(ls -1 "$SP" | grep -v "^_bundle.zip$"); do
   rm -rf "$SP/$entry"
@@ -186,3 +213,45 @@ print('[fetch-python-runtime] adapters import gate ok (' + str(sum(1 for _ in pk
 # the exact bytes Python will read at first run. Review 2026-09-28
 # § F10 bundle hygiene.
 find "$OUT" -type d -name "__pycache__" -prune -exec rm -rf {} + 2>/dev/null || true
+
+# 10. Bytecode for the packages that stay loose on disk (substrate, msgspec), written AFTER the
+# sweep so it survives. __pycache__ layout (their .py files are present), unchecked-hash so Python
+# never rewrites them; the code signature then covers exactly these files.
+PYTHONDONTWRITEBYTECODE=1 "$PY" -m compileall -q -j 0 --invalidation-mode unchecked-hash "$SP/substrate" "$SP/msgspec" >/dev/null
+echo "[fetch-python-runtime] precompiled: $(find "$OUT" -name '*.pyc' | wc -l | tr -d ' ') .pyc files (plus those inside the zips)"
+
+# 11. Code placement per Apple's "Placing Content in a Bundle" (review 2026-09-28 F10; quoted in
+# process/planning/RESEARCH-2026-09-28-mac-packaging-from-apple-primary-sources-v2.md): Mach-O
+# code does not belong in Contents/Resources. Tcl/Tk (tkinter only; nothing here imports it) is
+# dropped. Every remaining Mach-O file moves to build/python-native/ (shipped to
+# Contents/Frameworks/python-native/), with bin/ and lib/ kept as siblings so the interpreter's
+# @rpath (@executable_path/../lib) still finds libpython, and no dotted directory names (codesign
+# treats `name.ext` directories as bundles). A relative symlink stays at each old path, so Python's
+# import system is unchanged. electron/main.js sets PYTHONHOME to Resources/python because the
+# interpreter, resolved through its symlink, now lives elsewhere.
+NATIVE="$REPO/build/python-native"
+rm -rf "$NATIVE"
+find "$OUT/lib" -maxdepth 1 \( -name 'libtcl*' -o -name 'libtk*' -o -name 'tcl9*' -o -name 'tk9*' -o -name 'thread*' -o -name 'itcl*' -o -name 'tcl8*' -o -name 'tk8*' \) -exec rm -rf {} +
+find "$OUT" -name '_tkinter*.so' -delete
+"$PY" - "$OUT" "$NATIVE" <<'PYEOF'
+import os, re, subprocess, sys
+from pathlib import Path
+out, native = Path(sys.argv[1]), Path(sys.argv[2])
+moved = 0
+for f in sorted(p for p in out.rglob("*") if p.is_file() and not p.is_symlink()):
+    head = f.open("rb").read(4)
+    if head not in (b"\xcf\xfa\xed\xfe", b"\xca\xfe\xba\xbe", b"\xfe\xed\xfa\xcf"):  # Mach-O magics
+        continue
+    rel = f.relative_to(out)
+    # flatten lib/pythonX.Y/... (a dotted directory) to lib-dynload/ or site-packages/
+    nrel = Path(re.sub(r"^lib/python\d+\.\d+/", "", rel.as_posix()))
+    dest = native / nrel
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    os.replace(f, dest)
+    # link from Contents/Resources/python/<rel> to Contents/Frameworks/python-native/<nrel>
+    link_dir = Path("Contents/Resources/python") / rel.parent
+    target = os.path.relpath(Path("Contents/Frameworks/python-native") / nrel, link_dir)
+    os.symlink(target, f)
+    moved += 1
+print(f"[fetch-python-runtime] moved {moved} Mach-O files to build/python-native (symlinked from Resources)")
+PYEOF

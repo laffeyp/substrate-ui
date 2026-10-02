@@ -16,7 +16,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import server  # noqa: E402
-from session_registry import SessionRegistry  # noqa: E402
+from substrate.session_registry import SessionRegistry  # noqa: E402
 
 from substrate.topologies.applications.registry import load_manifests  # noqa: E402
 
@@ -66,7 +66,7 @@ def test_session_tools_include_seven_substrate_toolkit_tools(
         "run_topology": make_run_topology(_substrate_daemon),
         "run_topology_poll": make_run_topology_poll(_substrate_daemon),
         "inspect_record": make_inspect_record(),
-        "list_records": make_list_records(server._SESSIONS_BASE),
+        "list_records": make_list_records(server._sessions_base()),
         "list_topologies": make_list_topologies(),
         "list_applications": make_list_applications(server._APPLICATIONS),
         "list_sessions": make_list_sessions(registry),

@@ -1,0 +1,636 @@
+{
+  "writtenAt": "2026-10-02T05:32:08.954Z",
+  "totalFlows": 17,
+  "totalRuns": 17,
+  "flowReports": [
+    {
+      "flow": "cold_boot",
+      "runs": 1,
+      "runOks": 1,
+      "coverage": [
+        {
+          "tag": "DRIVER_ROSTER_LOADED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "SESSIONS_LOADED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "WORKSPACES_LOADED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "BUNDLE_ROSTER_LOADED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        }
+      ],
+      "defects": []
+    },
+    {
+      "flow": "chat_one_turn",
+      "runs": 1,
+      "runOks": 1,
+      "coverage": [
+        {
+          "tag": "DRIVER_ROSTER_LOADED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "DRIVER_PICKED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "SESSION_OPEN_REQUESTED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "SESSION_OPEN_ACKED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "STREAM_ATTACHED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_SUBMITTED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_ACK",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "STREAM_ENVELOPE_APPENDED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_PARKED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "SESSION_END_REQUESTED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "SESSION_ENDED_LOCAL",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "STREAM_CLOSED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        }
+      ],
+      "defects": []
+    },
+    {
+      "flow": "slash_router",
+      "runs": 1,
+      "runOks": 1,
+      "coverage": [
+        {
+          "tag": "SLASH_ROUTED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "SLASH_UNKNOWN",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        }
+      ],
+      "defects": []
+    },
+    {
+      "flow": "bundle_picked",
+      "runs": 1,
+      "runOks": 1,
+      "coverage": [
+        {
+          "tag": "BUNDLE_ROSTER_LOADED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "BUNDLE_PICKED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        }
+      ],
+      "defects": []
+    },
+    {
+      "flow": "studio_build",
+      "runs": 1,
+      "runOks": 1,
+      "coverage": [
+        {
+          "tag": "SPEC_VALIDATE_REQUESTED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "SPEC_VALIDATED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "SPEC_BUILD_REQUESTED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "SPEC_BUILT",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "SPEC_BUILD_REJECTED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        }
+      ],
+      "defects": []
+    },
+    {
+      "flow": "attach_existing",
+      "runs": 1,
+      "runOks": 1,
+      "coverage": [
+        {
+          "tag": "SESSION_ATTACH_STARTED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "STREAM_ATTACHED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "STREAM_ENVELOPE_APPENDED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        }
+      ],
+      "defects": []
+    },
+    {
+      "flow": "refused_turn",
+      "runs": 1,
+      "runOks": 1,
+      "coverage": [
+        {
+          "tag": "TURN_SUBMITTED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_REFUSED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        }
+      ],
+      "defects": []
+    },
+    {
+      "flow": "refused_open",
+      "runs": 1,
+      "runOks": 1,
+      "coverage": [
+        {
+          "tag": "SESSION_OPEN_REQUESTED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "SESSION_OPEN_REFUSED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        }
+      ],
+      "defects": []
+    },
+    {
+      "flow": "stream_reconnect",
+      "runs": 1,
+      "runOks": 1,
+      "coverage": [
+        {
+          "tag": "STREAM_RECONNECTING",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "STREAM_ATTACHED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        }
+      ],
+      "defects": []
+    },
+    {
+      "flow": "caret_pin",
+      "runs": 1,
+      "runOks": 1,
+      "coverage": [
+        {
+          "tag": "SESSION_OPEN_REQUESTED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "SESSION_OPEN_ACKED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_SUBMITTED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "STREAM_ENVELOPE_APPENDED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_PARKED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        }
+      ],
+      "defects": []
+    },
+    {
+      "flow": "pane_split_transcript",
+      "runs": 1,
+      "runOks": 1,
+      "coverage": [
+        {
+          "tag": "SESSION_OPEN_REQUESTED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "SESSION_OPEN_ACKED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_SUBMITTED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "STREAM_ENVELOPE_APPENDED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_PARKED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        }
+      ],
+      "defects": []
+    },
+    {
+      "flow": "pane_header_clip",
+      "runs": 1,
+      "runOks": 1,
+      "coverage": [
+        {
+          "tag": "SESSION_OPEN_REQUESTED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "SESSION_OPEN_ACKED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_SUBMITTED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "STREAM_ENVELOPE_APPENDED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_PARKED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        }
+      ],
+      "defects": []
+    },
+    {
+      "flow": "pane_prompt_isolation",
+      "runs": 1,
+      "runOks": 1,
+      "coverage": [
+        {
+          "tag": "SESSION_OPEN_REQUESTED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "SESSION_OPEN_ACKED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_SUBMITTED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "STREAM_ENVELOPE_APPENDED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_PARKED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        }
+      ],
+      "defects": []
+    },
+    {
+      "flow": "reveal_mode_direction",
+      "runs": 1,
+      "runOks": 1,
+      "coverage": [
+        {
+          "tag": "SESSION_OPEN_REQUESTED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "SESSION_OPEN_ACKED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_SUBMITTED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "STREAM_ENVELOPE_APPENDED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_PARKED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        }
+      ],
+      "defects": []
+    },
+    {
+      "flow": "model_reply_render",
+      "runs": 1,
+      "runOks": 1,
+      "coverage": [
+        {
+          "tag": "SESSION_OPEN_REQUESTED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "SESSION_OPEN_ACKED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_SUBMITTED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "STREAM_ENVELOPE_APPENDED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_PARKED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        }
+      ],
+      "defects": []
+    },
+    {
+      "flow": "cli_discovery",
+      "runs": 1,
+      "runOks": 1,
+      "coverage": [
+        {
+          "tag": "DRIVER_ROSTER_LOADED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "DRIVER_PICKED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "SESSION_OPEN_REQUESTED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "SESSION_OPEN_ACKED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "STREAM_ATTACHED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_SUBMITTED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_ACK",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "STREAM_ENVELOPE_APPENDED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_PARKED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "SESSION_END_REQUESTED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "SESSION_ENDED_LOCAL",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "STREAM_CLOSED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        }
+      ],
+      "defects": []
+    },
+    {
+      "flow": "cli_version_picker",
+      "runs": 1,
+      "runOks": 1,
+      "coverage": [
+        {
+          "tag": "SESSION_OPEN_REQUESTED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "SESSION_OPEN_ACKED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_SUBMITTED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "STREAM_ENVELOPE_APPENDED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        },
+        {
+          "tag": "TURN_PARKED",
+          "hits": 1,
+          "runs": 1,
+          "status": "green"
+        }
+      ],
+      "defects": []
+    }
+  ],
+  "summary": {
+    "tags_at_5_of_5": 81,
+    "tags_at_4_of_5": 0,
+    "tags_below_4": 0,
+    "tags_dead": 0,
+    "total_bugs": 0
+  }
+}

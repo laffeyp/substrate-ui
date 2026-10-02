@@ -79,6 +79,19 @@ const EXPECTED_TEAM = "ZVL8XB9XGU";
 // the park wait. The unique suffix keeps the transcript check exact.
 const TYPED_LITERAL = "reply with the single word ok and use no tools (smoke " + Date.now().toString(36) + ")";
 const TARGET = process.env.SMOKE_TARGET === "source" ? "source" : "packaged";
+// State root for the launched app. Always set, so a smoke never writes the
+// user's real ~/.substrate (Sprint 093). SMOKE_STATE points it at a clone
+// of real state to time startup against real data.
+const STATE = process.env.SMOKE_STATE || mkdtempSync(join(tmpdir(), "smoke-state-"));
+const T0 = Date.now();
+const MARKS: Record<string, number> = {};
+const mark = (k: string) => { if (!(k in MARKS)) MARKS[k] = Date.now() - T0; };
+function backendPids(): number[] {
+  // Backends of THIS run: a server.py whose environment carries our state root.
+  const out = spawnSync("ps", ["-axo", "pid=,command="], { encoding: "utf8" }).stdout || "";
+  const cands = out.split("\n").filter((l) => /server\.py --port 0/.test(l) && !/uv run/.test(l)).map((l) => Number(l.trim().split(/\s+/)[0]));
+  return cands.filter((pid) => (spawnSync("ps", ["eww", "-o", "command=", "-p", String(pid)], { encoding: "utf8" }).stdout || "").includes("SUBSTRATE_HOME=" + STATE));
+}
 // Empty = use the app's own default driver (`default` in /api/models),
 // the one a user gets. SMOKE_DRIVER overrides.
 const DRIVER_OVERRIDE = process.env.SMOKE_DRIVER || "";
@@ -132,7 +145,6 @@ async function checkBundle(): Promise<void> {
     join(REPO_ROOT, "electron"),
     join(REPO_ROOT, "web", "dist"),
     join(REPO_ROOT, "server.py"),
-    join(REPO_ROOT, "session_registry.py"),
     join(REPO_ROOT, "session_errors.py"),
     join(REPO_ROOT, "builder.py"),
     join(REPO_ROOT, "demo_topologies.py"),
@@ -146,7 +158,9 @@ async function checkBundle(): Promise<void> {
     die("stale build: " + newest.path + " is newer than the bundle. rebuild with `npm run pack:dev`");
   }
 
-  // 3. Signed with the expected team. `codesign -dvv` writes to stderr.
+  // 3. Signed with the expected team. `codesign -dvv` writes to stderr. SMOKE_UNSIGNED=1 skips
+  //    this for a VERIFICATION build (unsigned, from the kernel working tree; never released).
+  if (process.env.SMOKE_UNSIGNED === "1") return;
   const cs = spawnSync("codesign", ["--display", "--verbose=2", APP_ROOT], { encoding: "utf8" });
   const csOut = (cs.stdout || "") + (cs.stderr || "");
   if (cs.status !== 0) die("codesign check failed: " + csOut.slice(0, 400));
@@ -170,11 +184,12 @@ async function run(): Promise<void> {
     ? await electron.launch({
       executablePath: APP_EXE,
       args: ["--user-data-dir=" + userDataDir],
-      env: { ...process.env, PATH: LAUNCHD_PATH } as Record<string, string>,
+      env: { ...process.env, PATH: LAUNCHD_PATH, SUBSTRATE_HOME: STATE } as Record<string, string>,
       timeout: 30_000,
     })
     : await electron.launch({
       args: [REPO_ROOT, "--user-data-dir=" + userDataDir],
+      env: { ...process.env, SUBSTRATE_HOME: STATE } as Record<string, string>,
       timeout: 30_000,
     });
 
@@ -198,6 +213,7 @@ async function run(): Promise<void> {
     }
 
     const win = await app.firstWindow({ timeout: 20_000 });
+    mark("window_created");
     win.on("console", (m) => consoleChunks.push("[" + m.type() + "] " + m.text()));
 
     // 6. Wait for the reveal shell mount. main.js:95 logs `spawning
@@ -289,8 +305,9 @@ async function run(): Promise<void> {
     //    httpx` — if the bundled runtime is missing httpx (as it was
     //    on 2026-09-28), the daemon 500s here and the literal never
     //    appears in the transcript.
-    const prompt = win.locator('input[placeholder^="type to talk"]').first();
+    const prompt = win.locator('[placeholder^="type to talk"]').first();
     await prompt.waitFor({ state: "visible", timeout: 10_000 });
+    mark("prompt_visible");
     await prompt.click();
     await prompt.type(TYPED_LITERAL, { delay: 15 });
 
@@ -301,6 +318,7 @@ async function run(): Promise<void> {
       die("typed text did not land in input: got " + JSON.stringify(inputValue) + " (expected " + JSON.stringify(TYPED_LITERAL) + ")");
     }
     await win.keyboard.press("Enter");
+    mark("turn_sent");
 
     // 10. And the literal must appear in the transcript DOM. Poll the
     //     rendered text for it — the transcript renders user turns as
@@ -321,6 +339,7 @@ async function run(): Promise<void> {
       undefined,
       { timeout: 180_000 },
     );
+    mark("turn_parked");
     await win.waitForFunction(
       () => {
         const g = (window as unknown as { __vm: { get(id: number): { snapshot(): { topologyGraph: { producers: unknown[] } | null } } } }).__vm.get(1).snapshot().topologyGraph;
@@ -329,6 +348,7 @@ async function run(): Promise<void> {
       undefined,
       { timeout: 15_000 },
     ).catch(() => die("Structure data empty after a parked turn: topologyGraph has no producers (the pane would say \"no topology loaded\")"));
+    mark("structure_populated");
 
     exitCode = 0;
   } catch (err) {
@@ -337,7 +357,14 @@ async function run(): Promise<void> {
     if (consoleChunks.length > 0) process.stderr.write("--- renderer console ---\n" + consoleChunks.join("\n") + "\n");
     exitCode = 1;
   } finally {
+    const backendsBeforeQuit = backendPids();
+    const tq = Date.now();
     await app.close().catch(() => undefined);
+    for (let i = 0; i < 600 && backendPids().length > 0; i++) await new Promise((r) => setTimeout(r, 100));
+    MARKS.quit_to_backend_gone_ms = Date.now() - tq;
+    MARKS.backends_before_quit = backendsBeforeQuit.length;
+    MARKS.backends_after_quit = backendPids().length;
+    process.stdout.write("timing " + JSON.stringify({ target: TARGET, state: STATE, driver: DRIVER, ...MARKS }) + "\n");
     // Final ModuleNotFoundError scan — the packaged .app's child stderr
     // may only drain after close(). Fail late rather than miss it: a
     // module missing from the bundled runtime is the exact class of

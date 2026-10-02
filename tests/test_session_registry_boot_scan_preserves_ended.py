@@ -26,7 +26,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import server  # noqa: E402
-from session_registry import SessionRegistry  # noqa: E402
+from substrate.session_registry import SessionRegistry  # noqa: E402
 
 
 def _write_ended_manifest(session_dir: Path) -> None:
@@ -84,7 +84,7 @@ def test_boot_scan_preserves_ended_when_record_dir_is_torn(
     _write_ended_manifest(tmp_path / sid)
     (tmp_path / sid / "record").mkdir()
 
-    import session_registry as sreg
+    from substrate import session_registry as sreg
 
     def _raise_read(*_a, **_kw):
         raise RecordGapError("simulated torn tail (test)")

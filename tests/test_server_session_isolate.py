@@ -13,12 +13,13 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import server  # noqa: E402
-from session_registry import SessionRegistry  # noqa: E402
+from substrate.session_registry import SessionRegistry  # noqa: E402
 
 
 @pytest.fixture
 def base(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[str, Path]:
-    monkeypatch.setattr(server, "_SESSIONS_BASE", tmp_path)
+    _sb = tmp_path
+    monkeypatch.setattr(server, "_sessions_base", lambda: _sb)
     server._SESSION_REGISTRY = SessionRegistry(
         base=tmp_path,
         session_topology_factory=server._build_session_topology_from_manifest,

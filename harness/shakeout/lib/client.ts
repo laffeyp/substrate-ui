@@ -20,18 +20,26 @@ export class NodeSubstrateClient implements SubstrateClient {
       headers["Content-Type"] = "application/json";
       body = JSON.stringify(opts.body);
     }
-    let response: Response;
+    // UI sprint 097: the abort timer spans the BODY read too. It used to be cleared once the
+    // headers arrived, so a response whose body never ends (an SSE stream fetched as JSON) hung
+    // the caller until the flow's 15-minute watchdog. 5 s was also shorter than one real CLI
+    // turn (POST /turn returns at park: 6.4 s measured for claude), so the default is 30 s.
     const ac = new AbortController();
-    const timer = setTimeout(() => ac.abort(), 5000);
+    const timeoutMs = opts.timeoutMs ?? 30_000;
+    const timer = setTimeout(() => ac.abort(), timeoutMs);
+    let response: Response;
+    let text: string;
     try {
       response = await fetch(url, { method, headers, body, signal: ac.signal });
+      text = await response.text();
     } catch (err) {
-      const detail = err instanceof Error ? err.message : String(err);
-      return { ok: false, status: 0, failureClass: "network", detail };
+      const detail = ac.signal.aborted
+        ? `timed out after ${timeoutMs} ms (${method} ${pathPart})`
+        : err instanceof Error ? err.message : String(err);
+      return { ok: false, status: 0, failureClass: ac.signal.aborted ? "timeout" : "network", detail };
     } finally {
       clearTimeout(timer);
     }
-    const text = await response.text().catch(() => "");
     if (!response.ok) {
       let failureClass = "http_error"; let detail = text;
       try {

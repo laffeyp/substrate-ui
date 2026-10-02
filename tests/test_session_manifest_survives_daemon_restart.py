@@ -28,7 +28,7 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from session_registry import (  # noqa: E402
+from substrate.session_registry import (  # noqa: E402
     SessionManifest,
     SessionRegistry,
     _manifest_to_dict,

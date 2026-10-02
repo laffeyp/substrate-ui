@@ -192,6 +192,7 @@ class Component extends DCLogic {
       const restParts = [`${secs}s`];
       restParts.push(tools === 0 ? 'no tools' : `${tools} tool${tools === 1 ? '' : 's'}`);
       if (liveToolName) restParts.push(liveToolName);
+      restParts.push('ctrl+c to stop');
       const restText = restParts.join(' · ');
       return {
         kind: 'live', verb: liveToolName || '', seconds: secs,
@@ -1304,9 +1305,8 @@ class Component extends DCLogic {
       sentLines: (p.sent || []).map(t => ({ text: t })),
       editing: p.editing, notEditing: !p.editing, nameVal: p.nameVal,
       nameColor: p.id === state.focused ? '#e2e5e9' : '#9aa0a8',
-      // Status dot per pane. 19i: when the last transcript row is a
-      // RateLimitedWaiting warning, the dot hollows (no fill) so the
-      // user sees the retry state at a glance without a modal.
+      // Status dot per pane. (19i's hollow "rate-limited" dot was removed in Sprint 096:
+      // it keyed on a RateLimitedWaiting kind the kernel never emits.)
       dot: (() => {
         const snap = (state.controllerSnapshots || {})[p.id] || (p.id === 1 ? state.controllerSnapshot : null);
         if (!snap) return '#4a4e55';
@@ -1320,9 +1320,6 @@ class Component extends DCLogic {
       dotBg: (() => {
         const snap = (state.controllerSnapshots || {})[p.id] || (p.id === 1 ? state.controllerSnapshot : null);
         if (!snap) return '#4a4e55';
-        const last = (snap.transcript || []).slice(-1)[0];
-        const rateLimited = last && last.kind === 'RateLimitedWaiting';
-        if (rateLimited) return 'transparent';
         const conn = snap.connection;
         if (conn === 'connected') return '#7fb3b8';
         if (conn === 'connecting') return '#82a5c8';
@@ -1415,25 +1412,25 @@ class Component extends DCLogic {
     // full-granularity turn slice — every tool cycle is ToolCall · TriggerFired · ProducerStarted · ToolResult · ProducerCompleted, as on a real record
     const cycle = (base, tool, callId, step, args, gist, resultGist, resultPayload, resultContent, child) => ([
       { seq: base, kind: EnvelopeKind.ToolCall, schema: 'tool_loop.ToolCall', prod: 'model', gist, lanes: child ? 'mc' : 'mt', payload: { call_id: callId, tool, args, step }, content: [] },
-      { seq: base + 1, kind: 'TriggerFired', schema: 'substrate.TriggerFired', prod: 'runtime', gist: 'fire-tool → tool', lanes: child ? 'mc' : 'mt', payload: { trigger_id: 'fire-tool', starts: 'tool' }, content: [] },
-      { seq: base + 2, kind: 'ProducerStarted', schema: 'substrate.ProducerStarted', prod: 'runtime', gist: 'tool · ' + tool, lanes: child ? 'mc' : 'mt', payload: { kind: 'tool', instance: 'tool_' + callId }, content: [] },
+      { seq: base + 1, kind: EnvelopeKind.TriggerFired, schema: EnvelopeKind.TriggerFired + '@1', prod: 'runtime', gist: 'fire-tool → tool', lanes: child ? 'mc' : 'mt', payload: { trigger_id: 'fire-tool', starts: 'tool' }, content: [] },
+      { seq: base + 2, kind: EnvelopeKind.ProducerStarted, schema: EnvelopeKind.ProducerStarted + '@1', prod: 'runtime', gist: 'tool · ' + tool, lanes: child ? 'mc' : 'mt', payload: { kind: 'tool', instance: 'tool_' + callId }, content: [] },
       { seq: base + 3, kind: EnvelopeKind.ToolResult, schema: 'tool_loop.ToolResult', prod: 'tool · ' + tool, gist: resultGist, lanes: child ? 'mc' : 'mt', payload: Object.assign({ call_id: callId, tool, step, ok: true, error: '' }, resultPayload), content: resultContent },
-      { seq: base + 4, kind: 'ProducerCompleted', schema: 'substrate.ProducerCompleted', prod: 'runtime', gist: 'tool · ' + tool, lanes: child ? 'mc' : 'mt', payload: { kind: 'tool', instance: 'tool_' + callId }, content: [] },
+      { seq: base + 4, kind: EnvelopeKind.ProducerCompleted, schema: EnvelopeKind.ProducerCompleted + '@1', prod: 'runtime', gist: 'tool · ' + tool, lanes: child ? 'mc' : 'mt', payload: { kind: 'tool', instance: 'tool_' + callId }, content: [] },
     ]);
     const demoFullSessionEnvelopes = [
       { seq: 214, kind: EnvelopeKind.UserMessage, schema: 'session.UserMessage', prod: 'runtime', gist: 'the metering test flakes…', lanes: 'm',
         payload: { text: 'the metering test flakes under load — find and fix the race', turn_index: 9, slash_source: null },
         content: [{ k: 'ASSEMBLED_PROMPT', v: '[system] You are the session driver…\n[turn 8] …compacted…\n[user] the metering test flakes under load — find and fix the race' }] },
-      { seq: 215, kind: 'TriggerFired', schema: 'substrate.TriggerFired', prod: 'runtime', gist: 'fire-model → model', lanes: 'm', payload: { trigger_id: 'fire-model', starts: 'model' }, content: [] },
-      { seq: 216, kind: 'ProducerStarted', schema: 'substrate.ProducerStarted', prod: 'runtime', gist: 'model', lanes: 'm', payload: { kind: 'model', instance: 'model_a1b2c3' }, content: [] },
+      { seq: 215, kind: EnvelopeKind.TriggerFired, schema: EnvelopeKind.TriggerFired + '@1', prod: 'runtime', gist: 'fire-model → model', lanes: 'm', payload: { trigger_id: 'fire-model', starts: 'model' }, content: [] },
+      { seq: 216, kind: EnvelopeKind.ProducerStarted, schema: EnvelopeKind.ProducerStarted + '@1', prod: 'runtime', gist: 'model', lanes: 'm', payload: { kind: 'model', instance: 'model_a1b2c3' }, content: [] },
       ...cycle(217, 'grep', 'tc_0034', 34, ['meter_lock', 'src/'], 'grep "meter_lock" src/', 'ok · 14 matches', {}, [{ k: 'OUTPUT', v: 'src/substrate/metering.py:41: with meter_lock:\nsrc/substrate/metering.py:88: meter_lock = Lock()\n… 14 matches' }]),
       ...cycle(222, 'read_file', 'tc_0035', 35, ['src/substrate/metering.py'], 'read_file metering.py', 'ok · 312 lines', {}, [{ k: 'OUTPUT', v: 'def _emit_log(self, entry):\n    self._log.append(entry)   # ← two producers share this deque\n… 312 lines' }]),
       ...cycle(227, 'edit_file', 'tc_0036', 36, ['src/substrate/metering.py', 'self._log.append(entry)', 'with self._kernel_lock:\n    self._log.append(entry)'], 'edit_file metering.py', 'ok · 1 replacement', { output: 'ok — 1 replacement' }, []),
       ...cycle(232, 'delegate', 'tc_0037', 37, ['review the locking change in metering.py'], 'delegate → reviewer-a', 'ok · answer folded', {}, [{ k: 'OUTPUT', v: 'lock scope is right — add a comment on why the deque needs the kernel lock\n\n(child record: delegate_child_3e366fe6_c0 · 47 events)' }], true),
       ...cycle(237, 'bash', 'tc_0038', 38, ['pytest -k metering -n 8'], 'bash pytest -k metering -n 8', 'ok · 24 passed', { output: { exit: 0, stdout: '24 passed in 4.12s', stderr: '' } }, [{ k: 'OUTPUT.STDOUT', v: '24 passed in 4.12s' }]),
-      { seq: 242, kind: 'FinalAnswer', schema: 'tool_loop.FinalAnswer', prod: 'model', gist: 'turn done', lanes: 'm', payload: { steps: 38 },
+      { seq: 242, kind: EnvelopeKind.FinalAnswer, schema: 'tool_loop.FinalAnswer', prod: 'model', gist: 'turn done', lanes: 'm', payload: { steps: 38 },
         content: [{ k: 'TEXT', v: 'The race was in _emit_log — an unlocked deque shared by two producers. Wrapped it in the kernel lock; reviewer-a signed off. 24/24 green under -n 8.' }] },
-      { seq: 243, kind: 'TriggerFired', schema: 'substrate.TriggerFired', prod: 'runtime', gist: 'park-on-final-answer → park', lanes: '', payload: { trigger_id: 'park-on-final-answer', starts: 'park' }, content: [] },
+      { seq: 243, kind: EnvelopeKind.TriggerFired, schema: EnvelopeKind.TriggerFired + '@1', prod: 'runtime', gist: 'park-on-final-answer → park', lanes: '', payload: { trigger_id: 'park-on-final-answer', starts: 'park' }, content: [] },
       { seq: 244, kind: EnvelopeKind.Park, schema: 'session.Park', prod: 'park', gist: 'await UserMessage', lanes: '', payload: { awaiting: EnvelopeKind.UserMessage, turn_index: 9, reason: 'final_answer' }, content: [] },
     ];
     const demoLiteSessionEnvelopes = [
@@ -1465,15 +1462,15 @@ class Component extends DCLogic {
       if (kind === EnvelopeKind.UserMessage) return 'runtime';
       if (kind === EnvelopeKind.ToolCall) return 'model';
       if (kind === EnvelopeKind.ToolResult) return payload.tool ? `tool · ${payload.tool}` : 'tool';
-      if (kind === 'FinalAnswer' || kind === EnvelopeKind.ModelReply) return 'model';
+      if (kind === EnvelopeKind.FinalAnswer || kind === EnvelopeKind.ModelReply) return 'model';
       if (kind === EnvelopeKind.Park) return 'park';
-      if (kind === EnvelopeKind.PromptFragment || kind === 'PromptComposed' || kind === EnvelopeKind.SessionStarted) return 'runtime';
+      if (kind === EnvelopeKind.PromptFragment || kind === EnvelopeKind.PromptComposed || kind === EnvelopeKind.SessionStarted) return 'runtime';
       return producerKind || 'runtime';
     };
     const formatEnvelopeGist = (kind, payload) => {
       if (kind === EnvelopeKind.UserMessage) return String(payload.text || payload.assembled_prompt || '').slice(0, 160);
       if (kind === EnvelopeKind.ModelReply) return String(payload.text || '').slice(0, 160);
-      if (kind === 'FinalAnswer') return 'turn done';
+      if (kind === EnvelopeKind.FinalAnswer) return 'turn done';
       if (kind === EnvelopeKind.ToolCall) {
         const t = payload.tool || 'tool';
         const args = Array.isArray(payload.args) ? payload.args.join(' ') : (payload.args ? String(payload.args) : '');
@@ -1497,7 +1494,6 @@ class Component extends DCLogic {
       if (kind === EnvelopeKind.Park) return `await ${payload.awaiting || EnvelopeKind.UserMessage}`;
       if (kind === EnvelopeKind.SessionStarted) return `seed · driver ${payload.driver_model || '?'}`;
       if (kind === EnvelopeKind.SessionEnded) return `end · ${payload.reason || 'server_end'}`;
-      if (kind === 'RateLimitedWaiting') return `retry ${payload.retry_index || payload.attempt || '?'} in ${payload.retry_after_seconds || '?'}s`;
       return '';
     };
     const envelopes = _liveEnvelopes.map((env) => {
@@ -1712,7 +1708,7 @@ class Component extends DCLogic {
         return { c: '#82a5c8', l: b, w: 0, dot: b };
       }
       // FinalAnswer, SessionEnded = moments on the model lifeline.
-      if (e.kind === 'FinalAnswer' || e.kind === EnvelopeKind.SessionEnded) {
+      if (e.kind === EnvelopeKind.FinalAnswer || e.kind === EnvelopeKind.SessionEnded) {
         const b = cx(laneIdx.model);
         return { c: '#82a5c8', l: 0, w: b, dot: b };
       }
@@ -1818,7 +1814,7 @@ class Component extends DCLogic {
     const routerRows = q.startsWith('/') ? CMDS.filter(c => c[0].startsWith(q) || q === '/').map(c => ({
       cmd: c[0], desc: c[1],
       pick: c[2] ? (() => (c[2])(fp && fp.id ? fp.id : 1))
-        : (() => this.setState(s => ({ panes: s.panes.map(x => x.id === (fp && fp.id ? fp.id : 1) ? Object.assign({}, x, { pv: c[0] + ' ' }) : x) }))),
+        : (() => { const cmd = c[0] + ' '; this.setState(s => ({ panes: s.panes.map(x => x.id === (fp && fp.id ? fp.id : 1) ? Object.assign({}, x, { pv: cmd }) : x) })); if (this._promptEl) { this._promptEl.value = cmd; this._promptEl.focus(); } }),
     })) : [];
     // Detect a 2-D numeric grid inside the bound session's envelopes.
     // game_of_life-style topologies emit `payload.grid` on their
@@ -2148,10 +2144,14 @@ class Component extends DCLogic {
       // to the focused pane's pv, so the same field the terminal-view
       // pane input mutates is what the reveal-view input shows.
       promptVal: (fp && fp.pv) || '',
+      promptRef: (el) => { this._promptEl = el; },
       onPrompt: (ev) => {
         const paneId = (fp && fp.id) || 1;
-        const val = ev.target.value;
+        const el = ev.target;
+        const val = el.value;
         this.setState(s => ({ panes: s.panes.map(x => x.id === paneId ? Object.assign({}, x, { pv: val }) : x) }));
+        el.style.height = 'auto';
+        el.style.height = el.scrollHeight + 'px';
       },
       routerOpen: routerRows.length > 0, routerRows,
       promptRadius: routerRows.length > 0 ? '0 0 6px 6px' : '6px',
@@ -2196,7 +2196,7 @@ class Component extends DCLogic {
       ioDocs: _liveEnvelopes
         .filter((env) => env && env.payload && (
           env.kind === EnvelopeKind.UserMessage || env.kind === EnvelopeKind.ModelReply
-          || env.kind === 'FinalAnswer' || env.kind === EnvelopeKind.ToolResult))
+          || env.kind === EnvelopeKind.FinalAnswer || env.kind === EnvelopeKind.ToolResult))
         .map((env) => {
           const p = env.payload || {};
           const text = env.kind === EnvelopeKind.ToolResult
@@ -2205,7 +2205,7 @@ class Component extends DCLogic {
             : String(p.text || p.assembled_prompt || '');
           const label = env.kind === EnvelopeKind.UserMessage ? 'UserMessage · input'
             : env.kind === EnvelopeKind.ModelReply ? 'ModelReply · output'
-            : env.kind === 'FinalAnswer' ? 'FinalAnswer · output'
+            : env.kind === EnvelopeKind.FinalAnswer ? 'FinalAnswer · output'
             : `ToolResult · ${(p && p.tool) || 'tool'}`;
           return { seq: env.seq, title: label, text };
         }),
@@ -2316,11 +2316,14 @@ class Component extends DCLogic {
       sentLines: (fp && fp.sent) ? fp.sent.map(t => ({ text: t })) : [],
       onPromptKey: (ev) => {
         if (ev.key !== 'Enter') return;
+        if (ev.shiftKey) return;
+        ev.preventDefault();
         const paneId = (fp && fp.id) || 1;
         const pane = this.state.panes.find(x => x.id === paneId);
         const v = ((pane && pane.pv) || '').trim();
         if (!v) return;
         this.setState(s => ({ panes: s.panes.map(x => x.id === paneId ? Object.assign({}, x, { pv: '' }) : x) }));
+        if (this._promptEl) { this._promptEl.value = ''; this._promptEl.style.height = 'auto'; }
         const vm = window.__vm;
         if (vm && typeof vm.setActive === 'function') vm.setActive(paneId);
         const controller = vm && typeof vm.get === 'function' ? vm.get(paneId) : null;
