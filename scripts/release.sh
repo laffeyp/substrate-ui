@@ -18,7 +18,8 @@
 #   4. electron-builder: sign (and notarize with --notarize); commits recorded in Info.plist
 #   5. codesign --verify --deep --strict on the built bundle
 #   6. smoke:packaged (real-model turn, Structure, quit), shakeout:packaged (Axis A) and the
-#      lifecycle gates (close/Dock-click, deep link, startup-failure dialog) against THAT bundle
+#      lifecycle gates (close/Dock-click, deep link, startup-failure dialog) and the transcript
+#      scroll gate (follow / read / resume / view switch) against THAT bundle
 #   7. --install: quit the running app, move the old bundle to the Trash, copy this one in,
 #      verify its signature where it landed
 set -euo pipefail
@@ -84,6 +85,7 @@ PORT="$(python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));prin
   npx tsx harness/shakeout/run.ts) > "$LOG_DIR/release-$STAMP-shakeout.log" 2>&1 \
   || { tail -30 "$LOG_DIR/release-$STAMP-shakeout.log" >&2; exit 1; }
 (cd "$REPO" && LIFECYCLE_APP="$APP" npx tsx harness/shakeout/lifecycle_gates.ts) | tee "$LOG_DIR/release-$STAMP-lifecycle.log"
+(cd "$REPO" && SCROLL_APP="$APP" npx tsx harness/shakeout/transcript_follow.ts) | tee "$LOG_DIR/release-$STAMP-scroll.log"
 codesign --verify --deep --strict "$APP"  # the gates must not have written into the bundle
 
 if [ "$INSTALL" != true ]; then

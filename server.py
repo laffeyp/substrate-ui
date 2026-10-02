@@ -3003,19 +3003,30 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         # Background thread — sprint 225d polls the record.
+        run_handle: dict[str, Any] = {}
+
         def _run_background() -> None:
             try:
-                asyncio.run(api.Runtime(record_root).run(topology_factory, name=application_name))
-            except Exception:  # noqa: BLE001 — background worker; failure surfaces via the record's tail on next status poll.
+                result = asyncio.run(
+                    api.Runtime(record_root).run(topology_factory, name=application_name)
+                )
+                run_handle["result_status"] = result.status
+            except Exception as exc:  # noqa: BLE001 — background worker; kept for the status poll
                 traceback.print_exc()
+                # UI sprint 102: a run that raised left no RunFinalised, and the status poll
+                # read "running" forever. The error is kept for it to report.
+                run_handle["error"] = f"{type(exc).__name__}: {exc}"
 
         thread = threading.Thread(target=_run_background, daemon=True)
-        _TOPOLOGY_RUNS[run_id] = {
-            "record_root": record_root,
-            "thread": thread,
-            "started_at": started_at,
-            "application": application_name,
-        }
+        run_handle.update(
+            {
+                "record_root": record_root,
+                "thread": thread,
+                "started_at": started_at,
+                "application": application_name,
+            }
+        )
+        _TOPOLOGY_RUNS[run_id] = run_handle
         thread.start()
         self._json(
             {
@@ -3067,6 +3078,15 @@ class Handler(BaseHTTPRequestHandler):
                             continue
                         output = env.get("payload")
                         break
+        # UI sprint 102: the worker thread ended and the record never finalised (or never
+        # appeared): the run failed. Before, this read "running" forever.
+        thread = handle.get("thread")
+        if status == "running" and thread is not None and not thread.is_alive():
+            if "result_status" in handle:  # it returned: paused, finalised or failed, as the run says
+                status = str(handle["result_status"])
+            else:
+                status = "failed"
+                output = {"error": handle.get("error", "the run ended without finalising its record")}
         self._json(
             {
                 "run_id": run_id,

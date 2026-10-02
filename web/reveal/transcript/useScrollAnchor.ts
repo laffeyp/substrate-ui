@@ -1,35 +1,40 @@
-// Sprint 075 — atom-level scroll anchor.
+// Transcript scroll: the one owner (UI sprint 102).
 //
-// The transcript scroller stays at whichever atom the user is
-// reading. When an atom's height changes (tool card open/close,
-// ToolProgress chunk lands, streaming pane grows), a
-// `useLayoutEffect` reads the anchor atom's current viewport y and
-// nudges `scrollTop` by the delta. Content grows below the anchor
-// without moving the anchor. Content shrinks below the anchor
-// without moving the anchor.
+// Two behaviours, the ones the Architect asked for on 2026-09-15 (`83b20bd`) and that went
+// missing on 2026-09-24 when Sprint 076 deleted reveal.ts's autoscroll as "superseded" by
+// this hook, which did not follow the bottom at all:
 //
-// Sticky-bottom kicks in when `anchorSeq === null` — the user has
-// scrolled all the way down; new envelopes drop the anchor.
+//   following — the user is at the bottom (within STICK_PX): new content scrolls into view;
+//   reading   — the user has scrolled up: the row at the top of the view stays exactly where
+//               it is while content grows or shrinks around it (Sprint 075's caret pin).
 //
-// The scroller is discovered once by walking parents from the mount
-// div until an ancestor's computed `overflow-y` is `auto` or
-// `scroll`. Its `overflow-anchor` is set to `none` so Chromium does
-// not run its own anchor and race the hook.
+// Scrolling back to the bottom resumes following. The mode and position are saved per pane per
+// view (`key`), so switching terminal ↔ reveal, or the root remounting when dc-runtime clears
+// its mount div, comes back to the same place.
+//
+// The scroller is the nearest ancestor of the mount div with overflow-y auto|scroll. Its
+// `overflow-anchor` is set to `none` so Chromium's own anchoring does not race this hook.
 
-import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
+import { useCallback, useLayoutEffect, useRef } from "react";
 
 export interface ScrollAnchor {
   registerRow: (seq: number, element: HTMLElement | null) => void;
   attachTo: (mount: HTMLElement | null) => void;
 }
 
-export function useScrollAnchor(): ScrollAnchor {
+/** Distance from the bottom, in px, that still counts as "at the bottom". */
+export const STICK_PX = 24;
+
+interface Saved { scrollTop: number; following: boolean }
+const savedByKey = new Map<string, Saved>();
+
+export function useScrollAnchor(key: string): ScrollAnchor {
   const rowRefs = useRef<Map<number, HTMLElement>>(new Map());
   const anchorSeqRef = useRef<number | null>(null);
   const anchorOffsetRef = useRef<number>(0);
   const scrollerRef = useRef<HTMLElement | null>(null);
-  const mountRef = useRef<HTMLElement | null>(null);
-  const stickyRef = useRef<boolean>(true);
+  const followingRef = useRef<boolean>(savedByKey.get(key)?.following ?? true);
+  const cleanupRef = useRef<(() => void) | null>(null);
 
   const findScroller = useCallback((mount: HTMLElement): HTMLElement | null => {
     let node: HTMLElement | null = mount.parentElement;
@@ -41,25 +46,12 @@ export function useScrollAnchor(): ScrollAnchor {
     return null;
   }, []);
 
+  // The anchor is the row straddling the top of the viewport: the largest offset still ≤ 0
+  // (a tool card's wrapper sits slightly above its header, so "smallest offset ≥ 0" would
+  // pick the row below the card the user is looking at). Fallback: the first row below.
   const updateAnchor = useCallback(() => {
     const scroller = scrollerRef.current;
     if (!scroller) return;
-    // Always pick the topmost-visible row as anchor. Sticky-bottom is
-    // dc-runtime's job (reveal.ts:135-155); the atom hook only pins
-    // whichever row the user is reading against height changes below
-    // it. Clearing the anchor at scroll-bottom lets card expansion
-    // jerk the header up by the added height — that's the caret_pin
-    // regression this hook exists to prevent.
-    stickyRef.current = false;
-    // The anchor is the row that straddles the top of the viewport:
-    // the row with the largest offset that is still ≤ 0 (its top edge
-    // sits at or above the scroller's top edge, its bottom below).
-    // A tool card whose header sits just inside the viewport has its
-    // row wrapper's top slightly above the scroller top due to inline
-    // margin; picking "smallest offset ≥ 0" would skip that card and
-    // land on the next row down, so a click that expands the straddling
-    // card would push its below-neighbour down and this hook would
-    // drag scrollTop up to keep it — moving the clicked header off.
     const scrollerTop = scroller.getBoundingClientRect().top;
     let bestSeq: number | null = null;
     let bestOffset = Number.NEGATIVE_INFINITY;
@@ -67,69 +59,82 @@ export function useScrollAnchor(): ScrollAnchor {
     let fallbackOffset = Number.POSITIVE_INFINITY;
     for (const [seq, element] of rowRefs.current) {
       const offset = element.getBoundingClientRect().top - scrollerTop;
-      if (offset <= 0 && offset > bestOffset) {
-        bestSeq = seq;
-        bestOffset = offset;
-      }
-      if (offset > 0 && offset < fallbackOffset) {
-        fallbackSeq = seq;
-        fallbackOffset = offset;
-      }
+      if (offset <= 0 && offset > bestOffset) { bestSeq = seq; bestOffset = offset; }
+      if (offset > 0 && offset < fallbackOffset) { fallbackSeq = seq; fallbackOffset = offset; }
     }
     const pickSeq = bestSeq !== null ? bestSeq : fallbackSeq;
-    const pickOffset = bestSeq !== null ? bestOffset : fallbackOffset;
     if (pickSeq !== null) {
       anchorSeqRef.current = pickSeq;
-      anchorOffsetRef.current = pickOffset;
+      anchorOffsetRef.current = bestSeq !== null ? bestOffset : fallbackOffset;
     }
   }, []);
 
-  const restoreAnchor = useCallback(() => {
+  // Put the view where the mode says: the bottom when following, the anchor row's old
+  // viewport offset when reading. A hidden scroller (clientHeight 0) is left alone.
+  const settle = useCallback(() => {
     const scroller = scrollerRef.current;
-    if (!scroller) return;
-    // No anchor means the user hasn't scrolled away from wherever
-    // the scroller started, so leave scrollTop alone. The dc-runtime
-    // sticky-bottom autoscroll in reveal.ts:117-138 handles the
-    // "keep at bottom on new envelopes" case; the anchor here only
-    // holds a user-picked scroll position across atom height changes.
+    if (!scroller || scroller.clientHeight === 0) return;
+    if (followingRef.current) {
+      scroller.scrollTop = scroller.scrollHeight;
+      return;
+    }
     if (anchorSeqRef.current === null) return;
     const anchor = rowRefs.current.get(anchorSeqRef.current);
     if (!anchor) return;
-    const scrollerTop = scroller.getBoundingClientRect().top;
-    const currentOffset = anchor.getBoundingClientRect().top - scrollerTop;
-    const delta = currentOffset - anchorOffsetRef.current;
+    const delta = anchor.getBoundingClientRect().top - scroller.getBoundingClientRect().top - anchorOffsetRef.current;
     if (delta !== 0) scroller.scrollTop += delta;
   }, []);
 
-  const listenerRef = useRef<((event: Event) => void) | null>(null);
+  const onScroll = useCallback(() => {
+    const scroller = scrollerRef.current;
+    if (!scroller || scroller.clientHeight === 0) return; // hidden: keep the saved state
+    const following = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <= STICK_PX;
+    followingRef.current = following;
+    savedByKey.set(key, { scrollTop: scroller.scrollTop, following });
+    updateAnchor();
+  }, [key, updateAnchor]);
+
   const attachTo = useCallback((mount: HTMLElement | null) => {
-    mountRef.current = mount;
-    if (!mount) {
-      if (scrollerRef.current && listenerRef.current) {
-        scrollerRef.current.removeEventListener("scroll", listenerRef.current);
-      }
-      scrollerRef.current = null;
-      listenerRef.current = null;
-      return;
-    }
-    if (scrollerRef.current) return;
+    if (cleanupRef.current) { cleanupRef.current(); cleanupRef.current = null; }
+    scrollerRef.current = null;
+    if (!mount) return;
     const scroller = findScroller(mount);
     if (!scroller) return;
     scrollerRef.current = scroller;
     scroller.style.overflowAnchor = "none";
-    const handler = (): void => updateAnchor();
-    listenerRef.current = handler;
-    scroller.addEventListener("scroll", handler, { passive: true });
-    // Seed the anchor once so the first click after mount pins,
-    // even if no user scroll has fired yet.
+    // Restore this pane+view's saved place. The ref fires after the rows are in the DOM.
+    const saved = savedByKey.get(key);
+    if (saved && !saved.following) {
+      followingRef.current = false;
+      scroller.scrollTop = saved.scrollTop;
+    } else {
+      followingRef.current = true;
+      scroller.scrollTop = scroller.scrollHeight;
+    }
     updateAnchor();
-  }, [findScroller, updateAnchor]);
+    scroller.addEventListener("scroll", onScroll, { passive: true });
+    // Content that grows outside a React commit (a card opened, a font loaded) and a scroller
+    // that changes size (window resize, a view shown again) both settle the view.
+    let lastHeight = scroller.clientHeight;
+    const observer = new ResizeObserver(() => {
+      const wasHidden = lastHeight === 0;
+      lastHeight = scroller.clientHeight;
+      if (wasHidden && lastHeight > 0) {
+        const back = savedByKey.get(key);
+        if (back && !back.following) { scroller.scrollTop = back.scrollTop; updateAnchor(); return; }
+      }
+      settle();
+    });
+    observer.observe(scroller);
+    observer.observe(mount);
+    cleanupRef.current = () => {
+      scroller.removeEventListener("scroll", onScroll);
+      observer.disconnect();
+    };
+  }, [findScroller, key, onScroll, settle, updateAnchor]);
 
-  // Restore on every commit. `useLayoutEffect` runs after DOM writes
-  // and before paint, so the correction is invisible to the user.
-  useLayoutEffect(() => {
-    restoreAnchor();
-  });
+  // Every commit (new rows, streaming text) settles before paint.
+  useLayoutEffect(() => { settle(); });
 
   const registerRow = useCallback((seq: number, element: HTMLElement | null) => {
     if (element) rowRefs.current.set(seq, element);

@@ -6,6 +6,8 @@
 //       and leave no backend behind.
 //   F5  a `substrate://record/<path>` deep link delivered to the running app must reach the
 //       renderer and attach that record.
+//   F8  the backend dies while the app is in use (UI sprint 102): the app must say so, naming
+//       how it stopped, and exit on Quit; before, nothing listened and the window sat dead.
 //
 // Runs against source (`electron .`) by default; LIFECYCLE_APP=<path to Substrate.app> runs the
 // same checks against a packaged bundle. Every launch gets its own temp state root.
@@ -118,9 +120,41 @@ async function f7(): Promise<void> {
   check(backendsFor(state).length === 0, "F7 no backend left behind");
 }
 
+async function f8(): Promise<void> {
+  const state = mkdtempSync(join(tmpdir(), "lifecycle-dies-"));
+  const app = await launch(state);
+  let err = "";
+  app.process().stderr?.on("data", (b) => { err += b.toString("utf8"); });
+  const exited = new Promise<void>((r) => app.process().once("exit", () => r()));
+  try {
+    const win = await app.firstWindow({ timeout: 30_000 });
+    await win.waitForLoadState("load");
+    await app.evaluate(({ dialog }) => {
+      dialog.showMessageBox = (async (opts: { title?: string; detail?: string }) => {
+        process.stderr.write(`MSGBOX ${JSON.stringify([opts.title, opts.detail])}\n`);
+        return { response: 1, checkboxChecked: false }; // Quit
+      }) as typeof dialog.showMessageBox;
+    });
+    const pids = backendsFor(state);
+    check(pids.length === 1, `F8 one backend before the kill (${pids})`);
+    if (pids.length) process.kill(pids[0], "SIGKILL");
+    await Promise.race([exited, new Promise((r) => setTimeout(r, 20_000))]);
+  } finally {
+    await app.close().catch(() => undefined);
+  }
+  const m = err.match(/MSGBOX (\[.*\])/);
+  const box = m ? (JSON.parse(m[1]) as string[]) : null;
+  check(!!box && /backend stopped/.test(box[0]), `F8 dialog shown when the backend died (${box ? box[0] : "none"})`);
+  // packaged: Electron's child is python itself (killed by SIGKILL); source: it is `uv run`,
+  // which exits with a code when its python child dies
+  check(!!box && /was killed \(SIGKILL\)|exited with code/.test(box[1]), `F8 dialog says how it stopped (${box ? box[1].split("\n")[0] : ""})`);
+  check(backendsFor(state).length === 0, "F8 no backend left after Quit");
+}
+
 (async () => {
   await f6AndF5();
   await f7();
+  await f8();
   process.stdout.write(fails.length ? `lifecycle_gates: ${fails.length} FAILED\n` : "lifecycle_gates: all passed\n");
   process.exit(fails.length ? 1 : 0);
 })().catch((e) => { console.error(e); process.exit(2); });

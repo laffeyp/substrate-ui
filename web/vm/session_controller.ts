@@ -928,15 +928,14 @@ export class SessionController {
   }
 
   private handleEnvelope(sessionId: string, env: RecordEnvelope): void {
+    // A reconnecting EventSource asks for the same URL again, so the server replays envelopes
+    // this controller already holds. UI sprint 102: skip them whole. Before, rawEnvelopes was
+    // deduped but the switch below still ran, so every reconnect appended the transcript again.
+    const existing = this.snap.rawEnvelopes;
+    if (typeof env.seq === "number" && existing.some((e) => e.seq === env.seq)) return;
     if (typeof env.seq === "number" && env.seq > this.lastSeq) this.lastSeq = env.seq;
     this.emit("STREAM_ENVELOPE_APPENDED", { seq: env.seq, kind: env.kind });
-    // Append to rawEnvelopes for the stream lens; dedupe by seq so a
-    // resume-replay doesn't double-count.
-    const existing = this.snap.rawEnvelopes;
-    const alreadyAt = existing.findIndex((e) => e.seq === env.seq);
-    if (alreadyAt < 0) {
-      this.patch({ rawEnvelopes: [...existing, env] });
-    }
+    this.patch({ rawEnvelopes: [...existing, env] });
     const payload = env.payload ?? {};
     switch (env.kind) {
       case EnvelopeKind.SessionStarted: {

@@ -158,6 +158,12 @@
 
 *Sprint tail had grown to 33 blocks reaching Sprint 001, and a second board at `process/BLACKBOARD.md` had taken writes since 2026-06-18 (Sep 23–25 closes for Sprints 070–076, 083, 084, 085a–c existed only there). These blocks moved verbatim, not compressed, so no fact is lost. The `process/` copy is at `_deprecated/process-BLACKBOARD-2026-10-01.md`.*
 
+#### Sprint 094 (2026-10-01, earlier pass, superseded by the entry above) — disposability (roadmap class D)
+- **Shutdown deadlock fixed.** `_sigterm_handler` now starts `_shutdown_sequence` on a worker thread. SIGTERM to exit: 0.20 s with zero sessions (was alive 31 s later), 0.95 s with five parked real-model sessions (`ended=5`).
+- **Orphans: class fixed.** The watchdog watched only its direct parent; in source mode that is `uv`, which outlives Electron. Electron now passes `SUBSTRATE_PARENT_PID`; the backend exits ~3 s after app death with `uv` in between. 15 orphaned backends from Sep 28–30 (incl. pid 38409) were stopped; 24 of 26 processes ignored SIGTERM (old code) and took SIGKILL. The live `/Applications` backend was left alone.
+- **Single-instance:** `whenReady` returns when the lock was not acquired (Electron's documented shape).
+- **Open:** startup time unmeasured (card `process/sprints/sprint-094-disposability.md`). Suite: 192 passed, same 18 failures. Not committed.
+
 #### Sprint 093 (2026-10-01, closed) — state root at use time; hermetic tests (roadmap classes A + B)
 - **093a** `server.py`, `session_registry.py`: `RUNS` / `_SESSIONS_BASE` / `_SESSIONS_BASE_DEFAULT` replaced by `_runs_dir()` / `_sessions_base()` and a construction-time registry default; import-time `RUNS.mkdir` removed. **093b** `tests/conftest.py` sets a fresh `SUBSTRATE_HOME` at conftest import (always, even over a dev shell's `~/.substrate-dev`); six tests patch the accessor. `test_agent_endpoint_reports_the_per_conversation_workspace` hard-coded `/.substrate/sessions/` and passed only because of the leak; it now checks the resolved root. **093c** `_is_temp_workspace` refuses temp-directory paths by class at write (`_remember_workspace`) and at read (`_recent_workspaces`); `tests/test_workspace_temp_paths_093c.py` (4 tests).
 - **Checks run.** Full suite under a throwaway `HOME`: `$HOME/.substrate` absent (baseline: 30 dirs + 1 record); failure set identical to the 18-test baseline; 4 new tests pass. A live launch with `SUBSTRATE_HOME=<tmp>` finalised and wrote its record under `<tmp>/runs/`. The live `~/.substrate/recent-workspaces.json` was purged from 64 rows to 4; backup at `recent-workspaces.json.bak-2026-10-01`.
@@ -820,6 +826,11 @@ Twelve PNGs at `captures/pixel-baseline-2026-09-23/`: six states (`empty`, `one_
 
 *Agent maintains. Last 10 increment closes; older roll into ## Built as compressed paragraphs.*
 
+### Sprint 102 (2026-10-02, closed) — transcript scroll, and the class H sweep
+- Scroll: `useScrollAnchor(key)` follows the bottom while the user is there, holds the row being read once they scroll up, resumes at the bottom, and keeps its place per pane per view. Gate `transcript_follow.ts` drives the Electron app (7/7; the old hook fails 3, with a 973 px gap) and runs in `release.sh`.
+- Class H sweep, each a state with no exit or a cancel that could not reach the work: CLI drivers now die with the interrupt (process group); delegate children stop when the parent is interrupted (`_TOOL_CANCEL_HOOKS`); a stream reconnect no longer appends the transcript again; a background topology run whose worker died reports `failed`, not `running`; a backend death after startup shows a dialog with Relaunch or Quit (lifecycle F8).
+- Gates: kernel 1,212 / 3 skipped; UI 216; client specs 21/21; realmodel 41/41. Card: `process/sprints/sprint-102-scroll-and-the-class-h-sweep.md`.
+
 ### Sprint 101 (2026-10-02, closed) — agent work is not a short request (class H, new)
 - Removed default wall-clock limits on model work (turn, delegate, CLI waits, Ollama and CLI calls); `num_predict` defaults to `num_ctx`. bash: per-call `timeout_s` (120/600), process-group kill on deadline and cancel, separate stderr reader, background children no longer block. Failure states: manifest `running` during a turn; a failed turn's status and index from the record; a caller's timeout parks the turn; shutdown interrupts running turns; the activity strip shows failed turns as ended (`web/reveal/activity.ts`). Tool calls keyed `callId@seq`. `test:unit` gates releases.
 - Gates: kernel 1,210 / 3 skipped; UI 215; client specs 20/20; realmodel 40/41 (ensemble agreement, stochastic, 5/5 on rerun). Card: `process/sprints/sprint-101-agent-work-is-not-a-short-request.md`.
@@ -872,9 +883,3 @@ Twelve PNGs at `captures/pixel-baseline-2026-09-23/`: six states (`empty`, `one_
 - **Quit hang root-caused.** The interim handler (Event.set + Thread.start inside the SIGTERM handler) deadlocked on 2 of 9 runs. A native sample showed the main thread parked in the handler's lock wait. Python's signal docs forbid locks in handlers. Replaced with a self-pipe; quit to backend gone 0.50–0.93 s on 6 of 6 runs.
 - **Real-use test.** `packaged_app_smoke.ts` now times each stage and runs against `SMOKE_STATE` (it used to write the real `~/.substrate`). Two source runs: real-model turn parked, Structure populated, quit with a live session 0.85–0.87 s.
 - Full table: `process/sprints/sprint-094-disposability.md`. Suite: 193 passed, same 18 failures. Packaged target unmeasured until sprint 098.
-
-### Sprint 094 (2026-10-01, earlier pass, superseded by the entry above) — disposability (roadmap class D)
-- **Shutdown deadlock fixed.** `_sigterm_handler` now starts `_shutdown_sequence` on a worker thread. SIGTERM to exit: 0.20 s with zero sessions (was alive 31 s later), 0.95 s with five parked real-model sessions (`ended=5`).
-- **Orphans: class fixed.** The watchdog watched only its direct parent; in source mode that is `uv`, which outlives Electron. Electron now passes `SUBSTRATE_PARENT_PID`; the backend exits ~3 s after app death with `uv` in between. 15 orphaned backends from Sep 28–30 (incl. pid 38409) were stopped; 24 of 26 processes ignored SIGTERM (old code) and took SIGKILL. The live `/Applications` backend was left alone.
-- **Single-instance:** `whenReady` returns when the lock was not acquired (Electron's documented shape).
-- **Open:** startup time unmeasured (card `process/sprints/sprint-094-disposability.md`). Suite: 192 passed, same 18 failures. Not committed.

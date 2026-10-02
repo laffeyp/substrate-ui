@@ -3,9 +3,8 @@
 // ToolResult envelopes fold into their matching ToolCall (mirrors
 // the dc-runtime filter at reveal_component.ts:519).
 //
-// The parent gates auto-follow-bottom (Sprint 075 wires the real
-// scroll anchor); for now the container is the dc-runtime scroller,
-// which stays sticky-bottom via reveal.ts's existing autoscroll.
+// Scroll is owned by useScrollAnchor (UI sprint 102): follow the bottom while the user is
+// there, hold the row being read once they scroll up, per pane per view.
 
 import * as React from "react";
 import { useController } from "./useController";
@@ -36,7 +35,7 @@ function buildResultByCallId(snapshot: Snapshot): Map<string, TranscriptRow> {
 
 export function Transcript(props: TranscriptProps): React.ReactElement | null {
   const snapshot = useController(props.paneId);
-  const { registerRow, attachTo } = useScrollAnchor();
+  const { registerRow, attachTo } = useScrollAnchor(`${props.view}:${props.paneId}`);
   const resultByCallId = React.useMemo(() => buildResultByCallId(snapshot), [snapshot.transcript]);
   const rows: TranscriptRow[] = snapshot.transcript.filter((row) => row.kind !== EnvelopeKind.ToolResult);
   return (
