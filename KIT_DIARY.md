@@ -6,7 +6,7 @@
 
 ## Hypothesis tracking
 
-*One row per hypothesis definition. While this diary existed in two copies (project root and `process/`, merged 2026-10-01), IDs H17–H22 were each assigned more than once; the Defined-in date tells the definitions apart, and references written before a redefinition mean the earlier one. New hypotheses start at H35.*
+*One row per hypothesis definition. While this diary existed in two copies (project root and `process/`, merged 2026-10-01), IDs H17–H22 were each assigned more than once; the Defined-in date tells the definitions apart, and references written before a redefinition mean the earlier one. New hypotheses start at H37.*
 
 | # | Defined in | Hypothesis | Verdict | Evidence |
 |---|---|---|---|---|
@@ -50,10 +50,24 @@
 | H32 | 2026-10-01 | A second copy of anything (module, board, diary) is a fork, and a fork is found by diff, not by reading either copy. | **new (tentative)** | `session_registry.py` ×2 (33 hunks); `BLACKBOARD.md` ×2 (283 + 348 one-sided lines); H17–H22 assigned twice. |
 | H33 | 2026-10-01 | Making a silent failure loud turns every caller's old setting into a contract; audit the callers in the same change. | **new (tentative)** | Sprint 097 loud truncation; caps of 12–160 tokens in `reference/walkthrough.py` and `test_realmodel_demos.py`; the judge failed at 40. |
 | H34 | 2026-10-01 | An irreversible outward step (a publish) must never be an input to a reversible inward one (build, test, install). | **new (tentative)** | Sprint 089's PyPI pin made every packaged test wait on a kernel release; Sprint 100 builds the kernel from the commit. |
+| H35 | 2026-10-02 | A limit belongs on the unit whose length the system knows; open-ended work is supervised by progress, not by clock. | **new (tentative)** | Turn, delegate, model-call and CLI limits removed; bash gained the per-call deadline it lacked (Sprint 101). |
+| H36 | 2026-10-02 | A cancel that cannot reach the work is a status change, not a stop. | **new (tentative)** | The turn cap, ctrl+c and shutdown all left a hung bash running; its server outlived the turn. |
 
 ---
 
 ## Entries
+
+### 2026-10-02 — Sprint 101: the orchestration assumed a turn is an RPC
+
+**Context.** A 600 s cap cancelled turn 28. The Architect: "models can work for some time … Claude Code is basically the standard." The record showed the turn was not slow; a bash call had hung on a pipe held by a background server, and the cap could not stop the hung thread anyway.
+
+**H35 (new): a limit belongs on the unit whose length the system knows, and supervision of open-ended work is by progress, not by clock.** Every limit removed today sat on work whose length the model decides: the turn, the delegated child, the model call, the CLI's wait. The one limit that was missing sat on the unit whose length the system does know how to bound, a single shell command (Claude Code: 2 minutes default, 10 maximum). Temporal draws the same line: Start-To-Close on one attempt, Schedule-To-Close infinite by default, heartbeats for long work. A small team's agent product shipped this model; we did not ask it before choosing 600.
+
+**H36 (new): a cancel that cannot reach the work is a status change, not a stop.** `asyncio.to_thread` hands the call to a thread, and `concurrent.futures.Future.cancel()` refuses a running call. The 600 s cap, ctrl+c and the shutdown sweep all "cancelled" a bash call that kept running, and its server outlived the turn. Cancellation has to reach the process, so the process group is now killed.
+
+**The same shapes as Sprint 099.** The activity strip had no exit from "live" except a Park; the manifest never said "running"; a failed turn reused its index. These are statechart gaps, sneak paths in Binder's term. Call ids unique per turn were used as session-wide keys, which is H32's fork in a new form: one name, two scopes.
+
+---
 
 ### 2026-10-01 — Sprint 100: a publish step sat in front of the tests
 
@@ -661,4 +675,4 @@ lessons for the kit sit under the finding-30 series above.
 
 ---
 
-*KIT_DIARY.md for substrate-ui. 28 entries, 2026-06-17 to 2026-10-01. 40 hypothesis definitions under 34 IDs (H1–H34); H17, H18, H19, H20, H21, H22 carry more than one definition. Merged with `process/KIT_DIARY.md` on 2026-10-01; that copy is at `_deprecated/process-KIT_DIARY-2026-10-01.md`.*
+*KIT_DIARY.md for substrate-ui. 29 entries, 2026-06-17 to 2026-10-02. 42 hypothesis definitions under 36 IDs (H1–H36); H17, H18, H19, H20, H21, H22 carry more than one definition. Merged with `process/KIT_DIARY.md` on 2026-10-01; that copy is at `_deprecated/process-KIT_DIARY-2026-10-01.md`.*

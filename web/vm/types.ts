@@ -29,6 +29,10 @@ export interface TranscriptRow {
   // render one card. The row builder in `session_controller.ts`
   // populates these off `payload.args` / `payload.output`.
   callId?: string;
+  /** UI sprint 101 — one tool call's identity within the session: `${callId}@${seq of its
+   *  ToolCall}`. The kernel numbers call ids per turn (c0, c1, …), so a bare callId recurs
+   *  across turns; pairing results, progress and open state by it mixed up calls. */
+  callKey?: string;
   args?: string[];
   output?: string;
   error?: string;
@@ -99,6 +103,11 @@ export interface Snapshot {
   turnIndex: number;
   transcript: TranscriptRow[];
   parkReason: string | null;
+  /** UI sprint 101 — a turn known to be over without a Park: the last turn request came back
+   *  with an error (timeout, 500, refusal), or at attach the server said the session was not
+   *  running while the record's last turn never parked. Any turn whose UserMessage was written
+   *  before `atT` (epoch seconds) is over, not live. Cleared by the next turn. */
+  turnFailure: { detail: string; atT: number } | null;
   endedReason: string | null;
   driverRoster: string[];
   driverDefault: string | null;

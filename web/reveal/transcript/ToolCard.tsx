@@ -36,14 +36,16 @@ const ToolCardInner: React.FC<Props> = ({ call, result, progressText, progressEo
   const toolRunning = !result;
   const failed = result?.toolOk === false;
   const callId = call.callId ?? "";
-  const seededOpen = callId ? openByCallId.get(callId) : undefined;
+  // open state per call, not per recurring call id (UI sprint 101)
+  const openKey = call.callKey ?? callId;
+  const seededOpen = openKey ? openByCallId.get(openKey) : undefined;
   const initialOpen = seededOpen !== undefined ? seededOpen : toolRunning;
   const [isOpen, setIsOpen] = React.useState<boolean>(initialOpen);
   const onDetailsToggle = React.useCallback((event: React.SyntheticEvent<HTMLDetailsElement>) => {
     const next = event.currentTarget.open;
     setIsOpen(next);
-    if (callId) openByCallId.set(callId, next);
-  }, [callId]);
+    if (openKey) openByCallId.set(openKey, next);
+  }, [openKey]);
 
   const toolName = call.toolName ?? "";
   const toolPreview = call.args?.[0] ?? "";

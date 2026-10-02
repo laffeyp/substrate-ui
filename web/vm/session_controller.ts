@@ -150,6 +150,7 @@ const EMPTY_SNAPSHOT: Snapshot = {
   turnIndex: 0,
   transcript: [],
   parkReason: null,
+      turnFailure: null,
   endedReason: null,
   driverRoster: [],
   driverDefault: null,
@@ -172,6 +173,8 @@ export class SessionController {
   private readonly eventListeners = new Set<EventListener>();
   private unsubscribeStream: Unsubscribe | null = null;
   private lastSeq = -1;
+  /** callId → callKey of the ToolCall currently open under that id (UI sprint 101). */
+  private openCallKey = new Map<string, string>();
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private endedEmittedFor: string | null = null;
   /** Sprint 085 followup — subset of driverGroups.cli that the
@@ -430,6 +433,7 @@ export class SessionController {
     }
     const ack = result.data;
     this.lastSeq = -1;
+    this.openCallKey.clear();
     this.endedEmittedFor = null;
     // Sprint 085b follow-up: AuthPrompt rows persist across session boundaries
     // as a receipt that the user authenticated a CLI. Every other row type
@@ -447,6 +451,7 @@ export class SessionController {
       rawEnvelopes: [],
       progressByCallId: {},
       parkReason: null,
+      turnFailure: null,
       endedReason: null,
     });
     this.attachStream(ack.session_id);
@@ -475,7 +480,7 @@ export class SessionController {
       text: trimmed,
     });
     const turnIndex = this.snap.turnIndex;
-    this.patch({ turnIndex: turnIndex + 1, parkReason: null });
+    this.patch({ turnIndex: turnIndex + 1, parkReason: null, turnFailure: null });
     this.emit("TURN_SUBMITTED", { session_id: sessionId, turn_index: turnIndex, text_length: trimmed.length });
     const result = await this.client.fetchJson<unknown>(
       `/api/session/${encodeURIComponent(sessionId)}/turn`,
@@ -488,6 +493,7 @@ export class SessionController {
         role: "warning",
         text: `turn refused: ${result.detail}`,
       });
+      this.patch({ turnFailure: { detail: String(result.detail), atT: Date.now() / 1000 } });
       this.emit("TURN_REFUSED", { failure_class: result.failureClass, detail: result.detail });
     } else {
       this.emit("TURN_ACK", { session_id: sessionId });
@@ -505,6 +511,7 @@ export class SessionController {
   async attachRecordRoot(recordRoot: string): Promise<void> {
     if (this.unsubscribeStream) { this.unsubscribeStream(); this.unsubscribeStream = null; }
     this.lastSeq = -1;
+    this.openCallKey.clear();
     this.endedEmittedFor = null;
     this.patch({
       sessionId: null,
@@ -514,6 +521,7 @@ export class SessionController {
       rawEnvelopes: [],
       progressByCallId: {},
       parkReason: null,
+      turnFailure: null,
       endedReason: null,
       connection: "connecting",
     });
@@ -550,6 +558,7 @@ export class SessionController {
     }
     const manifest = result.data;
     this.lastSeq = -1;
+    this.openCallKey.clear();
     this.endedEmittedFor = null;
     this.patch({
       sessionId: manifest.session_id,
@@ -563,6 +572,12 @@ export class SessionController {
       rawEnvelopes: [],
       progressByCallId: {},
       parkReason: null,
+      // UI sprint 101: the server's status at attach. A session that is not running has no
+      // turn in flight, so a last turn on the record without a Park ended some other way.
+      turnFailure:
+        manifest.status && manifest.status !== "running" && manifest.status !== "live"
+          ? { detail: `the turn ended without parking (session ${manifest.status})`, atT: Date.now() / 1000 }
+          : null,
       endedReason: null,
     });
     this.attachStream(manifest.session_id);
@@ -981,10 +996,12 @@ export class SessionController {
           : [];
         const step = typeof payload.step === "number" ? payload.step : undefined;
         const preview = args.length ? args[0] : "";
+        const callKey = callId ? `${callId}@${env.seq}` : "";
+        if (callId) this.openCallKey.set(callId, callKey);
         this.appendTranscript({
           seq: env.seq, kind: env.kind, role: "tool",
           text: preview ? `${toolName} ${preview}` : `call ${toolName}`,
-          toolName, callId, args, toolStep: step,
+          toolName, callId, callKey, args, toolStep: step,
         });
         return;
       }
@@ -994,12 +1011,13 @@ export class SessionController {
         // progressByCallId map so the setState triggers a re-render.
         const callId = payload.call_id ? String(payload.call_id) : "";
         if (!callId) return;
+        const key = this.openCallKey.get(callId) ?? callId;
         const chunk = typeof payload.chunk === "string" ? payload.chunk : "";
         const eof = payload.eof === true;
-        const prior = this.snap.progressByCallId[callId] ?? { text: "", eof: false };
+        const prior = this.snap.progressByCallId[key] ?? { text: "", eof: false };
         const nextEntry = { text: prior.text + chunk, eof: prior.eof || eof };
         this.patch({
-          progressByCallId: { ...this.snap.progressByCallId, [callId]: nextEntry },
+          progressByCallId: { ...this.snap.progressByCallId, [key]: nextEntry },
         });
         return;
       }
@@ -1017,21 +1035,22 @@ export class SessionController {
             ? ""
             : JSON.stringify(rawOutput);
         const step = typeof payload.step === "number" ? payload.step : undefined;
+        const callKey = this.openCallKey.get(callId) ?? callId;
         this.appendTranscript({
           seq: env.seq, kind: env.kind, role: "tool",
           text: ok ? `${toolName} → ok` : `${toolName} → err ${err}`,
-          toolName, callId, output, error: err, toolOk: ok, toolStep: step,
+          toolName, callId, callKey, output, error: err, toolOk: ok, toolStep: step,
         });
         // Seal any ToolProgress stream for this callId — the paired
         // ToolResult is the definitive close, regardless of whether the
         // tool emitted an explicit eof=true chunk.
-        if (callId && this.snap.progressByCallId[callId]) {
-          const entry = this.snap.progressByCallId[callId];
+        if (callKey && this.snap.progressByCallId[callKey]) {
+          const entry = this.snap.progressByCallId[callKey];
           if (!entry.eof) {
             this.patch({
               progressByCallId: {
                 ...this.snap.progressByCallId,
-                [callId]: { text: entry.text, eof: true },
+                [callKey]: { text: entry.text, eof: true },
               },
             });
           }

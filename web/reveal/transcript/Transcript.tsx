@@ -20,14 +20,16 @@ export interface TranscriptProps {
 }
 
 function keyForRow(row: TranscriptRow): string {
-  if (row.callId) return row.callId;
+  const id = row.callKey ?? row.callId;
+  if (id) return id;
   return "seq:" + row.seq;
 }
 
 function buildResultByCallId(snapshot: Snapshot): Map<string, TranscriptRow> {
   const paired = new Map<string, TranscriptRow>();
   for (const row of snapshot.transcript) {
-    if (row.kind === EnvelopeKind.ToolResult && row.callId) paired.set(row.callId, row);
+    const id = row.callKey ?? row.callId;
+    if (row.kind === EnvelopeKind.ToolResult && id) paired.set(id, row);
   }
   return paired;
 }
@@ -40,8 +42,9 @@ export function Transcript(props: TranscriptProps): React.ReactElement | null {
   return (
     <div ref={attachTo}>
       {rows.map((row) => {
-        const paired = row.callId ? resultByCallId.get(row.callId) : undefined;
-        const progressEntry = row.callId ? snapshot.progressByCallId[row.callId] : undefined;
+        const id = row.callKey ?? row.callId;
+        const paired = id ? resultByCallId.get(id) : undefined;
+        const progressEntry = id ? snapshot.progressByCallId[id] : undefined;
         return (
           <Row
             key={keyForRow(row)}
