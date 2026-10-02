@@ -33,7 +33,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import server  # noqa: E402
-from session_registry import (  # noqa: E402
+from substrate.session_registry import (  # noqa: E402
     FreshSessionRequiresUserMessage,
     SessionRegistry,
     TornRecordOnResume,
@@ -142,7 +142,7 @@ def test_torn_record_raises_typed_and_flips_status_to_interrupted(
     signal being tested is the branch, not the corruption mode.
     """
     from substrate.errors import RecordGapError
-    import session_registry as sreg
+    from substrate import session_registry as sreg
 
     sid = _create_deterministic(registry, tmp_path)
     # First turn — record now populated. Not patched yet.

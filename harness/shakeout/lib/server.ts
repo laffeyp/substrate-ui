@@ -33,11 +33,30 @@ export class ServerHandle {
     // detached:true puts the child in its own process group so we can
     // signal the whole group (uv + python). Killing only uv leaves the
     // python child running and holding port 8765.
-    this.proc = spawn("uv", ["run", "python", SERVER_PATH, "--port", String(PORT)], {
-      cwd: SUBSTRATE_ROOT,
+    // SHAKEOUT_APP=<path to Substrate.app> runs the flows against a PACKAGED bundle: its own
+    // interpreter and its own server.py, spawned the way electron/main.js spawns them
+    // (Sprint 098; the parity gate Sprint 091 named and never built).
+    // PYTHONDONTWRITEBYTECODE: a .pyc written inside a signed bundle breaks its seal.
+    const app = process.env.SHAKEOUT_APP;
+    const [exe, args, cwd] = app
+      ? [
+        join(app, "Contents", "Resources", "python", "bin", "python3"),
+        [join(app, "Contents", "Resources", "app.asar.unpacked", "server.py"), "--port", String(PORT)],
+        join(app, "Contents", "Resources"),
+      ]
+      : ["uv", ["run", "python", SERVER_PATH, "--port", String(PORT)], SUBSTRATE_ROOT];
+    this.proc = spawn(exe as string, args as string[], {
+      cwd: cwd as string,
       detached: true,
       stdio: ["ignore", out, out],
-      env: { ...process.env, SUBSTRATE_HOME: this.substrateHome },
+      env: {
+        ...process.env,
+        SUBSTRATE_HOME: this.substrateHome,
+        PYTHONUNBUFFERED: "1",
+        PYTHONDONTWRITEBYTECODE: "1",
+        // the packaged interpreter is a symlink into Contents/Frameworks (F10); name its home
+        ...(app ? { PYTHONHOME: join(app, "Contents", "Resources", "python") } : {}),
+      },
     });
     await this.waitHealthy(30000);
   }

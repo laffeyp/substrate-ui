@@ -55,21 +55,39 @@ const fs = require("node:fs");
 // and extracted — the method sindresorhus/shell-env uses.
 // DISABLE_AUTO_UPDATE stops oh-my-zsh from prompting during the probe.
 const PATH_MARK = "__SUBSTRATE_PATH__";
-function restoreShellPath() {
-  try {
+// Sprint 094: the probe starts when main.js loads and runs while Electron initialises; spawnServer
+// awaits it. It used to be a spawnSync inside whenReady that blocked startup ~0.4 s (measured).
+function probeShellPath() {
+  return new Promise((resolve) => {
     const shell = process.env.SHELL || "/bin/zsh";
-    const out = require("node:child_process").spawnSync(
-      shell, ["-ilc", `printf '${PATH_MARK}%s${PATH_MARK}' "$PATH"`],
-      { encoding: "utf8", timeout: 5_000, env: { ...process.env, DISABLE_AUTO_UPDATE: "true" } },
-    );
-    const m = typeof out.stdout === "string" ? out.stdout.match(new RegExp(PATH_MARK + "(.*)" + PATH_MARK)) : null;
-    if (m && m[1] && m[1].length > (process.env.PATH || "").length) {
-      process.env.PATH = m[1];
-      log("PATH restored from " + shell + " (" + m[1].length + " chars)");
-    } else {
-      log("PATH not restored (shell exit " + out.status + (out.error ? ", " + out.error.message : "") + ")");
-    }
-  } catch (err) { log("PATH restore failed: " + err.message); }
+    let out = "";
+    let child;
+    try {
+      child = spawn(shell, ["-ilc", `printf '${PATH_MARK}%s${PATH_MARK}' "$PATH"`], {
+        env: { ...process.env, DISABLE_AUTO_UPDATE: "true" },
+        stdio: ["ignore", "pipe", "ignore"],
+      });
+    } catch (err) { resolve({ shell, path: null, why: err.message }); return; }
+    const timer = setTimeout(() => { try { child.kill("SIGKILL"); } catch { /* gone */ } }, 5_000);
+    child.stdout.on("data", (c) => { out += c.toString("utf8"); });
+    child.on("error", (err) => { clearTimeout(timer); resolve({ shell, path: null, why: err.message }); });
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      const m = out.match(new RegExp(PATH_MARK + "(.*)" + PATH_MARK));
+      resolve({ shell, path: m && m[1] ? m[1] : null, why: "shell exit " + code });
+    });
+  });
+}
+const shellPathProbe = probeShellPath();
+
+async function restoreShellPath() {
+  const { shell, path: shellPath, why } = await shellPathProbe;
+  if (shellPath && shellPath.length > (process.env.PATH || "").length) {
+    process.env.PATH = shellPath;
+    log("PATH restored from " + shell + " (" + shellPath.length + " chars)");
+  } else {
+    log("PATH not restored (" + why + ")");
+  }
 }
 
 // F7. Route stderr into a per-user log so a Finder-launched app leaves
@@ -161,6 +179,7 @@ function spawnServer() {
   // Packaged vs source: Electron's `app.isPackaged` is the one right
   // test. Sprint 089 A1.
   let exe, args, cwd;
+  let pythonHome = null;
   if (app.isPackaged) {
     // Bundled interpreter at Contents/Resources/python/bin/python3
     // (Sprint 089 B3 explicitly deferred moving it to Contents/
@@ -170,6 +189,9 @@ function spawnServer() {
     // directory resolution finds its stdlib.
     const resDir = process.resourcesPath;
     exe = path.join(resDir, "python", "bin", "python3");
+    // F10: python3 is a symlink into Contents/Frameworks/python-native; Python resolves its home
+    // from the real file's location, so name the home (the stdlib lives in Resources/python).
+    pythonHome = path.join(resDir, "python");
     args = [path.join(resDir, "app.asar.unpacked", "server.py"), "--port", "0"];
     cwd = resDir;
   } else {
@@ -188,7 +210,15 @@ function spawnServer() {
     // signature. Suppress writes entirely inside the packaged .app.
     // Source-mode gets it too — cheap, prevents `__pycache__` litter
     // in the checkout. Sprint 089 A2.
-    env: { ...process.env, PYTHONUNBUFFERED: "1", PYTHONDONTWRITEBYTECODE: "1" },
+    // SUBSTRATE_PARENT_PID: the backend's watchdog exits when THIS process
+    // dies, even when `uv` sits between us in source mode (Sprint 094).
+    env: {
+      ...process.env,
+      PYTHONUNBUFFERED: "1",
+      PYTHONDONTWRITEBYTECODE: "1",
+      SUBSTRATE_PARENT_PID: String(process.pid),
+      ...(pythonHome ? { PYTHONHOME: pythonHome } : {}),
+    },
   });
   serverProc.stdout.on("data", (chunk) => {
     const text = chunk.toString();
@@ -339,8 +369,13 @@ if (!singleInstanceLock) {
 }
 
 app.whenReady().then(async () => {
-  setupLogFile();
-  restoreShellPath();
+  // Sprint 094: a second instance (lock not acquired) has already called
+  // app.quit(); it must not set up logging or spawn a backend on its way
+  // out. Electron's requestSingleInstanceLock example registers its
+  // whenReady work only in the lock-acquired branch; this guard is that.
+  if (!singleInstanceLock) return;
+  const logPath = setupLogFile();
+  await restoreShellPath();
   spawnServer();
   try {
     const port = await waitForPortReadback(Date.now() + READBACK_TIMEOUT_MS);
@@ -353,8 +388,9 @@ app.whenReady().then(async () => {
     // user with nothing. Show a dialog naming the failure + the log
     // path. Source-mode / terminal launches also get the dialog but
     // still see the traceback in the terminal.
-    const logsDir = (() => { try { return app.getPath("logs"); } catch { return null; } })();
-    const logHint = logsDir ? "\n\nLog: " + path.join(logsDir, "substrate.log") : "";
+    // Name the log only when one was opened (packaged mode). Source mode logs to the terminal;
+    // naming ~/Library/Logs/... there pointed at a file that was never written (UI sprint 097).
+    const logHint = logPath ? "\n\nLog: " + logPath : "\n\nSee the terminal output for the server's error.";
     dialog.showErrorBox(
       "Substrate could not start",
       "The backend server did not come up.\n\n" + err.message + logHint,

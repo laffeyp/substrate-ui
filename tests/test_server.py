@@ -330,10 +330,10 @@ def test_agent_endpoint_reports_the_per_conversation_workspace(
     named = post(base, "/api/agent?model=deterministic&legacy=true&workspace=mysession")[
         "workspace"
     ]
-    assert named.endswith("/.substrate/sessions/mysession") and Path(named).is_dir()
+    assert named == str(server._sessions_base() / "mysession") and Path(named).is_dir()
     # unset -> a dedicated session dir, NOT the server's cwd (the footgun).
     default_ws = post(base, "/api/agent?model=deterministic&legacy=true")["workspace"]
-    assert "/.substrate/sessions/" in default_ws and default_ws != os.getcwd()
+    assert default_ws.startswith(str(server._sessions_base()) + "/") and default_ws != os.getcwd()
 
 
 def test_session_worktree_isolates_a_session_on_a_branch(tmp_path, monkeypatch) -> None:
@@ -345,7 +345,8 @@ def test_session_worktree_isolates_a_session_on_a_branch(tmp_path, monkeypatch) 
 
     import server
 
-    monkeypatch.setattr(server, "_SESSIONS_BASE", tmp_path / "sessions")
+    _sb = tmp_path / "sessions"
+    monkeypatch.setattr(server, "_sessions_base", lambda: _sb)
     repo = tmp_path / "repo"
     repo.mkdir()
     for cmd in (
@@ -398,17 +399,18 @@ def test_agent_params_parse_and_echo(base: str) -> None:
 
 
 def test_models_endpoint_lists_drivers_with_a_default(base: str) -> None:
-    # the terminal's model picker: the drivers you can pick — Ollama models (live) + the CLI presets
-    # (claude / gemini) + the CI stand-in — with a default (the biggest OSS model if present, else CI).
+    """The model picker's roster: Ollama models + the CI stand-in under `models`, installed CLI
+    drivers under `cli`, and a default drawn from them. Sprint 097: the old version demanded
+    `claude` and `gemini` inside `models`, which held on one machine with both CLIs installed
+    and before CLI drivers moved to their own `cli` list. Now the CLI list is checked against
+    what is actually on PATH, so the test means the same thing on every machine."""
+    import shutil
+
     d = get(base, "/api/models")
-    assert (
-        "claude" in d["models"]
-        and "gemini" in d["models"]
-        and "deterministic" in d["models"]
-    )
-    assert (
-        d["default"] in d["models"]
-    )  # the default is always one of the offered options
+    assert "deterministic" in d["models"]
+    cli = d.get("cli", [])
+    assert all(shutil.which(name) for name in cli), cli  # every listed CLI is really installed
+    assert d["default"] in d["models"] or d["default"] in cli
 
 
 def test_resume_continues_a_paused_run(base: str) -> None:
@@ -601,7 +603,8 @@ def test_ui_imports_only_sanctioned_substrate_surfaces() -> None:
 def test_static_index_is_served(base: str) -> None:
     with urlopen(base + "/", timeout=10) as r:
         body = r.read().decode()
-    assert "run console" in body.lower()
+    # `/` serves the reveal shell (the classic "run console" retired to _deprecated/ on 2026-09-22).
+    assert "<title>substrate · reveal</title>" in body
 
 
 def test_authored_route_feeds_a_reading_trigger(tmp_path) -> None:

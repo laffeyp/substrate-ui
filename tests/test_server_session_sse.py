@@ -30,7 +30,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import server  # noqa: E402
-from session_registry import SessionRegistry  # noqa: E402
+from substrate.session_registry import SessionRegistry  # noqa: E402
 
 # TECHNIQUE #38 — F-API-4 test primitives. `assert_event` / `assert_no_event`
 # accept ANY iterable of envelope dicts (see substrate.testing._load), so the
@@ -138,7 +138,7 @@ def test_sse_streams_backlog_when_session_already_has_events(
     _post_json(base + f"/api/session/{sid}/turn", {"text": "hello"})
     frames = _read_sse_frames(
         base + f"/api/session/{sid}/events?since_seq=-1",
-        max_frames=30,
+        max_frames=200,  # Sprint 097: the default `session` bundle (sprint 054) adds frames; 30 cut off ModelReply
         idle_timeout=2.0,
     )
     # `substrate.RunStarted` intentionally NOT asserted here: the daemon's
@@ -163,7 +163,7 @@ def test_sse_since_seq_filters_backlog(base: str, tmp_path: Path) -> None:
     _post_json(base + f"/api/session/{sid}/turn", {"text": "prior"})
     all_frames = _read_sse_frames(
         base + f"/api/session/{sid}/events?since_seq=-1",
-        max_frames=30,
+        max_frames=200,  # Sprint 097: the default `session` bundle (sprint 054) adds frames; 30 cut off ModelReply
         idle_timeout=2.0,
     )
     assert all_frames, "expected at least the RunStarted envelope"

@@ -22,8 +22,7 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from session_errors import SESSION_ENDED_MID_DELEGATE  # noqa: E402
-from session_registry import SessionEndedMidTurn, SessionRegistry  # noqa: E402
+from substrate.session_registry import SessionRegistry  # noqa: E402
 
 from substrate import api  # noqa: E402
 from substrate.adapters import DeterministicResponder  # noqa: E402
@@ -48,7 +47,10 @@ def _factory(
     )
 
 
-def test_ended_session_raises_typed_failure(tmp_path: Path) -> None:
+def test_vanished_session_raises_typed_failure(tmp_path: Path) -> None:
+    """The typed failure is for a session that VANISHED (manifest deleted). An ENDED session
+    resumes instead (Architect ruling 2026-09-25, session_registry.turn_sync); this test
+    asserted the pre-ruling contract until Sprint 097."""
     base = tmp_path / "sessions"
     base.mkdir()
     registry = SessionRegistry(base=base, session_topology_factory=_factory)
@@ -61,20 +63,19 @@ def test_ended_session_raises_typed_failure(tmp_path: Path) -> None:
         bundle=None,
         seed="x",
     )
-    # Mark the session ended before the delegate fires.
-    registry.update_status("s_dead", "ended")
+    from substrate.topologies.session import UserMessage as SessionUserMessage
 
-    d = make_delegate(
-        responder=DeterministicResponder(seed=0),
-        root=tmp_path / "parent",
-        session_registry=registry,
-    )
-    with pytest.raises(ValueError, match=SESSION_ENDED_MID_DELEGATE):
-        d.run([{"task": "hi", "child_session_name": "dead-reviewer"}])
+    registry.delete("s_dead")
+    with pytest.raises(KeyError):
+        registry.turn_sync(
+            "s_dead",
+            SessionUserMessage(text="hi", turn_index=0, assembled_prompt="hi", slash_source="test"),
+        )
 
 
-def test_registry_turn_sync_raises_session_ended_mid_turn_directly(tmp_path: Path) -> None:
-    """SessionRegistry.turn_sync surfaces the typed error the delegate then wraps."""
+def test_registry_turn_sync_resumes_an_ended_session(tmp_path: Path) -> None:
+    """Architect ruling 2026-09-25: an ended session accepts another turn. turn_sync flips the
+    manifest from ended to parked and runs the turn; no SessionEndedMidTurn."""
     base = tmp_path / "sessions"
     base.mkdir()
     registry = SessionRegistry(base=base, session_topology_factory=_factory)
@@ -91,16 +92,11 @@ def test_registry_turn_sync_raises_session_ended_mid_turn_directly(tmp_path: Pat
 
     from substrate.topologies.session import UserMessage as SessionUserMessage
 
-    with pytest.raises(SessionEndedMidTurn):
-        registry.turn_sync(
-            "s_dead2",
-            SessionUserMessage(
-                text="hi",
-                turn_index=0,
-                assembled_prompt="hi",
-                slash_source="test",
-            ),
-        )
+    registry.turn_sync(
+        "s_dead2",
+        SessionUserMessage(text="hi", turn_index=0, assembled_prompt="hi", slash_source="test"),
+    )
+    assert registry.get("s_dead2").status != "ended"
 
 
 def test_unknown_session_name_raises_typed_failure(tmp_path: Path) -> None:

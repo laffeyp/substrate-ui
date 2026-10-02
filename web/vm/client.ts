@@ -11,6 +11,8 @@ export interface FetchOpts {
   method?: "GET" | "POST" | "PATCH" | "DELETE";
   body?: unknown;
   headers?: Record<string, string>;
+  /** Abort after this many ms, covering headers AND body (harness client; default 30 s). */
+  timeoutMs?: number;
 }
 
 /** Result shape carried by every network call so failures are typed. */

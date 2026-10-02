@@ -37,3 +37,4 @@ runs/.archive-*/
 build/python/
 dist-electron/
 .env.local
+build/python-native/

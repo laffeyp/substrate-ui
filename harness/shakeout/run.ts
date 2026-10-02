@@ -60,11 +60,14 @@ const AXIS_C: Flow[] = [
   electronMenu,
   electronDeeplink,
 ];
-const FLOWS: Flow[] = [
+const ALL_FLOWS: Flow[] = [
   ...(AXIS_ONLY.includes("A") ? AXIS_A : []),
   ...(AXIS_ONLY.includes("B") ? AXIS_B : []),
   ...(AXIS_ONLY.includes("C") ? AXIS_C : []),
 ];
+// SHAKEOUT_FLOWS=name,name runs only the named flows (UI sprint 097: targeted reruns).
+const ONLY = (process.env.SHAKEOUT_FLOWS || "").split(",").map((s) => s.trim()).filter(Boolean);
+const FLOWS: Flow[] = ONLY.length ? ALL_FLOWS.filter((f) => ONLY.includes(f.name)) : ALL_FLOWS;
 
 const FLOW_TIMEOUT_MS = Number(process.env.SHAKEOUT_FLOW_TIMEOUT_MS || "900000");
 

@@ -26,13 +26,13 @@ module.exports = {
   asar: true,
 
   // server.py opens its sibling .py files by name — Python's import
-  // system needs them on disk, not inside asar. All four go to
+  // system needs them on disk, not inside asar. They go to
   // Contents/Resources/app.asar.unpacked/ (Sprint 088's bug: only
-  // session_registry.py was listed; the other three caused
-  // ModuleNotFoundError at first launch).
+  // session_registry.py was listed; the others caused
+  // ModuleNotFoundError at first launch). The session registry itself
+  // now ships in the kernel wheel (substrate.session_registry).
   asarUnpack: [
     "server.py",
-    "session_registry.py",
     "session_errors.py",
     "builder.py",
     "demo_topologies.py",
@@ -48,7 +48,6 @@ module.exports = {
     "electron/**/*",
     "web/dist/**/*",
     "server.py",
-    "session_registry.py",
     "session_errors.py",
     "builder.py",
     "demo_topologies.py",
@@ -69,6 +68,11 @@ module.exports = {
   // build/python/ before this config runs.
   extraResources: [
     { from: "build/python", to: "python", filter: ["**/*"] },
+  ],
+  // F10: the runtime's Mach-O code (interpreter, libpython, extension modules), split out by
+  // scripts/fetch-python-runtime.sh step 11. Resources/python keeps symlinks to these.
+  extraFiles: [
+    { from: "build/python-native", to: "Frameworks/python-native", filter: ["**/*"] },
   ],
 
   directories: {
@@ -96,6 +100,9 @@ module.exports = {
 
   mac: {
     category: "public.app-category.developer-tools",
+    // F10 (review 2026-09-28): the app shipped Electron's default icon. Built from the canonical
+    // mascot by scripts/make_icon.py; committed so a build does not need Pillow.
+    icon: "build/icon.icns",
     target: [
       { target: "dmg", arch: ["arm64"] },
     ],
@@ -111,6 +118,13 @@ module.exports = {
     // errors out (Sprint 088 trip-up).
     identity: "Green Rose Systems, LLC (ZVL8XB9XGU)",
     notarize: true,
+    // Sprint 098: the build records the commits it was built from, in Info.plist, BEFORE
+    // signing (a change to a signed bundle breaks its seal, Apple TN2206). scripts/release.sh
+    // sets these; a build made outside it says "unrecorded".
+    extendInfo: {
+      SubstrateUICommit: process.env.SUBSTRATE_UI_COMMIT || "unrecorded",
+      SubstrateKernelVersion: process.env.SUBSTRATE_KERNEL_VERSION || "unrecorded",
+    },
   },
 
   dmg: {

@@ -34,7 +34,7 @@ from msgspec import Struct
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import server  # noqa: E402
-from session_registry import SessionRegistry  # noqa: E402
+from substrate.session_registry import SessionRegistry  # noqa: E402
 
 from substrate import api  # noqa: E402
 from substrate.constants import PRODUCER_CANCELLED, PRODUCER_STARTED  # noqa: E402
@@ -226,7 +226,7 @@ def test_interrupt_parks_the_session_with_producer_cancelled_and_provenance(
     assert payload["producer"]["kind"] == "model"
     # v0.3 provenance annotation:
     assert payload["cause"] == "external"
-    assert payload["caller"] == "daemon:interrupt"
+    assert payload["caller"] == "daemon:interrupt-hard"  # tiered interrupt (design 2026-09-14 r3)
 
     park_events = [e for e in envs if e["kind"] == "Park"]
     assert len(park_events) >= 1

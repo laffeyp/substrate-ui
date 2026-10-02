@@ -23,6 +23,44 @@ import type {
 import type { SubstrateClient, Unsubscribe } from "./client";
 import { emit as sddEmit } from "./instrumentation/sdd";
 import { EnvelopeKind } from "./kinds";
+import type { EnvelopeKindValue } from "./kinds";
+
+// Sprint 096 — every generated envelope kind must be classified here: `rendered` (handleEnvelope
+// has a case that shows it) or `ignored` (bookkeeping the transcript does not show). The Record
+// type makes tsc fail when the generator adds a kind this table does not name (TypeScript
+// Handbook, exhaustiveness checking).
+const KIND_DISPOSITION: Record<EnvelopeKindValue, "rendered" | "ignored"> = {
+  [EnvelopeKind.SessionStarted]: "rendered",
+  [EnvelopeKind.UserMessage]: "rendered",
+  [EnvelopeKind.ModelReply]: "rendered",
+  [EnvelopeKind.FinalAnswer]: "rendered",
+  [EnvelopeKind.ToolCall]: "rendered",
+  [EnvelopeKind.ToolProgress]: "rendered",
+  [EnvelopeKind.ToolResult]: "rendered",
+  [EnvelopeKind.Park]: "rendered",
+  [EnvelopeKind.SessionEnded]: "rendered",
+  [EnvelopeKind.SessionWarning]: "rendered",
+  [EnvelopeKind.TranscriptCompacted]: "rendered",
+  [EnvelopeKind.InputBuildFailed]: "rendered",
+  [EnvelopeKind.RunFinalised]: "rendered",
+  [EnvelopeKind.PredicateQuarantined]: "rendered",
+  [EnvelopeKind.ProducerEmittedInvalidEvent]: "rendered",
+  // ProducerFailed: a model failure reaches the user as Park{reason: model_error, detail}.
+  [EnvelopeKind.ProducerFailed]: "ignored",
+  // ProducerCancelled: an interrupt reaches the user as Park{reason: interrupt}.
+  [EnvelopeKind.ProducerCancelled]: "ignored",
+  [EnvelopeKind.PromptFragment]: "ignored",
+  [EnvelopeKind.PromptComposed]: "ignored",
+  [EnvelopeKind.InterruptRequested]: "ignored",
+  [EnvelopeKind.SessionEndRequested]: "ignored",
+  [EnvelopeKind.RunStarted]: "ignored",
+  [EnvelopeKind.TriggerFired]: "ignored",
+  [EnvelopeKind.ProducerStarted]: "ignored",
+  [EnvelopeKind.ProducerCompleted]: "ignored",
+  [EnvelopeKind.TerminationMatched]: "ignored",
+  [EnvelopeKind.InjectionApplied]: "ignored",
+};
+const KIND_DISPOSITION_BY_VALUE: Record<string, string> = KIND_DISPOSITION;
 
 type Listener = (snap: Snapshot) => void;
 
@@ -922,7 +960,7 @@ export class SessionController {
         });
         return;
       }
-      case "FinalAnswer": {
+      case EnvelopeKind.FinalAnswer: {
         // A bail-final answer with distinct text still shows; a normal duplicate
         // of the preceding ModelReply is skipped so the transcript doesn't
         // double-print.
@@ -950,7 +988,7 @@ export class SessionController {
         });
         return;
       }
-      case "ToolProgress": {
+      case EnvelopeKind.ToolProgress: {
         // Phase 8 item 8: append a chunk under the ToolCall row's card.
         // The chunk may be empty on eof (marker only). We build a fresh
         // progressByCallId map so the setState triggers a re-render.
@@ -1035,7 +1073,7 @@ export class SessionController {
         this.emit("SESSION_ENDED_LOCAL", { reason });
         return;
       }
-      case "SessionWarning": {
+      case EnvelopeKind.SessionWarning: {
         const cond = String(payload.condition_kind ?? "warning");
         this.appendTranscript({
           seq: env.seq, kind: env.kind, role: "warning",
@@ -1043,17 +1081,7 @@ export class SessionController {
         });
         return;
       }
-      case "RateLimitedWaiting": {
-        const model = payload.model ? String(payload.model) : this.snap.driver ?? "?";
-        const retry = payload.retry_after_seconds ?? payload.wait_s ?? "?";
-        const attempt = payload.attempt ?? payload.retry ?? "?";
-        this.appendTranscript({
-          seq: env.seq, kind: env.kind, role: "warning",
-          text: `◌ rate-limited — retry ${attempt} in ${retry}s · ${model}`,
-        });
-        return;
-      }
-      case "TranscriptCompacted": {
+      case EnvelopeKind.TranscriptCompacted: {
         const droppedStart = payload.dropped_seq_start ?? "?";
         const droppedEnd = payload.dropped_seq_end ?? "?";
         this.appendTranscript({
@@ -1062,9 +1090,56 @@ export class SessionController {
         });
         return;
       }
+      case EnvelopeKind.InputBuildFailed: {
+        const error = payload.error ? String(payload.error) : "trigger input could not be built";
+        this.appendTranscript({
+          seq: env.seq, kind: env.kind, role: "warning",
+          text: `! input build failed: ${error}`,
+        });
+        return;
+      }
+      case EnvelopeKind.RunFinalised: {
+        const transcript = this.snap.transcript;
+        const lastTool = [...transcript].reverse().find((r) => r.kind === EnvelopeKind.ToolCall);
+        if (lastTool && lastTool.callId) {
+          const hasResult = transcript.some(
+            (r) => r.kind === EnvelopeKind.ToolResult && r.callId === lastTool.callId,
+          );
+          if (!hasResult) {
+            this.appendTranscript({
+              seq: env.seq - 0.5, kind: "OrphanedToolCall", role: "warning",
+              text: `! tool call ${lastTool.toolName ?? "?"} never returned — the run ended`,
+            });
+          }
+        }
+        return;
+      }
+      case EnvelopeKind.PredicateQuarantined: {
+        // A Trigger's predicate or input builder raised and the kernel quarantined it: the
+        // session cannot take that path again this run. Without this row the user saw nothing.
+        const trig = String(payload.trigger_id ?? "?");
+        const why = payload.error ? String(payload.error) : String(payload.reason ?? "quarantined");
+        this.appendTranscript({
+          seq: env.seq, kind: env.kind, role: "warning",
+          text: `! trigger ${trig} quarantined: ${why}`,
+        });
+        return;
+      }
+      case EnvelopeKind.ProducerEmittedInvalidEvent: {
+        const producer = payload.producer as { kind?: string } | undefined;
+        const at = payload.at_path ? ` at ${String(payload.at_path)}` : "";
+        this.appendTranscript({
+          seq: env.seq, kind: env.kind, role: "warning",
+          text: `! ${producer?.kind ?? "a producer"} emitted an invalid event${at}: ${String(payload.reason ?? "")}`,
+        });
+        return;
+      }
       default: {
-        // Every other envelope kind is recorded but not rendered; a future
-        // View can pick it up off the transcript by kind.
+        if (!(env.kind in KIND_DISPOSITION_BY_VALUE)) {
+          // A kind the generated vocabulary does not know: the kernel emits something
+          // scripts/gen_kinds.py did not see. Loud in the console, not silent.
+          console.warn(`[session_controller] unknown envelope kind ${env.kind} at seq ${env.seq}`);
+        }
         return;
       }
     }

@@ -27,7 +27,7 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from session_registry import NameCollision, SessionRegistry  # noqa: E402
+from substrate.session_registry import NameCollision, SessionRegistry  # noqa: E402
 
 
 def test_second_create_with_same_name_raises_collision(tmp_path: Path) -> None:

@@ -11,7 +11,8 @@ serialization is exercised over the wire:
   demo_broken   — a Producer fails INSIDE a clean finalise -> status="finalised", producers_failed>0
                   (the finished-!=-worked case: the verdict must read NOT CLEAN)
 
-Written to substrate-ui/runs/, where the server serves them alongside the bundled records.
+Written to <state root>/runs/ (SUBSTRATE_HOME, default ~/.substrate), where the server serves
+them. The test suite generates them into its own temp state root (tests/conftest.py).
 Run: cd substrate && uv run python ../substrate-ui/gen_demo_records.py
 """
 
@@ -35,7 +36,13 @@ from substrate.topologies.tool_loop.tools import Tool
 
 from demo_topologies import resumable_topology
 
-RUNS = Path(__file__).resolve().parent / "runs"
+def _default_runs() -> Path:
+    """The server's runs dir, `<state root>/runs` (Sprint 093/097). It was this file's own
+    `runs/` folder, which the server stopped reading when F1 moved RUNS, so the demo
+    records (and the six tests that read them) silently vanished."""
+    from substrate import api
+
+    return api.substrate_home() / "runs"
 
 
 class Ping(Struct, frozen=True):
@@ -121,7 +128,8 @@ def topo_broken(b: Any) -> None:
     b.termination(quiescence_with_watchdog(seconds=1))
 
 
-async def main() -> None:
+async def main(runs: Path | None = None) -> None:
+    RUNS = runs if runs is not None else _default_runs()
     specs = [
         ("demo_failed", topo_failed, False),
         ("demo_paused", topo_paused, True),  # pause is a persistent-bus operation

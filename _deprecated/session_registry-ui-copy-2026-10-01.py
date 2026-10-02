@@ -69,7 +69,6 @@ STATUS_PARKED: SessionStatus = "parked"
 STATUS_INTERRUPTED: SessionStatus = "interrupted"
 STATUS_ENDED: SessionStatus = "ended"
 
-_SESSIONS_BASE_DEFAULT = api.substrate_home() / "sessions"
 _BY_NAME_FILENAME = "by-name.json"
 _BY_NAME_LOCK_FILENAME = ".by-name.lock"
 _MANIFEST_FILENAME = "manifest.json"
@@ -251,7 +250,8 @@ class SessionRegistry:
         session_topology_factory: SessionTopologyFactory | None = None,
         turn_queue_cap: int = 4,
     ) -> None:
-        self._base = Path(base) if base is not None else _SESSIONS_BASE_DEFAULT
+        # Sprint 093: default resolved at construction (in main()), not at import.
+        self._base = Path(base) if base is not None else api.substrate_home() / "sessions"
         self._by_name: dict[str, str] = {}
         self._manifests: dict[str, SessionManifest] = {}
         # Sprint 216: per-session queued-turn counter for the /turn queue cap.
@@ -339,11 +339,10 @@ class SessionRegistry:
                 manifest = _replace(manifest, status=true_status)
                 _atomic_write_json(manifest_path, _manifest_to_dict(manifest))
             self._manifests[manifest.session_id] = manifest
-            # F14: derive the next turn_index from the record so _session_turn
-            # does not need to scan the whole record on every POST /turn.
-            self._next_turn_index[manifest.session_id] = _next_turn_index_from_record(
-                Path(manifest.record_root)
-            )
+            # Sprint 094: the next turn_index is NOT derived here. Scanning
+            # every record at boot cost 6.9 of 7.1 s over 3,079 sessions
+            # (measured 2026-10-01) for a number only a session that takes
+            # another turn needs. `next_turn_index` derives it on first use.
         # Prune stale by-name entries whose manifests dropped off disk.
         self._by_name = {
             name: sid for name, sid in self._by_name.items() if sid in self._manifests
@@ -609,7 +608,7 @@ class SessionRegistry:
         if bundle is not None:
             # Validate against the substrate bundle catalog. An unknown name
             # fails here, not silently at next-turn seed assembly.
-            from substrate.bundles import load_bundle
+            load_bundle = api.load_bundle  # F-API-6: public surface only (Sprint 097)
             load_bundle(bundle)
         threading_lock = self._turn_threading_locks.setdefault(session_id, threading.Lock())
         with threading_lock:
@@ -847,13 +846,21 @@ class SessionRegistry:
         return self._turn_queue_cap
 
     def next_turn_index(self, session_id: str) -> int:
-        """F14: the next turn_index for this session, derived from the
-        in-memory counter (no record scan). Returns 0 for unknown sessions."""
-        return self._next_turn_index.get(session_id, 0)
+        """F14: the next turn_index for this session. The first call for a
+        known session scans its record once (Sprint 094: lazy, not at
+        boot); later calls read the in-memory counter. Returns 0 for
+        unknown sessions."""
+        cached = self._next_turn_index.get(session_id)
+        if cached is not None:
+            return cached
+        manifest = self._manifests.get(session_id)
+        value = _next_turn_index_from_record(Path(manifest.record_root)) if manifest else 0
+        self._next_turn_index[session_id] = value
+        return value
 
     def advance_turn_index(self, session_id: str) -> None:
         """F14: increment the turn counter after a successful turn."""
-        self._next_turn_index[session_id] = self._next_turn_index.get(session_id, 0) + 1
+        self._next_turn_index[session_id] = self.next_turn_index(session_id) + 1
 
     def interrupt(
         self,
@@ -892,7 +899,7 @@ class SessionRegistry:
         if tier not in ("soft", "hard"):
             raise ValueError(f"tier must be 'soft' or 'hard', got {tier!r}")
         if record_root is not None:
-            from substrate.kernel.runtime import find_active_runtime
+            find_active_runtime = api.find_active_runtime  # F-API-6 (Sprint 097)
 
             child_runtime = find_active_runtime(record_root)
             if child_runtime is None:
@@ -1137,7 +1144,7 @@ def _run_run_sync(
         asyncio.set_event_loop(loop)
         try:
             runtime = api.Runtime(record_root, persistent=True)
-            task = loop.create_task(runtime.run(factory))
+            task = loop.create_task(runtime.run(factory, name="session"))
             if handle_out is not None:
                 handle_out.loop = loop
                 handle_out.task = task
@@ -1338,7 +1345,7 @@ def _next_turn_index_from_record(record_root: Path) -> int:
         return 0
     highest = -1
     try:
-        for env in api.read_record(record_root):
+        for env in api.read_record(record_root, resolve_blobs=True):  # Sprint 095: a long UserMessage is a blob
             if env.get("kind") == "UserMessage":
                 payload = env.get("payload") or {}
                 if isinstance(payload, dict) and "turn_index" in payload:

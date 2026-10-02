@@ -17,7 +17,8 @@ export type ParsedBlock =
   | { kind: "code_block"; lang: string; text: string }
   | { kind: "ul"; items: { inlines: InlineSegment[] }[] }
   | { kind: "ol"; items: { inlines: InlineSegment[] }[] }
-  | { kind: "heading"; level: number; inlines: InlineSegment[] };
+  | { kind: "heading"; level: number; inlines: InlineSegment[] }
+  | { kind: "table"; headers: InlineSegment[][]; rows: InlineSegment[][] [] };
 
 export interface RenderedInline {
   t: string;
@@ -36,12 +37,15 @@ export interface RenderedBlock {
   isUl: boolean;
   isOl: boolean;
   isH: boolean;
+  isTable: boolean;
   hasLang: boolean;
   lang: string;
   text: string;
   inlines: RenderedInline[];
   items: { inlines: RenderedInline[] }[];
   hSize: string;
+  tableHeaders: RenderedInline[][];
+  tableRows: RenderedInline[][][];
 }
 
 export function mdInlines(text: string): InlineSegment[] {
@@ -115,6 +119,26 @@ export function mdBlocks(text: string): ParsedBlock[] {
       i++;
       continue;
     }
+    if (trimmed.includes("|") && i + 1 < lines.length) {
+      const sepLine = lines[i + 1].trim();
+      if (/^\|?[\s-:]+(\|[\s-:]+)+\|?\s*$/.test(sepLine)) {
+        const parseCells = (row: string): InlineSegment[][] => {
+          let s = row.trim();
+          if (s.startsWith("|")) s = s.slice(1);
+          if (s.endsWith("|")) s = s.slice(0, -1);
+          return s.split("|").map((cell) => mdInlines(cell.trim()));
+        };
+        const headers = parseCells(lines[i]);
+        i += 2;
+        const rows: InlineSegment[][][] = [];
+        while (i < lines.length && lines[i].trim().includes("|")) {
+          rows.push(parseCells(lines[i]));
+          i++;
+        }
+        blocks.push({ kind: "table", headers, rows });
+        continue;
+      }
+    }
     const buf: string[] = [];
     while (i < lines.length) {
       const rowTrim = lines[i].trim();
@@ -170,12 +194,15 @@ export function renderBlock(blk: ParsedBlock): RenderedBlock {
     isUl: false,
     isOl: false,
     isH: false,
+    isTable: false,
     hasLang: false,
     lang: "",
     text: "",
     inlines: [],
     items: [],
     hSize: "13px",
+    tableHeaders: [],
+    tableRows: [],
   };
   if (blk.kind === "p") {
     rendered.isP = true;
@@ -195,6 +222,10 @@ export function renderBlock(blk: ParsedBlock): RenderedBlock {
     rendered.isH = true;
     rendered.inlines = blk.inlines.map(renderInline);
     rendered.hSize = blk.level === 1 ? "17px" : blk.level === 2 ? "15px" : "13px";
+  } else if (blk.kind === "table") {
+    rendered.isTable = true;
+    rendered.tableHeaders = blk.headers.map((cell) => cell.map(renderInline));
+    rendered.tableRows = blk.rows.map((row) => row.map((cell) => cell.map(renderInline)));
   }
   return rendered;
 }

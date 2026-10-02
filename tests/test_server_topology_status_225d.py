@@ -17,17 +17,18 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import server  # noqa: E402
-from session_registry import SessionRegistry  # noqa: E402
+from substrate.session_registry import SessionRegistry  # noqa: E402
 
 from substrate.topologies.applications.registry import load_manifests  # noqa: E402
 
 
 @pytest.fixture
 def base(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> str:
-    monkeypatch.setattr(server, "_SESSIONS_BASE", tmp_path / "sessions")
-    server._SESSIONS_BASE.mkdir(parents=True)
+    _sb = tmp_path / "sessions"
+    monkeypatch.setattr(server, "_sessions_base", lambda: _sb)
+    server._sessions_base().mkdir(parents=True)
     server._SESSION_REGISTRY = SessionRegistry(
-        base=server._SESSIONS_BASE,
+        base=server._sessions_base(),
         session_topology_factory=server._build_session_topology_from_manifest,
     )
     server._APPLICATIONS = load_manifests()

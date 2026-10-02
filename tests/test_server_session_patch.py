@@ -38,7 +38,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import server  # noqa: E402
-from session_registry import SessionRegistry  # noqa: E402
+from substrate.session_registry import SessionRegistry  # noqa: E402
 
 
 @pytest.fixture
@@ -170,11 +170,11 @@ def test_patch_empty_body_returns_400(base: tuple[str, Path]) -> None:
 def test_patch_deferred_field_returns_400_naming_the_field(base: tuple[str, Path]) -> None:
     url, tmp_path = base
     sid = _create(url, tmp_path / "wsp", name="wanting-tools")
-    # Sprint 223d: `per_turn` moved from _NOT_YET to _PATCHABLE. Use `bundle`,
-    # still in _NOT_YET (belongs to piece H).
-    status, body = _patch_json(url + f"/api/session/{sid}", {"bundle": "some-bundle"})
+    # Sprint 223d moved `per_turn`, and a later sprint `bundle`, to _PATCHABLE. `seed`
+    # is still in _NOT_YET (Sprint 097 update).
+    status, body = _patch_json(url + f"/api/session/{sid}", {"seed": "other"})
     assert status == 400
-    assert "bundle" in body["error"]
+    assert "seed" in body["error"]
     assert "not PATCH-able yet" in body["error"]
 
 
