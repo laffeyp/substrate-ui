@@ -6,7 +6,7 @@
 
 ## Hypothesis tracking
 
-*One row per hypothesis definition. While this diary existed in two copies (project root and `process/`, merged 2026-10-01), IDs H17–H22 were each assigned more than once; the Defined-in date tells the definitions apart, and references written before a redefinition mean the earlier one. New hypotheses start at H34.*
+*One row per hypothesis definition. While this diary existed in two copies (project root and `process/`, merged 2026-10-01), IDs H17–H22 were each assigned more than once; the Defined-in date tells the definitions apart, and references written before a redefinition mean the earlier one. New hypotheses start at H35.*
 
 | # | Defined in | Hypothesis | Verdict | Evidence |
 |---|---|---|---|---|
@@ -49,10 +49,21 @@
 | H31 | 2026-10-01 | a fix's own inputs need the same suspicion as the system's. | **new (tentative)** | Entry 2026-10-01. |
 | H32 | 2026-10-01 | A second copy of anything (module, board, diary) is a fork, and a fork is found by diff, not by reading either copy. | **new (tentative)** | `session_registry.py` ×2 (33 hunks); `BLACKBOARD.md` ×2 (283 + 348 one-sided lines); H17–H22 assigned twice. |
 | H33 | 2026-10-01 | Making a silent failure loud turns every caller's old setting into a contract; audit the callers in the same change. | **new (tentative)** | Sprint 097 loud truncation; caps of 12–160 tokens in `reference/walkthrough.py` and `test_realmodel_demos.py`; the judge failed at 40. |
+| H34 | 2026-10-01 | An irreversible outward step (a publish) must never be an input to a reversible inward one (build, test, install). | **new (tentative)** | Sprint 089's PyPI pin made every packaged test wait on a kernel release; Sprint 100 builds the kernel from the commit. |
 
 ---
 
 ## Entries
+
+### 2026-10-01 — Sprint 100: a publish step sat in front of the tests
+
+**Context.** Sprint 089 pinned the app's bundled kernel to a PyPI version and refused to build once the kernel moved past that tag. For a day of bug fixing, every kernel fix blocked every packaged test until someone published a release. The workaround grew its own machinery: hand-built wheels, a `VERIFICATION_BUILD` marker, a refusal rule in `release.sh`. The Architect named it: "Testing the app should not depend on a release."
+
+**H34 (new): an irreversible outward step must never be an input to a reversible inward one.** Publishing to PyPI cannot be taken back; building and testing an app can be repeated at will. Sprint 089 put the first in front of the second, so each test cycle required an act that only the Architect may authorize. Humble & Farley's deployment pipeline has the order built in: version control in, binaries built once, release to the world last. Both Sprint 089 packaging research docs mention PyPI zero times, and the Sprint 089 card wrote "PyPI-installed substrate-kernel" into its deliverable with no stated reason; the sprint 098 review found the pin and recorded it as "waits on the Architect", which is H22 again: a blocking fact got written down instead of removed.
+
+**The workaround hid the defect.** Verification builds worked well enough that sprints 097–099 shipped their gates through them without asking why a workaround was needed at all. A workaround that needs a refusal rule in a second script is a design defect reporting itself.
+
+---
 
 ### 2026-10-01 — The era committed at its end, not at each close
 
@@ -650,4 +661,4 @@ lessons for the kit sit under the finding-30 series above.
 
 ---
 
-*KIT_DIARY.md for substrate-ui. 27 entries, 2026-06-17 to 2026-10-01. 39 hypothesis definitions under 33 IDs (H1–H33); H17, H18, H19, H20, H21, H22 carry more than one definition. Merged with `process/KIT_DIARY.md` on 2026-10-01; that copy is at `_deprecated/process-KIT_DIARY-2026-10-01.md`.*
+*KIT_DIARY.md for substrate-ui. 28 entries, 2026-06-17 to 2026-10-01. 40 hypothesis definitions under 34 IDs (H1–H34); H17, H18, H19, H20, H21, H22 carry more than one definition. Merged with `process/KIT_DIARY.md` on 2026-10-01; that copy is at `_deprecated/process-KIT_DIARY-2026-10-01.md`.*

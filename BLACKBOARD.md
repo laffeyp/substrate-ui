@@ -104,6 +104,8 @@
 
 ## Decisions
 
+- **2026-10-01 user** — "Testing the app should not depend on a release. Let's make it not happen." Sprint 100: the bundled kernel is built from the `../substrate` commit, not installed from PyPI; a PyPI release no longer gates any app build, test or install.
+
 - **2026-10-01 user** — Commit. "commit for sure, update blackboard and kit diary." Both repos committed the same day: kernel `0e2b7176` (47 changed files, 3 new tests), substrate-ui in the commit that carries this entry. The kernel 1.1.2 release and the 147 session dirs were not answered; both sit in `## Open questions`.
 
 - **2026-10-01 user** — Era sequencing. "lets do all we can before release and then pause ... We're going to finish like a whole era of bug fixing and then do [the] assigned thing." Finish roadmap sprints 096–098 up to, not including, the kernel PyPI release; then pause. AFTER the bug-fix era: one whole-project pass that reads the project through the seven practice lenses and their primary sources (`process/planning/ROADMAP-2026-10-01-engineering-practice-classes.md`) to find where it falls short of best practice. Not mixed into bug-fixing.
@@ -149,6 +151,17 @@
 ### Rolled from Sprint tail and merged from process/BLACKBOARD.md (2026-10-01, newest first)
 
 *Sprint tail had grown to 33 blocks reaching Sprint 001, and a second board at `process/BLACKBOARD.md` had taken writes since 2026-06-18 (Sep 23–25 closes for Sprints 070–076, 083, 084, 085a–c existed only there). These blocks moved verbatim, not compressed, so no fact is lost. The `process/` copy is at `_deprecated/process-BLACKBOARD-2026-10-01.md`.*
+
+#### Review of Sprints 086b–092 (2026-10-01) — bugs re-filed as instances of seven practice classes
+- **Technique: appeal to prior authority.** Each bug was matched to the established practice it violates, and that practice's canonical source was fetched and quoted. The source is the external check surface; the bug list is checked against it, not against memory. Roadmap: `process/planning/ROADMAP-2026-10-01-engineering-practice-classes.md`.
+- **Gaps found, measured.**
+  - (A/B) A test run under a throwaway `HOME` wrote 30 session dirs + 1 run record to the real `~/.substrate`: `RUNS`, `_SESSIONS_BASE` and `_SESSIONS_BASE_DEFAULT` read `SUBSTRATE_HOME` at import, before the Sprint 092 conftest sets it. `recent-workspaces.json` holds 61 deleted pytest tmpdirs out of 64 rows.
+  - (C) `/Applications` build 1790667186 predates 090–092. `dist-electron` fails `codesign --verify` after the hand-copy. The drift guard counts commits, not a dirty `src/`. Sprint 091 is marked done with no `shakeout:packaged` script.
+  - (D) The server stayed alive 31 s after SIGTERM with zero sessions: `srv.shutdown()` runs on the serving thread, so every quit waits for the 45 s SIGKILL. `main.js` `whenReady` sits outside the single-instance `else`. The orphan watchdog works (exits in 1 s).
+  - (E) `kinds.ts` held unprefixed lifecycle kinds from Sep 23 to Oct 1. The ESLint guard misses `case` literals, and three lifecycle kinds have no handler.
+  - (F) Sprint A resolves blob stubs for live views only. The resume fold (`_as_event`, `kernel/runtime.py`) still feeds stubs. Sprint B imports kernel internals into `server.py`.
+  - (G) The 18 failing substrate-ui tests are classified by cause in the roadmap. The kernel has 1 failure (`test_assay_coding.py`), and its full run exceeded 30 min.
+- **Order:** A+B → D → F → E → G → C. Each step closes on a named command check, not on reading.
 
 #### Sprint 092 (2026-10-01, IN PROGRESS — blob externalization, EnvelopeKind fixes, six UI polish items landed in source; workspace pollution investigation open)
 
@@ -748,7 +761,7 @@ Twelve PNGs at `captures/pixel-baseline-2026-09-23/`: six states (`empty`, `one_
 
 *Anyone may append.*
 
-- **2026-10-01 — Kernel 1.1.2 to PyPI?** Sprint 098's `npm run release` builds the bundled runtime from the PyPI kernel pinned by `SUBSTRATE_VERSION` in `scripts/fetch-python-runtime.sh` (1.1.1 today). Everything from UI sprints 093–099 on the kernel side (`0e2b7176`) ships only after a 1.1.2 release and that bump. User-only: a release is outward-facing.
+- **2026-10-01 — Kernel 1.1.2 to PyPI?** Answered for the app by Sprint 100: the app bundles the kernel from the commit, so nothing in substrate-ui waits on PyPI. Publishing remains a question about the library's other users only, and stays the Architect's (outward-facing).
 - **2026-10-01 — The 147 session dirs in the real `~/.substrate/sessions`.** Created on 2026-10-01, before `substrate/tests/conftest.py` isolated the state root; provenance is mixed between leaking tests and the Architect's own use. Untouched. User-only: they are the Architect's data.
 
 ---
@@ -794,6 +807,10 @@ Twelve PNGs at `captures/pixel-baseline-2026-09-23/`: six states (`empty`, `one_
 ## Sprint tail
 
 *Agent maintains. Last 10 increment closes; older roll into ## Built as compressed paragraphs.*
+
+### Sprint 100 (2026-10-01, closed) — the app's kernel comes from the commit, not PyPI (roadmap class C)
+- `fetch-python-runtime.sh` builds the kernel wheel from `git archive HEAD` of a clean `../substrate` (releasable) or from its working tree (`VERIFICATION_BUILD`, refused by `release.sh`); `SUBSTRATE_VERSION`, the PyPI install and `SUBSTRATE_WHEEL` are gone. `KERNEL_SOURCE` ships in the bundle and Info.plist (`SubstrateKernelCommit`).
+- `release.sh` ran all six stages from substrate-ui `0645c1d` + kernel `0e2b7176` with PyPI still at 1.1.1: 214 UI tests, signature, both commits in Info.plist, smoke, lifecycle gates, Axis-A 81 tags green / 0 bugs. The dirty path was probed and reverted. Card: `process/sprints/sprint-100-kernel-from-the-commit.md`.
 
 ### Sprint 099 (2026-10-01, closed) — one session registry; three defects found by the realmodel tier; one board (roadmap class A)
 - Kernel `session_registry.py` absorbed the UI copy's behaviour (ended → parked, `driver_version`, lazy turn index); `substrate.api` exports it through a PEP 562 `__getattr__` (an eager import cycled). The UI copy, its packaging entries and a stale mypy override are gone. A false `SessionManifest.seed` deprecation warning came out.
@@ -851,14 +868,3 @@ Twelve PNGs at `captures/pixel-baseline-2026-09-23/`: six states (`empty`, `one_
 - **Checks run.** Full suite under a throwaway `HOME`: `$HOME/.substrate` absent (baseline: 30 dirs + 1 record); failure set identical to the 18-test baseline; 4 new tests pass. A live launch with `SUBSTRATE_HOME=<tmp>` finalised and wrote its record under `<tmp>/runs/`. The live `~/.substrate/recent-workspaces.json` was purged from 64 rows to 4; backup at `recent-workspaces.json.bak-2026-10-01`.
 - **Not done.** No signed build carries this (sprint 098). Not committed.
 - **Cards.** Retroactive placeholders filed for the cardless Sprint 092 A/B/C work (`process/sprints/sprint-092a/b/c-*.md`), plus forward placeholders 094–098 for roadmap classes D, F, E, G, C.
-
-### Review of Sprints 086b–092 (2026-10-01) — bugs re-filed as instances of seven practice classes
-- **Technique: appeal to prior authority.** Each bug was matched to the established practice it violates, and that practice's canonical source was fetched and quoted. The source is the external check surface; the bug list is checked against it, not against memory. Roadmap: `process/planning/ROADMAP-2026-10-01-engineering-practice-classes.md`.
-- **Gaps found, measured.**
-  - (A/B) A test run under a throwaway `HOME` wrote 30 session dirs + 1 run record to the real `~/.substrate`: `RUNS`, `_SESSIONS_BASE` and `_SESSIONS_BASE_DEFAULT` read `SUBSTRATE_HOME` at import, before the Sprint 092 conftest sets it. `recent-workspaces.json` holds 61 deleted pytest tmpdirs out of 64 rows.
-  - (C) `/Applications` build 1790667186 predates 090–092. `dist-electron` fails `codesign --verify` after the hand-copy. The drift guard counts commits, not a dirty `src/`. Sprint 091 is marked done with no `shakeout:packaged` script.
-  - (D) The server stayed alive 31 s after SIGTERM with zero sessions: `srv.shutdown()` runs on the serving thread, so every quit waits for the 45 s SIGKILL. `main.js` `whenReady` sits outside the single-instance `else`. The orphan watchdog works (exits in 1 s).
-  - (E) `kinds.ts` held unprefixed lifecycle kinds from Sep 23 to Oct 1. The ESLint guard misses `case` literals, and three lifecycle kinds have no handler.
-  - (F) Sprint A resolves blob stubs for live views only. The resume fold (`_as_event`, `kernel/runtime.py`) still feeds stubs. Sprint B imports kernel internals into `server.py`.
-  - (G) The 18 failing substrate-ui tests are classified by cause in the roadmap. The kernel has 1 failure (`test_assay_coding.py`), and its full run exceeded 30 min.
-- **Order:** A+B → D → F → E → G → C. Each step closes on a named command check, not on reading.
