@@ -236,6 +236,10 @@ function spawnServer() {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send("server:dead", { code, signal });
     }
+    // UI sprint 102: the backend died while the app was in use (not quitting, not starting).
+    // Nothing listened for `server:dead`, so the window sat with dead streams and failing turns
+    // and no word why. Say so, and offer the two ways out.
+    if (serverUp && !quitAfterServer) onBackendDied(code, signal);
   });
 }
 
@@ -368,6 +372,27 @@ if (!singleInstanceLock) {
   });
 }
 
+let serverUp = false; // set once the backend answered its health check
+let appLogPath = null;
+
+async function onBackendDied(code, signal) {
+  const how = signal ? "was killed (" + signal + ")" : "exited with code " + code;
+  const where = appLogPath ? "\n\nLog: " + appLogPath : "\n\nSee the terminal output for the server's error.";
+  const { response } = await dialog.showMessageBox({
+    type: "error",
+    title: "Substrate's backend stopped",
+    message: "Substrate's backend stopped",
+    detail: "The backend server " + how + ". Sessions and records are on disk; relaunching reopens them." + where,
+    buttons: ["Relaunch", "Quit"],
+    defaultId: 0,
+    cancelId: 1,
+  });
+  if (response === 0) {
+    app.relaunch();
+  }
+  app.exit(0);
+}
+
 app.whenReady().then(async () => {
   // Sprint 094: a second instance (lock not acquired) has already called
   // app.quit(); it must not set up logging or spawn a backend on its way
@@ -375,6 +400,7 @@ app.whenReady().then(async () => {
   // whenReady work only in the lock-acquired branch; this guard is that.
   if (!singleInstanceLock) return;
   const logPath = setupLogFile();
+  appLogPath = logPath;
   await restoreShellPath();
   spawnServer();
   try {
@@ -382,6 +408,7 @@ app.whenReady().then(async () => {
     log("server bound port=" + port);
     await pollHealth(port, Date.now() + HEALTH_TIMEOUT_MS);
     log("server up on http://127.0.0.1:" + port);
+    serverUp = true;
   } catch (err) {
     log("startup failed: " + err.message);
     // F7. On a packaged Finder-launched app, a silent quit leaves the

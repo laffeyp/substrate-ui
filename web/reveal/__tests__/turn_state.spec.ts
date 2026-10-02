@@ -90,3 +90,12 @@ test("a failed turn request records the failure on the snapshot", async () => {
   assert.ok(f, "turnFailure set");
   assert.match(f.detail, /TimeoutError/);
 });
+
+test("a replayed envelope (stream reconnect) does not append its row again", () => {
+  const c = controller();
+  const env = { seq: 7, t: T0, kind: EnvelopeKind.UserMessage, payload: { text: "hello", turn_index: 0 } };
+  feed(c, env);
+  feed(c, env);
+  const rows = c.snapshot().transcript.filter((r) => r.seq === 7);
+  assert.strictEqual(rows.length, 1, `rows for seq 7: ${rows.length}`);
+});

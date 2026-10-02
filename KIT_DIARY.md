@@ -57,6 +57,16 @@
 
 ## Entries
 
+### 2026-10-02 — Sprint 102: the sweep found what the incident did not
+
+**Context.** Sprint 101 fixed the instances of class H that turn 28 exposed. The Architect asked for the sweep across the session; it found five more, none of which the incident had touched.
+
+**The pattern held at every place it was looked for.** A CLI agent kept editing files after an interrupt. Delegated children outlived their parent's interrupt. A reconnecting stream doubled the transcript. A dead background run read "running" forever. A dead backend left a silent window, because the one message sent about it, `server:dead`, had no listener. Each is a state whose failure exit was never drawn, or a cancel that stopped waiting without stopping the work (H36). Fixing an incident's own instances is not a sweep; walking each state and asking "how does this end when something fails" is.
+
+**Every new test was run against the old code first**, and each failed there: the scroll gate (a 973 px gap), the CLI cancel, the delegate hook, the replayed envelope, the dead-run status. A test that passes on the broken code proves nothing about the fix.
+
+---
+
 ### 2026-10-02 — Sprint 101: the orchestration assumed a turn is an RPC
 
 **Context.** A 600 s cap cancelled turn 28. The Architect: "models can work for some time … Claude Code is basically the standard." The record showed the turn was not slow; a bash call had hung on a pipe held by a background server, and the cap could not stop the hung thread anyway.
@@ -675,4 +685,4 @@ lessons for the kit sit under the finding-30 series above.
 
 ---
 
-*KIT_DIARY.md for substrate-ui. 29 entries, 2026-06-17 to 2026-10-02. 42 hypothesis definitions under 36 IDs (H1–H36); H17, H18, H19, H20, H21, H22 carry more than one definition. Merged with `process/KIT_DIARY.md` on 2026-10-01; that copy is at `_deprecated/process-KIT_DIARY-2026-10-01.md`.*
+*KIT_DIARY.md for substrate-ui. 30 entries, 2026-06-17 to 2026-10-02. 42 hypothesis definitions under 36 IDs (H1–H36); H17, H18, H19, H20, H21, H22 carry more than one definition. Merged with `process/KIT_DIARY.md` on 2026-10-01; that copy is at `_deprecated/process-KIT_DIARY-2026-10-01.md`.*

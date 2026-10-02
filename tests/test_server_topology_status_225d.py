@@ -117,3 +117,35 @@ def test_missing_run_id_returns_400(base: str) -> None:
     status, body = _get(base + "/api/topology/best_of_n_verified/status")
     assert status == 400
     assert "run_id" in json.dumps(body)
+
+
+def test_a_run_whose_worker_died_reports_failed_not_running(base: str, tmp_path: Path) -> None:
+    # UI sprint 102: a background run that raised left no RunFinalised, and status read
+    # "running" forever. A dead worker with no finalised record is a failed run.
+    dead = threading.Thread(target=lambda: None)
+    dead.start()
+    dead.join()
+    server._TOPOLOGY_RUNS["r_dead"] = {
+        "record_root": tmp_path / "never-written",
+        "thread": dead,
+        "started_at": time.time(),
+        "application": "research_sweep",
+        "error": "RuntimeError: boom",
+    }
+    status, body = _get(f"{base}/api/topology/research_sweep/status?run_id=r_dead")
+    assert status == 200
+    assert body["status"] == "failed"
+    assert body["output"] == {"error": "RuntimeError: boom"}
+
+    paused = threading.Thread(target=lambda: None)
+    paused.start()
+    paused.join()
+    server._TOPOLOGY_RUNS["r_paused"] = {
+        "record_root": tmp_path / "never-written",
+        "thread": paused,
+        "started_at": time.time(),
+        "application": "research_sweep",
+        "result_status": "paused",
+    }
+    _, body = _get(f"{base}/api/topology/research_sweep/status?run_id=r_paused")
+    assert body["status"] == "paused", "a run that returned reports its own status"
