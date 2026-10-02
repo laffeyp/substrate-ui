@@ -46,4 +46,4 @@ Checked and correct: the turn-queue slot is released in a `finally`; CLI login P
   - kernel `test_delegate_cancel_reaches_child_102` (without the hook, the call registered no stop);
   - client spec "a replayed envelope … does not append its row again";
   - UI `test_a_run_whose_worker_died_reports_failed_not_running`.
-- Tiers: kernel 1,212 passed, 3 skipped; UI 216; client specs 21/21; realmodel 41/41. Committed: kernel `9dfa71d9`; substrate-ui in the commit carrying this card.
+- Tiers: kernel 1,212 passed, 3 skipped; UI 216; client specs 21/21; realmodel 41/41. Committed: kernel `73ed4fce`; substrate-ui `eb23c21` and the follow-up that replaced a raw "running" comparison the kernel's pre-commit gate rejects.
