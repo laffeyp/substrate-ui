@@ -158,6 +158,14 @@
 
 *Sprint tail had grown to 33 blocks reaching Sprint 001, and a second board at `process/BLACKBOARD.md` had taken writes since 2026-06-18 (Sep 23–25 closes for Sprints 070–076, 083, 084, 085a–c existed only there). These blocks moved verbatim, not compressed, so no fact is lost. The `process/` copy is at `_deprecated/process-BLACKBOARD-2026-10-01.md`.*
 
+#### Sprint 095 (2026-10-01, closed 095a–c) — one blob resolver for every reader (roadmap class F)
+- **Kernel:** `resolve_blob_payload` plus `read_record(..., resolve_blobs=True)` and `attach(..., resolve_blobs=True)`, exported on `substrate.api`. The resume fold, `view_at`, the session transcript, delegate, parent context, `inspect_record` and the turn-index scan read resolved; integrity readers stay raw. The record bytes are unchanged.
+- **Proven:** the new test failed before the change (resumed View held a stub, giving `substrate.PredicateQuarantined`) and passes after. Over HTTP, a 30,000-char payload is a stub on disk and arrives whole from `/api/records/<name>` and the SSE stream.
+- **Found:** Sprint 092a stored a `(disk, memory)` pair as every run's finalisation payload. Caught by an existing robustness test and fixed. No real record was affected.
+- **UI:** `server.py` now redeems through the kernel; its private blob reader and the two kernel-internal imports are gone.
+- **Suites:** kernel targeted 258 passed (3 failures predate this sprint); UI 193 passed with the same 18 failures.
+- **Open:** 095d kernel release (PyPI) awaits the Architect. Card: `process/sprints/sprint-095-claim-check-resolver.md`. Not committed.
+
 #### Sprint 094 (2026-10-01, closed in source mode) — startup measured and fixed; quit hang root-caused
 - **Startup measured** against a clone of real state (3,079 sessions). The window and prompt were fast (0.8–1.3 s). The session list took 7.5–9.1 s: `boot_scan` read every record to precompute `next_turn_index` (6.9 of 7.1 s). Now derived on first use. Boot scan 0.20 s; list complete at 0.79 s.
 - **Quit hang root-caused.** The interim handler (Event.set + Thread.start inside the SIGTERM handler) deadlocked on 2 of 9 runs. A native sample showed the main thread parked in the handler's lock wait. Python's signal docs forbid locks in handlers. Replaced with a self-pipe; quit to backend gone 0.50–0.93 s on 6 of 6 runs.
@@ -832,6 +840,10 @@ Twelve PNGs at `captures/pixel-baseline-2026-09-23/`: six states (`empty`, `one_
 
 *Agent maintains. Last 10 increment closes; older roll into ## Built as compressed paragraphs.*
 
+### Sprint 104 (2026-10-02, closed) — the model hears when a background task ends
+- A task that ends without the model stopping it is written to the record as `BackgroundTaskEnded` before the next model step, and that step's prompt carries `[background task bg_… (cmd) exited 0; last output: …]`. While parked, the notice waits for the next turn's first step. Each ending is told once. The app shows it as a row.
+- Gates: kernel 1,225 / 2 skipped; UI 218; client specs 22/22; realmodel 43/43 (kimi named a background task's output from the notice alone, 3 of 3). Card `process/sprints/sprint-104-the-model-hears-when-a-task-ends.md`.
+
 ### Sprint 103 (2026-10-02, closed) — supervised background commands (Claude Code parity)
 - `bash(cmd, timeout_s?, run_in_background?)` writes to files, never pipes. Background returns a task id at once. A foreground command still running at its deadline moves to the background (a `sleep` is killed). Leftover children of a finished shell become a task. `bash_output`, `bash_stop` and `bash_tasks` read, stop and list the session's tasks. Tasks stop when a delegated child ends, when the session ends or is deleted, and when the app quits; output over 5 GB is killed. The bash schema now lets native tool calls pass `timeout_s`; it could not since sprint 101.
 - Gates: kernel 1,221 / 3 skipped; UI 218; client specs 21/21; realmodel 42/42 (a kimi session ran, read, used and stopped a background web server, 3 of 3). Research `process/planning/RESEARCH-2026-10-02-background-commands.md`; roadmap `ROADMAP-2026-10-02-background-commands.md` (104 exit notice, 105 tasks in the app); card `process/sprints/sprint-103-supervised-background-commands.md`.
@@ -879,11 +891,3 @@ Twelve PNGs at `captures/pixel-baseline-2026-09-23/`: six states (`empty`, `one_
 - **Removed:** dead `RateLimitedWaiting` handling (a kind the kernel never emitted). Added warning rows for quarantined triggers and invalid events.
 - **Coverage:** all 21 kinds in 2,859 real record segments are generated.
 - **Checks:** UI 195 passed (same 18 failures); smoke ok. Card `process/sprints/sprint-096-generated-envelope-kinds.md`. Not committed.
-
-### Sprint 095 (2026-10-01, closed 095a–c) — one blob resolver for every reader (roadmap class F)
-- **Kernel:** `resolve_blob_payload` plus `read_record(..., resolve_blobs=True)` and `attach(..., resolve_blobs=True)`, exported on `substrate.api`. The resume fold, `view_at`, the session transcript, delegate, parent context, `inspect_record` and the turn-index scan read resolved; integrity readers stay raw. The record bytes are unchanged.
-- **Proven:** the new test failed before the change (resumed View held a stub, giving `substrate.PredicateQuarantined`) and passes after. Over HTTP, a 30,000-char payload is a stub on disk and arrives whole from `/api/records/<name>` and the SSE stream.
-- **Found:** Sprint 092a stored a `(disk, memory)` pair as every run's finalisation payload. Caught by an existing robustness test and fixed. No real record was affected.
-- **UI:** `server.py` now redeems through the kernel; its private blob reader and the two kernel-internal imports are gone.
-- **Suites:** kernel targeted 258 passed (3 failures predate this sprint); UI 193 passed with the same 18 failures.
-- **Open:** 095d kernel release (PyPI) awaits the Architect. Card: `process/sprints/sprint-095-claim-check-resolver.md`. Not committed.

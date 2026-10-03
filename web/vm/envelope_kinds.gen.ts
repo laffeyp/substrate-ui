@@ -4,6 +4,7 @@
 
 /* eslint-disable no-restricted-syntax */
 export const EnvelopeKind = {
+  BackgroundTaskEnded: "BackgroundTaskEnded",
   FinalAnswer: "FinalAnswer",
   InjectionApplied: "substrate.InjectionApplied",
   InputBuildFailed: "substrate.InputBuildFailed",
