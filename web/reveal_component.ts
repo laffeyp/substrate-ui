@@ -155,6 +155,26 @@ class Component extends DCLogic {
       activityRestText: activity ? activity.restText : '',
       activityColor: activity ? activity.color : '#62676f',
       activityPulseClass: activity && activity.pulseOn ? 'act-pulse' : '',
+      // UI sprint 105: one line per running bash background task, with a stop link (Claude
+      // Code's /tasks). The controller keeps the list fresh while any task runs.
+      ...this._taskBindings(paneId, snap),
+    };
+  }
+  _taskBindings(paneId, snap) {
+    const tasks = (snap && Array.isArray(snap.backgroundTasks)) ? snap.backgroundTasks : [];
+    const running = tasks.filter((t) => t.status === 'running');
+    const fmt = (s) => (s >= 60 ? `${Math.floor(s / 60)}m` : `${Math.floor(s)}s`);
+    return {
+      tasksShow: running.length > 0,
+      taskRows: running.map((t) => ({
+        id: t.task_id,
+        label: `${t.task_id} · ${String(t.command).slice(0, 60)} · ${fmt(t.runtime_s)}`,
+        stop: () => {
+          const vm = window.__vm;
+          const c = vm && vm.get(paneId);
+          if (c) c.stopTask(t.task_id);
+        },
+      })),
     };
   }
   _liveBindingsForRetired(paneId, state) {

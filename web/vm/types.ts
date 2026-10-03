@@ -40,6 +40,16 @@ export interface TranscriptRow {
 }
 
 /** One row a View renders in the session-rail sidebar. */
+/** One bash background task, as the daemon describes it (UI sprint 105). */
+export interface BackgroundTaskRow {
+  task_id: string;
+  command: string;
+  status: "running" | "exited" | "stopped";
+  exit: number | null;
+  runtime_s: number;
+  stopped_because: string | null;
+}
+
 export interface SessionRow {
   sessionId: string;
   name: string;
@@ -108,6 +118,8 @@ export interface Snapshot {
    *  running while the record's last turn never parked. Any turn whose UserMessage was written
    *  before `atT` (epoch seconds) is over, not live. Cleared by the next turn. */
   turnFailure: { detail: string; atT: number } | null;
+  /** UI sprint 105 — the session's bash background tasks (GET /api/session/<id>/tasks). */
+  backgroundTasks: BackgroundTaskRow[];
   endedReason: string | null;
   driverRoster: string[];
   driverDefault: string | null;

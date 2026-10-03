@@ -158,6 +158,13 @@
 
 *Sprint tail had grown to 33 blocks reaching Sprint 001, and a second board at `process/BLACKBOARD.md` had taken writes since 2026-06-18 (Sep 23–25 closes for Sprints 070–076, 083, 084, 085a–c existed only there). These blocks moved verbatim, not compressed, so no fact is lost. The `process/` copy is at `_deprecated/process-BLACKBOARD-2026-10-01.md`.*
 
+#### Sprint 096 (2026-10-01, closed) — envelope kinds generated from the kernel (roadmap class E)
+- **Generator:** `scripts/gen_kinds.py` builds the session topology's registration and writes `web/vm/envelope_kinds.gen.ts` (28 kinds). The kernel now declares `tool_loop.INJECTED_EVENT_KINDS` because `ToolProgress` is injected unregistered.
+- **Classification:** `KIND_DISPOSITION` classifies every kind, and an unclassified kind fails `tsc` (proved with a fake kind). The ESLint ban list is read from the generated file, and it found 13 raw literals the old hand list missed.
+- **Removed:** dead `RateLimitedWaiting` handling (a kind the kernel never emitted). Added warning rows for quarantined triggers and invalid events.
+- **Coverage:** all 21 kinds in 2,859 real record segments are generated.
+- **Checks:** UI 195 passed (same 18 failures); smoke ok. Card `process/sprints/sprint-096-generated-envelope-kinds.md`. Not committed.
+
 #### Sprint 095 (2026-10-01, closed 095a–c) — one blob resolver for every reader (roadmap class F)
 - **Kernel:** `resolve_blob_payload` plus `read_record(..., resolve_blobs=True)` and `attach(..., resolve_blobs=True)`, exported on `substrate.api`. The resume fold, `view_at`, the session transcript, delegate, parent context, `inspect_record` and the turn-index scan read resolved; integrity readers stay raw. The record bytes are unchanged.
 - **Proven:** the new test failed before the change (resumed View held a stub, giving `substrate.PredicateQuarantined`) and passes after. Over HTTP, a 30,000-char payload is a stub on disk and arrives whole from `/api/records/<name>` and the SSE stream.
@@ -840,6 +847,11 @@ Twelve PNGs at `captures/pixel-baseline-2026-09-23/`: six states (`empty`, `one_
 
 *Agent maintains. Last 10 increment closes; older roll into ## Built as compressed paragraphs.*
 
+### Sprint 105 (2026-10-02, closed) — background tasks in the app
+- The activity strip lists each running background task (`task bg_… · cmd · runtime · stop`) in both views; stop kills it and the model hears about it. Daemon: `GET /api/session/<id>/tasks`, `POST …/tasks/<task_id>/stop`. Gate `tasks_gate.ts` drives a real kimi turn in the Electron app and runs in `release.sh`.
+- Found: the locked signal vocabulary has said 30 tags while listing 31 since sprint 087 (2026-09-27), and its parity check ran in no gate. Fixed the count; parity now gates releases. The background-commands roadmap (103–105) is complete.
+- Gates: kernel 1,224 / 3 skipped; UI 220; client specs 23/23. Card `process/sprints/sprint-105-background-tasks-in-the-app.md`.
+
 ### Sprint 104 (2026-10-02, closed) — the model hears when a background task ends
 - A task that ends without the model stopping it is written to the record as `BackgroundTaskEnded` before the next model step, and that step's prompt carries `[background task bg_… (cmd) exited 0; last output: …]`. While parked, the notice waits for the next turn's first step. Each ending is told once. The app shows it as a row.
 - Gates: kernel 1,225 / 2 skipped; UI 218; client specs 22/22; realmodel 43/43 (kimi named a background task's output from the notice alone, 3 of 3). Card `process/sprints/sprint-104-the-model-hears-when-a-task-ends.md`.
@@ -884,10 +896,3 @@ Twelve PNGs at `captures/pixel-baseline-2026-09-23/`: six states (`empty`, `one_
 - **For the whole-project pass:** coding gate finds `mypy` by PATH; two near-identical `session_registry.py` modules.
 - **For the Architect:** 147 session dirs created in the real `~/.substrate/sessions` today, mixed provenance. One orphan backend from 00:14 had served the real state root all day; stopped.
 - Card `process/sprints/sprint-097-green-build.md`.
-
-### Sprint 096 (2026-10-01, closed) — envelope kinds generated from the kernel (roadmap class E)
-- **Generator:** `scripts/gen_kinds.py` builds the session topology's registration and writes `web/vm/envelope_kinds.gen.ts` (28 kinds). The kernel now declares `tool_loop.INJECTED_EVENT_KINDS` because `ToolProgress` is injected unregistered.
-- **Classification:** `KIND_DISPOSITION` classifies every kind, and an unclassified kind fails `tsc` (proved with a fake kind). The ESLint ban list is read from the generated file, and it found 13 raw literals the old hand list missed.
-- **Removed:** dead `RateLimitedWaiting` handling (a kind the kernel never emitted). Added warning rows for quarantined triggers and invalid events.
-- **Coverage:** all 21 kinds in 2,859 real record segments are generated.
-- **Checks:** UI 195 passed (same 18 failures); smoke ok. Card `process/sprints/sprint-096-generated-envelope-kinds.md`. Not committed.

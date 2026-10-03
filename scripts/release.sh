@@ -19,7 +19,8 @@
 #   5. codesign --verify --deep --strict on the built bundle
 #   6. smoke:packaged (real-model turn, Structure, quit), shakeout:packaged (Axis A) and the
 #      lifecycle gates (close/Dock-click, deep link, startup-failure dialog) and the transcript
-#      scroll gate (follow / read / resume / view switch) against THAT bundle
+#      scroll gate (follow / read / resume / view switch) and the background-tasks gate against
+#      THAT bundle
 #   7. --install: quit the running app, move the old bundle to the Trash, copy this one in,
 #      verify its signature where it landed
 set -euo pipefail
@@ -60,6 +61,7 @@ say "2/7 tests and web build"
 (cd "$REPO" && uv run --project "$KERNEL" python -m pytest tests/ -q -p no:cacheprovider)
 (cd "$REPO" && npm run build)
 (cd "$REPO" && npm run test:unit)  # UI sprint 101: the client specs had no gate
+(cd "$REPO" && npx tsx web/vm/tools/check-vocabulary-parity.ts)  # UI sprint 105: broken since sprint 087, ungated
 
 say "3/7 bundled runtime"
 (cd "$REPO" && bash scripts/fetch-python-runtime.sh) > "$LOG_DIR/release-$STAMP-runtime.log" 2>&1 \
@@ -88,6 +90,7 @@ PORT="$(python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));prin
   || { tail -30 "$LOG_DIR/release-$STAMP-shakeout.log" >&2; exit 1; }
 (cd "$REPO" && LIFECYCLE_APP="$APP" npx tsx harness/shakeout/lifecycle_gates.ts) | tee "$LOG_DIR/release-$STAMP-lifecycle.log"
 (cd "$REPO" && SCROLL_APP="$APP" npx tsx harness/shakeout/transcript_follow.ts) | tee "$LOG_DIR/release-$STAMP-scroll.log"
+(cd "$REPO" && TASKS_APP="$APP" npx tsx harness/shakeout/tasks_gate.ts) | tee "$LOG_DIR/release-$STAMP-tasks.log"
 codesign --verify --deep --strict "$APP"  # the gates must not have written into the bundle
 
 if [ "$INSTALL" != true ]; then

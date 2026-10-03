@@ -9,6 +9,7 @@
 // hexagonal core. The `SubstrateClient` port keeps the transport swappable.
 
 import type {
+  BackgroundTaskRow,
   BundleRow,
   ConnectionState,
   ProducerNode,
@@ -152,6 +153,7 @@ const EMPTY_SNAPSHOT: Snapshot = {
   transcript: [],
   parkReason: null,
       turnFailure: null,
+      backgroundTasks: [],
   endedReason: null,
   driverRoster: [],
   driverDefault: null,
@@ -176,6 +178,8 @@ export class SessionController {
   private lastSeq = -1;
   /** callId → callKey of the ToolCall currently open under that id (UI sprint 101). */
   private openCallKey = new Map<string, string>();
+  /** UI sprint 105: the refresh timer that runs while a background task is running. */
+  private tasksTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private endedEmittedFor: string | null = null;
   /** Sprint 085 followup — subset of driverGroups.cli that the
@@ -453,11 +457,39 @@ export class SessionController {
       progressByCallId: {},
       parkReason: null,
       turnFailure: null,
+      backgroundTasks: [],
       endedReason: null,
     });
     this.attachStream(ack.session_id);
     this.loadTopologyGraph(ack.session_id).catch(() => undefined);
     this.emit("SESSION_OPEN_ACKED", { session_id: ack.session_id, name: ack.name ?? null, driver });
+  }
+
+  /** UI sprint 105: reload this session's background tasks; keep polling every 3 s while any runs. */
+  async refreshTasks(): Promise<void> {
+    const sessionId = this.snap.sessionId;
+    if (!sessionId) return;
+    const result = await this.client.fetchJson<{ tasks: BackgroundTaskRow[] }>(
+      `/api/session/${encodeURIComponent(sessionId)}/tasks`,
+    );
+    if (!result.ok || this.snap.sessionId !== sessionId) return;
+    const tasks = result.data?.tasks ?? [];
+    this.patch({ backgroundTasks: tasks });
+    if (this.tasksTimer) { clearTimeout(this.tasksTimer); this.tasksTimer = null; }
+    if (tasks.some((t) => t.status === "running")) {
+      this.tasksTimer = setTimeout(() => { this.tasksTimer = null; void this.refreshTasks(); }, 3000);
+    }
+  }
+
+  /** UI sprint 105: stop one background task from the app; the model hears about it. */
+  async stopTask(taskId: string): Promise<void> {
+    const sessionId = this.snap.sessionId;
+    if (!sessionId) return;
+    await this.client.fetchJson<unknown>(
+      `/api/session/${encodeURIComponent(sessionId)}/tasks/${encodeURIComponent(taskId)}/stop`,
+      { method: "POST" },
+    );
+    await this.refreshTasks();
   }
 
   async sendTurn(text: string): Promise<void> {
@@ -523,6 +555,7 @@ export class SessionController {
       progressByCallId: {},
       parkReason: null,
       turnFailure: null,
+      backgroundTasks: [],
       endedReason: null,
       connection: "connecting",
     });
@@ -1036,6 +1069,7 @@ export class SessionController {
             : JSON.stringify(rawOutput);
         const step = typeof payload.step === "number" ? payload.step : undefined;
         const callKey = this.openCallKey.get(callId) ?? callId;
+        if (toolName.startsWith("bash")) void this.refreshTasks(); // UI sprint 105
         this.appendTranscript({
           seq: env.seq, kind: env.kind, role: "tool",
           text: ok ? `${toolName} → ok` : `${toolName} → err ${err}`,
@@ -1094,6 +1128,7 @@ export class SessionController {
       }
       case EnvelopeKind.BackgroundTaskEnded: {
         // UI sprint 104: a bash background task of this session ended; the model was told too.
+        void this.refreshTasks();
         const id = String(payload.task_id ?? "");
         const how = payload.status === "exited"
           ? `exited ${payload.exit ?? "?"}`
