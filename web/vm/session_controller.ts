@@ -31,6 +31,7 @@ import type { EnvelopeKindValue } from "./kinds";
 // Handbook, exhaustiveness checking).
 const KIND_DISPOSITION: Record<EnvelopeKindValue, "rendered" | "ignored"> = {
   [EnvelopeKind.SessionStarted]: "rendered",
+  [EnvelopeKind.BackgroundTaskEnded]: "rendered",
   [EnvelopeKind.UserMessage]: "rendered",
   [EnvelopeKind.ModelReply]: "rendered",
   [EnvelopeKind.FinalAnswer]: "rendered",
@@ -1089,6 +1090,16 @@ export class SessionController {
         });
         this.closeStreamOnEnd(reason);
         this.emit("SESSION_ENDED_LOCAL", { reason });
+        return;
+      }
+      case EnvelopeKind.BackgroundTaskEnded: {
+        // UI sprint 104: a bash background task of this session ended; the model was told too.
+        const id = String(payload.task_id ?? "");
+        const how = payload.status === "exited"
+          ? `exited ${payload.exit ?? "?"}`
+          : `stopped (${String(payload.stopped_because ?? "")})`;
+        const cmd = String(payload.command ?? "").slice(0, 80);
+        this.appendTranscript({ seq: env.seq, kind: env.kind, role: "system", text: `task ${id} ${how} · ${cmd}` });
         return;
       }
       case EnvelopeKind.SessionWarning: {

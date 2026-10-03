@@ -99,3 +99,14 @@ test("a replayed envelope (stream reconnect) does not append its row again", () 
   const rows = c.snapshot().transcript.filter((r) => r.seq === 7);
   assert.strictEqual(rows.length, 1, `rows for seq 7: ${rows.length}`);
 });
+
+test("a background task that ended shows as a row", () => {
+  const c = controller();
+  feed(c, {
+    seq: 30, t: T0, kind: EnvelopeKind.BackgroundTaskEnded,
+    payload: { task_id: "bg_1234abcd", command: "npm run build", status: "exited", exit: 0 },
+  });
+  const row = c.snapshot().transcript.find((r) => r.seq === 30);
+  assert.ok(row, "no row for BackgroundTaskEnded");
+  assert.strictEqual(row.text, "task bg_1234abcd exited 0 · npm run build");
+});
