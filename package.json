@@ -23,7 +23,8 @@
     "shakeout:packaged": "SHAKEOUT_AXIS=A SHAKEOUT_APP=${SHAKEOUT_APP:-$PWD/dist-electron/mac-arm64/Substrate.app} npx tsx harness/shakeout/run.ts",
     "release": "bash scripts/release.sh",
     "gates:lifecycle": "npx tsx harness/shakeout/lifecycle_gates.ts",
-    "gates:scroll": "npx tsx harness/shakeout/transcript_follow.ts"
+    "gates:scroll": "npx tsx harness/shakeout/transcript_follow.ts",
+    "gates:tasks": "npx tsx harness/shakeout/tasks_gate.ts"
   },
   "devDependencies": {
     "@electron/notarize": "^3.1.1",

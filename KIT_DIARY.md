@@ -57,6 +57,14 @@
 
 ## Entries
 
+### 2026-10-02 — Sprints 104–105: a check no gate runs is not a check
+
+**Context.** Sprints 104 and 105 finished the background-commands roadmap: the model hears when a task ends, and the app lists tasks and stops them.
+
+**The third ungated check this week.** Adding a new signal tag led to `check-vocabulary-parity.ts`, the script that guards the locked signal vocabulary. It failed before reading a line of code: the lock said 30 tags and listed 31. Sprint 087 added `DRIVER_VERSION_PICKED` five days earlier and never ran it. The client unit specs (sprint 101) and the scroll behaviour (sprint 102) had the same shape: a check that exists, and a release pipeline that never calls it. Each is now in `release.sh`. Every check this project writes goes into the pipeline in the same commit, or it starts to decay the day it lands.
+
+---
+
 ### 2026-10-02 — Sprint 103: build from the reference, verify the old claims
 
 **Context.** Background commands were built from Anthropic's own Claude Code documentation, quoted in the research note, not from memory of how Claude Code feels. The docs changed the design in one place: a foreground command that hits its timeout moves to the background instead of dying, which Sprint 101 had built the other way.
@@ -695,4 +703,4 @@ lessons for the kit sit under the finding-30 series above.
 
 ---
 
-*KIT_DIARY.md for substrate-ui. 31 entries, 2026-06-17 to 2026-10-02. 42 hypothesis definitions under 36 IDs (H1–H36); H17, H18, H19, H20, H21, H22 carry more than one definition. Merged with `process/KIT_DIARY.md` on 2026-10-01; that copy is at `_deprecated/process-KIT_DIARY-2026-10-01.md`.*
+*KIT_DIARY.md for substrate-ui. 32 entries, 2026-06-17 to 2026-10-02. 42 hypothesis definitions under 36 IDs (H1–H36); H17, H18, H19, H20, H21, H22 carry more than one definition. Merged with `process/KIT_DIARY.md` on 2026-10-01; that copy is at `_deprecated/process-KIT_DIARY-2026-10-01.md`.*

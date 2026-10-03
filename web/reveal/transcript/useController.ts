@@ -29,6 +29,7 @@ const EMPTY_SNAPSHOT: Snapshot = {
   transcript: [],
   parkReason: null,
   turnFailure: null,
+  backgroundTasks: [],
   endedReason: null,
   driverRoster: [],
   driverDefault: null,

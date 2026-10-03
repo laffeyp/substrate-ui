@@ -110,3 +110,24 @@ test("a background task that ended shows as a row", () => {
   assert.ok(row, "no row for BackgroundTaskEnded");
   assert.strictEqual(row.text, "task bg_1234abcd exited 0 · npm run build");
 });
+
+test("background tasks: refresh fills the snapshot; stop posts and refreshes", async () => {
+  const calls: { path: string; method: string }[] = [];
+  let status = "running";
+  const client = {
+    fetchJson: async (path: string, opts: { method?: string } = {}) => {
+      calls.push({ path, method: opts.method ?? "GET" });
+      if (path.endsWith("/stop")) { status = "stopped"; return { ok: true, data: {} }; }
+      return { ok: true, data: { tasks: [{ task_id: "bg_1", command: "npm run dev", status, exit: null, runtime_s: 61, stopped_because: null }] } };
+    },
+    streamRecord: () => () => undefined,
+    streamRecordByPath: () => () => undefined,
+  } as unknown as SubstrateClient;
+  const c = new SessionController(client);
+  (c as unknown as { snap: { sessionId: string } }).snap.sessionId = "s_1";
+  await c.refreshTasks();
+  assert.strictEqual(c.snapshot().backgroundTasks[0].status, "running");
+  await c.stopTask("bg_1");
+  assert.ok(calls.some((x) => x.path === "/api/session/s_1/tasks/bg_1/stop" && x.method === "POST"));
+  assert.strictEqual(c.snapshot().backgroundTasks[0].status, "stopped");
+});

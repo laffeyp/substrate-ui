@@ -1924,6 +1924,10 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/session":
                 self._session_create()
                 return
+            m_stop = re.fullmatch(r"/api/session/([^/]+)/tasks/([^/]+)/stop", path)
+            if m_stop:  # UI sprint 105
+                self._session_task_stop(m_stop.group(1), m_stop.group(2))
+                return
             if path.startswith("/api/session/") and path.endswith("/turn"):
                 session_id = path[len("/api/session/") : -len("/turn")]
                 self._session_turn(session_id)
@@ -2588,6 +2592,32 @@ class Handler(BaseHTTPRequestHandler):
                 "record": str(root_after),
             }
         )
+
+    def _session_tasks(self, session_id: str) -> None:
+        """UI sprint 105: GET /api/session/<id>/tasks — the session's bash background tasks."""
+        from substrate.topologies.tool_loop.background import TABLE as _BG
+
+        if _SESSION_REGISTRY is None or _SESSION_REGISTRY.get(session_id) is None:
+            self._error(404, f"unknown session {session_id!r}")
+            return
+        self._json({"tasks": [t.describe() for t in _BG.tasks_of(session_id)]})
+
+    def _session_task_stop(self, session_id: str, task_id: str) -> None:
+        """UI sprint 105: POST /api/session/<id>/tasks/<task_id>/stop — stop it from the app. The
+        model hears about it at its next step (sprint 104), as Claude Code's agent moves on when the
+        user stops a task from /tasks."""
+        from substrate.topologies.tool_loop.background import TABLE as _BG
+
+        if _SESSION_REGISTRY is None or _SESSION_REGISTRY.get(session_id) is None:
+            self._error(404, f"unknown session {session_id!r}")
+            return
+        try:
+            task = _BG.get(session_id, task_id)
+        except KeyError:
+            self._error(404, f"unknown task {task_id!r} in session {session_id!r}")
+            return
+        _BG.stop(task, "stopped from the app")
+        self._json(task.describe())
 
     def _session_interrupt(self, session_id: str) -> None:
         """Sprint 217d: POST /api/session/<id>/interrupt. Cancels the running
@@ -3795,6 +3825,10 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if path.startswith("/api/session/") and "/" not in path[len("/api/session/"):]:
                 self._session_get(path[len("/api/session/"):])
+                return
+            m_tasks = re.fullmatch(r"/api/session/([^/]+)/tasks", path)
+            if m_tasks:  # UI sprint 105
+                self._session_tasks(m_tasks.group(1))
                 return
             if path.startswith("/api/session/") and path.endswith("/events"):
                 session_id = path[len("/api/session/") : -len("/events")]
