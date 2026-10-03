@@ -57,6 +57,16 @@
 
 ## Entries
 
+### 2026-10-02 — Sprint 103: build from the reference, verify the old claims
+
+**Context.** Background commands were built from Anthropic's own Claude Code documentation, quoted in the research note, not from memory of how Claude Code feels. The docs changed the design in one place: a foreground command that hits its timeout moves to the background instead of dying, which Sprint 101 had built the other way.
+
+**Reading the schema found a false claim from Sprint 101.** Sprint 101 documented `bash(cmd, timeout_s?)`, but the tool's JSON schema declared only `cmd`, and native tool calls are mapped through that schema. No model using Ollama's tool calling could pass `timeout_s`. The tests passed because they called the Python function directly. The card's "model can pass a timeout" was observed only one layer below the model. H35's per-call deadline existed in code and nowhere a model could reach.
+
+**The model under test matters.** Every tool worked under `qwen2.5:7b-instruct`, which then skipped the step that stops the server. The app's default driver, `kimi-k2.7-code:cloud`, did all four steps in 3 of 3 runs. A realmodel test that runs only the smallest local model measures that model, not the feature.
+
+---
+
 ### 2026-10-02 — Sprint 102: the sweep found what the incident did not
 
 **Context.** Sprint 101 fixed the instances of class H that turn 28 exposed. The Architect asked for the sweep across the session; it found five more, none of which the incident had touched.
@@ -685,4 +695,4 @@ lessons for the kit sit under the finding-30 series above.
 
 ---
 
-*KIT_DIARY.md for substrate-ui. 30 entries, 2026-06-17 to 2026-10-02. 42 hypothesis definitions under 36 IDs (H1–H36); H17, H18, H19, H20, H21, H22 carry more than one definition. Merged with `process/KIT_DIARY.md` on 2026-10-01; that copy is at `_deprecated/process-KIT_DIARY-2026-10-01.md`.*
+*KIT_DIARY.md for substrate-ui. 31 entries, 2026-06-17 to 2026-10-02. 42 hypothesis definitions under 36 IDs (H1–H36); H17, H18, H19, H20, H21, H22 carry more than one definition. Merged with `process/KIT_DIARY.md` on 2026-10-01; that copy is at `_deprecated/process-KIT_DIARY-2026-10-01.md`.*
