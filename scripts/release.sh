@@ -42,7 +42,8 @@ mkdir -p "$LOG_DIR"
 STAMP="$(date +%Y%m%d-%H%M%S)"
 
 say "1/7 clean trees"
-UI_DIRTY="$(git -C "$REPO" status --porcelain)"
+# runs/packaged/ and captures/ hold this script's own logs and gate reports, not source
+UI_DIRTY="$(git -C "$REPO" status --porcelain -- . ':!runs/packaged' ':!captures')"
 K_DIRTY="$(git -C "$KERNEL" status --porcelain -- src/ pyproject.toml)"
 if [ -n "$UI_DIRTY" ] || [ -n "$K_DIRTY" ]; then
   echo "[release] refusing: a release builds from commits, not a working tree." >&2
@@ -82,6 +83,7 @@ say "6/7 gates against the built bundle"
 (cd "$REPO" && SMOKE_APP="$APP" npx tsx harness/shakeout/packaged_app_smoke.ts) | tee "$LOG_DIR/release-$STAMP-smoke.log"
 PORT="$(python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1]);s.close()')"
 (cd "$REPO" && SHAKEOUT_APP="$APP" SHAKEOUT_PORT="$PORT" SHAKEOUT_AXIS=A SHAKEOUT_RUNS="${SHAKEOUT_RUNS:-1}" \
+  SHAKEOUT_OUT_DIR="$LOG_DIR/release-$STAMP-shakeout" \
   npx tsx harness/shakeout/run.ts) > "$LOG_DIR/release-$STAMP-shakeout.log" 2>&1 \
   || { tail -30 "$LOG_DIR/release-$STAMP-shakeout.log" >&2; exit 1; }
 (cd "$REPO" && LIFECYCLE_APP="$APP" npx tsx harness/shakeout/lifecycle_gates.ts) | tee "$LOG_DIR/release-$STAMP-lifecycle.log"
