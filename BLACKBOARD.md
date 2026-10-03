@@ -158,6 +158,12 @@
 
 *Sprint tail had grown to 33 blocks reaching Sprint 001, and a second board at `process/BLACKBOARD.md` had taken writes since 2026-06-18 (Sep 23–25 closes for Sprints 070–076, 083, 084, 085a–c existed only there). These blocks moved verbatim, not compressed, so no fact is lost. The `process/` copy is at `_deprecated/process-BLACKBOARD-2026-10-01.md`.*
 
+#### Sprint 094 (2026-10-01, closed in source mode) — startup measured and fixed; quit hang root-caused
+- **Startup measured** against a clone of real state (3,079 sessions). The window and prompt were fast (0.8–1.3 s). The session list took 7.5–9.1 s: `boot_scan` read every record to precompute `next_turn_index` (6.9 of 7.1 s). Now derived on first use. Boot scan 0.20 s; list complete at 0.79 s.
+- **Quit hang root-caused.** The interim handler (Event.set + Thread.start inside the SIGTERM handler) deadlocked on 2 of 9 runs. A native sample showed the main thread parked in the handler's lock wait. Python's signal docs forbid locks in handlers. Replaced with a self-pipe; quit to backend gone 0.50–0.93 s on 6 of 6 runs.
+- **Real-use test.** `packaged_app_smoke.ts` now times each stage and runs against `SMOKE_STATE` (it used to write the real `~/.substrate`). Two source runs: real-model turn parked, Structure populated, quit with a live session 0.85–0.87 s.
+- Full table: `process/sprints/sprint-094-disposability.md`. Suite: 193 passed, same 18 failures. Packaged target unmeasured until sprint 098.
+
 #### Sprint 094 (2026-10-01, earlier pass, superseded by the entry above) — disposability (roadmap class D)
 - **Shutdown deadlock fixed.** `_sigterm_handler` now starts `_shutdown_sequence` on a worker thread. SIGTERM to exit: 0.20 s with zero sessions (was alive 31 s later), 0.95 s with five parked real-model sessions (`ended=5`).
 - **Orphans: class fixed.** The watchdog watched only its direct parent; in source mode that is `uv`, which outlives Electron. Electron now passes `SUBSTRATE_PARENT_PID`; the backend exits ~3 s after app death with `uv` in between. 15 orphaned backends from Sep 28–30 (incl. pid 38409) were stopped; 24 of 26 processes ignored SIGTERM (old code) and took SIGKILL. The live `/Applications` backend was left alone.
@@ -826,6 +832,10 @@ Twelve PNGs at `captures/pixel-baseline-2026-09-23/`: six states (`empty`, `one_
 
 *Agent maintains. Last 10 increment closes; older roll into ## Built as compressed paragraphs.*
 
+### Sprint 103 (2026-10-02, closed) — supervised background commands (Claude Code parity)
+- `bash(cmd, timeout_s?, run_in_background?)` writes to files, never pipes. Background returns a task id at once. A foreground command still running at its deadline moves to the background (a `sleep` is killed). Leftover children of a finished shell become a task. `bash_output`, `bash_stop` and `bash_tasks` read, stop and list the session's tasks. Tasks stop when a delegated child ends, when the session ends or is deleted, and when the app quits; output over 5 GB is killed. The bash schema now lets native tool calls pass `timeout_s`; it could not since sprint 101.
+- Gates: kernel 1,221 / 3 skipped; UI 218; client specs 21/21; realmodel 42/42 (a kimi session ran, read, used and stopped a background web server, 3 of 3). Research `process/planning/RESEARCH-2026-10-02-background-commands.md`; roadmap `ROADMAP-2026-10-02-background-commands.md` (104 exit notice, 105 tasks in the app); card `process/sprints/sprint-103-supervised-background-commands.md`.
+
 ### Sprint 102 (2026-10-02, closed) — transcript scroll, and the class H sweep
 - Scroll: `useScrollAnchor(key)` follows the bottom while the user is there, holds the row being read once they scroll up, resumes at the bottom, and keeps its place per pane per view. Gate `transcript_follow.ts` drives the Electron app (7/7; the old hook fails 3, with a 973 px gap) and runs in `release.sh`.
 - Class H sweep, each a state with no exit or a cancel that could not reach the work: CLI drivers now die with the interrupt (process group); delegate children stop when the parent is interrupted (`_TOOL_CANCEL_HOOKS`); a stream reconnect no longer appends the transcript again; a background topology run whose worker died reports `failed`, not `running`; a backend death after startup shows a dialog with Relaunch or Quit (lifecycle F8).
@@ -877,9 +887,3 @@ Twelve PNGs at `captures/pixel-baseline-2026-09-23/`: six states (`empty`, `one_
 - **UI:** `server.py` now redeems through the kernel; its private blob reader and the two kernel-internal imports are gone.
 - **Suites:** kernel targeted 258 passed (3 failures predate this sprint); UI 193 passed with the same 18 failures.
 - **Open:** 095d kernel release (PyPI) awaits the Architect. Card: `process/sprints/sprint-095-claim-check-resolver.md`. Not committed.
-
-### Sprint 094 (2026-10-01, closed in source mode) — startup measured and fixed; quit hang root-caused
-- **Startup measured** against a clone of real state (3,079 sessions). The window and prompt were fast (0.8–1.3 s). The session list took 7.5–9.1 s: `boot_scan` read every record to precompute `next_turn_index` (6.9 of 7.1 s). Now derived on first use. Boot scan 0.20 s; list complete at 0.79 s.
-- **Quit hang root-caused.** The interim handler (Event.set + Thread.start inside the SIGTERM handler) deadlocked on 2 of 9 runs. A native sample showed the main thread parked in the handler's lock wait. Python's signal docs forbid locks in handlers. Replaced with a self-pipe; quit to backend gone 0.50–0.93 s on 6 of 6 runs.
-- **Real-use test.** `packaged_app_smoke.ts` now times each stage and runs against `SMOKE_STATE` (it used to write the real `~/.substrate`). Two source runs: real-model turn parked, Structure populated, quit with a live session 0.85–0.87 s.
-- Full table: `process/sprints/sprint-094-disposability.md`. Suite: 193 passed, same 18 failures. Packaged target unmeasured until sprint 098.

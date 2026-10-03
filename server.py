@@ -280,17 +280,26 @@ def _shutdown_all_sessions(*, per_session_timeout: float = 10.0) -> dict[str, in
     pause, then exit" wording. Best-effort per session: an exception on
     one session does not stop the loop.
 
-    Returns `{"ended": N, "skipped_fresh": F, "skipped_ended": M, "failed": K}`:
+    Returns `{"ended": N, "skipped_fresh": F, "skipped_ended": M, "failed": K, "background_stopped": B}`:
       - ended:         SessionEndRequested drove a clean SessionEnded on the record
       - skipped_fresh: manifest had no record on disk; transitioned to "ended"
                        at the daemon layer without opening
       - skipped_ended: manifest already had status "ended" or "interrupted"
                        before the sweep — nothing to do
       - failed:        an unexpected exception on one session; the sweep continued
+      - background_stopped: bash background tasks stopped at quit (UI sprint 103)
     """
-    result = {"ended": 0, "skipped_fresh": 0, "skipped_ended": 0, "failed": 0}
+    result = {"ended": 0, "skipped_fresh": 0, "skipped_ended": 0, "failed": 0, "background_stopped": 0}
     if _SESSION_REGISTRY is None:
         return result
+    # UI sprint 103: background commands do not outlive the daemon (Claude Code cleans its
+    # background tasks up at exit). This runs first and the sweep below cannot undo it.
+    try:
+        from substrate.topologies.tool_loop.background import TABLE as _BG
+
+        result["background_stopped"] = _BG.stop_all("the app quit")
+    except Exception as exc:  # noqa: BLE001 — shutdown must not raise
+        traceback.print_exception(exc)
     from substrate.topologies.session import SessionEndRequested
 
     for manifest in list(_SESSION_REGISTRY.list_all()):
@@ -343,9 +352,14 @@ def _tools_for_manifest(manifest: Any) -> dict[str, Any]:
     """
     from substrate.topologies.tool_loop.tools import full_suite
 
-    all_tools = full_suite(Path(manifest.workspace))
+    # UI sprint 103: the session id owns the bash tool's background tasks, so this session's tools
+    # see only its tasks and ending or deleting the session stops them.
+    all_tools = full_suite(Path(manifest.workspace), owner=manifest.session_id)
     if manifest.tools:
-        return {name: all_tools[name] for name in manifest.tools if name in all_tools}
+        allowed = set(manifest.tools)
+        if "bash" in allowed:  # a task the model can start, it must be able to read and stop
+            allowed |= {"bash_output", "bash_stop", "bash_tasks"}
+        return {name: tool for name, tool in all_tools.items() if name in allowed}
     return all_tools
 
 
