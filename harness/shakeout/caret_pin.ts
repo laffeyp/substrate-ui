@@ -107,10 +107,16 @@ export const flow: Flow = {
         return summaries.filter((s) => (s.textContent || "").includes("bash")).length >= 1;
       }, undefined, { timeout: 30_000 });
 
-      // Scroll mid-way through the transcript.
+      // Scroll so the first bash card header sits a third of the way down the view. A fixed
+      // scrollHeight/2 sometimes left no header in view, depending on how long the model's
+      // replies were (UI sprint 105).
       await page.evaluate(() => {
         const el = document.querySelector<HTMLElement>("[data-vm-transcript-scroller=\"1\"]");
-        if (el) el.scrollTop = Math.floor(el.scrollHeight / 2);
+        const header = Array.from(document.querySelectorAll<HTMLElement>("summary"))
+          .find((s) => (s.textContent || "").includes("bash"));
+        if (!el || !header) return;
+        const offset = header.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop;
+        el.scrollTop = Math.max(0, offset - Math.floor(el.clientHeight / 3));
       });
       await page.waitForTimeout(400);
 
@@ -156,18 +162,31 @@ export const flow: Flow = {
         }, cardHandle);
       };
 
+      // UI sprint 105: the geometry around each click goes into the defect text, so a failing run
+      // says why (the drift was intermittent and its cause unknown).
+      const geo = async (): Promise<string> => {
+        return await page.evaluate((el: any) => {
+          const sc = document.querySelector<HTMLElement>("[data-vm-transcript-scroller=\"1\"]");
+          const d = el.closest("details");
+          return `connected=${el.isConnected} open=${d ? d.open : "?"} scrollTop=${sc ? Math.round(sc.scrollTop) : -1} `
+            + `scrollHeight=${sc ? sc.scrollHeight : -1} clientHeight=${sc ? sc.clientHeight : -1}`;
+        }, cardHandle);
+      };
       const before = await readTop();
+      const g0 = await geo();
       await dispatchClick();
       await page.waitForTimeout(500);
       const afterOpen = await readTop();
+      const g1 = await geo();
       await dispatchClick();
       await page.waitForTimeout(500);
       const afterClose = await readTop();
+      const g2 = await geo();
 
       if (Math.abs(afterOpen - before) > 1) {
         defects.push({
           category: "caret_pin_drift_on_open",
-          observed: `header top moved from ${before} to ${afterOpen} on click-open`,
+          observed: `header top moved from ${before} to ${afterOpen} on click-open [before: ${g0}] [after: ${g1}]`,
           expected: "header top unchanged (within 1px) across click-open",
           reproduces: true,
           severity: "high",
@@ -176,7 +195,7 @@ export const flow: Flow = {
       if (Math.abs(afterClose - before) > 1) {
         defects.push({
           category: "caret_pin_drift_on_close",
-          observed: `header top moved from ${before} to ${afterClose} on click-close`,
+          observed: `header top moved from ${before} to ${afterClose} on click-close [before: ${g0}] [open: ${g1}] [closed: ${g2}]`,
           expected: "header top unchanged (within 1px) across click-close",
           reproduces: true,
           severity: "high",

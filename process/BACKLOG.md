@@ -51,6 +51,16 @@ card when picked up. Append-only-ish; mark items done/promoted rather than delet
   (`../substrate/docs/tool-loop-tool-suite.md`). The arc: read -> converse-with-a-model -> view its
   output -> edit -> a full agent-driven editor over the substrate record.
 
+- **[2026-10-02] Sessions in a virtual machine or container.** The Architect: Substrate should
+  eventually run a session's tools inside virtualization and/or a container, "for this exact task of
+  getting these models their own space they cannot break out of." The shape: start a VM or
+  container from a folder holding everything the model should have context on, and the session
+  works only inside it. Some teams run in-house virtualization already, which makes this simple for
+  them. Today the bash tool runs on the host with the user's rights (sprint 103's process groups
+  supervise it; they do not confine it). Ties to: the test-only `sandbox-exec` profile
+  (`../substrate/tests/_sandbox.py`), the queued containerization requirement for SWE-bench grading,
+  and the per-session workspace.
+
 ---
 
 *Append new notes with a date and a one-line context. Promote to a sprint card when worked; mark the

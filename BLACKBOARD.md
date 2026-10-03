@@ -849,6 +849,7 @@ Twelve PNGs at `captures/pixel-baseline-2026-09-23/`: six states (`empty`, `one_
 
 ### Sprint 105 (2026-10-02, closed) — background tasks in the app
 - The activity strip lists each running background task (`task bg_… · cmd · runtime · stop`) in both views; stop kills it and the model hears about it. Daemon: `GET /api/session/<id>/tasks`, `POST …/tasks/<task_id>/stop`. Gate `tasks_gate.ts` drives a real kimi turn in the Electron app and runs in `release.sh`.
+- Found at release: `caret_pin` (a clicked card header moving) had failed 1 run in 3-4 since before sprint 102. A closing card shrank the content and the browser clamped scrollTop. The scroll hook now pins a clicked header and holds the transcript's height until the user scrolls: 9 of 9 clean.
 - Found: the locked signal vocabulary has said 30 tags while listing 31 since sprint 087 (2026-09-27), and its parity check ran in no gate. Fixed the count; parity now gates releases. The background-commands roadmap (103–105) is complete.
 - Gates: kernel 1,224 / 3 skipped; UI 220; client specs 23/23. Card `process/sprints/sprint-105-background-tasks-in-the-app.md`.
 

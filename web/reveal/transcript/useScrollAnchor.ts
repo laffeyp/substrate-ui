@@ -6,7 +6,14 @@
 //
 //   following — the user is at the bottom (within STICK_PX): new content scrolls into view;
 //   reading   — the user has scrolled up: the row at the top of the view stays exactly where
-//               it is while content grows or shrinks around it (Sprint 075's caret pin).
+//               it is while content grows or shrinks around it;
+//   pinned    — the user clicked a card's header (a <summary>): that header stays exactly where
+//               it is while the card opens or closes, in either mode (Sprint 075's caret pin).
+//               While pinned, the transcript keeps at least the height it had at the click
+//               (bottom padding), so closing a card near the end cannot make the browser clamp
+//               scrollTop and drag the header: caret_pin failed 1 run in 3-4 since before sprint
+//               102 for exactly that (914 → 696 px of content in a 246 px view, scrollTop clamped
+//               from 457 to 450). The padding goes when the user scrolls.
 //
 // Scrolling back to the bottom resumes following. The mode and position are saved per pane per
 // view (`key`), so switching terminal ↔ reveal, or the root remounting when dc-runtime clears
@@ -35,6 +42,11 @@ export function useScrollAnchor(key: string): ScrollAnchor {
   const scrollerRef = useRef<HTMLElement | null>(null);
   const followingRef = useRef<boolean>(savedByKey.get(key)?.following ?? true);
   const cleanupRef = useRef<(() => void) | null>(null);
+  // The clicked header and its viewport offset; held until the user scrolls.
+  const pinRef = useRef<{ el: HTMLElement; offset: number; height: number } | null>(null);
+  const mountRef = useRef<HTMLElement | null>(null);
+  // scrollTop values this hook wrote, so their scroll events are not read as the user's.
+  const ownWritesRef = useRef<Set<number>>(new Set());
 
   const findScroller = useCallback((mount: HTMLElement): HTMLElement | null => {
     let node: HTMLElement | null = mount.parentElement;
@@ -71,23 +83,47 @@ export function useScrollAnchor(key: string): ScrollAnchor {
 
   // Put the view where the mode says: the bottom when following, the anchor row's old
   // viewport offset when reading. A hidden scroller (clientHeight 0) is left alone.
+  const write = useCallback((scroller: HTMLElement, top: number) => {
+    const before = scroller.scrollTop;
+    scroller.scrollTop = top;
+    if (scroller.scrollTop !== before) ownWritesRef.current.add(scroller.scrollTop);
+  }, []);
+
   const settle = useCallback(() => {
     const scroller = scrollerRef.current;
     if (!scroller || scroller.clientHeight === 0) return;
+    const pin = pinRef.current;
+    if (pin && pin.el.isConnected) {
+      const mount = mountRef.current;
+      if (mount) {
+        const pad = parseFloat(mount.style.paddingBottom || "0") || 0;
+        const need = Math.max(0, pin.height - (scroller.scrollHeight - pad));
+        if (need !== pad) mount.style.paddingBottom = need ? `${need}px` : "";
+      }
+      const delta = pin.el.getBoundingClientRect().top - scroller.getBoundingClientRect().top - pin.offset;
+      if (delta !== 0) write(scroller, scroller.scrollTop + delta);
+      return;
+    }
     if (followingRef.current) {
-      scroller.scrollTop = scroller.scrollHeight;
+      write(scroller, scroller.scrollHeight);
       return;
     }
     if (anchorSeqRef.current === null) return;
     const anchor = rowRefs.current.get(anchorSeqRef.current);
     if (!anchor) return;
     const delta = anchor.getBoundingClientRect().top - scroller.getBoundingClientRect().top - anchorOffsetRef.current;
-    if (delta !== 0) scroller.scrollTop += delta;
-  }, []);
+    if (delta !== 0) write(scroller, scroller.scrollTop + delta);
+  }, [write]);
 
   const onScroll = useCallback(() => {
     const scroller = scrollerRef.current;
     if (!scroller || scroller.clientHeight === 0) return; // hidden: keep the saved state
+    if (ownWritesRef.current.delete(scroller.scrollTop)) return; // this hook moved it, not the user
+    ownWritesRef.current.clear();
+    if (pinRef.current) {
+      pinRef.current = null; // the user scrolled: the clicked header is no longer held
+      if (mountRef.current) mountRef.current.style.paddingBottom = "";
+    }
     const following = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <= STICK_PX;
     followingRef.current = following;
     savedByKey.set(key, { scrollTop: scroller.scrollTop, following });
@@ -97,6 +133,7 @@ export function useScrollAnchor(key: string): ScrollAnchor {
   const attachTo = useCallback((mount: HTMLElement | null) => {
     if (cleanupRef.current) { cleanupRef.current(); cleanupRef.current = null; }
     scrollerRef.current = null;
+    mountRef.current = mount;
     if (!mount) return;
     const scroller = findScroller(mount);
     if (!scroller) return;
@@ -113,6 +150,18 @@ export function useScrollAnchor(key: string): ScrollAnchor {
     }
     updateAnchor();
     scroller.addEventListener("scroll", onScroll, { passive: true });
+    // A click on a card header pins it before the card opens or closes (capture: before the
+    // <details> toggles and the layout changes).
+    const onClick = (event: Event): void => {
+      const summary = (event.target as HTMLElement | null)?.closest?.("summary");
+      if (!summary || !mount.contains(summary)) return;
+      pinRef.current = {
+        el: summary as HTMLElement,
+        offset: summary.getBoundingClientRect().top - scroller.getBoundingClientRect().top,
+        height: scroller.scrollHeight,
+      };
+    };
+    mount.addEventListener("click", onClick, true);
     // Content that grows outside a React commit (a card opened, a font loaded) and a scroller
     // that changes size (window resize, a view shown again) both settle the view.
     let lastHeight = scroller.clientHeight;
@@ -129,9 +178,10 @@ export function useScrollAnchor(key: string): ScrollAnchor {
     observer.observe(mount);
     cleanupRef.current = () => {
       scroller.removeEventListener("scroll", onScroll);
+      mount.removeEventListener("click", onClick, true);
       observer.disconnect();
     };
-  }, [findScroller, key, onScroll, settle, updateAnchor]);
+  }, [findScroller, key, onScroll, settle, updateAnchor, write]);
 
   // Every commit (new rows, streaming text) settles before paint.
   useLayoutEffect(() => { settle(); });
