@@ -40,3 +40,16 @@ Tests:
 - `harness/shakeout/tasks_gate.ts` (`npm run gates:tasks`, `release.sh` stage 6). In source mode a kimi turn started `sleep 301`; the strip listed `task bg_… · sleep 301 · 0s · stop`; clicking stop removed the line; the daemon reported `stopped from the app`; no `sleep 301` was left. 5/5.
 
 Tiers: kernel 1,224 passed, 3 skipped; UI 220; client specs 23/23; vocabulary parity OK.
+
+## found at release: caret_pin drift (fixed)
+
+The sprint 105 release's Axis-A shakeout reported 2 bugs in `caret_pin`: a tool card's header moved when clicked. It reproduced 3 of 3 against the installed app.
+- **Not new.** The sprint 103 web code failed it 1 run in 3, and the code before sprint 102 failed 1 in 4. Earlier releases ran the flow once and passed by luck.
+- **Cause, from geometry added to the flow's defect text.** The card was already open, so the first click closed it: content shrank from 914 to 696 px in a 246 px view. The browser clamped scrollTop from 457 to 450, and the header moved 7 px. No scroll write can prevent a clamp.
+- **Fix in `useScrollAnchor`:**
+  - a click on a card header pins it, in either mode;
+  - while pinned, the transcript keeps at least its height at the click (bottom padding), so closing a card cannot force a clamp;
+  - the pin and the padding go when the user scrolls; the hook tells its own scroll writes from the user's.
+- **The flow's setup** scrolled to `scrollHeight/2`, which sometimes left no card header in view, depending on reply length. It now puts the first bash header a third of the way down the view.
+- **After:** `caret_pin` 9 of 9 clean in source mode. Scroll gate 13 of 14: one run, straight after the nine `caret_pin` runs, failed a check whose line was not captured; release logs keep the full output.
+
