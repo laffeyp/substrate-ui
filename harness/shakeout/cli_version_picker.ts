@@ -8,7 +8,9 @@
 // bug, session_registry allowlist).
 //
 // Deliberately minimal: one CLI × one pin per run. A full matrix
-// would spin dozens of live turns per pass.
+// would spin dozens of live turns per pass. No tags are declared: a box
+// with no authenticated CLI has nothing to drive, and every check on a
+// present CLI is a defect.
 
 import { NodeSubstrateClient } from "./lib/client";
 import { BASE_URL } from "./lib/server";
@@ -22,13 +24,7 @@ interface CliVersionsEntry { families: Family[]; default_family: string | null; 
 
 export const flow: Flow = {
   name: "cli_version_picker",
-  declared: [
-    "SESSION_OPEN_REQUESTED",
-    "SESSION_OPEN_ACKED",
-    "TURN_SUBMITTED",
-    "STREAM_ENVELOPE_APPENDED",
-    "TURN_PARKED",
-  ],
+  declared: [],
   async run(): Promise<{ emitted: EmittedRecord[]; defects: Defect[] }> {
     const emitted: EmittedRecord[] = [];
     const defects: Defect[] = [];
@@ -47,7 +43,7 @@ export const flow: Flow = {
         const statusRes = await fetch(`${BASE_URL}/api/cli/${driver}/status`);
         const status = (await statusRes.json()) as { authed: boolean | null };
         if (status.authed === false) {
-          emitted.push({ tag: "DRIVER_ROSTER_LOADED", payload: { driver, skipped: "auth_required" } });
+          console.log(`    cli_version_picker: ${driver} is not authenticated; skipped`);
           continue;
         }
       } catch { /* fall through */ }
@@ -78,7 +74,6 @@ export const flow: Flow = {
           body: {
             driver,
             driver_params: { driver_version: pickId },
-            workspace: "~/.substrate/sandbox",
           },
         });
         if (!create.ok) {
@@ -146,7 +141,7 @@ export const flow: Flow = {
         // Clean up.
         await client.fetchJson<unknown>(
           `/api/session/${encodeURIComponent(sid)}/end`,
-          { method: "POST", body: { reason: "smoke_done" } },
+          { method: "POST", body: { source: "smoke_done" } },
         );
       } catch (err) {
         defects.push({

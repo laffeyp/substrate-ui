@@ -2,7 +2,7 @@
   "name": "substrate-ui-e2e",
   "version": "1.1.0",
   "private": true,
-  "description": "Live end-to-end test harness for substrate-ui \u2014 drives the real reveal shell in real Chrome (Playwright channel:'chrome') against the real server. The observation contract's tooling, scoped to this repo and pinned by package-lock.json so it is reproducible, not an ad-hoc /tmp install. Phase 6 (2026-09-22) retired the classic tree to _deprecated/classic-tree/; the reveal shell is the only entry.",
+  "description": "Live end-to-end test harness for substrate-ui — drives the real reveal shell in real Chrome (Playwright channel:'chrome') against the real server. The observation contract's tooling, scoped to this repo and pinned by package-lock.json so it is reproducible, not an ad-hoc /tmp install. Phase 6 (2026-09-22) retired the classic tree to _deprecated/classic-tree/; the reveal shell is the only entry.",
   "main": "electron/main.js",
   "scripts": {
     "dev": "vite",
@@ -22,12 +22,14 @@
     "release": "bash scripts/release.sh",
     "gates:lifecycle": "npx tsx harness/shakeout/lifecycle_gates.ts",
     "gates:scroll": "npx tsx harness/shakeout/transcript_follow.ts",
-    "gates:tasks": "npx tsx harness/shakeout/tasks_gate.ts"
+    "gates:tasks": "npx tsx harness/shakeout/tasks_gate.ts",
+    "test:py": "uv run --project ../substrate python -m pytest tests/ -q -p no:cacheprovider",
+    "gates:electron": "SHAKEOUT_AXIS=C SHAKEOUT_RUNS=1 npx tsx harness/shakeout/run.ts && npx tsx harness/shakeout/lifecycle_gates.ts && npx tsx harness/shakeout/transcript_follow.ts && SMOKE_TARGET=source npx tsx harness/shakeout/resume_ended_session.ts",
+    "test": "npm run test:py && npm run test:unit && npx tsx harness/vm_smoke.ts && SHAKEOUT_RUNS=1 npm run shakeout && npm run gates:electron"
   },
   "devDependencies": {
     "@electron/notarize": "^3.1.1",
     "@types/node": "^22",
-    "@types/pngjs": "^6.0.5",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@typescript-eslint/eslint-plugin": "^8.70.1",
@@ -35,9 +37,7 @@
     "electron": "^44.4.5",
     "electron-builder": "^26.15.3",
     "eslint": "^10.11.0",
-    "pixelmatch": "^7.2.0",
     "playwright": "^1.49.0",
-    "pngjs": "^7.0.0",
     "tsx": "^4.23.12",
     "typescript": "^5",
     "vite": "^5"

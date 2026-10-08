@@ -7,12 +7,17 @@
 // launch is up it starts a SECOND instance on the same user-data dir and
 // counts backends, which checks the single-instance guard.
 //
+// A measurement, not a gate: it prints numbers and exits 0 unless the launch itself throws.
+// Every backend left on this state root after quit is killed by pid at the end of each launch
+// (found by SUBSTRATE_HOME, never by a name pattern) and reported as backends_left_after_quit.
+//
 // Usage: STARTUP_STATE=/path/to/state-clone npx tsx harness/startup_timing.ts
 
 import { _electron as electron, type ElectronApplication } from "playwright";
-import { execSync, spawn } from "node:child_process";
+import { spawn } from "node:child_process";
 import path from "node:path";
 import { scratchDir } from "./shakeout/lib/scratch";
+import { backendPids } from "./shakeout/lib/procs";
 
 const REPO_ROOT = path.resolve(__dirname, "..");
 const STATE = process.env.STARTUP_STATE || scratchDir("startup-state-");
@@ -20,18 +25,7 @@ const RUNS = Number(process.env.STARTUP_RUNS || 2);
 const PROMPT = '[placeholder^="type to talk"], [placeholder^="type a path"]';
 
 function backendsFor(state: string): number[] {
-  // Backends whose environment points at this state root.
-  const out = execSync("ps -axo pid=,command=", { encoding: "utf8" });
-  const pids: number[] = [];
-  for (const line of out.split("\n")) {
-    if (!/server\.py --port 0/.test(line) || /uv run/.test(line)) continue;
-    const pid = Number(line.trim().split(/\s+/)[0]);
-    try {
-      const env = execSync(`ps eww -o command= -p ${pid}`, { encoding: "utf8" });
-      if (env.includes(`SUBSTRATE_HOME=${state}`)) pids.push(pid);
-    } catch { /* gone */ }
-  }
-  return pids;
+  return backendPids(state);
 }
 
 async function launchOnce(userDataDir: string, checkSecondInstance: boolean): Promise<Record<string, unknown>> {
@@ -98,6 +92,7 @@ async function launchOnce(userDataDir: string, checkSecondInstance: boolean): Pr
     }
     return backendsFor(STATE).length;
   })();
+  for (const pid of backendsFor(STATE)) { try { process.kill(pid, "SIGKILL"); } catch { /* gone */ } }
   if (process.env.STARTUP_LOG) require("node:fs").writeFileSync(`${process.env.STARTUP_LOG}-${t0}.log`, logLines.join("\n"));
   return { ...marks, quit_to_no_backend_ms: Date.now() - tq, backends_left_after_quit: pidsLeft, second_instance: second };
 }

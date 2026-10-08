@@ -16,12 +16,6 @@ import { flow as refusedOpen } from "./refused_open";
 import { flow as refusedTurn } from "./refused_turn";
 import { flow as attachExisting } from "./attach_existing";
 import { flow as streamReconnect } from "./stream_reconnect";
-import { flow as caretPin } from "./caret_pin";
-import { flow as paneSplit } from "./pane_split";
-import { flow as paneHeaderClip } from "./pane_header_clip";
-import { flow as panePromptIsolation } from "./pane_prompt_isolation";
-import { flow as revealModeDirection } from "./reveal_mode_direction";
-import { flow as modelReplyRender } from "./model_reply_render";
 import { flow as cliDiscovery } from "./cli_discovery";
 import { flow as cliVersionPicker } from "./cli_version_picker";
 import { flow as electronSmoke } from "./electron_smoke";
@@ -31,11 +25,12 @@ import { TOOL_FLOWS } from "./tools_index";
 import { join } from "node:path";
 
 const RUNS_PER_FLOW = Number(process.env.SHAKEOUT_RUNS || "5");
-// Axis A: HTTP flows against the shakeout's own ServerHandle on 8765.
-// Axis B: real-model tool flows against the same server.
-// Axis C: Electron flows that spawn their own Electron+server pair
-//   per run on an ephemeral port. Opt-in via SHAKEOUT_AXIS=ABC.
-const AXIS_ONLY = process.env.SHAKEOUT_AXIS || "AB";
+// Axis A: the session controller against the shakeout's own server (an ephemeral port), on the
+//   deterministic driver unless SHAKEOUT_DRIVER names one (lib/driver.ts sessionDriver).
+// Axis B: real-model tool flows against the same server; opt in with SHAKEOUT_AXIS=AB.
+// Axis C: Electron flows that spawn their own Electron+server pair per run; opt in with SHAKEOUT_AXIS=AC.
+// The browser (Chrome) flows were retired on 2026-10-08 (lens-audit ledger, sprint 108).
+const AXIS_ONLY = process.env.SHAKEOUT_AXIS || "A";
 const AXIS_A: Flow[] = [
   coldBoot,
   chatOneTurn,
@@ -46,12 +41,6 @@ const AXIS_A: Flow[] = [
   refusedTurn,
   refusedOpen,
   streamReconnect,
-  caretPin,
-  paneSplit,
-  paneHeaderClip,
-  panePromptIsolation,
-  revealModeDirection,
-  modelReplyRender,
   cliDiscovery,
   cliVersionPicker,
 ];

@@ -15,11 +15,16 @@
 import { SessionController } from "../../web/vm/session_controller";
 import { NodeSubstrateClient } from "./lib/client";
 import { BASE_URL, ServerHandle } from "./lib/server";
-import { pickRealDriver } from "./lib/driver";
+import { sessionDriver } from "./lib/driver";
 import type { Flow, EmittedRecord, Defect, FlowContext } from "./lib/flow";
 
-const TURN_KICKOFF_WAIT_MS = 2500;
-const POST_RESTART_MS = 8000;
+const PARK_TIMEOUT_MS = 300_000;
+const REATTACH_TIMEOUT_MS = 20_000;
+
+async function until(cond: () => boolean, timeoutMs: number): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline && !cond()) await new Promise((r) => setTimeout(r, 100));
+}
 const END_TIMEOUT_MS = 30_000;
 
 export const flow: Flow = {
@@ -31,18 +36,15 @@ export const flow: Flow = {
     const emitted: EmittedRecord[] = [];
     controller.onEvent((ev) => emitted.push({ tag: ev.tag, payload: ev.payload }));
 
-    const driver = await pickRealDriver(BASE_URL);
+    const driver = await sessionDriver(BASE_URL);
     await controller.loadDriverRoster();
     controller.pickDriver(driver);
     await controller.openSession({ driver });
 
-    // Kick off a turn asking for a long response so the SSE is carrying
-    // real in-flight envelopes when we kill the server.
-    void controller.sendTurn(
-      "Please count from 1 to 25 slowly, one number per short line, with a brief pause between each."
-    );
-    // Give the model a moment to start streaming.
-    await new Promise((r) => setTimeout(r, TURN_KICKOFF_WAIT_MS));
+    // One turn, so the stream has carried envelopes; the SSE stays open after the park, which is
+    // the connection the kill below breaks.
+    await controller.sendTurn("Please count from 1 to 5, one number per line.");
+    await until(() => controller.snapshot().parkReason != null, PARK_TIMEOUT_MS);
 
     // SIGKILL the server. A plain SIGTERM triggers the server's shutdown
     // handler which emits SessionEnded on the SSE — the client sees that
@@ -55,8 +57,8 @@ export const flow: Flow = {
     // Restart so the reconnect can succeed.
     await ctx.server.start();
     await ctx.server.waitHealthy(5000);
-    // Give the reconnect timer + re-attach a beat to complete.
-    await new Promise((r) => setTimeout(r, POST_RESTART_MS));
+    // The reconnect timer fires and the stream re-attaches: a second STREAM_ATTACHED.
+    await until(() => emitted.filter((e) => e.tag === "STREAM_ATTACHED").length >= 2, REATTACH_TIMEOUT_MS);
 
     const defects: Defect[] = [];
     if (!emitted.some((e) => e.tag === "STREAM_RECONNECTING")) {

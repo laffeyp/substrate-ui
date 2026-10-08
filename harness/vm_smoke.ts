@@ -1,19 +1,26 @@
-// harness/vm_smoke.js — drives web/vm/SessionController against the live server.
+// harness/vm_smoke.ts — drives web/vm/SessionController against a real server.
 //
 // Verifies the Presentation Model does what its public API says without any
 // shell in the loop. Runs in Node (fetch + a tiny SSE reader over http).
-// Assumes the substrate-ui server is up at http://127.0.0.1:8765.
+// Starts its own server (lib/server.ts: ephemeral port, scratch SUBSTRATE_HOME);
+// SUBSTRATE_UI_BASE points it at a running one instead.
 //
-// Pass path: driver roster non-empty, session opens on deterministic, envelope
-// stream carries SessionStarted → UserMessage → ModelReply → Park, endSession
-// closes the stream cleanly.
+// Pass path: driver roster non-empty, session opens on deterministic, the
+// envelope stream carries UserMessage, ModelReply and Park, the slash commands
+// act, and endSession leaves the session ended on the server.
 
 import { SessionController } from "../web/vm/session_controller";
 import { NodeSubstrateClient } from "./shakeout/lib/client";
-
-const BASE = process.env.SUBSTRATE_UI_BASE || "http://127.0.0.1:8765";
+import { BASE_URL, ServerHandle } from "./shakeout/lib/server";
 
 async function main() {
+  const own = process.env.SUBSTRATE_UI_BASE ? null : new ServerHandle();
+  if (own) await own.start();
+  try { await smoke(process.env.SUBSTRATE_UI_BASE || BASE_URL); }
+  finally { if (own) await own.stop(); }
+}
+
+async function smoke(BASE: string) {
   const client = new NodeSubstrateClient(BASE);
   const controller = new SessionController(client);
 
@@ -27,12 +34,8 @@ async function main() {
 
   // Subscribe to events BEFORE the first loader fires so
   // DRIVER_ROSTER_LOADED lands in the tape.
-  const seenKinds = new Set<string>();
   const emittedTags: string[] = [];
   controller.onEvent((ev) => { emittedTags.push(ev.tag); });
-  controller.subscribe((snap) => {
-    for (const row of snap.transcript) seenKinds.add(row.kind);
-  });
 
   await controller.loadDriverRoster();
   const rosterSnap = controller.snapshot();
@@ -54,8 +57,9 @@ async function main() {
   const afterTurn = controller.snapshot();
   step("transcript grows past the local echo", afterTurn.transcript.length >= 2,
     `${afterTurn.transcript.length} rows`);
-  step("SessionStarted, UserMessage, Park all seen", ["UserMessage", "Park"].every((k) => seenKinds.has(k)),
-    `saw ${Array.from(seenKinds).join(", ")}`);
+  const envKinds = new Set(afterTurn.rawEnvelopes.map((e) => e.kind));
+  step("UserMessage, ModelReply, Park envelopes on the stream", ["UserMessage", "ModelReply", "Park"].every((k) => envKinds.has(k)),
+    `saw ${Array.from(envKinds).join(", ")}`);
   step("park reason recorded", !!afterTurn.parkReason, afterTurn.parkReason || "(none)");
 
   // Slash commands routed through submitLine.
@@ -78,6 +82,7 @@ async function main() {
   const unkRow = unkSnap.transcript.find(r => r.text.startsWith("unknown slash: /unknownslash"));
   step("unknown slash surfaces a warning row", !!unkRow, unkRow?.text?.slice(0, 60) ?? "(no warning)");
 
+  const sid = controller.snapshot().sessionId;
   await controller.endSession("smoke_test_done");
   const endDeadline = Date.now() + 5000;
   while (Date.now() < endDeadline) {
@@ -85,7 +90,10 @@ async function main() {
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
   const closed = controller.snapshot();
-  step("session ends cleanly", closed.sessionId === null, closed.endedReason || "(no reason)");
+  step("session ends cleanly (client)", closed.sessionId === null, closed.endedReason || "(no reason)");
+  const server = sid ? await client.fetchJson<{ status?: string }>(`/api/session/${encodeURIComponent(sid)}`) : null;
+  const serverStatus = server && server.ok ? server.data.status : "(unread)";
+  step("session ended on the server", serverStatus === "ended", String(serverStatus));
 
   const expectedTags = [
     "DRIVER_ROSTER_LOADED",
@@ -109,10 +117,10 @@ async function main() {
   controller.disconnect();
   console.log("");
   console.log(`summary: ${steps} steps, ${failed ? "FAILED at " + failed : "all pass"}`);
-  process.exit(failed ? 1 : 0);
+  process.exitCode = failed ? 1 : 0;
 }
 
-main().catch((err) => {
+main().then(() => process.exit(process.exitCode ?? 0)).catch((err) => {
   console.error(err);
   process.exit(1);
 });

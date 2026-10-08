@@ -16,3 +16,13 @@ export async function pickRealDriver(baseUrl: string): Promise<string> {
   }
   return roster[0];
 }
+
+/** The driver an Axis A flow opens its session on. Axis A checks the app, not a model, so it runs on
+ * the deterministic driver unless SHAKEOUT_DRIVER names one; SHAKEOUT_DRIVER=default takes the
+ * server's real default (release.sh does, so a release still drives a real model through Axis A).
+ * Axis B, which checks that a model can use each tool, always calls pickRealDriver. */
+export async function sessionDriver(baseUrl: string): Promise<string> {
+  const want = process.env.SHAKEOUT_DRIVER || "";
+  if (!want) return "deterministic";
+  return want === "default" ? pickRealDriver(baseUrl) : want;
+}

@@ -10,7 +10,8 @@
 //     ended session finalised before the model ran (server.py
 //     _with_session_end_threshold).
 //
-// Steps, on the app's default driver:
+// Steps, on the app's default driver (a real model: this gate checks resume end to end, so it
+// is part of the real-model tier; SMOKE_DRIVER=deterministic runs it offline):
 //   1. open a session, one turn, wait for park;
 //   2. endSession (explicit end unbinds the pane's session);
 //   3. attachExisting(that id): the old transcript replays, endedReason set;
@@ -20,11 +21,15 @@
 //
 // SMOKE_TARGET=source runs `electron .`; otherwise SMOKE_APP or
 // dist-electron/mac-arm64/Substrate.app. HOME is a temp dir, so the run
-// never touches ~/.substrate.
+// never touches ~/.substrate. UV_CACHE_DIR and UV_PYTHON_INSTALL_DIR stay on
+// the real home in source mode: uv's content-addressed package and
+// interpreter caches are build inputs, not app state, and an empty cache
+// would download a Python per run.
 
 import { _electron as electron } from "playwright";
 import { join, resolve } from "node:path";
 import { scratchDir } from "./lib/scratch";
+import { bindPaneAsUser } from "./lib/electron";
 
 const REPO_ROOT = resolve(__dirname, "..", "..");
 const TARGET = process.env.SMOKE_TARGET === "source" ? "source" : "packaged";
@@ -51,9 +56,9 @@ type Vm = {
   spawn(id: number): unknown;
 };
 
+// A failed check throws, so the finally below always closes the app and its backend.
 function die(msg: string): never {
-  process.stderr.write("resume_ended_session: " + msg + "\n");
-  process.exit(1);
+  throw new Error(msg);
 }
 
 async function main(): Promise<void> {
@@ -70,40 +75,22 @@ async function main(): Promise<void> {
     const win = await app.firstWindow({ timeout: 30_000 });
     await win.waitForFunction(() => (window as unknown as { __vm?: unknown }).__vm != null, undefined, { timeout: 30_000 });
 
-    // Bind pane 1 (same fiber walk as packaged_app_smoke.ts step 7).
-    await win.evaluate(() => {
-      const root = document.getElementById("dc-root") as (HTMLElement & Record<string, unknown>) | null;
-      if (!root) throw new Error("no #dc-root");
-      const key = Object.keys(root).find((k) => k.startsWith("__reactContainer"));
-      if (!key) throw new Error("no react fiber");
-      const stack: unknown[] = [((root[key] as { stateNode?: { current?: unknown } }).stateNode?.current)];
-      type Logic = { _bindPane: (id: number, p: string) => void; state: { panes: { id: number; unbound?: boolean }[] } };
-      let logic: Logic | null = null;
-      while (stack.length) {
-        const c = stack.pop() as { stateNode?: { logic?: { _bindPane?: unknown } }; child?: unknown; sibling?: unknown } | undefined;
-        if (!c) continue;
-        const cand = c.stateNode?.logic;
-        if (cand && typeof cand._bindPane === "function") { logic = cand as unknown as Logic; break; }
-        if (c.sibling) stack.push(c.sibling);
-        if (c.child) stack.push(c.child);
-      }
-      if (!logic) throw new Error("no pane-logic fiber");
-      const p1 = logic.state.panes[0];
-      if (p1.unbound) logic._bindPane(p1.id, "~/.substrate/sandbox");
-    });
+    // Bind pane 1 the way a user does: Enter in the path input picks the per-session sandbox.
+    await bindPaneAsUser(win);
 
     // 1. Open + first turn.
-    const sid = await win.evaluate(async (first) => {
+    const sid = await win.evaluate(async ([first, override]) => {
       const vm = (window as unknown as { __vm: Vm }).__vm;
       const c = (vm.get(1) ?? vm.spawn(1)) as NonNullable<ReturnType<Vm["get"]>>;
       await c.loadDriverRoster();
       const r = await fetch("/api/models").then((x) => x.json()) as { default?: string };
-      if (!r.default) throw new Error("no default driver");
-      c.pickDriver(r.default);
-      await c.openSession({ driver: r.default });
+      const drv = override || r.default;
+      if (!drv) throw new Error("no default driver");
+      c.pickDriver(drv);
+      await c.openSession({ driver: drv });
       await c.sendTurn(first);
       return c.snapshot().sessionId;
-    }, FIRST);
+    }, [FIRST, process.env.SMOKE_DRIVER || ""] as const);
     if (!sid) die("no session opened");
     await win.waitForFunction(() => (window as unknown as { __vm: Vm }).__vm.get(1)!.snapshot().parkReason != null, undefined, { timeout: 180_000 });
     const firstReply = await win.evaluate(() => {

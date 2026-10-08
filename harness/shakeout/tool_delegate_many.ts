@@ -37,7 +37,7 @@ export const flow: Flow = {
     const prompt = (
       "Use the delegate tool ONCE with a `children` list of three entries. " +
       "Each entry should have a small task like 'compute 6 * 7' or 'say hello' " +
-      "and the deterministic driver. Wait for the ToolResult and report what " +
+      `and the driver ${driver}. Wait for the ToolResult and report what ` +
       "came back. Do not call delegate more than once."
     );
     await controller.sendTurn(prompt);

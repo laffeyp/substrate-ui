@@ -16,6 +16,7 @@
 import { _electron as electron, type ElectronApplication, type Page } from "playwright";
 import { join, resolve } from "node:path";
 import { scratchDir } from "./lib/scratch";
+import { bindPaneAsUser } from "./lib/electron";
 
 const REPO_ROOT = resolve(__dirname, "..", "..");
 const APP = process.env.SCROLL_APP || "";
@@ -42,13 +43,30 @@ const geo = (win: Page): Promise<Geo> =>
     return { top: el.scrollTop, height: el.scrollHeight, client: el.clientHeight, dist: el.scrollHeight - el.scrollTop - el.clientHeight };
   }, SCROLLER);
 
+/** Resolve once the transcript's layout has held still for three animation frames: the condition
+ * the fixed 250-400 ms sleeps stood in for (lens audit F387). */
+async function settle(win: Page): Promise<void> {
+  // A string, not a closure: tsx wraps named inner functions in a __name helper the page lacks.
+  await win.evaluate(`new Promise((resolve) => {
+    let last = -1, still = 0, frames = 0;
+    const step = () => {
+      const el = document.querySelector(${JSON.stringify(SCROLLER)});
+      const h = el ? el.scrollHeight * 100000 + el.scrollTop : 0;
+      still = h === last ? still + 1 : 0;
+      last = h;
+      if (still >= 3 || ++frames > 600) resolve(undefined); else requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  })`);
+}
+
 /** The user scrolls: set scrollTop the way a wheel would, then let the scroll event land. */
 async function scrollTo(win: Page, where: "bottom" | number): Promise<void> {
   await win.evaluate(([sel, w]) => {
     const el = document.querySelector<HTMLElement>(sel as string)!;
     el.scrollTop = w === "bottom" ? el.scrollHeight : (w as number);
   }, [SCROLLER, where] as const);
-  await win.waitForTimeout(250);
+  await settle(win);
 }
 
 /** Viewport y of the transcript element at the scroller's top edge, tagged so it can be found again. */
@@ -85,23 +103,33 @@ async function turn(win: Page): Promise<void> {
     parksBefore,
     { timeout: 30_000 },
   );
-  await win.waitForTimeout(300); // rows render, layout settles
+  await settle(win); // rows render, layout settles
 }
 
 async function toggleView(win: Page): Promise<void> {
+  const revealed = await win.evaluate(() => document.querySelectorAll('[data-vm-transcript-mount="reveal"]').length > 0);
   await win.keyboard.down("Control");
   await win.keyboard.press("`");
   await win.keyboard.up("Control");
-  await win.waitForTimeout(400);
+  await win.waitForFunction(
+    (was) => (document.querySelectorAll('[data-vm-transcript-mount="reveal"]').length > 0) !== was,
+    revealed,
+    { timeout: 10_000 },
+  );
+  await settle(win);
 }
 
 (async () => {
-  const app = await launch();
+  let app: ElectronApplication | null = null;
   try {
+    app = await launch();
     const win = await app.firstWindow({ timeout: 30_000 });
     await win.waitForLoadState("load");
     await app.evaluate(({ BrowserWindow }) => { BrowserWindow.getAllWindows()[0]?.setSize(900, 560); });
     await win.waitForFunction(() => (window as any).__vm != null, undefined, { timeout: 15_000 });
+    // Bind the pane as a user does; the view switch (ctrl+`) is a no-op on an unbound pane
+    // (reveal_component.ts), which let the switch checks below pass without switching.
+    await bindPaneAsUser(win);
     await win.evaluate(async () => {
       const c = (window as any).__vm.get(1) ?? (window as any).__vm.spawn(1);
       await c.loadDriverRoster();
@@ -155,7 +183,7 @@ async function toggleView(win: Page): Promise<void> {
   } catch (e) {
     check(false, `flow error: ${e instanceof Error ? e.message : String(e)}`);
   } finally {
-    await app.close().catch(() => undefined);
+    await app?.close().catch(() => undefined);
   }
   process.stdout.write(fails.length ? `transcript_follow: ${fails.length} FAILED\n` : "transcript_follow: all passed\n");
   process.exit(fails.length ? 1 : 0);

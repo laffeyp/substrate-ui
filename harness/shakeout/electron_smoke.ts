@@ -1,53 +1,13 @@
-// Electron smoke flow. Launches `electron .` via Playwright's
-// _electron.launch, waits for the reveal shell's atom transcript
-// mount to appear, drives one deterministic turn through the
-// controller, asserts snapshot().parkReason non-null, closes.
+// Electron smoke flow. Launches the app, binds the first pane through the path input as a user
+// does, drives one deterministic turn through the prompt input, and reports the controller
+// signals the renderer actually emitted (window.__vmSignals). A tag the app did not emit is not
+// reported, so a broken open/turn/park path shows as missing coverage as well as a defect.
 //
-// The passed FlowContext.server (from the shakeout runner) is
-// unused — this flow spawns its own substrate server inside the
-// Electron main process, on an ephemeral port. The shakeout's
-// 8765 server keeps running alongside, harmless.
+// The FlowContext server is unused: the app spawns its own server on an ephemeral port.
 
 import { _electron as electron } from "playwright";
-import { rmSync } from "node:fs";
-import { join } from "node:path";
 import type { Flow, EmittedRecord, Defect, FlowContext } from "./lib/flow";
-import { scratchDir } from "./lib/scratch";
-
-const REPO_ROOT = join(__dirname, "..", "..");
-
-// Each Electron launch gets its own userData dir. Electron's
-// single-instance lock (electron/main.js Sprint 081) keys on the
-// userData path — a fresh dir per launch means concurrent
-// invocations coexist. Removes the collision when the shakeout
-// runs alongside a dev-launched `npm run electron` or when several
-// AXIS_C flows run back-to-back and the OS hasn't released the
-// lock yet.
-export interface Launch {
-  options: { args: string[]; env: Record<string, string>; executablePath?: string };
-  cleanup: () => void;
-}
-
-// UI sprint 106: every launch gets its own state root (SUBSTRATE_HOME) as well as its own
-// user-data dir. Without SUBSTRATE_HOME the app ran on the user's real ~/.substrate and took the
-// installed app's single-instance lock (main.js names it "Substrate" then), so with the app open
-// the launch quit at once. SHAKEOUT_APP=<Substrate.app> runs the packaged bundle.
-export function launchArgs(): Launch {
-  const dir = scratchDir("electron-shakeout-");
-  const state = scratchDir("electron-shakeout-state-");
-  const env = { ...process.env, SUBSTRATE_HOME: state } as Record<string, string>;
-  const app = process.env.SHAKEOUT_APP || "";
-  return {
-    options: app
-      ? { executablePath: join(app, "Contents", "MacOS", "Substrate"), args: ["--user-data-dir=" + dir], env }
-      : { args: [REPO_ROOT, "--user-data-dir=" + dir], env },
-    cleanup: () => {
-      for (const d of [dir, state]) {
-        try { rmSync(d, { recursive: true, force: true }); } catch (_) { /* best-effort */ }
-      }
-    },
-  };
-}
+import { bindPaneAsUser, launchArgs, observedSignals, waitForApp } from "./lib/electron";
 
 export const flow: Flow = {
   name: "electron_smoke",
@@ -59,40 +19,35 @@ export const flow: Flow = {
     "TURN_PARKED",
   ],
   async run(_ctx: FlowContext): Promise<{ emitted: EmittedRecord[]; defects: Defect[] }> {
-    const emitted: EmittedRecord[] = [];
+    let emitted: EmittedRecord[] = [];
     const defects: Defect[] = [];
     const launch = launchArgs();
     const app = await electron.launch({ ...launch.options, timeout: 30_000 });
     try {
       const win = await app.firstWindow({ timeout: 20_000 });
-      await win.waitForFunction(
-        () => (window as unknown as { __vm?: unknown }).__vm != null, // the app is up; a transcript mount exists only once a session opens (UI sprint 106)
-        undefined,
-        { timeout: 15_000 },
-      );
+      await waitForApp(win);
       await win.evaluate(async () => {
         const vm = (window as unknown as { __vm: { get(id: number): unknown; spawn(id: number): unknown } }).__vm;
-        const c = (vm.get(1) ?? vm.spawn(1)) as { loadDriverRoster: () => Promise<void>; pickDriver: (n: string) => void; openSession: (o: { driver: string }) => Promise<void>; sendTurn: (t: string) => Promise<void> };
+        const c = (vm.get(1) ?? vm.spawn(1)) as { loadDriverRoster: () => Promise<void>; pickDriver: (n: string) => void };
         await c.loadDriverRoster();
         c.pickDriver("deterministic");
-        await c.openSession({ driver: "deterministic" });
-        await c.sendTurn("hello");
       });
+      await bindPaneAsUser(win);
+      const prompt = win.locator('[placeholder^="type to talk"]').first();
+      await prompt.click();
+      await prompt.type("hello", { delay: 5 });
+      await win.keyboard.press("Enter");
       await win.waitForFunction(
         () => (window as unknown as { __vm?: { get(id: number): { snapshot(): { parkReason?: unknown } } | null } }).__vm?.get(1)?.snapshot().parkReason != null,
         undefined,
         { timeout: 30_000 },
       );
-      emitted.push({ tag: "SESSION_OPEN_REQUESTED", payload: {} });
-      emitted.push({ tag: "SESSION_OPEN_ACKED", payload: {} });
-      emitted.push({ tag: "TURN_SUBMITTED", payload: {} });
-      emitted.push({ tag: "STREAM_ENVELOPE_APPENDED", payload: {} });
-      emitted.push({ tag: "TURN_PARKED", payload: {} });
+      emitted = await observedSignals(win);
     } catch (err) {
       defects.push({
         category: "electron_smoke_failed",
         observed: err instanceof Error ? err.message : String(err),
-        expected: "Electron window mounts and one deterministic turn parks",
+        expected: "the pane binds, one deterministic turn typed into the prompt parks",
         reproduces: true,
         severity: "high",
       });
