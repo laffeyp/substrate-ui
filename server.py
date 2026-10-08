@@ -4167,8 +4167,17 @@ def main() -> None:
         uds_path.unlink()
     except FileNotFoundError:
         pass
-    uds_srv = _UnixHTTPServer(str(uds_path), Handler)
-    summary += f"; UDS at {uds_path}"
+    # UI sprint 106: a Unix socket path is limited to sizeof(sun_path) bytes (104 on macOS,
+    # 108 on Linux; unix(4)/unix(7)). A long SUBSTRATE_HOME made the bind raise
+    # `OSError: AF_UNIX path too long` and the daemon died before serving. The socket is the
+    # CLI's preferred transport, not the only one: without it the daemon still serves TCP.
+    uds_srv: _UnixHTTPServer | None
+    try:
+        uds_srv = _UnixHTTPServer(str(uds_path), Handler)
+        summary += f"; UDS at {uds_path}"
+    except OSError as exc:
+        uds_srv = None
+        summary += f"; UDS unavailable ({exc}; {len(str(uds_path))}-byte path), TCP only"
     srv = ThreadingHTTPServer((HOST, PORT), Handler)
     # Sprint 079: bound-port readback for the Electron main process.
     # ThreadingHTTPServer((HOST, 0), ...) picks an ephemeral port; the
@@ -4181,7 +4190,8 @@ def main() -> None:
     print(f"substrate-ui port={PORT}", flush=True)
     summary = summary.replace(f"http://{HOST}:{args.port}", f"http://{HOST}:{PORT}", 1)
     print(summary)
-    threading.Thread(target=uds_srv.serve_forever, daemon=True).start()
+    if uds_srv is not None:
+        threading.Thread(target=uds_srv.serve_forever, daemon=True).start()
     threading.Thread(target=_run_boot_scan, daemon=True, name="boot_scan").start()
 
     def _say(msg: str) -> None:
@@ -4209,7 +4219,8 @@ def main() -> None:
             f"skipped_ended={outcome['skipped_ended']} "
             f"failed={outcome['failed']}"
         )
-        uds_srv.shutdown()
+        if uds_srv is not None:
+            uds_srv.shutdown()
         srv.shutdown()  # returns once serve_forever() on the main thread exits
 
     _shutdown_claim_lock = threading.Lock()
@@ -4305,7 +4316,8 @@ def main() -> None:
     try:
         srv.serve_forever()
     except KeyboardInterrupt:
-        uds_srv.shutdown()
+        if uds_srv is not None:
+            uds_srv.shutdown()
     finally:
         # Reached when the shutdown thread's srv.shutdown() stops the loop,
         # or on Ctrl-C. Remove the socket so the next daemon binds cleanly.

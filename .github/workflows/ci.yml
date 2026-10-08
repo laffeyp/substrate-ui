@@ -10,24 +10,29 @@ concurrency:
 
 # The console consumes substrate as a LIBRARY, through its public surfaces only. CI mirrors the
 # documented local run model: check out both repos side by side, install substrate editable into a
-# venv, and run the console's tests against it (cd substrate && uv run python ../substrate-ui/...).
-# The substrate checkout uses the default token (fine for a public repo); if laffeyp/substrate is
-# private, set a repo secret CROSS_REPO_TOKEN to a PAT with read access and it is used instead.
+# venv, and run the console's checks against it. laffeyp/substrate is private: the checkout reads
+# the repo secret CROSS_REPO_TOKEN (a PAT with read access to it).
+#
+# UI sprint 106 (2026-10-07): every run had failed since at least 2026-09-28. The e2e job called
+# four npm scripts deleted with the classic tree on 2026-09-22; the lint job ran an unpinned
+# `uvx ruff`, whose newer default rules reported 231 errors the project's pinned ruff does not; the
+# two checkout jobs failed on an expired CROSS_REPO_TOKEN. The jobs below run the checks that exist.
 
 jobs:
   lint:
-    name: lint (ruff, backend Python)
+    name: lint (ruff, pinned)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       - uses: astral-sh/setup-uv@v6
-      # static lint only (no substrate needed) on the backend Python the console ships. Format is
-      # deliberately NOT gated here -- the UI Python isn't ruff-formatted and that's its own style.
+      # Pinned to the ruff in substrate's uv.lock, which the local `uv run --project ../substrate
+      # ruff check .` uses (Twelve-Factor II: declare dependencies exactly). ruff.toml excludes
+      # _deprecated/.
       - name: Ruff
-        run: uvx ruff check server.py builder.py demo_topologies.py gen_demo_records.py tests/
+        run: uvx ruff@0.15.17 check .
 
   server-tests:
-    name: server tests (real substrate.api over HTTP)
+    name: server tests (real substrate.api)
     runs-on: ubuntu-latest
     steps:
       - name: Check out substrate-ui
@@ -45,17 +50,15 @@ jobs:
       - name: Install substrate (editable, with dev extras)
         working-directory: substrate
         run: |
-          uv venv --python 3.12
+          uv venv --python 3.14
           uv pip install -e ".[dev]"
-      - name: Generate the demo fixture records (some tests read them)
+      # tests/conftest.py gives the run a fresh SUBSTRATE_HOME and generates the demo records.
+      - name: substrate-ui tests
         working-directory: substrate
-        run: uv run python ../substrate-ui/gen_demo_records.py
-      - name: Server tests (real server on an ephemeral port, real substrate.api)
-        working-directory: substrate
-        run: uv run python -m pytest ../substrate-ui/tests/test_server.py -q
+        run: uv run python -m pytest ../substrate-ui/tests -q
 
-  e2e:
-    name: e2e (structural DOM, real Chrome)
+  web:
+    name: web (generated kinds, build, client specs, vocabulary)
     runs-on: ubuntu-latest
     steps:
       - name: Check out substrate-ui
@@ -73,32 +76,24 @@ jobs:
       - name: Install substrate (editable)
         working-directory: substrate
         run: |
-          uv venv --python 3.12
+          uv venv --python 3.14
           uv pip install -e .
-      - name: Generate the demo fixture records (the e2e reads them)
-        working-directory: substrate
-        run: uv run python ../substrate-ui/gen_demo_records.py
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
-      - name: Install harness deps + Chrome (pinned by package-lock)
+          node-version: "22"
+      - name: Install web deps (pinned by package-lock)
         working-directory: substrate-ui
-        run: |
-          npm ci
-          npx playwright install chrome --with-deps
-      - name: Run the console + Studio e2e (server in the background)
-        working-directory: substrate
-        run: |
-          uv run python ../substrate-ui/server.py &
-          SERVER_PID=$!
-          trap "kill $SERVER_PID 2>/dev/null || true" EXIT
-          for i in $(seq 1 30); do
-            curl -sf http://127.0.0.1:8765/ >/dev/null 2>&1 && break
-            sleep 1
-          done
-          cd ../substrate-ui
-          npm run e2e
-          npm run e2e:studio
-          npm run e2e:assay
-          npm run e2e:delegate
+        run: npm ci
+      - name: Envelope kinds generated from the kernel are current
+        working-directory: substrate-ui
+        run: uv run --project ../substrate python scripts/gen_kinds.py --check
+      - name: Build (tsc, eslint, vite)
+        working-directory: substrate-ui
+        run: npm run build
+      - name: Client unit specs
+        working-directory: substrate-ui
+        run: npm run test:unit
+      - name: Signal vocabulary parity
+        working-directory: substrate-ui
+        run: npx tsx web/vm/tools/check-vocabulary-parity.ts
