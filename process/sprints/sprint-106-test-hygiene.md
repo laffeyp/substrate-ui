@@ -67,3 +67,13 @@ The install step asked the running app to quit, waited 60 s, and copied the new 
 - `release.sh` now stops with an error when the app has not quit, instead of installing under it.
 - The broad `pkill` was the agent's mistake; processes on this machine are stopped by pid only.
 
+## CI after the push (2026-10-08)
+
+- substrate-ui `aad8f3d`: lint, server tests and web all pass. It is the first green run in at least 60.
+- substrate `ba79d310` failed two tests in CI that local runs could not show:
+  - an unguarded realmodel test (`test_realmodel_prompt_composition`), now guarded;
+  - `test_cli_responder_cancel_102`, which read a Linux zombie as alive.
+
+  Kernel CI now runs `-m "not realmodel and not swebench_harness"`, the local fast tier. substrate `7d89bdec`: all six jobs pass (Ubuntu and macOS, Python 3.12, 3.13 and 3.14).
+- Both repos are public, so GitHub Actions runs them free on standard runners.
+

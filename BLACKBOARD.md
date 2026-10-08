@@ -866,7 +866,7 @@ Twelve PNGs at `captures/pixel-baseline-2026-09-23/`: six states (`empty`, `one_
   - 11 one-off scripts retired to `harness/_deprecated/`.
 
   `release.sh` now runs the VM smoke, Axes A–C and `resume_ended_session`.
-- Closed the same day: both repos are public, so the expired `CROSS_REPO_TOKEN` was unneeded and the workflow no longer reads it; both repos pushed. Card `process/sprints/sprint-106-test-hygiene.md`.
+- Closed the same day: both repos are public, so the expired `CROSS_REPO_TOKEN` was unneeded and the workflow no longer reads it; both repos pushed. CI is green in both repos for the first time since before 2026-09-15: substrate-ui `aad8f3d`, 3/3 jobs; substrate `7d89bdec`, 6/6 jobs. Card `process/sprints/sprint-106-test-hygiene.md`.
 
 ### Sprint 105 (2026-10-02, closed) — background tasks in the app
 - The activity strip lists each running background task (`task bg_… · cmd · runtime · stop`) in both views; stop kills it and the model hears about it. Daemon: `GET /api/session/<id>/tasks`, `POST …/tasks/<task_id>/stop`. Gate `tasks_gate.ts` drives a real kimi turn in the Electron app and runs in `release.sh`.
