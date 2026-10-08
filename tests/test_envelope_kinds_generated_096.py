@@ -20,6 +20,13 @@ def test_generated_kinds_file_is_current() -> None:
     )
 
 
+def test_generated_statuses_file_is_current() -> None:
+    """UI sprint 107: SessionStatus and TaskStatus come from the kernel's enums too."""
+    assert gen_kinds.STATUS_OUT.read_text() == gen_kinds.render_statuses(), (
+        "web/vm/statuses.gen.ts is stale: run `python scripts/gen_kinds.py`"
+    )
+
+
 def test_lifecycle_kinds_carry_the_reserved_prefix() -> None:
     kinds = gen_kinds.session_kinds()
     assert "substrate.RunFinalised" in kinds
