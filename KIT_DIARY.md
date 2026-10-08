@@ -57,6 +57,21 @@
 
 ## Entries
 
+### 2026-10-07 — Sprint 106: old tests, read before judged
+
+**Context.** The Architect asked which checks existed outside the release pipeline, and set the frame: these are probably old tests meeting newer code. The audit read each one, traced what it covered, and ran it before anyone decided anything.
+
+**The frame held.** Of the checks found, none failed on a product bug:
+- some were current and simply ungated (the VM smoke, Axis B, the resume flow);
+- some tested a boot layout or a port model the app no longer has (the mount-seam check, Axis C, four sprint exit tests);
+- some depended on something outside their repo: a `docker` binary, the UI checkout beside the kernel, the `datasets` package, an unpinned ruff, an expired token.
+
+The one product defect found (the daemon dying on a long state path) turned up while setting up a run, not in a test.
+
+**Hermeticity is most of it.** Each CI failure was a test reaching outside its own repo. Running the kernel tier in an isolated Python 3.12 environment with only the dev extras, as CI builds it, found a third `datasets` test the developer machine could never show. A test environment that mirrors CI exactly finds what a well-stocked laptop hides.
+
+---
+
 ### 2026-10-02 — Sprints 104–105: a check no gate runs is not a check
 
 **Context.** Sprints 104 and 105 finished the background-commands roadmap: the model hears when a task ends, and the app lists tasks and stops them.
@@ -703,4 +718,4 @@ lessons for the kit sit under the finding-30 series above.
 
 ---
 
-*KIT_DIARY.md for substrate-ui. 32 entries, 2026-06-17 to 2026-10-02. 42 hypothesis definitions under 36 IDs (H1–H36); H17, H18, H19, H20, H21, H22 carry more than one definition. Merged with `process/KIT_DIARY.md` on 2026-10-01; that copy is at `_deprecated/process-KIT_DIARY-2026-10-01.md`.*
+*KIT_DIARY.md for substrate-ui. 33 entries, 2026-06-17 to 2026-10-02. 42 hypothesis definitions under 36 IDs (H1–H36); H17, H18, H19, H20, H21, H22 carry more than one definition. Merged with `process/KIT_DIARY.md` on 2026-10-01; that copy is at `_deprecated/process-KIT_DIARY-2026-10-01.md`.*
