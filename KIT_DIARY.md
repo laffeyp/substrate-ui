@@ -6,7 +6,7 @@
 
 ## Hypothesis tracking
 
-*One row per hypothesis definition. While this diary existed in two copies (project root and `process/`, merged 2026-10-01), IDs H17–H22 were each assigned more than once; the Defined-in date tells the definitions apart, and references written before a redefinition mean the earlier one. New hypotheses start at H37.*
+*One row per hypothesis definition. While this diary existed in two copies (project root and `process/`, merged 2026-10-01), IDs H17–H22 were each assigned more than once; the Defined-in date tells the definitions apart, and references written before a redefinition mean the earlier one. New hypotheses start at H40.*
 
 | # | Defined in | Hypothesis | Verdict | Evidence |
 |---|---|---|---|---|
@@ -52,10 +52,27 @@
 | H34 | 2026-10-01 | An irreversible outward step (a publish) must never be an input to a reversible inward one (build, test, install). | **new (tentative)** | Sprint 089's PyPI pin made every packaged test wait on a kernel release; Sprint 100 builds the kernel from the commit. |
 | H35 | 2026-10-02 | A limit belongs on the unit whose length the system knows; open-ended work runs until it finishes or the user stops it. | **new (tentative)** | Turn, delegate, model-call and CLI limits removed; bash gained the per-call deadline it lacked (Sprint 101). |
 | H36 | 2026-10-02 | A cancel that cannot reach the work is a status change, not a stop. | **new (tentative)** | The turn cap, ctrl+c and shutdown all left a hung bash running; its server outlived the turn. |
+| H37 | 2026-10-08 | A suite that is hermetic in-process still leaks through what it launches: a test is separate from the machine only when every process it starts gets the test's state root too. | **new (tentative)** | Sprint 107: pytest wrote nothing to `~/.substrate`, while the Electron gates wrote `~/Library`, the harness wrote `$TMPDIR` and `/tmp`, and one test ran the host's CLIs. Checked by running each suite under an empty `HOME`. |
+| H38 | 2026-10-08 | When a fix lands for one call site of a class, its siblings stay broken until a sweep names every site that shares the cause. | **new (tentative)** | Sprint 101 made quit interrupt a running turn; `/end`, its child cascade, delete and six setters waited on the same lock until Sprint 107 listed every holder of it. |
+| H39 | 2026-10-08 | A vocabulary kept as strings drifts even under a gate when the gate's scope is narrower than the vocabulary's use. | **new (tentative)** | The status-literal hook scanned one repo's top-level files and one operator, and stated the other repo had no literals; that repo had 7. |
 
 ---
 
 ## Entries
+
+### 2026-10-08 — Sprint 107: the whole-project pass, and tests separate from the machine
+
+**Context.** The Architect's order: delete the test folders that leaked into the real home, make sure tests write elsewhere, then the whole-project pass through the practice lenses, then the kernel release. Mid-pass: "tests should be totally separate" is a large part of the review.
+
+**What the measurement showed.** The obvious check (count `~/.substrate` before and after a pytest run) passed: nothing changed. The leaks were elsewhere, and only a wider measurement found them: running each suite under an empty `HOME`, listing every gate's temp dirs, and looking in `~/Library` and `/tmp`. Each layer that starts processes (Electron, the harness, a test calling host CLIs) had to carry the test's state root itself. H37.
+
+**Sibling sweeps beat incident fixes.** Sprint 101 fixed quit. Listing every holder of the per-session turn lock found five more ways to wait behind a running model (`/end`, the child cascade, delete, the setters), and the fix for the setters was not "interrupt" but lock splitting: their own docstrings promised mid-turn changes. H38.
+
+**Gates had narrower reach than they claimed.** The status-literal hook, the harness (never type-checked, so a test picked `undefined` and passed), the UI's missing format check, a boundary test blind to private names: each existed and was green over less than it appeared to cover. Reading each gate's scope against the thing it guards was the fastest way to find drift. H39.
+
+**What the kit could say.** "Hermetic" needs an operational definition the kit can check: the suite runs under an empty `HOME` and a fresh `TMPDIR`, and the run fails if either holds anything afterwards. That is one script, and it turns a principle into a gate.
+
+---
 
 ### 2026-10-07 — Sprint 106: old tests, read before judged
 
@@ -718,4 +735,4 @@ lessons for the kit sit under the finding-30 series above.
 
 ---
 
-*KIT_DIARY.md for substrate-ui. 33 entries, 2026-06-17 to 2026-10-02. 42 hypothesis definitions under 36 IDs (H1–H36); H17, H18, H19, H20, H21, H22 carry more than one definition. Merged with `process/KIT_DIARY.md` on 2026-10-01; that copy is at `_deprecated/process-KIT_DIARY-2026-10-01.md`.*
+*KIT_DIARY.md for substrate-ui. 34 entries, 2026-06-17 to 2026-10-08. 45 hypothesis definitions under 39 IDs (H1–H39); H17, H18, H19, H20, H21, H22 carry more than one definition. Merged with `process/KIT_DIARY.md` on 2026-10-01; that copy is at `_deprecated/process-KIT_DIARY-2026-10-01.md`.*
