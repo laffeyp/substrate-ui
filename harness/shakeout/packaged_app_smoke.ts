@@ -62,9 +62,9 @@
 
 import { _electron as electron } from "playwright";
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync, statSync, readdirSync } from "node:fs";
+import { existsSync, rmSync, statSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { tmpdir } from "node:os";
+import { scratchDir } from "./lib/scratch";
 
 const REPO_ROOT = resolve(__dirname, "..", "..");
 // SMOKE_APP points the smoke at another copy of the bundle, e.g. the
@@ -82,7 +82,7 @@ const TARGET = process.env.SMOKE_TARGET === "source" ? "source" : "packaged";
 // State root for the launched app. Always set, so a smoke never writes the
 // user's real ~/.substrate (Sprint 093). SMOKE_STATE points it at a clone
 // of real state to time startup against real data.
-const STATE = process.env.SMOKE_STATE || mkdtempSync(join(tmpdir(), "smoke-state-"));
+const STATE = process.env.SMOKE_STATE || scratchDir("smoke-state-");
 const T0 = Date.now();
 const MARKS: Record<string, number> = {};
 const mark = (k: string) => { if (!(k in MARKS)) MARKS[k] = Date.now() - T0; };
@@ -176,7 +176,7 @@ async function run(): Promise<void> {
   //    lock so a running dev instance does not block the smoke. The
   //    packaged target gets launchd's PATH, as a Finder launch does;
   //    the source target keeps the shell PATH `npm run electron` has.
-  const userDataDir = mkdtempSync(join(tmpdir(), "packaged-smoke-"));
+  const userDataDir = scratchDir("packaged-smoke-");
   const stderrChunks: string[] = [];
   const consoleChunks: string[] = [];
 
@@ -242,16 +242,17 @@ async function run(): Promise<void> {
       const key = Object.keys(root).find((k) => k.startsWith("__reactContainer"));
       if (!key) throw new Error("no react fiber on #dc-root");
       const stack: unknown[] = [((root[key] as { stateNode?: { current?: unknown } }).stateNode?.current)];
-      let logic: {
+      type Logic = {
         _bindPane: (id: number, path: string) => void;
         state: { panes: { id: number; unbound?: boolean }[] };
-      } | null = null;
+      };
+      let logic: Logic | null = null;
       while (stack.length > 0) {
         const cursor = stack.pop();
         if (!cursor) continue;
         const inst = (cursor as { stateNode?: { logic?: { _bindPane?: unknown } } }).stateNode;
         const cand = inst?.logic;
-        if (cand && typeof cand._bindPane === "function") { logic = cand as typeof logic; break; }
+        if (cand && typeof cand._bindPane === "function") { logic = cand as unknown as Logic; break; }
         const c = (cursor as { child?: unknown }).child;
         const s = (cursor as { sibling?: unknown }).sibling;
         if (s) stack.push(s);

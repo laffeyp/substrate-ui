@@ -45,3 +45,4 @@ def test_daemon_serves_tcp_when_the_socket_path_is_too_long(tmp_path: Path) -> N
     finally:
         proc.terminate()
         proc.wait(timeout=30)
+        proc.stdout.close()  # the pipe this test read (UI sprint 107: it leaked)

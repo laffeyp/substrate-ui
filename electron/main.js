@@ -12,6 +12,7 @@
 
 const { app, BrowserWindow, shell, ipcMain, dialog, screen } = require("electron");
 const { spawn } = require("node:child_process");
+const fs = require("node:fs");
 const http = require("node:http");
 const path = require("node:path");
 const { installMenu } = require("./menu");
@@ -24,6 +25,22 @@ const { installMenu } = require("./menu");
 // call so the paths land under `~/Library/Logs/Substrate/`,
 // `~/Library/Application Support/Substrate/`, etc.
 app.setName(process.env.SUBSTRATE_HOME ? "Substrate Dev" : "Substrate");
+
+// UI sprint 107. A run that names its own SUBSTRATE_HOME (a test gate, `npm run electron`) keeps
+// ALL of its state under that root: logs and the Chromium profile too. On macOS app.getPath('logs')
+// is ~/Library/Logs/<name> regardless of --user-data-dir, so every gate run wrote the real
+// ~/Library/Logs/Substrate Dev/substrate.log, and launchers without --user-data-dir wrote a profile
+// into ~/Library/Application Support/Substrate Dev (Software Engineering at Google, ch. 14:
+// hermetic tests). An explicit --user-data-dir still wins for the profile.
+if (process.env.SUBSTRATE_HOME) {
+  const root = path.join(process.env.SUBSTRATE_HOME, "electron");
+  fs.mkdirSync(path.join(root, "profile"), { recursive: true });
+  app.setAppLogsPath(path.join(root, "logs"));
+  if (!app.commandLine.hasSwitch("user-data-dir")) {
+    app.setPath("userData", path.join(root, "profile"));
+    app.setPath("sessionData", path.join(root, "profile"));
+  }
+}
 
 // Sprint 079: --port 0 asks server.py to bind an ephemeral port.
 // The bound value comes back as the first stdout line matching
@@ -40,7 +57,6 @@ const HEALTH_POLL_MS = 200;
 const KILL_GRACE_MS = 45_000;
 const PORT_READBACK_RE = /^substrate-ui port=(\d+)$/m;
 
-const fs = require("node:fs");
 
 // F2. GUI-launched apps on macOS get launchd's default PATH
 // (/usr/bin:/bin:/usr/sbin:/sbin) — not the user's shell PATH. That

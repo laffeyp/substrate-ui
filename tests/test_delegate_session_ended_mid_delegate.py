@@ -22,7 +22,7 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from substrate.session_registry import SessionRegistry  # noqa: E402
+from substrate.session_registry import SessionManifest, SessionRegistry  # noqa: E402
 
 from substrate import api  # noqa: E402
 from substrate.adapters import DeterministicResponder  # noqa: E402
@@ -31,11 +31,11 @@ from substrate.topologies.tool_loop.delegate import make_delegate  # noqa: E402
 
 
 def _factory(
-    manifest: object, first_turn_user_message: object = None
+    manifest: SessionManifest, first_turn_user_message: object = None
 ) -> Callable[[api.TopologyBuilder], None]:
     del first_turn_user_message  # delegate path uses .resume(); no first-turn opener needed
-    del manifest
     return session_topology(
+        record_root=Path(manifest.record_root),  # the daemon's configuration (UI sprint 107)
         driver=DeterministicResponder(seed=7),
         driver_name="deterministic",
         driver_context_tokens=4096,

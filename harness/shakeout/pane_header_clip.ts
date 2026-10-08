@@ -51,13 +51,14 @@ export const flow: Flow = {
         if (!key) throw new Error("no react fiber");
         const container = root[key] as { stateNode?: { current?: unknown } } | undefined;
         const stack: unknown[] = [container?.stateNode?.current];
-        let logic: { _split: (dir: string) => void; state: { panes: { id: number }[] }; _bindPane: (id: number, ws: string) => void } | null = null;
+        type Logic = { _split: (dir: string) => void; state: { panes: { id: number }[] }; _bindPane: (id: number, ws: string) => void };
+        let logic: Logic | null = null;
         while (stack.length > 0) {
           const cursor = stack.pop();
           if (!cursor) continue;
           const inst = (cursor as { stateNode?: { logic?: { _split?: unknown } } }).stateNode;
           const cand = inst?.logic;
-          if (cand && typeof cand._split === "function") { logic = cand as typeof logic; break; }
+          if (cand && typeof cand._split === "function") { logic = cand as unknown as Logic; break; }
           const child = (cursor as { child?: unknown }).child;
           const sibling = (cursor as { sibling?: unknown }).sibling;
           if (sibling) stack.push(sibling);

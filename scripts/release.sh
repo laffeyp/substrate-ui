@@ -58,7 +58,20 @@ say "    substrate-ui $SUBSTRATE_UI_COMMIT, kernel $KERNEL_COMMIT"
 
 say "2/7 tests and web build"
 (cd "$REPO" && uv run --project "$KERNEL" python scripts/gen_kinds.py --check)
-(cd "$REPO" && uv run --project "$KERNEL" python -m pytest tests/ -q -p no:cacheprovider)
+# UI sprint 107: the suite runs under an empty HOME, and anything it writes there fails the release
+# (Software Engineering at Google, ch. 14: hermetic tests). uv's own caches stay where they are.
+TEST_HOME="$(mktemp -d)"
+UV_CACHE="${UV_CACHE_DIR:-$HOME/.cache/uv}"
+UV_PYTHONS="${UV_PYTHON_INSTALL_DIR:-$HOME/.local/share/uv/python}"
+(cd "$REPO" && HOME="$TEST_HOME" UV_CACHE_DIR="$UV_CACHE" UV_PYTHON_INSTALL_DIR="$UV_PYTHONS" \
+  uv run --project "$KERNEL" python -m pytest tests/ -q -p no:cacheprovider)
+LEAKED="$(find "$TEST_HOME" -mindepth 1 | head -20)"
+rm -rf "$TEST_HOME"
+if [ -n "$LEAKED" ]; then
+  echo "[release] refusing: the test suite wrote into HOME (it must write only to its own temp dirs):" >&2
+  echo "$LEAKED" | sed "s|$TEST_HOME|~|; s/^/    /" >&2
+  exit 1
+fi
 (cd "$REPO" && npm run build)
 (cd "$REPO" && npm run test:unit)  # UI sprint 101: the client specs had no gate
 (cd "$REPO" && npx tsx web/vm/tools/check-vocabulary-parity.ts)  # UI sprint 105: broken since sprint 087, ungated
@@ -92,6 +105,9 @@ codesign --verify --deep --strict "$APP"
   || { echo "[release] Info.plist does not record kernel commit $KERNEL_COMMIT" >&2; exit 1; }
 
 say "6/7 gates against the built bundle"
+# UI sprint 107: every gate gives the app its own SUBSTRATE_HOME, and main.js keeps the app's logs and
+# Chromium profile under it. Anything a gate writes to these real-HOME paths fails the release.
+GATE_MARK="$(mktemp)"
 (cd "$REPO" && SMOKE_APP="$APP" npx tsx harness/shakeout/packaged_app_smoke.ts) | tee "$LOG_DIR/release-$STAMP-smoke.log"
 PORT="$(python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1]);s.close()')"
 (cd "$REPO" && SHAKEOUT_APP="$APP" SHAKEOUT_PORT="$PORT" SHAKEOUT_AXIS=ABC SHAKEOUT_RUNS="${SHAKEOUT_RUNS:-1}" \
@@ -103,6 +119,14 @@ PORT="$(python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));prin
 (cd "$REPO" && TASKS_APP="$APP" npx tsx harness/shakeout/tasks_gate.ts) | tee "$LOG_DIR/release-$STAMP-tasks.log"
 (cd "$REPO" && SMOKE_APP="$APP" npx tsx harness/shakeout/resume_ended_session.ts) | tee "$LOG_DIR/release-$STAMP-resume.log"
 codesign --verify --deep --strict "$APP"  # the gates must not have written into the bundle
+GATE_LEAKS="$(find "$HOME/Library/Logs/Substrate Dev" "$HOME/Library/Application Support/Substrate Dev" \
+  "$HOME/Library/Application Support/substrate-ui-e2e" /tmp/shakeout -newer "$GATE_MARK" 2>/dev/null | head -20 || true)"
+rm -f "$GATE_MARK"
+if [ -n "$GATE_LEAKS" ]; then
+  echo "[release] refusing: a gate wrote outside its temp dirs:" >&2
+  echo "$GATE_LEAKS" | sed 's/^/    /' >&2
+  exit 1
+fi
 
 if [ "$INSTALL" != true ]; then
   say "7/7 skipped (no --install). Built and gated: $APP"

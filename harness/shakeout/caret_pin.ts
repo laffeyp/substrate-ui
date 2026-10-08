@@ -63,6 +63,11 @@ export const flow: Flow = {
         }
       });
 
+      // UI sprint 107: the console line "Failed to load resource: 404" names no URL; this does.
+      page.on("response", (res) => {
+        if (res.status() >= 400) console.error(`[caret_pin] ${res.status()} ${res.request().method()} ${res.url()}`);
+      });
+
       await page.goto(BASE_URL + "/?atom-transcript=1&t=" + Date.now(), { waitUntil: "networkidle" });
       await page.waitForFunction(() => (window as any).__vm != null, undefined, { timeout: 10_000 });
 

@@ -49,7 +49,7 @@ def test_session_tools_include_seven_substrate_toolkit_tools(
     )
     # Rebuild the tool dict directly — the same call session_topology
     # receives via _build_session_topology_from_manifest.
-    from substrate import _daemon as _substrate_daemon
+    from substrate.api import daemon_client as _substrate_daemon
     from substrate.topologies.tool_loop.substrate_tools import (
         make_inspect_record,
         make_list_applications,

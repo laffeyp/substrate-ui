@@ -12,18 +12,15 @@ Run from the substrate venv:
 
 from __future__ import annotations
 
-import json
 import sys
-import threading
-from http.server import ThreadingHTTPServer
 from pathlib import Path
-from urllib.request import urlopen
 
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import server  # noqa: E402
 from substrate.session_registry import SessionRegistry  # noqa: E402
+from _serving import call, serving# noqa: E402
 
 
 @pytest.fixture
@@ -32,15 +29,14 @@ def base(tmp_path: Path) -> str:
         base=tmp_path,
         session_topology_factory=server._build_session_topology_from_manifest,
     )
-    srv = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
-    threading.Thread(target=srv.serve_forever, daemon=True).start()
-    yield f"http://127.0.0.1:{srv.server_address[1]}"
-    srv.shutdown()
+    with serving() as base:
+        yield base
 
 
 def _get(url: str) -> dict:
-    with urlopen(url, timeout=15) as r:
-        return json.loads(r.read())
+    status, payload = call("GET", url, timeout=15)
+    assert status < 400, (status, payload)  # this helper used to raise on an error status
+    return payload
 
 
 def test_empty_registry_returns_empty_buckets(base: str) -> None:

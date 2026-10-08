@@ -11,13 +11,8 @@ Run from the substrate venv:
 
 from __future__ import annotations
 
-import json
 import sys
-import threading
-from http.server import ThreadingHTTPServer
 from pathlib import Path
-from urllib.error import HTTPError
-from urllib.request import Request, urlopen
 
 import pytest
 
@@ -26,6 +21,7 @@ import server  # noqa: E402
 from substrate.session_registry import SessionRegistry  # noqa: E402
 
 from substrate import api  # noqa: E402
+from _serving import call, serving# noqa: E402
 
 
 @pytest.fixture
@@ -34,29 +30,13 @@ def base(tmp_path: Path) -> str:
         base=tmp_path,
         session_topology_factory=server._build_session_topology_from_manifest,
     )
-    srv = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
-    threading.Thread(target=srv.serve_forever, daemon=True).start()
-    yield f"http://127.0.0.1:{srv.server_address[1]}"
-    srv.shutdown()
+    with serving() as base:
+        yield base
 
 
 def _post_json(url: str, body: dict, timeout: float = 30) -> tuple[int, dict]:
-    req = Request(
-        url,
-        data=json.dumps(body).encode(),
-        method="POST",
-        headers={"Content-Type": "application/json"},
-    )
-    try:
-        with urlopen(req, timeout=timeout) as r:
-            return r.status, json.loads(r.read())
-    except HTTPError as exc:
-        raw = exc.read()
-        try:
-            payload = json.loads(raw) if raw else {}
-        except json.JSONDecodeError:
-            payload = {}
-        return exc.code, payload
+    status, payload = call("POST", url, body, timeout=timeout)
+    return status, payload
 
 
 def _create(base: str, workspace: Path) -> str:

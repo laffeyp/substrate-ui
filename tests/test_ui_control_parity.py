@@ -24,19 +24,15 @@ Run from the substrate venv:
 
 from __future__ import annotations
 
-import json
 import sys
-import threading
-from http.server import ThreadingHTTPServer
 from pathlib import Path
-from urllib.error import HTTPError
-from urllib.request import Request, urlopen
 
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import server  # noqa: E402
 from substrate.session_registry import SessionRegistry  # noqa: E402
+from _serving import call, serving# noqa: E402
 
 
 @pytest.fixture
@@ -45,27 +41,12 @@ def base(tmp_path: Path) -> str:
         base=tmp_path,
         session_topology_factory=server._build_session_topology_from_manifest,
     )
-    srv = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
-    threading.Thread(target=srv.serve_forever, daemon=True).start()
-    yield f"http://127.0.0.1:{srv.server_address[1]}"
-    srv.shutdown()
+    with serving() as base:
+        yield base
 
 
 def _http(url: str, method: str = "GET", body: dict | None = None) -> tuple[int, object]:
-    data = json.dumps(body).encode() if body is not None else None
-    headers = {"Content-Type": "application/json"} if body is not None else {}
-    req = Request(url, data=data, method=method, headers=headers)
-    try:
-        with urlopen(req, timeout=15) as r:
-            raw = r.read()
-            return r.status, (json.loads(raw) if raw else None)
-    except HTTPError as exc:
-        raw = exc.read()
-        try:
-            payload = json.loads(raw) if raw else {}
-        except json.JSONDecodeError:
-            payload = {}
-        return exc.code, payload
+    return call(method, url, body, timeout=15)
 
 
 def _create_session(base: str, workspace: str | None = None, **extras) -> str:

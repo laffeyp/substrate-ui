@@ -137,4 +137,5 @@ def test_shutdown_mixes_fresh_parked_and_ended_buckets(
         outcome = server._shutdown_all_sessions(per_session_timeout=15.0)
     finally:
         srv.shutdown()
+        srv.server_close()
     assert outcome == {"ended": 1, "skipped_fresh": 1, "skipped_ended": 1, "failed": 0, "background_stopped": 0}

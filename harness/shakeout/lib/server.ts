@@ -6,8 +6,8 @@
 import { spawn, ChildProcess } from "node:child_process";
 import { setTimeout as sleep } from "node:timers/promises";
 import { join } from "node:path";
-import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { scratchDir } from "./scratch";
+import { shakeoutOutDir } from "./report";
 
 const REPO_ROOT = join(__dirname, "..", "..", "..");
 const SUBSTRATE_ROOT = join(REPO_ROOT, "..", "substrate");
@@ -18,17 +18,18 @@ export const BASE_URL = `http://127.0.0.1:${PORT}`;
 
 export class ServerHandle {
   private proc: ChildProcess | null = null;
-  private logPath = "/tmp/shakeout-server.log";
+  private logPath = join(shakeoutOutDir(), "server.log");
   readonly substrateHome: string;
 
   constructor() {
-    this.substrateHome = mkdtempSync(join(tmpdir(), "shakeout-home-"));
+    this.substrateHome = scratchDir("shakeout-home-");
   }
 
   async start(): Promise<void> {
     if (this.proc) return;
     await this.requirePortFree();
     const fs = await import("node:fs");
+    fs.mkdirSync(shakeoutOutDir(), { recursive: true });
     const out = fs.openSync(this.logPath, "a");
     // detached:true puts the child in its own process group so we can
     // signal the whole group (uv + python). Killing only uv leaves the

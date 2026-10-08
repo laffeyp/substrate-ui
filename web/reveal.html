@@ -2,6 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8">
+<link rel="icon" href="data:,"><!-- UI sprint 107: no icon to fetch; the missing /favicon.ico 404ed on every load -->
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>substrate · reveal</title>
 <!-- dc-runtime needs React + ReactDOM in window scope before support.js runs. -->
@@ -446,7 +447,7 @@
      <div style="font-size:11px;color:#62676f;margin-bottom:8px">node-graph — drag the Producer cards; solid edges are Triggers; dashed edges feed a Route's named slot</div>
      <div style="position:relative;height:420px;border:1px solid rgba(255,255,255,.07);border-radius:8px;background:#1a1c20;overflow:hidden;width:960px">
       <svg viewBox="0 0 960 420" preserveAspectRatio="none" style="position:absolute;inset:0;width:960px;height:420px;pointer-events:none">
-       <sc-for list="{{ canvasEdges }}" as="ed" hint-placeholder-count="2"><path d="{{ ed.d }}" stroke="{{ ed.stroke }}" stroke-width="1.5" fill="none" stroke-dasharray="{{ ed.dash }}"></path></sc-for>
+       <sc-for list="{{ canvasEdges }}" as="ed" hint-placeholder-count="2"><path sc-camel-d="{{ ed.d }}" stroke="{{ ed.stroke }}" stroke-width="1.5" fill="none" stroke-dasharray="{{ ed.dash }}"></path></sc-for>
       </svg>
       <sc-for list="{{ canvasLabels }}" as="cl" hint-placeholder-count="2"><div style="position:absolute;left:{{ cl.x }}px;top:{{ cl.y }}px;color:{{ cl.fill }};font-size:10px;background:rgba(26,28,32,.88);border-radius:4px;padding:1px 6px;pointer-events:none;white-space:nowrap">{{ cl.text }}</div></sc-for>
       <sc-for list="{{ canvasCards }}" as="cc" hint-placeholder-count="3">

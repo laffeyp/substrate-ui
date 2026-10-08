@@ -38,3 +38,9 @@ build/python/
 dist-electron/
 .env.local
 build/python-native/
+
+# release.sh's per-run logs and gate reports (UI sprint 107: they were untracked noise; the
+# release's own clean-tree check already skipped them)
+runs/packaged/release-*
+# the shakeout harness's server log, written next to each run's report.json
+captures/shakeout-*/server.log

@@ -461,7 +461,8 @@ export class SessionController {
       endedReason: null,
     });
     this.attachStream(ack.session_id);
-    this.loadTopologyGraph(ack.session_id).catch(() => undefined);
+    // No graph fetch here: a fresh session has no record until its first turn, so the request
+    // 404'd on every open (UI sprint 107). The SessionStarted handler fetches it once it exists.
     this.emit("SESSION_OPEN_ACKED", { session_id: ack.session_id, name: ack.name ?? null, driver });
   }
 
@@ -776,54 +777,51 @@ export class SessionController {
     const cmd = parts[0].toLowerCase();
     const rest = parts.slice(1).join(" ");
     this.emit("SLASH_ROUTED", { cmd });
-    switch (cmd) {
-      case "exit":
-      case "quit":
-      case "end":
-        await this.endSession("user_end");
-        return true;
-      case "model":
-      case "driver":
-        if (rest) this.pickDriver(rest);
-        else this.appendTranscript({
-          seq: -Math.round(Date.now()) - 2,
-          kind: "SlashHelp", role: "system",
-          text: `current driver: ${this.snap.driver ?? this.snap.driverDefault ?? "deterministic"}. use /model <name> to switch.`,
-        });
-        return true;
-      case "help":
-      case "?": {
-        const known = ["/exit", "/model <name>", "/name <new>", "/list", "/interrupt", "/clear", "/help"];
-        this.appendTranscript({
-          seq: -Math.round(Date.now()) - 3,
-          kind: "SlashHelp", role: "system",
-          text: `slash commands: ${known.join(" · ")}`,
-        });
-        return true;
-      }
-      case "clear":
-        this.patch({ transcript: [] });
-        return true;
-      case "interrupt":
-      case "int":
-        await this.interruptTurn();
-        return true;
-      case "name":
-      case "rename":
-        if (!rest) {
+    const command = this.slashCommands().find((c) => c.names.includes(cmd));
+    if (command) {
+      await command.run(rest);
+      return true;
+    }
+    this.appendTranscript({
+      seq: -Math.round(Date.now()) - 4,
+      kind: "SlashUnknown", role: "warning",
+      text: `unknown slash: /${cmd}. /help for the list.`,
+    });
+    this.emit("SLASH_UNKNOWN", { cmd });
+    return true;
+  }
+
+  /** The slash commands, in `/help` order. UI sprint 107: one table; the dispatch `switch` and
+   * the `/help` list were two hand-kept copies of the same seven commands. */
+  private slashCommands(): { names: string[]; usage: string; run: (rest: string) => Promise<void> | void }[] {
+    return [
+      { names: ["exit", "quit", "end"], usage: "/exit", run: () => this.endSession("user_end") },
+      {
+        names: ["model", "driver"], usage: "/model <name>",
+        run: (rest) => {
+          if (rest) this.pickDriver(rest);
+          else this.appendTranscript({
+            seq: -Math.round(Date.now()) - 2,
+            kind: "SlashHelp", role: "system",
+            text: `current driver: ${this.snap.driver ?? this.snap.driverDefault ?? "deterministic"}. use /model <name> to switch.`,
+          });
+        },
+      },
+      {
+        names: ["name", "rename"], usage: "/name <new>",
+        run: async (rest) => {
+          if (rest) { await this.renameSession(rest); return; }
           this.appendTranscript({
             seq: -Math.round(Date.now()) - 9,
             kind: "SlashHelp", role: "system",
             text: `current name: ${this.snap.sessionName ?? "(unnamed)"}. use /name <new> to rename.`,
           });
-        } else {
-          await this.renameSession(rest);
-        }
-        return true;
-      case "list":
-      case "ls":
-        await this.loadLiveSessions();
-        {
+        },
+      },
+      {
+        names: ["list", "ls"], usage: "/list",
+        run: async () => {
+          await this.loadLiveSessions();
           const rows = this.snap.liveSessions;
           const text = rows.length
             ? `${rows.length} session${rows.length === 1 ? "" : "s"}: ${rows.map(r => `${r.name} (${r.status})`).join(", ")}`
@@ -833,17 +831,21 @@ export class SessionController {
             kind: "SlashListed", role: "system",
             text,
           });
-        }
-        return true;
-      default:
-        this.appendTranscript({
-          seq: -Math.round(Date.now()) - 4,
-          kind: "SlashUnknown", role: "warning",
-          text: `unknown slash: /${cmd}. /help for the list.`,
-        });
-        this.emit("SLASH_UNKNOWN", { cmd });
-        return true;
-    }
+        },
+      },
+      { names: ["interrupt", "int"], usage: "/interrupt", run: () => this.interruptTurn() },
+      { names: ["clear"], usage: "/clear", run: () => { this.patch({ transcript: [] }); } },
+      {
+        names: ["help", "?"], usage: "/help",
+        run: () => {
+          this.appendTranscript({
+            seq: -Math.round(Date.now()) - 3,
+            kind: "SlashHelp", role: "system",
+            text: `slash commands: ${this.slashCommands().map((c) => c.usage).join(" · ")}`,
+          });
+        },
+      },
+    ];
   }
 
   /** Rename the current session. PATCH /api/session/<id> body
@@ -976,10 +978,9 @@ export class SessionController {
         const driver = payload.driver_model != null ? String(payload.driver_model) : this.snap.driver;
         const bundle = payload.bundle == null ? this.snap.bundleSlug : String(payload.bundle);
         this.patch({ driver, bundleSlug: bundle });
-        // The open-time loadTopologyGraph (openSession) runs before the
-        // session's first turn creates its record, so it 404s. This
-        // envelope is read off that record, so the record now exists:
-        // fetch the graph here if nothing loaded it yet.
+        // A fresh session's record exists from its first turn, and this
+        // envelope is read off it: fetch the graph here if nothing (an
+        // attach) loaded it yet.
         if (!this.snap.topologyGraph) {
           this.loadTopologyGraph(sessionId).catch(() => undefined);
         }

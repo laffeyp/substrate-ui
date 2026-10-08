@@ -66,7 +66,9 @@ def dual_transport(tmp_path: Path) -> tuple[str, str]:
     threading.Thread(target=uds_srv.serve_forever, daemon=True).start()
     yield f"http://127.0.0.1:{tcp_srv.server_address[1]}", str(uds_path)
     tcp_srv.shutdown()
+    tcp_srv.server_close()
     uds_srv.shutdown()
+    uds_srv.server_close()
     try:
         uds_path.unlink()
     except FileNotFoundError:

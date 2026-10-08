@@ -101,6 +101,15 @@ export function assembleFullReport(flows: FlowResult[]): FullReport {
   };
 }
 
+/** Where one shakeout run writes its report and its server log. UI sprint 102: release.sh points
+ * SHAKEOUT_OUT_DIR at its own log dir, so a gate run never rewrites a committed report under
+ * captures/. UI sprint 107: the server log lands here too; it used to append forever to
+ * /tmp/shakeout-server.log (4.6 MB), outside every run's directory. */
+export function shakeoutOutDir(): string {
+  const today = new Date().toISOString().slice(0, 10);
+  return process.env.SHAKEOUT_OUT_DIR || join(__dirname, "..", "..", "..", "captures", `shakeout-${today}`);
+}
+
 export function writeReport(report: FullReport, outDir: string): string {
   mkdirSync(outDir, { recursive: true });
   const path = join(outDir, "report.json");

@@ -23,9 +23,8 @@
 // never touches ~/.substrate.
 
 import { _electron as electron } from "playwright";
-import { mkdtempSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { tmpdir } from "node:os";
+import { scratchDir } from "./lib/scratch";
 
 const REPO_ROOT = resolve(__dirname, "..", "..");
 const TARGET = process.env.SMOKE_TARGET === "source" ? "source" : "packaged";
@@ -58,8 +57,8 @@ function die(msg: string): never {
 }
 
 async function main(): Promise<void> {
-  const home = mkdtempSync(join(tmpdir(), "resume-home-"));
-  const userData = mkdtempSync(join(tmpdir(), "resume-ud-"));
+  const home = scratchDir("resume-home-");
+  const userData = scratchDir("resume-ud-");
   const env = { ...process.env, HOME: home, UV_CACHE_DIR: join(process.env.HOME || "", ".cache/uv"), UV_PYTHON_INSTALL_DIR: join(process.env.HOME || "", ".local/share/uv/python") } as Record<string, string>;
   const app = TARGET === "source"
     ? await electron.launch({ args: [REPO_ROOT, "--user-data-dir=" + userData], env, timeout: 60_000 })
@@ -78,12 +77,13 @@ async function main(): Promise<void> {
       const key = Object.keys(root).find((k) => k.startsWith("__reactContainer"));
       if (!key) throw new Error("no react fiber");
       const stack: unknown[] = [((root[key] as { stateNode?: { current?: unknown } }).stateNode?.current)];
-      let logic: { _bindPane: (id: number, p: string) => void; state: { panes: { id: number; unbound?: boolean }[] } } | null = null;
+      type Logic = { _bindPane: (id: number, p: string) => void; state: { panes: { id: number; unbound?: boolean }[] } };
+      let logic: Logic | null = null;
       while (stack.length) {
         const c = stack.pop() as { stateNode?: { logic?: { _bindPane?: unknown } }; child?: unknown; sibling?: unknown } | undefined;
         if (!c) continue;
         const cand = c.stateNode?.logic;
-        if (cand && typeof cand._bindPane === "function") { logic = cand as typeof logic; break; }
+        if (cand && typeof cand._bindPane === "function") { logic = cand as unknown as Logic; break; }
         if (c.sibling) stack.push(c.sibling);
         if (c.child) stack.push(c.child);
       }

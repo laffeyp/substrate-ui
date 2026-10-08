@@ -3,6 +3,7 @@
 // report. Owns the server.
 
 import { ServerHandle, BASE_URL } from "./lib/server";
+import { shakeoutOutDir } from "./lib/report";
 import type { Flow, EmittedRecord, Defect } from "./lib/flow";
 import { assembleFullReport, writeReport, printSummary, exitCodeFor } from "./lib/report";
 import type { RunResult, FlowResult } from "./lib/report";
@@ -125,10 +126,7 @@ async function main(): Promise<void> {
   }
 
   const report = assembleFullReport(flowResults);
-  const today = new Date().toISOString().slice(0, 10);
-  // UI sprint 102: release.sh points this at its own log dir, so a gate run never rewrites a
-  // committed report under captures/ (one sleep-broken run did, and blocked the next release).
-  const outDir = process.env.SHAKEOUT_OUT_DIR || join(__dirname, "..", "..", "captures", `shakeout-${today}`);
+  const outDir = shakeoutOutDir();
   const reportPath = writeReport(report, outDir);
   printSummary(report);
   console.log(`\n[shakeout] report written to ${reportPath}`);
