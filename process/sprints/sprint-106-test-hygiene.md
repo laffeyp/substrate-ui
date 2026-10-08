@@ -60,3 +60,10 @@ Tiers: kernel 1,224 passed, 3 skipped (3.14); UI 221; client specs 23/23; lint, 
 
 - The repo secret `CROSS_REPO_TOKEN` on laffeyp/substrate-ui has expired: GitHub answers `Bad credentials`. Both UI CI jobs that check out the kernel need a fresh PAT with read access to laffeyp/substrate.
 - CI runs only on pushed commits, and nothing since 2026-09-30 is pushed.
+
+## found at release
+
+The install step asked the running app to quit, waited 60 s, and copied the new bundle in whether or not it had quit. This time the app could not quit: during the long-path test I had run `pkill -f "server.py --port 0"`, which also matched the installed app's own backend. The app then showed its backend-stopped dialog (sprint 102), and that modal refused AppleScript's quit ("User canceled", -128). The old build stayed running over the new bundle. It was stopped by pid and the new build opened.
+- `release.sh` now stops with an error when the app has not quit, instead of installing under it.
+- The broad `pkill` was the agent's mistake; processes on this machine are stopped by pid only.
+
