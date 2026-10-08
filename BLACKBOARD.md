@@ -809,7 +809,6 @@ Twelve PNGs at `captures/pixel-baseline-2026-09-23/`: six states (`empty`, `one_
 *Anyone may append.*
 
 - **2026-10-01 — Kernel 1.1.2 to PyPI?** Answered for the app by Sprint 100: the app bundles the kernel from the commit, so nothing in substrate-ui waits on PyPI. Publishing remains a question about the library's other users only, and stays the Architect's (outward-facing).
-- **2026-10-07 — Renew `CROSS_REPO_TOKEN`.** The laffeyp/substrate-ui repo secret used to check out the private kernel in CI returns `Bad credentials`. A new PAT with read access to laffeyp/substrate is an account credential, so it is the Architect's. Sprint 106.
 - **2026-10-01 — The 147 session dirs in the real `~/.substrate/sessions`.** Created on 2026-10-01, before `substrate/tests/conftest.py` isolated the state root; provenance is mixed between leaking tests and the Architect's own use. Untouched. User-only: they are the Architect's data.
 
 ---
@@ -867,7 +866,7 @@ Twelve PNGs at `captures/pixel-baseline-2026-09-23/`: six states (`empty`, `one_
   - 11 one-off scripts retired to `harness/_deprecated/`.
 
   `release.sh` now runs the VM smoke, Axes A–C and `resume_ended_session`.
-- Open (Architect): `CROSS_REPO_TOKEN` expired, so UI CI cannot check out the kernel; nothing since 2026-09-30 is pushed. Card `process/sprints/sprint-106-test-hygiene.md`.
+- Closed the same day: both repos are public, so the expired `CROSS_REPO_TOKEN` was unneeded and the workflow no longer reads it; both repos pushed. Card `process/sprints/sprint-106-test-hygiene.md`.
 
 ### Sprint 105 (2026-10-02, closed) — background tasks in the app
 - The activity strip lists each running background task (`task bg_… · cmd · runtime · stop`) in both views; stop kills it and the model hears about it. Daemon: `GET /api/session/<id>/tasks`, `POST …/tasks/<task_id>/stop`. Gate `tasks_gate.ts` drives a real kimi turn in the Electron app and runs in `release.sh`.

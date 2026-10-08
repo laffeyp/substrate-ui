@@ -10,13 +10,15 @@ concurrency:
 
 # The console consumes substrate as a LIBRARY, through its public surfaces only. CI mirrors the
 # documented local run model: check out both repos side by side, install substrate editable into a
-# venv, and run the console's checks against it. laffeyp/substrate is private: the checkout reads
-# the repo secret CROSS_REPO_TOKEN (a PAT with read access to it).
+# venv, and run the console's checks against it. laffeyp/substrate is public, so the checkout needs
+# no token. (The workflow used to prefer a CROSS_REPO_TOKEN secret; that PAT expired and every
+# checkout failed with "Bad credentials" while the default token would have worked.)
 #
 # UI sprint 106 (2026-10-07): every run had failed since at least 2026-09-28. The e2e job called
 # four npm scripts deleted with the classic tree on 2026-09-22; the lint job ran an unpinned
 # `uvx ruff`, whose newer default rules reported 231 errors the project's pinned ruff does not; the
-# two checkout jobs failed on an expired CROSS_REPO_TOKEN. The jobs below run the checks that exist.
+# two checkout jobs failed on an expired CROSS_REPO_TOKEN, unneeded for a public repo. The jobs below
+# run the checks that exist.
 
 jobs:
   lint:
@@ -44,7 +46,6 @@ jobs:
         with:
           repository: laffeyp/substrate
           path: substrate
-          token: ${{ secrets.CROSS_REPO_TOKEN || github.token }}
       - name: Install uv
         uses: astral-sh/setup-uv@v6
       - name: Install substrate (editable, with dev extras)
@@ -70,7 +71,6 @@ jobs:
         with:
           repository: laffeyp/substrate
           path: substrate
-          token: ${{ secrets.CROSS_REPO_TOKEN || github.token }}
       - name: Install uv
         uses: astral-sh/setup-uv@v6
       - name: Install substrate (editable)
