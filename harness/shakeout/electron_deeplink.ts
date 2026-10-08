@@ -27,11 +27,11 @@ export const flow: Flow = {
     // Warm path.
     {
       const launch = launchArgs();
-      const app = await electron.launch({ args: launch.args, timeout: 30_000 });
+      const app = await electron.launch({ ...launch.options, timeout: 30_000 });
       try {
         const win = await app.firstWindow({ timeout: 20_000 });
         await win.waitForFunction(
-          () => document.querySelectorAll('[data-vm-atom-root="terminal"]').length >= 1,
+          () => (window as unknown as { __vm?: unknown }).__vm != null, // the app is up; a transcript mount exists only once a session opens (UI sprint 106)
           undefined,
           { timeout: 15_000 },
         );
@@ -61,14 +61,14 @@ export const flow: Flow = {
     // Cold path — observe the main-side flush log line.
     {
       const launch = launchArgs();
-      const app = await electron.launch({ args: launch.args, timeout: 30_000 });
+      const app = await electron.launch({ ...launch.options, timeout: 30_000 });
       const stderrBuf: string[] = [];
       app.process().stderr?.on("data", (c) => stderrBuf.push(c.toString()));
       try {
         await app.evaluate((m, u) => m.app.emit("open-url", { preventDefault: Boolean }, u), TEST_URL);
         const win = await app.firstWindow({ timeout: 20_000 });
         await win.waitForFunction(
-          () => document.querySelectorAll('[data-vm-atom-root="terminal"]').length >= 1,
+          () => (window as unknown as { __vm?: unknown }).__vm != null, // the app is up; a transcript mount exists only once a session opens (UI sprint 106)
           undefined,
           { timeout: 15_000 },
         );

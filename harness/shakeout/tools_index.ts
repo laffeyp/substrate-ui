@@ -17,6 +17,10 @@ export const TOOL_FLOWS: Flow[] = [
   makeToolFlow({ tool: "edit_file", prompt: "Please demonstrate the `edit_file` tool by creating and editing a file under /tmp/shakeout/, then report what changed." }),
   makeToolFlow({ tool: "write_file", prompt: "Please demonstrate the `write_file` tool by writing a short file under /tmp/shakeout/ and report what you wrote." }),
   makeToolFlow({ tool: "bash", prompt: "Please demonstrate the `bash` tool by running a short read-only command (like `pwd` or `date`) and report what came back." }),
+  // UI sprint 106: the sprint 103 background tools had no flow.
+  makeToolFlow({ tool: "bash_output", prompt: "Please demonstrate the `bash_output` tool: first start `sleep 1; echo READY` with the `bash` tool and run_in_background true, then call `bash_output` once with the task_id it returned, and report what came back." }),
+  makeToolFlow({ tool: "bash_stop", prompt: "Please demonstrate the `bash_stop` tool: first start `sleep 120` with the `bash` tool and run_in_background true, then call `bash_stop` once with the task_id it returned, and report what came back." }),
+  makeToolFlow({ tool: "bash_tasks", prompt: "Please demonstrate the `bash_tasks` tool: first start `sleep 1` with the `bash` tool and run_in_background true, then call `bash_tasks` once and report what came back." }),
   makeToolFlow({ tool: "inspect_record", prompt: "Please demonstrate the `inspect_record` tool by inspecting any substrate record you can find and report a summary of what came back." }),
   makeToolFlow({ tool: "list_records", prompt: "Please demonstrate the `list_records` tool by calling it once and report a summary of what came back." }),
   makeToolFlow({ tool: "list_sessions", prompt: "Please demonstrate the `list_sessions` tool by calling it once and report a summary of what came back." }),

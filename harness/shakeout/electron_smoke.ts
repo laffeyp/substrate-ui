@@ -23,11 +23,29 @@ const REPO_ROOT = join(__dirname, "..", "..");
 // runs alongside a dev-launched `npm run electron` or when several
 // AXIS_C flows run back-to-back and the OS hasn't released the
 // lock yet.
-export function launchArgs(): { args: string[]; cleanup: () => void } {
+export interface Launch {
+  options: { args: string[]; env: Record<string, string>; executablePath?: string };
+  cleanup: () => void;
+}
+
+// UI sprint 106: every launch gets its own state root (SUBSTRATE_HOME) as well as its own
+// user-data dir. Without SUBSTRATE_HOME the app ran on the user's real ~/.substrate and took the
+// installed app's single-instance lock (main.js names it "Substrate" then), so with the app open
+// the launch quit at once. SHAKEOUT_APP=<Substrate.app> runs the packaged bundle.
+export function launchArgs(): Launch {
   const dir = mkdtempSync(join(tmpdir(), "electron-shakeout-"));
+  const state = mkdtempSync(join(tmpdir(), "electron-shakeout-state-"));
+  const env = { ...process.env, SUBSTRATE_HOME: state } as Record<string, string>;
+  const app = process.env.SHAKEOUT_APP || "";
   return {
-    args: [REPO_ROOT, "--user-data-dir=" + dir],
-    cleanup: () => { try { rmSync(dir, { recursive: true, force: true }); } catch (_) { /* best-effort */ } },
+    options: app
+      ? { executablePath: join(app, "Contents", "MacOS", "Substrate"), args: ["--user-data-dir=" + dir], env }
+      : { args: [REPO_ROOT, "--user-data-dir=" + dir], env },
+    cleanup: () => {
+      for (const d of [dir, state]) {
+        try { rmSync(d, { recursive: true, force: true }); } catch (_) { /* best-effort */ }
+      }
+    },
   };
 }
 
@@ -44,11 +62,11 @@ export const flow: Flow = {
     const emitted: EmittedRecord[] = [];
     const defects: Defect[] = [];
     const launch = launchArgs();
-    const app = await electron.launch({ args: launch.args, timeout: 30_000 });
+    const app = await electron.launch({ ...launch.options, timeout: 30_000 });
     try {
       const win = await app.firstWindow({ timeout: 20_000 });
       await win.waitForFunction(
-        () => document.querySelectorAll('[data-vm-atom-root="terminal"]').length >= 1,
+        () => (window as unknown as { __vm?: unknown }).__vm != null, // the app is up; a transcript mount exists only once a session opens (UI sprint 106)
         undefined,
         { timeout: 15_000 },
       );
