@@ -10,6 +10,8 @@
 
 *Agent + Architect. Halts, partials, comprehension affirmations, Rubber Duck observations marked `surfaced`.*
 
+- **2026-10-08 Claude — The tests were not separate from the machine.** The real home held 3,094 test sessions and 1,380 empty test folders; `$TMPDIR` held 218 gate dirs; `~/Library` held 79 MB of test Electron profiles and logs; a model wrote demo files into the real `/tmp`; one UI test ran every installed CLI's model listing and rewrote `~/.cursor/cli-config.json`. The Python suites were already isolated; the gates, the app's Electron paths and that test were not. All deleted (sessions through the app's own endpoint), each cause fixed, and `release.sh` now refuses a release whose tests write into `HOME`. The same pass found the siblings Sprint 101 missed: `/end`, delete and every session setter waited behind a running turn, and glob/grep walked the whole disk where no interrupt could reach. Card `process/sprints/sprint-107-whole-project-pass.md`. Said in chat the same turn.
+
 - **2026-10-02 Claude — Class H: agent work modelled as a short request.** Turn 28 died at the daemon's 600 s cap. The model was not working: its bash call had started a background server that held the tool's output pipe, and the tool's read loop had no deadline. The cap removed the symptom and could not stop the thread. The strip kept counting under the red error, and the bash card showed turn 9's result because call ids restart each turn. Sprint 101: no wall-clock limits on model work, a real per-call bash deadline with process-group kill, failure states with exits (manifest, turn index, timeout parks, shutdown interrupts, the strip shows "ended"), calls keyed `callId@seq`, and the output cap raised to the context window (Ollama counts reasoning against it). Class doc: `process/planning/CLASS-2026-10-02-agent-work-modelled-as-a-short-request.md`. Said in chat the same turn.
 
 - **2026-10-02 Claude — The transcript has not followed the bottom since 2026-09-24.** The Architect reported no sticky/free scrolling in build 1790925851. The 2026-09-15 behaviour (`83b20bd`: follow the tail only when already at the bottom; keep each pane's position across view switches) was deleted by Sprint 076 as "superseded by `useScrollAnchor`". Meanwhile the hook's own comments assign follow-bottom to the `reveal.ts` code 076 deleted, and the hook pins the topmost row forever. Sprint 075's sticky invariant never had a check; Sprint 092 recorded "Sticky-bottom terminal pinning" with no observation run; the 093–099 review did not re-verify it. No gate measures scroll position after a row arrives. Postmortem: `process/planning/POSTMORTEM-2026-10-02-transcript-follow-bottom-regression.md`. Said in chat the same turn.
@@ -108,6 +110,8 @@
 
 ## Decisions
 
+- **2026-10-08 user** — "Oh, leaking test folders can be deleted. Don't worry about that. Just make sure that next time they're somewhere else, correct? then whole project pass! then kernel can come last today." And mid-pass: "as part of the review, like this is a big thing, right? The best practices review that we're going to do next. You know, tests should be totally separate." Sprint 107: the test sessions and folders deleted; tests, gates and the app's test runs write only to their own temp dirs, and the release checks it.
+
 - **2026-10-02 user** — Agent work has no wall-clock limit. "models can work for some time … Claude Code is basically the standard. Nothing can work for 20 minutes, you know what I mean? It doesn't just like... you have to cancel it." No turn is cancelled for lack of progress either: "we're not canceling a turn after a long stretch with no progress. I already made that decision." A turn ends when it finishes or when the user interrupts it. Sprint 101.
 
 - **2026-10-01 user** — "Testing the app should not depend on a release. Let's make it not happen." Sprint 100: the bundled kernel is built from the `../substrate` commit, not installed from PyPI; a PyPI release no longer gates any app build, test or install.
@@ -153,6 +157,13 @@
 ## Built
 
 *Agent appends one entry per sprint/increment close. Append-only.*
+
+### Rolled from Sprint tail (2026-10-08)
+
+#### Sprint 098 (2026-10-01, built; first run waits on the Architect) — one release command (roadmap class C)
+- `scripts/release.sh`: clean trees → tests → runtime → sign → verify → smoke + Axis-A shakeout against the built bundle → optional install. The commit is recorded in `Info.plist` before signing. The drift guard now refuses uncommitted kernel edits. `SHAKEOUT_APP` makes `shakeout:packaged` real (091's missing gate).
+- Ran: release refuses at stage 1 on today's uncommitted tree. Packaged shakeout against the installed Sep 29 build: 4 flows 5/5; `cli_discovery` 1–3 defects per run; `cli_version_picker` hit the 15-min watchdog (open).
+- Card `process/sprints/sprint-098-release-pipeline.md`.
 
 ### Rolled from Sprint tail and merged from process/BLACKBOARD.md (2026-10-01, newest first)
 
@@ -809,7 +820,7 @@ Twelve PNGs at `captures/pixel-baseline-2026-09-23/`: six states (`empty`, `one_
 *Anyone may append.*
 
 - **2026-10-01 — Kernel 1.1.2 to PyPI?** Answered for the app by Sprint 100: the app bundles the kernel from the commit, so nothing in substrate-ui waits on PyPI. Publishing remains a question about the library's other users only, and stays the Architect's (outward-facing).
-- **2026-10-01 — The 147 session dirs in the real `~/.substrate/sessions`.** Created on 2026-10-01, before `substrate/tests/conftest.py` isolated the state root; provenance is mixed between leaking tests and the Architect's own use. Untouched. User-only: they are the Architect's data.
+- ~~**2026-10-01 — The 147 session dirs in the real `~/.substrate/sessions`.**~~ Closed 2026-10-08 by the Architect's decision ("leaking test folders can be deleted"). By then the folder held 4,522 entries: 3,094 test sessions deleted through the app's endpoint, 1,380 empty folders removed, 43 sessions with a human first message or a name kept, plus 4 old folders holding files. Sprint 107.
 
 ---
 
@@ -854,6 +865,13 @@ Twelve PNGs at `captures/pixel-baseline-2026-09-23/`: six states (`empty`, `one_
 ## Sprint tail
 
 *Agent maintains. Last 10 increment closes; older roll into ## Built as compressed paragraphs.*
+
+### Sprint 107 (2026-10-08, closed) — the whole-project pass
+- Tests are separate from the machine: the real home's test sessions, folders, temp dirs, `~/Library` profiles and `/tmp` files deleted; `main.js` keeps a test run's logs and profile under its `SUBSTRATE_HOME`; one fixture removes every gate temp dir; a host-dependent CLI test fixed; the release runs the UI suite under an empty `HOME` and checks the gates wrote nothing outside their dirs.
+- Class H siblings: `/end`, delete and the session setters no longer wait behind a running turn (interrupt first; lock splitting); glob/grep stop at their caps and at the interrupt.
+- One copy of each fact: `TaskStatus`, `RunStatus` and kind-name constants replace bare strings on 55 lines; the client's statuses are generated; one Node client, one slash table, one server fixture, one HTTP helper.
+- Gates that existed nowhere: the harness type-check (34 errors, one test that tested nothing), UI formatting, the status-literal gate in the kernel and in CI. A launch race CI exposed is fixed.
+- Gates: kernel 1,229 / 3 skipped; UI 225, 0 warnings; source-mode gates all pass; CI green. Card `process/sprints/sprint-107-whole-project-pass.md`.
 
 ### Sprint 106 (2026-10-07, closed) — the checks no gate ran
 - Audit: every check outside the release pipeline read, traced and run; none failed on a product bug. Fixed:
@@ -905,8 +923,3 @@ Twelve PNGs at `captures/pixel-baseline-2026-09-23/`: six states (`empty`, `one_
 
 ### Sprint 098a (2026-10-01, closed; retroactive card) — the open items of 097 and 098
 - Loud truncation (`num_predict` always set, `done_reason == "length"` raises) and the coding_flow drafter wedge it exposed; realmodel fixes; `list_records` 7.84 s → 1.79 s via `read_first_envelope` and `RunStarted.payload.name`; coding-gate `PATH` (`_gate_env`); `cli_version_picker` 15-minute hang (SSE endpoint fetched as a JSON page); lifecycle gates F5/F6/F7; F10 icon; precompiled bytecode (backend start 0.52 s → 0.15 s); Mach-O in `Frameworks/python-native` so `codesign --deep --strict` passes; verification builds. Card: `process/sprints/sprint-098a-open-items-closed.md`.
-
-### Sprint 098 (2026-10-01, built; first run waits on the Architect) — one release command (roadmap class C)
-- `scripts/release.sh`: clean trees → tests → runtime → sign → verify → smoke + Axis-A shakeout against the built bundle → optional install. The commit is recorded in `Info.plist` before signing. The drift guard now refuses uncommitted kernel edits. `SHAKEOUT_APP` makes `shakeout:packaged` real (091's missing gate).
-- Ran: release refuses at stage 1 on today's uncommitted tree. Packaged shakeout against the installed Sep 29 build: 4 flows 5/5; `cli_discovery` 1–3 defects per run; `cli_version_picker` hit the 15-min watchdog (open).
-- Card `process/sprints/sprint-098-release-pipeline.md`.
