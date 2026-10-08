@@ -9,10 +9,10 @@
 // 8765 server keeps running alongside, harmless.
 
 import { _electron as electron } from "playwright";
-import { mkdtempSync, rmSync } from "node:fs";
+import { rmSync } from "node:fs";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
 import type { Flow, EmittedRecord, Defect, FlowContext } from "./lib/flow";
+import { scratchDir } from "./lib/scratch";
 
 const REPO_ROOT = join(__dirname, "..", "..");
 
@@ -33,8 +33,8 @@ export interface Launch {
 // installed app's single-instance lock (main.js names it "Substrate" then), so with the app open
 // the launch quit at once. SHAKEOUT_APP=<Substrate.app> runs the packaged bundle.
 export function launchArgs(): Launch {
-  const dir = mkdtempSync(join(tmpdir(), "electron-shakeout-"));
-  const state = mkdtempSync(join(tmpdir(), "electron-shakeout-state-"));
+  const dir = scratchDir("electron-shakeout-");
+  const state = scratchDir("electron-shakeout-state-");
   const env = { ...process.env, SUBSTRATE_HOME: state } as Record<string, string>;
   const app = process.env.SHAKEOUT_APP || "";
   return {

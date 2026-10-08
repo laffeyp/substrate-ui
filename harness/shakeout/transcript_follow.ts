@@ -14,9 +14,8 @@
 //   npx tsx harness/shakeout/transcript_follow.ts
 
 import { _electron as electron, type ElectronApplication, type Page } from "playwright";
-import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { scratchDir } from "./lib/scratch";
 
 const REPO_ROOT = resolve(__dirname, "..", "..");
 const APP = process.env.SCROLL_APP || "";
@@ -28,8 +27,8 @@ const check = (ok: boolean, what: string) => {
 };
 
 function launch(): Promise<ElectronApplication> {
-  const state = mkdtempSync(join(tmpdir(), "scroll-state-"));
-  const userData = mkdtempSync(join(tmpdir(), "scroll-userdata-"));
+  const state = scratchDir("scroll-state-");
+  const userData = scratchDir("scroll-userdata-");
   const env = { ...process.env, SUBSTRATE_HOME: state } as Record<string, string>;
   return APP
     ? electron.launch({ executablePath: join(APP, "Contents", "MacOS", "Substrate"), args: ["--user-data-dir=" + userData], env })

@@ -6,7 +6,7 @@
   "main": "electron/main.js",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && npm run lint && vite build",
+    "build": "tsc --noEmit && tsc -p harness && npm run lint && vite build",
     "typecheck": "tsc --noEmit",
     "lint": "eslint web/",
     "smoke:vm": "npx tsx harness/vm_smoke.ts",

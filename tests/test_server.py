@@ -13,9 +13,6 @@ from __future__ import annotations
 import json
 import os
 import sys
-import threading
-import urllib.error
-from http.server import ThreadingHTTPServer
 from pathlib import Path
 from urllib.request import urlopen
 
@@ -26,14 +23,13 @@ import server  # noqa: E402  the module under test
 
 from substrate import api  # noqa: E402
 from substrate.topologies import bundled  # noqa: E402
+from _serving import call, serving# noqa: E402
 
 
 @pytest.fixture(scope="module")
 def base() -> object:
-    srv = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
-    threading.Thread(target=srv.serve_forever, daemon=True).start()
-    yield f"http://127.0.0.1:{srv.server_address[1]}"
-    srv.shutdown()
+    with serving() as base:
+        yield base
 
 
 def get(base: str, path: str) -> object:
@@ -206,9 +202,7 @@ def test_io_endpoint_derives_input_and_outputs(base: str) -> None:
 
 
 def test_unknown_record_is_404(base: str) -> None:
-    with pytest.raises(urllib.error.HTTPError) as exc:
-        get(base, "/api/records/does_not_exist/run_graph")
-    assert exc.value.code == 404
+    assert call("GET", base + "/api/records/does_not_exist/run_graph")[0] == 404
 
 
 def test_launch_runs_a_topology_and_records_it(base: str) -> None:
@@ -287,9 +281,7 @@ def test_run_graph_reports_server_authoritative_liveness(base: str) -> None:
 
 
 def test_launch_unknown_topology_is_404(base: str) -> None:
-    with pytest.raises(urllib.error.HTTPError) as exc:
-        post(base, "/api/launch?topology=does_not_exist")
-    assert exc.value.code == 404
+    assert call("POST", base + "/api/launch?topology=does_not_exist")[0] == 404
 
 
 def test_agent_endpoint_launches_a_live_tool_using_loop(base: str) -> None:
@@ -399,19 +391,42 @@ def test_agent_params_parse_and_echo(base: str) -> None:
     assert res["params"] == {"think": True, "max_tokens": 123, "timeout": 240.0}
 
 
-def test_models_endpoint_lists_drivers_with_a_default(base: str) -> None:
+def test_models_endpoint_lists_drivers_with_a_default(
+    base: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """The model picker's roster: Ollama models + the CI stand-in under `models`, installed CLI
-    drivers under `cli`, and a default drawn from them. Sprint 097: the old version demanded
-    `claude` and `gemini` inside `models`, which held on one machine with both CLIs installed
-    and before CLI drivers moved to their own `cli` list. Now the CLI list is checked against
-    what is actually on PATH, so the test means the same thing on every machine."""
+    drivers under `cli`, and a default drawn from them.
+
+    UI sprint 107: the test ran against the host. `/api/models` asked the real Ollama for its
+    tags and ran every installed CLI's model listing (`cursor-agent --list-models` rewrote
+    ~/.cursor/cli-config.json on each run), so what it checked depended on the machine. It now
+    fixes the machine: one CLI on PATH, two Ollama tags, a canned version tree. That also lets it
+    check the default rule, which a host-dependent run could not."""
+    import io
     import shutil
+    import urllib.request
+
+    real_urlopen = urllib.request.urlopen
+
+    def fake_urlopen(req: object, *a: object, **k: object) -> object:
+        url = req if isinstance(req, str) else getattr(req, "full_url", "")
+        if str(url).startswith("http://localhost:11434/"):
+            return io.BytesIO(b'{"models":[{"name":"llama3:8b"},{"name":"kimi-k2.7-code:cloud"}]}')
+        return real_urlopen(req, *a, **k)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(shutil, "which", lambda cmd, *a, **k: "/bin/x" if cmd == "cursor-agent" else None)
+    monkeypatch.setattr(
+        server, "_probe_cli_versions",
+        lambda name: {"families": [{"family": "auto", "models": ["auto"]}], "source": "curated"},
+    )
 
     d = get(base, "/api/models")
-    assert "deterministic" in d["models"]
-    cli = d.get("cli", [])
-    assert all(shutil.which(name) for name in cli), cli  # every listed CLI is really installed
-    assert d["default"] in d["models"] or d["default"] in cli
+    assert d["cli"] == ["cursor-agent"]
+    assert d["models"] == ["kimi-k2.7-code:cloud", "llama3:8b", "cursor-agent", "deterministic"]
+    assert (d["ollama_cloud"], d["ollama_local"]) == (["kimi-k2.7-code:cloud"], ["llama3:8b"])
+    assert d["default"] == "kimi-k2.7-code:cloud", "a verified-agentic cloud tag wins the default"
+    assert set(d["cli_versions"]) == {"cursor-agent"}
 
 
 def test_resume_continues_a_paused_run(base: str) -> None:
@@ -433,11 +448,8 @@ def test_resume_continues_a_paused_run(base: str) -> None:
 
 
 def test_resume_non_resumable_is_404(base: str) -> None:
-    with pytest.raises(urllib.error.HTTPError) as exc:
-        post(
-            base, "/api/resume?record=code_review"
-        )  # a finalised, non-resumable record
-    assert exc.value.code == 404
+    # a finalised, non-resumable record
+    assert call("POST", base + "/api/resume?record=code_review")[0] == 404
 
 
 def test_build_runs_an_authored_topology(base: str) -> None:
@@ -587,6 +599,15 @@ def test_ui_imports_only_sanctioned_substrate_surfaces() -> None:
             mods: list[str] = []
             if isinstance(node, ast.ImportFrom) and node.module:
                 mods = [node.module]
+                # UI sprint 107: a private NAME is a kernel internal too, even from a sanctioned
+                # module, and `from substrate import _x` passed the module check below
+                # (`substrate._daemon`, `delegate._prefix_context_slice` both did).
+                if node.module == "substrate" or node.module.startswith("substrate."):
+                    offenders += [
+                        f"{py.name}: {node.module}.{a.name}"
+                        for a in node.names
+                        if a.name.startswith("_")
+                    ]
             elif isinstance(node, ast.Import):
                 mods = [a.name for a in node.names]
             for m in mods:

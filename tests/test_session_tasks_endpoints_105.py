@@ -6,14 +6,9 @@ and the model hears about it (sprint 104's notice).
 
 from __future__ import annotations
 
-import json
 import sys
-import threading
-from http.server import ThreadingHTTPServer
 from pathlib import Path
 from types import SimpleNamespace
-from urllib.error import HTTPError
-from urllib.request import Request, urlopen
 
 import pytest
 
@@ -22,6 +17,7 @@ import server  # noqa: E402
 
 from substrate.session_registry import SessionRegistry  # noqa: E402
 from substrate.topologies.tool_loop.background import TABLE  # noqa: E402
+from _serving import call, serving# noqa: E402
 
 
 @pytest.fixture
@@ -32,29 +28,20 @@ def base(tmp_path: Path) -> str:
             session_id=sid, name=None, driver="deterministic", workspace=str(tmp_path),
             workspace_shape="flat", bundle=None, seed="",
         )
-    srv = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
-    threading.Thread(target=srv.serve_forever, daemon=True).start()
-    yield f"http://127.0.0.1:{srv.server_address[1]}"
-    srv.shutdown()
+    with serving() as base:
+        yield base
     for sid in ("s_00000000000105aa", "s_00000000000105bb"):
         TABLE.stop_owner(sid, "test teardown")
 
 
 def _get(url: str) -> tuple[int, dict]:
-    try:
-        with urlopen(url, timeout=10) as r:
-            return r.status, json.loads(r.read())
-    except HTTPError as e:
-        return e.code, {}
+    status, payload = call("GET", url, timeout=10)
+    return status, payload
 
 
 def _post(url: str, origin: str) -> tuple[int, dict]:
-    req = Request(url, data=b"", method="POST", headers={"Origin": origin})
-    try:
-        with urlopen(req, timeout=10) as r:
-            return r.status, json.loads(r.read())
-    except HTTPError as e:
-        return e.code, {}
+    status, payload = call("POST", url, headers={"Origin": origin}, timeout=10)
+    return status, payload
 
 
 def test_list_and_stop_a_sessions_task(base: str, tmp_path: Path) -> None:

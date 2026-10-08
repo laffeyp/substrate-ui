@@ -11,9 +11,8 @@
 
 import { _electron as electron, type ElectronApplication } from "playwright";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { scratchDir } from "./lib/scratch";
 
 const REPO_ROOT = resolve(__dirname, "..", "..");
 const APP = process.env.TASKS_APP || "";
@@ -25,8 +24,8 @@ const check = (ok: boolean, what: string) => {
 };
 
 function launch(): Promise<ElectronApplication> {
-  const state = mkdtempSync(join(tmpdir(), "tasks-state-"));
-  const userData = mkdtempSync(join(tmpdir(), "tasks-userdata-"));
+  const state = scratchDir("tasks-state-");
+  const userData = scratchDir("tasks-userdata-");
   const env = { ...process.env, SUBSTRATE_HOME: state } as Record<string, string>;
   return APP
     ? electron.launch({ executablePath: join(APP, "Contents", "MacOS", "Substrate"), args: ["--user-data-dir=" + userData], env })

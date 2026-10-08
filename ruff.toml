@@ -1,2 +1,6 @@
+# The kernel's settings (substrate/pyproject.toml [tool.ruff]); UI sprint 107 aligned the two repos,
+# which had linted at different line lengths and formatted only one of them.
+target-version = "py312"
+line-length = 100
 # _deprecated/ holds archived code kept for the audit trail; it is not built, shipped or tested.
 extend-exclude = ["_deprecated"]

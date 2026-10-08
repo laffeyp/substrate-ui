@@ -6,13 +6,9 @@ Standalone session ends alone. boot_scan preserves composite_of.
 
 from __future__ import annotations
 
-import json
 import sys
-import threading
 import uuid
-from http.server import ThreadingHTTPServer
 from pathlib import Path
-from urllib.request import Request, urlopen
 
 import pytest
 
@@ -21,6 +17,7 @@ import server  # noqa: E402
 from substrate.session_registry import SessionStatus, SessionRegistry  # noqa: E402
 
 from substrate import api  # noqa: E402
+from _serving import call, serving# noqa: E402
 
 
 @pytest.fixture
@@ -29,21 +26,14 @@ def base(tmp_path: Path) -> tuple[str, Path]:
         base=tmp_path,
         session_topology_factory=server._build_session_topology_from_manifest,
     )
-    srv = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
-    threading.Thread(target=srv.serve_forever, daemon=True).start()
-    yield f"http://127.0.0.1:{srv.server_address[1]}", tmp_path
-    srv.shutdown()
+    with serving() as base:
+        yield base, tmp_path
 
 
 def _post(url: str, body: dict) -> tuple[int, dict]:
-    req = Request(
-        url,
-        data=json.dumps(body).encode(),
-        method="POST",
-        headers={"Content-Type": "application/json"},
-    )
-    with urlopen(req, timeout=30) as response:
-        return response.status, json.loads(response.read())
+    status, payload = call("POST", url, body, timeout=30)
+    assert status < 400, (status, payload)  # this helper used to raise on an error status
+    return status, payload
 
 
 def _create_pair(registry: SessionRegistry) -> tuple[str, str]:

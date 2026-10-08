@@ -7,17 +7,15 @@ manifests + by-name entries drop.
 from __future__ import annotations
 
 import sys
-import threading
 import uuid
-from http.server import ThreadingHTTPServer
 from pathlib import Path
-from urllib.request import Request, urlopen
 
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import server  # noqa: E402
 from substrate.session_registry import SessionRegistry  # noqa: E402
+from _serving import call_raw, serving# noqa: E402
 
 
 @pytest.fixture
@@ -26,16 +24,14 @@ def base(tmp_path: Path) -> tuple[str, Path]:
         base=tmp_path,
         session_topology_factory=server._build_session_topology_from_manifest,
     )
-    srv = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
-    threading.Thread(target=srv.serve_forever, daemon=True).start()
-    yield f"http://127.0.0.1:{srv.server_address[1]}", tmp_path
-    srv.shutdown()
+    with serving() as base:
+        yield base, tmp_path
 
 
 def _delete(url: str) -> int:
-    req = Request(url, method="DELETE")
-    with urlopen(req, timeout=15) as response:
-        return response.status
+    status, payload = call_raw("DELETE", url, timeout=15)
+    assert status < 400, (status, payload)  # this helper used to raise on an error status
+    return status
 
 
 def _create_pair(registry: SessionRegistry, base_path: Path) -> tuple[str, str]:

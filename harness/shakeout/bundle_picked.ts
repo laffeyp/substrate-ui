@@ -1,5 +1,7 @@
 // Bundle picked: load the bundle roster, pick the first one, assert
-// BUNDLE_PICKED fires with the slug.
+// BUNDLE_PICKED fires with that bundle's name and the controller holds it.
+// UI sprint 107: the flow picked `roster[0].slug`, a field BundleRow does not have, so it picked
+// `undefined` and passed on the tag alone; no gate type-checked harness/ until this sprint.
 
 import { SessionController } from "../../web/vm/session_controller";
 import { NodeSubstrateClient } from "./lib/client";
@@ -30,7 +32,19 @@ export const flow: Flow = {
       return { emitted, defects };
     }
 
-    controller.pickBundle(roster[0].slug);
+    const name = roster[0].name;
+    controller.pickBundle(name);
+    const picked = emitted.find((e) => e.tag === "BUNDLE_PICKED")?.payload as { bundle?: unknown } | undefined;
+    const held = controller.snapshot().bundleSlug;
+    if (picked?.bundle !== name || held !== name) {
+      defects.push({
+        category: "bundle_not_picked",
+        observed: `BUNDLE_PICKED.bundle=${JSON.stringify(picked?.bundle)}, snapshot.bundleSlug=${JSON.stringify(held)}`,
+        expected: `both ${JSON.stringify(name)}`,
+        reproduces: true,
+        severity: "high",
+      });
+    }
     controller.disconnect();
     return { emitted, defects };
   },

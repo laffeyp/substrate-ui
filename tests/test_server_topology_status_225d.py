@@ -9,9 +9,7 @@ import json
 import sys
 import threading
 import time
-from http.server import ThreadingHTTPServer
 from pathlib import Path
-from urllib.request import Request, urlopen
 
 import pytest
 
@@ -20,6 +18,7 @@ import server  # noqa: E402
 from substrate.session_registry import SessionRegistry  # noqa: E402
 
 from substrate.topologies.applications.registry import load_manifests  # noqa: E402
+from _serving import call, serving# noqa: E402
 
 
 @pytest.fixture
@@ -33,34 +32,19 @@ def base(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> str:
     )
     server._APPLICATIONS = load_manifests()
     server._TOPOLOGY_RUNS = {}
-    srv = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
-    threading.Thread(target=srv.serve_forever, daemon=True).start()
-    yield f"http://127.0.0.1:{srv.server_address[1]}"
-    srv.shutdown()
+    with serving() as base:
+        yield base
 
 
 def _post(url: str, body: dict) -> tuple[int, dict]:
-    req = Request(
-        url,
-        data=json.dumps(body).encode(),
-        method="POST",
-        headers={"Content-Type": "application/json"},
-    )
-    with urlopen(req, timeout=30) as response:
-        return response.status, json.loads(response.read())
+    status, payload = call("POST", url, body, timeout=30)
+    assert status < 400, (status, payload)  # this helper used to raise on an error status
+    return status, payload
 
 
 def _get(url: str) -> tuple[int, dict]:
-    try:
-        with urlopen(url, timeout=15) as response:
-            return response.status, json.loads(response.read())
-    except Exception as exc:
-        code = getattr(exc, "code", 0)
-        raw = getattr(exc, "read", lambda: b"{}")()
-        try:
-            return code, json.loads(raw)
-        except Exception:
-            return code, {"raw": raw.decode(errors="replace")}
+    status, payload = call("GET", url, timeout=15)
+    return status, payload
 
 
 def test_async_run_transitions_running_then_finalised(base: str) -> None:

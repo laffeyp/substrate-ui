@@ -11,12 +11,11 @@
 
 import { _electron as electron, type ElectronApplication } from "playwright";
 import { execSync, spawn } from "node:child_process";
-import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
 import path from "node:path";
+import { scratchDir } from "./shakeout/lib/scratch";
 
 const REPO_ROOT = path.resolve(__dirname, "..");
-const STATE = process.env.STARTUP_STATE || mkdtempSync(path.join(tmpdir(), "startup-state-"));
+const STATE = process.env.STARTUP_STATE || scratchDir("startup-state-");
 const RUNS = Number(process.env.STARTUP_RUNS || 2);
 const PROMPT = '[placeholder^="type to talk"], [placeholder^="type a path"]';
 
@@ -104,7 +103,7 @@ async function launchOnce(userDataDir: string, checkSecondInstance: boolean): Pr
 }
 
 (async () => {
-  const userDataDir = mkdtempSync(path.join(tmpdir(), "startup-userdata-"));
+  const userDataDir = scratchDir("startup-userdata-");
   for (let i = 0; i < RUNS; i++) {
     const r = await launchOnce(userDataDir, i === 0);
     console.log(JSON.stringify({ run: i + 1, state: STATE, ...r }));

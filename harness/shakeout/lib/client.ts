@@ -1,6 +1,5 @@
-// A NodeSubstrateClient copy for the shakeout harness. Same shape as
-// harness/vm_smoke.ts — HTTP fetch + a tiny SSE reader over Node's
-// http module. Lets each flow build a SessionController and drive it
+// The harness's one NodeSubstrateClient (vm_smoke.ts imports it; UI sprint 107 removed its copy):
+// HTTP fetch + a tiny SSE reader over Node's http module. Lets each flow build a SessionController and drive it
 // without a browser in the loop.
 
 import http from "node:http";
@@ -55,7 +54,17 @@ export class NodeSubstrateClient implements SubstrateClient {
   }
 
   streamRecord(sessionId: string, sinceSeq: number, handlers: StreamHandlers): Unsubscribe {
-    const url = new URL(this.baseUrl + `/api/session/${encodeURIComponent(sessionId)}/events?since_seq=${sinceSeq}`);
+    return this._openSse(`/api/session/${encodeURIComponent(sessionId)}/events?since_seq=${sinceSeq}`, handlers);
+  }
+
+  /** Mirrors BrowserSubstrateClient.streamRecordByPath (delegate descent). UI sprint 107: this
+   * client lacked it, which no gate saw because no gate type-checked harness/. */
+  streamRecordByPath(recordRoot: string, sinceSeq: number, handlers: StreamHandlers): Unsubscribe {
+    return this._openSse(`/api/records/by-path/events?path=${encodeURIComponent(recordRoot)}&since_seq=${sinceSeq}`, handlers);
+  }
+
+  private _openSse(pathPart: string, handlers: StreamHandlers): Unsubscribe {
+    const url = new URL(this.baseUrl + pathPart);
     // Track whether the stream reached its natural terminus (RunFinalised).
     // The browser's BrowserSubstrateClient distinguishes onError (transient
     // drop, controller will reconnect) from onClose (terminal, stop

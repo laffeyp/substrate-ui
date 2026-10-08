@@ -16,10 +16,8 @@ import json
 import sys
 import threading
 import time
-from http.server import ThreadingHTTPServer
 from pathlib import Path
-from urllib.error import HTTPError
-from urllib.request import Request, urlopen
+from urllib.request import urlopen
 
 import pytest
 
@@ -27,6 +25,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import server  # noqa: E402
 from session_errors import SESSION_ENDED_MID_DELEGATE  # noqa: E402
 from substrate.session_registry import SessionRegistry  # noqa: E402
+from _serving import call, call_raw, serving# noqa: E402
 
 
 @pytest.fixture
@@ -35,37 +34,18 @@ def base(tmp_path: Path) -> str:
         base=tmp_path,
         session_topology_factory=server._build_session_topology_from_manifest,
     )
-    srv = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
-    threading.Thread(target=srv.serve_forever, daemon=True).start()
-    yield f"http://127.0.0.1:{srv.server_address[1]}"
-    srv.shutdown()
+    with serving() as base:
+        yield base
 
 
 def _post_json(url: str, body: dict, timeout: float = 30) -> tuple[int, dict]:
-    req = Request(
-        url,
-        data=json.dumps(body).encode(),
-        method="POST",
-        headers={"Content-Type": "application/json"},
-    )
-    try:
-        with urlopen(req, timeout=timeout) as r:
-            return r.status, json.loads(r.read())
-    except HTTPError as exc:
-        raw = exc.read()
-        try:
-            payload = json.loads(raw) if raw else {}
-        except json.JSONDecodeError:
-            payload = {}
-        return exc.code, payload
+    status, payload = call("POST", url, body, timeout=timeout)
+    return status, payload
 
 
 def _delete(url: str) -> tuple[int, bytes]:
-    try:
-        with urlopen(Request(url, method="DELETE"), timeout=15) as r:
-            return r.status, r.read()
-    except HTTPError as exc:
-        return exc.code, exc.read()
+    status, payload = call_raw("DELETE", url, timeout=15)
+    return status, payload
 
 
 def _create(base: str, workspace: Path, name: str | None = None, **extra: object) -> dict:
@@ -141,14 +121,10 @@ def test_sse_since_seq_non_integer_returns_400(base: str, tmp_path: Path) -> Non
     """
     created = _create(base, tmp_path / "wsp", name="bad-cursor")
     sid = created["session_id"]
-    try:
-        urlopen(base + f"/api/session/{sid}/events?since_seq=abc", timeout=5)
-        raise AssertionError("expected 400")
-    except HTTPError as exc:
-        assert exc.code == 400
-        body = json.loads(exc.read())
-        assert "since_seq" in body["error"]
-        assert "integer" in body["error"]
+    status, body = call("GET", base + f"/api/session/{sid}/events?since_seq=abc", timeout=5)
+    assert status == 400
+    assert "since_seq" in body["error"]
+    assert "integer" in body["error"]
 
 
 # ── Finding 4 — delete during in-flight turn does not crash the turn ─

@@ -11,10 +11,7 @@ from __future__ import annotations
 
 import json
 import sys
-import threading
-from http.server import ThreadingHTTPServer
 from pathlib import Path
-from urllib.request import Request, urlopen
 
 import pytest
 
@@ -24,6 +21,7 @@ from substrate.session_registry import SessionRegistry  # noqa: E402
 
 from substrate import api  # noqa: E402
 from substrate.topologies.applications.registry import load_manifests  # noqa: E402
+from _serving import call, serving# noqa: E402
 
 
 @pytest.fixture
@@ -37,29 +35,13 @@ def base(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> str:
     )
     # Load the four shipped manifests from the installed package.
     server._APPLICATIONS = load_manifests()
-    srv = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
-    threading.Thread(target=srv.serve_forever, daemon=True).start()
-    yield f"http://127.0.0.1:{srv.server_address[1]}"
-    srv.shutdown()
+    with serving() as base:
+        yield base
 
 
 def _post(url: str, body: dict) -> tuple[int, dict]:
-    req = Request(
-        url,
-        data=json.dumps(body).encode(),
-        method="POST",
-        headers={"Content-Type": "application/json"},
-    )
-    try:
-        with urlopen(req, timeout=60) as response:
-            return response.status, json.loads(response.read())
-    except Exception as exc:
-        code = getattr(exc, "code", 0)
-        raw = getattr(exc, "read", lambda: b"{}")()
-        try:
-            return code, json.loads(raw)
-        except Exception:
-            return code, {"raw": raw.decode(errors="replace")}
+    status, payload = call("POST", url, body, timeout=60)
+    return status, payload
 
 
 def test_best_of_n_verified_dispatch_writes_a_finalised_record(base: str) -> None:

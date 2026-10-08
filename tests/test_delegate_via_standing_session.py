@@ -30,7 +30,7 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from substrate.session_registry import SessionRegistry  # noqa: E402
+from substrate.session_registry import SessionManifest, SessionRegistry  # noqa: E402
 
 from substrate import api  # noqa: E402
 from substrate.adapters import DeterministicResponder  # noqa: E402
@@ -42,16 +42,20 @@ from substrate.topologies.tool_loop.delegate import make_delegate  # noqa: E402
 
 
 def _reviewer_factory(
-    manifest: object, first_turn_user_message: object = None
+    manifest: SessionManifest, first_turn_user_message: object = None
 ) -> Callable[[api.TopologyBuilder], None]:
     del first_turn_user_message  # delegate path never opens a fresh record via .run()
+    return _reviewer_topology(Path(manifest.record_root))
+
+
+def _reviewer_topology(record_root: Path) -> Callable[[api.TopologyBuilder], None]:
     """Rebuild the reviewer's session_topology from its manifest. The daemon
     (substrate-ui/server.py, sprint 214) will do this with the driver registry
     + role prompts; here we use DeterministicResponder + no tools so the CI
     stays offline.
     """
-    del manifest
     return session_topology(
+        record_root=record_root,  # the daemon's configuration (UI sprint 107)
         driver=DeterministicResponder(seed=7),
         driver_name="deterministic",
         driver_context_tokens=4096,
@@ -71,7 +75,7 @@ async def _open_reviewer(record_root: Path) -> None:
     at seq 0, then pauses on Park after the DeterministicResponder answers.
     """
     await api.Runtime(record_root, persistent=True).resume(
-        _reviewer_factory(None),
+        _reviewer_topology(record_root),
         resume_event=UserMessage(
             text="hello",
             turn_index=0,
@@ -226,7 +230,7 @@ async def test_delegate_reads_only_this_turns_final_answer(tmp_path: Path) -> No
     from substrate.topologies.session import UserMessage as SessionUserMessage
 
     await api.Runtime(reviewer_record, persistent=True).resume(
-        _reviewer_factory(None),
+        _reviewer_topology(reviewer_record),
         resume_event=SessionUserMessage(
             text="prior turn one",
             turn_index=1,

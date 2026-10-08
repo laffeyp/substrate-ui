@@ -16,9 +16,9 @@
 
 import { _electron as electron, type ElectronApplication } from "playwright";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { scratchDir } from "./lib/scratch";
 
 const REPO_ROOT = resolve(__dirname, "..", "..");
 const APP = process.env.LIFECYCLE_APP || "";
@@ -29,7 +29,7 @@ const check = (ok: boolean, what: string) => {
 };
 
 function launch(state: string): Promise<ElectronApplication> {
-  const userData = mkdtempSync(join(tmpdir(), "lifecycle-userdata-"));
+  const userData = scratchDir("lifecycle-userdata-");
   const env = { ...process.env, SUBSTRATE_HOME: state } as Record<string, string>;
   return APP
     ? electron.launch({ executablePath: join(APP, "Contents", "MacOS", "Substrate"), args: ["--user-data-dir=" + userData], env })
@@ -49,7 +49,7 @@ async function healthy(port: string): Promise<boolean> {
 }
 
 async function f6AndF5(): Promise<void> {
-  const state = mkdtempSync(join(tmpdir(), "lifecycle-state-"));
+  const state = scratchDir("lifecycle-state-");
   const app = await launch(state);
   try {
     const win = await app.firstWindow({ timeout: 30_000 });
@@ -98,7 +98,7 @@ async function f6AndF5(): Promise<void> {
 
 async function f7(): Promise<void> {
   // SUBSTRATE_HOME pointing at a FILE: the backend cannot create its state dirs and exits.
-  const dir = mkdtempSync(join(tmpdir(), "lifecycle-badstate-"));
+  const dir = scratchDir("lifecycle-badstate-");
   const state = join(dir, "not-a-dir");
   writeFileSync(state, "x");
   const app = await launch(state);
@@ -121,7 +121,7 @@ async function f7(): Promise<void> {
 }
 
 async function f8(): Promise<void> {
-  const state = mkdtempSync(join(tmpdir(), "lifecycle-dies-"));
+  const state = scratchDir("lifecycle-dies-");
   const app = await launch(state);
   let err = "";
   app.process().stderr?.on("data", (b) => { err += b.toString("utf8"); });

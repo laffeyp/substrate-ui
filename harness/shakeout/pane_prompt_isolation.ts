@@ -43,13 +43,14 @@ export const flow: Flow = {
         const key = Object.keys(root).find((k) => k.startsWith("__reactContainer"));
         if (!key) throw new Error("no fiber");
         const stack: unknown[] = [((root[key] as { stateNode?: { current?: unknown } }).stateNode?.current)];
-        let logic: { _split: (dir: string) => void; state: { panes: { id: number; unbound?: boolean }[] }; _bindPane: (id: number, ws: string) => void } | null = null;
+        type Logic = { _split: (dir: string) => void; state: { panes: { id: number; unbound?: boolean }[] }; _bindPane: (id: number, ws: string) => void };
+        let logic: Logic | null = null;
         while (stack.length > 0) {
           const cursor = stack.pop();
           if (!cursor) continue;
           const inst = (cursor as { stateNode?: { logic?: { _split?: unknown } } }).stateNode;
           const cand = inst?.logic;
-          if (cand && typeof cand._split === "function") { logic = cand as typeof logic; break; }
+          if (cand && typeof cand._split === "function") { logic = cand as unknown as Logic; break; }
           const c = (cursor as { child?: unknown }).child;
           const s = (cursor as { sibling?: unknown }).sibling;
           if (s) stack.push(s);

@@ -261,6 +261,28 @@ def _load_daemon_config(config_path: Path | None = None) -> dict[str, Any]:
     return defaults
 
 
+def _interrupt_then_end(session_id: str, source: str, timeout_seconds: float) -> tuple[Any, Path]:
+    """End a session, interrupting its running turn first. UI sprint 101 (quit) and 107 (`/end`
+    and the child cascade): turns have no time limit and the end turn waits for the session's
+    lock, so ending a session mid-turn used to wait for the model to finish. A hard interrupt
+    stops the turn the way ctrl+c does (it parks; the record says it was cancelled), then the
+    end turn runs. Raises what `turn_sync` raises."""
+    from substrate.topologies.session import SessionEndRequested
+
+    assert _SESSION_REGISTRY is not None
+    manifest = _SESSION_REGISTRY.get(session_id)
+    if manifest is not None and manifest.status == SessionStatus.RUNNING:
+        try:
+            _SESSION_REGISTRY.interrupt(session_id, tier="hard")
+        except Exception as exc:  # noqa: BLE001 — best-effort; the end below still runs
+            traceback.print_exception(exc)
+    return _SESSION_REGISTRY.turn_sync(
+        session_id,
+        resume_event=SessionEndRequested(session_id=session_id, source=source),
+        timeout_seconds=timeout_seconds,
+    )
+
+
 def _shutdown_all_sessions(*, per_session_timeout: float = 10.0) -> dict[str, int]:
     """Sprint 215d + 217a: end every running/parked session cleanly on daemon
     shutdown. For each manifest whose status is not `ended` or `interrupted`,
@@ -300,28 +322,12 @@ def _shutdown_all_sessions(*, per_session_timeout: float = 10.0) -> dict[str, in
         result["background_stopped"] = _BG.stop_all("the app quit")
     except Exception as exc:  # noqa: BLE001 — shutdown must not raise
         traceback.print_exception(exc)
-    from substrate.topologies.session import SessionEndRequested
-
     for manifest in list(_SESSION_REGISTRY.list_all()):
         if manifest.status in (SessionStatus.ENDED, SessionStatus.INTERRUPTED):
             result["skipped_ended"] += 1
             continue
-        if manifest.status == SessionStatus.RUNNING:
-            # UI sprint 101: turns have no time limit, so a running turn can hold the session's
-            # lock past any shutdown grace. Stop it the way ctrl+c does (the turn parks, and the
-            # record says it was interrupted), then end the session below.
-            try:
-                _SESSION_REGISTRY.interrupt(manifest.session_id, tier="hard")
-            except Exception as exc:  # noqa: BLE001 — best-effort; the end below still runs
-                traceback.print_exception(exc)
         try:
-            _SESSION_REGISTRY.turn_sync(
-                manifest.session_id,
-                resume_event=SessionEndRequested(
-                    session_id=manifest.session_id, source="daemon_shutdown"
-                ),
-                timeout_seconds=per_session_timeout,
-            )
+            _interrupt_then_end(manifest.session_id, "daemon_shutdown", per_session_timeout)
             result["ended"] += 1
         except Exception as exc:  # noqa: BLE001 — best-effort; log and move on
             if isinstance(exc, FreshSessionRequiresUserMessage):
@@ -499,7 +505,7 @@ def _build_session_topology_from_manifest(
     # is the shipped wire client; the daemon binds its own registries
     # here so every session sees the CURRENT applications catalog,
     # session list, and record dir.
-    from substrate import _daemon as _substrate_daemon
+    from substrate.api import daemon_client as _substrate_daemon
     from substrate.topologies.tool_loop.substrate_tools import (
         make_inspect_record,
         make_list_applications,
@@ -2415,9 +2421,9 @@ class Handler(BaseHTTPRequestHandler):
             # unchanged assembled_prompt.
             assembled_prompt = text
             if context_slice is not None and record_root_locked.exists():
-                from substrate.topologies.tool_loop.delegate import _prefix_context_slice
+                from substrate.topologies.tool_loop.delegate import prefix_context_slice
 
-                assembled_prompt = _prefix_context_slice(
+                assembled_prompt = prefix_context_slice(
                     record_root_locked, text, context_slice
                 )
             # Sprint 223d: per_turn (spec §7b) prefixes every UserMessage's
@@ -2507,8 +2513,6 @@ class Handler(BaseHTTPRequestHandler):
             self._error(400, str(exc))
             return
 
-        from substrate.topologies.session import SessionEndRequested
-
         # Sprint 225b: cascade to child sub-agents FIRST. A composite parent
         # (a session that has children via composite_of) ends each child
         # before ending itself. Per-child failure is best-effort — logged
@@ -2517,14 +2521,7 @@ class Handler(BaseHTTPRequestHandler):
         children = _SESSION_REGISTRY.list_children(session_id)
         for child_manifest in children:
             try:
-                child_end_event = SessionEndRequested(
-                    session_id=child_manifest.session_id, source="composite_parent_end"
-                )
-                _SESSION_REGISTRY.turn_sync(
-                    child_manifest.session_id,
-                    resume_event=child_end_event,
-                    timeout_seconds=30.0,
-                )
+                _interrupt_then_end(child_manifest.session_id, "composite_parent_end", 30.0)
             except FreshSessionRequiresUserMessage:
                 _SESSION_REGISTRY.update_status(child_manifest.session_id, SessionStatus.ENDED)
             except Exception:  # noqa: BLE001 — child cascade is best-effort; one child's failure does not block the parent.
@@ -2540,13 +2537,8 @@ class Handler(BaseHTTPRequestHandler):
             except _RECORD_IO_ERRORS:  # REVIEW-2026-08-28 Q6: narrow mid-write catch
                 seq_at_start = -1
 
-        resume_event = SessionEndRequested(session_id=session_id, source=source)
         try:
-            updated_manifest, root_after = _SESSION_REGISTRY.turn_sync(
-                session_id,
-                resume_event=resume_event,
-                timeout_seconds=60.0,
-            )
+            updated_manifest, root_after = _interrupt_then_end(session_id, source, 60.0)
         except Exception as exc:
             if isinstance(exc, SessionEndedMidTurn):
                 self._json(

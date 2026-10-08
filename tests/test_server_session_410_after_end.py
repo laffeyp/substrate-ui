@@ -17,13 +17,8 @@ Run:
 
 from __future__ import annotations
 
-import json
 import sys
-import threading
-from http.server import ThreadingHTTPServer
 from pathlib import Path
-from urllib.error import HTTPError
-from urllib.request import Request, urlopen
 
 import pytest
 
@@ -31,6 +26,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import server  # noqa: E402
 from session_errors import SESSION_ENDED_MID_DELEGATE  # noqa: E402
 from substrate.session_registry import SessionRegistry  # noqa: E402
+from _serving import call, call_raw, serving# noqa: E402
 
 
 @pytest.fixture
@@ -39,39 +35,18 @@ def base(tmp_path: Path) -> str:
         base=tmp_path,
         session_topology_factory=server._build_session_topology_from_manifest,
     )
-    srv = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
-    threading.Thread(target=srv.serve_forever, daemon=True).start()
-    yield f"http://127.0.0.1:{srv.server_address[1]}"
-    srv.shutdown()
+    with serving() as base:
+        yield base
 
 
 def _post_json(url: str, body: dict | None) -> tuple[int, dict]:
-    data = json.dumps(body).encode() if body is not None else b""
-    req = Request(
-        url,
-        data=data,
-        method="POST",
-        headers={"Content-Type": "application/json"} if body is not None else {},
-    )
-    try:
-        with urlopen(req, timeout=30) as r:
-            raw = r.read()
-            return r.status, (json.loads(raw) if raw else {})
-    except HTTPError as exc:
-        raw = exc.read()
-        try:
-            payload = json.loads(raw) if raw else {}
-        except json.JSONDecodeError:
-            payload = {}
-        return exc.code, payload
+    status, payload = call("POST", url, body, timeout=30)
+    return status, payload
 
 
 def _delete(url: str) -> int:
-    try:
-        with urlopen(Request(url, method="DELETE"), timeout=15) as r:
-            return r.status
-    except HTTPError as exc:
-        return exc.code
+    status, payload = call_raw("DELETE", url, timeout=15)
+    return status
 
 
 def _create(base: str, workspace: Path, name: str) -> str:
