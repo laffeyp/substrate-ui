@@ -57,6 +57,8 @@ KERNEL_COMMIT="$(git -C "$KERNEL" rev-parse HEAD)"
 say "    substrate-ui $SUBSTRATE_UI_COMMIT, kernel $KERNEL_COMMIT"
 
 say "2/7 tests and web build"
+# UI sprint 107: the same lint and format checks CI runs (ruff settings match the kernel's).
+(cd "$REPO" && uv run --project "$KERNEL" ruff check . && uv run --project "$KERNEL" ruff format --check .)
 (cd "$REPO" && uv run --project "$KERNEL" python scripts/gen_kinds.py --check)
 # UI sprint 107: the suite runs under an empty HOME, and anything it writes there fails the release
 # (Software Engineering at Google, ch. 14: hermetic tests). uv's own caches stay where they are.

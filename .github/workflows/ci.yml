@@ -32,6 +32,10 @@ jobs:
       # _deprecated/.
       - name: Ruff
         run: uvx ruff@0.15.17 check .
+      # UI sprint 107: the kernel's CI checked formatting and this repo's did not (53 of 58 files
+      # had drifted).
+      - name: Ruff format
+        run: uvx ruff@0.15.17 format --check .
 
   server-tests:
     name: server tests (real substrate.api)

@@ -1,0 +1,3 @@
+# Format-only commits; `git blame --ignore-revs-file .git-blame-ignore-revs` and GitHub's blame view skip them.
+# UI sprint 107: ruff format over the repo (48 files)
+6cc4477da665f175d7607801b7cc9893a75583d4
