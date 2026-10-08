@@ -3127,7 +3127,7 @@ class Handler(BaseHTTPRequestHandler):
                 {
                     "run_id": run_id,
                     "record_root": str(record_root),
-                    "status": "finalised",
+                    "status": api.RunStatus.FINALISED,
                     "final_seq": final_seq,
                     "application": application_name,
                 }
@@ -3201,11 +3201,11 @@ class Handler(BaseHTTPRequestHandler):
                 )  # Sprint 095: output is returned
             except Exception:  # noqa: BLE001 — torn record while the background run is mid-write; treat as running until stable.
                 envelopes = []
-                status = "failed"
+                status = api.RunStatus.FAILED
                 ended = True
             else:
                 if envelopes and envelopes[-1].get("kind") == api.RUN_FINALISED:
-                    status = "finalised"
+                    status = api.RunStatus.FINALISED
                     ended = True
                     # Extract the application terminal envelope's payload as `output`
                     # (Solved / Verdict / Synthesis). One tail scan; nothing exotic.
@@ -3224,7 +3224,7 @@ class Handler(BaseHTTPRequestHandler):
             ):  # it returned: paused, finalised or failed, as the run says
                 status = str(handle["result_status"])
             else:
-                status = "failed"
+                status = api.RunStatus.FAILED
                 output = {
                     "error": handle.get("error", "the run ended without finalising its record")
                 }
@@ -3331,7 +3331,7 @@ class Handler(BaseHTTPRequestHandler):
             except _RECORD_IO_ERRORS:  # REVIEW-2026-08-28 Q6: narrow mid-write catch
                 pass
             time.sleep(0.05)
-        status = api.run_graph(root).status if root.exists() else "incomplete"
+        status = api.run_graph(root).status if root.exists() else api.RunStatus.INCOMPLETE
         self._json({"name": run_name, "status": status, "launched": name})
 
     def _agent(self, q: dict[str, list[str]]) -> None:
@@ -3569,7 +3569,7 @@ class Handler(BaseHTTPRequestHandler):
             except _RECORD_IO_ERRORS:  # REVIEW-2026-08-28 Q6: narrow mid-write catch
                 pass
             time.sleep(0.05)
-        status = api.run_graph(root).status if root.exists() else "incomplete"
+        status = api.run_graph(root).status if root.exists() else api.RunStatus.INCOMPLETE
         self._json(
             {
                 "name": run_name,
@@ -3618,7 +3618,7 @@ class Handler(BaseHTTPRequestHandler):
         th.start()
         for _ in range(80):  # the continuation is fast; wait briefly for a terminal
             try:
-                if api.run_graph(root).status in ("finalised", "failed"):
+                if api.run_graph(root).status in (api.RunStatus.FINALISED, api.RunStatus.FAILED):
                     break
             except _RECORD_IO_ERRORS:  # REVIEW-2026-08-28 Q6: narrow mid-write catch
                 pass
@@ -3680,20 +3680,20 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 if root.exists():
                     g = api.run_graph(root)
-                    if g.status != "incomplete":
+                    if g.status != api.RunStatus.INCOMPLETE:
                         break
             except Exception:  # noqa: BLE001 - record not yet readable (pre-RunStarted)
                 pass
             time.sleep(0.05)
         out: dict[str, object] = {
             "name": run_name,
-            "status": g.status if g else "incomplete",
+            "status": g.status if g else api.RunStatus.INCOMPLETE,
             "built": name,
         }
         # "never matured" is only true against a TERMINAL graph. If the wait timed out and the run is
         # still incomplete, a trigger is "unfired" merely because the run hasn't reached it yet -- a
         # spurious signal on the slow (Ollama) path (ui-backend-5). Only report it for a settled run.
-        if g is not None and g.status != "incomplete":
+        if g is not None and g.status != api.RunStatus.INCOMPLETE:
             authored = [t["id"] for t in spec.get("triggers", [])]
             fired = {i.trigger_id for i in g.instances if i.trigger_id}
             unfired = [t for t in authored if t not in fired]
