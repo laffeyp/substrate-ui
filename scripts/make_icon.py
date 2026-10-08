@@ -44,7 +44,9 @@ def main() -> None:
         iconset.mkdir()
         for size in (16, 32, 128, 256, 512):
             img.resize((size, size), Image.LANCZOS).save(iconset / f"icon_{size}x{size}.png")
-            img.resize((size * 2, size * 2), Image.LANCZOS).save(iconset / f"icon_{size}x{size}@2x.png")
+            img.resize((size * 2, size * 2), Image.LANCZOS).save(
+                iconset / f"icon_{size}x{size}@2x.png"
+            )
         OUT.parent.mkdir(parents=True, exist_ok=True)
         subprocess.run(["iconutil", "-c", "icns", str(iconset), "-o", str(OUT)], check=True)
     img.save(REPO / "build" / "icon-1024.png")

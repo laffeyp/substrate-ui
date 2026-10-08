@@ -25,7 +25,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import server  # noqa: E402
 from substrate.session_registry import SessionRegistry  # noqa: E402
-from _serving import call, serving# noqa: E402
+from _serving import call, serving  # noqa: E402
 
 
 @pytest.fixture
@@ -64,9 +64,7 @@ def test_post_session_creates_a_manifest(base: str, tmp_path: Path) -> None:
 
 def test_post_session_second_name_collision_returns_409(base: str, tmp_path: Path) -> None:
     _post_json(base + "/api/session", {"driver": "deterministic", "name": "planner"})
-    status, body = _post_json(
-        base + "/api/session", {"driver": "deterministic", "name": "planner"}
-    )
+    status, body = _post_json(base + "/api/session", {"driver": "deterministic", "name": "planner"})
     assert status == 409
     assert body["error"] == "name already taken"
     assert body["existing_session_id"].startswith("s_")

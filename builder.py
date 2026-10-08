@@ -32,10 +32,17 @@ from substrate.reference import (  # the runtime's CI-mode Responder (pure, seed
 )
 
 _OPS = {
-    ">=": lambda a, b: a >= b, ">": lambda a, b: a > b, "==": lambda a, b: a == b,
-    "<=": lambda a, b: a <= b, "<": lambda a, b: a < b,
+    ">=": lambda a, b: a >= b,
+    ">": lambda a, b: a > b,
+    "==": lambda a, b: a == b,
+    "<=": lambda a, b: a <= b,
+    "<": lambda a, b: a < b,
 }
-_VIEWS = {"KindCount": api.KindCount, "KindBuffer": api.KindBuffer, "PerKindLatest": api.PerKindLatest}
+_VIEWS = {
+    "KindCount": api.KindCount,
+    "KindBuffer": api.KindBuffer,
+    "PerKindLatest": api.PerKindLatest,
+}
 # PerKey is deliberately NOT offered: it requires a key-extraction fn the authored-spec shape has no
 # field for, so policy_cls() would crash the build with a raw TypeError (ui-backend-4).
 _POLICIES = {"Once": api.Once, "PerEvent": api.PerEvent, "WhileTrue": api.WhileTrue}
@@ -124,6 +131,7 @@ def build_from_spec(spec: dict[str, Any], responder: Any = None) -> Any:
 
     def make_producer(kind: str, emit_structs: list[type], model: bool, prompt: str) -> Any:
         if model:
+
             async def producer(inp: Any) -> Any:
                 # route through call_responder so a real (Ollama) model call is offloaded/cancellable
                 # and doesn't block the event loop — same discipline the runtime topologies use.
@@ -134,10 +142,12 @@ def build_from_spec(spec: dict[str, Any], responder: Any = None) -> Any:
                 for s in emit_structs:
                     yield s(note=text)
         else:
+
             async def producer(inp: Any) -> Any:
                 note = kind if not inp else f"{kind} <- {inp}"  # the stub reflects the input it got
                 for s in emit_structs:
                     yield s(note=note)
+
         return producer
 
     def topo(b: Any) -> None:
@@ -154,10 +164,15 @@ def build_from_spec(spec: dict[str, Any], responder: Any = None) -> Any:
                 model = bool(p.get("model"))
                 prompt = str(p.get("prompt") or f"You are {kind}.")
                 # a model Producer is replay-deterministic iff its Responder is (Ollama is NOT)
-                det = bool(p.get("deterministic", True)) and (responder_is_deterministic if model else True)
+                det = bool(p.get("deterministic", True)) and (
+                    responder_is_deterministic if model else True
+                )
                 b.producer_kind(
-                    kind, schemas=schemas, schema_version=1,
-                    start=make_producer(kind, schemas, model, prompt), deterministic=det,
+                    kind,
+                    schemas=schemas,
+                    schema_version=1,
+                    start=make_producer(kind, schemas, model, prompt),
+                    deterministic=det,
                 )
                 if p.get("initial"):
                     b.initial(kind)
@@ -169,8 +184,12 @@ def build_from_spec(spec: dict[str, Any], responder: Any = None) -> Any:
             view_kinds = {v["name"]: v.get("kind") for v in spec.get("views", [])}
             for t in spec.get("triggers", []):
                 policy_name = t.get("policy", "PerEvent")
-                if policy_name not in _POLICIES:  # don't silently fall back to PerEvent (ui-backend-4)
-                    raise SpecError(f"unsupported trigger policy {policy_name!r} (choose: {', '.join(_POLICIES)})")
+                if (
+                    policy_name not in _POLICIES
+                ):  # don't silently fall back to PerEvent (ui-backend-4)
+                    raise SpecError(
+                        f"unsupported trigger policy {policy_name!r} (choose: {', '.join(_POLICIES)})"
+                    )
                 b.trigger(
                     t["id"],
                     subscription=api.Subscription(kinds=frozenset({t["on"]})),
@@ -190,7 +209,9 @@ def build_from_spec(spec: dict[str, Any], responder: Any = None) -> Any:
                     slot=r["slot"],
                     transform=lambda event: event.payload,
                 )
-            b.termination(_termination(spec.get("termination") or {"kind": "quiescence_with_watchdog"}))
+            b.termination(
+                _termination(spec.get("termination") or {"kind": "quiescence_with_watchdog"})
+            )
             if spec.get("name"):
                 b.baseline(authored=spec["name"])
         except (KeyError, TypeError) as exc:

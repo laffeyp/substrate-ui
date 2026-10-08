@@ -23,7 +23,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import server  # noqa: E402
 from substrate.session_registry import SessionRegistry  # noqa: E402
-from _serving import call, serving# noqa: E402
+from _serving import call, serving  # noqa: E402
 
 
 @pytest.fixture
@@ -152,7 +152,11 @@ def test_create_rejects_bad_driver_params(base: str, tmp_path: Path) -> None:
     status, body = _request(
         base + "/api/session",
         "POST",
-        {"driver": "kimi-k2.6:cloud", "workspace": str(tmp_path / "wsp"), "driver_params": {"bogus": 1}},
+        {
+            "driver": "kimi-k2.6:cloud",
+            "workspace": str(tmp_path / "wsp"),
+            "driver_params": {"bogus": 1},
+        },
     )
     assert status == 400
     assert "driver_params" in body["error"]
@@ -164,12 +168,16 @@ def test_resolver_returns_distinct_responders_per_params(base: str, tmp_path: Pa
     responder_default = server._daemon_driver_resolver("kimi-k2.6:cloud")
     responder_thinking = server._daemon_driver_resolver("kimi-k2.6:cloud", {"think": True})
     responder_thinking_again = server._daemon_driver_resolver("kimi-k2.6:cloud", {"think": True})
-    assert responder_default is not responder_thinking, "different params must yield different Responder"
+    assert responder_default is not responder_thinking, (
+        "different params must yield different Responder"
+    )
     assert responder_thinking is responder_thinking_again, "same params must hit the cache"
     # The thinking Responder actually carries think=True on the OllamaResponder.
     assert getattr(responder_thinking, "_think", False) is True
     # Sprint 045: the default follows the model's thinking support, not a fixed False.
-    assert getattr(responder_default, "_think", None) is server._model_supports_thinking("kimi-k2.6:cloud")
+    assert getattr(responder_default, "_think", None) is server._model_supports_thinking(
+        "kimi-k2.6:cloud"
+    )
 
 
 def test_workspace_and_seed_still_deferred(base: str, tmp_path: Path) -> None:

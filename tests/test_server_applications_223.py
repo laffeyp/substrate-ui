@@ -18,7 +18,7 @@ import server  # noqa: E402
 from substrate.session_registry import SessionRegistry  # noqa: E402
 
 from substrate.topologies.applications.registry import load_manifests  # noqa: E402
-from _serving import call, serving# noqa: E402
+from _serving import call, serving  # noqa: E402
 
 
 _FIXTURE_A = """
@@ -74,9 +74,7 @@ def test_empty_applications_returns_empty_list(base: str) -> None:
     assert body == []
 
 
-def test_three_fixture_manifests_return_three_entries(
-    base: str, tmp_path: Path
-) -> None:
+def test_three_fixture_manifests_return_three_entries(base: str, tmp_path: Path) -> None:
     fixture_root = tmp_path / "fixture-applications"
     fixture_root.mkdir()
     (fixture_root / "code_review.manifest.toml").write_text(_FIXTURE_A, encoding="utf-8")
@@ -93,9 +91,7 @@ def test_three_fixture_manifests_return_three_entries(
         assert set(entry) == {"name", "description", "runs", "inputs_schema", "output_kind"}
 
 
-def test_wire_shape_excludes_slots_and_default_bundle(
-    base: str, tmp_path: Path
-) -> None:
+def test_wire_shape_excludes_slots_and_default_bundle(base: str, tmp_path: Path) -> None:
     """§7.6 line 1044: wire response is 5 fields. `slots` + `default_bundle`
     are internal to the piece-H binding step, NOT visible to a caller
     browsing the app catalog."""

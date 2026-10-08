@@ -32,7 +32,7 @@ from substrate.session_registry import SessionRegistry  # noqa: E402
 
 from substrate import api  # noqa: E402
 from substrate.testing import assert_event  # noqa: E402
-from _serving import call, serving# noqa: E402
+from _serving import call, serving  # noqa: E402
 
 
 @pytest.fixture
@@ -58,9 +58,7 @@ def _create(base: str, workspace: Path, name: str | None = None) -> str:
     return body["session_id"]
 
 
-def test_end_finalises_the_session_and_writes_session_ended(
-    base: str, tmp_path: Path
-) -> None:
+def test_end_finalises_the_session_and_writes_session_ended(base: str, tmp_path: Path) -> None:
     sid = _create(base, tmp_path / "wsp", name="closer")
     # Prime the record with one real turn so the session has UserMessage +
     # ModelReply + Park landed before /end drives the finalisation.
@@ -79,9 +77,7 @@ def test_end_finalises_the_session_and_writes_session_ended(
     )
 
 
-def test_manifest_transitions_to_ended_and_next_turn_resumes(
-    base: str, tmp_path: Path
-) -> None:
+def test_manifest_transitions_to_ended_and_next_turn_resumes(base: str, tmp_path: Path) -> None:
     """POST /end sets the manifest to ended; per the Architect ruling of 2026-09-25 the next
     /turn resumes the same session (200, parked). Asserted 410 until Sprint 097."""
     sid = _create(base, tmp_path / "wsp", name="closed")
@@ -93,6 +89,7 @@ def test_manifest_transitions_to_ended_and_next_turn_resumes(
     status, body = _post_json(base + f"/api/session/{sid}/turn", {"text": "again"})
     assert status == 200, body
     assert body.get("status") == "parked", body
+
 
 def test_end_on_unknown_session_returns_404(base: str) -> None:
     status, body = _post_json(base + "/api/session/s_nonexistent/end", None)
@@ -110,9 +107,7 @@ def test_source_body_field_lands_on_the_session_end_requested_envelope(
     """
     sid = _create(base, tmp_path / "wsp", name="sourced")
     _post_json(base + f"/api/session/{sid}/turn", {"text": "priming"})
-    _s, body = _post_json(
-        base + f"/api/session/{sid}/end", {"source": "cli_slash_exit"}
-    )
+    _s, body = _post_json(base + f"/api/session/{sid}/end", {"source": "cli_slash_exit"})
     record_root = Path(body["record"])
     assert_event(record_root, "SessionEndRequested", source="cli_slash_exit")
     # SessionEnded still fires with the normalised reason.

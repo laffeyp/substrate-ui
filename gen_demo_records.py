@@ -36,6 +36,7 @@ from substrate.topologies.tool_loop.tools import Tool
 
 from demo_topologies import resumable_topology
 
+
 def _default_runs() -> Path:
     """The server's runs dir, `<state root>/runs` (Sprint 093/097). It was this file's own
     `runs/` folder, which the server stopped reading when F1 moved RUNS, so the demo
@@ -137,8 +138,16 @@ async def main(runs: Path | None = None) -> None:
         # a diverging pair for the diff surface: same topology, sequences differ at the 3rd event.
         ("demo_diff_a", topo_seq([1, 2, 3]), False),
         ("demo_diff_b", topo_seq([1, 2, 9]), False),
-        ("demo_solo_chat", topo_solo, False),  # a real input seed -> one Message out (for the I/O surface)
-        ("demo_resumable", resumable_topology, True),  # pauses awaiting approval -> resumable (control)
+        (
+            "demo_solo_chat",
+            topo_solo,
+            False,
+        ),  # a real input seed -> one Message out (for the I/O surface)
+        (
+            "demo_resumable",
+            resumable_topology,
+            True,
+        ),  # pauses awaiting approval -> resumable (control)
     ]
     for name, topo, persistent in specs:
         root = RUNS / f"{name}.record"
@@ -205,7 +214,9 @@ async def main(runs: Path | None = None) -> None:
     )
     for lock in parent.rglob(".lock"):
         lock.unlink()
-    print("  demo_delegate  -> parent splits across TWO children (two navigable delegated-child branches)")
+    print(
+        "  demo_delegate  -> parent splits across TWO children (two navigable delegated-child branches)"
+    )
 
 
 if __name__ == "__main__":

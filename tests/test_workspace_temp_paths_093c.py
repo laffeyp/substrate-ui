@@ -42,10 +42,14 @@ def test_recent_workspaces_hides_stored_temp_rows(tmp_path: Path) -> None:
     real = Path(__file__).resolve().parent.parent  # the repo: exists, never a temp dir
     file = api.substrate_home() / "recent-workspaces.json"
     file.parent.mkdir(parents=True, exist_ok=True)
-    file.write_text(json.dumps([
-        {"path": str(tmp_path), "shape": "path"},
-        {"path": str(real), "shape": "path"},
-    ]))
+    file.write_text(
+        json.dumps(
+            [
+                {"path": str(tmp_path), "shape": "path"},
+                {"path": str(real), "shape": "path"},
+            ]
+        )
+    )
     try:
         paths = [row["path"] for row in server._recent_workspaces()]
     finally:

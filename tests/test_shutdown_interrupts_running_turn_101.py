@@ -41,21 +41,37 @@ def test_shutdown_interrupts_a_running_turn_then_ends_the_session(tmp_path: Path
 
     def factory(m: SessionManifest, first: Any = None) -> Any:
         return session_topology(
-            driver=responder, driver_name="deterministic", driver_context_tokens=4096,
-            seed="", tools={}, per_turn="", max_turns=200, turn_max_steps=4,
-            session_id=m.session_id, workspace_path=m.workspace,
-            record_root=Path(m.record_root), script=None, first_turn_user_message=first,
+            driver=responder,
+            driver_name="deterministic",
+            driver_context_tokens=4096,
+            seed="",
+            tools={},
+            per_turn="",
+            max_turns=200,
+            turn_max_steps=4,
+            session_id=m.session_id,
+            workspace_path=m.workspace,
+            record_root=Path(m.record_root),
+            script=None,
+            first_turn_user_message=first,
         )
 
     reg = SessionRegistry(base=tmp_path, session_topology_factory=factory)
     server._SESSION_REGISTRY = reg
     sid = reg.create(
-        session_id="s_0123456789abcdef", name=None, driver="deterministic",
-        workspace=str(tmp_path / "ws"), workspace_shape="flat", bundle=None, seed="",
+        session_id="s_0123456789abcdef",
+        name=None,
+        driver="deterministic",
+        workspace=str(tmp_path / "ws"),
+        workspace_shape="flat",
+        bundle=None,
+        seed="",
     ).session_id
 
     def turn(text: str, i: int) -> None:
-        reg.turn_sync(sid, UserMessage(text=text, turn_index=i, assembled_prompt=text, slash_source="user"))
+        reg.turn_sync(
+            sid, UserMessage(text=text, turn_index=i, assembled_prompt=text, slash_source="user")
+        )
 
     turn("first", 0)
     worker = threading.Thread(target=lambda: turn("second", 1), daemon=True)

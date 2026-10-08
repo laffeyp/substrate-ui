@@ -30,7 +30,7 @@ from session_errors import SESSION_ENDED_MID_DELEGATE  # noqa: E402
 from substrate.session_registry import SessionRegistry  # noqa: E402
 
 from substrate import api  # noqa: E402
-from _serving import call, call_raw, serving# noqa: E402
+from _serving import call, call_raw, serving  # noqa: E402
 
 
 @pytest.fixture

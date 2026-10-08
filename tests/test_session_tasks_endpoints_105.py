@@ -17,7 +17,7 @@ import server  # noqa: E402
 
 from substrate.session_registry import SessionRegistry  # noqa: E402
 from substrate.topologies.tool_loop.background import TABLE  # noqa: E402
-from _serving import call, serving# noqa: E402
+from _serving import call, serving  # noqa: E402
 
 
 @pytest.fixture
@@ -25,8 +25,13 @@ def base(tmp_path: Path) -> str:
     server._SESSION_REGISTRY = SessionRegistry(base=tmp_path / "sessions")
     for sid in ("s_00000000000105aa", "s_00000000000105bb"):
         server._SESSION_REGISTRY.create(
-            session_id=sid, name=None, driver="deterministic", workspace=str(tmp_path),
-            workspace_shape="flat", bundle=None, seed="",
+            session_id=sid,
+            name=None,
+            driver="deterministic",
+            workspace=str(tmp_path),
+            workspace_shape="flat",
+            bundle=None,
+            seed="",
         )
     with serving() as base:
         yield base
@@ -45,9 +50,13 @@ def _post(url: str, origin: str) -> tuple[int, dict]:
 
 
 def test_list_and_stop_a_sessions_task(base: str, tmp_path: Path) -> None:
-    tools = server._tools_for_manifest(SimpleNamespace(session_id="s_00000000000105aa", workspace=str(tmp_path), tools=None))
+    tools = server._tools_for_manifest(
+        SimpleNamespace(session_id="s_00000000000105aa", workspace=str(tmp_path), tools=None)
+    )
     r = tools["bash"].run(["sleep 60", None, True])
-    other = server._tools_for_manifest(SimpleNamespace(session_id="s_00000000000105bb", workspace=str(tmp_path), tools=None))
+    other = server._tools_for_manifest(
+        SimpleNamespace(session_id="s_00000000000105bb", workspace=str(tmp_path), tools=None)
+    )
     other["bash"].run(["sleep 60", None, True])
 
     code, body = _get(f"{base}/api/session/s_00000000000105aa/tasks")
@@ -59,7 +68,9 @@ def test_list_and_stop_a_sessions_task(base: str, tmp_path: Path) -> None:
     assert code == 200 and stopped["status"] == "stopped"
     assert stopped["stopped_because"] == "stopped from the app"
     told = TABLE.drain_ended("s_00000000000105aa")
-    assert [t["task_id"] for t in told] == [r["task_id"]], "the model hears about a stop from the app"
+    assert [t["task_id"] for t in told] == [r["task_id"]], (
+        "the model hears about a stop from the app"
+    )
 
 
 def test_unknown_session_or_task_is_404(base: str) -> None:

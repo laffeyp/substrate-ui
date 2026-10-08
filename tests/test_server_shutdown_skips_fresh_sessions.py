@@ -79,7 +79,13 @@ def test_shutdown_buckets_fresh_session_as_skipped_fresh(
     )
 
     outcome = server._shutdown_all_sessions(per_session_timeout=10.0)
-    assert outcome == {"ended": 0, "skipped_fresh": 1, "skipped_ended": 0, "failed": 0, "background_stopped": 0}
+    assert outcome == {
+        "ended": 0,
+        "skipped_fresh": 1,
+        "skipped_ended": 0,
+        "failed": 0,
+        "background_stopped": 0,
+    }
 
 
 def test_fresh_session_transitions_to_ended_and_survives_reboot(
@@ -138,4 +144,10 @@ def test_shutdown_mixes_fresh_parked_and_ended_buckets(
     finally:
         srv.shutdown()
         srv.server_close()
-    assert outcome == {"ended": 1, "skipped_fresh": 1, "skipped_ended": 1, "failed": 0, "background_stopped": 0}
+    assert outcome == {
+        "ended": 1,
+        "skipped_fresh": 1,
+        "skipped_ended": 1,
+        "failed": 0,
+        "background_stopped": 0,
+    }

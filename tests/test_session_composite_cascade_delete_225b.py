@@ -15,7 +15,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import server  # noqa: E402
 from substrate.session_registry import SessionRegistry  # noqa: E402
-from _serving import call_raw, serving# noqa: E402
+from _serving import call_raw, serving  # noqa: E402
 
 
 @pytest.fixture

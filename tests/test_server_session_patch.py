@@ -35,7 +35,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import server  # noqa: E402
 from substrate.session_registry import SessionRegistry  # noqa: E402
-from _serving import call, serving# noqa: E402
+from _serving import call, serving  # noqa: E402
 
 
 @pytest.fixture
@@ -58,7 +58,9 @@ def _patch_json(url: str, body: dict) -> tuple[int, dict]:
     return status, payload
 
 
-def _create(base: str, workspace: Path, name: str | None = None, driver: str = "deterministic") -> str:
+def _create(
+    base: str, workspace: Path, name: str | None = None, driver: str = "deterministic"
+) -> str:
     _s, body = _post_json(
         base + "/api/session",
         {"driver": driver, "name": name, "workspace": str(workspace)},

@@ -26,7 +26,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import server  # noqa: E402
 from substrate.session_registry import SessionRegistry  # noqa: E402
-from _serving import call, serving# noqa: E402
+from _serving import call, serving  # noqa: E402
 
 
 @pytest.fixture
@@ -115,9 +115,7 @@ def test_429_returns_immediately_not_after_lock_wait(
     # The refusal must return well under the 1 s sleep the admitted turns
     # are inside. If the cap check took the turn lock, this would block.
     start = time.monotonic()
-    status, body = _post_json(
-        base_cap3 + f"/api/session/{sid}/turn", {"text": "no"}, timeout=5
-    )
+    status, body = _post_json(base_cap3 + f"/api/session/{sid}/turn", {"text": "no"}, timeout=5)
     elapsed = time.monotonic() - start
     assert status == 429
     assert body["error"] == "session queue full"

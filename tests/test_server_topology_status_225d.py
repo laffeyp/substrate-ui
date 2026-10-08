@@ -18,7 +18,7 @@ import server  # noqa: E402
 from substrate.session_registry import SessionRegistry  # noqa: E402
 
 from substrate.topologies.applications.registry import load_manifests  # noqa: E402
-from _serving import call, serving# noqa: E402
+from _serving import call, serving  # noqa: E402
 
 
 @pytest.fixture
@@ -90,9 +90,7 @@ def test_async_run_transitions_running_then_finalised(base: str) -> None:
 
 
 def test_unknown_run_id_returns_404(base: str) -> None:
-    status, body = _get(
-        base + "/api/topology/best_of_n_verified/status?run_id=s_topo_nosuch"
-    )
+    status, body = _get(base + "/api/topology/best_of_n_verified/status?run_id=s_topo_nosuch")
     assert status == 404
     assert "s_topo_nosuch" in json.dumps(body)
 

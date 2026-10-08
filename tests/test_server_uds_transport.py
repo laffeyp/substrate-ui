@@ -113,9 +113,7 @@ def test_uds_socket_file_exists_after_bind(dual_transport: tuple[str, str]) -> N
 def test_uds_post_create_session_succeeds(dual_transport: tuple[str, str]) -> None:
     """Client posts to UDS; daemon creates the session through the same handler."""
     _tcp, uds_path = dual_transport
-    status, body = _uds_post_json(
-        uds_path, "/api/session", {"driver": "deterministic"}
-    )
+    status, body = _uds_post_json(uds_path, "/api/session", {"driver": "deterministic"})
     assert status == 200
     assert body["session_id"].startswith("s_")
 
@@ -134,7 +132,5 @@ def test_tcp_still_works_alongside_uds(dual_transport: tuple[str, str]) -> None:
     assert any(sid.startswith("s_") for sid in ids)
     # Same catalog from UDS:
     _status, uds_body = _uds_get(uds_path, "/api/session")
-    uds_ids = [
-        entry["session_id"] for entry in uds_body["live"] + uds_body["parked"]
-    ]
+    uds_ids = [entry["session_id"] for entry in uds_body["live"] + uds_body["parked"]]
     assert set(ids) == set(uds_ids)
