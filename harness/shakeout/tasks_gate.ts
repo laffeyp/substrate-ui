@@ -5,26 +5,28 @@
 // `sleep 301` process is left. Claude Code's /tasks is the reference.
 //
 // Runs against source (`electron .`) by default; TASKS_APP=<path to Substrate.app> runs the
-// packaged bundle. Needs the kimi-k2.7-code:cloud driver (the app's default).
+// packaged bundle. Drives the app's default model (`default` in /api/models); TASKS_DRIVER overrides.
+// Counts only `sleep 301` processes under this run's own backend (found by its SUBSTRATE_HOME).
 //
 //   npx tsx harness/shakeout/tasks_gate.ts
 
 import { _electron as electron, type ElectronApplication } from "playwright";
-import { spawnSync } from "node:child_process";
 import { join, resolve } from "node:path";
 import { scratchDir } from "./lib/scratch";
+import { backendPids, descendantsMatching } from "./lib/procs";
 
 const REPO_ROOT = resolve(__dirname, "..", "..");
 const APP = process.env.TASKS_APP || "";
-const DRIVER = "kimi-k2.7-code:cloud";
+const DRIVER_OVERRIDE = process.env.TASKS_DRIVER || "";
 const fails: string[] = [];
 const check = (ok: boolean, what: string) => {
   process.stdout.write(`${ok ? "ok  " : "FAIL"} ${what}\n`);
   if (!ok) fails.push(what);
 };
 
+const state = scratchDir("tasks-state-");
+
 function launch(): Promise<ElectronApplication> {
-  const state = scratchDir("tasks-state-");
   const userData = scratchDir("tasks-userdata-");
   const env = { ...process.env, SUBSTRATE_HOME: state } as Record<string, string>;
   return APP
@@ -32,24 +34,26 @@ function launch(): Promise<ElectronApplication> {
     : electron.launch({ args: [REPO_ROOT, "--user-data-dir=" + userData], env });
 }
 
-const sleepers = (): number =>
-  (spawnSync("pgrep", ["-f", "^sleep 301$"], { encoding: "utf8" }).stdout || "").split("\n").filter(Boolean).length;
+const sleepers = (): number => descendantsMatching(backendPids(state), /^sleep 301$/).length;
 
 (async () => {
-  const before = sleepers();
-  const app = await launch();
+  let app: ElectronApplication | null = null;
   try {
+    app = await launch();
+    const before = sleepers();
     const win = await app.firstWindow({ timeout: 30_000 });
     await win.waitForLoadState("load");
     await win.waitForFunction(() => (window as any).__vm != null, undefined, { timeout: 15_000 });
-    const sid = await win.evaluate(async (drv) => {
+    const sid = await win.evaluate(async (override) => {
       const c = (window as any).__vm.get(1) ?? (window as any).__vm.spawn(1);
       await c.loadDriverRoster();
+      const drv = override || ((await (await fetch("/api/models")).json()) as { default?: string }).default;
+      if (!drv) throw new Error("no default driver in /api/models and TASKS_DRIVER unset");
       c.pickDriver(drv);
       await c.openSession({ driver: drv });
       void c.sendTurn("Call the bash tool with cmd 'sleep 301' and run_in_background true. Then reply with the word ok.");
       return c.snapshot().sessionId as string;
-    }, DRIVER);
+    }, DRIVER_OVERRIDE);
     await win.waitForSelector("[data-vm-task-stop]", { timeout: 120_000 });
     const label = await win.locator("[data-vm-tasks]").first().innerText();
     check(/sleep 301/.test(label), `the strip lists the task (${label.replace(/\s+/g, " ").trim()})`);
@@ -69,7 +73,7 @@ const sleepers = (): number =>
   } catch (e) {
     check(false, `flow error: ${e instanceof Error ? e.message : String(e)}`);
   } finally {
-    await app.close().catch(() => undefined);
+    await app?.close().catch(() => undefined);
   }
   process.stdout.write(fails.length ? `tasks_gate: ${fails.length} FAILED\n` : "tasks_gate: all passed\n");
   process.exit(fails.length ? 1 : 0);

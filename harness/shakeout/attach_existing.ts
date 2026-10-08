@@ -5,7 +5,7 @@
 import { SessionController } from "../../web/vm/session_controller";
 import { NodeSubstrateClient } from "./lib/client";
 import { BASE_URL } from "./lib/server";
-import { pickRealDriver } from "./lib/driver";
+import { sessionDriver } from "./lib/driver";
 import type { Flow, EmittedRecord, Defect } from "./lib/flow";
 
 const PARK_TIMEOUT_MS = 60_000;
@@ -18,7 +18,7 @@ export const flow: Flow = {
     "STREAM_ENVELOPE_APPENDED",
   ],
   async run(): Promise<{ emitted: EmittedRecord[]; defects: Defect[] }> {
-    const driver = await pickRealDriver(BASE_URL);
+    const driver = await sessionDriver(BASE_URL);
 
     const openerClient = new NodeSubstrateClient(BASE_URL);
     const opener = new SessionController(openerClient);

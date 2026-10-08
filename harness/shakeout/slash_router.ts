@@ -1,26 +1,16 @@
-// Slash router with a real driver session in the loop. Some slashes
-// need a session (/tools, /workspace, /isolate); others don't (/help,
-// /model, /clear, /ls, /list, /name, /exit). Open one session with a
-// real model, then walk every slash through submitLine.
+// Slash router. Opens one session, then drives every slash command the controller has
+// (session_controller.ts slashCommands: help, model, name, list, interrupt, clear, exit) and checks
+// what each one did, not only that it was routed: SLASH_ROUTED fires before the lookup, so it alone
+// would pass for a command that does not exist. Unknown commands must fire SLASH_UNKNOWN; known
+// ones must not.
 
 import { SessionController } from "../../web/vm/session_controller";
 import { NodeSubstrateClient } from "./lib/client";
 import { BASE_URL } from "./lib/server";
-import { pickRealDriver } from "./lib/driver";
+import { sessionDriver } from "./lib/driver";
 import type { Flow, EmittedRecord, Defect } from "./lib/flow";
 
-const SLASHES = [
-  "/help",
-  "/model deterministic",
-  "/clear",
-  "/ls",
-  "/list",
-  "/name shakeout-slash",
-  "/tools bash",
-  "/workspace .",
-  "/isolate",
-  "/exit",
-];
+const UNKNOWN = ["/unknownslashfoobar", "/tools", "/workspace", "/isolate"];
 
 export const flow: Flow = {
   name: "slash_router",
@@ -30,49 +20,56 @@ export const flow: Flow = {
     const controller = new SessionController(client);
     const emitted: EmittedRecord[] = [];
     controller.onEvent((ev) => emitted.push({ tag: ev.tag, payload: ev.payload }));
+    const defects: Defect[] = [];
+    const fail = (category: string, observed: string, expected: string) =>
+      defects.push({ category, observed, expected, reproduces: true, severity: "high" });
 
-    const driver = await pickRealDriver(BASE_URL);
+    const driver = await sessionDriver(BASE_URL);
     await controller.loadDriverRoster();
     controller.pickDriver(driver);
     await controller.openSession({ driver });
+    const sid = controller.snapshot().sessionId;
+    if (!sid) {
+      fail("no_session", "openSession left no session id", "a session to drive the slashes against");
+      controller.disconnect();
+      return { emitted, defects };
+    }
+    const rows = () => controller.snapshot().transcript;
 
-    for (const line of SLASHES) {
-      try { await controller.submitLine(line); }
-      catch { /* individual slash failures land as defects below */ }
-    }
-    await controller.submitLine("/unknownslashfoobar");
+    await controller.submitLine("/help");
+    if (!rows().some((r) => r.text.startsWith("slash commands:"))) fail("help_no_listing", "no 'slash commands:' row", "/help lists the commands");
 
-    const defects: Defect[] = [];
-    const routedCmds = new Set(
-      emitted.filter((e) => e.tag === "SLASH_ROUTED").map((e) => String(e.payload.cmd))
-    );
-    for (const line of SLASHES) {
-      const cmd = line.slice(1).split(/\s/)[0];
-      if (!routedCmds.has(cmd)) {
-        defects.push({
-          category: "slash_not_routed",
-          observed: `${line} did not fire SLASH_ROUTED`,
-          expected: `SLASH_ROUTED with cmd=${cmd}`,
-          reproduces: true,
-          severity: "medium",
-        });
-      }
+    await controller.submitLine("/model deterministic");
+    if (controller.snapshot().driver !== "deterministic") fail("model_not_set", `driver ${controller.snapshot().driver}`, "/model sets the driver");
+
+    await controller.submitLine("/name shakeout-slash");
+    const named = await client.fetchJson<{ name?: string | null }>(`/api/session/${encodeURIComponent(sid)}`, { method: "GET" });
+    if (!named.ok || named.data.name !== "shakeout-slash") fail("name_not_persisted", JSON.stringify(named), "/name renames the session on the server");
+
+    await controller.submitLine("/list");
+    if (!rows().some((r) => r.kind === "SlashListed")) fail("list_no_row", "no SlashListed row", "/list appends the session list");
+
+    await controller.submitLine("/interrupt");
+
+    await controller.submitLine("/clear");
+    if (rows().length !== 0) fail("clear_left_rows", `${rows().length} rows after /clear`, "/clear empties the transcript");
+
+    for (const line of UNKNOWN) await controller.submitLine(line);
+    const unknown = new Set(emitted.filter((e) => e.tag === "SLASH_UNKNOWN").map((e) => String(e.payload.cmd)));
+    for (const line of UNKNOWN) {
+      if (!unknown.has(line.slice(1))) fail("unknown_not_flagged", `${line} fired no SLASH_UNKNOWN`, "every unknown command is flagged");
     }
-    const unknownCmds = emitted.filter((e) => e.tag === "SLASH_UNKNOWN").map((e) => String(e.payload.cmd));
-    if (!unknownCmds.includes("unknownslashfoobar")) {
-      defects.push({
-        category: "unknown_slash_not_flagged",
-        observed: "/unknownslashfoobar did not fire SLASH_UNKNOWN",
-        expected: "SLASH_UNKNOWN with cmd=unknownslashfoobar",
-        reproduces: true,
-        severity: "medium",
-      });
+    for (const known of ["help", "model", "name", "list", "interrupt", "clear"]) {
+      if (unknown.has(known)) fail("known_flagged_unknown", `/${known} fired SLASH_UNKNOWN`, "known commands are dispatched");
     }
 
-    // Session may have been ended by /exit; if not, end it explicitly.
-    if (controller.snapshot().sessionId) {
-      await controller.endSession("shakeout_slash_done");
-    }
+    await controller.submitLine("/exit");
+    const deadline = Date.now() + 10_000;
+    while (Date.now() < deadline && controller.snapshot().sessionId !== null) await new Promise((r) => setTimeout(r, 100));
+    const ended = await client.fetchJson<{ status?: string }>(`/api/session/${encodeURIComponent(sid)}`, { method: "GET" });
+    const endedStatus = ended.ok ? ended.data.status : `HTTP ${ended.status}`;
+    if (endedStatus !== "ended") fail("exit_not_ended", `server status ${endedStatus}`, "/exit ends the session on the server");
+
     controller.disconnect();
     return { emitted, defects };
   },

@@ -30,13 +30,13 @@
 //   - It is signed with the expected Apple team (ZVL8XB9XGU).
 //   - It is fresher than every input that could have changed the bundle
 //     since it was built: electron/**, web/dist/**, server.py and its
-//     four siblings, electron-builder.config.js, build/entitlements.mac.plist,
+//     three siblings, electron-builder.config.js, build/entitlements.mac.plist,
 //     scripts/fetch-python-runtime.sh, build/python/**.
 //
 // Preconditions asserted after launch:
 //   - `process.resourcesPath` in the main process points at
 //     dist-electron/mac-arm64/Substrate.app/Contents/Resources.
-//   - main.js:95's "spawning server: ..." log names the bundled
+//   - main.js's "spawning server: ..." log names the bundled
 //     python3 (build/python/bin/python3 → Contents/Resources/python/bin/python3),
 //     not `uv`.
 //   - stderr contains no ModuleNotFoundError.
@@ -61,10 +61,12 @@
 // source-vs-packaged parity check.
 
 import { _electron as electron } from "playwright";
-import { execFileSync, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { existsSync, rmSync, statSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { scratchDir } from "./lib/scratch";
+import { bindPaneAsUser } from "./lib/electron";
+import { backendPids as backendPidsFor } from "./lib/procs";
 
 const REPO_ROOT = resolve(__dirname, "..", "..");
 // SMOKE_APP points the smoke at another copy of the bundle, e.g. the
@@ -87,10 +89,7 @@ const T0 = Date.now();
 const MARKS: Record<string, number> = {};
 const mark = (k: string) => { if (!(k in MARKS)) MARKS[k] = Date.now() - T0; };
 function backendPids(): number[] {
-  // Backends of THIS run: a server.py whose environment carries our state root.
-  const out = spawnSync("ps", ["-axo", "pid=,command="], { encoding: "utf8" }).stdout || "";
-  const cands = out.split("\n").filter((l) => /server\.py --port 0/.test(l) && !/uv run/.test(l)).map((l) => Number(l.trim().split(/\s+/)[0]));
-  return cands.filter((pid) => (spawnSync("ps", ["eww", "-o", "command=", "-p", String(pid)], { encoding: "utf8" }).stdout || "").includes("SUBSTRATE_HOME=" + STATE));
+  return backendPidsFor(STATE);
 }
 // Empty = use the app's own default driver (`default` in /api/models),
 // the one a user gets. SMOKE_DRIVER overrides.
@@ -100,10 +99,11 @@ const LAUNCHD_PATH = "/usr/bin:/bin:/usr/sbin:/sbin";
 const BUNDLED_PY = join(APP_RESOURCES, "python", "bin", "python3");
 const CLI_NAMES = ["claude", "codex", "cursor-agent"];
 
+// A failed check throws, so run()'s finally always closes the app, waits for its backend, scans
+// stderr and removes the scratch dirs (lens audit F396).
 type Fail = (msg: string) => never;
 const die: Fail = (msg) => {
-  process.stderr.write("packaged_app_smoke: " + msg + "\n");
-  process.exit(1);
+  throw new Error(msg);
 };
 
 function newestMtime(paths: string[]): { path: string; mtimeMs: number } {
@@ -216,7 +216,7 @@ async function run(): Promise<void> {
     mark("window_created");
     win.on("console", (m) => consoleChunks.push("[" + m.type() + "] " + m.text()));
 
-    // 6. Wait for the reveal shell mount. main.js:95 logs `spawning
+    // 6. Wait for the reveal shell mount. electron/main.js logs `spawning
     //    server: <exe> <args>` on the main-process stderr and the
     //    bundled python path is asserted after the run via the same
     //    captured stream (Playwright's _electron.launch buffers a
@@ -228,40 +228,15 @@ async function run(): Promise<void> {
     // 7. Bind pane 1 to a sandbox path. On first launch every pane is
     //    unbound: the reveal shell renders a path-binding input
     //    (placeholder "type a path · ↑↓ picks…"), not the chat prompt.
-    //    The transcript mount only appears once a pane is bound.
-    //    pane_prompt_isolation.ts uses the same _bindPane fiber walk;
-    //    this smoke follows suit.
+    //    The transcript mount only appears once a pane is bound. The
+    //    smoke binds it as a first-run user does: Enter in the path
+    //    input picks the per-session sandbox (lib/electron.ts).
     await win.waitForFunction(
       () => (window as unknown as { __vm?: unknown }).__vm != null,
       undefined,
       { timeout: 10_000 },
     );
-    await win.evaluate(() => {
-      const root = document.getElementById("dc-root") as (HTMLElement & Record<string, unknown>) | null;
-      if (!root) throw new Error("no #dc-root");
-      const key = Object.keys(root).find((k) => k.startsWith("__reactContainer"));
-      if (!key) throw new Error("no react fiber on #dc-root");
-      const stack: unknown[] = [((root[key] as { stateNode?: { current?: unknown } }).stateNode?.current)];
-      type Logic = {
-        _bindPane: (id: number, path: string) => void;
-        state: { panes: { id: number; unbound?: boolean }[] };
-      };
-      let logic: Logic | null = null;
-      while (stack.length > 0) {
-        const cursor = stack.pop();
-        if (!cursor) continue;
-        const inst = (cursor as { stateNode?: { logic?: { _bindPane?: unknown } } }).stateNode;
-        const cand = inst?.logic;
-        if (cand && typeof cand._bindPane === "function") { logic = cand as unknown as Logic; break; }
-        const c = (cursor as { child?: unknown }).child;
-        const s = (cursor as { sibling?: unknown }).sibling;
-        if (s) stack.push(s);
-        if (c) stack.push(c);
-      }
-      if (!logic) throw new Error("no pane-logic fiber");
-      const pane1 = logic.state.panes[0];
-      if (pane1.unbound) logic._bindPane(pane1.id, "~/.substrate/sandbox");
-    });
+    await bindPaneAsUser(win);
 
     // 8. Now the transcript mount can render.
     await win.waitForFunction(
@@ -312,7 +287,7 @@ async function run(): Promise<void> {
     await prompt.click();
     await prompt.type(TYPED_LITERAL, { delay: 15 });
 
-    // 9. The literal must land in the input's value (the reported bug is
+    // 11. The literal must land in the input's value (the reported bug is
     //    that typed text never appears anywhere).
     const inputValue = await prompt.inputValue();
     if (inputValue !== TYPED_LITERAL) {
@@ -321,7 +296,7 @@ async function run(): Promise<void> {
     await win.keyboard.press("Enter");
     mark("turn_sent");
 
-    // 10. And the literal must appear in the transcript DOM. Poll the
+    // 12. And the literal must appear in the transcript DOM. Poll the
     //     rendered text for it — the transcript renders user turns as
     //     text nodes under [data-vm-atom-root="terminal"].
     await win.waitForFunction(
@@ -333,7 +308,7 @@ async function run(): Promise<void> {
       { timeout: 15_000 },
     );
 
-    // 11. The real-model turn parks, and the pane's topologyGraph —
+    // 13. The real-model turn parks, and the pane's topologyGraph —
     //     what Reveal → Structure renders — holds producers.
     await win.waitForFunction(
       () => (window as unknown as { __vm: { get(id: number): { snapshot(): { parkReason: unknown } } } }).__vm.get(1).snapshot().parkReason != null,
@@ -372,33 +347,30 @@ async function run(): Promise<void> {
     // regression this smoke exists to catch. Was found via this smoke
     // on 2026-09-28: httpx missing → transcript stays empty on turn 1.
     const allErr = stderrChunks.join("") + "\n" + consoleChunks.join("\n");
+    // The backend must run on the bundle's own interpreter, never uv (header precondition).
+    if (TARGET === "packaged" && exitCode === 0) {
+      const spawnLine = allErr.split("\n").find((l) => l.includes("spawning server:"));
+      if (!spawnLine || !spawnLine.includes(BUNDLED_PY) || /\buv\b/.test(spawnLine)) {
+        process.stderr.write("packaged_app_smoke: backend not spawned on the bundled python3: " + (spawnLine ?? "(no 'spawning server' line)") + "\n");
+        exitCode = 5;
+      }
+    }
     if (/ModuleNotFoundError/.test(allErr)) {
       const lines = allErr.split("\n").filter((l) => /ModuleNotFoundError/.test(l));
       process.stderr.write("packaged_app_smoke: ModuleNotFoundError observed:\n" + lines.join("\n") + "\n");
       if (exitCode === 0) exitCode = 3;
     }
-    // 12. Orphan sweep. Playwright's app.close() SIGTERMs the main
-    //     process; main.js's will-quit hook that ordinarily kills the
-    //     server group does not always fire in time, so the python
-    //     daemon can outlive the .app. Give it 2s to exit on its own,
-    //     then SIGKILL any bundled-python survivor. This is a smoke,
-    //     not a teardown test — leaving a daemon running would poison
-    //     the next run's port bind and mask the real bug next time.
-    //     The match is this bundle's absolute interpreter path — never a
-    //     bare "Contents/Resources/python/bin/python3", which would also
-    //     match an installed /Applications/Substrate.app in use.
-    await new Promise((r) => setTimeout(r, 2_000));
-    if (TARGET === "packaged") {
-      try {
-        const survivors = execFileSync("pgrep", ["-fl", BUNDLED_PY], { encoding: "utf8" });
-        if (survivors.trim().length > 0) {
-          process.stderr.write("packaged_app_smoke: orphan python3 of this bundle after close:\n" + survivors);
-          spawnSync("pkill", ["-9", "-f", BUNDLED_PY]);
-          if (exitCode === 0) exitCode = 4;
-        }
-      } catch {
-        // pgrep exits 1 when nothing matches — the pass case.
-      }
+    // 14. Orphan sweep. Playwright's app.close() SIGTERMs the main
+    //     process; main.js's will-quit hook that kills the server group
+    //     does not always fire in time. A backend of THIS run (found by
+    //     its SUBSTRATE_HOME, never by a name pattern: the installed app
+    //     may be running the same interpreter) still alive after the
+    //     wait above is a defect; it is killed by pid and the run fails.
+    const survivors = backendPids();
+    if (survivors.length > 0) {
+      process.stderr.write("packaged_app_smoke: backend(s) of this run alive after close: " + survivors.join(",") + "\n");
+      for (const pid of survivors) { try { process.kill(pid, "SIGKILL"); } catch { /* gone */ } }
+      if (exitCode === 0) exitCode = 4;
     }
     try { rmSync(userDataDir, { recursive: true, force: true }); } catch { /* best-effort */ }
   }

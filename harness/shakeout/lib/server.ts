@@ -13,8 +13,25 @@ const REPO_ROOT = join(__dirname, "..", "..", "..");
 const SUBSTRATE_ROOT = join(REPO_ROOT, "..", "substrate");
 const SERVER_PATH = join(REPO_ROOT, "server.py");
 
-const PORT = Number(process.env.SHAKEOUT_PORT || "8765");
-export const BASE_URL = `http://127.0.0.1:${PORT}`;
+// The port is chosen at the first start (SHAKEOUT_PORT pins it) and kept across restarts, so the
+// refused/reconnect flows reconnect to the same address. It is never the 8765 a standalone
+// server.py and the CLI's TCP fallback default to (lens audit F370). BASE_URL is a live binding:
+// read it at call time, after start().
+let PORT = Number(process.env.SHAKEOUT_PORT || "0");
+export let BASE_URL = `http://127.0.0.1:${PORT}`;
+
+async function freePort(): Promise<number> {
+  const net = await import("node:net");
+  return new Promise<number>((resolve, reject) => {
+    const s = net.createServer();
+    s.once("error", reject);
+    s.listen(0, "127.0.0.1", () => {
+      const addr = s.address();
+      const port = typeof addr === "object" && addr ? addr.port : 0;
+      s.close(() => resolve(port));
+    });
+  });
+}
 
 export class ServerHandle {
   private proc: ChildProcess | null = null;
@@ -27,13 +44,17 @@ export class ServerHandle {
 
   async start(): Promise<void> {
     if (this.proc) return;
+    if (!PORT) {
+      PORT = await freePort();
+      BASE_URL = `http://127.0.0.1:${PORT}`;
+    }
     await this.requirePortFree();
     const fs = await import("node:fs");
     fs.mkdirSync(shakeoutOutDir(), { recursive: true });
     const out = fs.openSync(this.logPath, "a");
     // detached:true puts the child in its own process group so we can
     // signal the whole group (uv + python). Killing only uv leaves the
-    // python child running and holding port 8765.
+    // python child running and holding the port.
     // SHAKEOUT_APP=<path to Substrate.app> runs the flows against a PACKAGED bundle: its own
     // interpreter and its own server.py, spawned the way electron/main.js spawns them
     // (Sprint 098; the parity gate Sprint 091 named and never built).

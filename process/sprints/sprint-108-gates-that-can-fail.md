@@ -3,7 +3,8 @@
 ```yaml
 ---
 id: 108
-status: open
+status: closed
+closed_at: 2026-10-08
 opened_at: 2026-10-08
 pass_kind: remediation
 roadmap: substrate-ui/process/planning/ROADMAP-2026-10-08-lens-audit-remediation.md
@@ -78,4 +79,66 @@ Each row closes as named; a row the sprint cannot close halts the sprint.
 
 ## result
 
-(filled at close)
+**The gate can fail now, and two planted breaks proved it.**
+- `exitCodeFor` returns 1 on any defect or failed run, as well as on a coverage gap.
+- Plant 1 made `/clear` a no-op in session_controller.ts. slash_router recorded 1 defect and the run exited 1.
+- Plant 2 made the toggle-reveal menu item do nothing. electron_menu recorded 1 defect and the run exited 1.
+- Under the old exit code both runs exit 0: every tag green, defects ignored. Both plants were reverted; `git diff` is clean on both files.
+
+**A vacuous check turned up in transcript_follow.**
+- Its two "switch" checks passed without ever switching views. The gate never bound its pane, and ctrl+` is a no-op on an unbound pane (reveal_component.ts:732).
+- The new switch wait failed, which exposed this.
+- The gate now binds the pane as a user does. Both checks switch for real and pass (scroll position 558 → 558).
+
+**electron_menu learned what the app actually does.**
+- The new-session menu item opens a pane already bound to the literal `~/.substrate/sandbox`.
+- That literal is F375; U111 fixes the server side.
+
+**What changed.**
+- `lib/electron.ts` holds the shared launch code and binds panes the way a user does: Enter in the path input. This replaces both the per-flow launch code and the fiber walks.
+- The Electron flows report the tags in `window.__vmSignals`, not tags they push themselves. electron_menu and electron_deeplink declare no tags and check outcomes.
+- slash_router checks what each real command does. It also checks that `/tools`, `/workspace` and `/isolate` fire SLASH_UNKNOWN.
+- cli_discovery and cli_version_picker declare no tags (a box with no authenticated CLI passes honestly) and fabricate no markers. cli_version_picker no longer sends the literal `~` workspace, and its end body now carries `source`.
+- `lib/procs.ts` finds this run's backends by `SUBSTRATE_HOME` and their children by parent chain.
+  - tasks_gate counts only its own `sleep 301` processes and takes the app's default driver.
+  - packaged_app_smoke has no `pkill`; it kills survivors by pid, and a survivor fails the run. It now checks that the backend was spawned on the bundled python.
+- Teardown runs on failure: `die()` throws in packaged_app_smoke and resume_ended_session, and transcript_follow launches inside `try`.
+- Fixed sleeps became conditions in transcript_follow (layout settled for three frames; the view mount toggled), stream_reconnect (park, then a second STREAM_ATTACHED) and electron_deeplink.
+- The shakeout server takes an ephemeral port, kept across restarts, and reports go to the OS temp dir.
+- Axis A runs on the deterministic driver unless `SHAKEOUT_DRIVER` is set. release.sh sets `SHAKEOUT_DRIVER=default`, so a release still drives a real model through Axis A.
+- vm_smoke starts its own isolated server, checks envelope kinds, and checks that the session ended on the server.
+- The fan-out flow gives its children the session's real driver.
+- Deleted:
+  - the six browser flows;
+  - `harness/_deprecated` (10 scripts and electron_spike);
+  - `tests/walkthrough.js` and `tests/harness/**` (20 files);
+  - pixelmatch, pngjs and @types/pngjs.
+- New npm scripts:
+  - `npm test` runs the Python suite, the unit specs, vm_smoke, shakeout Axis A and the Electron gates;
+  - `test:py` and `gates:electron` are also new.
+
+**Rows closed elsewhere.**
+- **F373** closes in U112. The flows pass end reasons, but the client sends them under the key `reason`, which the server does not read.
+- **F398** closes in U113, when the bundle records its kernel commit and an input hash.
+- **F384/F403:** the gates now bind through the path input, which picks the per-session sandbox, not the literal tilde.
+- **Kept on purpose:**
+  - F385: resume_ended_session keeps uv's cache on the real home in source mode. That cache holds content-addressed build inputs, not app state; the reason is written in the file.
+  - F386/F401: the resume and packaged-smoke gates stay on a real model, as the real-model tier. `SMOKE_DRIVER=deterministic` runs them offline.
+
+**Baseline for U112 (current shell, 2026-10-08)**
+
+| Gate | Result |
+|---|---|
+| Python | 225 passed |
+| Unit specs | 23/23 |
+| vm_smoke | 12/12 |
+| shakeout Axis A (deterministic) | 11 flows, 34 tags green, 0 defects |
+| Axis C (electron_smoke, electron_menu, electron_deeplink) | 0 defects |
+| lifecycle_gates | all passed |
+| transcript_follow | 7/7 |
+| resume_ended_session (source) | ok on kimi-k2.7-code:cloud, and on deterministic |
+| tasks_gate | 5/5 |
+| packaged_app_smoke (source) | ok; Structure populated; no backend left |
+| `npm run build` | passes |
+
+The packaged target needs a fresh bundle; it runs in U113.

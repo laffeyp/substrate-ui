@@ -872,6 +872,12 @@ Twelve PNGs at `captures/pixel-baseline-2026-09-23/`: six states (`empty`, `one_
 
 *Agent maintains. Last 10 increment closes; older roll into ## Built as compressed paragraphs.*
 
+### Sprint 108 (2026-10-08, closed) — gates that can fail
+- The shakeout exit code now counts defects. Two planted breaks each turned it red: a no-op `/clear`, and a dead toggle-reveal menu item. Under the old code both exited 0.
+- transcript_follow's view-switch checks had passed without switching, because the pane was unbound and ctrl+` does nothing then. The gate now binds the pane as a user does, and both checks switch for real and pass.
+- The Electron flows report the signals the app emitted. Gates find their own processes by `SUBSTRATE_HOME`; no `pkill` remains. Teardown runs on failure. The browser flows, harness/_deprecated, tests/walkthrough.js and tests/harness are gone. `npm test` runs every gate.
+- Baseline for the dc-runtime port is recorded in the card: Python 225, specs 23/23, vm_smoke 12/12, Axis A 11/11, Axis C 0 defects, lifecycle, scroll 7/7, resume, tasks 5/5, smoke (source). Card: `process/sprints/sprint-108-gates-that-can-fail.md`.
+
 ### Sprint 107 (2026-10-08, closed as fixes; not the audit) — the whole-project pass
 - Correction, same day: these are incident fixes found by running gates, not the lens audit. See the Surfaced entry of 2026-10-08 and the Decision of the same date.
 - Tests are separate from the machine: the real home's test sessions, folders, temp dirs, `~/Library` profiles and `/tmp` files deleted; `main.js` keeps a test run's logs and profile under its `SUBSTRATE_HOME`; one fixture removes every gate temp dir; a host-dependent CLI test fixed; the release runs the UI suite under an empty `HOME` and checks the gates wrote nothing outside their dirs.

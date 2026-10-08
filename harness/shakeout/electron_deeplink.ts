@@ -1,49 +1,49 @@
 // Electron deep-link flow. Two paths:
-//   Warm — after firstWindow, emit open-url from main and observe
-//   the renderer receive it via window.native.onDeepLink.
-//   Cold — emit open-url pre-window and observe the main-side
-//   "flushing <N> buffered deep-link(s)" log line, verifying the
-//   buffered dispatch fires on did-finish-load.
+//   Warm — after the window is up, emit open-url from main; the renderer receives it through
+//   window.native.onDeepLink.
+//   Cold — emit open-url before the window exists; main logs "flushing <N> buffered deep-link(s)"
+//   once the renderer loads.
+// No controller tags are declared: a deep link drives the shell, not a session.
 
 import { _electron as electron } from "playwright";
 import type { Flow, EmittedRecord, Defect, FlowContext } from "./lib/flow";
-import { launchArgs } from "./electron_smoke";
+import { launchArgs, waitForApp } from "./lib/electron";
 
 const TEST_URL = "substrate://record/shakeout-deadbeef";
 
+async function until(cond: () => boolean, timeoutMs: number): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (cond()) return true;
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  return cond();
+}
+
 export const flow: Flow = {
   name: "electron_deeplink",
-  declared: [
-    "SESSION_OPEN_REQUESTED",
-    "SESSION_OPEN_ACKED",
-    "TURN_SUBMITTED",
-    "STREAM_ENVELOPE_APPENDED",
-    "TURN_PARKED",
-  ],
+  declared: [],
   async run(_ctx: FlowContext): Promise<{ emitted: EmittedRecord[]; defects: Defect[] }> {
-    const emitted: EmittedRecord[] = [];
     const defects: Defect[] = [];
 
-    // Warm path.
     {
       const launch = launchArgs();
       const app = await electron.launch({ ...launch.options, timeout: 30_000 });
       try {
         const win = await app.firstWindow({ timeout: 20_000 });
-        await win.waitForFunction(
-          () => (window as unknown as { __vm?: unknown }).__vm != null, // the app is up; a transcript mount exists only once a session opens (UI sprint 106)
-          undefined,
-          { timeout: 15_000 },
-        );
+        await waitForApp(win);
         await win.evaluate(() => {
           (window as unknown as { __deepLinks: string[] }).__deepLinks = [];
           const nb = (window as unknown as { native?: { onDeepLink?: (cb: (u: string) => void) => void } }).native;
-          if (nb?.onDeepLink) nb.onDeepLink((u) => (window as unknown as { __deepLinks: string[] }).__deepLinks.push(u));
+          if (!nb?.onDeepLink) throw new Error("window.native.onDeepLink is missing");
+          nb.onDeepLink((u) => (window as unknown as { __deepLinks: string[] }).__deepLinks.push(u));
         });
         await app.evaluate((m, u) => m.app.emit("open-url", { preventDefault: Boolean }, u), TEST_URL);
-        await new Promise((r) => setTimeout(r, 300));
-        const log = await win.evaluate(() => (window as unknown as { __deepLinks: string[] }).__deepLinks);
-        if (!log.includes(TEST_URL)) throw new Error("warm: renderer did not receive deep-link " + TEST_URL);
+        await win.waitForFunction(
+          (u) => ((window as unknown as { __deepLinks: string[] }).__deepLinks || []).includes(u),
+          TEST_URL,
+          { timeout: 5_000 },
+        ).catch(() => { throw new Error("warm: renderer did not receive deep-link " + TEST_URL); });
       } catch (err) {
         defects.push({
           category: "electron_deeplink_warm_failed",
@@ -58,7 +58,6 @@ export const flow: Flow = {
       }
     }
 
-    // Cold path — observe the main-side flush log line.
     {
       const launch = launchArgs();
       const app = await electron.launch({ ...launch.options, timeout: 30_000 });
@@ -67,16 +66,12 @@ export const flow: Flow = {
       try {
         await app.evaluate((m, u) => m.app.emit("open-url", { preventDefault: Boolean }, u), TEST_URL);
         const win = await app.firstWindow({ timeout: 20_000 });
-        await win.waitForFunction(
-          () => (window as unknown as { __vm?: unknown }).__vm != null, // the app is up; a transcript mount exists only once a session opens (UI sprint 106)
-          undefined,
-          { timeout: 15_000 },
-        );
-        await new Promise((r) => setTimeout(r, 500));
-        const flush = stderrBuf.join("").match(/flushing (\d+) buffered deep-link/);
-        if (!flush || Number(flush[1]) < 1) {
-          throw new Error("cold: main-side buffered-flush log line not observed");
-        }
+        await waitForApp(win);
+        const flushed = () => {
+          const m = stderrBuf.join("").match(/flushing (\d+) buffered deep-link/);
+          return !!m && Number(m[1]) >= 1;
+        };
+        if (!(await until(flushed, 10_000))) throw new Error("cold: main-side buffered-flush log line not observed");
       } catch (err) {
         defects.push({
           category: "electron_deeplink_cold_failed",
@@ -91,13 +86,6 @@ export const flow: Flow = {
       }
     }
 
-    if (defects.length === 0) {
-      emitted.push({ tag: "SESSION_OPEN_REQUESTED", payload: {} });
-      emitted.push({ tag: "SESSION_OPEN_ACKED", payload: {} });
-      emitted.push({ tag: "TURN_SUBMITTED", payload: {} });
-      emitted.push({ tag: "STREAM_ENVELOPE_APPENDED", payload: {} });
-      emitted.push({ tag: "TURN_PARKED", payload: {} });
-    }
-    return { emitted, defects };
+    return { emitted: [], defects };
   },
 };

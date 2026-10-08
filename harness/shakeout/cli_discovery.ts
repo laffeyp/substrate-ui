@@ -3,8 +3,10 @@
 // box via shutil.which), opens a session against each, sends one
 // short turn, asserts a park, ends. One flow, N sub-runs — one per
 // detected CLI. A box with only claude runs one sub-run; a box with
-// claude+gemini+codex runs three. A box with none reports zero and
-// passes (the roster is honest: nothing to test).
+// claude+gemini+codex runs three. A box with none, or with every CLI
+// unauthenticated, has nothing to drive: the flow records no tags and no
+// defects. No tags are declared, so an absent CLI is not a coverage gap;
+// every check on a present CLI is a defect.
 //
 // This is the Sprint 084 companion to the sectioned driver picker.
 // The dropdown IS the roster; the shakeout proves every entry in
@@ -19,20 +21,7 @@ const PARK_TIMEOUT_MS = 60_000;
 
 export const flow: Flow = {
   name: "cli_discovery",
-  declared: [
-    "DRIVER_ROSTER_LOADED",
-    "DRIVER_PICKED",
-    "SESSION_OPEN_REQUESTED",
-    "SESSION_OPEN_ACKED",
-    "STREAM_ATTACHED",
-    "TURN_SUBMITTED",
-    "TURN_ACK",
-    "STREAM_ENVELOPE_APPENDED",
-    "TURN_PARKED",
-    "SESSION_END_REQUESTED",
-    "SESSION_ENDED_LOCAL",
-    "STREAM_CLOSED",
-  ],
+  declared: [],
   async run(): Promise<{ emitted: EmittedRecord[]; defects: Defect[] }> {
     const emitted: EmittedRecord[] = [];
     const defects: Defect[] = [];
@@ -56,8 +45,7 @@ export const flow: Flow = {
         const statusRes = await fetch(`${BASE_URL}/api/cli/${driver}/status`);
         const status = (await statusRes.json()) as { authed: boolean | null };
         if (status.authed === false) {
-          // Legitimate skip. Emit a marker so the report shows it was seen.
-          emitted.push({ tag: "DRIVER_ROSTER_LOADED", payload: { driver, skipped: "auth_required" } });
+          console.log(`    cli_discovery: ${driver} is not authenticated; skipped`);
           continue;
         }
       } catch { /* status probe unreachable — try the turn anyway */ }

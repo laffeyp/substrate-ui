@@ -78,15 +78,8 @@ fi
 (cd "$REPO" && npm run test:unit)  # UI sprint 101: the client specs had no gate
 (cd "$REPO" && npx tsx web/vm/tools/check-vocabulary-parity.ts)  # UI sprint 105: broken since sprint 087, ungated
 # UI sprint 106: the controller against a live source server (harness/vm_smoke.ts), ungated before.
-VM_PORT="$(python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1]);s.close()')"
-VM_STATE="$(mktemp -d)"
-(cd "$KERNEL" && SUBSTRATE_HOME="$VM_STATE" uv run python "$REPO/server.py" --port "$VM_PORT") \
-  > "$LOG_DIR/release-$STAMP-vmserver.log" 2>&1 &
-VM_PID=$!
-for _ in $(seq 1 60); do curl -sf "http://127.0.0.1:$VM_PORT/" >/dev/null && break; sleep 0.5; done
-(cd "$REPO" && SUBSTRATE_UI_BASE="http://127.0.0.1:$VM_PORT" npx tsx harness/vm_smoke.ts) \
-  | tee "$LOG_DIR/release-$STAMP-vmsmoke.log" || { kill "$VM_PID"; exit 1; }
-kill "$VM_PID"
+# Sprint 108: vm_smoke starts and stops its own isolated server.
+(cd "$REPO" && npx tsx harness/vm_smoke.ts) | tee "$LOG_DIR/release-$STAMP-vmsmoke.log"
 
 say "3/7 bundled runtime"
 (cd "$REPO" && bash scripts/fetch-python-runtime.sh) > "$LOG_DIR/release-$STAMP-runtime.log" 2>&1 \
@@ -112,7 +105,7 @@ say "6/7 gates against the built bundle"
 GATE_MARK="$(mktemp)"
 (cd "$REPO" && SMOKE_APP="$APP" npx tsx harness/shakeout/packaged_app_smoke.ts) | tee "$LOG_DIR/release-$STAMP-smoke.log"
 PORT="$(python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1]);s.close()')"
-(cd "$REPO" && SHAKEOUT_APP="$APP" SHAKEOUT_PORT="$PORT" SHAKEOUT_AXIS=ABC SHAKEOUT_RUNS="${SHAKEOUT_RUNS:-1}" \
+(cd "$REPO" && SHAKEOUT_APP="$APP" SHAKEOUT_PORT="$PORT" SHAKEOUT_AXIS=ABC SHAKEOUT_DRIVER=default SHAKEOUT_RUNS="${SHAKEOUT_RUNS:-1}" \
   SHAKEOUT_OUT_DIR="$LOG_DIR/release-$STAMP-shakeout" \
   npx tsx harness/shakeout/run.ts) > "$LOG_DIR/release-$STAMP-shakeout.log" 2>&1 \
   || { tail -30 "$LOG_DIR/release-$STAMP-shakeout.log" >&2; exit 1; }

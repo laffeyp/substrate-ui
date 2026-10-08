@@ -7,6 +7,7 @@
 
 import { writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
+import { tmpdir } from "node:os";
 
 export interface EmittedRecord {
   tag: string;
@@ -101,13 +102,12 @@ export function assembleFullReport(flows: FlowResult[]): FullReport {
   };
 }
 
-/** Where one shakeout run writes its report and its server log. UI sprint 102: release.sh points
- * SHAKEOUT_OUT_DIR at its own log dir, so a gate run never rewrites a committed report under
- * captures/. UI sprint 107: the server log lands here too; it used to append forever to
- * /tmp/shakeout-server.log (4.6 MB), outside every run's directory. */
+/** Where one shakeout run writes its report and its server log: SHAKEOUT_OUT_DIR (release.sh sets
+ * its own log dir), else one directory per run under the OS temp dir, never inside the repo
+ * (lens audit F371). The server log lands here too (UI sprint 107). */
+const RUN_STAMP = new Date().toISOString().replace(/[:.]/g, "-");
 export function shakeoutOutDir(): string {
-  const today = new Date().toISOString().slice(0, 10);
-  return process.env.SHAKEOUT_OUT_DIR || join(__dirname, "..", "..", "..", "captures", `shakeout-${today}`);
+  return process.env.SHAKEOUT_OUT_DIR || join(tmpdir(), `substrate-shakeout-${RUN_STAMP}`);
 }
 
 export function writeReport(report: FullReport, outDir: string): string {
@@ -144,7 +144,11 @@ export function printSummary(report: FullReport): void {
   );
 }
 
+/** 1 when any declared tag missed a run, any run threw, or any flow recorded a defect. A defect is
+ * a failed check; a gate that exits 0 over defects verifies nothing (lens audit F365). */
 export function exitCodeFor(report: FullReport): 0 | 1 {
   const s = report.summary;
-  return (s.tags_at_4_of_5 === 0 && s.tags_below_4 === 0 && s.tags_dead === 0) ? 0 : 1;
+  const runsFailed = report.flowReports.some((f) => f.runOks < f.runs);
+  const coverageGap = s.tags_at_4_of_5 + s.tags_below_4 + s.tags_dead > 0;
+  return (coverageGap || runsFailed || s.total_bugs > 0) ? 1 : 0;
 }

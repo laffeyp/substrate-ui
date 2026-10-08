@@ -1,72 +1,58 @@
-// Electron menu flow. Launches, triggers menu-new-session and
-// menu-toggle-reveal via app.evaluate(Menu.getMenuItemById().click()),
-// asserts the renderer received both events and acted on them
-// (pane count grows for new-session; state.revealed flips for
-// toggle-reveal).
+// Electron menu flow. Binds the first pane, then clicks two native menu items through
+// Menu.getMenuItemById(...).click() and checks what each did:
+//   menu-toggle-reveal — the reveal transcript mount appears, and a second click removes it;
+//   menu-new-session   — a second pane opens with its own transcript (the menu binds it at once).
+// No controller tags are declared: the menu drives the shell, not a session, so the checks are the
+// observations above and any failure is a defect.
 
-import { _electron as electron } from "playwright";
+import { _electron as electron, type ElectronApplication, type Page } from "playwright";
 import type { Flow, EmittedRecord, Defect, FlowContext } from "./lib/flow";
-import { launchArgs } from "./electron_smoke";
+import { bindPaneAsUser, launchArgs, waitForApp } from "./lib/electron";
+
+async function clickMenu(app: ElectronApplication, id: string): Promise<void> {
+  await app.evaluate((m, itemId) => {
+    const menu = m.Menu.getApplicationMenu();
+    if (!menu) throw new Error("no application menu");
+    const item = menu.getMenuItemById(itemId);
+    if (!item) throw new Error("menu item not found: " + itemId);
+    item.click();
+  }, id);
+}
+
+const count = (win: Page, sel: string): Promise<number> =>
+  win.evaluate((s) => document.querySelectorAll(s).length, sel);
 
 export const flow: Flow = {
   name: "electron_menu",
-  declared: [
-    "SESSION_OPEN_REQUESTED",
-    "SESSION_OPEN_ACKED",
-    "TURN_SUBMITTED",
-    "STREAM_ENVELOPE_APPENDED",
-    "TURN_PARKED",
-  ],
+  declared: [],
   async run(_ctx: FlowContext): Promise<{ emitted: EmittedRecord[]; defects: Defect[] }> {
-    const emitted: EmittedRecord[] = [];
     const defects: Defect[] = [];
     const launch = launchArgs();
     const app = await electron.launch({ ...launch.options, timeout: 30_000 });
     try {
       const win = await app.firstWindow({ timeout: 20_000 });
-      await win.waitForFunction(
-        () => (window as unknown as { __vm?: unknown }).__vm != null, // the app is up; a transcript mount exists only once a session opens (UI sprint 106)
-        undefined,
-        { timeout: 15_000 },
-      );
+      await waitForApp(win);
+      await bindPaneAsUser(win);
 
-      // new-session: panes 1 -> 2
-      const before = await win.evaluate(() =>
-        document.querySelectorAll('[data-vm-transcript-mount="terminal"]').length,
-      );
-      await app.evaluate((m, id) => {
-        const menu = m.Menu.getApplicationMenu();
-        if (!menu) throw new Error("no application menu");
-        const item = menu.getMenuItemById(id);
-        if (!item) throw new Error("menu item not found: " + id);
-        item.click();
-      }, "menu-new-session");
-      await win.waitForFunction(
-        (b) => document.querySelectorAll('[data-vm-transcript-mount="terminal"]').length > b,
-        before,
-        { timeout: 10_000 },
-      );
+      const REVEAL = '[data-vm-transcript-mount="reveal"]';
+      if ((await count(win, REVEAL)) !== 0) throw new Error("reveal mount present before toggle-reveal");
+      await clickMenu(app, "menu-toggle-reveal");
+      await win.waitForFunction((s) => document.querySelectorAll(s).length === 1, REVEAL, { timeout: 10_000 })
+        .catch(() => { throw new Error("menu-toggle-reveal did not show the reveal view"); });
+      await clickMenu(app, "menu-toggle-reveal");
+      await win.waitForFunction((s) => document.querySelectorAll(s).length === 0, REVEAL, { timeout: 10_000 })
+        .catch(() => { throw new Error("second menu-toggle-reveal did not return to the terminal view"); });
 
-      // toggle-reveal: state.revealed false -> true
-      await app.evaluate((m, id) => {
-        const menu = m.Menu.getApplicationMenu();
-        if (!menu) throw new Error("no application menu");
-        const item = menu.getMenuItemById(id);
-        if (!item) throw new Error("menu item not found: " + id);
-        item.click();
-      }, "menu-toggle-reveal");
-      await new Promise((r) => setTimeout(r, 300));
-
-      emitted.push({ tag: "SESSION_OPEN_REQUESTED", payload: {} });
-      emitted.push({ tag: "SESSION_OPEN_ACKED", payload: {} });
-      emitted.push({ tag: "TURN_SUBMITTED", payload: {} });
-      emitted.push({ tag: "STREAM_ENVELOPE_APPENDED", payload: {} });
-      emitted.push({ tag: "TURN_PARKED", payload: {} });
+      const PANE = '[data-vm-transcript-mount="terminal"]';
+      const before = await count(win, PANE);
+      await clickMenu(app, "menu-new-session");
+      await win.waitForFunction(([s, b]) => document.querySelectorAll(s as string).length > (b as number), [PANE, before] as const, { timeout: 10_000 })
+        .catch(() => { throw new Error(`menu-new-session did not add a pane (${before} before)`); });
     } catch (err) {
       defects.push({
         category: "electron_menu_failed",
         observed: err instanceof Error ? err.message : String(err),
-        expected: "menu-new-session grows pane count; menu-toggle-reveal flips revealed",
+        expected: "toggle-reveal shows and hides the reveal view; new-session adds a pane",
         reproduces: true,
         severity: "high",
       });
@@ -74,6 +60,6 @@ export const flow: Flow = {
       await app.close().catch(() => undefined);
       launch.cleanup();
     }
-    return { emitted, defects };
+    return { emitted: [], defects };
   },
 };
