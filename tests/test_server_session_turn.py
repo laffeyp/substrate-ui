@@ -32,9 +32,10 @@ import server  # noqa: E402
 from substrate.session_registry import SessionRegistry  # noqa: E402
 
 from substrate import api  # noqa: E402
+
 # TECHNIQUE #38 — F-API-4 test primitives operate on the record path directly.
 from substrate.testing import assert_event  # noqa: E402
-from _serving import call, serving# noqa: E402
+from _serving import call, serving  # noqa: E402
 
 
 @pytest.fixture
@@ -64,9 +65,7 @@ def test_first_turn_lands_a_user_message_with_slash_source_daemon(
     base: str, tmp_path: Path
 ) -> None:
     sid = _create_session(base, tmp_path / "wsp")
-    status, body = _post_json(
-        base + f"/api/session/{sid}/turn", {"text": "compute (2+3)*4"}
-    )
+    status, body = _post_json(base + f"/api/session/{sid}/turn", {"text": "compute (2+3)*4"})
     assert status == 200
     assert body["status"] == "parked"
     record_root = Path(body["record"])
@@ -84,9 +83,7 @@ def test_first_turn_lands_a_user_message_with_slash_source_daemon(
     assert_event(record_root, "FinalAnswer")
 
 
-def test_second_turn_appends_with_incremented_turn_index(
-    base: str, tmp_path: Path
-) -> None:
+def test_second_turn_appends_with_incremented_turn_index(base: str, tmp_path: Path) -> None:
     sid = _create_session(base, tmp_path / "wsp")
     _post_json(base + f"/api/session/{sid}/turn", {"text": "first"})
     status, body = _post_json(base + f"/api/session/{sid}/turn", {"text": "second"})
@@ -134,9 +131,7 @@ def test_two_concurrent_turns_on_same_session_serialize(base: str, tmp_path: Pat
 
 
 def test_unknown_session_id_returns_404(base: str) -> None:
-    status, body = _post_json(
-        base + "/api/session/s_nonexistent/turn", {"text": "hi"}
-    )
+    status, body = _post_json(base + "/api/session/s_nonexistent/turn", {"text": "hi"})
     assert status == 404
     assert "unknown session_id" in body["error"]
 

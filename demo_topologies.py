@@ -8,7 +8,13 @@ from __future__ import annotations
 from typing import Any
 
 from msgspec import Struct
-from substrate.api import PerEvent, Subscription, any_of, pause_await_input, quiescence_with_watchdog
+from substrate.api import (
+    PerEvent,
+    Subscription,
+    any_of,
+    pause_await_input,
+    quiescence_with_watchdog,
+)
 
 
 class Stage1Done(Struct, frozen=True):

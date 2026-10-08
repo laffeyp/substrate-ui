@@ -11,7 +11,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import server  # noqa: E402
 from substrate.session_registry import SessionRegistry  # noqa: E402
-from _serving import call, serving# noqa: E402
+from _serving import call, serving  # noqa: E402
 
 
 @pytest.fixture
@@ -90,10 +90,7 @@ def test_per_turn_prefixes_assembled_prompt_on_next_turn(base: tuple[str, Path])
     from substrate import api
 
     record_root = Path(server._SESSION_REGISTRY.get(sid).record_root)
-    ums = [
-        e for e in api.read_record(record_root)
-        if "UserMessage" in str(e.get("kind", ""))
-    ]
+    ums = [e for e in api.read_record(record_root) if "UserMessage" in str(e.get("kind", ""))]
     assert ums, "no UserMessage on the record after /turn"
     payload = ums[0].get("payload", {})
     assembled = payload.get("assembled_prompt", "")

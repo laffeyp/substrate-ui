@@ -87,7 +87,9 @@ def test_empty_record_first_turn_opens_with_runstarted_at_seq_0(
 
     registry.turn_sync(
         sid,
-        resume_event=UserMessage(text="hello", turn_index=0, assembled_prompt="hello", slash_source="user"),
+        resume_event=UserMessage(
+            text="hello", turn_index=0, assembled_prompt="hello", slash_source="user"
+        ),
         timeout_seconds=30.0,
     )
 
@@ -106,9 +108,7 @@ def test_empty_record_first_turn_opens_with_runstarted_at_seq_0(
     assert min(um_seqs) > 0, "UserMessage must not be the seq-0 envelope"
 
 
-def test_fresh_session_rejects_non_user_message(
-    registry: SessionRegistry, tmp_path: Path
-) -> None:
+def test_fresh_session_rejects_non_user_message(registry: SessionRegistry, tmp_path: Path) -> None:
     """A `SessionEndRequested` on an empty record raises
     `FreshSessionRequiresUserMessage` — the only kind the `session_open`
     producer can emit first is a `UserMessage`. `_shutdown_all_sessions`
@@ -176,9 +176,7 @@ def test_torn_record_raises_typed_and_flips_status_to_interrupted(
     assert registry.get(sid).status == "interrupted"
 
 
-def test_populated_record_uses_resume_not_run(
-    registry: SessionRegistry, tmp_path: Path
-) -> None:
+def test_populated_record_uses_resume_not_run(registry: SessionRegistry, tmp_path: Path) -> None:
     """The second turn on a session must go through `Runtime.resume`, not
     `Runtime.run`. Observable signal: exactly one `substrate.RunStarted`
     on the record after two turns. Two would mean `.run` fired a second

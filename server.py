@@ -77,6 +77,7 @@ class _UnixHTTPServer(socketserver.ThreadingUnixStreamServer):
         self.server_name = "localhost"
         self.server_port = 0
 
+
 # Sprint 214a: daemon-side session API. SessionRegistry is a MODULE-scope singleton
 # so every handler sees the same catalog + per-session lock. Initialized in main()
 # with a session_topology_factory closure that resolves a manifest's driver string
@@ -115,6 +116,7 @@ def _application_spec_to_wire(spec: Any) -> dict[str, Any]:
     from substrate.topologies.applications.registry import spec_to_wire
 
     return spec_to_wire(spec)
+
 
 # Sprint 215d: SIGTERM guard so a second signal during shutdown is a no-op
 # instead of re-entering `_shutdown_all_sessions` on a half-torn catalog.
@@ -311,7 +313,13 @@ def _shutdown_all_sessions(*, per_session_timeout: float = 10.0) -> dict[str, in
       - failed:        an unexpected exception on one session; the sweep continued
       - background_stopped: bash background tasks stopped at quit (UI sprint 103)
     """
-    result = {"ended": 0, "skipped_fresh": 0, "skipped_ended": 0, "failed": 0, "background_stopped": 0}
+    result = {
+        "ended": 0,
+        "skipped_fresh": 0,
+        "skipped_ended": 0,
+        "failed": 0,
+        "background_stopped": 0,
+    }
     if _SESSION_REGISTRY is None:
         return result
     # UI sprint 103: background commands do not outlive the daemon (Claude Code cleans its
@@ -439,9 +447,7 @@ _APP_BUILDERS: dict[str, Callable[[dict[str, Any]], Callable[..., Any]]] = {
 }
 
 
-def _build_pair_coding_composite(
-    session_registry: Any, inputs: dict[str, Any]
-) -> tuple[Any, Any]:
+def _build_pair_coding_composite(session_registry: Any, inputs: dict[str, Any]) -> tuple[Any, Any]:
     """Sprint 225c — register the pair_coding builder + reviewer pair.
     Returns `(builder_manifest, reviewer_manifest)` — the reviewer's
     `composite_of` points at the builder's session_id so sprint 225b's
@@ -625,9 +631,7 @@ class LiveTick(Struct, frozen=True):
 def _slow_topology() -> Any:
     async def ticker(_inp: Any) -> Any:
         for i in range(1, 7):
-            await asyncio.sleep(
-                0.5
-            )  # ~3s total, so the console can follow it being written
+            await asyncio.sleep(0.5)  # ~3s total, so the console can follow it being written
             yield LiveTick(n=i)
 
     def topo(b: Any) -> None:
@@ -638,16 +642,12 @@ def _slow_topology() -> Any:
     return topo
 
 
-_EXTRA_TOPOS = {
-    "live_demo": _slow_topology
-}  # launchable, alongside the bundled topologies
+_EXTRA_TOPOS = {"live_demo": _slow_topology}  # launchable, alongside the bundled topologies
 # run_name -> the launch thread. The server SPAWNED the run, so it alone knows if it's still alive:
 # a launch whose thread is dead with no terminal RunFinalised has TORN — the authoritative signal
 # that distinguishes "incomplete = live (still writing)" from "incomplete = torn (dead)" (review #36).
 _LAUNCHES: dict[str, "threading.Thread"] = {}
-MAX_LIVE_RUNS = (
-    8  # concurrency cap: a POST flood can't spawn unbounded run threads (security-3)
-)
+MAX_LIVE_RUNS = 8  # concurrency cap: a POST flood can't spawn unbounded run threads (security-3)
 
 
 def _is_live(name: str) -> bool:
@@ -656,9 +656,7 @@ def _is_live(name: str) -> bool:
         return False
     if th.is_alive():
         return True
-    _LAUNCHES.pop(
-        name, None
-    )  # evict the dead thread (no unbounded growth on a long-lived server)
+    _LAUNCHES.pop(name, None)  # evict the dead thread (no unbounded growth on a long-lived server)
     return False
 
 
@@ -716,7 +714,7 @@ KNOWN_CLI_ADAPTERS: dict[str, Any] = {
     # (if any) → parsed tree → else this fallback. Editing the
     # curated fallback stays a hand-maintained step; live-listed
     # CLIs never touch this block.
-    "claude":       {
+    "claude": {
         "command": ["claude", "-p"],
         "login_command": ["claude", "auth", "login"],
         "logout_command": ["claude", "auth", "logout"],
@@ -726,36 +724,56 @@ KNOWN_CLI_ADAPTERS: dict[str, Any] = {
         # `[claude-code:unrecognized_model]` without listing valid
         # choices. Fallback is curated by hand.
         "versions": [
-            {"id": "opus", "label": "Opus", "default_pin": "opus-4-8", "pins": [
-                {"id": "opus-4-8", "label": "4.8", "flag": ["--model", "claude-opus-4-8"]},
-                {"id": "opus-4-7", "label": "4.7", "flag": ["--model", "claude-opus-4-7"]},
-                {"id": "opus-4-6", "label": "4.6", "flag": ["--model", "claude-opus-4-6"]},
-                {"id": "opus-4-5", "label": "4.5", "flag": ["--model", "claude-opus-4-5"]},
-                {"id": "opus-4-1", "label": "4.1", "flag": ["--model", "claude-opus-4-1"]},
-                {"id": "opus-4",   "label": "4",   "flag": ["--model", "claude-opus-4"]},
-                {"id": "opus-3",   "label": "3",   "flag": ["--model", "claude-3-opus"]},
-            ]},
-            {"id": "sonnet", "label": "Sonnet", "default_pin": "sonnet-4-6", "pins": [
-                {"id": "sonnet-4-6", "label": "4.6", "flag": ["--model", "claude-sonnet-4-6"]},
-                {"id": "sonnet-4-5", "label": "4.5", "flag": ["--model", "claude-sonnet-4-5"]},
-                {"id": "sonnet-4",   "label": "4",   "flag": ["--model", "claude-sonnet-4"]},
-                {"id": "sonnet-3-7", "label": "3.7", "flag": ["--model", "claude-3-7-sonnet"]},
-                {"id": "sonnet-3-5", "label": "3.5", "flag": ["--model", "claude-3-5-sonnet"]},
-                {"id": "sonnet-3",   "label": "3",   "flag": ["--model", "claude-3-sonnet"]},
-            ]},
-            {"id": "haiku", "label": "Haiku", "default_pin": "haiku-4-5", "pins": [
-                {"id": "haiku-4-5", "label": "4.5", "flag": ["--model", "claude-haiku-4-5"]},
-                {"id": "haiku-3-5", "label": "3.5", "flag": ["--model", "claude-3-5-haiku"]},
-                {"id": "haiku-3",   "label": "3",   "flag": ["--model", "claude-3-haiku"]},
-            ]},
-            {"id": "fable", "label": "Fable", "default_pin": "fable-5-1", "pins": [
-                {"id": "fable-5-1", "label": "5.1", "flag": ["--model", "claude-fable-5-1"]},
-                {"id": "fable-5",   "label": "5",   "flag": ["--model", "claude-fable-5"]},
-            ]},
+            {
+                "id": "opus",
+                "label": "Opus",
+                "default_pin": "opus-4-8",
+                "pins": [
+                    {"id": "opus-4-8", "label": "4.8", "flag": ["--model", "claude-opus-4-8"]},
+                    {"id": "opus-4-7", "label": "4.7", "flag": ["--model", "claude-opus-4-7"]},
+                    {"id": "opus-4-6", "label": "4.6", "flag": ["--model", "claude-opus-4-6"]},
+                    {"id": "opus-4-5", "label": "4.5", "flag": ["--model", "claude-opus-4-5"]},
+                    {"id": "opus-4-1", "label": "4.1", "flag": ["--model", "claude-opus-4-1"]},
+                    {"id": "opus-4", "label": "4", "flag": ["--model", "claude-opus-4"]},
+                    {"id": "opus-3", "label": "3", "flag": ["--model", "claude-3-opus"]},
+                ],
+            },
+            {
+                "id": "sonnet",
+                "label": "Sonnet",
+                "default_pin": "sonnet-4-6",
+                "pins": [
+                    {"id": "sonnet-4-6", "label": "4.6", "flag": ["--model", "claude-sonnet-4-6"]},
+                    {"id": "sonnet-4-5", "label": "4.5", "flag": ["--model", "claude-sonnet-4-5"]},
+                    {"id": "sonnet-4", "label": "4", "flag": ["--model", "claude-sonnet-4"]},
+                    {"id": "sonnet-3-7", "label": "3.7", "flag": ["--model", "claude-3-7-sonnet"]},
+                    {"id": "sonnet-3-5", "label": "3.5", "flag": ["--model", "claude-3-5-sonnet"]},
+                    {"id": "sonnet-3", "label": "3", "flag": ["--model", "claude-3-sonnet"]},
+                ],
+            },
+            {
+                "id": "haiku",
+                "label": "Haiku",
+                "default_pin": "haiku-4-5",
+                "pins": [
+                    {"id": "haiku-4-5", "label": "4.5", "flag": ["--model", "claude-haiku-4-5"]},
+                    {"id": "haiku-3-5", "label": "3.5", "flag": ["--model", "claude-3-5-haiku"]},
+                    {"id": "haiku-3", "label": "3", "flag": ["--model", "claude-3-haiku"]},
+                ],
+            },
+            {
+                "id": "fable",
+                "label": "Fable",
+                "default_pin": "fable-5-1",
+                "pins": [
+                    {"id": "fable-5-1", "label": "5.1", "flag": ["--model", "claude-fable-5-1"]},
+                    {"id": "fable-5", "label": "5", "flag": ["--model", "claude-fable-5"]},
+                ],
+            },
         ],
         "default_family": "opus",
     },
-    "codex":        {
+    "codex": {
         "command": ["codex", "exec"],
         # `--device-auth` prints URL + one-time code to stdout without
         # spawning a local callback server, so the pty renders cleanly
@@ -767,20 +785,35 @@ KNOWN_CLI_ADAPTERS: dict[str, Any] = {
         # its embedded catalog is only reachable by binary inspection,
         # which we don't do. Fallback is curated by hand.
         "versions": [
-            {"id": "gpt-6",       "label": "GPT-6",       "default_pin": "gpt-6-astra", "pins": [
-                {"id": "gpt-6-astra", "label": "Astra", "flag": ["-m", "gpt-6-astra"]},
-                {"id": "gpt-6-sol",   "label": "Sol",   "flag": ["-m", "gpt-6-sol"]},
-                {"id": "gpt-6-luna",  "label": "Luna",  "flag": ["-m", "gpt-6-luna"]},
-            ]},
-            {"id": "gpt-5-6",     "label": "GPT-5.6",     "default_pin": "gpt-5-6-sol", "pins": [
-                {"id": "gpt-5-6-sol",   "label": "Sol",   "flag": ["-m", "gpt-5.6-sol"]},
-                {"id": "gpt-5-6-terra", "label": "Terra", "flag": ["-m", "gpt-5.6-terra"]},
-                {"id": "gpt-5-6-luna",  "label": "Luna",  "flag": ["-m", "gpt-5.6-luna"]},
-            ]},
-            {"id": "gpt-5",       "label": "GPT-5",       "default_pin": "gpt-5-5", "pins": [
-                {"id": "gpt-5-5", "label": "5.5", "flag": ["-m", "gpt-5.5"]},
-                {"id": "gpt-5-4", "label": "5.4", "flag": ["-m", "gpt-5.4"]},
-            ]},
+            {
+                "id": "gpt-6",
+                "label": "GPT-6",
+                "default_pin": "gpt-6-astra",
+                "pins": [
+                    {"id": "gpt-6-astra", "label": "Astra", "flag": ["-m", "gpt-6-astra"]},
+                    {"id": "gpt-6-sol", "label": "Sol", "flag": ["-m", "gpt-6-sol"]},
+                    {"id": "gpt-6-luna", "label": "Luna", "flag": ["-m", "gpt-6-luna"]},
+                ],
+            },
+            {
+                "id": "gpt-5-6",
+                "label": "GPT-5.6",
+                "default_pin": "gpt-5-6-sol",
+                "pins": [
+                    {"id": "gpt-5-6-sol", "label": "Sol", "flag": ["-m", "gpt-5.6-sol"]},
+                    {"id": "gpt-5-6-terra", "label": "Terra", "flag": ["-m", "gpt-5.6-terra"]},
+                    {"id": "gpt-5-6-luna", "label": "Luna", "flag": ["-m", "gpt-5.6-luna"]},
+                ],
+            },
+            {
+                "id": "gpt-5",
+                "label": "GPT-5",
+                "default_pin": "gpt-5-5",
+                "pins": [
+                    {"id": "gpt-5-5", "label": "5.5", "flag": ["-m", "gpt-5.5"]},
+                    {"id": "gpt-5-4", "label": "5.4", "flag": ["-m", "gpt-5.4"]},
+                ],
+            },
         ],
         "default_family": "gpt-6",
     },
@@ -802,17 +835,36 @@ KNOWN_CLI_ADAPTERS: dict[str, Any] = {
         # network) the fallback below applies with source="curated".
         "list_command": ["cursor-agent", "--list-models"],
         "versions": [
-            {"id": "sonnet",   "label": "Sonnet",   "default_pin": "sonnet-4-thinking", "pins": [
-                {"id": "sonnet-4-thinking", "label": "4 thinking", "flag": ["--model", "sonnet-4-thinking"]},
-                {"id": "sonnet-4",          "label": "4",          "flag": ["--model", "sonnet-4"]},
-            ]},
-            {"id": "opus",     "label": "Opus",     "default_pin": "opus-4", "pins": [
-                {"id": "opus-4", "label": "4", "flag": ["--model", "opus-4"]},
-            ]},
-            {"id": "gpt",      "label": "GPT",      "default_pin": "gpt-5-5", "pins": [
-                {"id": "gpt-5-5", "label": "5.5", "flag": ["--model", "gpt-5.5"]},
-                {"id": "gpt-5",   "label": "5",   "flag": ["--model", "gpt-5"]},
-            ]},
+            {
+                "id": "sonnet",
+                "label": "Sonnet",
+                "default_pin": "sonnet-4-thinking",
+                "pins": [
+                    {
+                        "id": "sonnet-4-thinking",
+                        "label": "4 thinking",
+                        "flag": ["--model", "sonnet-4-thinking"],
+                    },
+                    {"id": "sonnet-4", "label": "4", "flag": ["--model", "sonnet-4"]},
+                ],
+            },
+            {
+                "id": "opus",
+                "label": "Opus",
+                "default_pin": "opus-4",
+                "pins": [
+                    {"id": "opus-4", "label": "4", "flag": ["--model", "opus-4"]},
+                ],
+            },
+            {
+                "id": "gpt",
+                "label": "GPT",
+                "default_pin": "gpt-5-5",
+                "pins": [
+                    {"id": "gpt-5-5", "label": "5.5", "flag": ["--model", "gpt-5.5"]},
+                    {"id": "gpt-5", "label": "5", "flag": ["--model", "gpt-5"]},
+                ],
+            },
         ],
         "default_family": "sonnet",
     },
@@ -837,6 +889,7 @@ def _model_supports_thinking(name: str) -> bool:
     if name in _MODEL_THINKING_CACHE:
         return _MODEL_THINKING_CACHE[name]
     import urllib.request as _u
+
     try:
         req = _u.Request(  # noqa: S310 - localhost
             "http://localhost:11434/api/show",
@@ -923,21 +976,25 @@ def _parse_cursor_agent_list_models(text: str) -> dict[str, Any] | None:
         return None
     # Group by family: the prefix up to and including the first digit.
     families: dict[str, list[str]] = {}
+
     def _family_key(mid: str) -> str:
         parts = mid.split("-")
         if not parts:
             return mid
         return parts[0]
+
     for mid in ids:
         families.setdefault(_family_key(mid), []).append(mid)
     fam_list = []
     for key, pins in families.items():
-        fam_list.append({
-            "id": key,
-            "label": key.capitalize(),
-            "default_pin": pins[0],
-            "pins": [{"id": p, "label": p, "flag": ["--model", p]} for p in pins],
-        })
+        fam_list.append(
+            {
+                "id": key,
+                "label": key.capitalize(),
+                "default_pin": pins[0],
+                "pins": [{"id": p, "label": p, "flag": ["--model", p]} for p in pins],
+            }
+        )
     return {
         "families": fam_list,
         "default_family": fam_list[0]["id"] if fam_list else None,
@@ -1013,8 +1070,10 @@ def _cli_command(name: str, version: str | None = None) -> list[str] | None:
     tree = _probe_cli_versions(name)
     # `_resolve_pin` works on any shape whose families carry pins with
     # `id` and `flag`; both the curated and the live tree do.
-    pin = _resolve_pin({"versions": tree.get("families", []),
-                        "default_family": tree.get("default_family")}, version)
+    pin = _resolve_pin(
+        {"versions": tree.get("families", []), "default_family": tree.get("default_family")},
+        version,
+    )
     if pin is None:
         return cmd
     flag = pin.get("flag") or []
@@ -1101,8 +1160,12 @@ def _cli_pty_start(cli_name: str) -> str:
 
     proc = subprocess.Popen(  # noqa: S603 — operator-chosen CLI in the catalog
         login_cmd,
-        stdin=slave_fd, stdout=slave_fd, stderr=slave_fd,
-        close_fds=True, env=env, start_new_session=True,
+        stdin=slave_fd,
+        stdout=slave_fd,
+        stderr=slave_fd,
+        close_fds=True,
+        env=env,
+        start_new_session=True,
     )
     os.close(slave_fd)
 
@@ -1213,21 +1276,22 @@ def _agent_models() -> dict[str, object]:
     try:
         with _u.urlopen("http://localhost:11434/api/tags", timeout=2) as r:  # noqa: S310 - localhost
             tags = msgspec.json.decode(r.read())
-        ollama = sorted(
-            str(m.get("name", "")) for m in tags.get("models", []) if m.get("name")
-        )
+        ollama = sorted(str(m.get("name", "")) for m in tags.get("models", []) if m.get("name"))
     except Exception:  # noqa: BLE001 — no ollama / daemon down: CLI + deterministic still surface
         ollama = []
+
     # Ollama's cloud tags use two conventions: `:cloud` (simple) and
     # `:<size>-cloud` (the newer variant tag, e.g. `qwen3-coder:480b-cloud`).
     # Both are Ollama-hosted models; the tag string is what tells us so.
     def _is_cloud(tag: str) -> bool:
         suffix = tag.rsplit(":", 1)[-1] if ":" in tag else ""
         return suffix == "cloud" or suffix.endswith("-cloud")
+
     ollama_cloud = [t for t in ollama if _is_cloud(t)]
     ollama_local = [t for t in ollama if not _is_cloud(t)]
     cli = sorted(
-        name for name, entry in KNOWN_CLI_ADAPTERS.items()
+        name
+        for name, entry in KNOWN_CLI_ADAPTERS.items()
         if (cmd := entry.get("command")) and isinstance(cmd, list) and shutil.which(cmd[0])
     )
     # Sprint 085 followup — subset of cli entries with a login_command
@@ -1281,7 +1345,10 @@ def _list_sessions_snapshot() -> dict[str, list[dict[str, Any]]]:
     ~/.substrate/recent-workspaces.json file). Returns empty buckets
     when the registry has not booted yet."""
     buckets: dict[str, list[dict[str, Any]]] = {
-        "live": [], "parked": [], "ended": [], "interrupted": [],
+        "live": [],
+        "parked": [],
+        "ended": [],
+        "interrupted": [],
     }
     if _SESSION_REGISTRY is None:
         return buckets
@@ -1313,6 +1380,7 @@ def _canonical_workspace(path: str) -> str:
     workspaces both store this form so exact-string filters do not
     miss matches."""
     from pathlib import Path as _Path
+
     if not isinstance(path, str) or not path:
         return path
     try:
@@ -1329,8 +1397,10 @@ def _canonical_workspace(path: str) -> str:
 # hidden entirely — it is dev artifact, not user work.
 _PER_SESSION_SANDBOX_RE = None  # lazy-compiled below
 
+
 def _sessions_dir_root() -> str:
     return str(api.substrate_home() / "sessions")
+
 
 def _is_per_session_sandbox(path: str) -> bool:
     """Anywhere under ~/.substrate/sessions/. Covers every shape
@@ -1339,16 +1409,21 @@ def _is_per_session_sandbox(path: str) -> bool:
     `default`/`adhoc-<x>` bare paths. Everything under that root
     collapses under one Records row."""
     import re as _re
+
     global _PER_SESSION_SANDBOX_RE
     if _PER_SESSION_SANDBOX_RE is None:
         _PER_SESSION_SANDBOX_RE = _re.compile(r"\.substrate/sessions/")
     return isinstance(path, str) and bool(_PER_SESSION_SANDBOX_RE.search(path))
 
+
 def _is_test_fixture_workspace(path: str) -> bool:
     import re as _re
+
     if not isinstance(path, str):
         return False
-    return bool(_re.search(r"(^/var/folders/|^/tmp/|substrate-walkthrough-|substrate-harness-)", path))
+    return bool(
+        _re.search(r"(^/var/folders/|^/tmp/|substrate-walkthrough-|substrate-harness-)", path)
+    )
 
 
 def _classify_workspace_shape(path: str) -> str:
@@ -1356,6 +1431,7 @@ def _classify_workspace_shape(path: str) -> str:
     `worktree` = a directory that looks like a git working tree; `sandbox`
     = a directory under a known sandbox root; `path` = anything else."""
     from pathlib import Path as _Path
+
     p = _Path(path)
     try:
         if (p / ".git").exists():
@@ -1378,6 +1454,7 @@ def _is_temp_workspace(path: str) -> bool:
     temp dir, and its sandbox rows are real for that run."""
     import tempfile
     from pathlib import Path as _Path
+
     try:
         p = _Path(path).expanduser().resolve()
     except (OSError, RuntimeError):
@@ -1429,7 +1506,8 @@ def _remember_workspace(path: str) -> None:
             data = msgspec.json.decode(file.read_bytes())
             if isinstance(data, list):
                 existing = [
-                    row for row in data
+                    row
+                    for row in data
                     if isinstance(row, dict) and isinstance(row.get("path"), str)
                 ]
         except Exception:  # noqa: BLE001 — malformed file → rewrite
@@ -1443,7 +1521,9 @@ def _remember_workspace(path: str) -> None:
         if cp in canonical_seen:
             continue
         canonical_seen.add(cp)
-        canonicalized.append({"path": cp, "shape": row.get("shape") or _classify_workspace_shape(cp)})
+        canonicalized.append(
+            {"path": cp, "shape": row.get("shape") or _classify_workspace_shape(cp)}
+        )
     without = [row for row in canonicalized if row["path"] != canonical]
     shape = _classify_workspace_shape(canonical)
     updated = [{"path": canonical, "shape": shape}, *without][:_RECENT_WORKSPACES_MAX]
@@ -1466,8 +1546,10 @@ def _recent_workspaces() -> list[dict[str, str]]:
     A stable `~/.substrate/sandbox` row always exists so a fresh
     box has one bindable target."""
     from pathlib import Path as _Path
+
     seen: dict[str, dict[str, str]] = {}
     order: list[str] = []
+
     def _add(path: str, shape: str, *, must_exist: bool = True) -> None:
         if not isinstance(path, str) or not path:
             return
@@ -1482,6 +1564,7 @@ def _recent_workspaces() -> list[dict[str, str]]:
             return
         seen[cp] = {"path": cp, "shape": shape}
         order.append(cp)
+
     home_file = api.substrate_home() / "recent-workspaces.json"
     if home_file.exists():
         try:
@@ -1514,7 +1597,11 @@ def _recent_workspaces() -> list[dict[str, str]]:
             if _is_per_session_sandbox(canonical):
                 per_session_seen = True
                 continue
-            shape = entry.get("workspace_shape") if isinstance(entry.get("workspace_shape"), str) else _classify_workspace_shape(canonical)
+            shape = (
+                entry.get("workspace_shape")
+                if isinstance(entry.get("workspace_shape"), str)
+                else _classify_workspace_shape(canonical)
+            )
             _add(canonical, shape or "path")
     # Synthesized per-session sandbox row — one for the collective set.
     if per_session_seen:
@@ -1540,7 +1627,11 @@ HOST, PORT = (
 _WEB_SRC = Path(__file__).resolve().parent / "web"
 _WEB_DIST = _WEB_SRC / "dist"
 WEB = _WEB_DIST if _WEB_DIST.is_dir() else _WEB_SRC
-TERMINAL_V1 = Path(__file__).resolve().parent / "terminal-v1" / "web"  # sub-project (A10) — currently empty; round-1 archived to _deprecated/terminal-v1-round1/
+TERMINAL_V1 = (
+    Path(__file__).resolve().parent / "terminal-v1" / "web"
+)  # sub-project (A10) — currently empty; round-1 archived to _deprecated/terminal-v1-round1/
+
+
 def _runs_dir() -> Path:
     """Generated/live run records: `<state root>/runs`. Resolved at each use,
     never at import — Sprint 093 (Twelve-Factor III; Composition Root). An
@@ -1605,9 +1696,7 @@ def _worktree_diff(wt: Path) -> dict[str, object]:
     subprocess.run(  # intent-to-add so write_file'd NEW files show in the diff too
         ["git", "-C", str(wt), "add", "-A", "--intent-to-add"], check=False, capture_output=True
     )
-    diff = subprocess.run(
-        ["git", "-C", str(wt), "diff"], capture_output=True, text=True
-    ).stdout
+    diff = subprocess.run(["git", "-C", str(wt), "diff"], capture_output=True, text=True).stdout
     names = subprocess.run(
         ["git", "-C", str(wt), "diff", "--name-status"], capture_output=True, text=True
     ).stdout
@@ -1756,8 +1845,7 @@ def _records_index(exclude_sessions: bool = False) -> list[dict[str, object]]:
                 "status": g.status,  # incomplete | paused | finalised | failed (the real run-level outcome)
                 "final_reason": g.final_reason,
                 "paused_on": g.paused_on,
-                "resumable": name
-                in _RESUMABLE,  # a paused run the UI can feed + continue
+                "resumable": name in _RESUMABLE,  # a paused run the UI can feed + continue
                 "total_events": s.total_events,
                 "producers_failed": s.producers_failed
                 + s.input_build_failures
@@ -1813,9 +1901,7 @@ _PROJECTIONS = {
     "topology_graph": lambda ev: _builtins(api.topology_graph(ev)),
     "summary": lambda ev: _builtins(api.narration_summary(ev)),
     "narrate": lambda ev: [_builtins(line) for line in api.narrate(ev)],
-    "narrate_full": lambda ev: [
-        _builtins(line) for line in api.narrate(ev, lifecycle=True)
-    ],
+    "narrate_full": lambda ev: [_builtins(line) for line in api.narrate(ev, lifecycle=True)],
     "io": _io,
 }
 
@@ -1922,9 +2008,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:  # noqa: N802 — the thin control layer (launch + resume only, per ruling C1)
         path = unquote(urlparse(self.path).path)
         if not self._origin_ok():
-            self._error(
-                403, "cross-origin request rejected (Origin does not match Host)"
-            )
+            self._error(403, "cross-origin request rejected (Origin does not match Host)")
             return
         try:
             if path == "/api/session":
@@ -2041,6 +2125,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def _cli_pty_stream_endpoint(self, cli_name: str, sid: str) -> None:
         import base64 as _b64
+
         with _CLI_PTY_LOCK:
             session = _CLI_PTY_SESSIONS.get(sid)
         if session is None or session["cli"] != cli_name:
@@ -2058,16 +2143,20 @@ class Handler(BaseHTTPRequestHandler):
                     total = len(session["output_bytes"])
                     closed = session["closed"]
                     exit_code = session["exit_code"]
-                    chunk = bytes(session["output_bytes"][emitted:total]) if total > emitted else b""
+                    chunk = (
+                        bytes(session["output_bytes"][emitted:total]) if total > emitted else b""
+                    )
                 if chunk:
                     frame = b"data: " + _b64.b64encode(chunk) + b"\n\n"
                     self.wfile.write(frame)
                     self.wfile.flush()
                     emitted = total
                 if closed:
-                    exit_frame = b"event: exit\ndata: " + msgspec.json.encode(
-                        {"exit_code": exit_code}
-                    ) + b"\n\n"
+                    exit_frame = (
+                        b"event: exit\ndata: "
+                        + msgspec.json.encode({"exit_code": exit_code})
+                        + b"\n\n"
+                    )
                     self.wfile.write(exit_frame)
                     self.wfile.flush()
                     return
@@ -2110,12 +2199,14 @@ class Handler(BaseHTTPRequestHandler):
         except (subprocess.TimeoutExpired, FileNotFoundError) as exc:
             self._error(500, f"logout failed: {exc}")
             return
-        self._json({
-            "ok": proc.returncode == 0,
-            "exit_code": proc.returncode,
-            "stdout": proc.stdout,
-            "stderr": proc.stderr,
-        })
+        self._json(
+            {
+                "ok": proc.returncode == 0,
+                "exit_code": proc.returncode,
+                "stdout": proc.stdout,
+                "stderr": proc.stderr,
+            }
+        )
 
     def _read_json_body(self) -> dict[str, Any]:
         length = int(self.headers.get("Content-Length", "0") or "0")
@@ -2155,8 +2246,7 @@ class Handler(BaseHTTPRequestHandler):
         if isolate and workspace_shape == "worktree":
             self._error(
                 400,
-                "isolate=true and workspace_shape='worktree' are mutually exclusive; "
-                "pick one",
+                "isolate=true and workspace_shape='worktree' are mutually exclusive; pick one",
             )
             return
         # Sprint 046: workspace resolution matches product spec round 12
@@ -2300,7 +2390,9 @@ class Handler(BaseHTTPRequestHandler):
                 "workspace_shape": manifest.workspace_shape,
                 "bundle": manifest.bundle,
                 "role": manifest.role,
-                "driver_params": dict(current.driver_params) if current.driver_params is not None else None,
+                "driver_params": dict(current.driver_params)
+                if current.driver_params is not None
+                else None,
             }
         )
 
@@ -2323,7 +2415,11 @@ class Handler(BaseHTTPRequestHandler):
         if manifest is None:
             if _SESSION_REGISTRY.has_session_dir(session_id):
                 self._json(
-                    {"ok": False, "status": SessionStatus.ENDED, "error": SESSION_ENDED_MID_DELEGATE},
+                    {
+                        "ok": False,
+                        "status": SessionStatus.ENDED,
+                        "error": SESSION_ENDED_MID_DELEGATE,
+                    },
                     410,
                 )
                 return
@@ -2365,9 +2461,7 @@ class Handler(BaseHTTPRequestHandler):
                 )
                 return
             kinds = context_raw.get("kinds", [])
-            if not (
-                isinstance(kinds, list) and all(isinstance(k, str) for k in kinds)
-            ):
+            if not (isinstance(kinds, list) and all(isinstance(k, str) for k in kinds)):
                 self._error(400, "context.kinds must be a list of strings")
                 return
             context_slice = {
@@ -2423,9 +2517,7 @@ class Handler(BaseHTTPRequestHandler):
             if context_slice is not None and record_root_locked.exists():
                 from substrate.topologies.tool_loop.delegate import prefix_context_slice
 
-                assembled_prompt = prefix_context_slice(
-                    record_root_locked, text, context_slice
-                )
+                assembled_prompt = prefix_context_slice(record_root_locked, text, context_slice)
             # Sprint 223d: per_turn (spec §7b) prefixes every UserMessage's
             # assembled_prompt. Empty string is the no-op default.
             live_pt = _manifest.per_turn
@@ -2447,7 +2539,11 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc:
                 if isinstance(exc, SessionEndedMidTurn):
                     self._json(
-                        {"ok": False, "status": SessionStatus.ENDED, "error": SESSION_ENDED_MID_DELEGATE},
+                        {
+                            "ok": False,
+                            "status": SessionStatus.ENDED,
+                            "error": SESSION_ENDED_MID_DELEGATE,
+                        },
                         410,
                     )
                     return
@@ -2663,13 +2759,9 @@ class Handler(BaseHTTPRequestHandler):
         # record_root string. Empty / absent → session scope.
         record_root_raw = qs.get("record_root", [""])[0].strip()
         record_root_arg = record_root_raw or None
-        ref = _SESSION_REGISTRY.interrupt(
-            session_id, tier=tier_raw, record_root=record_root_arg
-        )
+        ref = _SESSION_REGISTRY.interrupt(session_id, tier=tier_raw, record_root=record_root_arg)
         if ref is None:
-            self._json(
-                {"interrupted": False, "landed": False, "session_id": session_id}
-            )
+            self._json({"interrupted": False, "landed": False, "session_id": session_id})
             return
         # Poll the record for a matching ProducerCancelled envelope. Poll interval
         # 50 ms; cap at max_wait_ms. Match on the (kind, instance) pair the
@@ -2681,16 +2773,17 @@ class Handler(BaseHTTPRequestHandler):
             target_instance = str(ref.get("instance", ""))
             # Descent scope: poll the CHILD's record for the ProducerCancelled
             # or InterruptRequested envelope. Session scope: parent's record.
-            record_root = (
-                Path(record_root_arg) if record_root_arg else Path(manifest.record_root)
-            )
+            record_root = Path(record_root_arg) if record_root_arg else Path(manifest.record_root)
             while time.monotonic() < deadline:
                 try:
                     for env in api.read_record(record_root):
                         if env.get("kind") != api.PRODUCER_CANCELLED:
                             continue
                         producer = (env.get("payload") or {}).get("producer") or {}
-                        if isinstance(producer, dict) and producer.get("instance") == target_instance:
+                        if (
+                            isinstance(producer, dict)
+                            and producer.get("instance") == target_instance
+                        ):
                             landed = True
                             break
                 except _RECORD_IO_ERRORS:  # REVIEW-2026-08-28 Q6: narrow mid-write catch
@@ -2752,7 +2845,9 @@ class Handler(BaseHTTPRequestHandler):
                 "created_at": manifest.created_at,
                 "status": manifest.status,
                 "role": manifest.role,
-                "driver_params": dict(manifest.driver_params) if manifest.driver_params is not None else None,
+                "driver_params": dict(manifest.driver_params)
+                if manifest.driver_params is not None
+                else None,
                 "tools": list(manifest.tools) if manifest.tools is not None else None,
             }
         )
@@ -2819,6 +2914,7 @@ class Handler(BaseHTTPRequestHandler):
         parents that hold delegate-runs in tests).
         """
         from pathlib import Path as _Path
+
         try:
             resolved = _Path(raw_path).resolve()
         except (OSError, RuntimeError) as exc:
@@ -3100,7 +3196,9 @@ class Handler(BaseHTTPRequestHandler):
         output: Any = None
         if record_root.exists():
             try:
-                envelopes = list(api.read_record(record_root, resolve_blobs=True))  # Sprint 095: output is returned
+                envelopes = list(
+                    api.read_record(record_root, resolve_blobs=True)
+                )  # Sprint 095: output is returned
             except Exception:  # noqa: BLE001 — torn record while the background run is mid-write; treat as running until stable.
                 envelopes = []
                 status = "failed"
@@ -3121,11 +3219,15 @@ class Handler(BaseHTTPRequestHandler):
         # appeared): the run failed. Before, this read "running" forever.
         thread = handle.get("thread")
         if not ended and thread is not None and not thread.is_alive():
-            if "result_status" in handle:  # it returned: paused, finalised or failed, as the run says
+            if (
+                "result_status" in handle
+            ):  # it returned: paused, finalised or failed, as the run says
                 status = str(handle["result_status"])
             else:
                 status = "failed"
-                output = {"error": handle.get("error", "the run ended without finalising its record")}
+                output = {
+                    "error": handle.get("error", "the run ended without finalising its record")
+                }
         self._json(
             {
                 "run_id": run_id,
@@ -3223,8 +3325,7 @@ class Handler(BaseHTTPRequestHandler):
         for _ in range(80):
             try:
                 if root.exists() and any(
-                    e.get("kind") == api.RUN_STARTED
-                    for e in api.read_record(root)
+                    e.get("kind") == api.RUN_STARTED for e in api.read_record(root)
                 ):
                     break
             except _RECORD_IO_ERRORS:  # REVIEW-2026-08-28 Q6: narrow mid-write catch
@@ -3332,7 +3433,8 @@ class Handler(BaseHTTPRequestHandler):
             )
         except SessionEndedMidTurn:
             self._json(
-                {"ok": False, "status": SessionStatus.ENDED, "error": SESSION_ENDED_MID_DELEGATE}, 410
+                {"ok": False, "status": SessionStatus.ENDED, "error": SESSION_ENDED_MID_DELEGATE},
+                410,
             )
             return
         except Exception as exc:  # noqa: BLE001 — bridge surfaces the class + text
@@ -3369,14 +3471,9 @@ class Handler(BaseHTTPRequestHandler):
         wt_arg = q.get("worktree", [""])[
             0
         ]  # a repo path -> isolate this session in its own worktree
-        session = (
-            re.sub(r"[^A-Za-z0-9._-]", "-", ws_arg)[:40]
-            or f"adhoc-{uuid.uuid4().hex[:8]}"
-        )
+        session = re.sub(r"[^A-Za-z0-9._-]", "-", ws_arg)[:40] or f"adhoc-{uuid.uuid4().hex[:8]}"
         branch = ""
-        if (
-            wt_arg
-        ):  # git-worktree-per-session: operate on a branch adjacent to the repo (B)
+        if wt_arg:  # git-worktree-per-session: operate on a branch adjacent to the repo (B)
             try:
                 workspace, branch = _session_worktree(Path(wt_arg), session)
             except Exception as exc:  # noqa: BLE001 — not a repo / git failed: fall back, surfaced
@@ -3428,7 +3525,11 @@ class Handler(BaseHTTPRequestHandler):
             # `cli` takes an arbitrary `?command=...`. Substrate provides the tools,
             # so even a plain prompt->text CLI becomes a tool-using agent here.
             task = q.get("task", [""])[0] or "Use the available tools to help."
-            cmd = _cli_command(model) if model in KNOWN_CLI_ADAPTERS else q.get("command", [""])[0].split()
+            cmd = (
+                _cli_command(model)
+                if model in KNOWN_CLI_ADAPTERS
+                else q.get("command", [""])[0].split()
+            )
             if not cmd:
                 self._error(
                     400,
@@ -3446,11 +3547,11 @@ class Handler(BaseHTTPRequestHandler):
             )
             label = "agent_" + model
         else:
-            topo = (
-                tool_loop_topology()
-            )  # deterministic calculator loop — CI-safe, no network
+            topo = tool_loop_topology()  # deterministic calculator loop — CI-safe, no network
             label = "agent_calc"
-        run_name = f"launch_{label}_{uuid.uuid4().hex[:12]}"  # launch_ prefix => prunable session run
+        run_name = (
+            f"launch_{label}_{uuid.uuid4().hex[:12]}"  # launch_ prefix => prunable session run
+        )
         root = _runs_dir() / f"{run_name}.record"
         th = threading.Thread(
             target=lambda: asyncio.run(api.Runtime(root).run(topo, name=label)), daemon=True
@@ -3462,8 +3563,7 @@ class Handler(BaseHTTPRequestHandler):
         ):  # wait only until RunStarted lands, so the console can follow immediately
             try:
                 if root.exists() and any(
-                    e.get("kind") == api.RUN_STARTED
-                    for e in api.read_record(root)
+                    e.get("kind") == api.RUN_STARTED for e in api.read_record(root)
                 ):
                     break
             except _RECORD_IO_ERRORS:  # REVIEW-2026-08-28 Q6: narrow mid-write catch
@@ -3510,9 +3610,7 @@ class Handler(BaseHTTPRequestHandler):
             lock.unlink()
         th = threading.Thread(
             target=lambda: asyncio.run(
-                api.Runtime(root, persistent=True).resume(
-                    topo, resume_event=ev_factory()
-                )
+                api.Runtime(root, persistent=True).resume(topo, resume_event=ev_factory())
             ),
             daemon=True,
         )
@@ -3525,9 +3623,7 @@ class Handler(BaseHTTPRequestHandler):
             except _RECORD_IO_ERRORS:  # REVIEW-2026-08-28 Q6: narrow mid-write catch
                 pass
             time.sleep(0.05)
-        self._json(
-            {"name": resume_name, "status": api.run_graph(root).status, "resumed": name}
-        )
+        self._json({"name": resume_name, "status": api.run_graph(root).status, "resumed": name})
 
     def _body(self) -> dict[str, object]:
         length = int(self.headers.get("Content-Length", 0))
@@ -3572,7 +3668,8 @@ class Handler(BaseHTTPRequestHandler):
         run_name = f"build_{name}_{uuid.uuid4().hex[:12]}"
         root = _runs_dir() / f"{run_name}.record"
         th = threading.Thread(
-            target=lambda: asyncio.run(api.Runtime(root).run(topo, name=f"build:{name}")), daemon=True
+            target=lambda: asyncio.run(api.Runtime(root).run(topo, name=f"build:{name}")),
+            daemon=True,
         )
         _LAUNCHES[run_name] = th
         th.start()
@@ -3601,9 +3698,7 @@ class Handler(BaseHTTPRequestHandler):
             fired = {i.trigger_id for i in g.instances if i.trigger_id}
             unfired = [t for t in authored if t not in fired]
             if unfired:
-                out["unfired_triggers"] = (
-                    unfired  # authored Triggers whose Predicate never matured
-                )
+                out["unfired_triggers"] = unfired  # authored Triggers whose Predicate never matured
         self._json(out)
 
     def _session_patch(self, session_id: str) -> None:
@@ -3689,7 +3784,9 @@ class Handler(BaseHTTPRequestHandler):
             elif isinstance(per_turn_raw, str):
                 per_turn_value = per_turn_raw
             else:
-                self._error(400, f"per_turn must be a string or null; got {type(per_turn_raw).__name__}")
+                self._error(
+                    400, f"per_turn must be a string or null; got {type(per_turn_raw).__name__}"
+                )
                 return
             updated = _SESSION_REGISTRY.set_per_turn(session_id, per_turn_value)
         if "bundle" in body:
@@ -3699,7 +3796,9 @@ class Handler(BaseHTTPRequestHandler):
             # seen at the next turn's UserMessage.assembled_prompt.
             bundle_raw = body["bundle"]
             if bundle_raw is not None and not isinstance(bundle_raw, str):
-                self._error(400, f"bundle must be a string or null; got {type(bundle_raw).__name__}")
+                self._error(
+                    400, f"bundle must be a string or null; got {type(bundle_raw).__name__}"
+                )
                 return
             bundle_value = str(bundle_raw) if bundle_raw else None
             try:
@@ -3736,7 +3835,9 @@ class Handler(BaseHTTPRequestHandler):
                 "workspace": updated.workspace,
                 "workspace_shape": updated.workspace_shape,
                 "bundle": updated.bundle,
-                "driver_params": dict(updated.driver_params) if updated.driver_params is not None else None,
+                "driver_params": dict(updated.driver_params)
+                if updated.driver_params is not None
+                else None,
                 "record": updated.record_root,
                 "status": updated.status,
             }
@@ -3796,9 +3897,7 @@ class Handler(BaseHTTPRequestHandler):
                 # line 1044: `{name, description, inputs_schema,
                 # output_kind, runs}`. Read from the boot-loaded
                 # `_APPLICATIONS` dict; the load fires at main().
-                self._json(
-                    [_application_spec_to_wire(spec) for spec in _APPLICATIONS.values()]
-                )
+                self._json([_application_spec_to_wire(spec) for spec in _APPLICATIONS.values()])
                 return
             if path.startswith("/api/topology/") and path.endswith("/status"):
                 # Sprint 225d — GET /api/topology/<name>/status?run_id=<id>.
@@ -3815,8 +3914,8 @@ class Handler(BaseHTTPRequestHandler):
             if path.startswith("/api/session/by-name/"):
                 self._session_by_name(unquote(path[len("/api/session/by-name/") :]))
                 return
-            if path.startswith("/api/session/") and "/" not in path[len("/api/session/"):]:
-                self._session_get(path[len("/api/session/"):])
+            if path.startswith("/api/session/") and "/" not in path[len("/api/session/") :]:
+                self._session_get(path[len("/api/session/") :])
                 return
             m_tasks = re.fullmatch(r"/api/session/([^/]+)/tasks", path)
             if m_tasks:  # UI sprint 105
@@ -3838,7 +3937,11 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/records":
                 # Sprint 034a: optional ?exclude_sessions=true filter.
                 q = parse_qs(urlparse(self.path).query)
-                exclude = (q.get("exclude_sessions", ["false"])[0] or "false").lower() in ("1", "true", "yes")
+                exclude = (q.get("exclude_sessions", ["false"])[0] or "false").lower() in (
+                    "1",
+                    "true",
+                    "yes",
+                )
                 self._json(_records_index(exclude_sessions=exclude))
                 return
             if path == "/api/records/by-path/events":
@@ -3901,7 +4004,7 @@ class Handler(BaseHTTPRequestHandler):
                     return
                 try:
                     offset = max(0, int(q.get("offset", ["0"])[0]))
-                    limit  = max(1, min(500, int(q.get("limit", ["50"])[0])))
+                    limit = max(1, min(500, int(q.get("limit", ["50"])[0])))
                 except ValueError:
                     self._error(400, "offset and limit must be integers")
                     return
@@ -3919,13 +4022,12 @@ class Handler(BaseHTTPRequestHandler):
                         ws_c = _canonical_workspace(ws)
                         # Per-session sandbox root collapses every
                         # <root>/<id>/workspace under one query target.
-                        matches = (
-                            ws_c == target_c
-                            or (target_c == sessions_root_c and _is_per_session_sandbox(ws_c))
+                        matches = ws_c == target_c or (
+                            target_c == sessions_root_c and _is_per_session_sandbox(ws_c)
                         )
                         if matches:
                             merged.append({**row, "workspace": ws_c, "status": bucket_name})
-                merged.sort(key=lambda r: (r.get("created_at") or 0), reverse=True)
+                merged.sort(key=lambda r: r.get("created_at") or 0, reverse=True)
                 total = len(merged)
                 page = merged[offset : offset + limit]
                 self._json({"rows": page, "total": total, "offset": offset, "limit": limit})
@@ -3945,14 +4047,14 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(res, 404 if "error" in res else 200)
                 return
             if path == "/api/topologies":
-                self._json(
-                    bundled.names() + list(_EXTRA_TOPOS)
-                )  # the launchable topologies
+                self._json(bundled.names() + list(_EXTRA_TOPOS))  # the launchable topologies
                 return
             if path == "/api/diff":
                 self._diff(parse_qs(urlparse(self.path).query))
                 return
-            if path == "/api/resolve_child":  # W2.2: a delegate ToolResult's child_root -> served name
+            if (
+                path == "/api/resolve_child"
+            ):  # W2.2: a delegate ToolResult's child_root -> served name
                 cp = parse_qs(urlparse(self.path).query).get("path", [""])[0]
                 self._json({"name": _resolve_child_name(cp)})
                 return
@@ -3976,10 +4078,10 @@ class Handler(BaseHTTPRequestHandler):
         if record is None:
             self._error(404, f"no record {name!r}")
             return
-        events = list(api.read_record(record, resolve_blobs=True))  # Sprint 095: the inspector shows payloads
-        if (
-            len(parts) == 1
-        ):  # the whole run: events + the manifest + the run-level status
+        events = list(
+            api.read_record(record, resolve_blobs=True)
+        )  # Sprint 095: the inspector shows payloads
+        if len(parts) == 1:  # the whole run: events + the manifest + the run-level status
             manifest = next(
                 (
                     (e.get("payload") or {}).get("topology")
@@ -4024,22 +4126,16 @@ class Handler(BaseHTTPRequestHandler):
         if div is None:
             self._json({"a": a, "b": b, "equivalent": True})
         else:
-            self._json(
-                {"a": a, "b": b, "equivalent": False, "divergence": _builtins(div)}
-            )
+            self._json({"a": a, "b": b, "equivalent": False, "divergence": _builtins(div)})
 
-    def _explain(
-        self, name: str, events: list[dict[str, object]], producer: str
-    ) -> None:
+    def _explain(self, name: str, events: list[dict[str, object]], producer: str) -> None:
         try:
             exp = api.explain_producer(events, producer)
             chain = api.trace_ancestry(events, producer)
         except (api.ProducerNotFound, api.SequenceOutOfRange) as exc:
             self._error(404, str(exc))
             return
-        self._json(
-            {"explanation": _builtins(exp), "ancestry": [_builtins(e) for e in chain]}
-        )
+        self._json({"explanation": _builtins(exp), "ancestry": [_builtins(e) for e in chain]})
 
     def _static(self, path: str) -> None:
         # Phase 6 closed 2026-09-22: `/` serves the reveal shell, the
@@ -4065,9 +4161,7 @@ class Handler(BaseHTTPRequestHandler):
         if not target.is_file():
             self._error(404, f"not found: {path}")
             return
-        self._send(
-            200, target.read_bytes(), _CT.get(target.suffix, "application/octet-stream")
-        )
+        self._send(200, target.read_bytes(), _CT.get(target.suffix, "application/octet-stream"))
 
 
 def main() -> None:
@@ -4078,10 +4172,12 @@ def main() -> None:
     # port. Default is the env-derived module-level HOST/PORT so any
     # caller that used SUBSTRATE_UI_PORT before continues to work.
     import argparse
+
     parser = argparse.ArgumentParser(description="substrate-ui HTTP server")
     parser.add_argument("--host", default=HOST, help="bind host (default: %(default)s)")
-    parser.add_argument("--port", type=int, default=PORT,
-                        help="bind port; 0 = ephemeral (default: %(default)s)")
+    parser.add_argument(
+        "--port", type=int, default=PORT, help="bind port; 0 = ephemeral (default: %(default)s)"
+    )
     args = parser.parse_args()
     HOST = args.host
     PORT = args.port
@@ -4145,6 +4241,7 @@ def main() -> None:
             if len(skipped) > 5:
                 note += f" ... (+{len(skipped) - 5} more)"
         print(note, flush=True)
+
     # Sprint 217e: bind a UDS listener alongside the TCP one. TECH-SPEC §6
     # names `~/.substrate/daemon.sock` as the primary transport, with TCP as
     # fallback. Both sockets share the same `Handler`; the CLI tries UDS first.
@@ -4291,7 +4388,9 @@ def main() -> None:
                 # port and ~/.substrate indefinitely (seen 2026-09-29, pid
                 # 38409). _say swallows that, and the handler's sys.exit
                 # only ends this thread, so exit the process explicitly.
-                _say(f"parent process died (was {parent_pid_at_start}, now reparented to init); shutting down")
+                _say(
+                    f"parent process died (was {parent_pid_at_start}, now reparented to init); shutting down"
+                )
                 if not _claim_shutdown():
                     return
                 try:

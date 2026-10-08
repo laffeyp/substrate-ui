@@ -25,7 +25,11 @@ def test_daemon_serves_tcp_when_the_socket_path_is_too_long(tmp_path: Path) -> N
     env.pop("SUBSTRATE_DAEMON_SOCK", None)
     proc = subprocess.Popen(
         [sys.executable, str(REPO / "server.py"), "--port", "0"],
-        cwd=REPO, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+        cwd=REPO,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
     )
     try:
         port, summary, deadline = None, "", time.monotonic() + 30

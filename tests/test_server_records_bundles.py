@@ -20,7 +20,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import server  # noqa: E402
 from substrate.session_registry import SessionRegistry  # noqa: E402
-from _serving import call, serving# noqa: E402
+from _serving import call, serving  # noqa: E402
 
 
 @pytest.fixture
@@ -73,7 +73,9 @@ def test_records_exclude_sessions_shape(base: str) -> None:
     assert filtered_names.issubset(all_names), "filtered set must be a subset of default"
     # No filtered name matches the session shape.
     for name in filtered_names:
-        assert not name.startswith(("launch_", "build_", "resume_")), f"session-prefix name leaked: {name}"
+        assert not name.startswith(("launch_", "build_", "resume_")), (
+            f"session-prefix name leaked: {name}"
+        )
 
 
 def test_records_exclude_sessions_hides_launch_prefixed(base: str) -> None:
@@ -87,7 +89,9 @@ def test_records_exclude_sessions_hides_launch_prefixed(base: str) -> None:
     names_filtered = {r["name"] for r in records_filtered}
     prefixed = {n for n in names_all if n.startswith(("launch_", "build_", "resume_"))}
     if prefixed:
-        assert not (prefixed & names_filtered), f"filtered records still has session-prefixed names: {prefixed & names_filtered}"
+        assert not (prefixed & names_filtered), (
+            f"filtered records still has session-prefixed names: {prefixed & names_filtered}"
+        )
 
 
 def test_bundles_lists_shipped_defaults(base: str) -> None:

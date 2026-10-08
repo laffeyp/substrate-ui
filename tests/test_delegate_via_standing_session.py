@@ -238,9 +238,7 @@ async def test_delegate_reads_only_this_turns_final_answer(tmp_path: Path) -> No
             slash_source="chat",
         ),
     )
-    prior_finals = [
-        e for e in api.read_record(reviewer_record) if e["kind"] == "FinalAnswer"
-    ]
+    prior_finals = [e for e in api.read_record(reviewer_record) if e["kind"] == "FinalAnswer"]
     prior_last_final_seq = prior_finals[-1]["seq"]
     prior_last_final_text = prior_finals[-1]["payload"]["text"]
 
@@ -254,17 +252,11 @@ async def test_delegate_reads_only_this_turns_final_answer(tmp_path: Path) -> No
     loop = asyncio.get_running_loop()
     result = await loop.run_in_executor(
         None,
-        lambda: d.run(
-            [{"task": "the delegated question", "child_session_name": "reviewer"}]
-        ),
+        lambda: d.run([{"task": "the delegated question", "child_session_name": "reviewer"}]),
     )
     # The delegated turn's FinalAnswer sits at a seq > prior_last_final_seq.
-    all_finals = [
-        e for e in api.read_record(reviewer_record) if e["kind"] == "FinalAnswer"
-    ]
-    delegated_finals = [
-        e for e in all_finals if int(e["seq"]) > int(prior_last_final_seq)
-    ]
+    all_finals = [e for e in api.read_record(reviewer_record) if e["kind"] == "FinalAnswer"]
+    delegated_finals = [e for e in all_finals if int(e["seq"]) > int(prior_last_final_seq)]
     assert len(delegated_finals) == 1
     # The parent's ToolResult reads exactly that seq's answer, not the earlier one.
     assert result["answer"] == delegated_finals[-1]["payload"]["text"]

@@ -25,7 +25,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import server  # noqa: E402
 from session_errors import SESSION_ENDED_MID_DELEGATE  # noqa: E402
 from substrate.session_registry import SessionRegistry  # noqa: E402
-from _serving import call, call_raw, serving# noqa: E402
+from _serving import call, call_raw, serving  # noqa: E402
 
 
 @pytest.fixture
@@ -57,6 +57,7 @@ def _create(base: str, workspace: Path, name: str | None = None, **extra: object
 
 # ── Finding 3 — do_DELETE must reject sub-resource paths ─────────────────
 
+
 def test_delete_on_a_sub_resource_returns_404_and_leaves_session_alive(
     base: str, tmp_path: Path
 ) -> None:
@@ -72,14 +73,13 @@ def test_delete_on_a_sub_resource_returns_404_and_leaves_session_alive(
     payload = json.loads(body) if body else {}
     assert "no delete endpoint" in payload.get("error", "")
     # The real session is untouched — a subsequent turn still runs.
-    turn_status, turn_body = _post_json(
-        base + f"/api/session/{sid}/turn", {"text": "hi"}
-    )
+    turn_status, turn_body = _post_json(base + f"/api/session/{sid}/turn", {"text": "hi"})
     assert turn_status == 200
     assert turn_body["status"] in ("parked", "ended")
 
 
 # ── Finding 6 — `seed_text` (TECH-SPEC §4 name) is accepted ─────────────
+
 
 def test_seed_text_alias_is_persisted_on_the_manifest(base: str, tmp_path: Path) -> None:
     """The TECH-SPEC §4 body carries `seed_text`; the earlier handler read
@@ -93,6 +93,7 @@ def test_seed_text_alias_is_persisted_on_the_manifest(base: str, tmp_path: Path)
 
 
 # ── Finding 7 — POST /turn response carries `seq` ───────────────────────
+
 
 def test_turn_response_carries_pre_turn_seq(base: str, tmp_path: Path) -> None:
     """TECH-SPEC §4 names `seq` (the record's tail cursor at turn start) in
@@ -114,6 +115,7 @@ def test_turn_response_carries_pre_turn_seq(base: str, tmp_path: Path) -> None:
 
 # ── Finding 17 — malformed since_seq returns 400 ────────────────────────
 
+
 def test_sse_since_seq_non_integer_returns_400(base: str, tmp_path: Path) -> None:
     """`?since_seq=abc` used to raise ValueError inside do_GET and get
     caught by the generic 500 branch. A malformed query parameter is a
@@ -128,6 +130,7 @@ def test_sse_since_seq_non_integer_returns_400(base: str, tmp_path: Path) -> Non
 
 
 # ── Finding 4 — delete during in-flight turn does not crash the turn ─
+
 
 def test_delete_during_in_flight_turn_waits_for_the_turn_to_finish(
     base: str, tmp_path: Path
@@ -162,18 +165,15 @@ def test_delete_during_in_flight_turn_waits_for_the_turn_to_finish(
     # (sprint 216 tightened this from 404 to 410: DELETE preserves the
     # record dir per SDD rule 12, so the was-live-and-is-now-gone shape
     # is 410 Gone, not 404 Not Found).
-    after_status, after_body = _post_json(
-        base + f"/api/session/{sid}/turn", {"text": "should 410"}
-    )
+    after_status, after_body = _post_json(base + f"/api/session/{sid}/turn", {"text": "should 410"})
     assert after_status == 410
     assert after_body["error"] == SESSION_ENDED_MID_DELEGATE
 
 
 # ── Finding 2, revised 2026-09-29 — SSE past a RunFinalised follows a resume ──
 
-def test_sse_reconnect_past_runfinalised_follows_resumed_growth(
-    base: str, tmp_path: Path
-) -> None:
+
+def test_sse_reconnect_past_runfinalised_follows_resumed_growth(base: str, tmp_path: Path) -> None:
     """Ended sessions are resumable: turn_sync flips ended -> parked and the
     run continues on the same record. A client that reattaches with
     `since_seq` at or past the old RunFinalised must therefore stay open and
@@ -199,14 +199,24 @@ def test_sse_reconnect_past_runfinalised_follows_resumed_growth(
         pytest.skip("no open segment on record; segment naming has drifted")
     finalised_seq = max(int(e["seq"]) for e in envs) + 1
     with segments[-1].open("ab") as fp:
-        fp.write(framing.frame({"seq": finalised_seq, "kind": "substrate.RunFinalised", "payload": {"reason": "test-injected"}}))
+        fp.write(
+            framing.frame(
+                {
+                    "seq": finalised_seq,
+                    "kind": "substrate.RunFinalised",
+                    "payload": {"reason": "test-injected"},
+                }
+            )
+        )
 
     result: dict = {}
     opened = threading.Event()
 
     def _reader() -> None:
         try:
-            with urlopen(base + f"/api/session/{sid}/events?since_seq={finalised_seq}", timeout=10) as resp:
+            with urlopen(
+                base + f"/api/session/{sid}/events?since_seq={finalised_seq}", timeout=10
+            ) as resp:
                 opened.set()
                 result["chunk"] = resp.read1(65536)
         except Exception as exc:  # noqa: BLE001 — timeout/close is the failure mode
@@ -217,12 +227,16 @@ def test_sse_reconnect_past_runfinalised_follows_resumed_growth(
     reader_thread.start()
     assert opened.wait(5), "SSE reader never connected"
     time.sleep(0.5)
-    assert reader_thread.is_alive(), (
-        "stream closed on a RunFinalised at/before since_seq: " + repr(result)
+    assert reader_thread.is_alive(), "stream closed on a RunFinalised at/before since_seq: " + repr(
+        result
     )
     # The resumed turn's first envelope, after the old RunFinalised.
     with segments[-1].open("ab") as fp:
-        fp.write(framing.frame({"seq": finalised_seq + 1, "kind": "UserMessage", "payload": {"text": "resumed"}}))
+        fp.write(
+            framing.frame(
+                {"seq": finalised_seq + 1, "kind": "UserMessage", "payload": {"text": "resumed"}}
+            )
+        )
     reader_thread.join(timeout=5)
     assert "chunk" in result, "reader got no data after the resume: " + repr(result)
     assert b'"resumed"' in result["chunk"], result["chunk"][:400]

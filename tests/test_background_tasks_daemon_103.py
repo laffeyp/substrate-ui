@@ -24,7 +24,9 @@ def _manifest(tmp_path: Path, sid: str, tools: tuple[str, ...] | None) -> Simple
 def test_allow_list_with_bash_brings_the_task_tools(tmp_path: Path) -> None:
     names = set(server._tools_for_manifest(_manifest(tmp_path, "s_x", ("bash", "read_file"))))
     assert names == {"bash", "bash_output", "bash_stop", "bash_tasks", "read_file"}
-    assert "bash_output" not in server._tools_for_manifest(_manifest(tmp_path, "s_x", ("read_file",)))
+    assert "bash_output" not in server._tools_for_manifest(
+        _manifest(tmp_path, "s_x", ("read_file",))
+    )
 
 
 def test_session_tools_own_tasks_by_session_id_and_quit_stops_them(tmp_path: Path) -> None:

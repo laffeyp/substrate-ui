@@ -23,7 +23,7 @@ import server  # noqa: E402  the module under test
 
 from substrate import api  # noqa: E402
 from substrate.topologies import bundled  # noqa: E402
-from _serving import call, serving# noqa: E402
+from _serving import call, serving  # noqa: E402
 
 
 @pytest.fixture(scope="module")
@@ -109,9 +109,7 @@ def test_run_graph_endpoint_matches_the_projection(base: str) -> None:
 
 def test_topology_graph_endpoint_nodes_and_edges(base: str) -> None:
     g = get(base, "/api/records/code_review/topology_graph")
-    assert any(
-        p["kind"] == "reviewer-security" and p["is_initial"] for p in g["producers"]
-    )
+    assert any(p["kind"] == "reviewer-security" and p["is_initial"] for p in g["producers"])
     assert any(p["kind"] == "judge" and not p["is_initial"] for p in g["producers"])
     adj = next(t for t in g["triggers"] if t["id"] == "adjudicate")
     assert adj["starts"] == "judge" and adj["on"] == ["CritiquePosted"]
@@ -167,8 +165,7 @@ def test_diff_endpoint_first_divergence(base: str) -> None:
     cross = get(base, "/api/diff?a=code_review&b=debate")
     assert cross["equivalent"] is False
     assert (
-        cross["divergence"]["seq"] == 0
-        and cross["divergence"]["kind_a"] == "substrate.RunStarted"
+        cross["divergence"]["seq"] == 0 and cross["divergence"]["kind_a"] == "substrate.RunStarted"
     )
 
 
@@ -181,9 +178,7 @@ def test_io_endpoint_derives_input_and_outputs(base: str) -> None:
     assert solo["baseline"] == {"dataset": "q3_incidents", "seed": 42}
     assert [o["kind"] for o in solo["outputs"]] == ["Message"]
     cr = get(base, "/api/records/code_review/io")
-    assert (
-        cr["input"] is None
-    )  # no runtime seed (parameterized at build), honestly null
+    assert cr["input"] is None  # no runtime seed (parameterized at build), honestly null
     # substrate review C-7 (2026-08-03): code_review now METERS each model call, so a ModelUsage precedes
     # each reviewer's critique and the judge's verdict on the record — the I/O outputs interleave them.
     assert [o["kind"] for o in cr["outputs"]] == [
@@ -196,9 +191,7 @@ def test_io_endpoint_derives_input_and_outputs(base: str) -> None:
         "ModelUsage",
         "VerdictRendered",
     ]
-    assert all(
-        "seq" in o for o in cr["outputs"]
-    )  # every artifact cites its producing seq
+    assert all("seq" in o for o in cr["outputs"])  # every artifact cites its producing seq
 
 
 def test_unknown_record_is_404(base: str) -> None:
@@ -212,9 +205,7 @@ def test_launch_runs_a_topology_and_records_it(base: str) -> None:
     assert res["status"] == "finalised" and res["launched"] == "code_review"
     name = res["name"]
     rg = get(base, f"/api/records/{name}/run_graph")
-    assert (
-        rg["status"] == "finalised" and len(rg["instances"]) == 6
-    )  # a genuine code_review run
+    assert rg["status"] == "finalised" and len(rg["instances"]) == 6  # a genuine code_review run
     assert get(base, f"/api/records/{name}/events")[0]["kind"] == "substrate.RunStarted"
     assert get(base, "/api/topologies")  # the launchable list is served
 
@@ -238,9 +229,7 @@ def test_launch_is_backgrounded_and_the_record_grows(base: str) -> None:
     import time
 
     res = post(base, "/api/launch?topology=live_demo")  # ~3s run
-    assert (
-        res["status"] == "incomplete"
-    )  # returned before the run finished -> backgrounded
+    assert res["status"] == "incomplete"  # returned before the run finished -> backgrounded
     name = res["name"]
     final = None
     for _ in range(40):
@@ -248,9 +237,7 @@ def test_launch_is_backgrounded_and_the_record_grows(base: str) -> None:
         final = get(base, f"/api/records/{name}/run_graph")["status"]
         if final != "incomplete":
             break
-    assert (
-        final == "finalised"
-    )  # the backgrounded run reached its terminal, readable over HTTP
+    assert final == "finalised"  # the backgrounded run reached its terminal, readable over HTTP
 
 
 def test_run_graph_reports_server_authoritative_liveness(base: str) -> None:
@@ -268,9 +255,7 @@ def test_run_graph_reports_server_authoritative_liveness(base: str) -> None:
         g = get(base, f"/api/records/{name}/run_graph")
         if g["status"] != "incomplete":
             break
-    assert (
-        g["status"] == "finalised" and g["live"] is False
-    )  # finished -> thread dead -> not live
+    assert g["status"] == "finalised" and g["live"] is False  # finished -> thread dead -> not live
     # a static (non-launch) record reports live=False (it isn't being written) — so the console
     # treats a static no-terminal record as torn/incomplete, never live.
     assert get(base, "/api/records/code_review/run_graph")["live"] is False
@@ -295,9 +280,7 @@ def test_agent_endpoint_launches_a_live_tool_using_loop(base: str) -> None:
     assert res["agent"] == "deterministic"
     name = res["name"]
     assert name.startswith("launch_agent")  # a prunable session run (launch_ prefix)
-    assert (
-        res["status"] == "finalised"
-    )  # the deterministic calculator loop finishes immediately
+    assert res["status"] == "finalised"  # the deterministic calculator loop finishes immediately
     events = get(base, f"/api/records/{name}/events")
     kinds = [e["kind"] for e in events]
     assert kinds[0] == "substrate.RunStarted"
@@ -306,9 +289,7 @@ def test_agent_endpoint_launches_a_live_tool_using_loop(base: str) -> None:
     assert kinds[-1] == "substrate.RunFinalised"
 
 
-def test_agent_endpoint_reports_the_per_conversation_workspace(
-    base: str, tmp_path
-) -> None:
+def test_agent_endpoint_reports_the_per_conversation_workspace(base: str, tmp_path) -> None:
     # per-session workspace: an ABSOLUTE path is a project the user picked (used + created as-is); a
     # BARE name is a dedicated session dir under ~/.substrate/sessions/ (the client passes the
     # conversation id, so turns share one dir); an UNSET workspace defaults to a fresh session dir —
@@ -353,17 +334,13 @@ def test_session_worktree_isolates_a_session_on_a_branch(tmp_path, monkeypatch) 
 
     wt, branch = server._session_worktree(repo, "sess-abc")
     assert branch == "substrate/sess-abc"
-    assert (
-        wt.is_dir() and (wt / "a.txt").read_text() == "hello"
-    )  # repo content, isolated copy
+    assert wt.is_dir() and (wt / "a.txt").read_text() == "hello"  # repo content, isolated copy
     head = subprocess.run(
         ["git", "-C", str(wt), "rev-parse", "--abbrev-ref", "HEAD"],
         capture_output=True,
         text=True,
     ).stdout.strip()
-    assert (
-        head == "substrate/sess-abc"
-    )  # on the session branch, not the repo's working tree
+    assert head == "substrate/sess-abc"  # on the session branch, not the repo's working tree
     assert server._session_worktree(repo, "sess-abc")[0] == wt  # idempotent
     # the diff surface: what the agent changed in the worktree — an edit AND a new (write_file'd) file.
     (wt / "a.txt").write_text("changed")
@@ -387,7 +364,9 @@ def test_agent_params_parse_and_echo(base: str) -> None:
         {"think": ["true"], "max_tokens": ["4096"], "timeout": ["240"]}
     ) == (True, 4096, 240.0)
     assert server._agent_params({"think": ["on"]}) == (True, 0, None)
-    res = post(base, "/api/agent?model=deterministic&legacy=true&think=true&max_tokens=123&timeout=240")
+    res = post(
+        base, "/api/agent?model=deterministic&legacy=true&think=true&max_tokens=123&timeout=240"
+    )
     assert res["params"] == {"think": True, "max_tokens": 123, "timeout": 240.0}
 
 
@@ -415,9 +394,12 @@ def test_models_endpoint_lists_drivers_with_a_default(
         return real_urlopen(req, *a, **k)  # type: ignore[arg-type]
 
     monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
-    monkeypatch.setattr(shutil, "which", lambda cmd, *a, **k: "/bin/x" if cmd == "cursor-agent" else None)
     monkeypatch.setattr(
-        server, "_probe_cli_versions",
+        shutil, "which", lambda cmd, *a, **k: "/bin/x" if cmd == "cursor-agent" else None
+    )
+    monkeypatch.setattr(
+        server,
+        "_probe_cli_versions",
         lambda name: {"families": [{"family": "auto", "models": ["auto"]}], "source": "curated"},
     )
 
@@ -527,9 +509,7 @@ def test_build_surfaces_unfired_triggers(base: str) -> None:
         },
     )
     assert res["status"] == "finalised"  # honestly finalised via quiescence...
-    assert res.get("unfired_triggers") == [
-        "needs_three"
-    ]  # ...but the unfired Trigger is surfaced
+    assert res.get("unfired_triggers") == ["needs_three"]  # ...but the unfired Trigger is surfaced
     # and indeed no Y was emitted (b never started) — the surfaced signal is true, not decorative:
     kinds = [e["kind"] for e in get(base, f"/api/records/{res['name']}/events")]
     assert "Y" not in kinds
@@ -567,9 +547,7 @@ def test_build_model_producer_runs_the_responder(base: str) -> None:
     assert len(verdicts) == 1
     expected = DeterministicResponder(seed=0).respond("rate this")
     assert verdicts[0]["payload"]["note"] == expected  # the REAL responder's output...
-    assert (
-        expected != "rater"
-    )  # ...not the stub's note=kind — the responder genuinely ran
+    assert expected != "rater"  # ...not the stub's note=kind — the responder genuinely ran
 
 
 def test_ui_imports_only_sanctioned_substrate_surfaces() -> None:
@@ -611,9 +589,7 @@ def test_ui_imports_only_sanctioned_substrate_surfaces() -> None:
             elif isinstance(node, ast.Import):
                 mods = [a.name for a in node.names]
             for m in mods:
-                if (
-                    m == "substrate" or m.startswith("substrate.")
-                ) and m != "substrate":
+                if (m == "substrate" or m.startswith("substrate.")) and m != "substrate":
                     top2 = ".".join(m.split(".")[:2])
                     if top2 not in sanctioned:
                         offenders.append(f"{py.name}: {m}")
@@ -660,9 +636,7 @@ def test_authored_route_feeds_a_reading_trigger(tmp_path) -> None:
     asyncio.run(api.Runtime(tmp_path / "run").run(topo))
 
     patches = [
-        e["payload"]["note"]
-        for e in api.read_record(tmp_path / "run")
-        if e["kind"] == "Patch"
+        e["payload"]["note"] for e in api.read_record(tmp_path / "run") if e["kind"] == "Patch"
     ]
     assert patches, "the Fixer ran on the routed Critique"
     assert (
@@ -674,9 +648,7 @@ def test_clear_runs_prunes_session_runs_but_keeps_demos_and_fixtures(base: str) 
     # the prune (sprint 012, item C2): POST /api/runs/clear deletes ONLY the hash-suffixed session
     # runs (launch_/build_/resume_); bundled demos + the named demo_* fixtures are KEPT. An EXPLICIT
     # user action, not a silent clobber — so the #35 durability ruling (no SILENT deletion) holds.
-    demos_before = {
-        r["name"] for r in get(base, "/api/records") if r["source"] == "demo"
-    }
+    demos_before = {r["name"] for r in get(base, "/api/records") if r["source"] == "demo"}
     launched = post(base, "/api/launch?topology=game_of_life")["name"]
     assert launched.startswith("launch_")  # a hash-suffixed session run
     res = post(base, "/api/runs/clear")

@@ -45,10 +45,19 @@ def test_end_interrupts_a_running_turn(tmp_path: Path) -> None:
 
     def factory(m: SessionManifest, first: Any = None) -> Any:
         return session_topology(
-            driver=responder, driver_name="deterministic", driver_context_tokens=4096,
-            seed="", tools={}, per_turn="", max_turns=200, turn_max_steps=4,
-            session_id=m.session_id, workspace_path=m.workspace,
-            record_root=Path(m.record_root), script=None, first_turn_user_message=first,
+            driver=responder,
+            driver_name="deterministic",
+            driver_context_tokens=4096,
+            seed="",
+            tools={},
+            per_turn="",
+            max_turns=200,
+            turn_max_steps=4,
+            session_id=m.session_id,
+            workspace_path=m.workspace,
+            record_root=Path(m.record_root),
+            script=None,
+            first_turn_user_message=first,
         )
 
     reg = SessionRegistry(base=tmp_path, session_topology_factory=factory)
@@ -57,12 +66,20 @@ def test_end_interrupts_a_running_turn(tmp_path: Path) -> None:
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     try:
         sid = reg.create(
-            session_id="s_0123456789abcde7", name=None, driver="deterministic",
-            workspace=str(tmp_path / "ws"), workspace_shape="flat", bundle=None, seed="",
+            session_id="s_0123456789abcde7",
+            name=None,
+            driver="deterministic",
+            workspace=str(tmp_path / "ws"),
+            workspace_shape="flat",
+            bundle=None,
+            seed="",
         ).session_id
 
         def turn(text: str, i: int) -> None:
-            reg.turn_sync(sid, UserMessage(text=text, turn_index=i, assembled_prompt=text, slash_source="user"))
+            reg.turn_sync(
+                sid,
+                UserMessage(text=text, turn_index=i, assembled_prompt=text, slash_source="user"),
+            )
 
         turn("first", 0)
         worker = threading.Thread(target=lambda: turn("second", 1), daemon=True)
@@ -75,7 +92,8 @@ def test_end_interrupts_a_running_turn(tmp_path: Path) -> None:
 
         req = Request(
             f"http://127.0.0.1:{srv.server_address[1]}/api/session/{sid}/end",
-            data=json.dumps({"source": "user_end"}).encode(), method="POST",
+            data=json.dumps({"source": "user_end"}).encode(),
+            method="POST",
             headers={"Content-Type": "application/json"},
         )
         t1 = time.monotonic()
@@ -102,20 +120,36 @@ def test_delete_interrupts_a_running_turn(tmp_path: Path) -> None:
 
     def factory(m: SessionManifest, first: Any = None) -> Any:
         return session_topology(
-            driver=responder, driver_name="deterministic", driver_context_tokens=4096,
-            seed="", tools={}, per_turn="", max_turns=200, turn_max_steps=4,
-            session_id=m.session_id, workspace_path=m.workspace,
-            record_root=Path(m.record_root), script=None, first_turn_user_message=first,
+            driver=responder,
+            driver_name="deterministic",
+            driver_context_tokens=4096,
+            seed="",
+            tools={},
+            per_turn="",
+            max_turns=200,
+            turn_max_steps=4,
+            session_id=m.session_id,
+            workspace_path=m.workspace,
+            record_root=Path(m.record_root),
+            script=None,
+            first_turn_user_message=first,
         )
 
     reg = SessionRegistry(base=tmp_path, session_topology_factory=factory)
     sid = reg.create(
-        session_id="s_0123456789abcde8", name=None, driver="deterministic",
-        workspace=str(tmp_path / "ws"), workspace_shape="flat", bundle=None, seed="",
+        session_id="s_0123456789abcde8",
+        name=None,
+        driver="deterministic",
+        workspace=str(tmp_path / "ws"),
+        workspace_shape="flat",
+        bundle=None,
+        seed="",
     ).session_id
 
     def turn(text: str, i: int) -> None:
-        reg.turn_sync(sid, UserMessage(text=text, turn_index=i, assembled_prompt=text, slash_source="user"))
+        reg.turn_sync(
+            sid, UserMessage(text=text, turn_index=i, assembled_prompt=text, slash_source="user")
+        )
 
     turn("first", 0)
     worker = threading.Thread(target=lambda: turn("second", 1), daemon=True)
@@ -144,20 +178,36 @@ def test_settings_change_mid_turn_without_waiting(tmp_path: Path) -> None:
 
     def factory(m: SessionManifest, first: Any = None) -> Any:
         return session_topology(
-            driver=responder, driver_name="deterministic", driver_context_tokens=4096,
-            seed="", tools={}, per_turn="", max_turns=200, turn_max_steps=4,
-            session_id=m.session_id, workspace_path=m.workspace,
-            record_root=Path(m.record_root), script=None, first_turn_user_message=first,
+            driver=responder,
+            driver_name="deterministic",
+            driver_context_tokens=4096,
+            seed="",
+            tools={},
+            per_turn="",
+            max_turns=200,
+            turn_max_steps=4,
+            session_id=m.session_id,
+            workspace_path=m.workspace,
+            record_root=Path(m.record_root),
+            script=None,
+            first_turn_user_message=first,
         )
 
     reg = SessionRegistry(base=tmp_path, session_topology_factory=factory)
     sid = reg.create(
-        session_id="s_0123456789abcde9", name=None, driver="deterministic",
-        workspace=str(tmp_path / "ws"), workspace_shape="flat", bundle=None, seed="",
+        session_id="s_0123456789abcde9",
+        name=None,
+        driver="deterministic",
+        workspace=str(tmp_path / "ws"),
+        workspace_shape="flat",
+        bundle=None,
+        seed="",
     ).session_id
 
     def turn(text: str, i: int) -> None:
-        reg.turn_sync(sid, UserMessage(text=text, turn_index=i, assembled_prompt=text, slash_source="user"))
+        reg.turn_sync(
+            sid, UserMessage(text=text, turn_index=i, assembled_prompt=text, slash_source="user")
+        )
 
     turn("first", 0)
     worker = threading.Thread(target=lambda: turn("second", 1), daemon=True)
@@ -173,7 +223,11 @@ def test_settings_change_mid_turn_without_waiting(tmp_path: Path) -> None:
     reg.set_per_turn(sid, "prefix")
     assert time.monotonic() - t1 < 2
     after = reg.get(sid)
-    assert (after.name, after.driver, after.per_turn) == ("renamed-mid-turn", "some-other-driver", "prefix")
+    assert (after.name, after.driver, after.per_turn) == (
+        "renamed-mid-turn",
+        "some-other-driver",
+        "prefix",
+    )
     assert after.status == SessionStatus.RUNNING, "the change did not stop the turn"
     assert reg.by_name("renamed-mid-turn") == sid
     reg.interrupt(sid, tier="hard")

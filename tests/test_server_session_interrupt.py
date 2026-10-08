@@ -34,7 +34,7 @@ from substrate.session_registry import SessionRegistry  # noqa: E402
 
 from substrate import api  # noqa: E402
 from substrate.constants import PRODUCER_CANCELLED, PRODUCER_STARTED  # noqa: E402
-from _serving import call, serving# noqa: E402
+from _serving import call, serving  # noqa: E402
 
 
 class SlowReply(Struct, frozen=True):
@@ -171,9 +171,7 @@ def test_interrupt_parks_the_session_with_producer_cancelled_and_provenance(
     turn_result: dict[str, object] = {}
 
     def fire_turn() -> None:
-        status, body = _post_json(
-            base + f"/api/session/{sid}/turn", {"text": "hello"}, timeout=15
-        )
+        status, body = _post_json(base + f"/api/session/{sid}/turn", {"text": "hello"}, timeout=15)
         turn_result["status"] = status
         turn_result["body"] = body
 
@@ -231,9 +229,7 @@ def test_interrupt_on_unknown_session_returns_404(base: str) -> None:
 
 
 @pytest.mark.timeout(20)
-def test_interrupt_with_max_wait_ms_zero_returns_landed_false(
-    base: str, tmp_path: Path
-) -> None:
+def test_interrupt_with_max_wait_ms_zero_returns_landed_false(base: str, tmp_path: Path) -> None:
     """`?max_wait_ms=0` skips the poll; the endpoint returns immediately after
     dispatch. `landed=false` truthfully reports the envelope has not been
     observed yet — the caller watches `/events` for the landing.
@@ -249,9 +245,7 @@ def test_interrupt_with_max_wait_ms_zero_returns_landed_false(
     record_root = tmp_path / sid / "record"
     _wait_for_model_started(record_root, timeout=5.0)
 
-    int_status, int_body = _post_json(
-        base + f"/api/session/{sid}/interrupt?max_wait_ms=0", None
-    )
+    int_status, int_body = _post_json(base + f"/api/session/{sid}/interrupt?max_wait_ms=0", None)
     assert int_status == 200
     assert int_body["interrupted"] is True
     assert int_body["landed"] is False  # skipped the poll, envelope not yet observed
@@ -263,8 +257,6 @@ def test_interrupt_with_max_wait_ms_zero_returns_landed_false(
 @pytest.mark.timeout(10)
 def test_interrupt_malformed_max_wait_ms_returns_400(base: str, tmp_path: Path) -> None:
     sid = _create(base, tmp_path / "wsp")
-    status, body = _post_json(
-        base + f"/api/session/{sid}/interrupt?max_wait_ms=abc", None
-    )
+    status, body = _post_json(base + f"/api/session/{sid}/interrupt?max_wait_ms=abc", None)
     assert status == 400
     assert "max_wait_ms" in body["error"]

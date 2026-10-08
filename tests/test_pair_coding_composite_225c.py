@@ -19,7 +19,7 @@ import server  # noqa: E402
 from substrate.session_registry import SessionStatus, SessionRegistry  # noqa: E402
 
 from substrate.topologies.applications.registry import load_manifests  # noqa: E402
-from _serving import call, serving# noqa: E402
+from _serving import call, serving  # noqa: E402
 
 
 @pytest.fixture

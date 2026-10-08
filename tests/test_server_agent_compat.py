@@ -18,7 +18,7 @@ import server  # noqa: E402
 from substrate.session_registry import SessionRegistry  # noqa: E402
 
 from substrate import api  # noqa: E402
-from _serving import call, serving# noqa: E402
+from _serving import call, serving  # noqa: E402
 
 
 @pytest.fixture
@@ -57,10 +57,7 @@ def test_second_call_same_session_reuses_it(base: tuple[str, Path]) -> None:
     assert first["session_id"] == second["session_id"]
     # Two UserMessages on the one record.
     record_root = Path(server._SESSION_REGISTRY.get(first["session_id"]).record_root)
-    ums = [
-        e for e in api.read_record(record_root)
-        if "UserMessage" in str(e.get("kind", ""))
-    ]
+    ums = [e for e in api.read_record(record_root) if "UserMessage" in str(e.get("kind", ""))]
     assert len(ums) == 2, f"expected two UserMessages, got {len(ums)}"
 
 
@@ -100,8 +97,5 @@ def test_concurrent_same_session_serializes(base: tuple[str, Path]) -> None:
     assert len(results) == 2
     assert results[0]["session_id"] == results[1]["session_id"]
     record_root = Path(server._SESSION_REGISTRY.get(results[0]["session_id"]).record_root)
-    ums = [
-        e for e in api.read_record(record_root)
-        if "UserMessage" in str(e.get("kind", ""))
-    ]
+    ums = [e for e in api.read_record(record_root) if "UserMessage" in str(e.get("kind", ""))]
     assert len(ums) == 2

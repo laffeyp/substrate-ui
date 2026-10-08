@@ -17,8 +17,13 @@ from substrate import session_registry as sr  # noqa: E402
 def test_turn_index_is_derived_lazily_once(tmp_path: Path, monkeypatch) -> None:
     first = sr.SessionRegistry(base=tmp_path)
     first.create(
-        session_id="s_0123456789abcdef", name=None, driver="deterministic",
-        workspace=str(tmp_path / "ws"), workspace_shape="flat", bundle=None, seed="0",
+        session_id="s_0123456789abcdef",
+        name=None,
+        driver="deterministic",
+        workspace=str(tmp_path / "ws"),
+        workspace_shape="flat",
+        bundle=None,
+        seed="0",
     )
 
     calls: list[Path] = []

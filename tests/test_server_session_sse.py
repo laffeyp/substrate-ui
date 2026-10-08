@@ -34,7 +34,7 @@ from substrate.session_registry import SessionRegistry  # noqa: E402
 # accept ANY iterable of envelope dicts (see substrate.testing._load), so the
 # SSE reader's output plugs in directly without a synthetic record file.
 from substrate.testing import assert_event, assert_no_event  # noqa: E402
-from _serving import call, serving# noqa: E402
+from _serving import call, serving  # noqa: E402
 
 
 @pytest.fixture
@@ -60,9 +60,7 @@ def _create(base: str, workspace: Path, name: str | None = None) -> str:
     return body["session_id"]
 
 
-def _read_sse_frames(
-    url: str, max_frames: int, idle_timeout: float = 2.0
-) -> list[dict]:
+def _read_sse_frames(url: str, max_frames: int, idle_timeout: float = 2.0) -> list[dict]:
     """Read up to `max_frames` `data:` frames from an SSE stream and close.
     The SSE server holds the socket open past finalisation, so this reader
     stops when either (a) it collects `max_frames` frames, or (b) the server
@@ -108,9 +106,7 @@ def _read_sse_frames(
     return frames
 
 
-def test_sse_streams_backlog_when_session_already_has_events(
-    base: str, tmp_path: Path
-) -> None:
+def test_sse_streams_backlog_when_session_already_has_events(base: str, tmp_path: Path) -> None:
     """Prime the record with one turn; then open /events with since_seq=-1 (from
     start). The stream backlogs every envelope on the record before going idle.
     Verified through the F-API-4 primitive (TECHNIQUE #38): `assert_event` and
