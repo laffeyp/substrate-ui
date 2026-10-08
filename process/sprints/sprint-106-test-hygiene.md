@@ -58,8 +58,8 @@ Tiers: kernel 1,224 passed, 3 skipped (3.14); UI 221; client specs 23/23; lint, 
 
 ## open (Architect)
 
-- The repo secret `CROSS_REPO_TOKEN` on laffeyp/substrate-ui has expired: GitHub answers `Bad credentials`. Both UI CI jobs that check out the kernel need a fresh PAT with read access to laffeyp/substrate.
-- CI runs only on pushed commits, and nothing since 2026-09-30 is pushed.
+- ~~`CROSS_REPO_TOKEN` expired~~ Closed 2026-10-07: laffeyp/substrate is public, so the checkout needs no token; the workflow no longer reads the secret. GitHub Actions is free for public repositories on standard runners (docs.github.com, "GitHub Actions billing").
+- ~~Nothing pushed since 2026-09-30~~ Pushed 2026-10-07 on the Architect's word.
 
 ## found at release
 
