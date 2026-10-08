@@ -872,6 +872,18 @@ Twelve PNGs at `captures/pixel-baseline-2026-09-23/`: six states (`empty`, `one_
 
 *Agent maintains. Last 10 increment closes; older roll into ## Built as compressed paragraphs.*
 
+### Sprint 110 (2026-10-08, closed) — the server's security boundary
+- The audit's two probes are now tests.
+  - The DNS-rebinding shape (Host and Origin `evil.test`) gets 403 and creates no session: every method checks the Host against the bound loopback port.
+  - `GET /api/worktree_diff` writes a scratch copy of the index, never the worktree's own, and serves only session worktrees.
+- Also:
+  - a request can no longer name its own CLI argv;
+  - bundle and role names are one path component (`substrate.naming`);
+  - `/tmp` left the records allowlist;
+  - bodies over 4 MiB get 413;
+  - a closed login PTY leaves the table.
+- Gates: UI 236, kernel 1,272 / 5 skipped, Axis C 0 defects, lifecycle passed. Card: `process/sprints/sprint-110-server-security-boundary.md`.
+
 ### Sprint 108 (2026-10-08, closed) — gates that can fail
 - The shakeout exit code now counts defects. Two planted breaks each turned it red: a no-op `/clear`, and a dead toggle-reveal menu item. Under the old code both exited 0.
 - transcript_follow's view-switch checks had passed without switching, because the pane was unbound and ctrl+` does nothing then. The gate now binds the pane as a user does, and both checks switch for real and pass.

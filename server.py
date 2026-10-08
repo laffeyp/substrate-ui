@@ -1089,6 +1089,15 @@ def _cli_command(name: str, version: str | None = None) -> list[str] | None:
 # process/planning/RESEARCH-2026-09-25-cli-adapter-login-flow-in-substrate-v2.md
 # for the per-CLI verified behavior.
 
+# Request bodies are JSON control messages; the largest legitimate one is a pasted turn. 4 MiB is
+# above any of those and far below what would exhaust memory.
+_MAX_BODY_BYTES = 4 * 1024 * 1024
+
+
+class BodyTooLarge(ValueError):
+    """A request body over _MAX_BODY_BYTES; answered 413."""
+
+
 _CLI_PTY_LOCK = threading.Lock()
 _CLI_PTY_SESSIONS: dict[str, dict[str, Any]] = {}
 _CLI_PTY_MAX_BUFFER = 512 * 1024  # 512KB per session — plenty for a login walk
@@ -1219,6 +1228,7 @@ def _cli_pty_start(cli_name: str) -> str:
             os.close(master_fd)
         except OSError:
             pass
+        _cli_pty_forget_later(sid)
 
     threading.Thread(target=_drain, daemon=True, name=f"cli-pty-{sid}").start()
     return sid
@@ -1242,10 +1252,26 @@ def _cli_pty_write(sid: str, data: bytes) -> bool:
         return False
 
 
+# A finished login pty stays readable this long, so a stream that connects late still gets the
+# backlog and the exit code; then it leaves the table (lens audit F317: entries were never removed).
+_CLI_PTY_LINGER_S = 60.0
+
+
+def _cli_pty_forget_later(sid: str) -> None:
+    def _forget() -> None:
+        with _CLI_PTY_LOCK:
+            _CLI_PTY_SESSIONS.pop(sid, None)
+
+    t = threading.Timer(_CLI_PTY_LINGER_S, _forget)
+    t.daemon = True
+    t.start()
+
+
 def _cli_pty_close(sid: str) -> bool:
-    """Kill the pty session. Idempotent."""
+    """Kill the pty session and remove it from the table. Idempotent. A stream already reading
+    holds its own reference and still sees the exit."""
     with _CLI_PTY_LOCK:
-        session = _CLI_PTY_SESSIONS.get(sid)
+        session = _CLI_PTY_SESSIONS.pop(sid, None)
     if session is None:
         return False
     proc = session["proc"]
@@ -1689,17 +1715,37 @@ def _session_worktree(repo: Path, session_id: str) -> tuple[Path, str]:
 
 def _worktree_diff(wt: Path) -> dict[str, object]:
     """What the agent CHANGED in a session worktree — the 'show me what it did' half of B. `git diff`
-    including new files (intent-to-add), plus the changed-file list. Raises if not a git worktree."""
+    including new files, plus the changed-file list. Read-only: new files are marked
+    intent-to-add in a scratch copy of the index (GIT_INDEX_FILE), so the worktree's own index is
+    never written (lens audit F301: a GET changed an arbitrary repository's index). Only the
+    session worktrees this server creates (`_session_worktree`) are served. Raises otherwise."""
+    import shutil
+    import tempfile
+
     wt = Path(wt).expanduser().resolve()
+    root = (_sessions_base() / "wt").resolve()
+    if not wt.is_relative_to(root) or wt == root:
+        raise ValueError(f"{wt} is not a session worktree")
     if not (wt / ".git").exists():
         raise ValueError(f"{wt} is not a git worktree")
-    subprocess.run(  # intent-to-add so write_file'd NEW files show in the diff too
-        ["git", "-C", str(wt), "add", "-A", "--intent-to-add"], check=False, capture_output=True
-    )
-    diff = subprocess.run(["git", "-C", str(wt), "diff"], capture_output=True, text=True).stdout
-    names = subprocess.run(
-        ["git", "-C", str(wt), "diff", "--name-status"], capture_output=True, text=True
-    ).stdout
+    index = subprocess.run(
+        ["git", "-C", str(wt), "rev-parse", "--git-path", "index"], capture_output=True, text=True
+    ).stdout.strip()
+    index_path = (wt / index) if index and not Path(index).is_absolute() else Path(index)
+    with tempfile.TemporaryDirectory(prefix="substrate-wtdiff-") as tmp:
+        scratch = Path(tmp) / "index"
+        if index_path.is_file():
+            shutil.copyfile(index_path, scratch)
+        env = {**os.environ, "GIT_INDEX_FILE": str(scratch)}
+
+        def git(*args: str) -> str:
+            return subprocess.run(
+                ["git", "-C", str(wt), *args], capture_output=True, text=True, env=env, timeout=60
+            ).stdout
+
+        git("add", "-A", "--intent-to-add")
+        diff = git("diff")
+        names = git("diff", "--name-status")
     return {"diff": diff, "files": names.strip().splitlines()}
 
 
@@ -1992,24 +2038,52 @@ class Handler(BaseHTTPRequestHandler):
     def _error(self, code: int, message: str) -> None:
         self._json({"error": message}, code)
 
+    def _host_ok(self) -> bool:
+        """DNS-rebinding defence (Jackson et al., *Protecting Browsers from DNS Rebinding Attacks*:
+        "reject incoming HTTP requests with unexpected Host headers"). Over TCP the Host must name
+        the loopback address this server is bound to, on its port. A rebound page reaches the
+        same socket under its own hostname, so its Host is foreign. The Unix socket has no Host
+        to forge; file permissions guard it."""
+        if isinstance(self.server, _UnixHTTPServer):
+            return True
+        port = self.server.server_address[1]
+        allowed = {f"127.0.0.1:{port}", f"localhost:{port}", f"[::1]:{port}"}
+        return self.headers.get("Host", "") in allowed
+
     def _origin_ok(self) -> bool:
-        # CSRF defence on the state-changing POSTs: a browser request carries an Origin; require it to
-        # match the Host it arrived on (same-origin). A cross-site form or a DNS-rebound page carries a
-        # foreign Origin -> rejected. Non-browser clients (curl, the test runner) send no Origin.
+        # CSRF defence on the state-changing methods: a browser request carries an Origin; it must
+        # name this server (same-origin, allowed host). A cross-site form carries a foreign Origin
+        # -> rejected. Non-browser clients (curl, the CLI, the test runner) send no Origin.
         origin = self.headers.get("Origin")
         if not origin:
             return True
-        return urlparse(origin).netloc == self.headers.get("Host", "")
+        return self._host_ok() and urlparse(origin).netloc == self.headers.get("Host", "")
+
+    def _refuse_foreign_host(self) -> bool:
+        """True (and the refusal sent) when the request must not be served: a Host that is not this
+        server's (403), a foreign Origin on any method (403; a GET that carries an Origin is a
+        cross-origin read, e.g. a page subscribing to the login-pty stream), or a body over
+        _MAX_BODY_BYTES (413, before any of it is read)."""
+        if not self._host_ok():
+            self._error(403, "unexpected Host header")
+            return True
+        if not self._origin_ok():
+            self._error(403, "cross-origin request refused")
+            return True
+        if int(self.headers.get("Content-Length", "0") or "0") > _MAX_BODY_BYTES:
+            self.close_connection = True
+            self._error(413, f"request body over {_MAX_BODY_BYTES} bytes")
+            return True
+        return False
 
     def _at_run_capacity(self) -> bool:
         # cap concurrent spawned runs so an unauthenticated POST flood can't exhaust threads/memory.
         return sum(1 for t in _LAUNCHES.values() if t.is_alive()) >= MAX_LIVE_RUNS
 
     def do_POST(self) -> None:  # noqa: N802 — the thin control layer (launch + resume only, per ruling C1)
-        path = unquote(urlparse(self.path).path)
-        if not self._origin_ok():
-            self._error(403, "cross-origin request rejected (Origin does not match Host)")
+        if self._refuse_foreign_host():
             return
+        path = unquote(urlparse(self.path).path)
         try:
             if path == "/api/session":
                 self._session_create()
@@ -2209,9 +2283,13 @@ class Handler(BaseHTTPRequestHandler):
         )
 
     def _read_json_body(self) -> dict[str, Any]:
+        """The one JSON body reader. A body over _MAX_BODY_BYTES raises BodyTooLarge (sent as 413)
+        before any of it is read."""
         length = int(self.headers.get("Content-Length", "0") or "0")
         if length <= 0:
             return {}
+        if length > _MAX_BODY_BYTES:
+            raise BodyTooLarge(length)
         raw = self.rfile.read(length)
         try:
             data = msgspec.json.decode(raw)
@@ -2926,8 +3004,6 @@ class Handler(BaseHTTPRequestHandler):
         allowed_roots = [
             _runs_dir().resolve(),
             (api.substrate_home() / "sessions").resolve(),
-            _Path("/tmp").resolve(),
-            _Path("/var/folders").resolve(),
         ]
         ok = False
         for root in allowed_roots:
@@ -3519,23 +3595,12 @@ class Handler(BaseHTTPRequestHandler):
                 max_steps=24,
             )
             label = "agent_" + re.sub(r"[^A-Za-z0-9]+", "-", model_name.split(":")[0])
-        elif model in KNOWN_CLI_ADAPTERS or model == "cli":
-            # a command-line model/agent drives the loop (CliResponder). Preset names
-            # (claude, gemini, codex, aider, ...) resolve through KNOWN_CLI_ADAPTERS;
-            # `cli` takes an arbitrary `?command=...`. Substrate provides the tools,
-            # so even a plain prompt->text CLI becomes a tool-using agent here.
+        elif model in KNOWN_CLI_ADAPTERS:
+            # a command-line model/agent drives the loop (CliResponder). Only the catalogued
+            # presets in KNOWN_CLI_ADAPTERS run; a request never names its own argv (lens audit
+            # F299: `model=cli&command=` ran any program). Substrate provides the tools.
             task = q.get("task", [""])[0] or "Use the available tools to help."
-            cmd = (
-                _cli_command(model)
-                if model in KNOWN_CLI_ADAPTERS
-                else q.get("command", [""])[0].split()
-            )
-            if not cmd:
-                self._error(
-                    400,
-                    "cli agent needs a command (model=<preset in KNOWN_CLI_ADAPTERS>, or ?command=...)",
-                )
-                return
+            cmd = _cli_command(model)
             responder = CliResponder(cmd, name=model, timeout=timeout)
             topo = tool_loop_topology(
                 model=responder,
@@ -3625,15 +3690,12 @@ class Handler(BaseHTTPRequestHandler):
             time.sleep(0.05)
         self._json({"name": resume_name, "status": api.run_graph(root).status, "resumed": name})
 
-    def _body(self) -> dict[str, object]:
-        length = int(self.headers.get("Content-Length", 0))
-        return msgspec.json.decode(self.rfile.read(length)) if length else {}
 
     def _validate(self) -> None:
         """The Studio's live validation: does the authored spec build? (static b.build() — the
         'allowable ways' = exactly what the runtime would accept; rejects bad wiring before a run)."""
         try:
-            topo = build_from_spec(self._body())
+            topo = build_from_spec(self._read_json_body())
             builder = api.TopologyBuilder()
             topo(builder)
             builder.build()
@@ -3650,7 +3712,7 @@ class Handler(BaseHTTPRequestHandler):
         opens with substrate.RunStarted (the authored topology becomes a genuine recorded run; the
         Studio's 'one act that causes things'). Backgrounded + tracked like launch (§7.7)."""
         try:
-            spec = self._body()
+            spec = self._read_json_body()
             topo = build_from_spec(spec, _responder_for(spec))
             builder = api.TopologyBuilder()
             topo(builder)
@@ -3803,12 +3865,12 @@ class Handler(BaseHTTPRequestHandler):
             bundle_value = str(bundle_raw) if bundle_raw else None
             try:
                 updated = _SESSION_REGISTRY.set_bundle(session_id, bundle_value)
-            except Exception as exc:  # noqa: BLE001 — daemon boundary: an unknown bundle name is a 400, not a 500.
-                cls_name = type(exc).__name__
-                if cls_name == "BundleNotFoundError":
-                    self._error(400, f"unknown bundle {bundle_value!r}: {exc}")
-                    return
-                raise
+            except api.BundleNotFoundError as exc:
+                self._error(400, f"unknown bundle {bundle_value!r}: {exc}")
+                return
+            except ValueError as exc:  # a name that is not one path component (substrate.naming)
+                self._error(400, str(exc))
+                return
         if "driver_params" in body:
             # Sprint 032c (piece G mechanical translation): per-session
             # driver params (think/max_tokens/timeout/num_ctx). null clears
@@ -3844,10 +3906,9 @@ class Handler(BaseHTTPRequestHandler):
         )
 
     def do_PATCH(self) -> None:  # noqa: N802 — sprint 215c: PATCH /api/session/<id>
-        path = unquote(urlparse(self.path).path)
-        if not self._origin_ok():
-            self._error(403, "cross-origin request rejected (Origin does not match Host)")
+        if self._refuse_foreign_host():
             return
+        path = unquote(urlparse(self.path).path)
         try:
             if path.startswith("/api/session/"):
                 session_id = path[len("/api/session/") :]
@@ -3861,10 +3922,9 @@ class Handler(BaseHTTPRequestHandler):
             self._error(500, f"{type(exc).__name__}: {exc}")
 
     def do_DELETE(self) -> None:  # noqa: N802 — sprint 214b: DELETE /api/session/<id>
-        path = unquote(urlparse(self.path).path)
-        if not self._origin_ok():
-            self._error(403, "cross-origin request rejected (Origin does not match Host)")
+        if self._refuse_foreign_host():
             return
+        path = unquote(urlparse(self.path).path)
         try:
             if path.startswith("/api/session/"):
                 session_id = path[len("/api/session/") :]
@@ -3883,6 +3943,8 @@ class Handler(BaseHTTPRequestHandler):
             self._error(500, f"{type(exc).__name__}: {exc}")
 
     def do_GET(self) -> None:  # noqa: N802
+        if self._refuse_foreign_host():
+            return
         path = unquote(urlparse(self.path).path)
         try:
             # Sprint 214b: session list + by-name lookup routed BEFORE the generic
