@@ -112,6 +112,13 @@ fi
 say "7/7 install"
 osascript -e 'tell application "Substrate" to quit' >/dev/null 2>&1 || true
 for _ in $(seq 1 120); do pgrep -f "/Applications/Substrate.app/Contents/MacOS/Substrate" >/dev/null || break; sleep 0.5; done
+# UI sprint 106: if the app is still running (a modal dialog refuses AppleScript's quit with
+# "User canceled"), stop. Replacing the bundle under a running app left the old build running
+# with the new one on disk.
+if pgrep -f "/Applications/Substrate.app/Contents/MacOS/Substrate" >/dev/null; then
+  echo "[release] the running Substrate did not quit within 60 s (a dialog may be open); quit it and rerun --install. Built and gated: $APP" >&2
+  exit 1
+fi
 if [ -d /Applications/Substrate.app ]; then
   OLD="$(/usr/libexec/PlistBuddy -c 'Print CFBundleVersion' /Applications/Substrate.app/Contents/Info.plist 2>/dev/null || echo unknown)"
   mv /Applications/Substrate.app "$HOME/.Trash/Substrate-$OLD-replaced-$STAMP.app"
