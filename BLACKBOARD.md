@@ -158,6 +158,14 @@
 
 *Sprint tail had grown to 33 blocks reaching Sprint 001, and a second board at `process/BLACKBOARD.md` had taken writes since 2026-06-18 (Sep 23–25 closes for Sprints 070–076, 083, 084, 085a–c existed only there). These blocks moved verbatim, not compressed, so no fact is lost. The `process/` copy is at `_deprecated/process-BLACKBOARD-2026-10-01.md`.*
 
+#### Sprint 097 (2026-10-01, closed) — both suites green (roadmap class G)
+- **substrate-ui:** 213 passed / 0 failed (was 188 / 18).
+- **Kernel fast tier:** 1,190 passed / 0 failed in 4.5 min. ruff, format and mypy clean. Real-model tier: 31 passed, 4 failed, 4 errors in 11.9 min (errors were the home leak, now fixed; failures open).
+- **Fixes, by cause:** demo fixtures generated per run; four tests moved to the 2026-09-25 ended-session ruling; F-API-6 boundary closed via three `substrate.api` exports; seven tests moved to superseded contracts; kernel tests isolated from the real `~/.substrate`; `server.py` `Callable` import (`get_type_hints` raised `NameError`); UI CI lint clean.
+- **For the whole-project pass:** coding gate finds `mypy` by PATH; two near-identical `session_registry.py` modules.
+- **For the Architect:** 147 session dirs created in the real `~/.substrate/sessions` today, mixed provenance. One orphan backend from 00:14 had served the real state root all day; stopped.
+- Card `process/sprints/sprint-097-green-build.md`.
+
 #### Sprint 096 (2026-10-01, closed) — envelope kinds generated from the kernel (roadmap class E)
 - **Generator:** `scripts/gen_kinds.py` builds the session topology's registration and writes `web/vm/envelope_kinds.gen.ts` (28 kinds). The kernel now declares `tool_loop.INJECTED_EVENT_KINDS` because `ToolProgress` is injected unregistered.
 - **Classification:** `KIND_DISPOSITION` classifies every kind, and an unclassified kind fails `tsc` (proved with a fake kind). The ESLint ban list is read from the generated file, and it found 13 raw literals the old hand list missed.
@@ -801,6 +809,7 @@ Twelve PNGs at `captures/pixel-baseline-2026-09-23/`: six states (`empty`, `one_
 *Anyone may append.*
 
 - **2026-10-01 — Kernel 1.1.2 to PyPI?** Answered for the app by Sprint 100: the app bundles the kernel from the commit, so nothing in substrate-ui waits on PyPI. Publishing remains a question about the library's other users only, and stays the Architect's (outward-facing).
+- **2026-10-07 — Renew `CROSS_REPO_TOKEN`.** The laffeyp/substrate-ui repo secret used to check out the private kernel in CI returns `Bad credentials`. A new PAT with read access to laffeyp/substrate is an account credential, so it is the Architect's. Sprint 106.
 - **2026-10-01 — The 147 session dirs in the real `~/.substrate/sessions`.** Created on 2026-10-01, before `substrate/tests/conftest.py` isolated the state root; provenance is mixed between leaking tests and the Architect's own use. Untouched. User-only: they are the Architect's data.
 
 ---
@@ -847,6 +856,19 @@ Twelve PNGs at `captures/pixel-baseline-2026-09-23/`: six states (`empty`, `one_
 
 *Agent maintains. Last 10 increment closes; older roll into ## Built as compressed paragraphs.*
 
+### Sprint 106 (2026-10-07, closed) — the checks no gate ran
+- Audit: every check outside the release pipeline read, traced and run; none failed on a product bug. Fixed:
+  - broken tests: the Docker collection crash, kernel tests needing the UI repo, `datasets`;
+  - one real defect: the daemon died on a long `SUBSTRATE_HOME`.
+
+  Updated or retired:
+  - Axis C updated (isolated state, bundle mode); Axis B extended to the sprint 103 tools;
+  - UI CI rewritten to run what exists, with ruff pinned;
+  - 11 one-off scripts retired to `harness/_deprecated/`.
+
+  `release.sh` now runs the VM smoke, Axes A–C and `resume_ended_session`.
+- Open (Architect): `CROSS_REPO_TOKEN` expired, so UI CI cannot check out the kernel; nothing since 2026-09-30 is pushed. Card `process/sprints/sprint-106-test-hygiene.md`.
+
 ### Sprint 105 (2026-10-02, closed) — background tasks in the app
 - The activity strip lists each running background task (`task bg_… · cmd · runtime · stop`) in both views; stop kills it and the model hears about it. Daemon: `GET /api/session/<id>/tasks`, `POST …/tasks/<task_id>/stop`. Gate `tasks_gate.ts` drives a real kimi turn in the Electron app and runs in `release.sh`.
 - Found at release: `caret_pin` (a clicked card header moving) had failed 1 run in 3-4 since before sprint 102. A closing card shrank the content and the browser clamped scrollTop. The scroll hook now pins a clicked header and holds the transcript's height until the user scrolls: 9 of 9 clean.
@@ -889,11 +911,3 @@ Twelve PNGs at `captures/pixel-baseline-2026-09-23/`: six states (`empty`, `one_
 - `scripts/release.sh`: clean trees → tests → runtime → sign → verify → smoke + Axis-A shakeout against the built bundle → optional install. The commit is recorded in `Info.plist` before signing. The drift guard now refuses uncommitted kernel edits. `SHAKEOUT_APP` makes `shakeout:packaged` real (091's missing gate).
 - Ran: release refuses at stage 1 on today's uncommitted tree. Packaged shakeout against the installed Sep 29 build: 4 flows 5/5; `cli_discovery` 1–3 defects per run; `cli_version_picker` hit the 15-min watchdog (open).
 - Card `process/sprints/sprint-098-release-pipeline.md`.
-
-### Sprint 097 (2026-10-01, closed) — both suites green (roadmap class G)
-- **substrate-ui:** 213 passed / 0 failed (was 188 / 18).
-- **Kernel fast tier:** 1,190 passed / 0 failed in 4.5 min. ruff, format and mypy clean. Real-model tier: 31 passed, 4 failed, 4 errors in 11.9 min (errors were the home leak, now fixed; failures open).
-- **Fixes, by cause:** demo fixtures generated per run; four tests moved to the 2026-09-25 ended-session ruling; F-API-6 boundary closed via three `substrate.api` exports; seven tests moved to superseded contracts; kernel tests isolated from the real `~/.substrate`; `server.py` `Callable` import (`get_type_hints` raised `NameError`); UI CI lint clean.
-- **For the whole-project pass:** coding gate finds `mypy` by PATH; two near-identical `session_registry.py` modules.
-- **For the Architect:** 147 session dirs created in the real `~/.substrate/sessions` today, mixed provenance. One orphan backend from 00:14 had served the real state root all day; stopped.
-- Card `process/sprints/sprint-097-green-build.md`.
