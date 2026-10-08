@@ -24,6 +24,7 @@ import type {
 import type { SubstrateClient, Unsubscribe } from "./client";
 import { emit as sddEmit } from "./instrumentation/sdd";
 import { EnvelopeKind } from "./kinds";
+import { SessionStatus, TaskStatus } from "./statuses.gen";
 import type { EnvelopeKindValue } from "./kinds";
 
 // Sprint 096 — every generated envelope kind must be classified here: `rendered` (handleEnvelope
@@ -477,7 +478,7 @@ export class SessionController {
     const tasks = result.data?.tasks ?? [];
     this.patch({ backgroundTasks: tasks });
     if (this.tasksTimer) { clearTimeout(this.tasksTimer); this.tasksTimer = null; }
-    if (tasks.some((t) => t.status === "running")) {
+    if (tasks.some((t) => t.status === TaskStatus.RUNNING)) {
       this.tasksTimer = setTimeout(() => { this.tasksTimer = null; void this.refreshTasks(); }, 3000);
     }
   }
@@ -610,7 +611,7 @@ export class SessionController {
       // UI sprint 101: the server's status at attach. A session that is not running has no
       // turn in flight, so a last turn on the record without a Park ended some other way.
       turnFailure:
-        manifest.status && manifest.status !== "running" && manifest.status !== "live"
+        manifest.status && manifest.status !== SessionStatus.RUNNING
           ? { detail: `the turn ended without parking (session ${manifest.status})`, atT: Date.now() / 1000 }
           : null,
       endedReason: null,
@@ -1131,7 +1132,7 @@ export class SessionController {
         // UI sprint 104: a bash background task of this session ended; the model was told too.
         void this.refreshTasks();
         const id = String(payload.task_id ?? "");
-        const how = payload.status === "exited"
+        const how = payload.status === TaskStatus.EXITED
           ? `exited ${payload.exit ?? "?"}`
           : `stopped (${String(payload.stopped_because ?? "")})`;
         const cmd = String(payload.command ?? "").slice(0, 80);

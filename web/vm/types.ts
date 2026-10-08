@@ -3,6 +3,7 @@
 // Every View (the classic shell today, the prototype's dc-runtime HTML next)
 // reads its render input from `Snapshot` and calls the SessionController's
 // actions. No DOM, no framework — just the vocabulary the two Views share.
+import type { TaskStatusValue } from "./statuses.gen";
 
 /** One envelope on the SSE record stream, mirrored from substrate-side. */
 export interface RecordEnvelope {
@@ -39,12 +40,11 @@ export interface TranscriptRow {
   toolStep?: number;
 }
 
-/** One row a View renders in the session-rail sidebar. */
 /** One bash background task, as the daemon describes it (UI sprint 105). */
 export interface BackgroundTaskRow {
   task_id: string;
   command: string;
-  status: "running" | "exited" | "stopped";
+  status: TaskStatusValue;  // generated from the kernel (UI sprint 107)
   exit: number | null;
   runtime_s: number;
   stopped_because: string | null;
