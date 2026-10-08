@@ -198,13 +198,27 @@ def test_unknown_record_is_404(base: str) -> None:
     assert call("GET", base + "/api/records/does_not_exist/run_graph")[0] == 404
 
 
+def _finished(base: str, name: str) -> dict:
+    """A launch is backgrounded (review #35) and returns once RunStarted is on the record; poll
+    its run_graph until the run reaches a terminal. UI sprint 107: three tests read the status
+    straight after the launch call and passed only when the run won the race (CI lost it)."""
+    import time
+
+    deadline = time.monotonic() + 30
+    while True:
+        g = get(base, f"/api/records/{name}/run_graph")
+        if g["status"] != "incomplete" or time.monotonic() > deadline:
+            return g
+        time.sleep(0.05)
+
+
 def test_launch_runs_a_topology_and_records_it(base: str) -> None:
     # the thin control layer (ruling C1: launch + resume only). POST runs a bundled topology to a
     # fresh record; the launch IS the recorded RunStarted (§7.7). It must be a REAL run, readable.
     res = post(base, "/api/launch?topology=code_review")
-    assert res["status"] == "finalised" and res["launched"] == "code_review"
+    assert res["launched"] == "code_review"
     name = res["name"]
-    rg = get(base, f"/api/records/{name}/run_graph")
+    rg = _finished(base, name)
     assert rg["status"] == "finalised" and len(rg["instances"]) == 6  # a genuine code_review run
     assert get(base, f"/api/records/{name}/events")[0]["kind"] == "substrate.RunStarted"
     assert get(base, "/api/topologies")  # the launchable list is served
@@ -217,10 +231,8 @@ def test_launch_records_are_durable_never_clobbered(base: str) -> None:
     a = post(base, "/api/launch?topology=debate")["name"]
     b = post(base, "/api/launch?topology=debate")["name"]
     assert a != b  # unique-id naming never collides, so neither is clobbered
-    assert (
-        get(base, f"/api/records/{a}/run_graph")["status"] == "finalised"
-    )  # the FIRST still exists
-    assert get(base, f"/api/records/{b}/run_graph")["status"] == "finalised"
+    assert _finished(base, a)["status"] == "finalised"  # the FIRST still exists
+    assert _finished(base, b)["status"] == "finalised"
 
 
 def test_launch_is_backgrounded_and_the_record_grows(base: str) -> None:
@@ -659,6 +671,5 @@ def test_clear_runs_prunes_session_runs_but_keeps_demos_and_fixtures(base: str) 
     assert (
         "demo_failed" in names_after and "game_of_life" in names_after
     )  # fixture + bundled, explicitly
-    assert (
-        post(base, "/api/launch?topology=game_of_life")["status"] == "finalised"
-    )  # launch still works
+    relaunched = post(base, "/api/launch?topology=game_of_life")["name"]
+    assert _finished(base, relaunched)["status"] == "finalised"  # launch still works

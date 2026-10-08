@@ -33,8 +33,18 @@ app.setName(process.env.SUBSTRATE_HOME ? "Substrate Dev" : "Substrate");
 // into ~/Library/Application Support/Substrate Dev (Software Engineering at Google, ch. 14:
 // hermetic tests). An explicit --user-data-dir still wins for the profile.
 if (process.env.SUBSTRATE_HOME) {
-  const root = path.join(process.env.SUBSTRATE_HOME, "electron");
-  fs.mkdirSync(path.join(root, "profile"), { recursive: true });
+  let root = path.join(process.env.SUBSTRATE_HOME, "electron");
+  try {
+    fs.mkdirSync(path.join(root, "profile"), { recursive: true });
+  } catch (err) {
+    // An unusable SUBSTRATE_HOME (lifecycle gate F7 points it at a file). Throwing here killed the
+    // app before the backend could fail and show its dialog; keep the run off the real ~/Library
+    // with a temp root it removes at quit, and let the backend report the bad state.
+    process.stderr.write("[electron] SUBSTRATE_HOME unusable for app state: " + err.message + "\n");
+    root = fs.mkdtempSync(path.join(require("node:os").tmpdir(), "substrate-electron-"));
+    fs.mkdirSync(path.join(root, "profile"));
+    app.on("will-quit", () => { try { fs.rmSync(root, { recursive: true, force: true }); } catch { /* best-effort */ } });
+  }
   app.setAppLogsPath(path.join(root, "logs"));
   if (!app.commandLine.hasSwitch("user-data-dir")) {
     app.setPath("userData", path.join(root, "profile"));
