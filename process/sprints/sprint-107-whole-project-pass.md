@@ -77,3 +77,7 @@ The Python suites already wrote nothing to `~/.substrate` (Sprint 093's conftest
 ## commits
 
 Kernel `3086f30c`, `b9db5ae1`, `d619efa6`, `a7977974`, `b04f8b2a`. substrate-ui `96edea8`, `6cc4477` (format only), `b1cf067`, `60feb7c`, `7021381`, `94eedfd`.
+
+## correction (2026-10-08, same day)
+
+This card overstates its scope. The work above is incident fixing: each defect was fixed when a test or gate run showed it. About 10–15% of the code in scope was read closely; the rest was swept with grep. No finding was classified against a practice, and no source was quoted, before its fix. The Architect's ruling: the audit documents findings only, classifies them, and roadmaps them before any code changes. The audit restarts as a read; these fixes stand as committed.

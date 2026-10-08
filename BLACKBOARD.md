@@ -10,6 +10,8 @@
 
 *Agent + Architect. Halts, partials, comprehension affirmations, Rubber Duck observations marked `surfaced`.*
 
+- **2026-10-08 Claude — Sprint 107 was not the audit it was asked to be.** The Architect asked for a whole-project pass through the practice lenses. The agent fixed each defect the moment a test or gate run showed it (11 commits, about 30 fixes) and called that the pass. About 10–15% of the ~49,000 lines in scope was read closely; the rest got grep sweeps. No finding was classified, no source was quoted before a fix, and no roadmap preceded the code, so no pattern was named before code changed: the reverse of the method that produced `ROADMAP-2026-10-01-engineering-practice-classes.md`. Two findings remain unfixed and are recorded only: the kernel sdist ships 18,336 assay record files from `process/runs` (95 MB, 5 MB under PyPI's default upload limit, since 1.0.1); a session created with the default workspace stores the literal `~/.substrate/sandbox`, and the tools resolve it relative to the server's working directory (a literal `~` directory appeared in the kernel repo on 2026-09-27; one of the Architect's sessions carries this workspace). The kernel 1.1.2 release is held (version bumped and built; nothing uploaded). Next: the read, findings only, into a dated findings document, for the Architect's review before any roadmap or fix.
+
 - **2026-10-08 Claude — The tests were not separate from the machine.** The real home held 3,094 test sessions and 1,380 empty test folders; `$TMPDIR` held 218 gate dirs; `~/Library` held 79 MB of test Electron profiles and logs; a model wrote demo files into the real `/tmp`; one UI test ran every installed CLI's model listing and rewrote `~/.cursor/cli-config.json`. The Python suites were already isolated; the gates, the app's Electron paths and that test were not. All deleted (sessions through the app's own endpoint), each cause fixed, and `release.sh` now refuses a release whose tests write into `HOME`. The same pass found the siblings Sprint 101 missed: `/end`, delete and every session setter waited behind a running turn, and glob/grep walked the whole disk where no interrupt could reach. Card `process/sprints/sprint-107-whole-project-pass.md`. Said in chat the same turn.
 
 - **2026-10-02 Claude — Class H: agent work modelled as a short request.** Turn 28 died at the daemon's 600 s cap. The model was not working: its bash call had started a background server that held the tool's output pipe, and the tool's read loop had no deadline. The cap removed the symptom and could not stop the thread. The strip kept counting under the red error, and the bash card showed turn 9's result because call ids restart each turn. Sprint 101: no wall-clock limits on model work, a real per-call bash deadline with process-group kill, failure states with exits (manifest, turn index, timeout parks, shutdown interrupts, the strip shows "ended"), calls keyed `callId@seq`, and the output cap raised to the context window (Ollama counts reasoning against it). Class doc: `process/planning/CLASS-2026-10-02-agent-work-modelled-as-a-short-request.md`. Said in chat the same turn.
@@ -109,6 +111,8 @@
 ---
 
 ## Decisions
+
+- **2026-10-08 user** — The audit documents; it does not fix. "list findings only. You're not fixing things step by step ... you start fixing things before you even find a pattern ... What you do is you document everything ... You're not supposed to touch any code." Hold the kernel release; read through the lenses; record findings with sources; classify; roadmap; then sprints. Sprint 107's fixes stand as committed; the audit restarts as a read.
 
 - **2026-10-08 user** — "Oh, leaking test folders can be deleted. Don't worry about that. Just make sure that next time they're somewhere else, correct? then whole project pass! then kernel can come last today." And mid-pass: "as part of the review, like this is a big thing, right? The best practices review that we're going to do next. You know, tests should be totally separate." Sprint 107: the test sessions and folders deleted; tests, gates and the app's test runs write only to their own temp dirs, and the release checks it.
 
@@ -866,7 +870,8 @@ Twelve PNGs at `captures/pixel-baseline-2026-09-23/`: six states (`empty`, `one_
 
 *Agent maintains. Last 10 increment closes; older roll into ## Built as compressed paragraphs.*
 
-### Sprint 107 (2026-10-08, closed) — the whole-project pass
+### Sprint 107 (2026-10-08, closed as fixes; not the audit) — the whole-project pass
+- Correction, same day: these are incident fixes found by running gates, not the lens audit. See the Surfaced entry of 2026-10-08 and the Decision of the same date.
 - Tests are separate from the machine: the real home's test sessions, folders, temp dirs, `~/Library` profiles and `/tmp` files deleted; `main.js` keeps a test run's logs and profile under its `SUBSTRATE_HOME`; one fixture removes every gate temp dir; a host-dependent CLI test fixed; the release runs the UI suite under an empty `HOME` and checks the gates wrote nothing outside their dirs.
 - Class H siblings: `/end`, delete and the session setters no longer wait behind a running turn (interrupt first; lock splitting); glob/grep stop at their caps and at the interrupt.
 - One copy of each fact: `TaskStatus`, `RunStatus` and kind-name constants replace bare strings on 55 lines; the client's statuses are generated; one Node client, one slash table, one server fixture, one HTTP helper.
