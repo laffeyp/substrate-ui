@@ -6,25 +6,22 @@ and the model hears about it (sprint 104's notice).
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-import server  # noqa: E402
-
-from substrate.session_registry import SessionRegistry  # noqa: E402
-from substrate.topologies.tool_loop.background import TABLE  # noqa: E402
 from _serving import call, serving  # noqa: E402
+from substrate.topologies.session_registry import SessionRegistry  # noqa: E402
+from substrate.topologies.tool_loop.background import TABLE  # noqa: E402
+
+import server  # noqa: E402
 
 
 @pytest.fixture
-def base(tmp_path: Path) -> str:
-    server._SESSION_REGISTRY = SessionRegistry(base=tmp_path / "sessions")
+def base(app: server.App, tmp_path: Path) -> str:
+    app.registry = SessionRegistry(base=tmp_path / "sessions")
     for sid in ("s_00000000000105aa", "s_00000000000105bb"):
-        server._SESSION_REGISTRY.create(
+        app.registry.create(
             session_id=sid,
             name=None,
             driver="deterministic",
@@ -33,7 +30,7 @@ def base(tmp_path: Path) -> str:
             bundle=None,
             seed="",
         )
-    with serving() as base:
+    with serving(app) as base:
         yield base
     for sid in ("s_00000000000105aa", "s_00000000000105bb"):
         TABLE.stop_owner(sid, "test teardown")

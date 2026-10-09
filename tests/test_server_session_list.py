@@ -6,30 +6,22 @@ Every entry carries `session_id`, `name`, `driver`, `workspace`, `workspace_shap
 own `status` field, which the boot scan (sprint 211) reconciles against the
 record's tail.
 
-Run from the substrate venv:
-    cd substrate && uv run python -m pytest ../substrate-ui/tests/test_server_session_list.py -q
 """
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 import pytest
+from _serving import call, serving, scratch_ws  # noqa: E402
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import server  # noqa: E402
-from substrate.session_registry import SessionRegistry  # noqa: E402
-from _serving import call, serving  # noqa: E402
 
 
 @pytest.fixture
-def base(tmp_path: Path) -> str:
-    server._SESSION_REGISTRY = SessionRegistry(
-        base=tmp_path,
-        session_topology_factory=server._build_session_topology_from_manifest,
-    )
-    with serving() as base:
+def base(app: server.App, tmp_path: Path) -> str:
+    app.install_registry(base=tmp_path)
+    with serving(app) as base:
         yield base
 
 
@@ -44,13 +36,13 @@ def test_empty_registry_returns_empty_buckets(base: str) -> None:
     assert body == {"live": [], "parked": [], "ended": [], "interrupted": []}
 
 
-def test_running_session_lands_in_live_bucket(base: str) -> None:
-    _SR = server._SESSION_REGISTRY
+def test_running_session_lands_in_live_bucket(app: server.App, base: str) -> None:
+    _SR = app.registry
     _SR.create(
         session_id="s_A",
         name="a",
         driver="deterministic",
-        workspace="/tmp/w",
+        workspace=scratch_ws("w"),
         workspace_shape="flat",
         bundle=None,
         seed="x",
@@ -68,8 +60,8 @@ def test_running_session_lands_in_live_bucket(base: str) -> None:
     assert body["ended"] == []
 
 
-def test_manifests_bucket_by_status(base: str) -> None:
-    _SR = server._SESSION_REGISTRY
+def test_manifests_bucket_by_status(app: server.App, base: str) -> None:
+    _SR = app.registry
     for sid, name, status in [
         ("s_P", "parked-one", "parked"),
         ("s_E", "ended-one", "ended"),
@@ -79,7 +71,7 @@ def test_manifests_bucket_by_status(base: str) -> None:
             session_id=sid,
             name=name,
             driver="deterministic",
-            workspace="/tmp/w",
+            workspace=scratch_ws("w"),
             workspace_shape="flat",
             bundle=None,
             seed="x",
@@ -92,13 +84,13 @@ def test_manifests_bucket_by_status(base: str) -> None:
     assert body["live"] == []
 
 
-def test_response_carries_created_at_timestamp(base: str) -> None:
-    _SR = server._SESSION_REGISTRY
+def test_response_carries_created_at_timestamp(app: server.App, base: str) -> None:
+    _SR = app.registry
     _SR.create(
         session_id="s_T",
         name="timed",
         driver="deterministic",
-        workspace="/tmp/w",
+        workspace=scratch_ws("w"),
         workspace_shape="flat",
         bundle=None,
         seed="x",

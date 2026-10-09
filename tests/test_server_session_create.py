@@ -10,33 +10,25 @@ Two behaviors under test:
      session_id returns 409 with `{"error": "name already taken",
      "existing_session_id": "..."}`.
 
-Run from the substrate venv:
-    cd substrate && uv run python -m pytest ../substrate-ui/tests/test_server_session_create.py -q
 """
 
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
 
 import pytest
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-import server  # noqa: E402
-from substrate.session_registry import SessionRegistry  # noqa: E402
 from _serving import call, serving  # noqa: E402
+
+import server  # noqa: E402
 
 
 @pytest.fixture
-def base(tmp_path: Path) -> str:
+def base(app: server.App, tmp_path: Path) -> str:
     # Point the module-scope SessionRegistry at a tmp base so the test does not
     # collide with any real ~/.substrate/sessions/ on the box.
-    server._SESSION_REGISTRY = SessionRegistry(
-        base=tmp_path,
-        session_topology_factory=server._build_session_topology_from_manifest,
-    )
-    with serving() as base:
+    app.install_registry(base=tmp_path)
+    with serving(app) as base:
         yield base
 
 
@@ -76,10 +68,10 @@ def test_post_session_anonymous_creates_without_name(base: str) -> None:
     assert body["name"] is None
 
 
-def test_post_session_defaults_driver_to_deterministic(base: str) -> None:
+def test_post_session_defaults_driver_to_deterministic(app: server.App, base: str) -> None:
     status, body = _post_json(base + "/api/session", {})
     assert status == 200
     # The manifest reflects the default.
-    manifest = server._SESSION_REGISTRY.get(body["session_id"])
+    manifest = app.registry.get(body["session_id"])
     assert manifest is not None
     assert manifest.driver == "deterministic"

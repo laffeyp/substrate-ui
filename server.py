@@ -22,6 +22,7 @@ Then open http://127.0.0.1:8765/ .
 from __future__ import annotations
 
 import asyncio
+import functools
 import os
 import re
 import signal
@@ -31,6 +32,7 @@ import time
 import traceback
 import uuid
 import socketserver
+from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from collections.abc import Callable
@@ -38,28 +40,32 @@ from typing import Any
 from urllib.parse import parse_qs, unquote, urlparse
 
 import msgspec
-from msgspec import Struct
 from substrate import api
 from substrate.topologies import bundled
-from substrate.topologies.tool_loop import tool_loop_topology
 from substrate.topologies.tool_loop.delegate import make_delegate
 from substrate.topologies.tool_loop.tools import full_suite
 
-from builder import SpecError, build_from_spec
-from demo_topologies import approval_event, resumable_topology
 from session_errors import (
     FRESH_SESSION_NEVER_OPENED,
     RECORD_TORN,
-    SESSION_ENDED_MID_DELEGATE,
+    SESSION_DELETED,
+    SESSION_ENDED_MID_TURN,
 )
-from substrate.api import (
-    SessionStatus,
+from substrate.app import (
     FreshSessionRequiresUserMessage,
     NameCollision,
     SessionEndedMidTurn,
+    SessionRegistry,
+    SessionStatus,
     TornRecordOnResume,
 )
-from substrate.reference import CliResponder, DeterministicResponder, OllamaResponder
+from substrate.app import daemon_client as _substrate_daemon_client
+from substrate.adapters.models import (
+    CliResponder,
+    DeterministicResponder,
+    OllamaResponder,
+    ollama_base_url,
+)
 
 
 class _UnixHTTPServer(socketserver.ThreadingUnixStreamServer):
@@ -72,22 +78,68 @@ class _UnixHTTPServer(socketserver.ThreadingUnixStreamServer):
 
     daemon_threads = True
 
-    def __init__(self, socket_path: str, handler_cls: type) -> None:
-        super().__init__(socket_path, handler_cls)
+    def __init__(self, socket_path: str, app: App) -> None:
+        super().__init__(socket_path, Handler)
         self.server_name = "localhost"
         self.server_port = 0
+        self.app = app
 
 
-# Sprint 214a: daemon-side session API. SessionRegistry is a MODULE-scope singleton
-# so every handler sees the same catalog + per-session lock. Initialized in main()
-# with a session_topology_factory closure that resolves a manifest's driver string
-# to a Responder and rebuilds the session_topology per turn.
-_SESSION_REGISTRY: Any = None
-# Sprint 223 — application catalog. Populated at main() via
-# `applications.registry.load_manifests()`; served by `GET /api/applications`.
-# Empty at import time so a fresh daemon (or a test that spins the server
-# without wiring the registry) responds with `[]` rather than 500.
-_APPLICATIONS: dict[str, Any] = {}
+@dataclass
+class App:
+    """Everything the console's request handlers share, built once by `main()` and handed to both
+    HTTP servers; a handler reads it as `self.app` (lens audit F318, F412: these were 13
+    module-level tables that every test reassigned or relied on the conftest to restore). A test
+    builds its own App and serves it with `_serving.serving(app)`."""
+
+    # The session catalog and its per-session locks; None until `install_registry`.
+    registry: SessionRegistry | None = None
+    # Application manifests (`GET /api/applications`); empty answers `[]`, not 500.
+    applications: dict[str, Any] = field(default_factory=dict)
+    # run_id -> {"record_root", "thread", "started_at", "application", "await_completion"} for
+    # POST /api/topology/<name>/run; GET .../status reads it.
+    topology_runs: dict[str, dict[str, Any]] = field(default_factory=dict)
+    # Set once shutdown starts, so a second SIGTERM is a no-op.
+    shutdown_started: threading.Event = field(default_factory=threading.Event)
+    # Responders by (driver name, params key), shared across sessions on purpose: an
+    # OllamaResponder's connection pool is costly to rebuild per turn, and a rate-limit semaphore
+    # must bound the whole process (REVIEW-2026-08-28 Q9). DeterministicResponder is never cached:
+    # its seed is state.
+    responder_cache: dict[tuple[str, tuple[tuple[str, Any], ...]], Any] = field(
+        default_factory=dict
+    )
+    model_thinking_cache: dict[str, bool] = field(default_factory=dict)
+    version_cache: dict[str, dict[str, Any]] = field(default_factory=dict)
+    version_cache_at: dict[str, float] = field(default_factory=dict)
+    cli_pty_lock: threading.Lock = field(default_factory=threading.Lock)
+    cli_pty_sessions: dict[str, dict[str, Any]] = field(default_factory=dict)
+    record_summary_cache: dict[Path, tuple[tuple[tuple[str, int, int], ...], dict[str, object]]] = (
+        field(default_factory=dict)
+    )
+    record_summary_lock: threading.Lock = field(default_factory=threading.Lock)
+    assay_cache: dict[str, tuple[float, dict[str, object]]] = field(default_factory=dict)
+
+    def install_registry(
+        self, base: Path | None = None, *, turn_queue_cap: int = 4, auto_boot: bool = True
+    ) -> SessionRegistry:
+        """A session registry under `base` whose turns build this App's session topology."""
+        self.registry = SessionRegistry(
+            base=base,
+            session_topology_factory=functools.partial(_build_session_topology_from_manifest, self),
+            turn_queue_cap=turn_queue_cap,
+            auto_boot=auto_boot,
+        )
+        return self.registry
+
+
+class AppHTTPServer(ThreadingHTTPServer):
+    """The TCP listener; carries the App its handlers read."""
+
+    def __init__(self, address: tuple[str, int], app: App) -> None:
+        super().__init__(address, Handler)
+        self.app = app
+
+
 # REVIEW-2026-08-28 Q6: the six "record mid-write; poll again" sites
 # used to catch bare Exception, which swallowed every bug inside
 # `api.read_record` + every bug in the filter predicate + every bug
@@ -104,11 +156,14 @@ _RECORD_IO_ERRORS: tuple[type[BaseException], ...] = (
 )
 
 
-# Sprint 225a: async runs launched via POST /api/topology/<name>/run
-# with await_completion=false. run_id -> {"record_root", "thread",
-# "started_at", "application", "await_completion"}. Sprint 225d's
-# GET /api/topology/<name>/status?run_id=<id> reads from here.
-_TOPOLOGY_RUNS: dict[str, dict[str, Any]] = {}
+def _tail_seq(record_root: Path) -> int:
+    """The record's highest seq, -1 when it has none, from its last frame alone (lens audit F310:
+    the turn, end and run handlers read the whole record to find this one number)."""
+    try:
+        last = api.read_last_envelope(record_root)
+    except _RECORD_IO_ERRORS:
+        return -1
+    return int(last["seq"]) if last is not None else -1
 
 
 def _application_spec_to_wire(spec: Any) -> dict[str, Any]:
@@ -116,29 +171,6 @@ def _application_spec_to_wire(spec: Any) -> dict[str, Any]:
     from substrate.topologies.applications.registry import spec_to_wire
 
     return spec_to_wire(spec)
-
-
-# Sprint 215d: SIGTERM guard so a second signal during shutdown is a no-op
-# instead of re-entering `_shutdown_all_sessions` on a half-torn catalog.
-_SHUTDOWN_STARTED = threading.Event()
-
-
-# REVIEW-2026-08-28 Q9 decision: this cache is intentional cross-session
-# sharing. A Responder that carries an httpx client + a connection pool
-# (OllamaResponder) is expensive to construct per-turn; a Responder that
-# carries a rate-limit semaphore (RateLimitedResponder) SHOULD share
-# across sessions so the per-provider rate limit is a process-wide bound,
-# not a per-session one — the /api/agent bridge + parallel session
-# `run_topology` calls would otherwise each get their own semaphore and
-# blow past the provider's limit.
-# DeterministicResponder is deliberately excluded from the cache (it
-# carries a stateful seed; sharing it across sessions would leak that
-# state across runs).
-# If a future Responder needs per-session isolation, add a `is_shareable`
-# probe and skip the cache for that class.
-# Sprint 032c: cache key extended from `driver name` to `(name, params key)`
-# so per-session driver_params yield distinct Responder instances.
-_RESPONDER_CACHE: dict[tuple[str, tuple[tuple[str, Any], ...]], Any] = {}
 
 
 def _params_cache_key(params: dict[str, Any] | None) -> tuple[tuple[str, Any], ...]:
@@ -149,7 +181,7 @@ def _params_cache_key(params: dict[str, Any] | None) -> tuple[tuple[str, Any], .
     return tuple(sorted(params.items()))
 
 
-def _daemon_driver_resolver(name: str, params: dict[str, Any] | None = None) -> Any:
+def _daemon_driver_resolver(app: App, name: str, params: dict[str, Any] | None = None) -> Any:
     """Daemon-side resolver: `deterministic` → seeded stub; `claude` / `gemini` →
     CliResponder; anything else → OllamaResponder (a real local or `:cloud` tag).
     Sprint 213a's `_default_model_resolver` in substrate ships a smaller default
@@ -169,7 +201,7 @@ def _daemon_driver_resolver(name: str, params: dict[str, Any] | None = None) -> 
     knobs; documented as such).
     """
     key = (name, _params_cache_key(params))
-    cached = _RESPONDER_CACHE.get(key)
+    cached = app.responder_cache.get(key)
     if cached is not None:
         return cached
     if name == "deterministic":
@@ -186,8 +218,9 @@ def _daemon_driver_resolver(name: str, params: dict[str, Any] | None = None) -> 
             raw = params.get("driver_version")
             if isinstance(raw, str) and raw:
                 version = raw
-        cli_cmd = _cli_command(name, version=version)
-        assert cli_cmd is not None
+        cli_cmd = _cli_command(app, name, version=version)
+        if cli_cmd is None:
+            raise ValueError(f"no command for CLI driver {name!r}")
         # Responder.name carries the version too so log lines and
         # error messages point at the exact model that failed.
         display_name = f"{name}:{version}" if version else name
@@ -223,7 +256,7 @@ def _daemon_driver_resolver(name: str, params: dict[str, Any] | None = None) -> 
         # Sprint 045 defaulted think=True across the board for the cloud
         # reasoning models; that broke local coder models. Probe the
         # model's capabilities via /api/show and let it decide.
-        think_default = _model_supports_thinking(name)
+        think_default = _model_supports_thinking(app, name)
         responder = OllamaResponder(
             model=name,
             # Cloud reasoning models (kimi/glm/nemotron/deepseek-v4) advertise
@@ -235,7 +268,7 @@ def _daemon_driver_resolver(name: str, params: dict[str, Any] | None = None) -> 
             num_ctx=int(p.get("num_ctx", num_ctx_default)),
             timeout=float(p["timeout"]) if p.get("timeout") is not None else None,
         )
-    _RESPONDER_CACHE[key] = responder
+    app.responder_cache[key] = responder
     return responder
 
 
@@ -263,7 +296,9 @@ def _load_daemon_config(config_path: Path | None = None) -> dict[str, Any]:
     return defaults
 
 
-def _interrupt_then_end(session_id: str, source: str, timeout_seconds: float) -> tuple[Any, Path]:
+def _interrupt_then_end(
+    app: App, session_id: str, source: str, timeout_seconds: float
+) -> tuple[Any, Path]:
     """End a session, interrupting its running turn first. UI sprint 101 (quit) and 107 (`/end`
     and the child cascade): turns have no time limit and the end turn waits for the session's
     lock, so ending a session mid-turn used to wait for the model to finish. A hard interrupt
@@ -271,21 +306,22 @@ def _interrupt_then_end(session_id: str, source: str, timeout_seconds: float) ->
     end turn runs. Raises what `turn_sync` raises."""
     from substrate.topologies.session import SessionEndRequested
 
-    assert _SESSION_REGISTRY is not None
-    manifest = _SESSION_REGISTRY.get(session_id)
+    if app.registry is None:
+        raise RuntimeError("no session registry: the daemon has not started")
+    manifest = app.registry.get(session_id)
     if manifest is not None and manifest.status == SessionStatus.RUNNING:
         try:
-            _SESSION_REGISTRY.interrupt(session_id, tier="hard")
+            app.registry.interrupt(session_id, tier="hard")
         except Exception as exc:  # noqa: BLE001 — best-effort; the end below still runs
             traceback.print_exception(exc)
-    return _SESSION_REGISTRY.turn_sync(
+    return app.registry.turn_sync(
         session_id,
         resume_event=SessionEndRequested(session_id=session_id, source=source),
         timeout_seconds=timeout_seconds,
     )
 
 
-def _shutdown_all_sessions(*, per_session_timeout: float = 10.0) -> dict[str, int]:
+def _shutdown_all_sessions(app: App, *, per_session_timeout: float = 10.0) -> dict[str, int]:
     """Sprint 215d + 217a: end every running/parked session cleanly on daemon
     shutdown. For each manifest whose status is not `ended` or `interrupted`,
     inject `SessionEndRequested(session_id, source="daemon_shutdown")` via
@@ -320,7 +356,7 @@ def _shutdown_all_sessions(*, per_session_timeout: float = 10.0) -> dict[str, in
         "failed": 0,
         "background_stopped": 0,
     }
-    if _SESSION_REGISTRY is None:
+    if app.registry is None:
         return result
     # UI sprint 103: background commands do not outlive the daemon (Claude Code cleans its
     # background tasks up at exit). This runs first and the sweep below cannot undo it.
@@ -330,12 +366,12 @@ def _shutdown_all_sessions(*, per_session_timeout: float = 10.0) -> dict[str, in
         result["background_stopped"] = _BG.stop_all("the app quit")
     except Exception as exc:  # noqa: BLE001 — shutdown must not raise
         traceback.print_exception(exc)
-    for manifest in list(_SESSION_REGISTRY.list_all()):
+    for manifest in list(app.registry.list_all()):
         if manifest.status in (SessionStatus.ENDED, SessionStatus.INTERRUPTED):
             result["skipped_ended"] += 1
             continue
         try:
-            _interrupt_then_end(manifest.session_id, "daemon_shutdown", per_session_timeout)
+            _interrupt_then_end(app, manifest.session_id, "daemon_shutdown", per_session_timeout)
             result["ended"] += 1
         except Exception as exc:  # noqa: BLE001 — best-effort; log and move on
             if isinstance(exc, FreshSessionRequiresUserMessage):
@@ -344,7 +380,7 @@ def _shutdown_all_sessions(*, per_session_timeout: float = 10.0) -> dict[str, in
                 # the run. Rule 12 preserves nothing (no record existed);
                 # the manifest hint just gets a terminal status.
                 try:
-                    _SESSION_REGISTRY.update_status(manifest.session_id, SessionStatus.ENDED)
+                    app.registry.update_status(manifest.session_id, SessionStatus.ENDED)
                     result["skipped_fresh"] += 1
                 except Exception:  # noqa: BLE001 — shutdown sweep must not raise; unknown per-session failure buckets as `failed` and the loop continues.
                     result["failed"] += 1
@@ -364,32 +400,41 @@ def _tools_for_manifest(manifest: Any) -> dict[str, Any]:
     An allow-list entry that names a tool absent from full_suite is
     dropped silently (unknown name → nothing to bind to).
     """
-    from substrate.topologies.tool_loop.tools import full_suite
 
     # UI sprint 103: the session id owns the bash tool's background tasks, so this session's tools
     # see only its tasks and ending or deleting the session stops them.
     all_tools = full_suite(Path(manifest.workspace), owner=manifest.session_id)
-    if manifest.tools:
-        allowed = set(manifest.tools)
-        if "bash" in allowed:  # a task the model can start, it must be able to read and stop
-            allowed |= {"bash_output", "bash_stop", "bash_tasks"}
-        return {name: tool for name, tool in all_tools.items() if name in allowed}
-    return all_tools
+    allowed = _allowed_tool_names(manifest)
+    if allowed is None:
+        return all_tools
+    return {name: tool for name, tool in all_tools.items() if name in allowed}
+
+
+def _allowed_tool_names(manifest: Any) -> set[str] | None:
+    """The session's tool allow-list, or None for unrestricted. It governs every tool the session
+    binds, the substrate toolkit (delegate, run_topology, …) included (UI sprint 109, N001: the
+    toolkit was added after the filter, so a read-only reviewer could still delegate)."""
+    if not manifest.tools:
+        return None
+    allowed = set(manifest.tools)
+    if "bash" in allowed:  # a task the model can start, it must be able to read and stop
+        allowed |= {"bash_output", "bash_stop", "bash_tasks"}
+    return allowed
 
 
 # ── sprint 225a: application dispatch — one-shot topology launcher ──────
 
 
-def _build_code_review_from_inputs(inputs: dict[str, Any]) -> Callable[..., Any]:
+def _build_code_review_from_inputs(app: App, inputs: dict[str, Any]) -> Callable[..., Any]:
     """`fanout_review_topology` — inputs.<role>_model per DEFAULT_ROLES
     resolve into the `responders` dict; `judge_model` into `judge`."""
     from substrate.topologies.applications.fanout_review import fanout_review_topology
     from substrate.topologies.code_review import DEFAULT_ROLES
 
     responders = {
-        role: _daemon_driver_resolver(str(inputs[f"{role}_model"])) for role in DEFAULT_ROLES
+        role: _daemon_driver_resolver(app, str(inputs[f"{role}_model"])) for role in DEFAULT_ROLES
     }
-    judge = _daemon_driver_resolver(str(inputs["judge_model"]))
+    judge = _daemon_driver_resolver(app, str(inputs["judge_model"]))
     return fanout_review_topology(
         repo=str(inputs["repo"]),
         ref=str(inputs.get("ref", "HEAD~1")),
@@ -399,7 +444,7 @@ def _build_code_review_from_inputs(inputs: dict[str, Any]) -> Callable[..., Any]
     )
 
 
-def _build_best_of_n_verified_from_inputs(inputs: dict[str, Any]) -> Callable[..., Any]:
+def _build_best_of_n_verified_from_inputs(app: App, inputs: dict[str, Any]) -> Callable[..., Any]:
     """`best_of_n_verified_topology` — drafter_model + verify_model both
     resolve into Responders. The verify=Check | Responder union collapses
     to Responder here; a deterministic-check variant is a future card."""
@@ -407,15 +452,15 @@ def _build_best_of_n_verified_from_inputs(inputs: dict[str, Any]) -> Callable[..
 
     return best_of_n_verified_topology(
         task=str(inputs["task"]),
-        drafter=_daemon_driver_resolver(str(inputs["drafter_model"])),
-        verify=_daemon_driver_resolver(str(inputs["verify_model"])),
+        drafter=_daemon_driver_resolver(app, str(inputs["drafter_model"])),
+        verify=_daemon_driver_resolver(app, str(inputs["verify_model"])),
         n=int(inputs.get("n", 3)),
         max_rounds=int(inputs.get("max_rounds", 2)),
         watchdog_seconds=float(inputs.get("watchdog_seconds", 30.0)),
     )
 
 
-def _build_research_sweep_from_inputs(inputs: dict[str, Any]) -> Callable[..., Any]:
+def _build_research_sweep_from_inputs(app: App, inputs: dict[str, Any]) -> Callable[..., Any]:
     """`research_sweep_topology` — three role-model kwargs; documents is a
     list of {label, text} dicts on the wire, translated here to the
     [(label, text), ...] tuple shape the topology expects."""
@@ -428,9 +473,9 @@ def _build_research_sweep_from_inputs(inputs: dict[str, Any]) -> Callable[..., A
     return research_sweep_topology(
         question=str(inputs["question"]),
         documents=documents,
-        reader=_daemon_driver_resolver(str(inputs["reader_model"])),
-        critic=_daemon_driver_resolver(str(inputs["critic_model"])),
-        synthesizer=_daemon_driver_resolver(str(inputs["synthesizer_model"])),
+        reader=_daemon_driver_resolver(app, str(inputs["reader_model"])),
+        critic=_daemon_driver_resolver(app, str(inputs["critic_model"])),
+        synthesizer=_daemon_driver_resolver(app, str(inputs["synthesizer_model"])),
         watchdog_seconds=float(inputs.get("watchdog_seconds", 30.0)),
     )
 
@@ -440,7 +485,7 @@ def _build_research_sweep_from_inputs(inputs: dict[str, Any]) -> Callable[..., A
 # manifest's [inputs] schema still gates required fields at the endpoint
 # layer; this table only knows how to translate resolved values into
 # topology kwargs (including the role-to-Responder mapping).
-_APP_BUILDERS: dict[str, Callable[[dict[str, Any]], Callable[..., Any]]] = {
+_APP_BUILDERS: dict[str, Callable[[App, dict[str, Any]], Callable[..., Any]]] = {
     "code_review": _build_code_review_from_inputs,
     "best_of_n_verified": _build_best_of_n_verified_from_inputs,
     "research_sweep": _build_research_sweep_from_inputs,
@@ -487,7 +532,7 @@ def _validate_topology_inputs(spec: Any, inputs: dict[str, Any]) -> str | None:
 
 
 def _build_session_topology_from_manifest(
-    manifest: Any, first_turn_user_message: Any = None
+    app: App, manifest: Any, first_turn_user_message: Any = None
 ) -> Any:
     """The `session_topology_factory` closure the SessionRegistry calls per turn.
     Reconstructs the session_topology from a manifest's persistent fields —
@@ -501,9 +546,8 @@ def _build_session_topology_from_manifest(
     """
     from substrate.topologies.session import session_topology
     from substrate.topologies.session.transcript import resolve_driver_context_tokens
-    from substrate.topologies.tool_loop.tools import full_suite
 
-    responder = _daemon_driver_resolver(manifest.driver, manifest.driver_params)
+    responder = _daemon_driver_resolver(app, manifest.driver, manifest.driver_params)
     session_tools = _tools_for_manifest(manifest)
     # Sprint 228: fold the substrate toolkit (piece F sprints 226-228)
     # into every session's tool suite alongside full_suite. The tools
@@ -511,7 +555,7 @@ def _build_session_topology_from_manifest(
     # is the shipped wire client; the daemon binds its own registries
     # here so every session sees the CURRENT applications catalog,
     # session list, and record dir.
-    from substrate.api import daemon_client as _substrate_daemon
+    from substrate.app import daemon_client as _substrate_daemon
     from substrate.topologies.tool_loop.substrate_tools import (
         make_inspect_record,
         make_list_applications,
@@ -529,8 +573,8 @@ def _build_session_topology_from_manifest(
         "inspect_record": make_inspect_record(),
         "list_records": make_list_records(_sessions_base()),
         "list_topologies": make_list_topologies(),
-        "list_applications": make_list_applications(_APPLICATIONS),
-        "list_sessions": make_list_sessions(_SESSION_REGISTRY),
+        "list_applications": make_list_applications(app.applications),
+        "list_sessions": make_list_sessions(app.registry),
         # Sprint 053: fold `delegate` in, closing the Sprint 228 card-vs-implementation
         # drift the shakeout (sprint 052) surfaced. Sprint 228's card specified eight
         # substrate-toolkit tools including delegate; commit c455b5a shipped seven.
@@ -541,12 +585,15 @@ def _build_session_topology_from_manifest(
             responder=responder,
             root=Path(manifest.workspace),
             child_suite_factory=full_suite,
-            session_registry=_SESSION_REGISTRY,
+            session_registry=app.registry,
             parent_session_id=manifest.session_id,
             parent_record_root=Path(manifest.record_root),
-            model_resolver=lambda name: _daemon_driver_resolver(name),
+            model_resolver=lambda name: _daemon_driver_resolver(app, name),
         ),
     }
+    allowed = _allowed_tool_names(manifest)
+    if allowed is not None:
+        session_tools = {name: tool for name, tool in session_tools.items() if name in allowed}
     topo = session_topology(
         driver=responder,
         driver_name=manifest.driver,
@@ -566,108 +613,33 @@ def _build_session_topology_from_manifest(
         record_root=Path(manifest.record_root),
         script=None,
         first_turn_user_message=first_turn_user_message,
+        # The role prompt resolves against the session's workspace, the same root the create-time
+        # check used. Before 2026-10-08 neither argument was passed and no UI session carried its
+        # role's prompt (lens audit F316, N004).
+        role=manifest.role,
+        role_repo_root=Path(manifest.workspace),
     )
-    # Resuming an ended session. session_topology terminates on
-    # threshold_count("SessionEnded", 1), and the runtime restores event
-    # counts from the whole record on resume — so a record that already
-    # holds a SessionEnded finalised the resumed run straight after the
-    # new UserMessage, before the model ran (turn_sync's ended->parked
-    # flip, bb09a70, never produced a reply). Count the SessionEnded
-    # events already on the record and finalise only on the next one.
-    prior_ended = _count_record_kind(Path(manifest.record_root), "SessionEnded")
-    if prior_ended == 0:
-        return topo
-    return _with_session_end_threshold(topo, prior_ended + 1)
-
-
-def _count_record_kind(record_root: Path, kind: str) -> int:
-    """Number of `kind` envelopes on the record at `record_root` (0 if none yet)."""
-    if not record_root.exists():
-        return 0
-    return sum(1 for env in api.read_record(record_root) if env.get("kind") == kind)
-
-
-def _with_session_end_threshold(topo: Any, threshold: int) -> Any:
-    """Wrap a session_topology builder so its termination finalises on the
-    `threshold`-th SessionEnded instead of the first. Same composition as
-    session_topology's own: pause on Park awaiting a UserMessage, or end."""
-    from substrate.topologies.session import PARK, SESSION_ENDED, USER_MESSAGE
-
-    def wrapped(b: Any) -> None:
-        topo(b)
-        b.termination(
-            api.any_of(
-                api.pause_await_input(
-                    when=lambda tctx: tctx.event is not None and tctx.event.kind == PARK,
-                    resume_condition=USER_MESSAGE,
-                ),
-                api.threshold_count(SESSION_ENDED, threshold),
-            )
-        )
-
-    return wrapped
-
-
-def _responder_for(spec: dict[str, object]) -> object:
-    """The Responder a model-backed authored topology runs against: 'deterministic' (CI mode, pure +
-    seeded — the default; no network, replay-stable) or 'ollama' (a real local LLM; loud failure if
-    Ollama is not running — never a silent stub)."""
-    if str(spec.get("responder") or "deterministic").lower() == "ollama":
-        return OllamaResponder(model=str(spec.get("model_name") or "llama3.2"))
-    return DeterministicResponder(seed=int(spec.get("seed", 0)))  # type: ignore[arg-type]
-
-
-# paused demo record -> (topology to re-resolve, the external resume event). Resume reattaches to
-# the record and injects the event so the resume Trigger fires the continuation (review #37: resume
-# self-records like launch, on the same seq sequence; we resume a COPY so the template stays paused).
-_RESUMABLE = {"demo_resumable": (resumable_topology, approval_event)}
-
-
-# ── a deliberately SLOW launchable topology, so live-attach has something to watch grow ──────
-class LiveTick(Struct, frozen=True):
-    n: int
-
-
-def _slow_topology() -> Any:
-    async def ticker(_inp: Any) -> Any:
-        for i in range(1, 7):
-            await asyncio.sleep(0.5)  # ~3s total, so the console can follow it being written
-            yield LiveTick(n=i)
-
-    def topo(b: Any) -> None:
-        b.producer_kind("ticker", schemas=[LiveTick], schema_version=1, start=ticker)
-        b.initial("ticker")
-        b.termination(api.threshold_count("LiveTick", 6))
-
     return topo
 
 
-_EXTRA_TOPOS = {"live_demo": _slow_topology}  # launchable, alongside the bundled topologies
-# run_name -> the launch thread. The server SPAWNED the run, so it alone knows if it's still alive:
-# a launch whose thread is dead with no terminal RunFinalised has TORN — the authoritative signal
-# that distinguishes "incomplete = live (still writing)" from "incomplete = torn (dead)" (review #36).
-_LAUNCHES: dict[str, "threading.Thread"] = {}
-MAX_LIVE_RUNS = 8  # concurrency cap: a POST flood can't spawn unbounded run threads (security-3)
+# A finished topology run's handle stays this long, so a status poll after it ends still reads
+# its outcome; then it is dropped (lens audit F295: the table only grew).
+_TOPOLOGY_RUN_LINGER_S = 3600.0
 
 
-def _is_live(name: str) -> bool:
-    th = _LAUNCHES.get(name)
-    if th is None:
-        return False
-    if th.is_alive():
-        return True
-    _LAUNCHES.pop(name, None)  # evict the dead thread (no unbounded growth on a long-lived server)
-    return False
+def _forget_finished_topology_runs(app: App) -> None:
+    now = time.time()
+    for run_id, handle in list(app.topology_runs.items()):
+        if not handle["thread"].is_alive() and now - handle["started_at"] > _TOPOLOGY_RUN_LINGER_S:
+            app.topology_runs.pop(run_id, None)
 
 
-def _agent_params(q: dict[str, list[str]]) -> tuple[bool, int, float | None]:
-    """(think, max_tokens, timeout) from the request; max_tokens 0 = the responder default;
-    no `timeout` = no limit on how long the model works (UI sprint 101)."""
-    think = q.get("think", ["false"])[0].lower() in ("1", "true", "on")
-    max_tokens = int(q.get("max_tokens", ["0"])[0] or 0)
-    raw_timeout = q.get("timeout", [""])[0]
-    timeout = float(raw_timeout) if raw_timeout else None
-    return think, max_tokens, timeout
+def _is_live(app: App, name: str) -> bool:
+    """A topology run this server started is still writing its record (`<run_id>.record`). The
+    server spawned the run, so its thread is the authority on liveness: incomplete with a live
+    thread is still being written; incomplete with a dead one is torn (review #36)."""
+    handle = app.topology_runs.get(name)
+    return handle is not None and handle["thread"].is_alive()
 
 
 # Sprint 084 — the CLI-adapter catalog. Every entry names a CLI Substrate
@@ -687,8 +659,7 @@ KNOWN_CLI_ADAPTERS: dict[str, Any] = {
     # Substrate hosts it inside a pty and streams the stdout into a
     # transcript card. Only URL-based OAuth flows fit the current card;
     # login_command:None means the CLI is selectable as a driver but
-    # no auth card fires (opencode: TUI login walk; will surface via
-    # the future API-key dropdown section). `logout_command` clears
+    # no auth card fires. `logout_command` clears
     # stored creds. `status_command` reports authed state.
     #
     # Sprint 087 (2026-09-27) — `versions` names the curated model
@@ -727,8 +698,9 @@ KNOWN_CLI_ADAPTERS: dict[str, Any] = {
             {
                 "id": "opus",
                 "label": "Opus",
-                "default_pin": "opus-4-8",
+                "default_pin": "opus-5-5",
                 "pins": [
+                    {"id": "opus-5-5", "label": "5.5", "flag": ["--model", "claude-opus-5-5"]},
                     {"id": "opus-4-8", "label": "4.8", "flag": ["--model", "claude-opus-4-8"]},
                     {"id": "opus-4-7", "label": "4.7", "flag": ["--model", "claude-opus-4-7"]},
                     {"id": "opus-4-6", "label": "4.6", "flag": ["--model", "claude-opus-4-6"]},
@@ -741,8 +713,9 @@ KNOWN_CLI_ADAPTERS: dict[str, Any] = {
             {
                 "id": "sonnet",
                 "label": "Sonnet",
-                "default_pin": "sonnet-4-6",
+                "default_pin": "sonnet-5-5",
                 "pins": [
+                    {"id": "sonnet-5-5", "label": "5.5", "flag": ["--model", "claude-sonnet-5-5"]},
                     {"id": "sonnet-4-6", "label": "4.6", "flag": ["--model", "claude-sonnet-4-6"]},
                     {"id": "sonnet-4-5", "label": "4.5", "flag": ["--model", "claude-sonnet-4-5"]},
                     {"id": "sonnet-4", "label": "4", "flag": ["--model", "claude-sonnet-4"]},
@@ -877,22 +850,20 @@ KNOWN_CLI_ADAPTERS: dict[str, Any] = {
 }
 
 
-_MODEL_THINKING_CACHE: dict[str, bool] = {}
-
-
-def _model_supports_thinking(name: str) -> bool:
+def _model_supports_thinking(app: App, name: str) -> bool:
     """Probe Ollama's /api/show for the model's capabilities; returns True iff
     "thinking" is in the capabilities list. Cached per-model for the process
-    lifetime — capabilities don't change without a re-pull. Falls back to True
-    on any probe failure so the daily cloud reasoning path (kimi/glm/nemotron)
-    keeps its Sprint 045 default when Ollama's probe is unreachable."""
-    if name in _MODEL_THINKING_CACHE:
-        return _MODEL_THINKING_CACHE[name]
+    lifetime — capabilities don't change without a re-pull. A failed probe
+    answers True (the Sprint 045 default for the cloud reasoning models) for
+    this call only and is not cached: while Ollama is unreachable the turn's
+    chat call fails anyway, and the next turn probes again (lens audit F305)."""
+    if name in app.model_thinking_cache:
+        return app.model_thinking_cache[name]
     import urllib.request as _u
 
     try:
         req = _u.Request(  # noqa: S310 - localhost
-            "http://localhost:11434/api/show",
+            f"{ollama_base_url()}/api/show",
             data=msgspec.json.encode({"name": name}),
             headers={"Content-Type": "application/json"},
         )
@@ -900,9 +871,9 @@ def _model_supports_thinking(name: str) -> bool:
             info = msgspec.json.decode(r.read())
         caps = info.get("capabilities") or []
         result = "thinking" in caps
-    except Exception:  # noqa: BLE001 — Ollama unreachable → keep the Sprint 045 default
-        result = True
-    _MODEL_THINKING_CACHE[name] = result
+    except Exception:  # noqa: BLE001 — Ollama unreachable: answer the default, cache nothing
+        return True
+    app.model_thinking_cache[name] = result
     return result
 
 
@@ -941,8 +912,6 @@ def _resolve_pin(entry: dict[str, Any], version: str | None) -> dict[str, Any] |
 # seconds. Users who log a CLI in/out and want the picker to refresh
 # right away can restart the daemon; a longer-lived cache-bust hook
 # (e.g. clear on POST /api/cli/<name>/logout) is a follow-up.
-_VERSION_CACHE: dict[str, dict[str, Any]] = {}
-_VERSION_CACHE_AT: dict[str, float] = {}
 _VERSION_CACHE_TTL_S = 300.0
 
 
@@ -1003,15 +972,15 @@ def _parse_cursor_agent_list_models(text: str) -> dict[str, Any] | None:
     }
 
 
-def _probe_cli_versions(name: str) -> dict[str, Any]:
+def _probe_cli_versions(app: App, name: str) -> dict[str, Any]:
     """Return the version tree for one CLI. Live-probes when the
     catalog entry names a `list_command` and the CLI accepts it;
     otherwise returns the curated fallback with source="curated".
     Cached per-process for _VERSION_CACHE_TTL_S seconds."""
     now = time.monotonic()
-    cached_at = _VERSION_CACHE_AT.get(name, 0.0)
-    if now - cached_at < _VERSION_CACHE_TTL_S and name in _VERSION_CACHE:
-        return _VERSION_CACHE[name]
+    cached_at = app.version_cache_at.get(name, 0.0)
+    if now - cached_at < _VERSION_CACHE_TTL_S and name in app.version_cache:
+        return app.version_cache[name]
     entry = KNOWN_CLI_ADAPTERS.get(name) or {}
     curated_families = entry.get("versions") or []
     curated_default_family = entry.get("default_family")
@@ -1045,17 +1014,17 @@ def _probe_cli_versions(name: str) -> dict[str, Any]:
                 if name == "cursor-agent":
                     parsed = _parse_cursor_agent_list_models(proc.stdout)
                 if parsed and parsed.get("families"):
-                    _VERSION_CACHE[name] = parsed
-                    _VERSION_CACHE_AT[name] = now
+                    app.version_cache[name] = parsed
+                    app.version_cache_at[name] = now
                     return parsed
         except (OSError, subprocess.SubprocessError):
             pass  # fall through to curated
-    _VERSION_CACHE[name] = curated
-    _VERSION_CACHE_AT[name] = now
+    app.version_cache[name] = curated
+    app.version_cache_at[name] = now
     return curated
 
 
-def _cli_command(name: str, version: str | None = None) -> list[str] | None:
+def _cli_command(app: App, name: str, version: str | None = None) -> list[str] | None:
     """Argv for a CLI adapter. Reads the LIVE version tree from
     _probe_cli_versions so a client that picks a live-listed pin id
     resolves against the same tree the picker rendered — not a stale
@@ -1067,7 +1036,7 @@ def _cli_command(name: str, version: str | None = None) -> list[str] | None:
     if entry is None:
         return None
     cmd = list(entry["command"])
-    tree = _probe_cli_versions(name)
+    tree = _probe_cli_versions(app, name)
     # `_resolve_pin` works on any shape whose families carry pins with
     # `id` and `flag`; both the curated and the live tree do.
     pin = _resolve_pin(
@@ -1098,8 +1067,6 @@ class BodyTooLarge(ValueError):
     """A request body over _MAX_BODY_BYTES; answered 413."""
 
 
-_CLI_PTY_LOCK = threading.Lock()
-_CLI_PTY_SESSIONS: dict[str, dict[str, Any]] = {}
 _CLI_PTY_MAX_BUFFER = 512 * 1024  # 512KB per session — plenty for a login walk
 
 
@@ -1112,7 +1079,8 @@ def _cli_status(cli_name: str, timeout: float = 5.0) -> dict[str, Any]:
     status_cmd = entry.get("status_command")
     if not status_cmd:
         return {"authed": None, "raw": "", "detail": "no status_command"}
-    assert isinstance(status_cmd, list)
+    if not isinstance(status_cmd, list):
+        raise TypeError(f"cli {cli_name!r}: status_command must be an argv list")
     try:
         proc = subprocess.run(  # noqa: S603 — operator-chosen CLI in the catalog
             status_cmd, capture_output=True, text=True, timeout=timeout
@@ -1135,13 +1103,10 @@ def _cli_status(cli_name: str, timeout: float = 5.0) -> dict[str, Any]:
         return {"authed": "Not logged in" not in combined, "raw": combined}
     if cli_name == "cursor-agent":
         return {"authed": "Not logged in" not in combined, "raw": combined}
-    if cli_name == "opencode":
-        # `opencode auth list` prints "0 credentials" when nothing configured.
-        return {"authed": "0 credentials" not in combined, "raw": combined}
     return {"authed": None, "raw": combined, "detail": "no parser"}
 
 
-def _cli_pty_start(cli_name: str) -> str:
+def _cli_pty_start(app: App, cli_name: str) -> str:
     """Fork a pty, spawn the CLI's login_command, return the session id.
     Bytes accumulate in a rolling buffer; the SSE stream reads from index 0
     on connect (so late subscribers see backlog + growth) and truncates at
@@ -1156,7 +1121,8 @@ def _cli_pty_start(cli_name: str) -> str:
     login_cmd = entry.get("login_command")
     if not login_cmd:
         raise ValueError(f"cli {cli_name!r} has no login_command")
-    assert isinstance(login_cmd, list)
+    if not isinstance(login_cmd, list):
+        raise TypeError(f"cli {cli_name!r}: login_command must be an argv list")
 
     master_fd, slave_fd = pty.openpty()
     flag = fcntl.fcntl(master_fd, fcntl.F_GETFL)
@@ -1188,8 +1154,8 @@ def _cli_pty_start(cli_name: str) -> str:
         "cli": cli_name,
         "lock": threading.Lock(),
     }
-    with _CLI_PTY_LOCK:
-        _CLI_PTY_SESSIONS[sid] = session
+    with app.cli_pty_lock:
+        app.cli_pty_sessions[sid] = session
 
     def _drain() -> None:
         while True:
@@ -1228,17 +1194,17 @@ def _cli_pty_start(cli_name: str) -> str:
             os.close(master_fd)
         except OSError:
             pass
-        _cli_pty_forget_later(sid)
+        _cli_pty_forget_later(app, sid)
 
     threading.Thread(target=_drain, daemon=True, name=f"cli-pty-{sid}").start()
     return sid
 
 
-def _cli_pty_write(sid: str, data: bytes) -> bool:
+def _cli_pty_write(app: App, sid: str, data: bytes) -> bool:
     """Forward user keystrokes to the pty's master fd. Returns False if the
     session is gone or closed."""
-    with _CLI_PTY_LOCK:
-        session = _CLI_PTY_SESSIONS.get(sid)
+    with app.cli_pty_lock:
+        session = app.cli_pty_sessions.get(sid)
     if session is None:
         return False
     with session["lock"]:
@@ -1257,21 +1223,21 @@ def _cli_pty_write(sid: str, data: bytes) -> bool:
 _CLI_PTY_LINGER_S = 60.0
 
 
-def _cli_pty_forget_later(sid: str) -> None:
+def _cli_pty_forget_later(app: App, sid: str) -> None:
     def _forget() -> None:
-        with _CLI_PTY_LOCK:
-            _CLI_PTY_SESSIONS.pop(sid, None)
+        with app.cli_pty_lock:
+            app.cli_pty_sessions.pop(sid, None)
 
     t = threading.Timer(_CLI_PTY_LINGER_S, _forget)
     t.daemon = True
     t.start()
 
 
-def _cli_pty_close(sid: str) -> bool:
+def _cli_pty_close(app: App, sid: str) -> bool:
     """Kill the pty session and remove it from the table. Idempotent. A stream already reading
     holds its own reference and still sees the exit."""
-    with _CLI_PTY_LOCK:
-        session = _CLI_PTY_SESSIONS.pop(sid, None)
+    with app.cli_pty_lock:
+        session = app.cli_pty_sessions.pop(sid, None)
     if session is None:
         return False
     proc = session["proc"]
@@ -1286,9 +1252,9 @@ def _cli_pty_close(sid: str) -> bool:
     return True
 
 
-def _agent_models() -> dict[str, object]:
+def _agent_models(app: App) -> dict[str, object]:
     """The drivers the terminal can pick — live-probed on both sides.
-    Ollama tags come from `http://localhost:11434/api/tags`. CLI adapters
+    Ollama tags come from `<ollama_base_url()>/api/tags`. CLI adapters
     come from `shutil.which(cmd[0])` against every entry in
     KNOWN_CLI_ADAPTERS. The dropdown reflects what is actually on the box:
     nothing installed → empty CLI section + empty Ollama section (with
@@ -1300,7 +1266,7 @@ def _agent_models() -> dict[str, object]:
 
     ollama: list[str] = []
     try:
-        with _u.urlopen("http://localhost:11434/api/tags", timeout=2) as r:  # noqa: S310 - localhost
+        with _u.urlopen(f"{ollama_base_url()}/api/tags", timeout=2) as r:  # noqa: S310 - Ollama
             tags = msgspec.json.decode(r.read())
         ollama = sorted(str(m.get("name", "")) for m in tags.get("models", []) if m.get("name"))
     except Exception:  # noqa: BLE001 — no ollama / daemon down: CLI + deterministic still surface
@@ -1349,7 +1315,7 @@ def _agent_models() -> dict[str, object]:
     # "Claude list curated 2026-09-27").
     cli_versions: dict[str, dict[str, Any]] = {}
     for name in cli:
-        tree = _probe_cli_versions(name)
+        tree = _probe_cli_versions(app, name)
         if tree.get("families"):
             cli_versions[name] = tree
     return {
@@ -1364,7 +1330,7 @@ def _agent_models() -> dict[str, object]:
     }
 
 
-def _list_sessions_snapshot() -> dict[str, list[dict[str, Any]]]:
+def _list_sessions_snapshot(app: App) -> dict[str, list[dict[str, Any]]]:
     """Every session manifest bucketed by status. Shared by GET
     /api/session (rendered as-is) and by `_recent_workspaces` (used to
     derive distinct workspace paths when there is no
@@ -1376,9 +1342,9 @@ def _list_sessions_snapshot() -> dict[str, list[dict[str, Any]]]:
         "ended": [],
         "interrupted": [],
     }
-    if _SESSION_REGISTRY is None:
+    if app.registry is None:
         return buckets
-    for manifest in _SESSION_REGISTRY.list_all():
+    for manifest in app.registry.list_all():
         payload = {
             "session_id": manifest.session_id,
             "name": manifest.name,
@@ -1398,9 +1364,28 @@ def _list_sessions_snapshot() -> dict[str, list[dict[str, Any]]]:
 _RECENT_WORKSPACES_MAX = 64
 
 
+def _resolve_workspace_arg(raw: str) -> str:
+    """A client's workspace string as the absolute directory it names. `~/.substrate/sandbox` is
+    the sandbox under this daemon's state root (`substrate_home()/sandbox`, so a test or gate home
+    keeps its own); any other `~` expands to the user's home. A relative path is refused: it
+    would resolve against the server's working directory, which is how literal `~` folders
+    appeared inside the kernel and UI repos (lens audit F002, F375)."""
+    if raw == "~/.substrate/sandbox" or raw.startswith("~/.substrate/sandbox/"):
+        tail = raw[len("~/.substrate/sandbox") :].lstrip("/")
+        return (
+            str(api.substrate_home() / "sandbox" / tail)
+            if tail
+            else str(api.substrate_home() / "sandbox")
+        )
+    path = Path(raw).expanduser()
+    if not path.is_absolute():
+        raise ValueError(f"workspace must be an absolute path (or start with ~), got {raw!r}")
+    return str(path)
+
+
 def _canonical_workspace(path: str) -> str:
-    """Sprint 086b — one string per real directory. Expands `~`,
-    resolves an absolute path, strips trailing slash. Two Records rows
+    """Sprint 086b — one string per real directory. Expands `~` and
+    strips a trailing slash (it does not resolve symlinks). Two Records rows
     that pointed at the same directory (`~/.substrate/sandbox` vs
     `/Users/peterlaffey/.substrate/sandbox`) now dedupe. Sessions and
     workspaces both store this form so exact-string filters do not
@@ -1492,7 +1477,7 @@ def _is_temp_workspace(path: str) -> bool:
         pass
     if any(part.startswith("pytest-of-") for part in p.parts):
         return True
-    roots = {"/tmp", "/private/tmp", "/var/folders", "/private/var/folders", tempfile.gettempdir()}
+    roots = {"/tmp", "/private/tmp", "/var/folders", "/private/var/folders", tempfile.gettempdir()}  # noqa: S108 — classifying temp paths, not writing to one
     for root in roots:
         try:
             if p.is_relative_to(_Path(root).resolve()):
@@ -1559,7 +1544,7 @@ def _remember_workspace(path: str) -> None:
         return
 
 
-def _recent_workspaces() -> list[dict[str, str]]:
+def _recent_workspaces(app: App) -> list[dict[str, str]]:
     """One row per distinct canonical directory a session ever ran in,
     plus every entry the user has recorded via the folder picker in
     `~/.substrate/recent-workspaces.json`. Per-session sandboxes
@@ -1602,14 +1587,14 @@ def _recent_workspaces() -> list[dict[str, str]]:
                     p, s = row.get("path"), row.get("shape")
                     if isinstance(p, str) and isinstance(s, str):
                         _add(p, s)
-        except Exception:  # noqa: BLE001 — file malformed / unreadable, keep going
+        except Exception:  # noqa: BLE001, S110 — file malformed / unreadable, keep going
             pass
     # Derive every distinct workspace across every session bucket.
     # Per-session sandboxes collapse under one synthesized row; every
     # other path (real folders, test fixtures) appears as-is.
     per_session_seen = False
     try:
-        sessions = _list_sessions_snapshot()
+        sessions = _list_sessions_snapshot(app)
     except Exception:  # noqa: BLE001
         sessions = {"live": [], "parked": [], "interrupted": [], "ended": []}
     for bucket in ("live", "parked", "interrupted", "ended"):
@@ -1638,24 +1623,17 @@ def _recent_workspaces() -> list[dict[str, str]]:
     return [seen[canonical] for canonical in order]
 
 
-# Module-level HOST/PORT default to the env values so existing
-# call-sites (bin/substrate-ui, tests, external scripts) keep working
-# without touching. main() reads --host / --port CLI flags and
-# overrides these values before binding; --port 0 asks the OS for
-# an ephemeral port that the readback line prints for Electron.
-HOST, PORT = (
-    os.environ.get("SUBSTRATE_UI_HOST", "127.0.0.1"),
-    int(os.environ.get("SUBSTRATE_UI_PORT", "8765")),
-)
+# The default address is the one the CLI's TCP fallback dials (SUBSTRATE_DAEMON_HOST /
+# SUBSTRATE_DAEMON_PORT, 127.0.0.1:8765), read from the kernel's daemon client so the two cannot
+# drift (lens audit F063). main() reads --host / --port and overrides these before binding;
+# --port 0 asks the OS for an ephemeral port that the readback line prints for Electron.
+HOST, PORT = _substrate_daemon_client.tcp_host_port()
 # Static frontend: Vite builds web/*.ts + web/*.html to web/dist/. If dist/ exists, serve from
 # there (production shape); otherwise fall back to web/ (transitional — the source-level index.html
 # won't load its <script type="module" src="./app.ts"> without the Vite runtime).
 _WEB_SRC = Path(__file__).resolve().parent / "web"
 _WEB_DIST = _WEB_SRC / "dist"
 WEB = _WEB_DIST if _WEB_DIST.is_dir() else _WEB_SRC
-TERMINAL_V1 = (
-    Path(__file__).resolve().parent / "terminal-v1" / "web"
-)  # sub-project (A10) — currently empty; round-1 archived to _deprecated/terminal-v1-round1/
 
 
 def _runs_dir() -> Path:
@@ -1753,7 +1731,9 @@ _SESSION_PREFIXES = (
     "launch_",
     "build_",
     "resume_",
-)  # hash-suffixed session runs (prunable; vs the stable demo_* fixtures)
+    "s_topo_",
+)  # generated runs (prunable; vs the stable demo_* fixtures). launch_/build_/resume_ records
+# predate 2026-10-08, when those endpoints were deleted; s_topo_ are /api/topology/<name>/run.
 _CT = {
     ".html": "text/html",
     ".js": "text/javascript",
@@ -1855,16 +1835,66 @@ def _bundles_index() -> list[dict[str, object]]:
     return out
 
 
-def _records_index(exclude_sessions: bool = False) -> list[dict[str, object]]:
+def _segment_fingerprint(path: Path) -> tuple[tuple[str, int, int], ...]:
+    """Name, size and mtime of each event segment: an append, a roll or a close changes it."""
+    out: list[tuple[str, int, int]] = []
+    for seg in sorted(path.glob("events-*.jsonl")):
+        try:
+            st = seg.stat()
+        except OSError:
+            continue  # rolled or closed between glob and stat; the next request sees the new name
+        out.append((seg.name, st.st_size, st.st_mtime_ns))
+    return tuple(out)
+
+
+def _record_summary(app: App, name: str, path: Path) -> dict[str, object]:
+    """One rail row, recomputed only when the record's segments changed (lens audit F311: every
+    request re-read every record and ran run_graph + narration_summary on each)."""
+    key = path.resolve()
+    fingerprint = _segment_fingerprint(path)
+    with app.record_summary_lock:
+        cached = app.record_summary_cache.get(key)
+    if cached is not None and cached[0] == fingerprint:
+        return {**cached[1], "name": name}
+    events = list(api.read_record(path))
+    s = api.narration_summary(events)
+    g = api.run_graph(events)
+    run_id = next(
+        (
+            str((e.get("payload") or {}).get("run_id"))
+            for e in events
+            if e.get("kind") == api.RUN_STARTED
+        ),
+        "",
+    )
+    row: dict[str, object] = {
+        "name": name,
+        "run_id": run_id,
+        "status": g.status,  # incomplete | paused | finalised | failed (the real run-level outcome)
+        "final_reason": g.final_reason,
+        "paused_on": g.paused_on,
+        "total_events": s.total_events,
+        "producers_failed": s.producers_failed
+        + s.input_build_failures
+        + s.predicate_quarantines
+        + s.invalid_emissions,
+        "application_events": s.application_events,
+        # a prunable run (`_SESSION_PREFIXES`) is a "run"; bundled demos and the named demo_*
+        # fixtures are stable "demos" (kept by the prune).
+        "source": "run" if name.startswith(_SESSION_PREFIXES) else "demo",
+    }
+    with app.record_summary_lock:
+        app.record_summary_cache[key] = (fingerprint, row)
+    return row
+
+
+def _records_index(app: App, exclude_sessions: bool = False) -> list[dict[str, object]]:
     """The record list for the rail: each record's real run-level status + a one-glance summary
     (so a broken/paused run is flagged in the list itself — §7.2).
 
-    Sprint 034a: `exclude_sessions=True` filters out records whose name is a
-    session-run (starts with `_SESSION_PREFIXES`: launch_/build_/resume_) OR a
-    daemon-session record (matches `_SESSION_ID_RE`: `s_[0-9a-f]{8,32}`). The
-    rail's four-bucket read renders live sessions in its own bucket (via
-    `GET /api/session`), so the records bucket suppresses them to avoid
-    double-rendering.
+    `exclude_sessions=True` drops records whose name starts with one of `_SESSION_PREFIXES` or
+    matches `_SESSION_ID_RE` (`s_[0-9a-f]{8,32}`): the rail renders live sessions in their own
+    bucket from `GET /api/session`.
     """
     out: list[dict[str, object]] = []
     for name in _record_names():
@@ -1873,36 +1903,7 @@ def _records_index(exclude_sessions: bool = False) -> list[dict[str, object]]:
         path = _record_path(name)
         if path is None:
             continue
-        events = list(api.read_record(path))
-        s = api.narration_summary(events)
-        g = api.run_graph(events)
-        run_id = next(
-            (
-                str((e.get("payload") or {}).get("run_id"))
-                for e in events
-                if e.get("kind") == api.RUN_STARTED
-            ),
-            "",
-        )
-        out.append(
-            {
-                "name": name,
-                "run_id": run_id,
-                "status": g.status,  # incomplete | paused | finalised | failed (the real run-level outcome)
-                "final_reason": g.final_reason,
-                "paused_on": g.paused_on,
-                "resumable": name in _RESUMABLE,  # a paused run the UI can feed + continue
-                "total_events": s.total_events,
-                "producers_failed": s.producers_failed
-                + s.input_build_failures
-                + s.predicate_quarantines
-                + s.invalid_emissions,
-                "application_events": s.application_events,
-                # a prunable session run is hash-suffixed (launch_/build_/resume_); bundled demos +
-                # the named demo_* fixtures are stable "demos" (kept by the prune).
-                "source": "run" if name.startswith(_SESSION_PREFIXES) else "demo",
-            }
-        )
+        out.append(_record_summary(app, name, path))
     return out
 
 
@@ -1992,10 +1993,9 @@ def _assays_index() -> list[dict[str, object]]:
 # build_report runs a 5000-sample bootstrap (~8s on 71×10 cells), so cache by (name, file mtime): a
 # DONE run computes once then serves instantly; a LIVE run's file mtime changes as it grows, so it
 # recomputes only when there is new data — never stale, never recomputing the unchanged.
-_ASSAY_CACHE: dict[str, tuple[float, dict[str, object]]] = {}
 
 
-def _assay_report(name: str) -> dict[str, object]:
+def _assay_report(app: App, name: str) -> dict[str, object]:
     """The arm matrix: report_from_cells -> the per-arm read (both currencies, deltas, margin-verdict)."""
     from substrate.assay.cells import report_from_cells
 
@@ -2003,7 +2003,7 @@ def _assay_report(name: str) -> dict[str, object]:
     if not _SAFE_RECORD_NAME.match(name) or not cells.exists():
         return {"error": f"no assay {name!r}"}
     mtime = cells.stat().st_mtime
-    cached = _ASSAY_CACHE.get(name)
+    cached = app.assay_cache.get(name)
     if cached and cached[0] == mtime:
         return cached[1]
     report, meta = report_from_cells(cells)
@@ -2012,11 +2012,16 @@ def _assay_report(name: str) -> dict[str, object]:
         "meta": meta,
         "report": _builtins(report),
     }
-    _ASSAY_CACHE[name] = (mtime, result)
+    app.assay_cache[name] = (mtime, result)
     return result
 
 
 class Handler(BaseHTTPRequestHandler):
+    @property
+    def app(self) -> App:
+        """The App of the server this request arrived on (`AppHTTPServer`, `_UnixHTTPServer`)."""
+        return self.server.app  # type: ignore[attr-defined, no-any-return]
+
     def log_message(self, *args: object) -> None:  # quiet
         pass
 
@@ -2076,10 +2081,6 @@ class Handler(BaseHTTPRequestHandler):
             return True
         return False
 
-    def _at_run_capacity(self) -> bool:
-        # cap concurrent spawned runs so an unauthenticated POST flood can't exhaust threads/memory.
-        return sum(1 for t in _LAUNCHES.values() if t.is_alive()) >= MAX_LIVE_RUNS
-
     def do_POST(self) -> None:  # noqa: N802 — the thin control layer (launch + resume only, per ruling C1)
         if self._refuse_foreign_host():
             return
@@ -2112,20 +2113,8 @@ class Handler(BaseHTTPRequestHandler):
                 topology_name = path[len("/api/topology/") : -len("/run")]
                 self._topology_run(topology_name)
                 return
-            if path == "/api/launch":
-                self._launch(parse_qs(urlparse(self.path).query))
-                return
             if path == "/api/agent":
                 self._agent(parse_qs(urlparse(self.path).query))
-                return
-            if path == "/api/resume":
-                self._resume(parse_qs(urlparse(self.path).query))
-                return
-            if path == "/api/validate":
-                self._validate()
-                return
-            if path == "/api/build":
-                self._build()
                 return
             if path == "/api/runs/clear":
                 self._clear_runs()
@@ -2140,7 +2129,7 @@ class Handler(BaseHTTPRequestHandler):
                     self._error(400, "workspace add: {path: string} required")
                     return
                 _remember_workspace(ws_path)
-                self._json({"ok": True, "workspaces": _recent_workspaces()})
+                self._json({"ok": True, "workspaces": _recent_workspaces(self.app)})
                 return
             # Sprint 085a — CLI auth-in-transcript control endpoints.
             if path.startswith("/api/cli/") and path.endswith("/pty/start"):
@@ -2171,7 +2160,7 @@ class Handler(BaseHTTPRequestHandler):
         are KEPT; only session runs are deleted. Skip a record a live launch thread is still writing."""
         import shutil
 
-        live = {name for name, t in _LAUNCHES.items() if t.is_alive()}
+        live = {name for name in self.app.topology_runs if _is_live(self.app, name)}
         removed, kept = 0, 0
         if _runs_dir().exists():
             for rec in sorted(_runs_dir().glob("*.record")):
@@ -2188,7 +2177,7 @@ class Handler(BaseHTTPRequestHandler):
     # ── Sprint 085a — CLI auth-in-transcript endpoints ─────────────────
     def _cli_pty_start_endpoint(self, cli_name: str) -> None:
         try:
-            sid = _cli_pty_start(cli_name)
+            sid = _cli_pty_start(self.app, cli_name)
         except ValueError as exc:
             self._error(400, str(exc))
             return
@@ -2200,8 +2189,8 @@ class Handler(BaseHTTPRequestHandler):
     def _cli_pty_stream_endpoint(self, cli_name: str, sid: str) -> None:
         import base64 as _b64
 
-        with _CLI_PTY_LOCK:
-            session = _CLI_PTY_SESSIONS.get(sid)
+        with self.app.cli_pty_lock:
+            session = self.app.cli_pty_sessions.get(sid)
         if session is None or session["cli"] != cli_name:
             self._error(404, f"unknown pty session {sid!r} for cli {cli_name!r}")
             return
@@ -2239,23 +2228,23 @@ class Handler(BaseHTTPRequestHandler):
             return
 
     def _cli_pty_stdin_endpoint(self, cli_name: str, sid: str) -> None:
-        with _CLI_PTY_LOCK:
-            session = _CLI_PTY_SESSIONS.get(sid)
+        with self.app.cli_pty_lock:
+            session = self.app.cli_pty_sessions.get(sid)
         if session is None or session["cli"] != cli_name:
             self._error(404, f"unknown pty session {sid!r} for cli {cli_name!r}")
             return
         length = int(self.headers.get("Content-Length", "0") or "0")
         data = self.rfile.read(length) if length > 0 else b""
-        ok = _cli_pty_write(sid, data)
+        ok = _cli_pty_write(self.app, sid, data)
         self._json({"ok": ok, "wrote": len(data) if ok else 0})
 
     def _cli_pty_close_endpoint(self, cli_name: str, sid: str) -> None:
-        with _CLI_PTY_LOCK:
-            session = _CLI_PTY_SESSIONS.get(sid)
+        with self.app.cli_pty_lock:
+            session = self.app.cli_pty_sessions.get(sid)
         if session is None or session["cli"] != cli_name:
             self._error(404, f"unknown pty session {sid!r} for cli {cli_name!r}")
             return
-        _cli_pty_close(sid)
+        _cli_pty_close(self.app, sid)
         self._json({"ok": True})
 
     def _cli_logout_endpoint(self, cli_name: str) -> None:
@@ -2267,7 +2256,9 @@ class Handler(BaseHTTPRequestHandler):
         if not logout_cmd:
             self._error(400, f"cli {cli_name!r} has no logout_command")
             return
-        assert isinstance(logout_cmd, list)
+        if not isinstance(logout_cmd, list):
+            self._error(500, f"cli {cli_name!r}: logout_command must be an argv list")
+            return
         try:
             proc = subprocess.run(logout_cmd, capture_output=True, text=True, timeout=15)  # noqa: S603
         except (subprocess.TimeoutExpired, FileNotFoundError) as exc:
@@ -2305,7 +2296,7 @@ class Handler(BaseHTTPRequestHandler):
             {"session_id", "name", "record", "workspace_shape"}.
         409 on colliding name.
         """
-        if _SESSION_REGISTRY is None:
+        if self.app.registry is None:
             self._error(503, "session registry not initialized (boot ordering)")
             return
         try:
@@ -2347,7 +2338,11 @@ class Handler(BaseHTTPRequestHandler):
             # session-registry create() promotes shape → worktree and
             # substrate creates the worktree there; if it's a plain
             # directory the session writes into it flat (Mode 1).
-            workspace = str(_workspace_arg)
+            try:
+                workspace = _resolve_workspace_arg(str(_workspace_arg))
+            except ValueError as exc:
+                self._error(400, str(exc))
+                return
         else:
             # Bare session, no --workspace. Spec §3 line 35 + §9c line 587:
             # sandbox at ~/.substrate/sessions/<id>/workspace/, flat shape.
@@ -2378,7 +2373,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             from substrate.topologies.session.roles import resolve_role_prompt
 
-            resolve_role_prompt(role, repo_root=Path.cwd())
+            resolve_role_prompt(role, repo_root=Path(workspace))
         except Exception as exc:  # noqa: BLE001 — RegistrationError forwarded as 400
             self._error(400, f"role {role!r}: {exc}")
             return
@@ -2416,7 +2411,7 @@ class Handler(BaseHTTPRequestHandler):
             driver_params = dict(driver_params_raw)
         session_id = _forced_session_id or f"s_{uuid.uuid4().hex[:24]}"
         try:
-            manifest = _SESSION_REGISTRY.create(
+            manifest = self.app.registry.create(
                 session_id=session_id,
                 name=str(name) if name is not None else None,
                 driver=driver,
@@ -2433,22 +2428,18 @@ class Handler(BaseHTTPRequestHandler):
             # session never lands corrupt.
             if driver_params is not None:
                 try:
-                    _SESSION_REGISTRY.set_driver_params(session_id, driver_params)
+                    self.app.registry.set_driver_params(session_id, driver_params)
                 except ValueError as exc:
-                    _SESSION_REGISTRY.delete(session_id)
+                    self.app.registry.delete(session_id)
                     self._error(400, f"driver_params: {exc}")
                     return
-        except Exception as exc:
-            # NameCollision carries existing_session_id per sprint 211.
-            if isinstance(exc, NameCollision):
-                self._json(
-                    {
-                        "error": "name already taken",
-                        "existing_session_id": getattr(exc, "existing_session_id", None),
-                    },
-                    409,
-                )
-                return
+        except NameCollision as exc:  # carries existing_session_id (sprint 211)
+            self._json(
+                {"error": "name already taken", "existing_session_id": exc.existing_session_id},
+                409,
+            )
+            return
+        except Exception as exc:  # noqa: BLE001 — the handler boundary: anything else is a 500 naming its type
             self._error(500, f"{type(exc).__name__}: {exc}")
             return
         # Sprint 086 — remember this workspace on session open so the
@@ -2458,7 +2449,7 @@ class Handler(BaseHTTPRequestHandler):
         # Sprint 032c: re-read the manifest post-validation (set_driver_params
         # rolls it forward with the validated dict). driver_params on the
         # response so the UI can echo it in the header without a GET.
-        current = _SESSION_REGISTRY.get(session_id) or manifest
+        current = self.app.registry.get(session_id) or manifest
         self._json(
             {
                 "session_id": manifest.session_id,
@@ -2481,7 +2472,7 @@ class Handler(BaseHTTPRequestHandler):
         wire uses, per piece-C review finding 3's fix). Per-session threading.Lock
         serializes concurrent callers. Returns {status, final_seq?, error?}.
         """
-        if _SESSION_REGISTRY is None:
+        if self.app.registry is None:
             self._error(503, "session registry not initialized (boot ordering)")
             return
         # Sprint 216: 410 for a session that was live and is now gone. A
@@ -2489,14 +2480,14 @@ class Handler(BaseHTTPRequestHandler):
         # manifest is popped. A caller that resolved the session name
         # earlier and hits /turn after the DELETE gets 410, not 404. A
         # never-existed session still returns 404.
-        manifest = _SESSION_REGISTRY.get(session_id)
+        manifest = self.app.registry.get(session_id)
         if manifest is None:
-            if _SESSION_REGISTRY.has_session_dir(session_id):
+            if self.app.registry.has_session_dir(session_id):
                 self._json(
                     {
                         "ok": False,
                         "status": SessionStatus.ENDED,
-                        "error": SESSION_ENDED_MID_DELEGATE,
+                        "error": SESSION_DELETED,
                     },
                     410,
                 )
@@ -2550,9 +2541,9 @@ class Handler(BaseHTTPRequestHandler):
         # registry's fast lock; refuse the (cap+1)th caller with 429
         # immediately (no block). Every admission MUST pair with
         # dequeue_turn in a `finally`, or the counter leaks.
-        admitted, position = _SESSION_REGISTRY.try_enqueue_turn(session_id)
+        admitted, position = self.app.registry.try_enqueue_turn(session_id)
         if not admitted:
-            cap = _SESSION_REGISTRY.turn_queue_cap()
+            cap = self.app.registry.turn_queue_cap()
             self._json(
                 {
                     "ok": False,
@@ -2568,14 +2559,7 @@ class Handler(BaseHTTPRequestHandler):
         # so a client that lost the previous response can resume from a known
         # boundary. The value is the caller's view; two concurrent callers may
         # see the same seq — that is fine, the lock serializes what follows.
-        record_root_pre = Path(manifest.record_root)
-        seq_at_start = -1
-        if record_root_pre.exists():
-            try:
-                for env in api.read_record(record_root_pre):
-                    seq_at_start = max(seq_at_start, int(env.get("seq", -1)))
-            except _RECORD_IO_ERRORS:  # REVIEW-2026-08-28 Q6: narrow mid-write catch
-                seq_at_start = -1
+        seq_at_start = _tail_seq(Path(manifest.record_root))
         # Sprint 214a: compute next turn_index INSIDE the per-session lock via
         # `resume_event_builder`, so two concurrent POST /turn calls see two
         # distinct tail states rather than the same pre-lock snapshot.
@@ -2584,7 +2568,7 @@ class Handler(BaseHTTPRequestHandler):
         def _build(_manifest: Any, record_root_locked: Path) -> Any:
             # F14: use the registry's in-memory counter instead of scanning
             # the entire record for the tail UserMessage.turn_index.
-            next_turn_index = _SESSION_REGISTRY.next_turn_index(session_id)
+            next_turn_index = self.app.registry.next_turn_index(session_id)
             # Sprint 217e: prefix a context slice to assembled_prompt when the
             # caller passed `context` in the body. The extractor is delegate's
             # existing helper; it reads the parent (== this session's) record
@@ -2610,38 +2594,36 @@ class Handler(BaseHTTPRequestHandler):
 
         try:
             try:
-                updated_manifest, root_after = _SESSION_REGISTRY.turn_sync(
+                updated_manifest, root_after = self.app.registry.turn_sync(
                     session_id,
                     resume_event_builder=_build,
                 )
-            except Exception as exc:
-                if isinstance(exc, SessionEndedMidTurn):
-                    self._json(
-                        {
-                            "ok": False,
-                            "status": SessionStatus.ENDED,
-                            "error": SESSION_ENDED_MID_DELEGATE,
-                        },
-                        410,
-                    )
-                    return
-                if isinstance(exc, TornRecordOnResume):
-                    self._json(
-                        {
-                            "ok": False,
-                            "status": SessionStatus.INTERRUPTED,
-                            "error": RECORD_TORN,
-                            "detail": str(exc),
-                        },
-                        410,
-                    )
-                    return
+            except SessionEndedMidTurn:
+                self._json(
+                    {
+                        "ok": False,
+                        "status": SessionStatus.ENDED,
+                        "error": SESSION_ENDED_MID_TURN,
+                    },
+                    410,
+                )
+                return
+            except TornRecordOnResume as exc:
+                self._json(
+                    {
+                        "ok": False,
+                        "status": SessionStatus.INTERRUPTED,
+                        "error": RECORD_TORN,
+                        "detail": str(exc),
+                    },
+                    410,
+                )
+                return
+            except Exception as exc:  # noqa: BLE001 — the handler boundary: anything else is a 500 naming its type
                 self._error(500, f"{type(exc).__name__}: {exc}")
                 return
             # Return the record's tail seq so the caller can page /events from there.
-            final_seq = -1
-            for env in api.read_record(root_after):
-                final_seq = max(final_seq, int(env.get("seq", -1)))
+            final_seq = _tail_seq(root_after)
             self._json(
                 {
                     "seq": seq_at_start,
@@ -2651,7 +2633,7 @@ class Handler(BaseHTTPRequestHandler):
                 }
             )
         finally:
-            _SESSION_REGISTRY.dequeue_turn(session_id)
+            self.app.registry.dequeue_turn(session_id)
 
     def _session_end(self, session_id: str) -> None:
         """Sprint 215a: POST /api/session/<id>/end. Body optional:
@@ -2661,17 +2643,17 @@ class Handler(BaseHTTPRequestHandler):
         `end-on-user-end` trigger (`session/__init__.py:499-509`) fires on any
         `SessionEndRequested` and routes through the `session_end` producer to
         emit `SessionEnded{reason: "user_end", total_turns: N}`;
-        `threshold_count("SessionEnded", 1)` matches; the run finalises;
+        `finalise_on("SessionEnded")` matches; the run finalises;
         `turn_sync` transitions the manifest to `"ended"`.
 
         Response: `{seq, status: "ended", final_seq, record}`. 404 on unknown
         session_id; 410 on a session already ended (the `SessionEndedMidTurn`
         shape).
         """
-        if _SESSION_REGISTRY is None:
+        if self.app.registry is None:
             self._error(503, "session registry not initialized (boot ordering)")
             return
-        manifest = _SESSION_REGISTRY.get(session_id)
+        manifest = self.app.registry.get(session_id)
         if manifest is None:
             self._error(404, f"unknown session_id {session_id!r}")
             return
@@ -2692,64 +2674,49 @@ class Handler(BaseHTTPRequestHandler):
         # before ending itself. Per-child failure is best-effort — logged
         # and continued — so a single stuck child does not block the parent's
         # SessionEnded from landing on the record.
-        children = _SESSION_REGISTRY.list_children(session_id)
+        children = self.app.registry.list_children(session_id)
         for child_manifest in children:
             try:
-                _interrupt_then_end(child_manifest.session_id, "composite_parent_end", 30.0)
+                _interrupt_then_end(
+                    self.app, child_manifest.session_id, "composite_parent_end", 30.0
+                )
             except FreshSessionRequiresUserMessage:
-                _SESSION_REGISTRY.update_status(child_manifest.session_id, SessionStatus.ENDED)
+                self.app.registry.update_status(child_manifest.session_id, SessionStatus.ENDED)
             except Exception:  # noqa: BLE001 — child cascade is best-effort; one child's failure does not block the parent.
                 traceback.print_exc()
 
         # Pre-request tail seq (piece-B review finding 7 shape).
-        record_root_pre = Path(manifest.record_root)
-        seq_at_start = -1
-        if record_root_pre.exists():
-            try:
-                for env in api.read_record(record_root_pre):
-                    seq_at_start = max(seq_at_start, int(env.get("seq", -1)))
-            except _RECORD_IO_ERRORS:  # REVIEW-2026-08-28 Q6: narrow mid-write catch
-                seq_at_start = -1
+        seq_at_start = _tail_seq(Path(manifest.record_root))
 
         try:
-            updated_manifest, root_after = _interrupt_then_end(session_id, source, 60.0)
-        except Exception as exc:
-            if isinstance(exc, SessionEndedMidTurn):
-                self._json(
-                    {"status": SessionStatus.ENDED, "error": SESSION_ENDED_MID_DELEGATE}, 410
-                )
-                return
-            # Sprint 220 (piece-D dispatch): a fresh session that never opened
-            # its record cannot receive a SessionEndRequested (which is not a
-            # UserMessage). Transition the manifest to "ended" at the daemon
-            # layer without opening. Same shape as _shutdown_all_sessions.
-            if isinstance(exc, FreshSessionRequiresUserMessage):
-                _SESSION_REGISTRY.update_status(session_id, SessionStatus.ENDED)
-                self._json(
-                    {
-                        "seq": seq_at_start,
-                        "status": SessionStatus.ENDED,
-                        "final_seq": seq_at_start,
-                        "record": manifest.record_root,
-                        "reason": FRESH_SESSION_NEVER_OPENED,
-                    }
-                )
-                return
-            if isinstance(exc, TornRecordOnResume):
-                self._json(
-                    {
-                        "status": SessionStatus.INTERRUPTED,
-                        "error": RECORD_TORN,
-                        "detail": str(exc),
-                    },
-                    410,
-                )
-                return
+            updated_manifest, root_after = _interrupt_then_end(self.app, session_id, source, 60.0)
+        except SessionEndedMidTurn:
+            self._json({"status": SessionStatus.ENDED, "error": SESSION_ENDED_MID_TURN}, 410)
+            return
+        except FreshSessionRequiresUserMessage:
+            # Sprint 220 (piece-D dispatch): a fresh session that never opened its record cannot
+            # receive a SessionEndRequested (which is not a UserMessage). Transition the manifest
+            # to "ended" at the daemon layer without opening. Same shape as _shutdown_all_sessions.
+            self.app.registry.update_status(session_id, SessionStatus.ENDED)
+            self._json(
+                {
+                    "seq": seq_at_start,
+                    "status": SessionStatus.ENDED,
+                    "final_seq": seq_at_start,
+                    "record": manifest.record_root,
+                    "reason": FRESH_SESSION_NEVER_OPENED,
+                }
+            )
+            return
+        except TornRecordOnResume as exc:
+            self._json(
+                {"status": SessionStatus.INTERRUPTED, "error": RECORD_TORN, "detail": str(exc)}, 410
+            )
+            return
+        except Exception as exc:  # noqa: BLE001 — the handler boundary: anything else is a 500 naming its type
             self._error(500, f"{type(exc).__name__}: {exc}")
             return
-        final_seq = -1
-        for env in api.read_record(root_after):
-            final_seq = max(final_seq, int(env.get("seq", -1)))
+        final_seq = _tail_seq(root_after)
         self._json(
             {
                 "seq": seq_at_start,
@@ -2763,7 +2730,7 @@ class Handler(BaseHTTPRequestHandler):
         """UI sprint 105: GET /api/session/<id>/tasks — the session's bash background tasks."""
         from substrate.topologies.tool_loop.background import TABLE as _BG
 
-        if _SESSION_REGISTRY is None or _SESSION_REGISTRY.get(session_id) is None:
+        if self.app.registry is None or self.app.registry.get(session_id) is None:
             self._error(404, f"unknown session {session_id!r}")
             return
         self._json({"tasks": [t.describe() for t in _BG.tasks_of(session_id)]})
@@ -2774,7 +2741,7 @@ class Handler(BaseHTTPRequestHandler):
         user stops a task from /tasks."""
         from substrate.topologies.tool_loop.background import TABLE as _BG
 
-        if _SESSION_REGISTRY is None or _SESSION_REGISTRY.get(session_id) is None:
+        if self.app.registry is None or self.app.registry.get(session_id) is None:
             self._error(404, f"unknown session {session_id!r}")
             return
         try:
@@ -2809,10 +2776,10 @@ class Handler(BaseHTTPRequestHandler):
 
         404 on unknown session_id.
         """
-        if _SESSION_REGISTRY is None:
+        if self.app.registry is None:
             self._error(503, "session registry not initialized (boot ordering)")
             return
-        manifest = _SESSION_REGISTRY.get(session_id)
+        manifest = self.app.registry.get(session_id)
         if manifest is None:
             self._error(404, f"unknown session_id {session_id!r}")
             return
@@ -2837,7 +2804,7 @@ class Handler(BaseHTTPRequestHandler):
         # record_root string. Empty / absent → session scope.
         record_root_raw = qs.get("record_root", [""])[0].strip()
         record_root_arg = record_root_raw or None
-        ref = _SESSION_REGISTRY.interrupt(session_id, tier=tier_raw, record_root=record_root_arg)
+        ref = self.app.registry.interrupt(session_id, tier=tier_raw, record_root=record_root_arg)
         if ref is None:
             self._json({"interrupted": False, "landed": False, "session_id": session_id})
             return
@@ -2894,20 +2861,20 @@ class Handler(BaseHTTPRequestHandler):
         record's own tail (sprint 211 + review finding 5 fold); this handler just
         reads the in-memory catalog.
         """
-        if _SESSION_REGISTRY is None:
+        if self.app.registry is None:
             self._error(503, "session registry not initialized (boot ordering)")
             return
-        self._json(_list_sessions_snapshot())
+        self._json(_list_sessions_snapshot(self.app))
 
     def _session_get(self, session_id: str) -> None:
         """Sprint 035w: GET /api/session/<id>. Returns the manifest slice the
         UI needs to render header fields — session_id, name, driver, workspace,
         workspace_shape, bundle, record, created_at, status, role,
         driver_params. 404 for unknown id."""
-        if _SESSION_REGISTRY is None:
+        if self.app.registry is None:
             self._error(503, "session registry not initialized (boot ordering)")
             return
-        manifest = _SESSION_REGISTRY.get(session_id)
+        manifest = self.app.registry.get(session_id)
         if manifest is None:
             self._error(404, f"not found: /api/session/{session_id}")
             return
@@ -2934,10 +2901,10 @@ class Handler(BaseHTTPRequestHandler):
         """Sprint 214b: GET /api/session/by-name/<name>. Returns `{"session_id":
         "..."}` or 404 with `{"error": "unknown name"}`. Names are case-sensitive.
         """
-        if _SESSION_REGISTRY is None:
+        if self.app.registry is None:
             self._error(503, "session registry not initialized (boot ordering)")
             return
-        session_id = _SESSION_REGISTRY.by_name(name)
+        session_id = self.app.registry.by_name(name)
         if session_id is None:
             self._error(404, f"unknown session name: {name!r}")
             return
@@ -2951,7 +2918,7 @@ class Handler(BaseHTTPRequestHandler):
         session_id. A subsequent POST /turn on that id returns 404 (the manifest
         is gone) — piece B's contract for a deleted session.
         """
-        if _SESSION_REGISTRY is None:
+        if self.app.registry is None:
             self._error(503, "session registry not initialized (boot ordering)")
             return
         # Sprint 225b: cascade delete to child sub-agents first. Rule 12
@@ -2959,14 +2926,14 @@ class Handler(BaseHTTPRequestHandler):
         # entries drop. Per-child KeyError is a race (child dropped
         # between list_children and delete); ignore per the best-effort
         # contract.
-        children = _SESSION_REGISTRY.list_children(session_id)
+        children = self.app.registry.list_children(session_id)
         for child_manifest in children:
             try:
-                _SESSION_REGISTRY.delete(child_manifest.session_id)
+                self.app.registry.delete(child_manifest.session_id)
             except KeyError:
                 pass
         try:
-            _SESSION_REGISTRY.delete(session_id)
+            self.app.registry.delete(session_id)
         except KeyError:
             self._error(404, f"unknown session_id {session_id!r}")
             return
@@ -3058,10 +3025,10 @@ class Handler(BaseHTTPRequestHandler):
         directly. Broken pipe (`OSError` on `self.wfile.write`) terminates the
         loop cleanly — the SSE contract lets either side hang up.
         """
-        if _SESSION_REGISTRY is None:
+        if self.app.registry is None:
             self._error(503, "session registry not initialized (boot ordering)")
             return
-        manifest = _SESSION_REGISTRY.get(session_id)
+        manifest = self.app.registry.get(session_id)
         if manifest is None:
             self._error(404, f"unknown session_id {session_id!r}")
             return
@@ -3122,7 +3089,7 @@ class Handler(BaseHTTPRequestHandler):
         """Sprint 225a: POST /api/topology/<name>/run.
 
         Body: `{inputs: {...}, await_completion?: bool, ...}`.
-        Reads the manifest from `_APPLICATIONS`; resolves `<role>_model`
+        Reads the manifest from `app.applications`; resolves `<role>_model`
         strings via `_daemon_driver_resolver`; hands the resolved inputs
         to the `_APP_BUILDERS` dispatch. `runs = "session"` and
         `runs = "session_composite"` return 400 with a pointer at the
@@ -3134,7 +3101,7 @@ class Handler(BaseHTTPRequestHandler):
         `{run_id, record_root, status: "running"}` and sprint 225d's
         status endpoint polls the record to observe transitions.
         """
-        spec = _APPLICATIONS.get(application_name)
+        spec = self.app.applications.get(application_name)
         if spec is None:
             self._error(404, f"unknown application {application_name!r}")
             return
@@ -3179,31 +3146,37 @@ class Handler(BaseHTTPRequestHandler):
             )
             return
         try:
-            topology_factory = builder(resolved)
+            topology_factory = builder(self.app, resolved)
         except Exception as exc:  # noqa: BLE001 — application builder can raise anything a topology constructor does; malformed inputs → 400 naming the class.
             self._error(400, f"{type(exc).__name__}: {exc}")
             return
 
         run_id = f"s_topo_{uuid.uuid4().hex[:20]}"
-        record_root = _runs_dir() / run_id
+        # `<run_id>.record`, like every run under runs/: listed by /api/records, served by name,
+        # pruned by /api/runs/clear (lens audit F295: the bare dir was none of these, and 389 of
+        # them piled up in a real home).
+        record_root = _runs_dir() / f"{run_id}.record"
         record_root.mkdir(parents=True, exist_ok=True)
+        _forget_finished_topology_runs(self.app)
         await_completion = body.get("await_completion", True)
         started_at = time.time()
 
         if await_completion:
             try:
-                asyncio.run(api.Runtime(record_root).run(topology_factory, name=application_name))
+                result = asyncio.run(
+                    api.Runtime(record_root).run(topology_factory, name=application_name)
+                )
             except Exception as exc:  # noqa: BLE001 — topology run boundary: any Producer/View failure surfaces as HTTP 500 with the class name.
                 self._error(500, f"{type(exc).__name__}: {exc}")
                 return
-            final_seq = -1
-            for envelope in api.read_record(record_root):
-                final_seq = max(final_seq, int(envelope.get("seq", -1)))
+            final_seq = _tail_seq(record_root)
             self._json(
                 {
                     "run_id": run_id,
                     "record_root": str(record_root),
-                    "status": api.RunStatus.FINALISED,
+                    # The run's own outcome: a paused or failed run said "finalised" before
+                    # (lens audit F296).
+                    "status": result.status,
                     "final_seq": final_seq,
                     "application": application_name,
                 }
@@ -3234,7 +3207,7 @@ class Handler(BaseHTTPRequestHandler):
                 "application": application_name,
             }
         )
-        _TOPOLOGY_RUNS[run_id] = run_handle
+        self.app.topology_runs[run_id] = run_handle
         thread.start()
         self._json(
             {
@@ -3258,7 +3231,7 @@ class Handler(BaseHTTPRequestHandler):
         Unknown run_id → 404. Application name in the URL is a UX signal
         for the caller; the actual lookup is by run_id.
         """
-        handle = _TOPOLOGY_RUNS.get(run_id)
+        handle = self.app.topology_runs.get(run_id)
         if handle is None:
             self._error(
                 404,
@@ -3275,7 +3248,7 @@ class Handler(BaseHTTPRequestHandler):
                 envelopes = list(
                     api.read_record(record_root, resolve_blobs=True)
                 )  # Sprint 095: output is returned
-            except Exception:  # noqa: BLE001 — torn record while the background run is mid-write; treat as running until stable.
+            except Exception:  # noqa: BLE001 — read_record already skips a half-written last frame; what raises here is a gap or a CRC failure, so the run is failed (lens audit F297: this comment said "treat as running").
                 envelopes = []
                 status = api.RunStatus.FAILED
                 ended = True
@@ -3357,7 +3330,7 @@ class Handler(BaseHTTPRequestHandler):
             )
             return
         try:
-            builder_manifest, reviewer_manifest = builder(_SESSION_REGISTRY, resolved)
+            builder_manifest, reviewer_manifest = builder(self.app.registry, resolved)
         except Exception as exc:  # noqa: BLE001 — composite builder can raise anything a topology constructor does; malformed inputs → 400 naming the class.
             self._error(400, f"{type(exc).__name__}: {exc}")
             return
@@ -3370,45 +3343,6 @@ class Handler(BaseHTTPRequestHandler):
                 "reviewer_record": reviewer_manifest.record_root,
             }
         )
-
-    def _launch(self, q: dict[str, list[str]]) -> None:
-        """Launch a bundled topology to a fresh record. The launch IS the recorded control action —
-        the run opens with substrate.RunStarted at seq 0 (§7.7: control is a thin layer, and every
-        control action is itself an event). Runs to a terminal, then the console reads the record."""
-        name = q.get("topology", [""])[0]
-        factory = bundled.BUNDLED.get(name) or _EXTRA_TOPOS.get(name)
-        if factory is None:
-            self._error(404, f"unknown topology {name!r}")
-            return
-        if self._at_run_capacity():
-            self._error(429, "too many concurrent runs; wait for some to finish")
-            return
-        # name the record by a UNIQUE id — never an in-memory counter (a counter resets on restart
-        # and collides with a prior on-disk record; clobbering it is silent data loss on a durable
-        # artifact — review #35). BACKGROUND the run (a daemon thread, fresh loop) so the request
-        # returns immediately — a synchronous launch can't deliver live-attach, and a slow/real run
-        # would block the request for its whole duration (review #35 finding 3).
-        run_name = f"launch_{name}_{uuid.uuid4().hex[:12]}"
-        root = _runs_dir() / f"{run_name}.record"
-        th = threading.Thread(
-            target=lambda: asyncio.run(api.Runtime(root).run(factory(), name=name)), daemon=True
-        )
-        _LAUNCHES[run_name] = (
-            th  # track liveness — a dead thread w/o a terminal = torn (review #36)
-        )
-        th.start()
-        # wait only until RunStarted is on the record, so the console can immediately read + follow it.
-        for _ in range(80):
-            try:
-                if root.exists() and any(
-                    e.get("kind") == api.RUN_STARTED for e in api.read_record(root)
-                ):
-                    break
-            except _RECORD_IO_ERRORS:  # REVIEW-2026-08-28 Q6: narrow mid-write catch
-                pass
-            time.sleep(0.05)
-        status = api.run_graph(root).status if root.exists() else api.RunStatus.INCOMPLETE
-        self._json({"name": run_name, "status": status, "launched": name})
 
     def _agent(self, q: dict[str, list[str]]) -> None:
         """`/api/agent` compat bridge (TECH-SPEC §7 line 690).
@@ -3423,20 +3357,14 @@ class Handler(BaseHTTPRequestHandler):
         Query params:
           - session: session name (find-or-create key). Missing → adhoc.
           - task: the user message text for this turn.
-          - model: `deterministic` (default), `ollama`, or a driver string.
-          - name: driver model name when model=ollama (e.g. `llama3.2:1b`).
+          - model: `deterministic` (default), `ollama` (with `name`), or a KNOWN_CLI_ADAPTERS key.
+          - name: the Ollama model tag; required when model=ollama (400 without it).
           - workspace: caller-supplied path (like the old shape).
-          - legacy: `true` → run the pre-bridge behavior for one release.
-                    The bridge default routes through SessionRegistry.
 
-        Response: `{record, session_id, ok: true, deprecated: true?}`. The
-        `deprecated: true` field lands on legacy=true responses so a caller
-        can see the shape is on its way out.
+        Response: `{record, session_id, ok: true}`. The pre-bridge `legacy=true` shape, which
+        ran a launch thread and could run a request-named argv, was deleted on 2026-10-08.
         """
-        if (q.get("legacy", [""])[0] or "").lower() == "true":
-            self._agent_legacy(q)
-            return
-        if _SESSION_REGISTRY is None:
+        if self.app.registry is None:
             # No silent legacy fallback. The bridge is the default; the
             # legacy shape ships one release with explicit `legacy=true`
             # opt-in per TECH-SPEC §7 line 690. A caller reaching here
@@ -3452,17 +3380,27 @@ class Handler(BaseHTTPRequestHandler):
         # Driver string per the create/PATCH shape. `model=ollama` + `name=X`
         # → driver=X so /api/session's PATCH-driver stays useful downstream.
         if model == "ollama":
-            driver = q.get("name", ["llama3.2:1b"])[0]
-        elif model in ("claude", "gemini", "cli"):
+            driver = q.get("name", [""])[0]
+            if not driver:
+                # The bridge had its own default tag (llama3.2:1b), a third model default beside
+                # `_agent_models`' preference list and the manifests' (lens audit F306).
+                self._error(400, "model=ollama needs name=<ollama tag>")
+                return
+        elif model == "deterministic" or model in KNOWN_CLI_ADAPTERS:
             driver = model
         else:
-            driver = "deterministic"
+            # Any other value used to run the deterministic stub without a word, so a request for
+            # a real adapter missing from a hand list (codex, cursor-agent) got canned replies
+            # (lens audit F298).
+            choices = ", ".join(["deterministic", "ollama", *sorted(KNOWN_CLI_ADAPTERS)])
+            self._error(400, f"unknown model {model!r}; one of: {choices}")
+            return
 
         # Find-or-create by name. A collision-free session name means create;
         # a hit means resume.
         session_id: str | None = None
         if session_name:
-            session_id = _SESSION_REGISTRY.by_name(session_name)
+            session_id = self.app.registry.by_name(session_name)
 
         if session_id is None:
             session_id = f"s_{uuid.uuid4().hex[:24]}"
@@ -3473,7 +3411,7 @@ class Handler(BaseHTTPRequestHandler):
             )
             Path(workspace).mkdir(parents=True, exist_ok=True)
             try:
-                _SESSION_REGISTRY.create(
+                self.app.registry.create(
                     session_id=session_id,
                     name=session_name or None,
                     driver=driver,
@@ -3491,7 +3429,7 @@ class Handler(BaseHTTPRequestHandler):
         from substrate.topologies.session import UserMessage as SessionUserMessage
 
         def _build(_manifest: Any, _record_root: Path) -> Any:
-            next_turn_index = _SESSION_REGISTRY.next_turn_index(session_id)
+            next_turn_index = self.app.registry.next_turn_index(session_id)
             assembled = task
             live_pt = _manifest.per_turn
             if live_pt:
@@ -3504,12 +3442,12 @@ class Handler(BaseHTTPRequestHandler):
             )
 
         try:
-            updated_manifest, root_after = _SESSION_REGISTRY.turn_sync(
+            updated_manifest, root_after = self.app.registry.turn_sync(
                 session_id, resume_event_builder=_build
             )
         except SessionEndedMidTurn:
             self._json(
-                {"ok": False, "status": SessionStatus.ENDED, "error": SESSION_ENDED_MID_DELEGATE},
+                {"ok": False, "status": SessionStatus.ENDED, "error": SESSION_ENDED_MID_TURN},
                 410,
             )
             return
@@ -3526,258 +3464,18 @@ class Handler(BaseHTTPRequestHandler):
             }
         )
 
-    def _agent_legacy(self, q: dict[str, list[str]]) -> None:
-        """The pre-bridge behavior. Stays one release per TECH-SPEC §7 line 690.
-
-        Callers that pass `?legacy=true` get the old launch-thread shape;
-        every other caller goes through the session-routed bridge above.
-        Response gains `deprecated: true` so the shape is visible.
-        """
-        model = (q.get("model", ["deterministic"])[0] or "deterministic").lower()
-        if self._at_run_capacity():
-            self._error(429, "too many concurrent runs; wait for some to finish")
-            return
-        # the per-conversation WORKSPACE: the directory the agent's tools operate in (relative paths
-        # + bash resolve there, absolute paths still go where named). This is ergonomics, not a jail.
-        # Per-session workspace, NEVER the server cwd (review C-16 corrected a stale "launch dir" note):
-        # an absolute `?workspace=` is a project the user picked; a bare name is a named session dir
-        # under ~/.substrate/sessions/ (the client passes the conversation id so its turns share one
-        # dir); absent -> a fresh adhoc session dir. Created if missing.
-        ws_arg = q.get("workspace", [""])[0]
-        wt_arg = q.get("worktree", [""])[
-            0
-        ]  # a repo path -> isolate this session in its own worktree
-        session = re.sub(r"[^A-Za-z0-9._-]", "-", ws_arg)[:40] or f"adhoc-{uuid.uuid4().hex[:8]}"
-        branch = ""
-        if wt_arg:  # git-worktree-per-session: operate on a branch adjacent to the repo (B)
-            try:
-                workspace, branch = _session_worktree(Path(wt_arg), session)
-            except Exception as exc:  # noqa: BLE001 — not a repo / git failed: fall back, surfaced
-                workspace = _sessions_base() / session
-                branch = f"(worktree failed: {type(exc).__name__})"
-        elif ws_arg:
-            p = Path(ws_arg).expanduser()
-            workspace = p if p.is_absolute() else (_sessions_base() / session)
-        else:
-            workspace = _sessions_base() / session
-        workspace.mkdir(parents=True, exist_ok=True)
-        suite = full_suite(workspace)
-        # W2.2 follow-on: give the cockpit agent a `delegate` tool. Its child RECORDS land as flat SERVED
-        # runs/ records (child_record_root -> _runs_dir()/<base>_cN.record) so the UI's delegated-child branch can
-        # navigate to them; the child's tool WORKSPACE stays under the session workspace. Real-model
-        # branches only (the deterministic calculator has no responder to hand a child).
-        child_base = "delegate_child_" + uuid.uuid4().hex[:8]
-
-        def _with_delegate(responder: object) -> dict[str, object]:
-            return {
-                **suite,
-                "delegate": make_delegate(
-                    responder=responder,  # type: ignore[arg-type]
-                    root=workspace,
-                    child_suite_factory=full_suite,
-                    child_record_root=lambda n: _runs_dir() / f"{child_base}_c{n}.record",
-                ),
-            }
-
-        think, max_tokens, timeout = _agent_params(q)
-        if model == "ollama":
-            model_name = q.get("name", ["llama3.2:1b"])[0]
-            task = q.get("task", [""])[0] or "Use the available tools to help."
-            responder = OllamaResponder(
-                model=model_name, think=think, max_tokens=max_tokens, timeout=timeout
-            )
-            topo = tool_loop_topology(
-                model=responder,
-                walkthrough=True,
-                deterministic=False,
-                tools=_with_delegate(responder),
-                task=task,
-                max_steps=24,
-            )
-            label = "agent_" + re.sub(r"[^A-Za-z0-9]+", "-", model_name.split(":")[0])
-        elif model in KNOWN_CLI_ADAPTERS:
-            # a command-line model/agent drives the loop (CliResponder). Only the catalogued
-            # presets in KNOWN_CLI_ADAPTERS run; a request never names its own argv (lens audit
-            # F299: `model=cli&command=` ran any program). Substrate provides the tools.
-            task = q.get("task", [""])[0] or "Use the available tools to help."
-            cmd = _cli_command(model)
-            responder = CliResponder(cmd, name=model, timeout=timeout)
-            topo = tool_loop_topology(
-                model=responder,
-                walkthrough=True,
-                deterministic=False,
-                tools=_with_delegate(responder),
-                task=task,
-                max_steps=24,
-            )
-            label = "agent_" + model
-        else:
-            topo = tool_loop_topology()  # deterministic calculator loop — CI-safe, no network
-            label = "agent_calc"
-        run_name = (
-            f"launch_{label}_{uuid.uuid4().hex[:12]}"  # launch_ prefix => prunable session run
-        )
-        root = _runs_dir() / f"{run_name}.record"
-        th = threading.Thread(
-            target=lambda: asyncio.run(api.Runtime(root).run(topo, name=label)), daemon=True
-        )
-        _LAUNCHES[run_name] = th
-        th.start()
-        for _ in range(
-            80
-        ):  # wait only until RunStarted lands, so the console can follow immediately
-            try:
-                if root.exists() and any(
-                    e.get("kind") == api.RUN_STARTED for e in api.read_record(root)
-                ):
-                    break
-            except _RECORD_IO_ERRORS:  # REVIEW-2026-08-28 Q6: narrow mid-write catch
-                pass
-            time.sleep(0.05)
-        status = api.run_graph(root).status if root.exists() else api.RunStatus.INCOMPLETE
-        self._json(
-            {
-                "name": run_name,
-                "status": status,
-                "agent": model,
-                "workspace": str(workspace),
-                "branch": branch,
-                "params": {"think": think, "max_tokens": max_tokens, "timeout": timeout},
-                "deprecated": True,
-            }
-        )
-
-    def _resume(self, q: dict[str, list[str]]) -> None:
-        """Resume a paused run (ruling C1: the other control). Resume a COPY (unique id) so the
-        paused template stays re-resumable: reattach to the copy persistent-bus, inject the external
-        event -> the resume Trigger fires the continuation, on the SAME seq sequence (self-records,
-        like launch). Backgrounded + tracked in _LAUNCHES so liveness/torn detection works the same.
-
-        CAVEAT (review #38): resuming a COPY is a DEMO affordance — it keeps the fixture re-runnable.
-        PRODUCTION resume is single-shot: a real pause is consumed IN PLACE (you cannot approve the
-        same gate twice). Don't read this as the resume contract — it's so the demo can be replayed."""
-        name = q.get("record", [""])[0]
-        spec = _RESUMABLE.get(name)
-        src = _record_path(name)
-        if spec is None or src is None:
-            self._error(404, f"{name!r} is not a resumable record")
-            return
-        topo, ev_factory = spec
-        import shutil
-
-        if self._at_run_capacity():
-            self._error(429, "too many concurrent runs; wait for some to finish")
-            return
-        resume_name = f"resume_{name}_{uuid.uuid4().hex[:12]}"
-        root = _runs_dir() / f"{resume_name}.record"
-        shutil.copytree(src, root)
-        for lock in root.rglob(".lock"):
-            lock.unlink()
-        th = threading.Thread(
-            target=lambda: asyncio.run(
-                api.Runtime(root, persistent=True).resume(topo, resume_event=ev_factory())
-            ),
-            daemon=True,
-        )
-        _LAUNCHES[resume_name] = th
-        th.start()
-        for _ in range(80):  # the continuation is fast; wait briefly for a terminal
-            try:
-                if api.run_graph(root).status in (api.RunStatus.FINALISED, api.RunStatus.FAILED):
-                    break
-            except _RECORD_IO_ERRORS:  # REVIEW-2026-08-28 Q6: narrow mid-write catch
-                pass
-            time.sleep(0.05)
-        self._json({"name": resume_name, "status": api.run_graph(root).status, "resumed": name})
-
-
-    def _validate(self) -> None:
-        """The Studio's live validation: does the authored spec build? (static b.build() — the
-        'allowable ways' = exactly what the runtime would accept; rejects bad wiring before a run)."""
-        try:
-            topo = build_from_spec(self._read_json_body())
-            builder = api.TopologyBuilder()
-            topo(builder)
-            builder.build()
-        except (SpecError, api.RegistrationError) as exc:
-            self._json({"valid": False, "error": str(exc)})
-            return
-        except Exception as exc:  # noqa: BLE001 - any spec malformation -> a clean invalid, never a crash
-            self._json({"valid": False, "error": f"{type(exc).__name__}: {exc}"})
-            return
-        self._json({"valid": True})
-
-    def _build(self) -> None:
-        """Build & launch: translate the authored spec into a REAL topology and RUN it — the run
-        opens with substrate.RunStarted (the authored topology becomes a genuine recorded run; the
-        Studio's 'one act that causes things'). Backgrounded + tracked like launch (§7.7)."""
-        try:
-            spec = self._read_json_body()
-            topo = build_from_spec(spec, _responder_for(spec))
-            builder = api.TopologyBuilder()
-            topo(builder)
-            builder.build()  # validate the wiring before running
-        except (SpecError, api.RegistrationError) as exc:
-            self._error(400, str(exc))
-            return
-        except Exception as exc:  # noqa: BLE001 — TopologyBuilder.build() can raise anything a Producer's constructor does; malformed authoring spec → 400 naming the class.
-            self._error(400, f"{type(exc).__name__}: {exc}")
-            return
-        name = str(spec.get("name") or "authored")
-        if self._at_run_capacity():
-            self._error(429, "too many concurrent runs; wait for some to finish")
-            return
-        run_name = f"build_{name}_{uuid.uuid4().hex[:12]}"
-        root = _runs_dir() / f"{run_name}.record"
-        th = threading.Thread(
-            target=lambda: asyncio.run(api.Runtime(root).run(topo, name=f"build:{name}")),
-            daemon=True,
-        )
-        _LAUNCHES[run_name] = th
-        th.start()
-        # authored stub topologies are deterministic + fast — wait briefly for a TERMINAL so the
-        # build result can be honest about which authored Triggers actually fired (review #39).
-        g = None
-        for _ in range(80):  # up to ~4s
-            try:
-                if root.exists():
-                    g = api.run_graph(root)
-                    if g.status != api.RunStatus.INCOMPLETE:
-                        break
-            except Exception:  # noqa: BLE001 - record not yet readable (pre-RunStarted)
-                pass
-            time.sleep(0.05)
-        out: dict[str, object] = {
-            "name": run_name,
-            "status": g.status if g else api.RunStatus.INCOMPLETE,
-            "built": name,
-        }
-        # "never matured" is only true against a TERMINAL graph. If the wait timed out and the run is
-        # still incomplete, a trigger is "unfired" merely because the run hasn't reached it yet -- a
-        # spurious signal on the slow (Ollama) path (ui-backend-5). Only report it for a settled run.
-        if g is not None and g.status != api.RunStatus.INCOMPLETE:
-            authored = [t["id"] for t in spec.get("triggers", [])]
-            fired = {i.trigger_id for i in g.instances if i.trigger_id}
-            unfired = [t for t in authored if t not in fired]
-            if unfired:
-                out["unfired_triggers"] = unfired  # authored Triggers whose Predicate never matured
-        self._json(out)
-
     def _session_patch(self, session_id: str) -> None:
-        """Sprint 215c: PATCH /api/session/<id>. Body:
-            {"driver"?: "kimi-k2.6:cloud", "name"?: "renamed"}
-        Every absent key leaves that field alone. Returns the updated
-        manifest shape.
+        """PATCH /api/session/<id>. The body may carry any of `driver`, `name`, `tools`,
+        `per_turn`, `bundle` and `driver_params`; an absent key leaves that field alone. Returns
+        the updated manifest shape.
 
-        `tools` and `per_turn` are NOT PATCH-able yet — both need
-        `SessionManifest` schema growth. A body carrying them returns 400
-        naming which fields are deferred; this keeps the failure explicit
-        rather than silently ignoring the ask.
+        `workspace`, `workspace_shape` and `seed` are fixed at create: a body carrying one gets
+        400 naming it. Any other key gets 400 as unknown.
         """
-        if _SESSION_REGISTRY is None:
+        if self.app.registry is None:
             self._error(503, "session registry not initialized (boot ordering)")
             return
-        manifest = _SESSION_REGISTRY.get(session_id)
+        manifest = self.app.registry.get(session_id)
         if manifest is None:
             self._error(404, f"unknown session_id {session_id!r}")
             return
@@ -3810,14 +3508,14 @@ class Handler(BaseHTTPRequestHandler):
             if not isinstance(driver, str) or not driver:
                 self._error(400, "driver must be a non-empty string")
                 return
-            updated = _SESSION_REGISTRY.set_driver(session_id, driver)
+            updated = self.app.registry.set_driver(session_id, driver)
         if "name" in body:
             new_name = body["name"]
             if not isinstance(new_name, str) or not new_name:
                 self._error(400, "name must be a non-empty string")
                 return
             try:
-                updated = _SESSION_REGISTRY.set_name(session_id, new_name)
+                updated = self.app.registry.set_name(session_id, new_name)
             except Exception as exc:
                 if isinstance(exc, NameCollision):
                     self._json(
@@ -3838,7 +3536,7 @@ class Handler(BaseHTTPRequestHandler):
                 return
             # Empty list is legitimate — treated as "no restriction" (None).
             tools_value: tuple[str, ...] | None = tuple(tools_raw) if tools_raw else None
-            updated = _SESSION_REGISTRY.set_tools(session_id, tools_value)
+            updated = self.app.registry.set_tools(session_id, tools_value)
         if "per_turn" in body:
             per_turn_raw = body["per_turn"]
             if per_turn_raw is None:
@@ -3850,7 +3548,7 @@ class Handler(BaseHTTPRequestHandler):
                     400, f"per_turn must be a string or null; got {type(per_turn_raw).__name__}"
                 )
                 return
-            updated = _SESSION_REGISTRY.set_per_turn(session_id, per_turn_value)
+            updated = self.app.registry.set_per_turn(session_id, per_turn_value)
         if "bundle" in body:
             # Sprint 032b: mid-session bundle PATCH. null clears; a string is
             # validated by `SessionRegistry.set_bundle` (loads via load_bundle
@@ -3864,7 +3562,7 @@ class Handler(BaseHTTPRequestHandler):
                 return
             bundle_value = str(bundle_raw) if bundle_raw else None
             try:
-                updated = _SESSION_REGISTRY.set_bundle(session_id, bundle_value)
+                updated = self.app.registry.set_bundle(session_id, bundle_value)
             except api.BundleNotFoundError as exc:
                 self._error(400, f"unknown bundle {bundle_value!r}: {exc}")
                 return
@@ -3885,7 +3583,7 @@ class Handler(BaseHTTPRequestHandler):
                 return
             params_value: dict[str, Any] | None = dict(params_raw) if params_raw else None
             try:
-                updated = _SESSION_REGISTRY.set_driver_params(session_id, params_value)
+                updated = self.app.registry.set_driver_params(session_id, params_value)
             except ValueError as exc:
                 self._error(400, f"driver_params: {exc}")
                 return
@@ -3958,12 +3656,14 @@ class Handler(BaseHTTPRequestHandler):
                 # shape is a JSON list of parsed specs per TECH-SPEC §7.6
                 # line 1044: `{name, description, inputs_schema,
                 # output_kind, runs}`. Read from the boot-loaded
-                # `_APPLICATIONS` dict; the load fires at main().
-                self._json([_application_spec_to_wire(spec) for spec in _APPLICATIONS.values()])
+                # `app.applications` dict; the load fires at main().
+                self._json(
+                    [_application_spec_to_wire(spec) for spec in self.app.applications.values()]
+                )
                 return
             if path.startswith("/api/topology/") and path.endswith("/status"):
                 # Sprint 225d — GET /api/topology/<name>/status?run_id=<id>.
-                # Piggybacks on _TOPOLOGY_RUNS (populated by 225a's
+                # Piggybacks on app.topology_runs (populated by 225a's
                 # await_completion=false path); returns status derived
                 # from the record's tail.
                 topology_name = path[len("/api/topology/") : -len("/status")]
@@ -4004,7 +3704,7 @@ class Handler(BaseHTTPRequestHandler):
                     "true",
                     "yes",
                 )
-                self._json(_records_index(exclude_sessions=exclude))
+                self._json(_records_index(self.app, exclude_sessions=exclude))
                 return
             if path == "/api/records/by-path/events":
                 # Phase 8 item 4: SSE stream of an arbitrary record path so
@@ -4032,7 +3732,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(_bundles_index())
                 return
             if path == "/api/models":
-                self._json(_agent_models())
+                self._json(_agent_models(self.app))
                 return
             # Sprint 085a — CLI auth read endpoints.
             if path.startswith("/api/cli/") and path.endswith("/status"):
@@ -4049,7 +3749,7 @@ class Handler(BaseHTTPRequestHandler):
                 # UI can offer as a picker default. Falls back to distinct
                 # workspace fields across live sessions when there is no
                 # ~/.substrate/recent-workspaces.json.
-                self._json(_recent_workspaces())
+                self._json(_recent_workspaces(self.app))
                 return
             # Sprint 086 — paginated per-workspace session listing.
             # `?path=<workspace>&offset=<n>&limit=<m>` returns the newest
@@ -4072,7 +3772,7 @@ class Handler(BaseHTTPRequestHandler):
                     return
                 target_c = _canonical_workspace(target)
                 sessions_root_c = _canonical_workspace(_sessions_dir_root())
-                snap = _list_sessions_snapshot()
+                snap = _list_sessions_snapshot(self.app)
                 merged: list[dict[str, Any]] = []
                 for bucket_name in ("live", "parked", "interrupted", "ended"):
                     for row in snap.get(bucket_name, []):
@@ -4105,11 +3805,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(_assays_index())
                 return
             if path.startswith("/api/assay/"):
-                res = _assay_report(unquote(path[len("/api/assay/") :]))
+                res = _assay_report(self.app, unquote(path[len("/api/assay/") :]))
                 self._json(res, 404 if "error" in res else 200)
-                return
-            if path == "/api/topologies":
-                self._json(bundled.names() + list(_EXTRA_TOPOS))  # the launchable topologies
                 return
             if path == "/api/diff":
                 self._diff(parse_qs(urlparse(self.path).query))
@@ -4122,9 +3819,6 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if path.startswith("/api/records/"):
                 self._api_record(path[len("/api/records/") :])
-                return
-            if path.startswith("/terminal-v1/") or path == "/terminal-v1":
-                self._static_root(TERMINAL_V1, path[len("/terminal-v1") :] or "/")
                 return
             self._static(path)
         except Exception as exc:  # noqa: BLE001 - surface any read error as JSON, never a crash
@@ -4173,7 +3867,7 @@ class Handler(BaseHTTPRequestHandler):
         out = proj(events)
         if sub == "run_graph" and isinstance(out, dict):
             out["live"] = _is_live(
-                name
+                self.app, name
             )  # server-authoritative liveness: is the launch still writing?
         self._json(out)
 
@@ -4231,8 +3925,7 @@ def main() -> None:
     # Sprint 079: --port / --host CLI flags. --port 0 binds an
     # ephemeral port; the readback line printed before serve_forever
     # is what Electron (electron/main.js) matches to learn the bound
-    # port. Default is the env-derived module-level HOST/PORT so any
-    # caller that used SUBSTRATE_UI_PORT before continues to work.
+    # port. The default is the module-level HOST/PORT.
     import argparse
 
     parser = argparse.ArgumentParser(description="substrate-ui HTTP server")
@@ -4255,33 +3948,32 @@ def main() -> None:
     # SessionRegistry from ~/.substrate/sessions/*/manifest.json, checking every
     # record's true status (hot segment → interrupted; RunFinalised → ended;
     # otherwise → parked) and rewriting manifests whose stored status disagrees.
-    from substrate.api import SessionRegistry
-
-    global _SESSION_REGISTRY
     cfg = _load_daemon_config()
-    registry = SessionRegistry(
-        session_topology_factory=_build_session_topology_from_manifest,
+    # The composition root: the one App every handler on both listeners reads.
+    app = App()
+    registry = app.install_registry(
         turn_queue_cap=int(cfg["turn_queue_cap"]),
+        # The scan runs once, on the background thread below. The constructor's default scan ran
+        # it a first time on this thread, so the port readback still waited on it (F319).
+        auto_boot=False,
     )
-    _SESSION_REGISTRY = registry
     # Sprint 223 — application catalog boot-scan. Scans
     # `substrate/topologies/applications/*.manifest.toml` and loads what
     # parses. `on_error="skip"` per §7.6: a fresh install has zero
     # manifests; a malformed one is logged and skipped so one bad file
     # does not kill the daemon. Served by `GET /api/applications`.
-    global _APPLICATIONS
     from substrate.topologies.applications.registry import load_manifests
 
-    _APPLICATIONS = load_manifests(on_error="skip")
+    app.applications = load_manifests(on_error="skip")
     # Sprint 087b — session boot-scan runs in the background. On this
     # box the scan walks ~4k session dirs and re-derives status for each
     # by tailing the record log; that blocked the port readback for
-    # 5–15 s and kept Electron from ever painting. The registry's
-    # _manifests dict is a plain dict[str, Manifest]; CPython's GIL
-    # makes single-key reads/writes atomic, so a request landing mid-
-    # scan sees whatever entries the scan has added so far. /api/session
-    # returns a partial list until the scan completes; the client's
-    # Records view reloads on demand.
+    # 5–15 s and kept Electron from ever painting. The scan publishes each
+    # session under the registry's manifest lock as a compare-and-set, so a
+    # request landing mid-scan sees the sessions published so far and a
+    # session it changes is never overwritten by the scan (F319).
+    # /api/session returns a partial list until the scan completes; the
+    # client's Records view reloads on demand.
     summary = (
         f"substrate-ui read-API server on http://{HOST}:{PORT}  "
         f"(records: {', '.join(bundled.names())}; sessions: scanning in background)"
@@ -4294,9 +3986,9 @@ def main() -> None:
         elapsed = time.monotonic() - started
         note = (
             f"boot_scan: {len(manifests)} manifest(s) in {elapsed:.2f}s — "
-            f"{sum(1 for m in manifests if m.status == 'parked')} parked, "
-            f"{sum(1 for m in manifests if m.status == 'interrupted')} interrupted, "
-            f"{sum(1 for m in manifests if m.status == 'ended')} ended"
+            f"{sum(1 for m in manifests if m.status == SessionStatus.PARKED)} parked, "
+            f"{sum(1 for m in manifests if m.status == SessionStatus.INTERRUPTED)} interrupted, "
+            f"{sum(1 for m in manifests if m.status == SessionStatus.ENDED)} ended"
         )
         if skipped:
             note += f"; SKIPPED {len(skipped)} unparseable manifest(s): {', '.join(skipped[:5])}"
@@ -4324,12 +4016,12 @@ def main() -> None:
     # CLI's preferred transport, not the only one: without it the daemon still serves TCP.
     uds_srv: _UnixHTTPServer | None
     try:
-        uds_srv = _UnixHTTPServer(str(uds_path), Handler)
+        uds_srv = _UnixHTTPServer(str(uds_path), app)
         summary += f"; UDS at {uds_path}"
     except OSError as exc:
         uds_srv = None
         summary += f"; UDS unavailable ({exc}; {len(str(uds_path))}-byte path), TCP only"
-    srv = ThreadingHTTPServer((HOST, PORT), Handler)
+    srv = AppHTTPServer((HOST, PORT), app)
     # Sprint 079: bound-port readback for the Electron main process.
     # ThreadingHTTPServer((HOST, 0), ...) picks an ephemeral port; the
     # actual bound value lives on srv.server_address. Print it as the
@@ -4363,7 +4055,7 @@ def main() -> None:
         31 s after SIGTERM with zero sessions, and Electron's 45 s SIGKILL
         ended every quit (Sprint 094; Twelve-Factor IX)."""
         _say("SIGTERM received; ending sessions cleanly...")
-        outcome = _shutdown_all_sessions(per_session_timeout=10.0)
+        outcome = _shutdown_all_sessions(app, per_session_timeout=10.0)
         _say(
             f"shutdown: ended={outcome['ended']} "
             f"skipped_fresh={outcome['skipped_fresh']} "
@@ -4381,9 +4073,9 @@ def main() -> None:
         SIGTERM racing the watchdog, is a no-op). Called from threads, never
         from the signal handler."""
         with _shutdown_claim_lock:
-            if _SHUTDOWN_STARTED.is_set():
+            if app.shutdown_started.is_set():
                 return False
-            _SHUTDOWN_STARTED.set()
+            app.shutdown_started.set()
             return True
 
     # Self-pipe: the signal handler writes one byte and does nothing else. The
@@ -4440,7 +4132,7 @@ def main() -> None:
         return True
 
     def _ppid_watchdog() -> None:
-        while not _SHUTDOWN_STARTED.is_set():
+        while not app.shutdown_started.is_set():
             time.sleep(1)
             ppid = os.getppid()
             if not _app_alive() or (ppid != parent_pid_at_start and ppid == 1):

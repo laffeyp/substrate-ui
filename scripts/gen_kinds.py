@@ -9,7 +9,7 @@ through its public TopologyBuilder:
   - every schema a Producer kind registers (what Producers can emit),
   - every kind a Trigger or View subscribes to (what can be injected: UserMessage, ...),
   - every kind a topology injects without registering it (`tool_loop.INJECTED_EVENT_KINDS`),
-  - every `substrate.*` lifecycle kind in `substrate.constants`.
+  - every `substrate.*` lifecycle kind in `substrate.api.LIFECYCLE_KINDS`.
 
 Usage (source mode, from substrate-ui/):
   uv run --project ../substrate python scripts/gen_kinds.py          # write the file
@@ -29,8 +29,8 @@ STATUS_OUT = Path(__file__).resolve().parent.parent / "web" / "vm" / "statuses.g
 def session_kinds() -> set[str]:
     import warnings
 
-    from substrate import api, constants
-    from substrate.reference import DeterministicResponder
+    from substrate import api
+    from substrate.adapters.models import DeterministicResponder
     from substrate.topologies.session import session_topology
     from substrate.topologies.tool_loop import INJECTED_EVENT_KINDS
 
@@ -57,12 +57,7 @@ def session_kinds() -> set[str]:
     for v in reg.views.values():
         kinds.update(getattr(v.subscription, "kinds", ()) or ())
     kinds.update(t.__name__ for t in INJECTED_EVENT_KINDS)
-    prefix = constants.RESERVED_PREFIX
-    kinds.update(
-        v
-        for name, v in vars(constants).items()
-        if name.isupper() and isinstance(v, str) and v.startswith(prefix) and v != prefix
-    )
+    kinds.update(api.LIFECYCLE_KINDS)
     return kinds
 
 
@@ -95,7 +90,7 @@ def render(kinds: set[str]) -> str:
 def render_statuses() -> str:
     """`SessionStatus` (a session manifest's status) and `TaskStatus` (a bash background task's),
     as `const` objects plus their value types."""
-    from substrate.api import SessionStatus
+    from substrate.app import SessionStatus
     from substrate.topologies.tool_loop.background import TaskStatus
 
     lines = [

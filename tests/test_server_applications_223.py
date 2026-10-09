@@ -8,18 +8,13 @@ zero manifests → `[]`, not 500).
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 import pytest
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-import server  # noqa: E402
-from substrate.session_registry import SessionRegistry  # noqa: E402
-
-from substrate.topologies.applications.registry import load_manifests  # noqa: E402
 from _serving import call, serving  # noqa: E402
+from substrate.topologies.applications.registry import load_manifests  # noqa: E402
 
+import server  # noqa: E402
 
 _FIXTURE_A = """
 name = "code_review"
@@ -50,12 +45,9 @@ model = {type = "string"}
 
 
 @pytest.fixture
-def base(tmp_path: Path) -> str:
-    server._SESSION_REGISTRY = SessionRegistry(
-        base=tmp_path,
-        session_topology_factory=server._build_session_topology_from_manifest,
-    )
-    with serving() as base:
+def base(app: server.App, tmp_path: Path) -> str:
+    app.install_registry(base=tmp_path)
+    with serving(app) as base:
         yield base
 
 
@@ -65,22 +57,24 @@ def _get(url: str) -> tuple[int, object]:
     return status, payload
 
 
-def test_empty_applications_returns_empty_list(base: str) -> None:
+def test_empty_applications_returns_empty_list(app: server.App, base: str) -> None:
     """A fresh daemon with no manifests loaded returns []. This is the
     invariant that keeps a fresh install from 500-ing at the endpoint."""
-    server._APPLICATIONS = {}
+    app.applications = {}
     status, body = _get(base + "/api/applications")
     assert status == 200
     assert body == []
 
 
-def test_three_fixture_manifests_return_three_entries(base: str, tmp_path: Path) -> None:
+def test_three_fixture_manifests_return_three_entries(
+    app: server.App, base: str, tmp_path: Path
+) -> None:
     fixture_root = tmp_path / "fixture-applications"
     fixture_root.mkdir()
     (fixture_root / "code_review.manifest.toml").write_text(_FIXTURE_A, encoding="utf-8")
     (fixture_root / "best_of_n.manifest.toml").write_text(_FIXTURE_B, encoding="utf-8")
     (fixture_root / "daily.manifest.toml").write_text(_FIXTURE_C, encoding="utf-8")
-    server._APPLICATIONS = load_manifests(root=fixture_root)
+    app.applications = load_manifests(root=fixture_root)
 
     status, body = _get(base + "/api/applications")
     assert status == 200
@@ -91,7 +85,9 @@ def test_three_fixture_manifests_return_three_entries(base: str, tmp_path: Path)
         assert set(entry) == {"name", "description", "runs", "inputs_schema", "output_kind"}
 
 
-def test_wire_shape_excludes_slots_and_default_bundle(base: str, tmp_path: Path) -> None:
+def test_wire_shape_excludes_slots_and_default_bundle(
+    app: server.App, base: str, tmp_path: Path
+) -> None:
     """§7.6 line 1044: wire response is 5 fields. `slots` + `default_bundle`
     are internal to the piece-H binding step, NOT visible to a caller
     browsing the app catalog."""
@@ -102,7 +98,7 @@ def test_wire_shape_excludes_slots_and_default_bundle(base: str, tmp_path: Path)
         'methodology = {default = "bundle:methodology"}\n',
         encoding="utf-8",
     )
-    server._APPLICATIONS = load_manifests(root=fixture_root)
+    app.applications = load_manifests(root=fixture_root)
     status, body = _get(base + "/api/applications")
     assert status == 200
     assert len(body) == 1

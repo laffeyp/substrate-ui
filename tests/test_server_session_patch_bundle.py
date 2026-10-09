@@ -6,30 +6,22 @@ bundle lands on the manifest and reaches the next `Runtime.resume` via
 by `SessionRegistry.set_bundle` via `substrate.bundles.load_bundle`).
 Null clears any attached bundle.
 
-Run from the substrate venv:
-    cd substrate && uv run python -m pytest ../substrate-ui/tests/test_server_session_patch_bundle.py -q
 """
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 import pytest
+from _serving import call, serving, scratch_ws  # noqa: E402
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import server  # noqa: E402
-from substrate.session_registry import SessionRegistry  # noqa: E402
-from _serving import call, serving  # noqa: E402
 
 
 @pytest.fixture
-def base(tmp_path: Path) -> str:
-    server._SESSION_REGISTRY = SessionRegistry(
-        base=tmp_path,
-        session_topology_factory=server._build_session_topology_from_manifest,
-    )
-    with serving() as base:
+def base(app: server.App, tmp_path: Path) -> str:
+    app.install_registry(base=tmp_path)
+    with serving(app) as base:
         yield base
 
 
@@ -45,7 +37,7 @@ def _create(base: str, workspace: Path, bundle: str | None = None) -> str:
     return resp["session_id"]
 
 
-def test_patch_bundle_lands_on_manifest(base: str, tmp_path: Path) -> None:
+def test_patch_bundle_lands_on_manifest(app: server.App, base: str, tmp_path: Path) -> None:
     """PATCH bundle: happy path. The manifest reflects the new bundle name
     immediately; the daemon's response body carries the same value.
     """
@@ -57,14 +49,16 @@ def test_patch_bundle_lands_on_manifest(base: str, tmp_path: Path) -> None:
     )
     assert status == 200, body
     assert body["bundle"] == "pair_coding"
-    manifest = server._SESSION_REGISTRY.get(sid)
+    manifest = app.registry.get(sid)
     assert manifest.bundle == "pair_coding"
 
 
-def test_patch_bundle_null_clears_attached_bundle(base: str, tmp_path: Path) -> None:
+def test_patch_bundle_null_clears_attached_bundle(
+    app: server.App, base: str, tmp_path: Path
+) -> None:
     """A session created with a bundle can drop it mid-flight by sending null."""
     sid = _create(base, tmp_path / "wsp", bundle="pair_coding")
-    manifest = server._SESSION_REGISTRY.get(sid)
+    manifest = app.registry.get(sid)
     assert manifest.bundle == "pair_coding"
     status, body = _request(
         base + f"/api/session/{sid}",
@@ -73,11 +67,11 @@ def test_patch_bundle_null_clears_attached_bundle(base: str, tmp_path: Path) -> 
     )
     assert status == 200, body
     assert body["bundle"] is None
-    manifest = server._SESSION_REGISTRY.get(sid)
+    manifest = app.registry.get(sid)
     assert manifest.bundle is None
 
 
-def test_patch_bundle_unknown_name_returns_400(base: str, tmp_path: Path) -> None:
+def test_patch_bundle_unknown_name_returns_400(app: server.App, base: str, tmp_path: Path) -> None:
     """An unknown bundle name is validated at PATCH time via load_bundle —
     the failure is a 400, not a silent land followed by a next-turn crash.
     """
@@ -89,7 +83,7 @@ def test_patch_bundle_unknown_name_returns_400(base: str, tmp_path: Path) -> Non
     )
     assert status == 400, body
     assert "does-not-exist" in body["error"] or "bundle" in body["error"]
-    manifest = server._SESSION_REGISTRY.get(sid)
+    manifest = app.registry.get(sid)
     assert manifest.bundle == "session"  # unchanged: the sprint-054 default, not the rejected name
 
 
@@ -125,7 +119,7 @@ def test_workspace_still_deferred(base: str, tmp_path: Path) -> None:
     status, body = _request(
         base + f"/api/session/{sid}",
         "PATCH",
-        {"workspace": "/tmp/other"},
+        {"workspace": scratch_ws("other")},
     )
     assert status == 400, body
     assert "workspace" in body["error"]

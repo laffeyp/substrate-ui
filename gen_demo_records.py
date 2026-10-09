@@ -11,9 +11,11 @@ serialization is exercised over the wire:
   demo_broken   — a Producer fails INSIDE a clean finalise -> status="finalised", producers_failed>0
                   (the finished-!=-worked case: the verdict must read NOT CLEAN)
 
-Written to <state root>/runs/ (SUBSTRATE_HOME, default ~/.substrate), where the server serves
-them. The test suite generates them into its own temp state root (tests/conftest.py).
-Run: cd substrate && uv run python ../substrate-ui/gen_demo_records.py
+Written to the runs directory named on the command line; nothing has a default, because each
+record of the same name there is deleted first and the user's own `~/.substrate/runs` is the
+server's live store (lens audit F341). The test suite generates them into its own temp state root
+(tests/conftest.py). To preview them in a running console, point it at a scratch home:
+    SUBSTRATE_HOME=/tmp/demo-home uv run python ../substrate-ui/gen_demo_records.py /tmp/demo-home/runs
 """
 
 from __future__ import annotations
@@ -35,15 +37,6 @@ from substrate.topologies.tool_loop import tool_loop_topology
 from substrate.topologies.tool_loop.tools import Tool
 
 from demo_topologies import resumable_topology
-
-
-def _default_runs() -> Path:
-    """The server's runs dir, `<state root>/runs` (Sprint 093/097). It was this file's own
-    `runs/` folder, which the server stopped reading when F1 moved RUNS, so the demo
-    records (and the six tests that read them) silently vanished."""
-    from substrate import api
-
-    return api.substrate_home() / "runs"
 
 
 class Ping(Struct, frozen=True):
@@ -129,8 +122,8 @@ def topo_broken(b: Any) -> None:
     b.termination(quiescence_with_watchdog(seconds=1))
 
 
-async def main(runs: Path | None = None) -> None:
-    RUNS = runs if runs is not None else _default_runs()
+async def main(runs: Path) -> None:
+    RUNS = runs
     specs = [
         ("demo_failed", topo_failed, False),
         ("demo_paused", topo_paused, True),  # pause is a persistent-bus operation
@@ -220,4 +213,8 @@ async def main(runs: Path | None = None) -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    import sys
+
+    if len(sys.argv) != 2:
+        sys.exit("usage: gen_demo_records.py <runs-dir>")
+    asyncio.run(main(Path(sys.argv[1])))

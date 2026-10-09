@@ -3,7 +3,8 @@
 ```yaml
 ---
 id: 109
-status: open
+status: closed
+closed_at: 2026-10-08
 opened_at: 2026-10-08
 pass_kind: remediation
 roadmap: substrate-ui/process/planning/ROADMAP-2026-10-08-lens-audit-remediation.md
@@ -83,4 +84,54 @@ Each row closes as named; a row the sprint cannot close halts the sprint.
 
 ## result
 
-(filled at close)
+**Checks.**
+- The suite under an empty `HOME` left 0 files in it.
+- The suite passes in three file orders: as listed, reversed, and shuffled with seed 109 (238 each).
+- No fixed sleep stands in for a condition: each remaining sleep sits inside a poll loop with a deadline.
+- A real-process SIGTERM test passes: the parked session ends with reason `daemon_shutdown`, the manifest reads "ended", and the process exits 0 within 10 s.
+
+**State is reset, not shared (F410–F413, F454).**
+- conftest sets a temp `HOME` as well as `SUBSTRATE_HOME`.
+- An autouse fixture puts every private module-level name of `server` back after each test: the binding, plus the contents of tables mutated in place. This is Meszaros's "mechanism to reinitialize" Registries.
+- The repo root and `scripts/` go on `sys.path` once, in conftest; 49 per-file inserts and 25 stale run instructions are gone.
+- One check is met differently from the card. The card said `grep 'server._SESSION_REGISTRY ='` would find nothing; 36 files still assign it, and the fixture restores it after each test. U111's composition root replaces the global, and those assignments go with it.
+
+**Tests that now check what they name.**
+- **F462 (composition).** The test captures the `tools` the daemon hands to `session_topology`. A planted removal of `list_sessions` turned it red.
+- **F443 (PATCH composition).** The next build resolves the patched driver.
+- **F456 (PATCH tools).** The built suite equals the allow-list.
+- **F445 (queue cap).** Admitted turns hold their slot for 1 s, and the second test polls the queue counter instead of sleeping 0.2 s.
+- **F455 (records filter).** A real `launch_` record is planted, so the filter has something to drop.
+- **F432 (delete race).** The model call takes 5 s, and the DELETE waits until it starts. The turn is interrupted (ProducerCancelled is on the record), parks and answers 200. Over three runs it passed three times.
+- **F433, F434 (SSE past the end).** A real `/end` and a real resumed `/turn` replace the hand-framed envelopes and the skip-on-drift.
+- **F430 (boot scan).** A clean pause reads "parked"; the same record with a cut frame reads "interrupted"; a bad CRC reads "interrupted".
+- **F425, F449 (concurrent turns).** The record alternates UserMessage/Park, and turn_index rises by one per turn.
+- **F423, F424.** "UI/CLI parity" is now `test_daemon_control_determinism.py`; it asserts every PATCH status and says what it does not observe.
+- **F420 (boundary test).** The UI→kernel boundary test scans `scripts/` too, and `gen_kinds.py` reads `api.LIFECYCLE_KINDS` instead of `substrate.constants`. The generated files were unchanged.
+- **F442.** The thinking probe is fixed in the test; no request reaches the developer's Ollama.
+- **F437.** The in-flight sleeps became `wait_model_started(record, after_seq=tail)` (`_serving.py`).
+- **F438, F448.** The hand-rolled servers use `serving()`.
+- **F426 and siblings.** `/tmp/w`-style workspaces became `scratch_ws(...)` inside the run's temp `HOME`.
+- **F463.** The `dict.setdefault` test is deleted.
+- **F427 and the other stale docstrings** are corrected, and the misnamed delegate-ended file is renamed.
+
+**Three defects found while repairing the tests, all fixed with tests.**
+- **N001 (server).** A session's tool allow-list filtered full_suite only. The daemon then added the substrate toolkit unconditionally, so a "read-only" reviewer could still `delegate` and `run_topology`. `_allowed_tool_names` now filters the composed suite.
+- **N002 (kernel `session_registry`).** The boot scan read a parked record whose last frame was cut mid-write as "parked". `read_record` skips the cut frame, so the message being written vanished and the session looked resumable.
+  - The new `record.has_torn_tail` check is read-only: a hot segment not ending in a newline holds a cut frame. `api` exports it.
+  - Such a segment now reads "interrupted".
+- **N003 (kernel delegate).** Two parents delegating to one standing session took the reviewer's turn_index and pre-turn snapshot before the session lock. Measured, both got turn_index 1.
+  - A parent could also take the other parent's FinalAnswer.
+  - The fix: both values are read in `turn_sync`'s `resume_event_builder`, under the lock, and the delegate takes the first FinalAnswer past its own snapshot.
+
+**Rows closed elsewhere.**
+- F428, F429 (kernel-only tests living in the UI repo) close in K258.
+- F422, F457 (`/api/agent` legacy, `await_completion`) and F421 (the `/api/launch` liveness race) close in U111 with those endpoints.
+- F466 (the UDS socket under `/tmp`) is kept on purpose: macOS caps socket paths at 104 bytes and `tmp_path` is longer. The reason is in the fixture's docstring.
+
+**Gates.**
+
+| Gate | Result |
+|---|---|
+| UI suite | 238 passed, in three orders and under an empty `HOME` |
+| Kernel suite | see the BLACKBOARD entry |

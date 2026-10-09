@@ -3,26 +3,20 @@
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
 
 import pytest
+from _serving import call, serving, scratch_ws  # noqa: E402
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import server  # noqa: E402
-from substrate.session_registry import SessionRegistry  # noqa: E402
-from _serving import call, serving  # noqa: E402
 
 
 @pytest.fixture
-def base(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[str, Path]:
+def base(app: server.App, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[str, Path]:
     _sb = tmp_path
     monkeypatch.setattr(server, "_sessions_base", lambda: _sb)
-    server._SESSION_REGISTRY = SessionRegistry(
-        base=tmp_path,
-        session_topology_factory=server._build_session_topology_from_manifest,
-    )
-    with serving() as base:
+    app.install_registry(base=tmp_path)
+    with serving(app) as base:
         yield base, tmp_path
 
 
@@ -31,22 +25,26 @@ def _post(url: str, body: dict) -> tuple[int, dict]:
     return status, payload
 
 
-def test_isolate_true_creates_isolated_workspace_dir(base: tuple[str, Path]) -> None:
+def test_isolate_true_creates_isolated_workspace_dir(
+    app: server.App, base: tuple[str, Path]
+) -> None:
     url, base_path = base
     status, body = _post(
         url + "/api/session",
-        {"driver": "deterministic", "isolate": True, "workspace": "/tmp/anywhere-else"},
+        {"driver": "deterministic", "isolate": True, "workspace": scratch_ws("anywhere-else")},
     )
     assert status == 200, body
     assert body["workspace_shape"] == "isolate"
     sid = body["session_id"]
-    manifest = server._SESSION_REGISTRY.get(sid)
+    manifest = app.registry.get(sid)
     expected = base_path / sid / "workspace"
     assert Path(manifest.workspace) == expected
     assert expected.is_dir()
 
 
-def test_isolate_false_preserves_caller_workspace(base: tuple[str, Path], tmp_path: Path) -> None:
+def test_isolate_false_preserves_caller_workspace(
+    app: server.App, base: tuple[str, Path], tmp_path: Path
+) -> None:
     url, _ = base
     caller_ws = tmp_path / "caller"
     caller_ws.mkdir()
@@ -56,7 +54,7 @@ def test_isolate_false_preserves_caller_workspace(base: tuple[str, Path], tmp_pa
     )
     assert status == 200, body
     assert body["workspace_shape"] == "flat"
-    manifest = server._SESSION_REGISTRY.get(body["session_id"])
+    manifest = app.registry.get(body["session_id"])
     assert Path(manifest.workspace) == caller_ws
 
 
@@ -68,7 +66,7 @@ def test_isolate_missing_defaults_to_false(base: tuple[str, Path]) -> None:
 
 
 def test_isolate_write_lands_in_isolated_dir_not_caller_path(
-    base: tuple[str, Path], tmp_path: Path
+    app: server.App, base: tuple[str, Path], tmp_path: Path
 ) -> None:
     """Observation half of the dual contract for §9c Mode 3: fire a real
     write_file tool call on the built session tool suite and verify the
@@ -87,7 +85,7 @@ def test_isolate_write_lands_in_isolated_dir_not_caller_path(
     )
     assert status == 200, body
     sid = body["session_id"]
-    manifest = server._SESSION_REGISTRY.get(sid)
+    manifest = app.registry.get(sid)
     isolated_ws = Path(manifest.workspace)
     assert isolated_ws != caller_ws
     # The tool suite the session would bind — same shape the session

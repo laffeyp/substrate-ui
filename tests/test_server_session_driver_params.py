@@ -9,30 +9,22 @@ the fix: PATCH lands on the manifest; response body carries the field;
 unknown keys 400; wrong types 400; the resolver rebuilds the Responder
 with the new params on next-turn build.
 
-Run from the substrate venv:
-    cd substrate && uv run python -m pytest ../substrate-ui/tests/test_server_session_driver_params.py -q
 """
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 import pytest
+from _serving import call, serving, scratch_ws  # noqa: E402
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import server  # noqa: E402
-from substrate.session_registry import SessionRegistry  # noqa: E402
-from _serving import call, serving  # noqa: E402
 
 
 @pytest.fixture
-def base(tmp_path: Path) -> str:
-    server._SESSION_REGISTRY = SessionRegistry(
-        base=tmp_path,
-        session_topology_factory=server._build_session_topology_from_manifest,
-    )
-    with serving() as base:
+def base(app: server.App, tmp_path: Path) -> str:
+    app.install_registry(base=tmp_path)
+    with serving(app) as base:
         yield base
 
 
@@ -48,7 +40,7 @@ def _create(base: str, workspace: Path, driver_params: dict | None = None) -> st
     return resp["session_id"]
 
 
-def test_patch_driver_params_lands_on_manifest(base: str, tmp_path: Path) -> None:
+def test_patch_driver_params_lands_on_manifest(app: server.App, base: str, tmp_path: Path) -> None:
     """PATCH driver_params: happy path. Manifest reflects the new dict; response
     body carries it for UI read-back."""
     sid = _create(base, tmp_path / "wsp")
@@ -59,14 +51,14 @@ def test_patch_driver_params_lands_on_manifest(base: str, tmp_path: Path) -> Non
     )
     assert status == 200, body
     assert body["driver_params"] == {"think": True, "max_tokens": 4096, "timeout": 600.0}
-    manifest = server._SESSION_REGISTRY.get(sid)
+    manifest = app.registry.get(sid)
     assert manifest.driver_params == {"think": True, "max_tokens": 4096, "timeout": 600.0}
 
 
-def test_patch_driver_params_null_clears(base: str, tmp_path: Path) -> None:
+def test_patch_driver_params_null_clears(app: server.App, base: str, tmp_path: Path) -> None:
     """A session created with params can drop them with null."""
     sid = _create(base, tmp_path / "wsp", driver_params={"think": True})
-    manifest = server._SESSION_REGISTRY.get(sid)
+    manifest = app.registry.get(sid)
     assert manifest.driver_params == {"think": True}
     status, body = _request(
         base + f"/api/session/{sid}",
@@ -75,7 +67,7 @@ def test_patch_driver_params_null_clears(base: str, tmp_path: Path) -> None:
     )
     assert status == 200, body
     assert body["driver_params"] is None
-    manifest = server._SESSION_REGISTRY.get(sid)
+    manifest = app.registry.get(sid)
     assert manifest.driver_params is None
 
 
@@ -140,10 +132,10 @@ def test_patch_driver_params_non_dict_returns_400(base: str, tmp_path: Path) -> 
     assert "driver_params" in body["error"]
 
 
-def test_create_accepts_driver_params(base: str, tmp_path: Path) -> None:
+def test_create_accepts_driver_params(app: server.App, base: str, tmp_path: Path) -> None:
     """POST /api/session carries driver_params through to the manifest."""
     sid = _create(base, tmp_path / "wsp", driver_params={"think": True, "num_ctx": 8192})
-    manifest = server._SESSION_REGISTRY.get(sid)
+    manifest = app.registry.get(sid)
     assert manifest.driver_params == {"think": True, "num_ctx": 8192}
 
 
@@ -162,27 +154,31 @@ def test_create_rejects_bad_driver_params(base: str, tmp_path: Path) -> None:
     assert "driver_params" in body["error"]
 
 
-def test_resolver_returns_distinct_responders_per_params(base: str, tmp_path: Path) -> None:
+def test_resolver_returns_distinct_responders_per_params(
+    app: server.App, base: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """The cache key includes params — think=True yields a different Responder
-    instance than think=False (or the default)."""
-    responder_default = server._daemon_driver_resolver("kimi-k2.6:cloud")
-    responder_thinking = server._daemon_driver_resolver("kimi-k2.6:cloud", {"think": True})
-    responder_thinking_again = server._daemon_driver_resolver("kimi-k2.6:cloud", {"think": True})
+    instance than think=False (or the default). The model's thinking support is fixed here:
+    the real probe asks the developer's Ollama (lens audit F442)."""
+    monkeypatch.setattr(server, "_model_supports_thinking", lambda app, model: False)
+    responder_default = server._daemon_driver_resolver(app, "kimi-k2.6:cloud")
+    responder_thinking = server._daemon_driver_resolver(app, "kimi-k2.6:cloud", {"think": True})
+    responder_thinking_again = server._daemon_driver_resolver(
+        app, "kimi-k2.6:cloud", {"think": True}
+    )
     assert responder_default is not responder_thinking, (
         "different params must yield different Responder"
     )
     assert responder_thinking is responder_thinking_again, "same params must hit the cache"
     # The thinking Responder actually carries think=True on the OllamaResponder.
     assert getattr(responder_thinking, "_think", False) is True
-    # Sprint 045: the default follows the model's thinking support, not a fixed False.
-    assert getattr(responder_default, "_think", None) is server._model_supports_thinking(
-        "kimi-k2.6:cloud"
-    )
+    # Sprint 045: the default follows the model's thinking support (False here), not a fixed value.
+    assert getattr(responder_default, "_think", None) is False
 
 
 def test_workspace_and_seed_still_deferred(base: str, tmp_path: Path) -> None:
     """The other deferred fields must still 400 — 032c only lifted driver_params."""
     sid = _create(base, tmp_path / "wsp")
-    st, body = _request(base + f"/api/session/{sid}", "PATCH", {"workspace": "/tmp/other"})
+    st, body = _request(base + f"/api/session/{sid}", "PATCH", {"workspace": scratch_ws("other")})
     assert st == 400
     assert "workspace" in body["error"]

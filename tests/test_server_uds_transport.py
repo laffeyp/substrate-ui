@@ -2,14 +2,12 @@
 
 TECH-SPEC §6 names `~/.substrate/daemon.sock` as the primary transport; TCP
 `127.0.0.1:8765` is the fallback. This sprint adds the UDS listener. The
-CLI (piece D) will try UDS first and fall back to TCP.
+CLI tries UDS first and falls back to TCP.
 
 These tests bind BOTH listeners and verify each independently. The UDS path
 is overridden via `SUBSTRATE_DAEMON_SOCK` so the tests do not touch the real
 `~/.substrate/daemon.sock`.
 
-Run from the substrate venv:
-    cd substrate && uv run python -m pytest ../substrate-ui/tests/test_server_uds_transport.py -q
 """
 
 from __future__ import annotations
@@ -17,16 +15,12 @@ from __future__ import annotations
 import http.client
 import json
 import socket
-import sys
 import threading
-from http.server import ThreadingHTTPServer
 from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import server  # noqa: E402
-from substrate.session_registry import SessionRegistry  # noqa: E402
 
 
 class _UnixHTTPConnection(http.client.HTTPConnection):
@@ -44,25 +38,22 @@ class _UnixHTTPConnection(http.client.HTTPConnection):
 
 
 @pytest.fixture
-def dual_transport(tmp_path: Path) -> tuple[str, str]:
+def dual_transport(app: server.App, tmp_path: Path) -> tuple[str, str]:
     """Bind TCP + UDS. Return (tcp_base_url, uds_socket_path). Uses `/tmp` for
     the socket path because macOS caps AF_UNIX paths at ~104 chars and
     `tmp_path` is longer than that. Registry base stays on `tmp_path`; only
     the socket file goes to a short path."""
     import uuid
 
-    server._SESSION_REGISTRY = SessionRegistry(
-        base=tmp_path,
-        session_topology_factory=server._build_session_topology_from_manifest,
-    )
-    tcp_srv = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
+    app.install_registry(base=tmp_path)
+    tcp_srv = server.AppHTTPServer(("127.0.0.1", 0), app)
     threading.Thread(target=tcp_srv.serve_forever, daemon=True).start()
     uds_path = Path(f"/tmp/substrate-test-{uuid.uuid4().hex[:8]}.sock")
     try:
         uds_path.unlink()
     except FileNotFoundError:
         pass
-    uds_srv = server._UnixHTTPServer(str(uds_path), server.Handler)
+    uds_srv = server._UnixHTTPServer(str(uds_path), app)
     threading.Thread(target=uds_srv.serve_forever, daemon=True).start()
     yield f"http://127.0.0.1:{tcp_srv.server_address[1]}", str(uds_path)
     tcp_srv.shutdown()

@@ -72,10 +72,15 @@ async function f6AndF5(): Promise<void> {
     check(after.length === 1 && after[0] === before[0], `F6 one backend, unchanged (before ${before}, after ${after})`);
 
     // F5: deep link to a real record.
-    const launched = await fetch(`http://127.0.0.1:${port}/api/launch?topology=game_of_life`, {
-      method: "POST", headers: { Origin: `http://127.0.0.1:${port}` },
-    }).then((r) => r.json()) as { name: string; status: string };
-    const recordRoot = join(state, "runs", `${launched.name}.record`);
+    // A deterministic topology run (POST /api/topology/<name>/run; /api/launch was deleted on
+    // 2026-10-08). Its record is `<run_id>.record` under runs/, attachable by path.
+    const run = await fetch(`http://127.0.0.1:${port}/api/topology/best_of_n_verified/run`, {
+      method: "POST",
+      headers: { Origin: `http://127.0.0.1:${port}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ inputs: { task: "double 3", drafter_model: "deterministic", verify_model: "deterministic", n: 2, max_rounds: 1 } }),
+    }).then((r) => r.json()) as { record_root: string };
+    const recordRoot = run.record_root;
+    const launched = { name: recordRoot.split("/").pop() ?? recordRoot };
     await win2.waitForFunction(() => (window as unknown as { __vm?: unknown }).__vm != null, undefined, { timeout: 15_000 });
     const url = "substrate://record/" + encodeURIComponent(recordRoot);
     await app.evaluate(({ app: a }, u) => { a.emit("open-url", { preventDefault() { /* test */ } }, u); }, url);

@@ -18,33 +18,27 @@ Behaviors under test:
   4. A session whose turn_sync fails does not stop the loop; the other
      session still ends.
 
-Run from the substrate venv:
-    cd substrate && uv run python -m pytest ../substrate-ui/tests/test_server_daemon_shutdown.py -q
 """
 
 from __future__ import annotations
 
-import sys
+import functools
+
 from pathlib import Path
 
 import pytest
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-import server  # noqa: E402
-from substrate.session_registry import SessionRegistry  # noqa: E402
-
-from substrate import api  # noqa: E402
-from substrate.testing import assert_event  # noqa: E402
 from _serving import call, serving  # noqa: E402
+from substrate import api  # noqa: E402
+from substrate.topologies.session_registry import SessionRegistry  # noqa: E402
+from substrate.testing import assert_event  # noqa: E402
+
+import server  # noqa: E402
 
 
 @pytest.fixture
-def base(tmp_path: Path) -> tuple[str, Path]:
-    server._SESSION_REGISTRY = SessionRegistry(
-        base=tmp_path,
-        session_topology_factory=server._build_session_topology_from_manifest,
-    )
-    with serving() as base:
+def base(app: server.App, tmp_path: Path) -> tuple[str, Path]:
+    app.install_registry(base=tmp_path)
+    with serving(app) as base:
         yield base, tmp_path
 
 
@@ -69,6 +63,7 @@ def _park(base: str, sid: str) -> None:
 
 
 def test_shutdown_ends_every_parked_session_with_reason_daemon_shutdown(
+    app: server.App,
     base: tuple[str, Path],
 ) -> None:
     url, tmp_path = base
@@ -77,7 +72,7 @@ def test_shutdown_ends_every_parked_session_with_reason_daemon_shutdown(
     _park(url, sid_a)
     _park(url, sid_b)
 
-    outcome = server._shutdown_all_sessions(per_session_timeout=10.0)
+    outcome = server._shutdown_all_sessions(app, per_session_timeout=10.0)
     # Sprint 217a: bucket set split from `skipped` into `skipped_fresh` and
     # `skipped_ended` so an operator reading the SIGTERM exit log can tell
     # a fresh session (no record on disk) from one that ended before the sweep.
@@ -90,7 +85,7 @@ def test_shutdown_ends_every_parked_session_with_reason_daemon_shutdown(
     }
 
     for sid in (sid_a, sid_b):
-        record_root = Path(server._SESSION_REGISTRY.get(sid).record_root)
+        record_root = Path(app.registry.get(sid).record_root)
         # The topology closed cleanly with the daemon-shutdown reason and
         # a real RunFinalised envelope — not a manifest flip.
         assert_event(record_root, "SessionEnded", reason="daemon_shutdown")
@@ -101,20 +96,23 @@ def test_shutdown_ends_every_parked_session_with_reason_daemon_shutdown(
 
 
 def test_shutdown_manifests_transition_to_ended_and_survive_reboot(
+    app: server.App,
     base: tuple[str, Path],
 ) -> None:
     url, tmp_path = base
     sid = _create(url, tmp_path / "wsp", "reboot-me")
     _park(url, sid)
 
-    server._shutdown_all_sessions(per_session_timeout=10.0)
-    assert server._SESSION_REGISTRY.get(sid).status == "ended"
+    server._shutdown_all_sessions(app, per_session_timeout=10.0)
+    assert app.registry.get(sid).status == "ended"
 
     # A fresh registry against the same base dir reads the ended status
     # from the on-disk manifest via boot_scan.
     fresh = SessionRegistry(
         base=tmp_path,
-        session_topology_factory=server._build_session_topology_from_manifest,
+        session_topology_factory=functools.partial(
+            server._build_session_topology_from_manifest, app
+        ),
     )
     fresh.boot_scan()
     reloaded = fresh.get(sid)
@@ -122,7 +120,7 @@ def test_shutdown_manifests_transition_to_ended_and_survive_reboot(
     assert reloaded.status == "ended"
 
 
-def test_shutdown_skips_already_ended_sessions(base: tuple[str, Path]) -> None:
+def test_shutdown_skips_already_ended_sessions(app: server.App, base: tuple[str, Path]) -> None:
     url, tmp_path = base
     sid_live = _create(url, tmp_path / "live", "live")
     sid_done = _create(url, tmp_path / "done", "done")
@@ -130,9 +128,9 @@ def test_shutdown_skips_already_ended_sessions(base: tuple[str, Path]) -> None:
     _park(url, sid_done)
     # End `done` via POST /end before shutdown fires.
     _post_json(url + f"/api/session/{sid_done}/end", {})
-    assert server._SESSION_REGISTRY.get(sid_done).status == "ended"
+    assert app.registry.get(sid_done).status == "ended"
 
-    outcome = server._shutdown_all_sessions(per_session_timeout=10.0)
+    outcome = server._shutdown_all_sessions(app, per_session_timeout=10.0)
     # `done` was skipped (already ended); `live` was ended.
     # Sprint 217a: the pre-ended session buckets under `skipped_ended`.
     assert outcome == {
@@ -144,14 +142,14 @@ def test_shutdown_skips_already_ended_sessions(base: tuple[str, Path]) -> None:
     }
     # The already-ended session's record still shows the earlier reason,
     # not the shutdown one.
-    done_root = Path(server._SESSION_REGISTRY.get(sid_done).record_root)
+    done_root = Path(app.registry.get(sid_done).record_root)
     envs = list(api.read_record(done_root))
     reasons = [e["payload"]["reason"] for e in envs if e["kind"] == "SessionEnded"]
     assert reasons == ["user_end"], reasons
 
 
 def test_shutdown_continues_when_one_session_fails(
-    base: tuple[str, Path], monkeypatch: pytest.MonkeyPatch
+    app: server.App, base: tuple[str, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A turn_sync raise on one session must not stop the loop; the
     other session still ends cleanly.
@@ -162,16 +160,16 @@ def test_shutdown_continues_when_one_session_fails(
     _park(url, sid_good)
     _park(url, sid_bad)
 
-    real_turn_sync = server._SESSION_REGISTRY.turn_sync
+    real_turn_sync = app.registry.turn_sync
 
     def _flaky_turn_sync(session_id: str, *args, **kwargs):
         if session_id == sid_bad:
             raise RuntimeError("simulated per-session failure")
         return real_turn_sync(session_id, *args, **kwargs)
 
-    monkeypatch.setattr(server._SESSION_REGISTRY, "turn_sync", _flaky_turn_sync)
+    monkeypatch.setattr(app.registry, "turn_sync", _flaky_turn_sync)
 
-    outcome = server._shutdown_all_sessions(per_session_timeout=10.0)
+    outcome = server._shutdown_all_sessions(app, per_session_timeout=10.0)
     assert outcome == {
         "ended": 1,
         "skipped_fresh": 0,
@@ -180,5 +178,5 @@ def test_shutdown_continues_when_one_session_fails(
         "background_stopped": 0,
     }
     # The good session ended cleanly.
-    good_root = Path(server._SESSION_REGISTRY.get(sid_good).record_root)
+    good_root = Path(app.registry.get(sid_good).record_root)
     assert_event(good_root, "SessionEnded", reason="daemon_shutdown")

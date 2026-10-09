@@ -4,44 +4,35 @@ The handler wraps `SessionRegistry.turn_sync` with a `SessionEndRequested`
 resume event. The session topology's `end-on-user-end` trigger fires,
 routes through the `session_end` producer, emits `SessionEnded{reason:
 "user_end"}`, and `threshold_count("SessionEnded", 1)` finalises the run.
-The manifest status transitions to `"ended"`; a subsequent /turn returns
-410.
+The manifest status transitions to `"ended"`; since the Architect's ruling of 2026-09-25 a
+subsequent /turn resumes the same session (it returned 410 before).
 
 Behaviors under test:
   1. POST /end on a live session returns 200 with `status="ended"`, and
      the record's tail carries `SessionEnded{reason: "user_end"}`.
-  2. The manifest transitions to `"ended"`; a subsequent /turn is 410.
+  2. The manifest transitions to `"ended"`; a subsequent /turn resumes and parks.
   3. POST /end on an unknown session_id returns 404.
   4. An optional body `{"source": "..."}` lands on the
      `SessionEndRequested.source` field for the audit trail.
 
-Run from the substrate venv:
-    cd substrate && uv run python -m pytest ../substrate-ui/tests/test_server_session_end.py -q
 """
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 import pytest
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-import server  # noqa: E402
-from substrate.session_registry import SessionRegistry  # noqa: E402
-
+from _serving import call, serving  # noqa: E402
 from substrate import api  # noqa: E402
 from substrate.testing import assert_event  # noqa: E402
-from _serving import call, serving  # noqa: E402
+
+import server  # noqa: E402
 
 
 @pytest.fixture
-def base(tmp_path: Path) -> str:
-    server._SESSION_REGISTRY = SessionRegistry(
-        base=tmp_path,
-        session_topology_factory=server._build_session_topology_from_manifest,
-    )
-    with serving() as base:
+def base(app: server.App, tmp_path: Path) -> str:
+    app.install_registry(base=tmp_path)
+    with serving(app) as base:
         yield base
 
 
@@ -77,13 +68,15 @@ def test_end_finalises_the_session_and_writes_session_ended(base: str, tmp_path:
     )
 
 
-def test_manifest_transitions_to_ended_and_next_turn_resumes(base: str, tmp_path: Path) -> None:
+def test_manifest_transitions_to_ended_and_next_turn_resumes(
+    app: server.App, base: str, tmp_path: Path
+) -> None:
     """POST /end sets the manifest to ended; per the Architect ruling of 2026-09-25 the next
     /turn resumes the same session (200, parked). Asserted 410 until Sprint 097."""
     sid = _create(base, tmp_path / "wsp", name="closed")
     _post_json(base + f"/api/session/{sid}/turn", {"text": "priming"})
     _s, _b = _post_json(base + f"/api/session/{sid}/end", None)
-    manifest = server._SESSION_REGISTRY.get(sid)
+    manifest = app.registry.get(sid)
     assert manifest is not None
     assert manifest.status == "ended"
     status, body = _post_json(base + f"/api/session/{sid}/turn", {"text": "again"})

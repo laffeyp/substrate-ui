@@ -1,47 +1,28 @@
-"""Sprint 036f — UI/CLI control parity gate.
+"""Daemon control determinism (named "UI/CLI control parity" from sprint 036f to 2026-10-08).
 
-The UI (web/controls/*.ts + web/terminal.ts) and the CLI's REPL slash router
-(substrate/src/substrate/cli.py::_slash_route) call the SAME daemon endpoints
-for every mutating control:
-
-  driver     UI mountDriverPicker   ==  CLI /model     ==  PATCH /api/session/<id> {driver}
-  bundle     UI mountBundlePicker   ==  CLI /bundle    ==  PATCH /api/session/<id> {bundle}
-  tools      UI mountToolsDrawer    ==  CLI /tools     ==  PATCH /api/session/<id> {tools}
-  driver_params  UI /set slash      ==  CLI /set       ==  PATCH /api/session/<id> {driver_params}
-  workspace  UI new-session dialog  ==  CLI --workspace  ==  POST /api/session {workspace}
-  isolate    UI isolateField        ==  CLI --isolate  ==  POST /api/session {isolate}
-
-Parity is guaranteed by the shared daemon layer. The gate this test enforces:
-for each canonical control input, the daemon's response and the manifest
-read-back are byte-identical regardless of which client sent the request.
-The 036a-e harnesses prove the UI hits the endpoints correctly; the CLI hits
-them through the same seams; this file proves the daemon's response
-determinism per control.
-
-Run from the substrate venv:
-    cd substrate && uv run python -m pytest ../substrate-ui/tests/test_ui_control_parity.py -q
+The UI and the CLI change a session through the same daemon endpoints (PATCH /api/session/<id>
+for driver, bundle, tools, driver_params; POST /api/session for workspace and isolate). This file
+checks the daemon's half of that contract: the same control input, sent for two sessions, gets a
+200 and lands the same manifest slice on both. It does not observe what the UI or the CLI send;
+their slash routers are checked by the shakeout's slash_router flow and the CLI's own tests (lens
+audit F423/F424: the old docstring claimed parity it could not see, and every PATCH response was
+discarded).
 """
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 import pytest
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-import server  # noqa: E402
-from substrate.session_registry import SessionRegistry  # noqa: E402
 from _serving import call, serving  # noqa: E402
+
+import server  # noqa: E402
 
 
 @pytest.fixture
-def base(tmp_path: Path) -> str:
-    server._SESSION_REGISTRY = SessionRegistry(
-        base=tmp_path,
-        session_topology_factory=server._build_session_topology_from_manifest,
-    )
-    with serving() as base:
+def base(app: server.App, tmp_path: Path) -> str:
+    app.install_registry(base=tmp_path)
+    with serving(app) as base:
         yield base
 
 
@@ -69,6 +50,11 @@ def _end(base: str, sid: str) -> None:
     _http(f"{base}/api/session/{sid}/end", "POST", {"source": "test-cleanup"})
 
 
+def _patch(base: str, sid: str, body: dict) -> None:
+    status, payload = _http(f"{base}/api/session/{sid}", "PATCH", body)
+    assert status == 200, f"PATCH {body} -> {status} {payload}"
+
+
 def _manifest_slice(m: dict, keys: list[str]) -> dict:
     return {k: m.get(k) for k in keys}
 
@@ -81,8 +67,8 @@ def test_driver_patch_parity(base: str, tmp_path: Path) -> None:
     sid_a = _create_session(base, workspace=ws_a)
     sid_b = _create_session(base, workspace=ws_b)
     try:
-        _http(f"{base}/api/session/{sid_a}", "PATCH", {"driver": "kimi-k2.6:cloud"})
-        _http(f"{base}/api/session/{sid_b}", "PATCH", {"driver": "kimi-k2.6:cloud"})
+        _patch(base, sid_a, {"driver": "kimi-k2.6:cloud"})
+        _patch(base, sid_b, {"driver": "kimi-k2.6:cloud"})
         slice_a = _manifest_slice(_get_manifest(base, sid_a), ["driver"])
         slice_b = _manifest_slice(_get_manifest(base, sid_b), ["driver"])
         assert slice_a == slice_b == {"driver": "kimi-k2.6:cloud"}
@@ -98,8 +84,8 @@ def test_bundle_patch_parity(base: str, tmp_path: Path) -> None:
     sid_a = _create_session(base, workspace=ws_a)
     sid_b = _create_session(base, workspace=ws_b)
     try:
-        _http(f"{base}/api/session/{sid_a}", "PATCH", {"bundle": "code_review"})
-        _http(f"{base}/api/session/{sid_b}", "PATCH", {"bundle": "code_review"})
+        _patch(base, sid_a, {"bundle": "code_review"})
+        _patch(base, sid_b, {"bundle": "code_review"})
         slice_a = _manifest_slice(_get_manifest(base, sid_a), ["bundle"])
         slice_b = _manifest_slice(_get_manifest(base, sid_b), ["bundle"])
         assert slice_a == slice_b == {"bundle": "code_review"}
@@ -115,8 +101,8 @@ def test_bundle_patch_null_parity(base: str, tmp_path: Path) -> None:
     sid_a = _create_session(base, workspace=ws_a, bundle="code_review")
     sid_b = _create_session(base, workspace=ws_b, bundle="code_review")
     try:
-        _http(f"{base}/api/session/{sid_a}", "PATCH", {"bundle": None})
-        _http(f"{base}/api/session/{sid_b}", "PATCH", {"bundle": None})
+        _patch(base, sid_a, {"bundle": None})
+        _patch(base, sid_b, {"bundle": None})
         m_a = _get_manifest(base, sid_a)
         m_b = _get_manifest(base, sid_b)
         assert m_a["bundle"] is None and m_b["bundle"] is None
@@ -140,8 +126,8 @@ def test_tools_patch_sort_parity(base: str, tmp_path: Path) -> None:
     sid_b = _create_session(base, workspace=ws_b)
     try:
         payload = {"tools": ["bash", "grep", "read_file"]}  # already sorted
-        _http(f"{base}/api/session/{sid_a}", "PATCH", payload)
-        _http(f"{base}/api/session/{sid_b}", "PATCH", payload)
+        _patch(base, sid_a, payload)
+        _patch(base, sid_b, payload)
         m_a = _get_manifest(base, sid_a)
         m_b = _get_manifest(base, sid_b)
         assert m_a["tools"] == m_b["tools"] == ["bash", "grep", "read_file"]
@@ -157,14 +143,12 @@ def test_tools_empty_clears_parity(base: str, tmp_path: Path) -> None:
     sid_a = _create_session(base, workspace=ws_a, tools=["grep"])
     sid_b = _create_session(base, workspace=ws_b, tools=["grep"])
     try:
-        _http(f"{base}/api/session/{sid_a}", "PATCH", {"tools": []})
-        _http(f"{base}/api/session/{sid_b}", "PATCH", {"tools": []})
+        _patch(base, sid_a, {"tools": []})
+        _patch(base, sid_b, {"tools": []})
         m_a = _get_manifest(base, sid_a)
         m_b = _get_manifest(base, sid_b)
-        # Daemon normalises empty list to None (unrestricted). Both clients
-        # see the same state after read-back.
-        assert m_a["tools"] == m_b["tools"]
-        assert m_a["tools"] in (None, [])
+        # The daemon normalises an empty list to None (unrestricted).
+        assert m_a["tools"] is None and m_b["tools"] is None
     finally:
         _end(base, sid_a)
         _end(base, sid_b)
@@ -179,8 +163,8 @@ def test_driver_params_patch_parity(base: str, tmp_path: Path) -> None:
     sid_b = _create_session(base, workspace=ws_b)
     try:
         payload = {"driver_params": {"think": True, "max_tokens": 4096}}
-        _http(f"{base}/api/session/{sid_a}", "PATCH", payload)
-        _http(f"{base}/api/session/{sid_b}", "PATCH", payload)
+        _patch(base, sid_a, payload)
+        _patch(base, sid_b, payload)
         m_a = _get_manifest(base, sid_a)
         m_b = _get_manifest(base, sid_b)
         assert m_a["driver_params"] == m_b["driver_params"]
@@ -255,10 +239,10 @@ def test_slash_router_wire_convergence(base: str, tmp_path: Path) -> None:
     ws = str(tmp_path / "chain")
     sid = _create_session(base, workspace=ws)
     try:
-        _http(f"{base}/api/session/{sid}", "PATCH", {"driver": "kimi-k2.6:cloud"})
-        _http(f"{base}/api/session/{sid}", "PATCH", {"bundle": "code_review"})
-        _http(f"{base}/api/session/{sid}", "PATCH", {"tools": ["grep", "read_file"]})
-        _http(f"{base}/api/session/{sid}", "PATCH", {"driver_params": {"think": True}})
+        _patch(base, sid, {"driver": "kimi-k2.6:cloud"})
+        _patch(base, sid, {"bundle": "code_review"})
+        _patch(base, sid, {"tools": ["grep", "read_file"]})
+        _patch(base, sid, {"driver_params": {"think": True}})
         m = _get_manifest(base, sid)
         assert m["driver"] == "kimi-k2.6:cloud"
         assert m["bundle"] == "code_review"

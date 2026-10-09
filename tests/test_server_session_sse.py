@@ -1,8 +1,9 @@
 """Sprint 214c — GET /api/session/<id>/events streams SSE frames.
 
 The endpoint holds the connection open and writes `data: <json>\\n\\n` per
-envelope on the record's growing tail. Closes on client disconnect or on
-`substrate.RunFinalised`. Filters by `since_seq` so a reconnecting client
+envelope on the record's growing tail. Closes on client disconnect or on a
+`substrate.RunFinalised` past `since_seq` (since 2026-09-29: a RunFinalised at or
+before the cursor keeps the stream open, so a resumed ended session streams on). Filters by `since_seq` so a reconnecting client
 resumes without re-reading the whole record.
 
 Testing shape: the tests fire the SSE reader from a background thread against
@@ -10,40 +11,31 @@ a real running ThreadingHTTPServer, then either (a) let a POST /turn populate
 the record and read the emitted SSE frames, or (b) prime the record first and
 verify backlog replay.
 
-Run from the substrate venv:
-    cd substrate && uv run python -m pytest ../substrate-ui/tests/test_server_session_sse.py -q
 """
 
 from __future__ import annotations
 
 import json
 import socket
-import sys
 import threading
-import time
 from pathlib import Path
 from urllib.request import urlopen
 
 import pytest
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-import server  # noqa: E402
-from substrate.session_registry import SessionRegistry  # noqa: E402
+from _serving import call, serving  # noqa: E402
 
 # TECHNIQUE #38 — F-API-4 test primitives. `assert_event` / `assert_no_event`
 # accept ANY iterable of envelope dicts (see substrate.testing._load), so the
 # SSE reader's output plugs in directly without a synthetic record file.
 from substrate.testing import assert_event, assert_no_event  # noqa: E402
-from _serving import call, serving  # noqa: E402
+
+import server  # noqa: E402
 
 
 @pytest.fixture
-def base(tmp_path: Path) -> str:
-    server._SESSION_REGISTRY = SessionRegistry(
-        base=tmp_path,
-        session_topology_factory=server._build_session_topology_from_manifest,
-    )
-    with serving() as base:
+def base(app: server.App, tmp_path: Path) -> str:
+    app.install_registry(base=tmp_path)
+    with serving(app) as base:
         yield base
 
 
@@ -60,7 +52,9 @@ def _create(base: str, workspace: Path, name: str | None = None) -> str:
     return body["session_id"]
 
 
-def _read_sse_frames(url: str, max_frames: int, idle_timeout: float = 2.0) -> list[dict]:
+def _read_sse_frames(
+    url: str, max_frames: int, idle_timeout: float = 2.0, opened: threading.Event | None = None
+) -> list[dict]:
     """Read up to `max_frames` `data:` frames from an SSE stream and close.
     The SSE server holds the socket open past finalisation, so this reader
     stops when either (a) it collects `max_frames` frames, or (b) the server
@@ -69,6 +63,8 @@ def _read_sse_frames(url: str, max_frames: int, idle_timeout: float = 2.0) -> li
     """
     frames: list[dict] = []
     resp = urlopen(url, timeout=idle_timeout)
+    if opened is not None:
+        opened.set()  # the server holds the stream open from here
     buf = b""
     try:
         while len(frames) < max_frames:
@@ -120,14 +116,9 @@ def test_sse_streams_backlog_when_session_already_has_events(base: str, tmp_path
         max_frames=200,  # Sprint 097: the default `session` bundle (sprint 054) adds frames; 30 cut off ModelReply
         idle_timeout=2.0,
     )
-    # `substrate.RunStarted` intentionally NOT asserted here: the daemon's
-    # POST /turn uses `Runtime.resume` (via `turn_sync` → `_run_resume_sync`),
-    # and `_resume_bootstrap` at `runtime.py:409` deliberately does not write
-    # RunStarted (it treats the run as CONTINUING, not opening). Piece-C
-    # review finding 16 named this as the substrate-primitive gap that sprint
-    # 214 was to decide; sprint 214a-c ship the endpoints without changing
-    # that primitive. The SSE stream faithfully replays whatever is on the
-    # record — the gap is at the writer, not the SSE reader.
+    # A session's first turn opens the record with `Runtime.run`, so the backlog starts at
+    # substrate.RunStarted (sprint 217a; test_session_registry_first_turn_uses_run.py).
+    assert_event(frames, "substrate.RunStarted")
     assert_event(frames, "UserMessage", text="hello", turn_index=0)
     assert_event(frames, "ModelReply", turn_index=0)
     assert_event(frames, "FinalAnswer")
@@ -161,7 +152,7 @@ def test_sse_since_seq_filters_backlog(base: str, tmp_path: Path) -> None:
     assert filtered
 
 
-def test_sse_streams_new_events_as_a_turn_lands(base: str, tmp_path: Path) -> None:
+def test_sse_streams_new_events_as_a_turn_lands(app: server.App, base: str, tmp_path: Path) -> None:
     """Fire the SSE reader BEFORE the turn lands. Frames arrive as the record
     grows. Uses since_seq=<current_max> so backlog doesn't dominate.
     """
@@ -169,7 +160,7 @@ def test_sse_streams_new_events_as_a_turn_lands(base: str, tmp_path: Path) -> No
     # Prime the record with one turn so the record has a substrate.RunStarted
     # envelope AND we know the current tail seq.
     _post_json(base + f"/api/session/{sid}/turn", {"text": "warmup"})
-    manifest = server._SESSION_REGISTRY.get(sid)
+    manifest = app.registry.get(sid)
     from substrate import api as substrate_api
 
     envs = list(substrate_api.read_record(Path(manifest.record_root)))
@@ -177,6 +168,7 @@ def test_sse_streams_new_events_as_a_turn_lands(base: str, tmp_path: Path) -> No
 
     collected: list[dict] = []
     reader_error: list[BaseException] = []
+    opened = threading.Event()
 
     def _reader() -> None:
         try:
@@ -184,6 +176,7 @@ def test_sse_streams_new_events_as_a_turn_lands(base: str, tmp_path: Path) -> No
                 base + f"/api/session/{sid}/events?since_seq={tail_seq}",
                 max_frames=15,
                 idle_timeout=3.0,
+                opened=opened,
             )
             collected.extend(frames)
         except BaseException as exc:  # noqa: BLE001
@@ -191,8 +184,9 @@ def test_sse_streams_new_events_as_a_turn_lands(base: str, tmp_path: Path) -> No
 
     reader_thread = threading.Thread(target=_reader, daemon=True)
     reader_thread.start()
-    # Give the reader a moment to hit the poll loop.
-    time.sleep(0.5)
+    # The stream is open before the turn posts, so its envelopes arrive live (lens audit F437:
+    # a 0.5 s sleep stood in for this).
+    assert opened.wait(5), "SSE reader never connected"
     # Fire a new turn; the reader picks up the fresh envelopes as they land.
     _post_json(base + f"/api/session/{sid}/turn", {"text": "streamed turn"})
     reader_thread.join(timeout=15)

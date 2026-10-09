@@ -17,14 +17,20 @@ the next import. Do not embed these strings anywhere else in the tree.
 from __future__ import annotations
 
 
-# Session state — the caller resolved a session name that has since
-# ended (or ended between the resolve and the /turn call). Surfaced by
-# turn_sync's SessionEndedMidTurn class AND by the delegate on the
-# substrate side. Re-imported from substrate so the delegate and the
-# daemon cannot drift on the tag string.
+# A delegate's standing session vanished under it (the delegate tool's own error, raised in the
+# kernel). Re-imported from substrate so the delegate and the daemon cannot drift on the string.
 from substrate.topologies.tool_loop.delegate import (
     SESSION_ENDED_MID_DELEGATE as SESSION_ENDED_MID_DELEGATE,
 )
+
+# A /turn for a session that was DELETED: its manifest is gone, its record dir remains (SDD rule
+# 12). 410, not 404: it existed. Until 2026-10-08 this answered `session_ended_mid_delegate`, a
+# name for the delegate case only (lens audit F431).
+SESSION_DELETED = "session_deleted"
+
+# turn_sync found the session gone once it held the session's lock: a delete (or a cascade from a
+# composite parent) landed between the caller's lookup and the turn.
+SESSION_ENDED_MID_TURN = "session_ended_mid_turn"
 
 # Sprint 220b: the session's record dir exists but api.read_record
 # raised (RecordGapError, TornFrameError, CRCMismatchError, FsyncError).
@@ -43,5 +49,7 @@ FRESH_SESSION_NEVER_OPENED = "fresh_session_never_opened"
 __all__ = [
     "FRESH_SESSION_NEVER_OPENED",
     "RECORD_TORN",
+    "SESSION_DELETED",
     "SESSION_ENDED_MID_DELEGATE",
+    "SESSION_ENDED_MID_TURN",
 ]

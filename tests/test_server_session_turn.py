@@ -15,36 +15,27 @@ Three behaviors under test:
   3. POST /turn to an unknown session_id returns 404. A body missing "text"
      returns 400.
 
-Run from the substrate venv:
-    cd substrate && uv run python -m pytest ../substrate-ui/tests/test_server_session_turn.py -q
 """
 
 from __future__ import annotations
 
-import sys
 import threading
 from pathlib import Path
 
 import pytest
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-import server  # noqa: E402
-from substrate.session_registry import SessionRegistry  # noqa: E402
-
+from _serving import call, serving  # noqa: E402
 from substrate import api  # noqa: E402
 
 # TECHNIQUE #38 — F-API-4 test primitives operate on the record path directly.
 from substrate.testing import assert_event  # noqa: E402
-from _serving import call, serving  # noqa: E402
+
+import server  # noqa: E402
 
 
 @pytest.fixture
-def base(tmp_path: Path) -> str:
-    server._SESSION_REGISTRY = SessionRegistry(
-        base=tmp_path,
-        session_topology_factory=server._build_session_topology_from_manifest,
-    )
-    with serving() as base:
+def base(app: server.App, tmp_path: Path) -> str:
+    app.install_registry(base=tmp_path)
+    with serving(app) as base:
         yield base
 
 
@@ -96,7 +87,9 @@ def test_second_turn_appends_with_incremented_turn_index(base: str, tmp_path: Pa
     assert_event(record_root, "UserMessage", text="second", turn_index=1)
 
 
-def test_two_concurrent_turns_on_same_session_serialize(base: str, tmp_path: Path) -> None:
+def test_two_concurrent_turns_on_same_session_serialize(
+    app: server.App, base: str, tmp_path: Path
+) -> None:
     sid = _create_session(base, tmp_path / "wsp")
     outcomes: list[tuple[int, dict]] = []
     outcomes_lock = threading.Lock()
@@ -120,7 +113,7 @@ def test_two_concurrent_turns_on_same_session_serialize(base: str, tmp_path: Pat
     # F-API-4 primitive pins one specific (text, turn_index) pairing per turn.
     # Either arrival order is legitimate; we look up each concurrent text under
     # the turn_index it actually landed at and confirm it exists.
-    record_root = Path(server._SESSION_REGISTRY.get(sid).record_root)
+    record_root = Path(app.registry.get(sid).record_root)
     user_msgs = [e for e in api.read_record(record_root) if e["kind"] == "UserMessage"]
     turn_by_text = {u["payload"]["text"]: u["payload"]["turn_index"] for u in user_msgs}
     assert set(turn_by_text) == {"turn A", "turn B"}
@@ -128,6 +121,7 @@ def test_two_concurrent_turns_on_same_session_serialize(base: str, tmp_path: Pat
     # Each concrete pairing exists at the seq lookup.
     for text, ti in turn_by_text.items():
         assert_event(record_root, "UserMessage", text=text, turn_index=ti)
+    _assert_turns_serialized(list(api.read_record(record_root)), 2)
 
 
 def test_unknown_session_id_returns_404(base: str) -> None:
@@ -141,3 +135,14 @@ def test_missing_text_returns_400(base: str, tmp_path: Path) -> None:
     status, body = _post_json(base + f"/api/session/{sid}/turn", {})
     assert status == 400
     assert "requires body" in body["error"]
+
+
+def _assert_turns_serialized(envs: list[dict], n_turns: int) -> None:
+    """In record order the turns do not interleave: UserMessage, Park, UserMessage, Park, …, and
+    turn_index rises by one per turn (lens audit F425/F449: only the count was checked)."""
+    marks = [e for e in envs if e["kind"] in ("UserMessage", "Park")]
+    assert [e["kind"] for e in marks] == ["UserMessage", "Park"] * n_turns, [
+        e["kind"] for e in marks
+    ]
+    indexes = [e["payload"]["turn_index"] for e in marks if e["kind"] == "UserMessage"]
+    assert indexes == list(range(indexes[0], indexes[0] + n_turns)), indexes

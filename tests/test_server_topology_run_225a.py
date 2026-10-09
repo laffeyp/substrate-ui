@@ -10,32 +10,25 @@ Four cases per the card's assertions block:
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
 
 import pytest
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-import server  # noqa: E402
-from substrate.session_registry import SessionRegistry  # noqa: E402
-
+from _serving import call, serving  # noqa: E402
 from substrate import api  # noqa: E402
 from substrate.topologies.applications.registry import load_manifests  # noqa: E402
-from _serving import call, serving  # noqa: E402
+
+import server  # noqa: E402
 
 
 @pytest.fixture
-def base(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> str:
+def base(app: server.App, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> str:
     _sb = tmp_path / "sessions"
     monkeypatch.setattr(server, "_sessions_base", lambda: _sb)
     server._sessions_base().mkdir(parents=True)
-    server._SESSION_REGISTRY = SessionRegistry(
-        base=server._sessions_base(),
-        session_topology_factory=server._build_session_topology_from_manifest,
-    )
+    app.install_registry(base=server._sessions_base())
     # Load the four shipped manifests from the installed package.
-    server._APPLICATIONS = load_manifests()
-    with serving() as base:
+    app.applications = load_manifests()
+    with serving(app) as base:
         yield base
 
 

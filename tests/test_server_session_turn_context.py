@@ -5,32 +5,23 @@ Malformed context returns 400. Well-formed context prefixes a slice of this
 session's own record to `UserMessage.assembled_prompt`; `UserMessage.text`
 stays raw. Missing context works unchanged (backwards-compat).
 
-Run from the substrate venv:
-    cd substrate && uv run python -m pytest ../substrate-ui/tests/test_server_session_turn_context.py -q
 """
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 import pytest
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-import server  # noqa: E402
-from substrate.session_registry import SessionRegistry  # noqa: E402
-
-from substrate import api  # noqa: E402
 from _serving import call, serving  # noqa: E402
+from substrate import api  # noqa: E402
+
+import server  # noqa: E402
 
 
 @pytest.fixture
-def base(tmp_path: Path) -> str:
-    server._SESSION_REGISTRY = SessionRegistry(
-        base=tmp_path,
-        session_topology_factory=server._build_session_topology_from_manifest,
-    )
-    with serving() as base:
+def base(app: server.App, tmp_path: Path) -> str:
+    app.install_registry(base=tmp_path)
+    with serving(app) as base:
         yield base
 
 
@@ -55,7 +46,9 @@ def test_turn_without_context_unchanged(base: str, tmp_path: Path) -> None:
     assert body["status"] == "parked"
 
 
-def test_turn_with_context_prefixes_assembled_prompt(base: str, tmp_path: Path) -> None:
+def test_turn_with_context_prefixes_assembled_prompt(
+    app: server.App, base: str, tmp_path: Path
+) -> None:
     """First turn builds record history. Second turn with `context` reads a
     slice of THIS session's record and prefixes it to `assembled_prompt`.
     The record's second UserMessage envelope carries the prefixed text.
@@ -63,7 +56,7 @@ def test_turn_with_context_prefixes_assembled_prompt(base: str, tmp_path: Path) 
     sid = _create(base, tmp_path / "wsp")
     # Turn 1: populate the record with envelopes to slice from.
     _post_json(base + f"/api/session/{sid}/turn", {"text": "compute (2+3)*4"})
-    manifest = server._SESSION_REGISTRY.get(sid)
+    manifest = app.registry.get(sid)
     record_root = Path(manifest.record_root)
     # Turn 2: pass context selecting the FinalAnswer from turn 1.
     envs = list(api.read_record(record_root))

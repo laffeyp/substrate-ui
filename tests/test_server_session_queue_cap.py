@@ -10,35 +10,26 @@ per TECH-SPEC §4:
 
 The refusal does NOT block on the per-session turn lock.
 
-Run:
-    cd substrate && uv run python -m pytest ../substrate-ui/tests/test_server_session_queue_cap.py -q
 """
 
 from __future__ import annotations
 
-import sys
 import threading
 import time
 from pathlib import Path
 
 import pytest
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-import server  # noqa: E402
-from substrate.session_registry import SessionRegistry  # noqa: E402
 from _serving import call, serving  # noqa: E402
+
+import server  # noqa: E402
 
 
 @pytest.fixture
-def base_cap3(tmp_path: Path) -> str:
+def base_cap3(app: server.App, tmp_path: Path) -> str:
     # cap=3 keeps the test fast: 3 admitted + 1 refused = 4 concurrent
     # POSTs, and the admitted ones all sleep on the same lock.
-    server._SESSION_REGISTRY = SessionRegistry(
-        base=tmp_path,
-        session_topology_factory=server._build_session_topology_from_manifest,
-        turn_queue_cap=3,
-    )
-    with serving() as base:
+    app.install_registry(base=tmp_path, turn_queue_cap=3)
+    with serving(app) as base:
         yield base
 
 
@@ -55,8 +46,20 @@ def _create(base: str, workspace: Path, name: str) -> str:
     return body["session_id"]
 
 
-def test_over_cap_call_returns_429_without_blocking(base_cap3: str, tmp_path: Path) -> None:
+def test_over_cap_call_returns_429_without_blocking(
+    app: server.App, base_cap3: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     sid = _create(base_cap3, tmp_path / "wsp", "capped")
+    # Every admitted turn holds its slot for 1 s, so all four requests meet a full queue whatever
+    # the machine's speed (lens audit F445: deterministic turns could finish before the fourth
+    # request arrived, and then all four were admitted).
+    real_turn_sync = app.registry.turn_sync
+
+    def _slow_turn_sync(session_id: str, *args, **kwargs):
+        time.sleep(1.0)
+        return real_turn_sync(session_id, *args, **kwargs)
+
+    monkeypatch.setattr(app.registry, "turn_sync", _slow_turn_sync)
     outcomes: list[tuple[int, dict]] = []
     outcomes_lock = threading.Lock()
 
@@ -86,7 +89,7 @@ def test_over_cap_call_returns_429_without_blocking(base_cap3: str, tmp_path: Pa
 
 
 def test_429_returns_immediately_not_after_lock_wait(
-    base_cap3: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    app: server.App, base_cap3: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The refusal path must not block on the per-session lock. Slow every
     admitted turn to 1 s via a monkey-patched turn_sync so the 3 admitted
@@ -95,13 +98,13 @@ def test_429_returns_immediately_not_after_lock_wait(
     """
     sid = _create(base_cap3, tmp_path / "wsp", "immediate")
 
-    real_turn_sync = server._SESSION_REGISTRY.turn_sync
+    real_turn_sync = app.registry.turn_sync
 
     def _slow_turn_sync(session_id: str, *args, **kwargs):
         time.sleep(1.0)
         return real_turn_sync(session_id, *args, **kwargs)
 
-    monkeypatch.setattr(server._SESSION_REGISTRY, "turn_sync", _slow_turn_sync)
+    monkeypatch.setattr(app.registry, "turn_sync", _slow_turn_sync)
 
     def _call(text: str) -> None:
         _post_json(base_cap3 + f"/api/session/{sid}/turn", {"text": text}, timeout=30)
@@ -110,7 +113,11 @@ def test_429_returns_immediately_not_after_lock_wait(
     admitted = [threading.Thread(target=_call, args=(f"a-{i}",)) for i in range(3)]
     for t in admitted:
         t.start()
-    time.sleep(0.2)
+    # Wait until all three hold a queue slot (the registry's counter), not a fixed 0.2 s.
+    deadline = time.monotonic() + 5
+    while app.registry._queue_depths.get(sid, 0) < 3 and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert app.registry._queue_depths.get(sid, 0) == 3
 
     # The refusal must return well under the 1 s sleep the admitted turns
     # are inside. If the cap check took the turn lock, this would block.

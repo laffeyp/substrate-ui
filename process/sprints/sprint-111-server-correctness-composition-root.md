@@ -3,7 +3,8 @@
 ```yaml
 ---
 id: 111
-status: open
+status: closed
+closed_at: 2026-10-08
 opened_at: 2026-10-08
 pass_kind: remediation
 roadmap: substrate-ui/process/planning/ROADMAP-2026-10-08-lens-audit-remediation.md
@@ -65,4 +66,59 @@ Each row closes as named; a row the sprint cannot close halts the sprint.
 
 ## result
 
-(filled at close)
+**Composition root (F318, F412).**
+- `server.App` holds the 13 tables that were module globals:
+  - the session registry and the application catalog;
+  - topology runs and the shutdown flag;
+  - the responder, thinking-probe, CLI-version, record-summary and assay caches;
+  - the login PTY table and its locks.
+- `main()` builds the one App. `AppHTTPServer` and `_UnixHTTPServer` carry it, and `Handler.app` reads it from the server the request arrived on. The 22 module functions that touch a table, or call one that does, take the App as their first argument.
+- `App.install_registry(base)` builds a registry whose topology factory is bound to that App.
+- Tests build their own App: a conftest `app` fixture, `serving(app)`, `app.install_registry(...)`. The 37 assignments to `server._SESSION_REGISTRY` and the other tables are gone, and `test_server.py` serves a fresh App per test instead of one per module.
+- `test_two_apps_share_no_state` serves two Apps at once: a session created on one is absent from the other.
+
+**The session's end rule lives in the kernel (F309, F310).**
+- The kernel gained `finalise_on(kind)`: finalise when the event just appended is of that kind. The session topology uses it in place of `threshold_count(SessionEnded, 1)`. A resume restores counts from the whole record, so the old rule ended a resumed session on its first new event.
+- The server's copy of the termination rule and its per-turn `_count_record_kind` scan are deleted.
+- With the old rule and no server copy, two resume-after-end tests fail; with `finalise_on`, they pass.
+- The turn, end and topology-run handlers read the record's tail seq from its last frame (`api.read_last_envelope`), not the whole record.
+
+**Configuration has one source.**
+- F063: the default address comes from the CLI's `tcp_host_port()`; `SUBSTRATE_UI_*` is gone.
+- F304: the Ollama address comes from the kernel's `ollama_base_url()`.
+- F306: the `/api/agent` bridge lost its own default tag.
+- F307: the Claude catalog defaults to `claude-opus-5-5` and `claude-sonnet-5-5`.
+- F308: the opencode parser is gone.
+- F342: responders are imported from `substrate.adapters`.
+
+**Correctness.**
+- F316, plus a new defect, N004. `role` was validated at create, then never passed to `session_topology`, so no UI session ever carried its role prompt, `default.md` included. It is now passed, and it resolves against the session's workspace, not the server's cwd.
+- F305: a failed thinking probe is not cached.
+- F298: an unknown `/api/agent` model is a 400 naming the choices. It used to run the deterministic stub.
+- F311: `/api/records` caches each row by its segment files' names, sizes and mtimes.
+- F319: the registry's boot scan publishes each session as a compare-and-set under the manifest lock. The server constructs the registry with `auto_boot=False`, so the scan runs once, off the request path.
+- F002, F375: a relative workspace is refused by the daemon. The CLI makes `.` absolute on its side, with `os.path.abspath`, which keeps symlinks as the daemon does.
+- F295, F296, F297: topology runs are `<run_id>.record`, report their real status, and are evicted after an hour.
+- F431: each 410 carries the code for its condition.
+- F303 and the legacy and Studio endpoints are deleted: `/api/launch`, `/api/resume`, `/api/validate`, `/api/build`, `/api/agent?legacy=true`, `/api/topologies`, `/terminal-v1` and builder.py.
+- F312, F315: docstrings now describe what the code does.
+
+**The real home (F294, F341).**
+- 396 leaked runs (389 `s_topo_*`, 5 shakeout records, `tool_loop`, `launch_agent_calc`) moved to `~/.Trash/substrate-runs-leak-2026-10-08`, and both literal `~` trees were removed.
+- `gen_demo_records.py` requires its output directory.
+
+**Tests.**
+- `tests/test_server_composition_111.py` has 10 tests. The four server-fix tests (role, cwd role, probe cache, address) fail when their fixes are reverted.
+- Kernel: `test_read_last_envelope_310.py` (4) and `test_session_registry_boot_scan_concurrent_319.py` (2). The rename test fails on HEAD.
+
+**Gates.**
+
+| Gate | Result |
+|---|---|
+| UI suite | 210 passed |
+| UI ruff, format, harness tsc | clean |
+| vm_smoke | 12/12 |
+| lifecycle gates | all passed |
+| resume_ended_session (source) | ok: ended, re-attached, resumed, replies "ok", "yes" |
+| tasks_gate | all passed |
+| kernel deterministic suite (`-m "not realmodel"`) | 1,271 passed, 4 skipped, 43 deselected |
