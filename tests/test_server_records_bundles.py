@@ -4,32 +4,24 @@ The rail rewrite (034b) and the terminal-view create-time picker (035w)
 consume these two endpoints. Neither existed before this sprint; the
 records endpoint's exclude_sessions query param is new too.
 
-Run from the substrate venv:
-    cd substrate && uv run python -m pytest ../substrate-ui/tests/test_server_records_bundles.py -q
 """
 
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
 from urllib.request import Request, urlopen
 
 import pytest
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-import server  # noqa: E402
-from substrate.session_registry import SessionRegistry  # noqa: E402
 from _serving import call, serving  # noqa: E402
+
+import server  # noqa: E402
 
 
 @pytest.fixture
-def base(tmp_path: Path) -> str:
-    server._SESSION_REGISTRY = SessionRegistry(
-        base=tmp_path,
-        session_topology_factory=server._build_session_topology_from_manifest,
-    )
-    with serving() as base:
+def base(app: server.App, tmp_path: Path) -> str:
+    app.install_registry(base=tmp_path)
+    with serving(app) as base:
         yield base
 
 
@@ -83,15 +75,21 @@ def test_records_exclude_sessions_hides_launch_prefixed(base: str) -> None:
     session-run per `_SESSION_PREFIXES`; the exclude_sessions filter drops
     those too.
     """
-    _st, records_all = _get(base + "/api/records")
-    _st, records_filtered = _get(base + "/api/records?exclude_sessions=true")
+    import shutil
+
+    # A real record under a session-run name, so the filter has something to drop (lens audit
+    # F455: the assertion ran only if an earlier test file had happened to launch one).
+    planted = server._runs_dir() / "launch_records_bundles_test.record"
+    shutil.copytree(server._runs_dir() / "demo_solo_chat.record", planted)
+    try:
+        _st, records_all = _get(base + "/api/records")
+        _st, records_filtered = _get(base + "/api/records?exclude_sessions=true")
+    finally:
+        shutil.rmtree(planted)
     names_all = {r["name"] for r in records_all}
     names_filtered = {r["name"] for r in records_filtered}
-    prefixed = {n for n in names_all if n.startswith(("launch_", "build_", "resume_"))}
-    if prefixed:
-        assert not (prefixed & names_filtered), (
-            f"filtered records still has session-prefixed names: {prefixed & names_filtered}"
-        )
+    assert "launch_records_bundles_test" in names_all
+    assert "launch_records_bundles_test" not in names_filtered
 
 
 def test_bundles_lists_shipped_defaults(base: str) -> None:

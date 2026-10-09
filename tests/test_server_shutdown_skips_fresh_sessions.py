@@ -16,7 +16,7 @@ never covered:
 
 Regressions this catches:
   - `FreshSessionRequiresUserMessage` renamed → bucket flips to `failed`
-    (server.py:177's isinstance check would still work, but the sweep test
+    (server.py's isinstance check in `_shutdown_all_sessions` would still work, but the sweep test
     now names the outcome explicitly).
   - The catch branch drops the `update_status(..., "ended")` call →
     a fresh session survives shutdown as `"provisioned"` and re-enters
@@ -25,25 +25,27 @@ Regressions this catches:
 
 from __future__ import annotations
 
-import sys
-import threading
-from http.server import ThreadingHTTPServer
+import functools
+
+from _serving import serving
+
 from pathlib import Path
 
 import pytest
+from substrate.topologies.session_registry import SessionRegistry  # noqa: E402
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import server  # noqa: E402
-from substrate.session_registry import SessionRegistry  # noqa: E402
 
 
 @pytest.fixture
-def registry(tmp_path: Path) -> SessionRegistry:
+def registry(app: server.App, tmp_path: Path) -> SessionRegistry:
     reg = SessionRegistry(
         base=tmp_path,
-        session_topology_factory=server._build_session_topology_from_manifest,
+        session_topology_factory=functools.partial(
+            server._build_session_topology_from_manifest, app
+        ),
     )
-    server._SESSION_REGISTRY = reg
+    app.registry = reg
     return reg
 
 
@@ -67,7 +69,7 @@ def _create_fresh(registry: SessionRegistry, tmp_path: Path, name: str) -> str:
 
 
 def test_shutdown_buckets_fresh_session_as_skipped_fresh(
-    registry: SessionRegistry, tmp_path: Path
+    app: server.App, registry: SessionRegistry, tmp_path: Path
 ) -> None:
     """A session that never received a turn — no record dir on disk —
     lands in the `skipped_fresh` bucket, not `failed`."""
@@ -78,7 +80,7 @@ def test_shutdown_buckets_fresh_session_as_skipped_fresh(
         "fresh session must have no record dir before the sweep"
     )
 
-    outcome = server._shutdown_all_sessions(per_session_timeout=10.0)
+    outcome = server._shutdown_all_sessions(app, per_session_timeout=10.0)
     assert outcome == {
         "ended": 0,
         "skipped_fresh": 1,
@@ -89,17 +91,19 @@ def test_shutdown_buckets_fresh_session_as_skipped_fresh(
 
 
 def test_fresh_session_transitions_to_ended_and_survives_reboot(
-    registry: SessionRegistry, tmp_path: Path
+    app: server.App, registry: SessionRegistry, tmp_path: Path
 ) -> None:
     """The daemon flips the manifest to `"ended"` at the daemon layer;
     a fresh registry over the same base dir sees `"ended"` after boot_scan."""
     sid = _create_fresh(registry, tmp_path, "fresh-then-ended")
-    server._shutdown_all_sessions(per_session_timeout=10.0)
+    server._shutdown_all_sessions(app, per_session_timeout=10.0)
     assert registry.get(sid).status == "ended"
 
     fresh = SessionRegistry(
         base=tmp_path,
-        session_topology_factory=server._build_session_topology_from_manifest,
+        session_topology_factory=functools.partial(
+            server._build_session_topology_from_manifest, app
+        ),
     )
     fresh.boot_scan()
     reloaded = fresh.get(sid)
@@ -110,18 +114,15 @@ def test_fresh_session_transitions_to_ended_and_survives_reboot(
 
 
 def test_shutdown_mixes_fresh_parked_and_ended_buckets(
-    registry: SessionRegistry, tmp_path: Path
+    app: server.App, registry: SessionRegistry, tmp_path: Path
 ) -> None:
     """Three sessions in three states — fresh, parked, already-ended —
     each land in the right bucket in a single sweep. Regression against
     the bucket accounting drifting after the piece-B commit's rename."""
-    from urllib.request import Request, urlopen
     import json as _json
+    from urllib.request import Request, urlopen
 
-    srv = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
-    threading.Thread(target=srv.serve_forever, daemon=True).start()
-    base = f"http://127.0.0.1:{srv.server_address[1]}"
-    try:
+    with serving(app) as base:
         # fresh — created but no turn
         _create_fresh(registry, tmp_path, "fresh")
 
@@ -140,10 +141,7 @@ def test_shutdown_mixes_fresh_parked_and_ended_buckets(
         ended = _create_fresh(registry, tmp_path, "ended")
         registry.update_status(ended, "ended")
 
-        outcome = server._shutdown_all_sessions(per_session_timeout=15.0)
-    finally:
-        srv.shutdown()
-        srv.server_close()
+        outcome = server._shutdown_all_sessions(app, per_session_timeout=15.0)
     assert outcome == {
         "ended": 1,
         "skipped_fresh": 1,

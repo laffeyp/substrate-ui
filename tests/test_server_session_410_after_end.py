@@ -1,41 +1,28 @@
 """Sprint 216 — /turn returns 410 for a session that was live and is now gone.
 
-Three code paths converge on 410 with
-    {"ok": False, "status": "ended", "error": SESSION_ENDED_MID_DELEGATE}:
-
-  1. Pre-lock manifest missing but record dir on disk (DELETEd session).
-  2. Pre-lock manifest present with status=="ended" (POST /end already ran).
-  3. Under-lock re-check finds the session ended mid-flight (existing
-     SessionEndedMidTurn catch — a delete or end fires between the caller's
-     pre-lock get() and the turn_sync entry).
+A DELETEd session (manifest gone, record dir kept) answers /turn with 410
+    {"ok": False, "status": "ended", "error": SESSION_DELETED}.
+An ENDED session resumes instead (Architect ruling 2026-09-25; it answered 410 before).
 
 A never-existed session still returns 404 with "unknown session_id".
 
-Run:
-    cd substrate && uv run python -m pytest ../substrate-ui/tests/test_server_session_410_after_end.py -q
 """
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 import pytest
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-import server  # noqa: E402
-from session_errors import SESSION_ENDED_MID_DELEGATE  # noqa: E402
-from substrate.session_registry import SessionRegistry  # noqa: E402
 from _serving import call, call_raw, serving  # noqa: E402
+
+import server  # noqa: E402
+from session_errors import SESSION_DELETED  # noqa: E402
 
 
 @pytest.fixture
-def base(tmp_path: Path) -> str:
-    server._SESSION_REGISTRY = SessionRegistry(
-        base=tmp_path,
-        session_topology_factory=server._build_session_topology_from_manifest,
-    )
-    with serving() as base:
+def base(app: server.App, tmp_path: Path) -> str:
+    app.install_registry(base=tmp_path)
+    with serving(app) as base:
         yield base
 
 
@@ -70,11 +57,11 @@ def test_turn_after_delete_returns_410_not_404(base: str, tmp_path: Path) -> Non
     assert body == {
         "ok": False,
         "status": "ended",
-        "error": SESSION_ENDED_MID_DELEGATE,
+        "error": SESSION_DELETED,
     }
 
 
-def test_turn_after_end_resumes_the_session(base: str, tmp_path: Path) -> None:
+def test_turn_after_end_resumes_the_session(app: server.App, base: str, tmp_path: Path) -> None:
     """Architect ruling 2026-09-25: POST /end leaves the session resumable; the next /turn
     returns 200 on the SAME session and parks again. (Asserted 410 until Sprint 097; the
     ruling and Sprint 089's resume fix changed the contract.)"""
@@ -84,7 +71,7 @@ def test_turn_after_end_resumes_the_session(base: str, tmp_path: Path) -> None:
     status, body = _post_json(base + f"/api/session/{sid}/turn", {"text": "again"})
     assert status == 200, body
     assert body.get("status") == "parked", body
-    assert server._SESSION_REGISTRY.get(sid).status == "parked"
+    assert app.registry.get(sid).status == "parked"
 
 
 def test_turn_on_never_existed_session_still_returns_404(base: str) -> None:

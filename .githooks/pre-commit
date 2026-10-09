@@ -31,3 +31,14 @@ if ! npm run --silent typecheck; then
   exit 1
 fi
 echo "[pre-commit] typecheck clean." >&2
+
+# The status-literal gate also runs here (lens audit F292: it lived only in the kernel's hook,
+# so a UI-only commit never ran it). One script, kept in the kernel repo.
+GATE="$REPO_ROOT/../substrate/scripts/check_status_literals.sh"
+if [ -f "$GATE" ]; then
+  echo "[pre-commit] status-literal gate..." >&2
+  bash "$GATE" "$REPO_ROOT"/*.py "$REPO_ROOT/scripts" "$REPO_ROOT/web" || {
+    echo "[pre-commit] BLOCKED — a status compared against a string literal." >&2
+    exit 1
+  }
+fi

@@ -1,7 +1,7 @@
 """Sprint 217d — POST /api/session/<id>/interrupt over the v0.3 cancel primitive.
 
 The endpoint dispatches `Runtime.cancel_producer(instance, cause="external",
-caller="daemon:interrupt")` synchronously (up to a 1-second wait for the
+caller="daemon:interrupt-hard")` synchronously (up to a 1-second wait for the
 loop-side closure) and polls the record for the resulting `ProducerCancelled`
 envelope. Response body distinguishes dispatch from landing:
 
@@ -12,29 +12,24 @@ envelope. Response body distinguishes dispatch from landing:
 Tests poll the record for the model producer's start envelope before firing the
 interrupt — no wall-clock `time.sleep` to smooth a race.
 
-Run from the substrate venv:
-    cd substrate && uv run python -m pytest ../substrate-ui/tests/test_server_session_interrupt.py -q
 """
 
 from __future__ import annotations
 
 import asyncio
-import sys
 import threading
 import time
 from collections.abc import AsyncIterator
 from pathlib import Path
 
 import pytest
+from _serving import call, serving  # noqa: E402
 from msgspec import Struct
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-import server  # noqa: E402
-from substrate.session_registry import SessionRegistry  # noqa: E402
-
 from substrate import api  # noqa: E402
 from substrate.constants import PRODUCER_CANCELLED, PRODUCER_STARTED  # noqa: E402
-from _serving import call, serving  # noqa: E402
+from substrate.topologies.session_registry import SessionRegistry  # noqa: E402
+
+import server  # noqa: E402
 
 
 class SlowReply(Struct, frozen=True):
@@ -112,12 +107,12 @@ def _test_factory(manifest: object, first_turn_user_message: object = None) -> o
 
 
 @pytest.fixture
-def base(tmp_path: Path) -> str:
-    server._SESSION_REGISTRY = SessionRegistry(
+def base(app: server.App, tmp_path: Path) -> str:
+    app.registry = SessionRegistry(
         base=tmp_path,
         session_topology_factory=_test_factory,
     )
-    with serving() as base:
+    with serving(app) as base:
         yield base
 
 
@@ -163,7 +158,7 @@ def test_interrupt_parks_the_session_with_producer_cancelled_and_provenance(
 ) -> None:
     """Fire a turn, poll for the model producer to start, then interrupt.
     Verify ProducerCancelled lands with `cause="external"` and
-    `caller="daemon:interrupt"` (the v0.3 provenance annotation) and the turn
+    `caller="daemon:interrupt-hard"` (the v0.3 provenance annotation; tiered interrupt) and the turn
     returns with status="parked".
     """
     sid = _create(base, tmp_path / "wsp")

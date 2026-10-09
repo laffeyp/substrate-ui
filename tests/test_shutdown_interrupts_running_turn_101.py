@@ -8,20 +8,20 @@ interrupts a running turn first (as ctrl+c does), then ends the session.
 
 from __future__ import annotations
 
+from _serving import record_tail_seq, wait_model_started
+
 import asyncio
-import sys
 import threading
 import time
 from pathlib import Path
 from typing import Any
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-import server  # noqa: E402
-
 from substrate import api  # noqa: E402
 from substrate.adapters import DeterministicResponder  # noqa: E402
-from substrate.session_registry import SessionManifest, SessionRegistry, SessionStatus  # noqa: E402
+from substrate.topologies.session_registry import SessionManifest, SessionRegistry, SessionStatus  # noqa: E402
 from substrate.topologies.session import UserMessage, session_topology  # noqa: E402
+
+import server  # noqa: E402
 
 
 class _Thinks(DeterministicResponder):
@@ -36,7 +36,9 @@ class _Thinks(DeterministicResponder):
         return self.respond(prompt)
 
 
-def test_shutdown_interrupts_a_running_turn_then_ends_the_session(tmp_path: Path) -> None:
+def test_shutdown_interrupts_a_running_turn_then_ends_the_session(
+    app: server.App, tmp_path: Path
+) -> None:
     responder = _Thinks(seed=0)
 
     def factory(m: SessionManifest, first: Any = None) -> Any:
@@ -57,7 +59,7 @@ def test_shutdown_interrupts_a_running_turn_then_ends_the_session(tmp_path: Path
         )
 
     reg = SessionRegistry(base=tmp_path, session_topology_factory=factory)
-    server._SESSION_REGISTRY = reg
+    app.registry = reg
     sid = reg.create(
         session_id="s_0123456789abcdef",
         name=None,
@@ -74,16 +76,17 @@ def test_shutdown_interrupts_a_running_turn_then_ends_the_session(tmp_path: Path
         )
 
     turn("first", 0)
+
+    tail = record_tail_seq(Path(reg.get(sid).record_root))
     worker = threading.Thread(target=lambda: turn("second", 1), daemon=True)
     worker.start()
-    t0 = time.monotonic()
-    while reg.get(sid).status != SessionStatus.RUNNING and time.monotonic() - t0 < 10:
-        time.sleep(0.05)
-    time.sleep(0.5)  # the model call is in flight
+    wait_model_started(
+        Path(reg.get(sid).record_root), after_seq=tail
+    )  # the second turn's model call is in flight
     assert reg.get(sid).status == SessionStatus.RUNNING
 
     t1 = time.monotonic()
-    outcome = server._shutdown_all_sessions(per_session_timeout=10.0)
+    outcome = server._shutdown_all_sessions(app, per_session_timeout=10.0)
     elapsed = time.monotonic() - t1
 
     assert elapsed < 10, f"shutdown waited {elapsed:.1f} s behind a running turn"

@@ -114,7 +114,7 @@ cd substrate-ui && npm run capture:states  # dynamic/edge states (live, torn, re
 cd substrate-ui && npm run capture:studio  # the Studio frames
 
 # regenerate the demo fixtures the tests + E2E read
-cd substrate && uv run python ../substrate-ui/gen_demo_records.py
+cd substrate && uv run python ../substrate-ui/gen_demo_records.py <runs-dir>
 ```
 
 `screenshots/` and `node_modules/` are gitignored; `package-lock.json` is committed so the harness is

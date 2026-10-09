@@ -4,3 +4,12 @@ target-version = "py312"
 line-length = 100
 # _deprecated/ holds archived code kept for the audit trail; it is not built, shipped or tested.
 extend-exclude = ["_deprecated"]
+
+[lint]
+# ruff's defaults plus BLE (blind except) and S (bandit), as the kernel (lens audit F008).
+extend-select = ["BLE", "S"]
+# S603/S607: argv-list subprocess calls to tools the code names (git, uv, CLI adapters).
+ignore = ["S603", "S607"]
+
+[lint.per-file-ignores]
+"tests/**" = ["S101", "S102", "S108", "S310", "S110", "BLE001"]

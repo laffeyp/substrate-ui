@@ -6,27 +6,23 @@ Standalone session ends alone. boot_scan preserves composite_of.
 
 from __future__ import annotations
 
-import sys
+import functools
+
 import uuid
 from pathlib import Path
 
 import pytest
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-import server  # noqa: E402
-from substrate.session_registry import SessionStatus, SessionRegistry  # noqa: E402
-
+from _serving import call, serving, scratch_ws  # noqa: E402
 from substrate import api  # noqa: E402
-from _serving import call, serving  # noqa: E402
+from substrate.topologies.session_registry import SessionRegistry, SessionStatus  # noqa: E402
+
+import server  # noqa: E402
 
 
 @pytest.fixture
-def base(tmp_path: Path) -> tuple[str, Path]:
-    server._SESSION_REGISTRY = SessionRegistry(
-        base=tmp_path,
-        session_topology_factory=server._build_session_topology_from_manifest,
-    )
-    with serving() as base:
+def base(app: server.App, tmp_path: Path) -> tuple[str, Path]:
+    app.install_registry(base=tmp_path)
+    with serving(app) as base:
         yield base, tmp_path
 
 
@@ -44,7 +40,7 @@ def _create_pair(registry: SessionRegistry) -> tuple[str, str]:
         session_id=builder_id,
         name=f"builder-{uuid.uuid4().hex[:6]}",
         driver="deterministic",
-        workspace="/tmp/pair-composite-test",
+        workspace=scratch_ws("pair-composite-test"),
         workspace_shape="flat",
         bundle=None,
         seed="",
@@ -54,7 +50,7 @@ def _create_pair(registry: SessionRegistry) -> tuple[str, str]:
         session_id=reviewer_id,
         name=f"reviewer-{uuid.uuid4().hex[:6]}",
         driver="deterministic",
-        workspace="/tmp/pair-composite-test",
+        workspace=scratch_ws("pair-composite-test"),
         workspace_shape="flat",
         bundle=None,
         seed="",
@@ -63,9 +59,9 @@ def _create_pair(registry: SessionRegistry) -> tuple[str, str]:
     return builder_id, reviewer_id
 
 
-def test_end_on_parent_cascades_to_child(base: tuple[str, Path]) -> None:
+def test_end_on_parent_cascades_to_child(app: server.App, base: tuple[str, Path]) -> None:
     url, _ = base
-    builder_id, reviewer_id = _create_pair(server._SESSION_REGISTRY)
+    builder_id, reviewer_id = _create_pair(app.registry)
     # Drive one turn on each so records exist (POST /end on a fresh
     # session flips the manifest to ended without a record write).
     _post(url + f"/api/session/{builder_id}/turn", {"text": "seed"})
@@ -74,28 +70,28 @@ def test_end_on_parent_cascades_to_child(base: tuple[str, Path]) -> None:
     status, _body = _post(url + f"/api/session/{builder_id}/end", {"source": "user_end"})
     assert status == 200
 
-    assert server._SESSION_REGISTRY.get(builder_id).status == SessionStatus.ENDED
-    assert server._SESSION_REGISTRY.get(reviewer_id).status == SessionStatus.ENDED
+    assert app.registry.get(builder_id).status == SessionStatus.ENDED
+    assert app.registry.get(reviewer_id).status == SessionStatus.ENDED
     # Both records carry SessionEnded on the record.
     for sid in (builder_id, reviewer_id):
-        record = Path(server._SESSION_REGISTRY.get(sid).record_root)
+        record = Path(app.registry.get(sid).record_root)
         kinds = [str(env.get("kind", "")) for env in api.read_record(record)]
         assert any("SessionEnded" in k for k in kinds), (
             f"session {sid!r} missing SessionEnded on the record: {kinds!r}"
         )
 
 
-def test_standalone_session_end_does_not_cascade(base: tuple[str, Path]) -> None:
+def test_standalone_session_end_does_not_cascade(app: server.App, base: tuple[str, Path]) -> None:
     """A session with composite_of=None ends alone; no other session's
     status changes."""
     url, _ = base
-    registry = server._SESSION_REGISTRY
+    registry = app.registry
     solo_id = f"s_solo_{uuid.uuid4().hex[:12]}"
     registry.create(
         session_id=solo_id,
         name="solo",
         driver="deterministic",
-        workspace="/tmp/solo",
+        workspace=scratch_ws("solo"),
         workspace_shape="flat",
         bundle=None,
         seed="",
@@ -105,7 +101,7 @@ def test_standalone_session_end_does_not_cascade(base: tuple[str, Path]) -> None
         session_id=other_id,
         name="other",
         driver="deterministic",
-        workspace="/tmp/other",
+        workspace=scratch_ws("other"),
         workspace_shape="flat",
         bundle=None,
         seed="",
@@ -119,13 +115,17 @@ def test_standalone_session_end_does_not_cascade(base: tuple[str, Path]) -> None
     assert registry.get(other_id).status != SessionStatus.ENDED
 
 
-def test_composite_of_survives_boot_scan(base: tuple[str, Path], tmp_path: Path) -> None:
+def test_composite_of_survives_boot_scan(
+    app: server.App, base: tuple[str, Path], tmp_path: Path
+) -> None:
     _url, base_path = base
-    _builder_id, reviewer_id = _create_pair(server._SESSION_REGISTRY)
+    _builder_id, reviewer_id = _create_pair(app.registry)
 
     fresh = SessionRegistry(
         base=base_path,
-        session_topology_factory=server._build_session_topology_from_manifest,
+        session_topology_factory=functools.partial(
+            server._build_session_topology_from_manifest, app
+        ),
     )
     fresh.boot_scan()
     reloaded = fresh.get(reviewer_id)

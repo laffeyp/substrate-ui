@@ -11,7 +11,6 @@ import { flow as coldBoot } from "./cold_boot";
 import { flow as chatOneTurn } from "./chat_one_turn";
 import { flow as slashRouter } from "./slash_router";
 import { flow as bundlePicked } from "./bundle_picked";
-import { flow as studioBuild } from "./studio_build";
 import { flow as refusedOpen } from "./refused_open";
 import { flow as refusedTurn } from "./refused_turn";
 import { flow as attachExisting } from "./attach_existing";
@@ -36,7 +35,6 @@ const AXIS_A: Flow[] = [
   chatOneTurn,
   slashRouter,
   bundlePicked,
-  studioBuild,
   attachExisting,
   refusedTurn,
   refusedOpen,

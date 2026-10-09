@@ -8,23 +8,22 @@ model finished, however long that took. It now interrupts first, as quit and ctr
 
 from __future__ import annotations
 
+from _serving import record_tail_seq, serving, wait_model_started
+
 import asyncio
 import json
-import sys
 import threading
 import time
-from http.server import ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 from urllib.request import Request, urlopen
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-import server  # noqa: E402
-
 from substrate import api  # noqa: E402
 from substrate.adapters import DeterministicResponder  # noqa: E402
-from substrate.session_registry import SessionManifest, SessionRegistry, SessionStatus  # noqa: E402
+from substrate.topologies.session_registry import SessionManifest, SessionRegistry, SessionStatus  # noqa: E402
 from substrate.topologies.session import UserMessage, session_topology  # noqa: E402
+
+import server  # noqa: E402
 
 
 class _Thinks(DeterministicResponder):
@@ -39,7 +38,7 @@ class _Thinks(DeterministicResponder):
         return self.respond(prompt)
 
 
-def test_end_interrupts_a_running_turn(tmp_path: Path) -> None:
+def test_end_interrupts_a_running_turn(app: server.App, tmp_path: Path) -> None:
     _Thinks.calls = 0
     responder = _Thinks(seed=0)
 
@@ -61,10 +60,8 @@ def test_end_interrupts_a_running_turn(tmp_path: Path) -> None:
         )
 
     reg = SessionRegistry(base=tmp_path, session_topology_factory=factory)
-    server._SESSION_REGISTRY = reg
-    srv = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
-    threading.Thread(target=srv.serve_forever, daemon=True).start()
-    try:
+    app.registry = reg
+    with serving(app) as base:
         sid = reg.create(
             session_id="s_0123456789abcde7",
             name=None,
@@ -82,16 +79,17 @@ def test_end_interrupts_a_running_turn(tmp_path: Path) -> None:
             )
 
         turn("first", 0)
+
+        tail = record_tail_seq(Path(reg.get(sid).record_root))
         worker = threading.Thread(target=lambda: turn("second", 1), daemon=True)
         worker.start()
-        t0 = time.monotonic()
-        while reg.get(sid).status != SessionStatus.RUNNING and time.monotonic() - t0 < 10:
-            time.sleep(0.05)
-        time.sleep(0.5)  # the model call is in flight
+        wait_model_started(
+            Path(reg.get(sid).record_root), after_seq=tail
+        )  # the second turn's model call is in flight
         assert reg.get(sid).status == SessionStatus.RUNNING
 
         req = Request(
-            f"http://127.0.0.1:{srv.server_address[1]}/api/session/{sid}/end",
+            f"{base}/api/session/{sid}/end",
             data=json.dumps({"source": "user_end"}).encode(),
             method="POST",
             headers={"Content-Type": "application/json"},
@@ -107,9 +105,6 @@ def test_end_interrupts_a_running_turn(tmp_path: Path) -> None:
         kinds = [e["kind"] for e in api.read_record(Path(reg.get(sid).record_root))]
         assert api.PRODUCER_CANCELLED in kinds, "the running turn was interrupted, on the record"
         assert "SessionEnded" in kinds
-    finally:
-        srv.shutdown()
-        srv.server_close()
 
 
 def test_delete_interrupts_a_running_turn(tmp_path: Path) -> None:
@@ -152,12 +147,13 @@ def test_delete_interrupts_a_running_turn(tmp_path: Path) -> None:
         )
 
     turn("first", 0)
+
+    tail = record_tail_seq(Path(reg.get(sid).record_root))
     worker = threading.Thread(target=lambda: turn("second", 1), daemon=True)
     worker.start()
-    t0 = time.monotonic()
-    while reg.get(sid).status != SessionStatus.RUNNING and time.monotonic() - t0 < 10:
-        time.sleep(0.05)
-    time.sleep(0.5)
+    wait_model_started(
+        Path(reg.get(sid).record_root), after_seq=tail
+    )  # the second turn's model call is in flight
     assert reg.get(sid).status == SessionStatus.RUNNING
     record_root = Path(reg.get(sid).record_root)
 
@@ -210,12 +206,13 @@ def test_settings_change_mid_turn_without_waiting(tmp_path: Path) -> None:
         )
 
     turn("first", 0)
+
+    tail = record_tail_seq(Path(reg.get(sid).record_root))
     worker = threading.Thread(target=lambda: turn("second", 1), daemon=True)
     worker.start()
-    t0 = time.monotonic()
-    while reg.get(sid).status != SessionStatus.RUNNING and time.monotonic() - t0 < 10:
-        time.sleep(0.05)
-    time.sleep(0.5)
+    wait_model_started(
+        Path(reg.get(sid).record_root), after_seq=tail
+    )  # the second turn's model call is in flight
 
     t1 = time.monotonic()
     reg.set_name(sid, "renamed-mid-turn")

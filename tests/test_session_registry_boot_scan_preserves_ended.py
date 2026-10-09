@@ -4,7 +4,7 @@ The 217a shutdown path flips a fresh session's manifest to `"ended"` at
 the daemon layer without opening a record. `_scan_record_status` returns
 `"parked"` for a missing record dir and `"interrupted"` for a torn one —
 both would overwrite the terminal `"ended"` state if boot_scan
-re-derived unconditionally. session_registry.py:290-295 short-circuits
+re-derived unconditionally. session_registry.py `_scan`'s `if manifest.status == SessionStatus.ENDED` branch short-circuits
 `"ended"` before re-derive.
 
 Only `test_fresh_session_transitions_to_ended_and_survives_reboot`
@@ -17,16 +17,16 @@ fail these before a downstream test caught the drift.
 
 from __future__ import annotations
 
+import functools
+
 import json
-import sys
 import time
 from pathlib import Path
 
 import pytest
+from substrate.topologies.session_registry import SessionRegistry  # noqa: E402
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import server  # noqa: E402
-from substrate.session_registry import SessionRegistry  # noqa: E402
 
 
 def _write_ended_manifest(session_dir: Path) -> None:
@@ -49,7 +49,9 @@ def _write_ended_manifest(session_dir: Path) -> None:
     (session_dir / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
 
 
-def test_boot_scan_preserves_ended_when_no_record_dir_exists(tmp_path: Path) -> None:
+def test_boot_scan_preserves_ended_when_no_record_dir_exists(
+    app: server.App, tmp_path: Path
+) -> None:
     """A fresh session flipped to `"ended"` at shutdown never wrote a
     record dir. `_scan_record_status` returns `"parked"` for a missing
     record; boot_scan MUST NOT overwrite `"ended"` with that."""
@@ -58,7 +60,9 @@ def test_boot_scan_preserves_ended_when_no_record_dir_exists(tmp_path: Path) -> 
 
     reg = SessionRegistry(
         base=tmp_path,
-        session_topology_factory=server._build_session_topology_from_manifest,
+        session_topology_factory=functools.partial(
+            server._build_session_topology_from_manifest, app
+        ),
     )
     reg.boot_scan()
     manifest = reg.get(sid)
@@ -72,7 +76,7 @@ def test_boot_scan_preserves_ended_when_no_record_dir_exists(tmp_path: Path) -> 
 
 
 def test_boot_scan_preserves_ended_when_record_dir_is_torn(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    app: server.App, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A session that had a record and ended, then the record went torn
     (bit rot, partial write). `_scan_record_status` returns `"interrupted"`
@@ -84,7 +88,7 @@ def test_boot_scan_preserves_ended_when_record_dir_is_torn(
     _write_ended_manifest(tmp_path / sid)
     (tmp_path / sid / "record").mkdir()
 
-    from substrate import session_registry as sreg
+    from substrate.topologies import session_registry as sreg
 
     def _raise_read(*_a, **_kw):
         raise RecordGapError("simulated torn tail (test)")
@@ -93,7 +97,9 @@ def test_boot_scan_preserves_ended_when_record_dir_is_torn(
 
     reg = SessionRegistry(
         base=tmp_path,
-        session_topology_factory=server._build_session_topology_from_manifest,
+        session_topology_factory=functools.partial(
+            server._build_session_topology_from_manifest, app
+        ),
     )
     reg.boot_scan()
     manifest = reg.get(sid)

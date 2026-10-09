@@ -7,10 +7,7 @@ classified in session_controller.ts's KIND_DISPOSITION table.
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 import gen_kinds  # noqa: E402
 
 

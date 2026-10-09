@@ -1,5 +1,5 @@
-"""Demo topologies shared by gen_demo_records.py (to CREATE the records) and server.py (to
-RESUME them). The resumable topology mirrors the runtime's own pause/resume reference: stage1
+"""Demo topologies for gen_demo_records.py, which runs them to create the `demo_*` fixture records.
+The resumable topology mirrors the runtime's own pause/resume reference: stage1
 runs, the run PAUSES awaiting an external ApprovalGranted, and a resume Trigger fires the
 continuation (stage2) to a terminal — the same record, the same dense seq sequence."""
 

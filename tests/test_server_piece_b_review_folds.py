@@ -4,37 +4,27 @@ One test per real behavioral fold in `REVIEW-2026-08-26-piece-b-closure.md`.
 A regression on any single fold fails at its dedicated assertion, not on a
 downstream lookalike. Findings not landed here (5, 11, 12, 13, 14) are card-
 level deferrals into sprint 216 — a code test would not cover them yet.
-
-Run from the substrate venv:
-    cd substrate && uv run python -m pytest \\
-        ../substrate-ui/tests/test_server_piece_b_review_folds.py -q
 """
 
 from __future__ import annotations
 
 import json
-import sys
 import threading
 import time
 from pathlib import Path
 from urllib.request import urlopen
 
 import pytest
+from _serving import call, call_raw, serving, wait_model_started  # noqa: E402
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import server  # noqa: E402
-from session_errors import SESSION_ENDED_MID_DELEGATE  # noqa: E402
-from substrate.session_registry import SessionRegistry  # noqa: E402
-from _serving import call, call_raw, serving  # noqa: E402
+from session_errors import SESSION_DELETED  # noqa: E402
 
 
 @pytest.fixture
-def base(tmp_path: Path) -> str:
-    server._SESSION_REGISTRY = SessionRegistry(
-        base=tmp_path,
-        session_topology_factory=server._build_session_topology_from_manifest,
-    )
-    with serving() as base:
+def base(app: server.App, tmp_path: Path) -> str:
+    app.install_registry(base=tmp_path)
+    with serving(app) as base:
         yield base
 
 
@@ -81,13 +71,15 @@ def test_delete_on_a_sub_resource_returns_404_and_leaves_session_alive(
 # ── Finding 6 — `seed_text` (TECH-SPEC §4 name) is accepted ─────────────
 
 
-def test_seed_text_alias_is_persisted_on_the_manifest(base: str, tmp_path: Path) -> None:
+def test_seed_text_alias_is_persisted_on_the_manifest(
+    app: server.App, base: str, tmp_path: Path
+) -> None:
     """The TECH-SPEC §4 body carries `seed_text`; the earlier handler read
     `seed` only and a spec-following client silently sent nothing. Both
     field names now land on `SessionManifest.seed`.
     """
     created = _create(base, tmp_path / "wsp", name="seeded", seed_text="hello world")
-    manifest = server._SESSION_REGISTRY.get(created["session_id"])
+    manifest = app.registry.get(created["session_id"])
     assert manifest is not None
     assert manifest.seed == "hello world"
 
@@ -132,15 +124,37 @@ def test_sse_since_seq_non_integer_returns_400(base: str, tmp_path: Path) -> Non
 # ── Finding 4 — delete during in-flight turn does not crash the turn ─
 
 
-def test_delete_during_in_flight_turn_waits_for_the_turn_to_finish(
-    base: str, tmp_path: Path
+class _SlowResponder:
+    """A deterministic responder whose model call takes `delay` seconds, so a turn is still
+    running when the test acts on it."""
+
+    def __init__(self, delay: float) -> None:
+        from substrate.adapters import DeterministicResponder
+
+        self._inner = DeterministicResponder(seed=0)
+        self._delay = delay
+
+    def respond(self, prompt: str) -> str:
+        return self._inner.respond(prompt)
+
+    async def arespond(self, prompt: str) -> str:
+        import asyncio
+
+        await asyncio.sleep(self._delay)
+        return self._inner.respond(prompt)
+
+
+def test_delete_during_in_flight_turn_interrupts_it_and_the_turn_parks(
+    app: server.App, base: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The earlier `delete` popped the manifest without regard to any
-    in-flight `turn_sync`; the turn's tail `update_status` then found the
-    manifest gone and raised KeyError from inside the running turn,
-    surfacing to the caller as a 500. The fold acquires the per-session
-    threading.Lock for the delete, so the in-flight turn completes cleanly.
-    """
+    """The earlier `delete` popped the manifest under a running `turn_sync`; the turn's tail
+    `update_status` then raised KeyError inside the running turn (a 500). Since UI sprint 107 a
+    delete interrupts the turn first; the turn parks and answers 200. The model call here takes 5 s, and the test checks the
+    model call has started before the DELETE (lens audit F432: a 0.15 s sleep let a fast turn
+    finish first, so the race the test names never happened)."""
+    monkeypatch.setattr(
+        server, "_daemon_driver_resolver", lambda app, name, params=None: _SlowResponder(5.0)
+    )
     created = _create(base, tmp_path / "wsp", name="delete-race")
     sid = created["session_id"]
     turn_result: dict = {}
@@ -152,91 +166,76 @@ def test_delete_during_in_flight_turn_waits_for_the_turn_to_finish(
 
     turn_thread = threading.Thread(target=_turn, daemon=True)
     turn_thread.start()
-    # Give the turn a moment to enter turn_sync and take the lock.
-    time.sleep(0.15)
+    wait_model_started(Path(app.registry.get(sid).record_root))
     delete_status, _ = _delete(base + f"/api/session/{sid}")
     turn_thread.join(timeout=30)
-    # The in-flight turn survived the delete cleanly (200, not 500).
-    assert turn_result.get("status") == 200
-    assert turn_result["body"]["status"] in ("parked", "ended")
-    # The delete returned 204 once the lock was free.
+    assert not turn_thread.is_alive()
+    # The DELETE interrupted the model call: the turn parked and answered 200 (never a 500), and
+    # the record carries the cancellation (the 5 s model call did not run to completion).
+    assert turn_result.get("status") == 200, turn_result
+    assert turn_result["body"]["status"] == "parked"
+    from substrate import api as substrate_api
+
+    kinds = [e["kind"] for e in substrate_api.read_record(Path(turn_result["body"]["record"]))]
+    assert substrate_api.PRODUCER_CANCELLED in kinds
     assert delete_status == 204
-    # And the session is genuinely gone — a subsequent turn returns 410
-    # (sprint 216 tightened this from 404 to 410: DELETE preserves the
-    # record dir per SDD rule 12, so the was-live-and-is-now-gone shape
-    # is 410 Gone, not 404 Not Found).
+    # The session is gone; DELETE keeps the record dir (SDD rule 12), so a later turn is 410.
     after_status, after_body = _post_json(base + f"/api/session/{sid}/turn", {"text": "should 410"})
     assert after_status == 410
-    assert after_body["error"] == SESSION_ENDED_MID_DELEGATE
+    assert after_body["error"] == SESSION_DELETED
 
 
 # ── Finding 2, revised 2026-09-29 — SSE past a RunFinalised follows a resume ──
 
 
-def test_sse_reconnect_past_runfinalised_follows_resumed_growth(base: str, tmp_path: Path) -> None:
-    """Ended sessions are resumable: turn_sync flips ended -> parked and the
-    run continues on the same record. A client that reattaches with
-    `since_seq` at or past the old RunFinalised must therefore stay open and
-    receive the resumed turn's envelopes. The original finding-2 fold closed
-    the stream on any RunFinalised, which cut a resumed turn off before its
-    first envelope (the "picking up an ended session starts a new one" bug,
-    2026-09-29). Only a RunFinalised past the cursor ends the stream now.
-
-    Ollama is not required: a synthetic RunFinalised, then a synthetic
-    envelope after it, are framed onto the record by hand.
-    """
+def test_sse_reconnect_past_runfinalised_follows_resumed_growth(
+    app: server.App, base: str, tmp_path: Path
+) -> None:
+    """Ended sessions are resumable: turn_sync flips ended -> parked and the run continues on the
+    same record. A client that reattaches with `since_seq` at the RunFinalised must stay open and
+    receive the resumed turn's envelopes. The record is written by the server itself: a real
+    `/end` writes the RunFinalised and a real `/turn` resumes (lens audit F434: the test used to
+    append hand-framed envelopes to a live record behind the writer's back)."""
     from substrate import api as substrate_api
-    from substrate.record import framing
 
     created = _create(base, tmp_path / "wsp", name="past-final")
     sid = created["session_id"]
-    _post_json(base + f"/api/session/{sid}/turn", {"text": "priming"})
-    record_root = Path(server._SESSION_REGISTRY.get(sid).record_root)
-    envs = list(substrate_api.read_record(record_root))
-    assert envs, "expected the priming turn to have written envelopes"
-    segments = sorted(record_root.glob("events-*.jsonl"))
-    if not segments:
-        pytest.skip("no open segment on record; segment naming has drifted")
-    finalised_seq = max(int(e["seq"]) for e in envs) + 1
-    with segments[-1].open("ab") as fp:
-        fp.write(
-            framing.frame(
-                {
-                    "seq": finalised_seq,
-                    "kind": "substrate.RunFinalised",
-                    "payload": {"reason": "test-injected"},
-                }
-            )
-        )
+    assert _post_json(base + f"/api/session/{sid}/turn", {"text": "priming"})[0] == 200
+    assert _post_json(base + f"/api/session/{sid}/end", {"source": "user_end"})[0] == 200
+    record_root = Path(app.registry.get(sid).record_root)
+    finals = [
+        e
+        for e in substrate_api.read_record(record_root)
+        if e["kind"] == substrate_api.RUN_FINALISED
+    ]
+    assert finals, "the /end wrote no RunFinalised"
+    finalised_seq = int(finals[-1]["seq"])
 
-    result: dict = {}
+    chunks: list[bytes] = []
     opened = threading.Event()
 
     def _reader() -> None:
         try:
             with urlopen(
-                base + f"/api/session/{sid}/events?since_seq={finalised_seq}", timeout=10
+                base + f"/api/session/{sid}/events?since_seq={finalised_seq}", timeout=15
             ) as resp:
                 opened.set()
-                result["chunk"] = resp.read1(65536)
-        except Exception as exc:  # noqa: BLE001 — timeout/close is the failure mode
-            result["error"] = repr(exc)
+                deadline = time.monotonic() + 15
+                while time.monotonic() < deadline:
+                    chunk = resp.read1(65536)
+                    if not chunk:
+                        return
+                    chunks.append(chunk)
+                    if b"resumed past the end" in b"".join(chunks):
+                        return
+        except Exception:  # noqa: BLE001 — a closed or timed-out stream is the failure under test
             opened.set()
 
     reader_thread = threading.Thread(target=_reader, daemon=True)
     reader_thread.start()
     assert opened.wait(5), "SSE reader never connected"
-    time.sleep(0.5)
-    assert reader_thread.is_alive(), "stream closed on a RunFinalised at/before since_seq: " + repr(
-        result
-    )
-    # The resumed turn's first envelope, after the old RunFinalised.
-    with segments[-1].open("ab") as fp:
-        fp.write(
-            framing.frame(
-                {"seq": finalised_seq + 1, "kind": "UserMessage", "payload": {"text": "resumed"}}
-            )
-        )
-    reader_thread.join(timeout=5)
-    assert "chunk" in result, "reader got no data after the resume: " + repr(result)
-    assert b'"resumed"' in result["chunk"], result["chunk"][:400]
+    assert reader_thread.is_alive(), "the stream closed on a RunFinalised at since_seq"
+    status, _ = _post_json(base + f"/api/session/{sid}/turn", {"text": "resumed past the end"})
+    assert status == 200
+    reader_thread.join(timeout=15)
+    assert b"resumed past the end" in b"".join(chunks), b"".join(chunks)[:400]

@@ -872,6 +872,34 @@ Twelve PNGs at `captures/pixel-baseline-2026-09-23/`: six states (`empty`, `one_
 
 *Agent maintains. Last 10 increment closes; older roll into ## Built as compressed paragraphs.*
 
+### Sprint 111 (2026-10-08, closed) — server correctness and composition root
+- `server.App` holds the 13 tables that were module globals; `main()` builds it, both listeners carry it, and `Handler.app` reads it. Tests build their own App (`app` fixture, `serving(app)`); the 37 assignments to server tables are gone, and two Apps served at once share nothing.
+- The session's end rule moved into the kernel: `finalise_on(SessionEnded)` replaces `threshold_count(SessionEnded, 1)`, which a resume's restored counts tripped on the first new event. The server's copy of the rule and its per-turn whole-record scan are deleted; turn and end read the tail seq from the last frame.
+- N004, a new defect: the role a session was created with never reached it, so no UI session had its role prompt (`default.md` included). Fixed, resolving against the session's workspace.
+- One source for the port, the Ollama address and the Claude catalog (`claude-opus-5-5`, `claude-sonnet-5-5`). `/api/agent` refuses an unknown model instead of running the stub. `/api/records` caches rows by segment fingerprint. The boot scan runs once and cannot overwrite a session a request changed.
+- Legacy and Studio endpoints deleted. 396 leaked runs moved from `~/.substrate/runs` to `~/.Trash/substrate-runs-leak-2026-10-08`.
+- Gates: UI 210; vm_smoke 12/12; lifecycle, resume-after-end and tasks gates pass; kernel 1,271 passed / 4 skipped / 43 real-model deselected. Card: `process/sprints/sprint-111-server-correctness-composition-root.md`.
+
+### Kernel sprint 250 (2026-10-08, closed) — record integrity and the Claim Check
+- The Claim Check covers injected events: a 2 MB resume event is a blob stub and the record reads back whole. A failed append consumes no seq.
+- A closed run's manifest keeps its `run_id` and replay ceiling. Roll and close had written the defaults over them.
+- One loader (`record.load_envelopes`); narrate and the testing helpers redeem blobs through it, replay through `BlobStore.get`.
+- `run_graph` treats a pause as the run's state only while nothing follows it, so a session mid-turn reads INCOMPLETE, not PAUSED. `ProducerStatus` types instance statuses.
+- Recovery cuts a NaN frame; the sidecar reader skips a torn last line; the record package's shared helpers are public names.
+- 7 tests, each red on HEAD b04f8b2a for its own finding. Gates: ruff, format, mypy --strict (138 files), lint-imports (2 contracts) clean; kernel 1,271 passed / 4 skipped / 43 real-model deselected. Card: `substrate/process/sprints/sprint-250-record-integrity.md`.
+
+### Kernel sprint 258 (2026-10-08, closed) — layering, packaging, gates
+- The 1.1.2 sdist is 889 KB; it was 95 MB, carrying process/runs.
+- One import-linter layers contract covers the package; a planted upward import breaks it. `substrate.app` is new: the application facade (session registry, daemon client, kind names, bundled registry, scorers, conformance). `api` is the kernel's facade only. The CLI imports `{api, app}` and nothing else, `importlib` included.
+- ruff BLE and S in both repos; every blind except names its boundary or became typed; production asserts are raises; every enum is a StrEnum; one status-literal gate in both hooks.
+- Card: `substrate/process/sprints/sprint-258-layering-packaging-gates.md`.
+
+### Sprint 109 (2026-10-08, closed) — hermetic UI tests
+- The suite leaves nothing in an empty `HOME` and passes in three file orders. An autouse fixture restores every private module-level name of `server` after each test.
+- Tests now check what they name; each repaired test was turned red by a planted break. A real-process SIGTERM test exists.
+- Three defects found while repairing tests, fixed with tests: N001 (the tool allow-list missed the substrate toolkit), N002 (a cut final frame after a clean pause read "parked"), N003 (delegate read turn_index and its snapshot outside the session lock).
+- Card: `process/sprints/sprint-109-hermetic-ui-tests.md`.
+
 ### Sprint 110 (2026-10-08, closed) — the server's security boundary
 - The audit's two probes are now tests.
   - The DNS-rebinding shape (Host and Origin `evil.test`) gets 403 and creates no session: every method checks the Host against the bound loopback port.

@@ -6,25 +6,20 @@ manifests + by-name entries drop.
 
 from __future__ import annotations
 
-import sys
 import uuid
 from pathlib import Path
 
 import pytest
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-import server  # noqa: E402
-from substrate.session_registry import SessionRegistry  # noqa: E402
 from _serving import call_raw, serving  # noqa: E402
+from substrate.topologies.session_registry import SessionRegistry  # noqa: E402
+
+import server  # noqa: E402
 
 
 @pytest.fixture
-def base(tmp_path: Path) -> tuple[str, Path]:
-    server._SESSION_REGISTRY = SessionRegistry(
-        base=tmp_path,
-        session_topology_factory=server._build_session_topology_from_manifest,
-    )
-    with serving() as base:
+def base(app: server.App, tmp_path: Path) -> tuple[str, Path]:
+    app.install_registry(base=tmp_path)
+    with serving(app) as base:
         yield base, tmp_path
 
 
@@ -60,13 +55,14 @@ def _create_pair(registry: SessionRegistry, base_path: Path) -> tuple[str, str]:
 
 
 def test_delete_parent_cascades_to_child_and_preserves_records(
+    app: server.App,
     base: tuple[str, Path],
 ) -> None:
     url, base_path = base
     from urllib.request import Request as _Req
     from urllib.request import urlopen as _urlopen
 
-    builder_id, reviewer_id = _create_pair(server._SESSION_REGISTRY, base_path)
+    builder_id, reviewer_id = _create_pair(app.registry, base_path)
     # Give each a record on disk so the rule-12 preservation is real.
     for sid in (builder_id, reviewer_id):
         _urlopen(
@@ -78,14 +74,14 @@ def test_delete_parent_cascades_to_child_and_preserves_records(
             ),
             timeout=30,
         )
-    builder_record = Path(server._SESSION_REGISTRY.get(builder_id).record_root)
-    reviewer_record = Path(server._SESSION_REGISTRY.get(reviewer_id).record_root)
+    builder_record = Path(app.registry.get(builder_id).record_root)
+    reviewer_record = Path(app.registry.get(reviewer_id).record_root)
 
     assert _delete(url + f"/api/session/{builder_id}") == 204
 
     # Both manifests are gone from the registry.
-    assert server._SESSION_REGISTRY.get(builder_id) is None
-    assert server._SESSION_REGISTRY.get(reviewer_id) is None
+    assert app.registry.get(builder_id) is None
+    assert app.registry.get(reviewer_id) is None
     # Rule 12: both record dirs stay on disk.
     assert builder_record.is_dir()
     assert reviewer_record.is_dir()

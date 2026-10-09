@@ -3,32 +3,27 @@
 Starts the actual server on an ephemeral port in a thread, hits it over HTTP with urllib, and
 asserts the JSON it serves matches the runtime's own projections (the seam serves
 `substrate.api` faithfully — no distortion, no invented data). This is the production data
-contract under test; it runs in the substrate venv:
-
-    cd substrate && uv run python -m pytest ../substrate-ui/test_server.py -q
+contract under test; it runs under `npm run test:py`.
 """
 
 from __future__ import annotations
 
 import json
-import os
-import sys
 from pathlib import Path
 from urllib.request import urlopen
 
 import pytest
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-import server  # noqa: E402  the module under test
-
+from _serving import call, serving  # noqa: E402
 from substrate import api  # noqa: E402
 from substrate.topologies import bundled  # noqa: E402
-from _serving import call, serving  # noqa: E402
+
+import server  # noqa: E402  the module under test
 
 
-@pytest.fixture(scope="module")
-def base() -> object:
-    with serving() as base:
+@pytest.fixture
+def base(app: server.App) -> object:
+    """A server per test, serving the test's own App (UI sprint 111)."""
+    with serving(app) as base:
         yield base
 
 
@@ -55,33 +50,6 @@ def post_json(base: str, path: str, body: object) -> object:
     )
     with urlopen(req, timeout=30) as r:
         return json.load(r)
-
-
-_AUTHORED = {
-    "name": "authored_review",
-    "producers": [
-        {"kind": "reviewer-a", "emits": ["Critique"], "initial": True},
-        {"kind": "reviewer-b", "emits": ["Critique"], "initial": True},
-        {"kind": "judge", "emits": ["Verdict"]},
-    ],
-    "views": [{"name": "crits", "kind": "KindCount", "of": "Critique"}],
-    "triggers": [
-        {
-            "id": "adjudicate",
-            "on": "Critique",
-            "predicate": {"view": "crits", "op": ">=", "n": 2},
-            "starts": "judge",
-            "policy": "Once",
-        }
-    ],
-    "termination": {
-        "kind": "any_of",
-        "members": [
-            {"kind": "all_completed"},
-            {"kind": "quiescence_with_watchdog", "seconds": 1},
-        ],
-    },
-}
 
 
 def test_records_index_carries_real_run_level_status(base: str) -> None:
@@ -212,113 +180,64 @@ def _finished(base: str, name: str) -> dict:
         time.sleep(0.05)
 
 
-def test_launch_runs_a_topology_and_records_it(base: str) -> None:
-    # the thin control layer (ruling C1: launch + resume only). POST runs a bundled topology to a
-    # fresh record; the launch IS the recorded RunStarted (§7.7). It must be a REAL run, readable.
-    res = post(base, "/api/launch?topology=code_review")
-    assert res["launched"] == "code_review"
-    name = res["name"]
-    rg = _finished(base, name)
-    assert rg["status"] == "finalised" and len(rg["instances"]) == 6  # a genuine code_review run
-    assert get(base, f"/api/records/{name}/events")[0]["kind"] == "substrate.RunStarted"
-    assert get(base, "/api/topologies")  # the launchable list is served
+def _topology_run(app: server.App, base: str, await_completion: bool = True) -> dict:
+    """One deterministic best_of_n_verified run through POST /api/topology/<name>/run, with the
+    application catalog loaded into the test's App first."""
+    from substrate.topologies.applications.registry import load_manifests
+
+    app.applications = load_manifests()
+    return post_json(
+        base,
+        "/api/topology/best_of_n_verified/run",
+        {
+            "inputs": {
+                "task": "double 3",
+                "drafter_model": "deterministic",
+                "verify_model": "deterministic",
+                "n": 2,
+                "max_rounds": 1,
+            },
+            "await_completion": await_completion,
+        },
+    )
 
 
-def test_launch_records_are_durable_never_clobbered(base: str) -> None:
-    # review #35: launched records are durable artifacts and must NEVER be silently deleted (the
-    # record IS the product). Two launches -> two DISTINCT unique-id records, BOTH still readable —
-    # this is the data-loss bug (in-memory counter + rmtree-on-collision) staying fixed.
-    a = post(base, "/api/launch?topology=debate")["name"]
-    b = post(base, "/api/launch?topology=debate")["name"]
-    assert a != b  # unique-id naming never collides, so neither is clobbered
-    assert _finished(base, a)["status"] == "finalised"  # the FIRST still exists
-    assert _finished(base, b)["status"] == "finalised"
+def test_run_graph_reports_server_authoritative_liveness(
+    app: server.App, base: str, monkeypatch
+) -> None:
+    """review #36: the server spawned a topology run, so it knows whether it is still being
+    written. run_graph carries `live`: True while the run's thread is alive, False once it is not.
+    A static record and a torn record (no terminal, nothing writing it) are never live."""
+    import threading
 
-
-def test_launch_is_backgrounded_and_the_record_grows(base: str) -> None:
-    # review #35 finding 3: a SLOW launch returns IMMEDIATELY (status incomplete), the run continues
-    # in the background, and the record GROWS to a terminal — the enabler for live-attach.
-    import time
-
-    res = post(base, "/api/launch?topology=live_demo")  # ~3s run
-    assert res["status"] == "incomplete"  # returned before the run finished -> backgrounded
-    name = res["name"]
-    final = None
-    for _ in range(40):
-        time.sleep(0.25)
-        final = get(base, f"/api/records/{name}/run_graph")["status"]
-        if final != "incomplete":
-            break
-    assert final == "finalised"  # the backgrounded run reached its terminal, readable over HTTP
-
-
-def test_run_graph_reports_server_authoritative_liveness(base: str) -> None:
-    # review #36: the server SPAWNED the run, so it knows if it's alive. run_graph carries `live`:
-    # a running launch is incomplete + live=True (still writing); once done, live=False. This is the
-    # signal the console uses to stop showing "● LIVE" for a torn run (incomplete + live=False).
-    import time
-
-    res = post(base, "/api/launch?topology=live_demo")
-    name = res["name"]
-    g = get(base, f"/api/records/{name}/run_graph")
-    assert g["status"] == "incomplete" and g["live"] is True  # thread alive, mid-write
-    for _ in range(40):
-        time.sleep(0.25)
-        g = get(base, f"/api/records/{name}/run_graph")
-        if g["status"] != "incomplete":
-            break
-    assert g["status"] == "finalised" and g["live"] is False  # finished -> thread dead -> not live
-    # a static (non-launch) record reports live=False (it isn't being written) — so the console
-    # treats a static no-terminal record as torn/incomplete, never live.
+    done = _topology_run(app, base)
+    name = Path(done["record_root"]).stem
+    release = threading.Event()
+    writer = threading.Thread(target=release.wait, daemon=True)
+    writer.start()
+    monkeypatch.setitem(
+        app.topology_runs,
+        name,
+        {"thread": writer, "started_at": 0.0, "record_root": done["record_root"]},
+    )
+    assert get(base, f"/api/records/{name}/run_graph")["live"] is True
+    release.set()
+    writer.join(timeout=5)
+    assert get(base, f"/api/records/{name}/run_graph")["live"] is False
     assert get(base, "/api/records/code_review/run_graph")["live"] is False
-    # a TORN record (no terminal, not a live launch) -> incomplete + live=False -> the console
-    # renders amber "INCOMPLETE" (broken/indeterminate), never "LIVE". §7.2 holds.
     torn = get(base, "/api/records/demo_torn/run_graph")
     assert torn["status"] == "incomplete" and torn["live"] is False
 
 
-def test_launch_unknown_topology_is_404(base: str) -> None:
-    assert call("POST", base + "/api/launch?topology=does_not_exist")[0] == 404
-
-
-def test_agent_endpoint_launches_a_live_tool_using_loop(base: str) -> None:
-    # the interactive terminal POSTs a task and the server starts a LIVE tool-using agent run the
-    # console follows. CI drives the DETERMINISTIC agent (model=deterministic) — no Ollama — proving
-    # the endpoint wires a real tool_loop run to the record (the model -> tool -> model loop, ON THE
-    # LOG). The ollama path is the SAME seam with a real Responder (walkthrough), exercised live, not
-    # in CI. Observation contract for the interactive-agent sprint: the agent run is a real recorded
-    # tool loop the console can follow; the terminal-driving half is the two-track E2E (Addendum A).
-    res = post(base, "/api/agent?model=deterministic&legacy=true")
-    assert res["agent"] == "deterministic"
-    name = res["name"]
-    assert name.startswith("launch_agent")  # a prunable session run (launch_ prefix)
-    assert res["status"] == "finalised"  # the deterministic calculator loop finishes immediately
-    events = get(base, f"/api/records/{name}/events")
-    kinds = [e["kind"] for e in events]
-    assert kinds[0] == "substrate.RunStarted"
-    # the tool-using loop actually ran and is on the record: model -> tool -> model -> answer.
-    assert "ToolCall" in kinds and "ToolResult" in kinds and "FinalAnswer" in kinds
-    assert kinds[-1] == "substrate.RunFinalised"
-
-
-def test_agent_endpoint_reports_the_per_conversation_workspace(base: str, tmp_path) -> None:
-    # per-session workspace: an ABSOLUTE path is a project the user picked (used + created as-is); a
-    # BARE name is a dedicated session dir under ~/.substrate/sessions/ (the client passes the
-    # conversation id, so turns share one dir); an UNSET workspace defaults to a fresh session dir —
-    # NEVER the server's cwd (the scribble-in-the-repo footgun the cockpit hit live). Echoed back so
-    # the terminal can show it.
-    ws = str(tmp_path)
-    res = post(base, f"/api/agent?model=deterministic&legacy=true&workspace={ws}")
-    assert res["workspace"] == ws  # absolute path used as-is
-    assert Path(ws).is_dir()  # and created if missing
-    # a bare name resolves under the sessions base, not treated as a relative cwd path.
-    named = post(base, "/api/agent?model=deterministic&legacy=true&workspace=mysession")[
-        "workspace"
-    ]
-    assert named == str(server._sessions_base() / "mysession") and Path(named).is_dir()
-    # unset -> a dedicated session dir, NOT the server's cwd (the footgun).
-    default_ws = post(base, "/api/agent?model=deterministic&legacy=true")["workspace"]
-    assert default_ws.startswith(str(server._sessions_base()) + "/") and default_ws != os.getcwd()
+def test_topology_runs_are_records_with_their_real_status(app: server.App, base: str) -> None:
+    """Lens audit F295/F296: a topology run is `<run_id>.record` under runs/, listed by
+    /api/records and served by name; the response carries the run's own status."""
+    done = _topology_run(app, base)
+    name = Path(done["record_root"]).stem
+    assert done["record_root"].endswith(".record")
+    assert name in {r["name"] for r in get(base, "/api/records")}
+    graph = get(base, f"/api/records/{name}/run_graph")
+    assert done["status"] == graph["status"]
 
 
 def test_session_worktree_isolates_a_session_on_a_branch(tmp_path, monkeypatch) -> None:
@@ -367,21 +286,6 @@ def test_session_worktree_isolates_a_session_on_a_branch(tmp_path, monkeypatch) 
         server._session_worktree(tmp_path / "notarepo", "s")
 
 
-def test_agent_params_parse_and_echo(base: str) -> None:
-    # sprint 015: the call parameters are explicit — parsed by _agent_params (unit) and echoed back
-    # by /api/agent (contract), so the terminal shows what the server actually applied.
-    # UI sprint 101: no timeout given = no limit on how long the model works.
-    assert server._agent_params({}) == (False, 0, None)
-    assert server._agent_params(
-        {"think": ["true"], "max_tokens": ["4096"], "timeout": ["240"]}
-    ) == (True, 4096, 240.0)
-    assert server._agent_params({"think": ["on"]}) == (True, 0, None)
-    res = post(
-        base, "/api/agent?model=deterministic&legacy=true&think=true&max_tokens=123&timeout=240"
-    )
-    assert res["params"] == {"think": True, "max_tokens": 123, "timeout": 240.0}
-
-
 def test_models_endpoint_lists_drivers_with_a_default(
     base: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -412,7 +316,10 @@ def test_models_endpoint_lists_drivers_with_a_default(
     monkeypatch.setattr(
         server,
         "_probe_cli_versions",
-        lambda name: {"families": [{"family": "auto", "models": ["auto"]}], "source": "curated"},
+        lambda app, name: {
+            "families": [{"family": "auto", "models": ["auto"]}],
+            "source": "curated",
+        },
     )
 
     d = get(base, "/api/models")
@@ -423,151 +330,12 @@ def test_models_endpoint_lists_drivers_with_a_default(
     assert set(d["cli_versions"]) == {"cursor-agent"}
 
 
-def test_resume_continues_a_paused_run(base: str) -> None:
-    # the other control (ruling C1): demo_resumable PAUSES awaiting ApprovalGranted. Resume injects
-    # the event -> the resume Trigger fires the continuation -> finalised, on a COPY so the template
-    # stays paused and re-resumable. The continuation actually ran (Stage2Done on the bus).
-    assert get(base, "/api/records/demo_resumable/run_graph")["status"] == "paused"
-    res = post(base, "/api/resume?record=demo_resumable")
-    assert res["status"] == "finalised" and res["resumed"] == "demo_resumable"
-    kinds = {e["kind"] for e in get(base, f"/api/records/{res['name']}/events")}
-    assert {
-        "ApprovalGranted",
-        "Stage2Done",
-        "substrate.RunFinalised",
-    } <= kinds  # the run continued
-    assert (
-        get(base, "/api/records/demo_resumable/run_graph")["status"] == "paused"
-    )  # template untouched
-
-
-def test_resume_non_resumable_is_404(base: str) -> None:
-    # a finalised, non-resumable record
-    assert call("POST", base + "/api/resume?record=code_review")[0] == 404
-
-
-def test_build_runs_an_authored_topology(base: str) -> None:
-    # the Studio seam (ruling E2): an authored JSON spec -> a REAL TopologyBuilder topology -> a
-    # recorded run. The decisive assertion (review #39): a TRIGGERED Producer actually emits, proving
-    # the authored wiring EXECUTED, not a faked finalise. 2 reviewers -> KindCount(Critique)>=2 matures
-    # -> adjudicate fires the judge -> judge emits Verdict.
-    res = post_json(base, "/api/build", _AUTHORED)
-    assert res["status"] == "finalised" and res["built"] == "authored_review"
-    name = res["name"]
-    kinds = [e["kind"] for e in get(base, f"/api/records/{name}/events")]
-    assert kinds[0] == "substrate.RunStarted" and kinds[-1] == "substrate.RunFinalised"
-    # Verdict exists ONLY because adjudicate fired the judge after the quorum of 2 Critiques:
-    assert kinds.count("Critique") == 2 and "Verdict" in kinds
-    # the read projection over the real run confirms the judge is anchored on the authored Trigger:
-    rg = get(base, f"/api/records/{name}/run_graph")
-    judge = next(i for i in rg["instances"] if i["kind"] == "judge")
-    assert judge["status"] == "completed" and judge["trigger_id"] == "adjudicate"
-    assert judge["fired_seq"] is not None  # it spawned from a firing, not an initial
-
-
-def test_validate_accepts_good_rejects_bad(base: str) -> None:
-    # the Studio's live validation (static TopologyBuilder.build() — the runtime's OWN "allowable
-    # ways"): a good spec validates; bad wiring is rejected with a clean typed message, never a crash.
-    assert post_json(base, "/api/validate", _AUTHORED) == {"valid": True}
-    no_producers = post_json(
-        base,
-        "/api/validate",
-        {"producers": [], "termination": {"kind": "all_completed"}},
-    )
-    assert no_producers["valid"] is False and "Producer" in no_producers["error"]
-    unknown_starts = post_json(
-        base,
-        "/api/validate",
-        {
-            "producers": [{"kind": "a", "emits": ["X"], "initial": True}],
-            "triggers": [{"id": "t", "on": "X", "starts": "ghost"}],
-            "termination": {"kind": "all_completed"},
-        },
-    )
-    assert unknown_starts["valid"] is False and "ghost" in unknown_starts["error"]
-
-
-def test_build_surfaces_unfired_triggers(base: str) -> None:
-    # review #39 finding 3 (honesty edge): the deterministic stub emits each kind ONCE, so a count
-    # Predicate above the producer count is UNREACHABLE — the run finalises green having fired nothing
-    # past the initials. That must not be silent: /api/build names the authored Trigger that never
-    # fired, so the Studio can warn instead of implying the wiring worked.
-    res = post_json(
-        base,
-        "/api/build",
-        {
-            "name": "unreachable",
-            "producers": [
-                {"kind": "a", "emits": ["X"], "initial": True},
-                {"kind": "b", "emits": ["Y"]},
-            ],
-            "views": [{"name": "xs", "kind": "KindCount", "of": "X"}],
-            "triggers": [
-                {
-                    "id": "needs_three",
-                    "on": "X",
-                    "predicate": {"view": "xs", "op": ">=", "n": 3},
-                    "starts": "b",
-                    "policy": "Once",
-                }
-            ],
-            "termination": {
-                "kind": "any_of",
-                "members": [
-                    {"kind": "all_completed"},
-                    {"kind": "quiescence_with_watchdog", "seconds": 1},
-                ],
-            },
-        },
-    )
-    assert res["status"] == "finalised"  # honestly finalised via quiescence...
-    assert res.get("unfired_triggers") == ["needs_three"]  # ...but the unfired Trigger is surfaced
-    # and indeed no Y was emitted (b never started) — the surfaced signal is true, not decorative:
-    kinds = [e["kind"] for e in get(base, f"/api/records/{res['name']}/events")]
-    assert "Y" not in kinds
-
-
-def test_build_model_producer_runs_the_responder(base: str) -> None:
-    # sprint 006: a MODEL-backed Producer calls the runtime's REAL Responder. Built with the default
-    # DeterministicResponder (CI mode — pure, seeded), the emitted payload carries the responder's
-    # deterministic output, proving the responder genuinely RAN (not the stub's note=kind).
-    from substrate.reference import DeterministicResponder
-
-    spec = {
-        "name": "model_demo",
-        "producers": [
-            {
-                "kind": "rater",
-                "emits": ["Verdict"],
-                "initial": True,
-                "model": True,
-                "prompt": "rate this",
-            }
-        ],
-        "termination": {
-            "kind": "any_of",
-            "members": [
-                {"kind": "all_completed"},
-                {"kind": "quiescence_with_watchdog", "seconds": 1},
-            ],
-        },
-    }
-    res = post_json(base, "/api/build", spec)
-    assert res["status"] == "finalised"
-    outs = get(base, f"/api/records/{res['name']}/io")["outputs"]
-    verdicts = [o for o in outs if o["kind"] == "Verdict"]
-    assert len(verdicts) == 1
-    expected = DeterministicResponder(seed=0).respond("rate this")
-    assert verdicts[0]["payload"]["note"] == expected  # the REAL responder's output...
-    assert expected != "rater"  # ...not the stub's note=kind — the responder genuinely ran
-
-
 def test_ui_imports_only_sanctioned_substrate_surfaces() -> None:
     # review #43: protect the UI->substrate boundary MECHANICALLY. substrate enforces its own kernel/app
     # boundary with a CI gate (import-linter + an AST test); the UI's was convention + a grep. The UI may
-    # import ONLY substrate's PUBLIC surfaces — substrate.api, the public reference Responders, the
-    # bundled topologies, and the assay PROJECTION readers — never a kernel internal
-    # (runtime/sequencer/record/encoding/attach/...).
+    # import ONLY substrate's PUBLIC surfaces — substrate.api, substrate.app, the Responders in
+    # substrate.adapters, the bundled topologies, and the assay PROJECTION readers — never a kernel
+    # internal (runtime/sequencer/record/encoding/attach/...).
     #
     # C-3 (2026-08-03): this test used to scan `Path(__file__).parent` == tests/, which holds only this
     # file — so it opened NOTHING it was meant to check and stayed green over an empty scan (Addendum B4:
@@ -578,9 +346,21 @@ def test_ui_imports_only_sanctioned_substrate_surfaces() -> None:
     # as records, and the assay VIEW (sprint 013/014) legitimately consumes it. Kernel internals stay out.
     import ast
 
-    sanctioned = {"substrate.api", "substrate.reference", "substrate.topologies", "substrate.assay"}
+    sanctioned = {
+        "substrate.api",
+        "substrate.app",
+        "substrate.adapters",
+        "substrate.topologies",
+        "substrate.assay",
+    }
     ui_root = Path(__file__).resolve().parent.parent  # the repo root, where the UI source lives
-    sources = [p for p in sorted(ui_root.glob("*.py")) if not p.name.startswith("test_")]
+    # The repo-root modules and scripts/ (lens audit F420: scripts/gen_kinds.py imported
+    # substrate.constants, unseen because only the root was scanned).
+    sources = [
+        p
+        for p in [*sorted(ui_root.glob("*.py")), *sorted((ui_root / "scripts").glob("*.py"))]
+        if not p.name.startswith("test_")
+    ]
     assert sources, "no UI source files found to scan — the boundary test would be vacuous"
     offenders = []
     for py in sources:
@@ -617,59 +397,18 @@ def test_static_index_is_served(base: str) -> None:
     assert "<title>substrate · reveal</title>" in body
 
 
-def test_authored_route_feeds_a_reading_trigger(tmp_path) -> None:
-    # ui-backend-6: a Route stages data into a slot; a Trigger that declares `reads: <slot>` feeds
-    # that staged data into the Producer it starts — so an authored Route is CONSUMED, not inert.
-    import asyncio  # noqa: PLC0415
-
-    from builder import build_from_spec  # noqa: PLC0415
-
-    from substrate.reference import DeterministicResponder  # noqa: PLC0415
-
-    spec = {
-        "name": "route_consumed",
-        "producers": [
-            {"kind": "Crit", "emits": ["Critique"], "initial": True, "model": False},
-            {"kind": "Fixer", "emits": ["Patch"], "model": False},
-        ],
-        "routes": [{"id": "stage", "of": "Critique", "slot": "crits"}],
-        "triggers": [
-            {
-                "id": "fix",
-                "on": "Critique",
-                "starts": "Fixer",
-                "reads": "crits",
-                "policy": "PerEvent",
-            }
-        ],
-        "termination": {"kind": "quiescence_with_watchdog", "seconds": 1},
-    }
-    topo = build_from_spec(spec, DeterministicResponder(seed=0))
-    asyncio.run(api.Runtime(tmp_path / "run").run(topo))
-
-    patches = [
-        e["payload"]["note"] for e in api.read_record(tmp_path / "run") if e["kind"] == "Patch"
-    ]
-    assert patches, "the Fixer ran on the routed Critique"
-    assert (
-        "staged" in patches[0]
-    )  # the Fixer's input carried the Route's staged data, not just the event
-
-
-def test_clear_runs_prunes_session_runs_but_keeps_demos_and_fixtures(base: str) -> None:
-    # the prune (sprint 012, item C2): POST /api/runs/clear deletes ONLY the hash-suffixed session
-    # runs (launch_/build_/resume_); bundled demos + the named demo_* fixtures are KEPT. An EXPLICIT
-    # user action, not a silent clobber — so the #35 durability ruling (no SILENT deletion) holds.
+def test_clear_runs_prunes_generated_runs_but_keeps_demos_and_fixtures(
+    app: server.App, base: str
+) -> None:
+    # the prune (sprint 012, item C2): POST /api/runs/clear deletes ONLY generated runs (s_topo_
+    # topology runs; launch_/build_/resume_ records from before 2026-10-08); bundled demos and the
+    # named demo_* fixtures are KEPT. An explicit user action, not a silent clobber.
     demos_before = {r["name"] for r in get(base, "/api/records") if r["source"] == "demo"}
-    launched = post(base, "/api/launch?topology=game_of_life")["name"]
-    assert launched.startswith("launch_")  # a hash-suffixed session run
+    generated = Path(_topology_run(app, base)["record_root"]).stem
+    assert generated.startswith("s_topo_")
     res = post(base, "/api/runs/clear")
     assert res["removed"] >= 1
     names_after = {r["name"] for r in get(base, "/api/records")}
-    assert launched not in names_after  # the session run was pruned
-    assert demos_before <= names_after  # every demo + fixture kept
-    assert (
-        "demo_failed" in names_after and "game_of_life" in names_after
-    )  # fixture + bundled, explicitly
-    relaunched = post(base, "/api/launch?topology=game_of_life")["name"]
-    assert _finished(base, relaunched)["status"] == "finalised"  # launch still works
+    assert generated not in names_after
+    assert demos_before <= names_after
+    assert "demo_failed" in names_after and "game_of_life" in names_after

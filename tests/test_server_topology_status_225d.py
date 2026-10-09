@@ -6,33 +6,26 @@ Closes the async loop 225a's await_completion=false opens.
 from __future__ import annotations
 
 import json
-import sys
 import threading
 import time
 from pathlib import Path
 
 import pytest
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-import server  # noqa: E402
-from substrate.session_registry import SessionRegistry  # noqa: E402
-
-from substrate.topologies.applications.registry import load_manifests  # noqa: E402
 from _serving import call, serving  # noqa: E402
+from substrate.topologies.applications.registry import load_manifests  # noqa: E402
+
+import server  # noqa: E402
 
 
 @pytest.fixture
-def base(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> str:
+def base(app: server.App, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> str:
     _sb = tmp_path / "sessions"
     monkeypatch.setattr(server, "_sessions_base", lambda: _sb)
     server._sessions_base().mkdir(parents=True)
-    server._SESSION_REGISTRY = SessionRegistry(
-        base=server._sessions_base(),
-        session_topology_factory=server._build_session_topology_from_manifest,
-    )
-    server._APPLICATIONS = load_manifests()
-    server._TOPOLOGY_RUNS = {}
-    with serving() as base:
+    app.install_registry(base=server._sessions_base())
+    app.applications = load_manifests()
+    app.topology_runs = {}
+    with serving(app) as base:
         yield base
 
 
@@ -101,13 +94,15 @@ def test_missing_run_id_returns_400(base: str) -> None:
     assert "run_id" in json.dumps(body)
 
 
-def test_a_run_whose_worker_died_reports_failed_not_running(base: str, tmp_path: Path) -> None:
+def test_a_run_whose_worker_died_reports_failed_not_running(
+    app: server.App, base: str, tmp_path: Path
+) -> None:
     # UI sprint 102: a background run that raised left no RunFinalised, and status read
     # "running" forever. A dead worker with no finalised record is a failed run.
     dead = threading.Thread(target=lambda: None)
     dead.start()
     dead.join()
-    server._TOPOLOGY_RUNS["r_dead"] = {
+    app.topology_runs["r_dead"] = {
         "record_root": tmp_path / "never-written",
         "thread": dead,
         "started_at": time.time(),
@@ -122,7 +117,7 @@ def test_a_run_whose_worker_died_reports_failed_not_running(base: str, tmp_path:
     paused = threading.Thread(target=lambda: None)
     paused.start()
     paused.join()
-    server._TOPOLOGY_RUNS["r_paused"] = {
+    app.topology_runs["r_paused"] = {
         "record_root": tmp_path / "never-written",
         "thread": paused,
         "started_at": time.time(),

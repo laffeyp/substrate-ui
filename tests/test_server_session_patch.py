@@ -1,10 +1,10 @@
-"""Sprint 215c — PATCH /api/session/<id> mutates driver + name.
+"""Sprint 215c — PATCH /api/session/<id> mutates driver and name (this file); tools,
+per_turn, bundle and driver_params are PATCH-able too and are tested in
+test_server_session_patch_{tools,per_turn,bundle}.py and
+test_server_session_driver_params.py.
 
-Body: {"driver"?: str, "name"?: str}. Every absent key leaves that
-field alone. `tools`, `per_turn`, `workspace`, `workspace_shape`,
-`bundle`, and `seed` are not PATCH-able yet (SessionManifest schema
-growth is a piece-B follow-up); a body carrying them returns 400
-naming the deferred fields.
+Every absent key leaves that field alone. `workspace`, `workspace_shape` and `seed` are
+not PATCH-able; a body carrying them returns 400 naming the field.
 
 Behaviors under test:
   1. PATCH driver updates the in-memory catalog AND the on-disk
@@ -15,36 +15,28 @@ Behaviors under test:
   3. PATCH with a colliding name returns 409 with existing_session_id.
   4. PATCH on unknown session_id returns 404.
   5. Empty body returns 400 (no mutable fields).
-  6. Body with `per_turn` (or any of the piece-H fields) returns 400 naming
-     that as deferred. `tools` moved from `_NOT_YET` to `_PATCHABLE` in sprint
-     217e; the deferred set is now {per_turn, workspace, workspace_shape,
-     bundle, seed}.
+  6. A body with `seed` returns 400 naming it as not PATCH-able.
 
-Run from the substrate venv:
-    cd substrate && uv run python -m pytest ../substrate-ui/tests/test_server_session_patch.py -q
 """
 
 from __future__ import annotations
 
+import functools
+
 import json
-import sys
 from pathlib import Path
 
 import pytest
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-import server  # noqa: E402
-from substrate.session_registry import SessionRegistry  # noqa: E402
 from _serving import call, serving  # noqa: E402
+from substrate.topologies.session_registry import SessionRegistry  # noqa: E402
+
+import server  # noqa: E402
 
 
 @pytest.fixture
-def base(tmp_path: Path) -> tuple[str, Path]:
-    server._SESSION_REGISTRY = SessionRegistry(
-        base=tmp_path,
-        session_topology_factory=server._build_session_topology_from_manifest,
-    )
-    with serving() as base:
+def base(app: server.App, tmp_path: Path) -> tuple[str, Path]:
+    app.install_registry(base=tmp_path)
+    with serving(app) as base:
         yield base, tmp_path
 
 
@@ -68,14 +60,16 @@ def _create(
     return body["session_id"]
 
 
-def test_patch_driver_updates_catalog_and_manifest_json(base: tuple[str, Path]) -> None:
+def test_patch_driver_updates_catalog_and_manifest_json(
+    app: server.App, base: tuple[str, Path]
+) -> None:
     url, tmp_path = base
     sid = _create(url, tmp_path / "wsp", name="switcher", driver="deterministic")
     status, body = _patch_json(url + f"/api/session/{sid}", {"driver": "claude"})
     assert status == 200
     assert body["driver"] == "claude"
     # In-memory catalog updated.
-    manifest = server._SESSION_REGISTRY.get(sid)
+    manifest = app.registry.get(sid)
     assert manifest is not None
     assert manifest.driver == "claude"
     # On-disk manifest.json updated too.
@@ -83,7 +77,7 @@ def test_patch_driver_updates_catalog_and_manifest_json(base: tuple[str, Path]) 
     assert on_disk["driver"] == "claude"
 
 
-def test_patch_driver_survives_registry_reboot(base: tuple[str, Path]) -> None:
+def test_patch_driver_survives_registry_reboot(app: server.App, base: tuple[str, Path]) -> None:
     """boot_scan reads manifest.json on daemon restart. A PATCHed driver
     must land in the new in-memory catalog.
     """
@@ -93,7 +87,9 @@ def test_patch_driver_survives_registry_reboot(base: tuple[str, Path]) -> None:
     # Fresh registry pointing at the same base dir.
     fresh = SessionRegistry(
         base=tmp_path,
-        session_topology_factory=server._build_session_topology_from_manifest,
+        session_topology_factory=functools.partial(
+            server._build_session_topology_from_manifest, app
+        ),
     )
     fresh.boot_scan()
     reloaded = fresh.get(sid)
@@ -101,14 +97,14 @@ def test_patch_driver_survives_registry_reboot(base: tuple[str, Path]) -> None:
     assert reloaded.driver == "kimi-k2.6:cloud"
 
 
-def test_patch_name_updates_by_name_index(base: tuple[str, Path]) -> None:
+def test_patch_name_updates_by_name_index(app: server.App, base: tuple[str, Path]) -> None:
     url, tmp_path = base
     sid = _create(url, tmp_path / "wsp", name="original")
     status, body = _patch_json(url + f"/api/session/{sid}", {"name": "renamed"})
     assert status == 200
     assert body["name"] == "renamed"
-    assert server._SESSION_REGISTRY.by_name("renamed") == sid
-    assert server._SESSION_REGISTRY.by_name("original") is None
+    assert app.registry.by_name("renamed") == sid
+    assert app.registry.by_name("original") is None
 
 
 def test_patch_name_collision_returns_409(base: tuple[str, Path]) -> None:
@@ -147,18 +143,24 @@ def test_patch_deferred_field_returns_400_naming_the_field(base: tuple[str, Path
     assert "not PATCH-able yet" in body["error"]
 
 
-def test_patch_driver_composes_with_next_turn_topology_build(base: tuple[str, Path]) -> None:
-    """PATCH driver → next turn's session_topology carries the new driver.
-    The factory reads `manifest.driver` at build time, so a PATCHed value
-    lands in the NEXT call, not the current in-flight one.
-    """
+def test_patch_driver_composes_with_next_turn_topology_build(
+    app: server.App, base: tuple[str, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """PATCH driver → the next turn's topology is built on the new driver. The factory resolves
+    `manifest.driver` at build time, so a PATCHed value lands in the NEXT build. Lens audit F443:
+    the old test patched deterministic to deterministic and asserted only `callable(topo)`."""
+    from substrate.adapters import DeterministicResponder
+
     url, tmp_path = base
     sid = _create(url, tmp_path / "wsp", name="composer", driver="deterministic")
-    _patch_json(url + f"/api/session/{sid}", {"driver": "deterministic"})
-    manifest = server._SESSION_REGISTRY.get(sid)
-    assert manifest is not None
-    topo = server._build_session_topology_from_manifest(manifest)
-    # The factory returns a callable; the point is it did not raise on the
-    # PATCHed driver value (a real end-to-end turn would exercise the
-    # Responder, but the topology-build seam is what PATCH must not break).
-    assert callable(topo)
+    status, _ = _patch_json(url + f"/api/session/{sid}", {"driver": "kimi-k2.6:cloud"})
+    assert status == 200
+    resolved: list[str] = []
+
+    def resolver(app: server.App, name: str, params: object = None) -> DeterministicResponder:
+        resolved.append(name)
+        return DeterministicResponder(seed=0)
+
+    monkeypatch.setattr(server, "_daemon_driver_resolver", resolver)
+    server._build_session_topology_from_manifest(app, app.registry.get(sid))
+    assert resolved[0] == "kimi-k2.6:cloud", resolved

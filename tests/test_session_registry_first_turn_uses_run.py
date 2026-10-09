@@ -26,29 +26,30 @@ branch fails a named test rather than a downstream one.
 
 from __future__ import annotations
 
-import sys
+import functools
+
 from pathlib import Path
 
 import pytest
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-import server  # noqa: E402
-from substrate.session_registry import (  # noqa: E402
+from substrate import api  # noqa: E402
+from substrate.topologies.session_registry import (  # noqa: E402
     FreshSessionRequiresUserMessage,
     SessionRegistry,
     TornRecordOnResume,
     _record_state,
 )
-
-from substrate import api  # noqa: E402
 from substrate.topologies.session import SessionEndRequested, UserMessage  # noqa: E402
+
+import server  # noqa: E402
 
 
 @pytest.fixture
-def registry(tmp_path: Path) -> SessionRegistry:
+def registry(app: server.App, tmp_path: Path) -> SessionRegistry:
     return SessionRegistry(
         base=tmp_path,
-        session_topology_factory=server._build_session_topology_from_manifest,
+        session_topology_factory=functools.partial(
+            server._build_session_topology_from_manifest, app
+        ),
     )
 
 
@@ -141,8 +142,8 @@ def test_torn_record_raises_typed_and_flips_status_to_interrupted(
     exact class the record module raises on a torn sealed tail. The
     signal being tested is the branch, not the corruption mode.
     """
+    from substrate.topologies import session_registry as sreg
     from substrate.errors import RecordGapError
-    from substrate import session_registry as sreg
 
     sid = _create_deterministic(registry, tmp_path)
     # First turn — record now populated. Not patched yet.

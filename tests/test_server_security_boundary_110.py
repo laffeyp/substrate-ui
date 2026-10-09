@@ -14,23 +14,15 @@ from pathlib import Path
 
 import pytest
 from _serving import call, call_raw, serving  # noqa: E402
-from substrate.session_registry import SessionRegistry  # noqa: E402
 
 import server  # noqa: E402
 
 
 @pytest.fixture
-def base(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> str:
-    monkeypatch.setattr(
-        server,
-        "_SESSION_REGISTRY",
-        SessionRegistry(
-            base=tmp_path / "sessions",
-            session_topology_factory=server._build_session_topology_from_manifest,
-        ),
-    )
+def base(app: server.App, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> str:
+    app.install_registry(tmp_path / "sessions")
     monkeypatch.setattr(server, "_sessions_base", lambda: tmp_path / "sessions")
-    with serving() as url:
+    with serving(app) as url:
         yield url
 
 
@@ -51,7 +43,7 @@ def test_a_foreign_host_is_refused_on_every_method(base: str) -> None:
         assert "Host" in payload["error"]
 
 
-def test_the_dns_rebinding_shape_creates_no_session(base: str) -> None:
+def test_the_dns_rebinding_shape_creates_no_session(app: server.App, base: str) -> None:
     port = _port(base)
     status, _ = call(
         "POST",
@@ -60,7 +52,7 @@ def test_the_dns_rebinding_shape_creates_no_session(base: str) -> None:
         headers={"Host": f"evil.test:{port}", "Origin": f"http://evil.test:{port}"},
     )
     assert status == 403
-    assert server._SESSION_REGISTRY.list_all() == []
+    assert app.registry.list_all() == []
 
 
 def test_loopback_hosts_on_the_bound_port_pass(base: str) -> None:
@@ -169,15 +161,15 @@ def test_a_request_cannot_name_its_own_cli_argv(base: str) -> None:
     assert not marker.exists(), "the request's own argv ran"
 
 
-def test_a_closed_login_pty_leaves_the_table() -> None:
+def test_a_closed_login_pty_leaves_the_table(app: server.App) -> None:
     proc = subprocess.Popen(["sleep", "30"], start_new_session=True)
     sid = "pty_test_110"
-    with server._CLI_PTY_LOCK:
-        server._CLI_PTY_SESSIONS[sid] = {"proc": proc, "cli": "claude"}
+    with app.cli_pty_lock:
+        app.cli_pty_sessions[sid] = {"proc": proc, "cli": "claude"}
     try:
-        assert server._cli_pty_close(sid) is True
-        assert sid not in server._CLI_PTY_SESSIONS
-        assert server._cli_pty_close(sid) is False
+        assert server._cli_pty_close(app, sid) is True
+        assert sid not in app.cli_pty_sessions
+        assert server._cli_pty_close(app, sid) is False
         proc.wait(timeout=5)
     finally:
         if proc.poll() is None:
