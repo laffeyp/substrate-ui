@@ -456,7 +456,6 @@ def _build_best_of_n_verified_from_inputs(app: App, inputs: dict[str, Any]) -> C
         verify=_daemon_driver_resolver(app, str(inputs["verify_model"])),
         n=int(inputs.get("n", 3)),
         max_rounds=int(inputs.get("max_rounds", 2)),
-        watchdog_seconds=float(inputs.get("watchdog_seconds", 30.0)),
     )
 
 
@@ -476,7 +475,6 @@ def _build_research_sweep_from_inputs(app: App, inputs: dict[str, Any]) -> Calla
         reader=_daemon_driver_resolver(app, str(inputs["reader_model"])),
         critic=_daemon_driver_resolver(app, str(inputs["critic_model"])),
         synthesizer=_daemon_driver_resolver(app, str(inputs["synthesizer_model"])),
-        watchdog_seconds=float(inputs.get("watchdog_seconds", 30.0)),
     )
 
 

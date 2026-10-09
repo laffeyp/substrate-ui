@@ -30,7 +30,7 @@ from substrate.api import (
     Runtime,
     Subscription,
     pause_await_input,
-    quiescence_with_watchdog,
+    quiescence,
     threshold_count,
 )
 from substrate.topologies.tool_loop import tool_loop_topology
@@ -107,7 +107,7 @@ def topo_failed(b: Any) -> None:
     b.producer_kind("pinger", schemas=[Ping], schema_version=1, start=pinger)
     b.initial("pinger")
     b.view("boom", BoomView())
-    b.termination(quiescence_with_watchdog(seconds=1))
+    b.termination(quiescence())
 
 
 def topo_paused(b: Any) -> None:
@@ -119,7 +119,7 @@ def topo_paused(b: Any) -> None:
 def topo_broken(b: Any) -> None:
     b.producer_kind("boomer", schemas=[Ping], schema_version=1, start=boomer)
     b.initial("boomer")
-    b.termination(quiescence_with_watchdog(seconds=1))
+    b.termination(quiescence())
 
 
 async def main(runs: Path) -> None:

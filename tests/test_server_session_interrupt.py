@@ -89,7 +89,7 @@ def _interruptible_topology() -> object:
                     when=lambda tctx: tctx.event is not None and tctx.event.kind == "Park",
                     resume_condition="UserMessage",
                 ),
-                api.quiescence_with_watchdog(seconds=10),
+                api.quiescence(),
             )
         )
 

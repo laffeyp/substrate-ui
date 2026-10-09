@@ -13,7 +13,7 @@ from substrate.api import (
     Subscription,
     any_of,
     pause_await_input,
-    quiescence_with_watchdog,
+    quiescence,
 )
 
 
@@ -60,7 +60,7 @@ def resumable_topology(b: Any) -> None:
     b.termination(
         any_of(
             pause_await_input(_paused_when, resume_condition="ApprovalGranted"),
-            quiescence_with_watchdog(seconds=1),
+            quiescence(),
         )
     )
 
