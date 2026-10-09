@@ -124,29 +124,19 @@ def test_fresh_session_rejects_non_user_message(registry: SessionRegistry, tmp_p
 
 
 def test_torn_record_raises_typed_and_flips_status_to_interrupted(
-    registry: SessionRegistry, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    registry: SessionRegistry, tmp_path: Path
 ) -> None:
-    """A record whose read raises must NOT dispatch either primitive:
-    `Runtime.run` would double-head the sealed segment with a fresh
-    `RunStarted@0`; `Runtime.resume` would inherit the torn tail. The
-    daemon halts in place: `TornRecordOnResume` raises, manifest flips
-    to `"interrupted"`. This is the fix for finding 1 in the piece-D
-    fold review.
+    """A record damaged past repair must NOT dispatch either primitive: `Runtime.run` would
+    double-head it with a fresh `RunStarted@0`; `Runtime.resume` would build on the damage. The
+    daemon halts in place: `TornRecordOnResume` raises and the manifest flips to "interrupted".
+    This is the fix for finding 1 in the piece-D fold review.
 
-    `_record_state` classifies via `api.read_record`, which raises on
-    sealed-segment gaps and CRC mismatches but silently recovers a torn
-    HOT tail (that is the whole point of `framing.recover` on the hot
-    segment). Rolling a sealed segment mid-test would take megabytes of
-    written frames, so this test patches `api.read_record` from the
-    session_registry module namespace to raise `RecordGapError` — the
-    exact class the record module raises on a torn sealed tail. The
-    signal being tested is the branch, not the corruption mode.
+    The damage is real: the hot segment becomes a SEALED segment with a cut final frame, which
+    `read_record` reports as data loss (a hot segment's cut tail is recovered instead). Since
+    lens audit F017 the registry reads only the first frame before dispatching, so this damage
+    surfaces from the resume's own read, and `turn_sync` maps it the same way.
     """
-    from substrate.topologies import session_registry as sreg
-    from substrate.errors import RecordGapError
-
     sid = _create_deterministic(registry, tmp_path)
-    # First turn — record now populated. Not patched yet.
     registry.turn_sync(
         sid,
         resume_event=UserMessage(
@@ -156,15 +146,10 @@ def test_torn_record_raises_typed_and_flips_status_to_interrupted(
     )
     record_root = Path(registry.get(sid).record_root)
     assert _record_state(record_root)[0] == "has_envelopes"
-
-    def _raise_read(*_a, **_kw):
-        raise RecordGapError("simulated torn sealed segment (test)")
-
-    monkeypatch.setattr(sreg.api, "read_record", _raise_read)
-
-    state, cause = _record_state(record_root)
-    assert state == "torn", f"expected torn, got {state} (cause={cause!r})"
-    assert isinstance(cause, RecordGapError)
+    hot = next(record_root.glob("events-*.open.jsonl"))
+    sealed = hot.with_name(hot.name.replace(".open", ""))
+    sealed.write_bytes(hot.read_bytes() + b'{"crc":"0000')  # a sealed segment cut mid-frame
+    hot.unlink()
 
     with pytest.raises(TornRecordOnResume):
         registry.turn_sync(

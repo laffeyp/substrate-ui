@@ -872,6 +872,13 @@ Twelve PNGs at `captures/pixel-baseline-2026-09-23/`: six states (`empty`, `one_
 
 *Agent maintains. Last 10 increment closes; older roll into ## Built as compressed paragraphs.*
 
+### Kernel sprint 251 (2026-10-08, halted on F017; every other row closed) — runtime liveness
+- HALT, F017: each session turn rereads the whole record, so turn N costs O(N). Measured on 300 deterministic turns: 15.5 ms at the start, 351 ms by turn 200. Three passes per turn became one (`record.recover_and_read`; the registry reads only the first frame); turn 200 now takes 186 ms. The linear growth stays until the Architect picks a design: snapshot-able Views, or a session runtime kept paused in memory between turns.
+- `quiescence_with_watchdog(seconds)` had no watchdog (`seconds` only capped a 10 ms poll); it is `quiescence()`, and the dead `watchdog_seconds` parameter left 13 topologies, two manifests and the console. `Budget.event_counts` is enforced: the over-cap emission is dropped and the Producer fails with `budget_exceeded`.
+- `cancel_producer` returns the real parent; the active-runtime map keys on resolved paths; a factory that raises is refused at registration; `Subscription.matches` and `Event.from_envelope` are the one copy of their rules; `RunFailureReason` names the run-failure reasons.
+- Found: `docs/api.md` had drifted 31 names behind (now regenerated, with a currency test); the record generator had committed a stray `pair_coding_chunked/` copy and left the real record stale (fixed; 18 records regenerated).
+- Gates: kernel 1,279 passed / 4 skipped / 43 deselected; UI 210; vm_smoke, resume-after-end and lifecycle pass. Card: `substrate/process/sprints/sprint-251-runtime-liveness.md`.
+
 ### Sprint 111 (2026-10-08, closed) — server correctness and composition root
 - `server.App` holds the 13 tables that were module globals; `main()` builds it, both listeners carry it, and `Handler.app` reads it. Tests build their own App (`app` fixture, `serving(app)`); the 37 assignments to server tables are gone, and two Apps served at once share nothing.
 - The session's end rule moved into the kernel: `finalise_on(SessionEnded)` replaces `threshold_count(SessionEnded, 1)`, which a resume's restored counts tripped on the first new event. The server's copy of the rule and its per-turn whole-record scan are deleted; turn and end read the tail seq from the last frame.
