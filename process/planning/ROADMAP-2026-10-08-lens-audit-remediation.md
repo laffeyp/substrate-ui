@@ -69,13 +69,10 @@ The order follows the 2026-10-01 roadmap's rule: each step's check runs on the s
   - `Budget.event_counts` is enforced or removed;
   - one subscription matcher and one failure-reason enum remain.
 
-**7. K252: sessions, tools, delegate.** 64 rows.
+**7. K252: sessions, tools, delegate.** 46 rows.
 - *Check:*
-  - a hard interrupt during a tool call parks the turn;
-  - per_turn appears once in the composed prompt (the probe becomes a test);
   - created sessions are PARKED;
   - fan-out children are linked and cascade;
-  - `ModelReply` carries usage;
   - `WorkspaceShape` is the only shape vocabulary, validated at the server.
 
 **8. K253: adapters.** 19 rows.

@@ -153,7 +153,9 @@ def test_delete_during_in_flight_turn_interrupts_it_and_the_turn_parks(
     model call has started before the DELETE (lens audit F432: a 0.15 s sleep let a fast turn
     finish first, so the race the test names never happened)."""
     monkeypatch.setattr(
-        server, "_daemon_driver_resolver", lambda app, name, params=None: _SlowResponder(5.0)
+        server,
+        "_daemon_driver_resolver",
+        lambda app, name, params=None, workspace=None: _SlowResponder(5.0),
     )
     created = _create(base, tmp_path / "wsp", name="delete-race")
     sid = created["session_id"]

@@ -81,10 +81,12 @@ def test_per_turn_survives_boot_scan(
     assert reloaded.per_turn == "carry-me"
 
 
-def test_per_turn_prefixes_assembled_prompt_on_next_turn(
+def test_per_turn_reaches_the_next_turns_prompt_once(
     app: server.App, base: tuple[str, Path]
 ) -> None:
-    """The next turn's UserMessage assembled_prompt starts with the per_turn."""
+    """A per_turn set by PATCH reaches the model on the next turn, once (K261). It used to be
+    prefixed into UserMessage.assembled_prompt and added again by its fragment, so the model read
+    it twice; the model step now puts it in the prompt it records as PromptComposed."""
     url, _ = base
     sid = _create(url)
     _patch(url + f"/api/session/{sid}", {"per_turn": "PREFIX::"})
@@ -93,10 +95,9 @@ def test_per_turn_prefixes_assembled_prompt_on_next_turn(
     from substrate import api
 
     record_root = Path(app.registry.get(sid).record_root)
-    ums = [e for e in api.read_record(record_root) if "UserMessage" in str(e.get("kind", ""))]
-    assert ums, "no UserMessage on the record after /turn"
-    payload = ums[0].get("payload", {})
-    assembled = payload.get("assembled_prompt", "")
-    assert assembled.startswith("PREFIX::"), (
-        f"per_turn prefix missing from assembled_prompt: {assembled!r}"
-    )
+    prompts = [
+        e["payload"]["text"] for e in api.read_record(record_root) if e["kind"] == "PromptComposed"
+    ]
+    assert prompts, "no PromptComposed on the record after /turn"
+    assert prompts[-1].count("PREFIX::") == 1, prompts[-1]
+    assert prompts[-1].index("PREFIX::") < prompts[-1].index("hello"), prompts[-1]

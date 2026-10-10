@@ -25,8 +25,10 @@ import asyncio
 import functools
 import os
 import re
+import shutil
 import signal
 import subprocess
+import tempfile
 import threading
 import time
 import traceback
@@ -105,7 +107,8 @@ class App:
     # OllamaResponder's connection pool is costly to rebuild per turn, and a rate-limit semaphore
     # must bound the whole process (REVIEW-2026-08-28 Q9). DeterministicResponder is never cached:
     # its seed is state.
-    responder_cache: dict[tuple[str, tuple[tuple[str, Any], ...]], Any] = field(
+    # Key: (driver, params, workspace); the workspace is set for CLI drivers only (sprint 114).
+    responder_cache: dict[tuple[str, tuple[tuple[str, Any], ...], str | None], Any] = field(
         default_factory=dict
     )
     model_thinking_cache: dict[str, bool] = field(default_factory=dict)
@@ -181,7 +184,9 @@ def _params_cache_key(params: dict[str, Any] | None) -> tuple[tuple[str, Any], .
     return tuple(sorted(params.items()))
 
 
-def _daemon_driver_resolver(app: App, name: str, params: dict[str, Any] | None = None) -> Any:
+def _daemon_driver_resolver(
+    app: App, name: str, params: dict[str, Any] | None = None, *, workspace: str | None = None
+) -> Any:
     """Daemon-side resolver: `deterministic` → seeded stub; `claude` / `gemini` →
     CliResponder; anything else → OllamaResponder (a real local or `:cloud` tag).
     Sprint 213a's `_default_model_resolver` in substrate ships a smaller default
@@ -199,8 +204,14 @@ def _daemon_driver_resolver(app: App, name: str, params: dict[str, Any] | None =
     `timeout`, `num_ctx`. None or empty means "responder defaults." Ignored for
     the CLI-adapter and Deterministic branches (those adapters have no equivalent
     knobs; documented as such).
+
+    Sprint 114: `workspace` is the session's workspace. A CLI adapter runs its
+    subprocess there, so the CLI agent reads and writes the session's files; the
+    CLI branch's cache key carries it, so two sessions on one CLI driver hold two
+    Responders. The Ollama and deterministic branches ignore it.
     """
-    key = (name, _params_cache_key(params))
+    cli_workspace = workspace if name in KNOWN_CLI_ADAPTERS else None
+    key = (name, _params_cache_key(params), cli_workspace)
     cached = app.responder_cache.get(key)
     if cached is not None:
         return cached
@@ -224,7 +235,7 @@ def _daemon_driver_resolver(app: App, name: str, params: dict[str, Any] | None =
         # Responder.name carries the version too so log lines and
         # error messages point at the exact model that failed.
         display_name = f"{name}:{version}" if version else name
-        responder: Any = CliResponder(cli_cmd, name=display_name)
+        responder: Any = CliResponder(cli_cmd, name=display_name, cwd=cli_workspace)
     else:
         p = params or {}
         # Sprint 051: num_ctx must match the model's advertised context, not
@@ -332,7 +343,7 @@ def _shutdown_all_sessions(app: App, *, per_session_timeout: float = 10.0) -> di
     Sprint 217a: `FreshSessionRequiresUserMessage` catches the fresh-session
     edge — a manifest whose record was never opened (created via POST /session
     but no /turn ever fired). SIGTERM's SessionEndRequested cannot open a
-    fresh record via the `session_open` path; the manifest transitions to
+    fresh record via the `first_message` path; the manifest transitions to
     `"ended"` at the daemon layer without opening the record on disk.
 
     Sequential — waits up to `per_session_timeout` seconds per session,
@@ -425,18 +436,23 @@ def _allowed_tool_names(manifest: Any) -> set[str] | None:
 # ── sprint 225a: application dispatch — one-shot topology launcher ──────
 
 
-def _build_code_review_from_inputs(app: App, inputs: dict[str, Any]) -> Callable[..., Any]:
+def _build_code_review_from_inputs(
+    app: App, inputs: dict[str, Any], folder: Path
+) -> Callable[..., Any]:
     """`fanout_review_topology` — inputs.<role>_model per DEFAULT_ROLES
-    resolve into the `responders` dict; `judge_model` into `judge`."""
+    resolve into the `responders` dict; `judge_model` into `judge`. A CLI
+    role runs in the repo under review, not the run folder (sprint 115)."""
     from substrate.topologies.applications.fanout_review import fanout_review_topology
     from substrate.topologies.code_review import DEFAULT_ROLES
 
+    repo = str(inputs["repo"])
     responders = {
-        role: _daemon_driver_resolver(app, str(inputs[f"{role}_model"])) for role in DEFAULT_ROLES
+        role: _daemon_driver_resolver(app, str(inputs[f"{role}_model"]), workspace=repo)
+        for role in DEFAULT_ROLES
     }
-    judge = _daemon_driver_resolver(app, str(inputs["judge_model"]))
+    judge = _daemon_driver_resolver(app, str(inputs["judge_model"]), workspace=repo)
     return fanout_review_topology(
-        repo=str(inputs["repo"]),
+        repo=repo,
         ref=str(inputs.get("ref", "HEAD~1")),
         responders=responders,
         judge=judge,
@@ -444,7 +460,9 @@ def _build_code_review_from_inputs(app: App, inputs: dict[str, Any]) -> Callable
     )
 
 
-def _build_best_of_n_verified_from_inputs(app: App, inputs: dict[str, Any]) -> Callable[..., Any]:
+def _build_best_of_n_verified_from_inputs(
+    app: App, inputs: dict[str, Any], folder: Path
+) -> Callable[..., Any]:
     """`best_of_n_verified_topology` — drafter_model + verify_model both
     resolve into Responders. The verify=Check | Responder union collapses
     to Responder here; a deterministic-check variant is a future card."""
@@ -452,14 +470,16 @@ def _build_best_of_n_verified_from_inputs(app: App, inputs: dict[str, Any]) -> C
 
     return best_of_n_verified_topology(
         task=str(inputs["task"]),
-        drafter=_daemon_driver_resolver(app, str(inputs["drafter_model"])),
-        verify=_daemon_driver_resolver(app, str(inputs["verify_model"])),
+        drafter=_daemon_driver_resolver(app, str(inputs["drafter_model"]), workspace=str(folder)),
+        verify=_daemon_driver_resolver(app, str(inputs["verify_model"]), workspace=str(folder)),
         n=int(inputs.get("n", 3)),
         max_rounds=int(inputs.get("max_rounds", 2)),
     )
 
 
-def _build_research_sweep_from_inputs(app: App, inputs: dict[str, Any]) -> Callable[..., Any]:
+def _build_research_sweep_from_inputs(
+    app: App, inputs: dict[str, Any], folder: Path
+) -> Callable[..., Any]:
     """`research_sweep_topology` — three role-model kwargs; documents is a
     list of {label, text} dicts on the wire, translated here to the
     [(label, text), ...] tuple shape the topology expects."""
@@ -472,9 +492,11 @@ def _build_research_sweep_from_inputs(app: App, inputs: dict[str, Any]) -> Calla
     return research_sweep_topology(
         question=str(inputs["question"]),
         documents=documents,
-        reader=_daemon_driver_resolver(app, str(inputs["reader_model"])),
-        critic=_daemon_driver_resolver(app, str(inputs["critic_model"])),
-        synthesizer=_daemon_driver_resolver(app, str(inputs["synthesizer_model"])),
+        reader=_daemon_driver_resolver(app, str(inputs["reader_model"]), workspace=str(folder)),
+        critic=_daemon_driver_resolver(app, str(inputs["critic_model"]), workspace=str(folder)),
+        synthesizer=_daemon_driver_resolver(
+            app, str(inputs["synthesizer_model"]), workspace=str(folder)
+        ),
     )
 
 
@@ -482,8 +504,10 @@ def _build_research_sweep_from_inputs(app: App, inputs: dict[str, Any]) -> Calla
 # the wire inputs. New applications wire in one entry per name. The
 # manifest's [inputs] schema still gates required fields at the endpoint
 # layer; this table only knows how to translate resolved values into
-# topology kwargs (including the role-to-Responder mapping).
-_APP_BUILDERS: dict[str, Callable[[App, dict[str, Any]], Callable[..., Any]]] = {
+# topology kwargs (including the role-to-Responder mapping). `folder` is the
+# run's own directory, where a CLI role runs (sprint 115); the launcher makes it
+# and removes it when the run ends.
+_APP_BUILDERS: dict[str, Callable[[App, dict[str, Any], Path], Callable[..., Any]]] = {
     "code_review": _build_code_review_from_inputs,
     "best_of_n_verified": _build_best_of_n_verified_from_inputs,
     "research_sweep": _build_research_sweep_from_inputs,
@@ -537,15 +561,17 @@ def _build_session_topology_from_manifest(
     driver string, workspace, seed, session_id. The daemon binds this at boot.
 
     Sprint 217a: `first_turn_user_message` threads the first-turn UserMessage
-    into the topology's `session_open` producer when `turn_sync` detects an
+    into the topology's `first_message` producer when `turn_sync` detects an
     empty record and composes `Runtime.run(...)`. On subsequent turns the
-    argument is None; the topology fires without a `session_open` initial
+    argument is None; the topology registers no `first_message` producer
     and `Runtime.resume(topology, resume_event=UserMessage)` continues the run.
     """
     from substrate.topologies.session import session_topology
     from substrate.topologies.session.transcript import resolve_driver_context_tokens
 
-    responder = _daemon_driver_resolver(app, manifest.driver, manifest.driver_params)
+    responder = _daemon_driver_resolver(
+        app, manifest.driver, manifest.driver_params, workspace=manifest.workspace
+    )
     session_tools = _tools_for_manifest(manifest)
     # Sprint 228: fold the substrate toolkit (piece F sprints 226-228)
     # into every session's tool suite alongside full_suite. The tools
@@ -608,7 +634,6 @@ def _build_session_topology_from_manifest(
         workspace_shape=manifest.workspace_shape,
         bundle=manifest.bundle,
         parent_session_id=manifest.composite_of,
-        record_root=Path(manifest.record_root),
         script=None,
         first_turn_user_message=first_turn_user_message,
         # The role prompt resolves against the session's workspace, the same root the create-time
@@ -2572,17 +2597,14 @@ class Handler(BaseHTTPRequestHandler):
             # existing helper; it reads the parent (== this session's) record
             # over the given seq range + kinds, caps at 8 KiB with event-
             # boundary drops, and returns the formatted text. Empty slice ->
-            # unchanged assembled_prompt.
-            assembled_prompt = text
+            # empty assembled_prompt. K261: assembled_prompt is set only when a slice was
+            # attached; per_turn goes into the prompt once, from the model's prompt builder.
+            assembled_prompt = ""
             if context_slice is not None and record_root_locked.exists():
                 from substrate.topologies.tool_loop.delegate import prefix_context_slice
 
-                assembled_prompt = prefix_context_slice(record_root_locked, text, context_slice)
-            # Sprint 223d: per_turn (spec §7b) prefixes every UserMessage's
-            # assembled_prompt. Empty string is the no-op default.
-            live_pt = _manifest.per_turn
-            if live_pt:
-                assembled_prompt = f"{live_pt}\n\n{assembled_prompt}"
+                sliced = prefix_context_slice(record_root_locked, text, context_slice)
+                assembled_prompt = sliced if sliced != text else ""
             return SessionUserMessage(
                 text=text,
                 turn_index=next_turn_index,
@@ -3011,8 +3033,9 @@ class Handler(BaseHTTPRequestHandler):
         """Sprint 214c: GET /api/session/<id>/events?since_seq=N. Server-Sent
         Events stream of the session's record. Each envelope arrives as
         `data: <json>\\n\\n`. The stream stays open across turn pauses — the
-        session record keeps growing as `Runtime.resume` fires — and closes
-        when `substrate.RunFinalised` lands OR the client disconnects.
+        session record keeps growing as `Runtime.resume` fires — and closes,
+        after an `end` event, when the record's last frame is a
+        `substrate.RunFinalised`, OR when the client disconnects.
 
         Filtering by `since_seq` lets a reconnecting client resume from a known
         cursor without re-reading the whole record. Default `since_seq=-1`
@@ -3042,33 +3065,34 @@ class Handler(BaseHTTPRequestHandler):
             # Emit backlog first (frames already on the record past since_seq),
             # then poll for new growth. The follower keeps its own segment
             # cursors so we never re-emit frames as we cross segment rolls.
-            finalised = False
             last_write = time.monotonic()
-            while not finalised:
-                for env in follower.read_new():
-                    seq = int(env.get("seq", -1))
-                    # Only a RunFinalised PAST the client's cursor ends the
-                    # stream. Ended sessions are resumable (turn_sync flips
-                    # ended -> parked and the run continues on the same
-                    # record), so a RunFinalised at or before since_seq is
-                    # history: a client that reattaches after it to follow a
-                    # resumed turn must stay open for that turn's envelopes.
-                    # (Piece-B review finding 2 closed the stream on any
-                    # RunFinalised to stop a post-finalisation reconnect from
-                    # polling forever; with resume, waiting — with the 15 s
-                    # keep-alive, until the client hangs up — is correct.)
-                    if seq <= since_seq:
+            while True:
+                batch = follower.read_new()
+                for env in batch:
+                    if int(env.get("seq", -1)) <= since_seq:
                         continue
-                    is_final = env.get("kind") == api.RUN_FINALISED
-                    if is_final:
-                        finalised = True
                     frame = b"data: " + msgspec.json.encode(env) + b"\n\n"
                     self.wfile.write(frame)
                     self.wfile.flush()
                     last_write = time.monotonic()
-                    if is_final:
-                        break
-                if finalised:
+                # The stream ends when the record ends: its last frame is a RunFinalised past the
+                # client's cursor. Ended sessions are resumable (turn_sync flips ended -> parked
+                # and the run continues on the same record), so a resumed session's record holds
+                # one RunFinalised per earlier end, each followed by more turns. Closing at the
+                # first of them cut a reattaching client off from everything after it: its reply
+                # arrived only when the next typed line reopened the stream (2026-10-08). A
+                # RunFinalised at or before since_seq is history too: a client that reattaches
+                # past it to follow a resumed turn stays open, with the 15 s keep-alive, until it
+                # hangs up. The `end` event tells the client the close is final, so its
+                # EventSource does not reconnect.
+                last = batch[-1] if batch else None
+                if (
+                    last is not None
+                    and last.get("kind") == api.RUN_FINALISED
+                    and int(last.get("seq", -1)) > since_seq
+                ):
+                    self.wfile.write(b"event: end\ndata: end\n\n")
+                    self.wfile.flush()
                     break
                 # F11: SSE keep-alive comment every 15s during idle so a
                 # reverse proxy with an idle timeout does not kill the
@@ -3143,9 +3167,13 @@ class Handler(BaseHTTPRequestHandler):
                 "_APP_BUILDERS; the manifest parses but no runner is wired",
             )
             return
+        # Sprint 115: the folder a CLI role runs in. Without one it ran in the server's
+        # directory (the kernel repo or the app bundle) and read that as its project.
+        folder = Path(tempfile.mkdtemp(prefix=f"substrate-{application_name}-"))
         try:
-            topology_factory = builder(self.app, resolved)
+            topology_factory = builder(self.app, resolved, folder)
         except Exception as exc:  # noqa: BLE001 — application builder can raise anything a topology constructor does; malformed inputs → 400 naming the class.
+            shutil.rmtree(folder, ignore_errors=True)
             self._error(400, f"{type(exc).__name__}: {exc}")
             return
 
@@ -3167,6 +3195,8 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc:  # noqa: BLE001 — topology run boundary: any Producer/View failure surfaces as HTTP 500 with the class name.
                 self._error(500, f"{type(exc).__name__}: {exc}")
                 return
+            finally:
+                shutil.rmtree(folder, ignore_errors=True)
             final_seq = _tail_seq(record_root)
             self._json(
                 {
@@ -3195,6 +3225,8 @@ class Handler(BaseHTTPRequestHandler):
                 # UI sprint 102: a run that raised left no RunFinalised, and the status poll
                 # read "running" forever. The error is kept for it to report.
                 run_handle["error"] = f"{type(exc).__name__}: {exc}"
+            finally:
+                shutil.rmtree(folder, ignore_errors=True)
 
         thread = threading.Thread(target=_run_background, daemon=True)
         run_handle.update(
@@ -3428,14 +3460,10 @@ class Handler(BaseHTTPRequestHandler):
 
         def _build(_manifest: Any, _record_root: Path) -> Any:
             next_turn_index = self.app.registry.next_turn_index(session_id)
-            assembled = task
-            live_pt = _manifest.per_turn
-            if live_pt:
-                assembled = f"{live_pt}\n\n{assembled}"
             return SessionUserMessage(
                 text=task,
                 turn_index=next_turn_index,
-                assembled_prompt=assembled,
+                assembled_prompt="",  # K261: per_turn reaches the prompt once, from the builder
                 slash_source="daemon",
             )
 

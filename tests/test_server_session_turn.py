@@ -7,8 +7,8 @@ from the piece-C review). Body: {"text": "..."}; response: {"status",
 
 Three behaviors under test:
   1. A first POST /turn runs one turn against the reviewer — record grows with
-     a UserMessage carrying slash_source="daemon", plus a ModelReply and a
-     FinalAnswer. Response status is "parked" (session_topology pauses on Park).
+     a UserMessage carrying slash_source="daemon", plus a ModelReply that ends
+     the turn. Response status is "parked" (session_topology pauses on Returned).
   2. Two concurrent POST /turn calls on the same session BOTH complete under
      the per-session threading.Lock; reviewer's record ends with two
      UserMessages in seq order; no race, no interleaving.
@@ -71,7 +71,8 @@ def test_first_turn_lands_a_user_message_with_slash_source_daemon(
         slash_source="daemon",
         turn_index=0,
     )
-    assert_event(record_root, "FinalAnswer")
+    assert_event(record_root, "ModelReply", stop_reason="end_turn", turn_index=0)
+    assert_event(record_root, "Returned", reason="replied", turn_index=0)
 
 
 def test_second_turn_appends_with_incremented_turn_index(base: str, tmp_path: Path) -> None:
@@ -138,10 +139,10 @@ def test_missing_text_returns_400(base: str, tmp_path: Path) -> None:
 
 
 def _assert_turns_serialized(envs: list[dict], n_turns: int) -> None:
-    """In record order the turns do not interleave: UserMessage, Park, UserMessage, Park, …, and
+    """In record order the turns do not interleave: UserMessage, Returned, UserMessage, …, and
     turn_index rises by one per turn (lens audit F425/F449: only the count was checked)."""
-    marks = [e for e in envs if e["kind"] in ("UserMessage", "Park")]
-    assert [e["kind"] for e in marks] == ["UserMessage", "Park"] * n_turns, [
+    marks = [e for e in envs if e["kind"] in ("UserMessage", "Returned")]
+    assert [e["kind"] for e in marks] == ["UserMessage", "Returned"] * n_turns, [
         e["kind"] for e in marks
     ]
     indexes = [e["payload"]["turn_index"] for e in marks if e["kind"] == "UserMessage"]

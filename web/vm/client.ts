@@ -100,6 +100,9 @@ export class BrowserSubstrateClient implements SubstrateClient {
         handlers.onError?.(err);
       }
     };
+    // The server sends `end` before it closes a stream whose record has ended; without it the
+    // EventSource would reconnect and ask again.
+    source.addEventListener("end", () => { source.close(); handlers.onClose?.(); });
     source.onerror = (err) => {
       if (source.readyState === EventSource.CLOSED) handlers.onClose?.();
       else handlers.onError?.(err);

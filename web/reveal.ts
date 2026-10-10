@@ -111,6 +111,8 @@ function boot(): void {
     style.textContent = [
       'body[data-electron="1"] [data-fake-lights]{display:none!important}',
       'body[data-electron="1"] [data-top-bar]{padding-left:78px!important;min-height:38px!important;box-sizing:border-box!important;-webkit-app-region:drag}',
+      // A split pane sits below the window's own bar, with no window buttons above it.
+      'body[data-electron="1"] [data-top-bar][data-corner="0"]{padding-left:10px!important}',
       'body[data-electron="1"] [data-top-bar] input,',
       'body[data-electron="1"] [data-top-bar] button,',
       'body[data-electron="1"] [data-top-bar] [style*="cursor:pointer"],',

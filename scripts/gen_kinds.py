@@ -9,7 +9,8 @@ through its public TopologyBuilder:
   - every schema a Producer kind registers (what Producers can emit),
   - every kind a Trigger or View subscribes to (what can be injected: UserMessage, ...),
   - every kind a topology injects without registering it (`tool_loop.INJECTED_EVENT_KINDS`),
-  - every `substrate.*` lifecycle kind in `substrate.api.LIFECYCLE_KINDS`.
+  - every `substrate.*` lifecycle kind in `substrate.api.LIFECYCLE_KINDS`,
+  - the turn-end kinds and the kinds older session records carry (vocabulary § K.3).
 
 Usage (source mode, from substrate-ui/):
   uv run --project ../substrate python scripts/gen_kinds.py          # write the file
@@ -32,6 +33,7 @@ def session_kinds() -> set[str]:
     from substrate import api
     from substrate.adapters.models import DeterministicResponder
     from substrate.topologies.session import session_topology
+    from substrate.topologies.session.vocabulary import LEGACY_SESSION_KINDS, TURN_END_KINDS
     from substrate.topologies.tool_loop import INJECTED_EVENT_KINDS
 
     with warnings.catch_warnings():
@@ -58,6 +60,8 @@ def session_kinds() -> set[str]:
         kinds.update(getattr(v.subscription, "kinds", ()) or ())
     kinds.update(t.__name__ for t in INJECTED_EVENT_KINDS)
     kinds.update(api.LIFECYCLE_KINDS)
+    # K260/U119: what a session record can end a turn with, and what older records carry.
+    kinds.update(TURN_END_KINDS | LEGACY_SESSION_KINDS)
     return kinds
 
 

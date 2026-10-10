@@ -119,7 +119,7 @@ export const flow: Flow = {
                 const text = typeof env.payload?.text === "string" ? env.payload.text : "";
                 if (text.trim().length > 0) sawModelReply = true;
               }
-              if (env.kind === "Park" || env.kind === "SessionEnded") {
+              if (env.kind === "Returned" || env.kind === "Park" || env.kind === "SessionEnded") {
                 sawPark = true;
                 clearTimeout(timer); stop(); resolve();
               }

@@ -157,7 +157,9 @@ def test_patch_driver_composes_with_next_turn_topology_build(
     assert status == 200
     resolved: list[str] = []
 
-    def resolver(app: server.App, name: str, params: object = None) -> DeterministicResponder:
+    def resolver(
+        app: server.App, name: str, params: object = None, *, workspace: str | None = None
+    ) -> DeterministicResponder:
         resolved.append(name)
         return DeterministicResponder(seed=0)
 
