@@ -58,7 +58,7 @@ def test_turn_with_context_prefixes_assembled_prompt(
     _post_json(base + f"/api/session/{sid}/turn", {"text": "compute (2+3)*4"})
     manifest = app.registry.get(sid)
     record_root = Path(manifest.record_root)
-    # Turn 2: pass context selecting the FinalAnswer from turn 1.
+    # Turn 2: pass context selecting turn 1's reply (a FinalAnswer filter takes v0.3 replies).
     envs = list(api.read_record(record_root))
     max_seq = max(int(e["seq"]) for e in envs)
     status, _body = _post_json(

@@ -51,6 +51,20 @@ export async function bindPaneAsUser(win: Page): Promise<void> {
   await win.locator('[placeholder^="type to talk"]').first().waitFor({ state: "visible", timeout: 15_000 });
 }
 
+/** After a window reload, wait for pane 1 to reattach `sessionId` by itself. The window keeps the
+ * focused pane's session in the URL (`?session=`), and a reload reattaches it: the user's resume
+ * path, so a gate checks that path instead of rebinding the pane by hand. */
+export async function waitForReattached(win: Page, sessionId: string): Promise<void> {
+  await win.waitForFunction(
+    (id) => {
+      const vm = (window as unknown as { __vm?: { get(n: number): { snapshot(): { sessionId: string | null } } | null } }).__vm;
+      return vm?.get(1)?.snapshot().sessionId === id;
+    },
+    sessionId,
+    { timeout: 15_000 },
+  );
+}
+
 /** The controller signals the renderer emitted so far, in order. */
 export async function observedSignals(win: Page): Promise<EmittedRecord[]> {
   return win.evaluate(() => {

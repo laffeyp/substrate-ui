@@ -58,7 +58,7 @@ async function smoke(BASE: string) {
   step("transcript grows past the local echo", afterTurn.transcript.length >= 2,
     `${afterTurn.transcript.length} rows`);
   const envKinds = new Set(afterTurn.rawEnvelopes.map((e) => e.kind));
-  step("UserMessage, ModelReply, Park envelopes on the stream", ["UserMessage", "ModelReply", "Park"].every((k) => envKinds.has(k)),
+  step("UserMessage, ModelReply, Returned envelopes on the stream", ["UserMessage", "ModelReply", "Returned"].every((k) => envKinds.has(k)),
     `saw ${Array.from(envKinds).join(", ")}`);
   step("park reason recorded", !!afterTurn.parkReason, afterTurn.parkReason || "(none)");
 

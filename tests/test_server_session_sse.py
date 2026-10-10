@@ -120,9 +120,8 @@ def test_sse_streams_backlog_when_session_already_has_events(base: str, tmp_path
     # substrate.RunStarted (sprint 217a; test_session_registry_first_turn_uses_run.py).
     assert_event(frames, "substrate.RunStarted")
     assert_event(frames, "UserMessage", text="hello", turn_index=0)
-    assert_event(frames, "ModelReply", turn_index=0)
-    assert_event(frames, "FinalAnswer")
-    assert_event(frames, "Park", reason="final_answer")
+    assert_event(frames, "ModelReply", turn_index=0, stop_reason="end_turn")
+    assert_event(frames, "Returned", reason="replied")
 
 
 def test_sse_since_seq_filters_backlog(base: str, tmp_path: Path) -> None:
@@ -204,3 +203,51 @@ def test_sse_unknown_session_returns_404(base: str) -> None:
     status, body = call("GET", base + "/api/session/s_nonexistent/events", timeout=5)
     assert status == 404
     assert "unknown session_id" in body["error"]
+
+
+def _stream_text(url: str, until: bytes, timeout: float = 10.0) -> tuple[bytes, bool]:
+    """Raw SSE bytes until `until` appears, the server closes (True), or `timeout` passes."""
+    out = b""
+    with urlopen(url, timeout=timeout) as resp:
+        while until not in out:
+            try:
+                chunk = resp.read1(65536)
+            except (TimeoutError, socket.timeout):
+                return out, False
+            if not chunk:
+                return out, True
+            out += chunk
+    return out, False
+
+
+def test_a_resumed_session_streams_past_its_earlier_ends(
+    app: server.App, base: str, tmp_path: Path
+) -> None:
+    """A session ended twice and resumed (each end writes a RunFinalised) streams its whole record
+    from the start, and stays open while the run is live. 2026-10-08: the stream closed at the first
+    RunFinalised, so a reattached window saw nothing past the first end, and a reply arrived only
+    when the next typed line reopened the stream."""
+    sid = _create(base, tmp_path / "wsp", name="twice-ended")
+    for text in ("first", "second"):
+        assert _post_json(base + f"/api/session/{sid}/turn", {"text": text})[0] == 200
+        assert _post_json(base + f"/api/session/{sid}/end", {"source": "user_end"})[0] == 200
+    assert _post_json(base + f"/api/session/{sid}/turn", {"text": "third after two ends"})[0] == 200
+
+    raw, closed = _stream_text(
+        base + f"/api/session/{sid}/events?since_seq=-1", b"third after two ends"
+    )
+    assert b"third after two ends" in raw, raw[-400:]
+    assert raw.count(b'"kind":"substrate.RunFinalised"') == 2
+    assert not closed and b"event: end" not in raw
+
+
+def test_an_ended_session_stream_ends_with_an_end_event(base: str, tmp_path: Path) -> None:
+    """When the record's last frame is a RunFinalised, the server sends `end` and closes, so the
+    browser's EventSource does not reconnect and ask again."""
+    sid = _create(base, tmp_path / "wsp", name="ended-once")
+    assert _post_json(base + f"/api/session/{sid}/turn", {"text": "only"})[0] == 200
+    assert _post_json(base + f"/api/session/{sid}/end", {"source": "user_end"})[0] == 200
+
+    raw, closed = _stream_text(base + f"/api/session/{sid}/events?since_seq=-1", b"\x00never")
+    assert closed
+    assert raw.rstrip().endswith(b"event: end\ndata: end")

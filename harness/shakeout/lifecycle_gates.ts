@@ -21,7 +21,8 @@ import { join, resolve } from "node:path";
 import { scratchDir } from "./lib/scratch";
 
 const REPO_ROOT = resolve(__dirname, "..", "..");
-const APP = process.env.LIFECYCLE_APP || "";
+// SHAKEOUT_APP is the one variable every Electron gate reads (lib/electron.ts).
+const APP = process.env.LIFECYCLE_APP || process.env.SHAKEOUT_APP || "";
 const fails: string[] = [];
 const check = (ok: boolean, what: string) => {
   process.stdout.write(`${ok ? "ok  " : "FAIL"} ${what}\n`);

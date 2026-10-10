@@ -19,6 +19,7 @@ export const EnvelopeKind = {
   ProducerStarted: "substrate.ProducerStarted",
   PromptComposed: "PromptComposed",
   PromptFragment: "PromptFragment",
+  Returned: "Returned",
   RunFinalised: "substrate.RunFinalised",
   RunStarted: "substrate.RunStarted",
   SessionEndRequested: "SessionEndRequested",

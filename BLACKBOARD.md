@@ -872,6 +872,46 @@ Twelve PNGs at `captures/pixel-baseline-2026-09-23/`: six states (`empty`, `one_
 
 *Agent maintains. Last 10 increment closes; older roll into ## Built as compressed paragraphs.*
 
+### Kernel K265 follow-through (2026-10-09) — prompt pieces once across a restart; skips named
+- New gate `session_prompt_once_across_restart.ts` (in `gates:electron`): one turn, quit, reopen, attach, one turn; the record holds its session-open fragments once, before the first message, under one `RunStarted`, and the second turn's prompt names the same ones.
+- New `pytest.ini` (`addopts = -ra`): the UI suite now ends with a line per skipped or failed test and its reason.
+
+### Kernel K264 follow-through (2026-10-09) — old turn-cap reason reads as turn_cap
+- `session_controller.ts` maps a SessionEnded `reason: "timeout"` (records before K264) to `turn_cap`. `structure_lists_producers.ts` also checks that every structure-view trigger has the form `<x>-on-<y>`; the installed app lists 13. Installed app rebuilt with the K264 kernel; all ten gates pass.
+
+### Kernel K263 follow-through (2026-10-09) — warning row reads its fields; structure view gated
+- `session_controller.ts` rendered a `SessionWarning` as `warning: ${payload.condition_kind}`. No such field exists, so every warning read "warning: warning". It now shows `kind · source_name · detail`; `both_session_shapes.ts` checks the row on a fixture warning.
+- New gate `structure_lists_producers.ts` (in `gates:electron`): the structure view of a fresh session lists `session_prompt` and `first_message` and none of the eight retired producer names. Installed app rebuilt with the K263 kernel; all ten gates pass on it.
+- `BACKLOG.md`: Architect's notes on a plain terminal pane on a key (D59; not built) and `!command` shell escape in the session input.
+
+### Kernel K262 follow-through (2026-10-09) — gates read the installed app; harness reads Returned
+- `transcript_follow.ts` (`SCROLL_APP`), `lifecycle_gates.ts` (`LIFECYCLE_APP`) and `resume_ended_session.ts` (forced to source by `gates:electron`) ran Electron from source even with `SHAKEOUT_APP` set. Each now reads `SHAKEOUT_APP`; `gates:electron` no longer passes `SMOKE_TARGET=source`. All nine gate scripts pass against `/Applications/Substrate.app` with the K262 kernel (rebuilt with `pack:runtime`).
+- `transcript_follow`, `cli_version_picker` and `vm_smoke` waited on `Park`; they accept `Returned`. The `both_session_shapes` fixture takes `ModelReply` and `Returned` from the session and defines the old `ModelReply` itself.
+
+### Sprint 119 (2026-10-09, closed) — the window reads both session shapes
+- `session_controller.ts` and `reveal_component.ts` treat `Returned` (vocabulary v0.3) and `Park` alike; the turn-end row reads "returned (<reason>)"; a tool-only ModelReply adds no row. Gate `both_session_shapes.ts` red then green against the installed app.
+
+### Sprint 118 (2026-10-09, closed) — split-pane headers start at their left edge
+- Every split pane header was padded 78px for the macOS window buttons; only a single pane's header sits under them. Inset now applies to a single pane only. Gate `split_pane_header_inset.ts` red then green against the installed app.
+- `/Applications/Substrate.app` was rebuilt from the working tree at 11:51 (signed, not notarized, not releasable); the Oct 7 bundle is in the session scratchpad. Until then every "app" check today ran on `npm exec electron .`, which is not Substrate; today's gates were rerun against the installed app and pass.
+
+### Sprint 117 (2026-10-09, closed) — the graph's model lane survives a resume
+- After a reattach the model lane went blank in the down and side graphs: the model span ended at the record's FIRST SessionEnded, and a resumed record holds one per earlier end. Now one span per open stretch. Gate `graph_model_lane_on_resume.ts` red (29 of 29 rows after the first end blank), green after; `gates:electron` exits 0.
+
+### Sprint 116 (2026-10-09, closed) — an answer reaches the next prompt once
+- A plain reply writes a ModelReply and a FinalAnswer with the same text; `transcript._render` wrote both, so the driver read every past answer twice (the `claude` driver said so). The FINAL line is now skipped when it repeats the turn's last MODEL line. Kernel 1,329 passed; `test_realmodel_background_bash_103` fails under suite load and passes alone.
+
+### Sprint 115 (2026-10-09, closed) — every CLI call runs in its own folder
+- Sprint 114 left two CLI callers in the wrong directory; both close here. A delegated child ran its CLI in the parent's workspace (fresh child) or the server's directory (`model=` child), and a nested delegate lost `model_resolver`. One-shot applications ran every CLI role in the server's directory.
+- Kernel: `CliResponder.at(cwd)`; `_default_child_factory` makes the child workspace and runs a CLI responder there (`_in_workspace`); nested delegates keep `model_resolver`. Server: application builders take the run folder; code_review's roles run in `repo`; best_of_n_verified and research_sweep roles run in a temp folder removed when the run ends.
+- Red before: the fresh child answered with the parent's folder, the `model=` child with the kernel repo; the app roles had no folder. Live with the real `claude -p`: both delegate paths answered with their own `delegate-runs/d1-cN/workspace`.
+- Gates: kernel ruff, format, mypy --strict (138 files), lint-imports clean; kernel fast suite 1,328 passed / 5 skipped; UI 215 passed.
+
+### Sprint 114 (2026-10-09, closed) — a CLI driver runs in the session's workspace
+- A `claude` session's CLI ran in the server's directory, not its workspace: under the installed app `/Applications/Substrate.app/Contents/Resources`, under the source build the `substrate` repo (it reported that repo's branch, commit and uncommitted files). `CliResponder` set no `cwd`.
+- `CliResponder(cwd=)`; the server passes the session's workspace and keys its CLI responder cache on it, so two sessions on one CLI driver run in two directories.
+- Live: a real `claude -p` turn in a per-session sandbox answered with that sandbox's path. Gates: kernel lint, mypy --strict, import contracts clean; UI 213. Card: `process/sprints/sprint-114-cli-driver-runs-in-the-session-workspace.md`.
+
 ### Kernel sprint 251 (2026-10-08, halted on F017; every other row closed) — runtime liveness
 - HALT, F017: each session turn rereads the whole record, so turn N costs O(N). Measured on 300 deterministic turns: 15.5 ms at the start, 351 ms by turn 200. Three passes per turn became one (`record.recover_and_read`; the registry reads only the first frame); turn 200 now takes 186 ms. The linear growth stays until the Architect picks a design: snapshot-able Views, or a session runtime kept paused in memory between turns.
 - `quiescence_with_watchdog(seconds)` had no watchdog (`seconds` only capped a 10 ms poll); it is `quiescence()`, and the dead `watchdog_seconds` parameter left 13 topologies, two manifests and the console. `Budget.event_counts` is enforced: the over-cap emission is dropped and the Producer fails with `budget_exceeded`.

@@ -8,8 +8,8 @@
 // No gate measured any of this, which is how it stayed broken from 2026-09-24 to 2026-10-02
 // (process/planning/POSTMORTEM-2026-10-02-transcript-follow-bottom-regression.md).
 //
-// Runs against source (`electron .`) by default; SCROLL_APP=<path to Substrate.app> runs the
-// packaged bundle. The deterministic driver keeps it offline and fast.
+// Runs against source (`electron .`) by default; SHAKEOUT_APP (or SCROLL_APP)=<path to
+// Substrate.app> runs the packaged bundle. The deterministic driver keeps it offline and fast.
 //
 //   npx tsx harness/shakeout/transcript_follow.ts
 
@@ -19,7 +19,8 @@ import { scratchDir } from "./lib/scratch";
 import { bindPaneAsUser } from "./lib/electron";
 
 const REPO_ROOT = resolve(__dirname, "..", "..");
-const APP = process.env.SCROLL_APP || "";
+// SHAKEOUT_APP is the one variable every Electron gate reads (lib/electron.ts).
+const APP = process.env.SCROLL_APP || process.env.SHAKEOUT_APP || "";
 const SCROLLER = '[data-vm-transcript-scroller="1"]';
 const fails: string[] = [];
 const check = (ok: boolean, what: string) => {
@@ -94,12 +95,13 @@ const probeTop = (win: Page): Promise<number> =>
 let turns = 0;
 async function turn(win: Page): Promise<void> {
   turns += 1;
+  // A turn ends with Returned (vocabulary v0.3) or, on records before it, Park.
   const parksBefore = await win.evaluate(
-    () => ((window as any).__vm.get(1).snapshot().rawEnvelopes as { kind: string }[]).filter((e) => e.kind === "Park").length,
+    () => ((window as any).__vm.get(1).snapshot().rawEnvelopes as { kind: string }[]).filter((e) => e.kind === "Returned" || e.kind === "Park").length,
   );
   await win.evaluate((n) => (window as any).__vm.get(1).sendTurn(`turn ${n}: say something short`), turns);
   await win.waitForFunction(
-    (before) => ((window as any).__vm.get(1).snapshot().rawEnvelopes as { kind: string }[]).filter((e) => e.kind === "Park").length > before,
+    (before) => ((window as any).__vm.get(1).snapshot().rawEnvelopes as { kind: string }[]).filter((e) => e.kind === "Returned" || e.kind === "Park").length > before,
     parksBefore,
     { timeout: 30_000 },
   );

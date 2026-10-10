@@ -54,7 +54,6 @@ def test_end_interrupts_a_running_turn(app: server.App, tmp_path: Path) -> None:
             turn_max_steps=4,
             session_id=m.session_id,
             workspace_path=m.workspace,
-            record_root=Path(m.record_root),
             script=None,
             first_turn_user_message=first,
         )
@@ -125,7 +124,6 @@ def test_delete_interrupts_a_running_turn(tmp_path: Path) -> None:
             turn_max_steps=4,
             session_id=m.session_id,
             workspace_path=m.workspace,
-            record_root=Path(m.record_root),
             script=None,
             first_turn_user_message=first,
         )
@@ -184,7 +182,6 @@ def test_settings_change_mid_turn_without_waiting(tmp_path: Path) -> None:
             turn_max_steps=4,
             session_id=m.session_id,
             workspace_path=m.workspace,
-            record_root=Path(m.record_root),
             script=None,
             first_turn_user_message=first,
         )

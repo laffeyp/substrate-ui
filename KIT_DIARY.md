@@ -60,6 +60,16 @@
 
 ## Entries
 
+### 2026-10-09 — Kernel K259–K266 in the console: gates that ran from source, and a row no gate rendered
+
+**Gates that claimed the installed app.** Three gates (`transcript_follow`, `lifecycle_gates`, `resume_ended_session`) launched Electron from source even with `SHAKEOUT_APP` set: two read their own variables, and `gates:electron` forced the third to source. Earlier "all gates against the installed app" reports covered four of seven. A gate's target has to come from one variable that every gate reads; the report should name the binary it launched.
+
+**A rebuild that did not carry the kernel.** A copied build command skipped `npm run pack:runtime`, so the first rebuild bundled the previous kernel. Checking a file the new kernel adds (`session_prompt_producer.py`) inside `/Applications/Substrate.app` after each install now confirms the bundle.
+
+**A renderer that read a field the struct never had.** `session_controller.ts` printed `warning: ${payload.condition_kind}`; `SessionWarning` has `kind`, so every warning read "warning: warning". No test or gate rendered a warning row, so nothing failed. `both_session_shapes.ts` now writes a fixture warning and checks the row's text. Each kind the controller renders needs one fixture that reaches it.
+
+**Skips named.** `pytest.ini` (`addopts = -ra`) makes every UI suite run name each skipped or failed test.
+
 ### 2026-10-08 — Sprint 107: the whole-project pass, and tests separate from the machine
 
 **Context.** The Architect's order: delete the test folders that leaked into the real home, make sure tests write elsewhere, then the whole-project pass through the practice lenses, then the kernel release. Mid-pass: "tests should be totally separate" is a large part of the review.

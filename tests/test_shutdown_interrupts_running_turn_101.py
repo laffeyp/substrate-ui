@@ -53,7 +53,6 @@ def test_shutdown_interrupts_a_running_turn_then_ends_the_session(
             turn_max_steps=4,
             session_id=m.session_id,
             workspace_path=m.workspace,
-            record_root=Path(m.record_root),
             script=None,
             first_turn_user_message=first,
         )

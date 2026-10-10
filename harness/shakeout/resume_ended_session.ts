@@ -33,7 +33,8 @@ import { bindPaneAsUser } from "./lib/electron";
 
 const REPO_ROOT = resolve(__dirname, "..", "..");
 const TARGET = process.env.SMOKE_TARGET === "source" ? "source" : "packaged";
-const APP_ROOT = process.env.SMOKE_APP || join(REPO_ROOT, "dist-electron", "mac-arm64", "Substrate.app");
+const APP_ROOT =
+  process.env.SMOKE_APP || process.env.SHAKEOUT_APP || join(REPO_ROOT, "dist-electron", "mac-arm64", "Substrate.app");
 const FIRST = "reply with the single word ok and use no tools";
 const SECOND = "reply with the single word yes and use no tools";
 

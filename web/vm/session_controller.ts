@@ -31,6 +31,12 @@ import type { EnvelopeKindValue } from "./kinds";
 // has a case that shows it) or `ignored` (bookkeeping the transcript does not show). The Record
 // type makes tsc fail when the generator adds a kind this table does not name (TypeScript
 // Handbook, exhaustiveness checking).
+// Park.reason values on records before vocabulary v0.3, read as Returned.reason (§ K.3).
+const LEGACY_PARK_REASONS: Record<string, string> = { final_answer: "replied", interrupt: "interrupted" };
+// SessionEnded.reason on records before kernel K264: the turn cap wrote "timeout" (vocabulary.py
+// LEGACY_SESSION_END_REASONS).
+const LEGACY_SESSION_END_REASONS: Record<string, string> = { timeout: "turn_cap" };
+
 const KIND_DISPOSITION: Record<EnvelopeKindValue, "rendered" | "ignored"> = {
   [EnvelopeKind.SessionStarted]: "rendered",
   [EnvelopeKind.BackgroundTaskEnded]: "rendered",
@@ -41,6 +47,7 @@ const KIND_DISPOSITION: Record<EnvelopeKindValue, "rendered" | "ignored"> = {
   [EnvelopeKind.ToolProgress]: "rendered",
   [EnvelopeKind.ToolResult]: "rendered",
   [EnvelopeKind.Park]: "rendered",
+  [EnvelopeKind.Returned]: "rendered",
   [EnvelopeKind.SessionEnded]: "rendered",
   [EnvelopeKind.SessionWarning]: "rendered",
   [EnvelopeKind.TranscriptCompacted]: "rendered",
@@ -48,9 +55,9 @@ const KIND_DISPOSITION: Record<EnvelopeKindValue, "rendered" | "ignored"> = {
   [EnvelopeKind.RunFinalised]: "rendered",
   [EnvelopeKind.PredicateQuarantined]: "rendered",
   [EnvelopeKind.ProducerEmittedInvalidEvent]: "rendered",
-  // ProducerFailed: a model failure reaches the user as Park{reason: model_error, detail}.
+  // ProducerFailed: a model failure reaches the user as Returned{reason: model_error, detail}.
   [EnvelopeKind.ProducerFailed]: "ignored",
-  // ProducerCancelled: an interrupt reaches the user as Park{reason: interrupt}.
+  // ProducerCancelled: an interrupt reaches the user as Returned{reason: interrupted}.
   [EnvelopeKind.ProducerCancelled]: "ignored",
   [EnvelopeKind.PromptFragment]: "ignored",
   [EnvelopeKind.PromptComposed]: "ignored",
@@ -634,23 +641,20 @@ export class SessionController {
       return;
     }
     // The controller owns the session's lifecycle: endSession must not
-    // return until the two close-emits have fired. Two paths reach them:
-    //   1. The SessionEnded envelope arrives on the stream, its handler
-    //      calls closeStreamOnEnd(reason), which patches endedReason and emits.
-    //   2. The stream is already down or the envelope never arrives —
-    //      forceClose here does it.
-    // Poll the snapshot's endedReason for up to 2s, then forceClose to
-    // unbind. STREAM_CLOSED fires once: closeStreamOnEnd emits it only
-    // from the call that actually closed an open stream. SESSION_ENDED_LOCAL only fires from the
-    // envelope path, so callers of endSession see it only if the
-    // server acknowledged with an envelope in time.
+    // return until the close-emits have fired. The SessionEnded envelope's
+    // handler patches endedReason and emits SESSION_ENDED_LOCAL; forceClose
+    // below closes the stream and unbinds, whether or not the envelope came.
+    // Poll the snapshot's endedReason for up to 2s, then forceClose.
+    // STREAM_CLOSED fires once: closeStreamOnEnd emits it only from the call
+    // that actually closed an open stream. SESSION_ENDED_LOCAL only fires from
+    // the envelope path, so callers of endSession see it only if the server
+    // acknowledged with an envelope in time.
     const deadline = Date.now() + 2000;
     while (Date.now() < deadline) {
       if (this.snap.endedReason != null) break;
       await new Promise((r) => setTimeout(r, 25));
     }
-    // The SessionEnded envelope only closes the stream (the session stays
-    // resumable when reached by attach). An explicit end also unbinds.
+    // An explicit end unbinds; a session reached by attach stays resumable.
     this.forceClose(reason);
   }
 
@@ -989,21 +993,25 @@ export class SessionController {
       }
       case EnvelopeKind.UserMessage: {
         const text = String(payload.text ?? "");
-        // Dedup against the local echo appended in sendTurn.
+        // A message after a SessionEnded means the session resumed on the same record.
+        if (this.snap.endedReason != null) this.patch({ endedReason: null });
+        // Replace the local echo appended in sendTurn. The row moves to the end: envelopes arrive
+        // in seq order, and record frames that were still arriving when the echo went up (a
+        // reattach's backlog) belong above the message, not below it.
         const transcript = this.snap.transcript;
         const echoIndex = transcript.findIndex(
           (row) => row.role === "user" && row.text === text && row.seq < 0,
         );
-        if (echoIndex >= 0) {
-          const next = transcript.slice();
-          next[echoIndex] = { ...next[echoIndex], seq: env.seq };
-          this.patch({ transcript: next });
-        } else {
-          this.appendTranscript({ seq: env.seq, kind: env.kind, role: "user", text });
-        }
+        const rest = echoIndex >= 0
+          ? [...transcript.slice(0, echoIndex), ...transcript.slice(echoIndex + 1)]
+          : transcript;
+        const row = echoIndex >= 0 ? transcript[echoIndex] : { kind: env.kind, role: "user", text };
+        this.patch({ transcript: [...rest, { ...row, seq: env.seq } as TranscriptRow] });
         return;
       }
       case EnvelopeKind.ModelReply: {
+        // Vocabulary v0.3: a model call that only requests a tool writes a ModelReply with no text.
+        if (!String(payload.text ?? "")) return;
         this.appendTranscript({
           seq: env.seq, kind: env.kind, role: "model",
           text: String(payload.text ?? ""),
@@ -1093,16 +1101,20 @@ export class SessionController {
         }
         return;
       }
-      case EnvelopeKind.Park: {
-        const reason = String(payload.reason ?? "");
+      case EnvelopeKind.Park:
+      case EnvelopeKind.Returned: {
+        // `Returned` ends a turn (vocabulary v0.3); records written before it end with `Park`,
+        // whose reasons read as Returned's (§ K.3).
+        const raw = String(payload.reason ?? "");
+        const reason = LEGACY_PARK_REASONS[raw] ?? raw;
         const detail = String(payload.detail ?? "");
         this.patch({ parkReason: reason });
         // A park with a non-happy reason names its cause. `model_error`
         // is the primary one: the ProducerFailed's `error` field carries
         // the exception (a network hiccup, a 502 from the provider, a
         // schema error). Surface it as a warning row so the user sees
-        // WHY the turn parked, not just that it did. `final_answer` and
-        // `interrupt` carry their meaning in the reason and get no detail.
+        // WHY the turn ended, not just that it did. `replied` and
+        // `interrupted` carry their meaning in the reason and get no detail.
         if (detail) {
           const shaped = summariseModelError(detail);
           this.appendTranscript({
@@ -1112,19 +1124,23 @@ export class SessionController {
         }
         this.appendTranscript({
           seq: env.seq, kind: env.kind, role: "park",
-          text: `· parked (${reason}) — your turn`,
+          text: `· returned (${reason}) — your turn`,
         });
         this.emit("TURN_PARKED", { park_reason: reason });
         return;
       }
       case EnvelopeKind.SessionEnded: {
-        const reason = String(payload.reason ?? "server_end");
+        const raw = String(payload.reason ?? "server_end");
+        const reason = LEGACY_SESSION_END_REASONS[raw] ?? raw;
         this.endedEmittedFor = sessionId;
         this.appendTranscript({
           seq: env.seq, kind: env.kind, role: "ended",
           text: `session ended (${reason})`,
         });
-        this.closeStreamOnEnd(reason);
+        // The stream stays open: in a resumed session's record this SessionEnded is history, and
+        // the turns after it are still to come. The server ends the stream (an `end` event) when
+        // the record's last frame is a RunFinalised; sendTurn reopens it to resume.
+        this.patch({ endedReason: reason });
         this.emit("SESSION_ENDED_LOCAL", { reason });
         return;
       }
@@ -1140,10 +1156,14 @@ export class SessionController {
         return;
       }
       case EnvelopeKind.SessionWarning: {
-        const cond = String(payload.condition_kind ?? "warning");
+        // SessionWarning names its condition in `kind`; a failed prompt source adds
+        // `source_name` and the error in `detail` (session vocabulary § J, § N).
+        const parts = [String(payload.kind ?? "warning")];
+        if (payload.source_name) parts.push(String(payload.source_name));
+        if (payload.detail) parts.push(String(payload.detail));
         this.appendTranscript({
           seq: env.seq, kind: env.kind, role: "warning",
-          text: `warning: ${cond}`,
+          text: `warning: ${parts.join(" · ")}`,
         });
         return;
       }

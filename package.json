@@ -24,7 +24,7 @@
     "gates:scroll": "npx tsx harness/shakeout/transcript_follow.ts",
     "gates:tasks": "npx tsx harness/shakeout/tasks_gate.ts",
     "test:py": "uv run --project ../substrate python -m pytest tests/ -q -p no:cacheprovider",
-    "gates:electron": "SHAKEOUT_AXIS=C SHAKEOUT_RUNS=1 npx tsx harness/shakeout/run.ts && npx tsx harness/shakeout/lifecycle_gates.ts && npx tsx harness/shakeout/transcript_follow.ts && SMOKE_TARGET=source npx tsx harness/shakeout/resume_ended_session.ts",
+    "gates:electron": "SHAKEOUT_AXIS=C SHAKEOUT_RUNS=1 npx tsx harness/shakeout/run.ts && npx tsx harness/shakeout/lifecycle_gates.ts && npx tsx harness/shakeout/transcript_follow.ts && npx tsx harness/shakeout/resume_ended_session.ts && npx tsx harness/shakeout/driver_chip_on_resume.ts && npx tsx harness/shakeout/resume_after_two_ends.ts && npx tsx harness/shakeout/graph_model_lane_on_resume.ts && npx tsx harness/shakeout/split_pane_header_inset.ts && npx tsx harness/shakeout/both_session_shapes.ts && npx tsx harness/shakeout/structure_lists_producers.ts && npx tsx harness/shakeout/session_prompt_once_across_restart.ts",
     "test": "npm run test:py && npm run test:unit && npx tsx harness/vm_smoke.ts && SHAKEOUT_RUNS=1 npm run shakeout && npm run gates:electron"
   },
   "devDependencies": {

@@ -562,6 +562,15 @@ class Component extends DCLogic {
     return base;
   }
 
+  // The driver a pane's chip shows. A bound session runs the driver on its manifest, which the
+  // pane's controller reads at attach (`attachExisting`); a resumed session must show that, not
+  // the roster default. An unbound pane shows the driver picked for its next session.
+  _paneDriver(state, pane) {
+    const snap = (state.controllerSnapshots || {})[pane.id];
+    if (snap && snap.sessionId && snap.driver) return snap.driver;
+    return pane.driver || state.driverDefault || 'deterministic';
+  }
+
   _buildDriverOpts(state, paneId, currentDriver) {
     // Sprint 087b — three-tier dropdown: CLI row (level 0) expands
     // into families (level 1), each family expands into pins
@@ -729,7 +738,7 @@ class Component extends DCLogic {
     };
     document.addEventListener("mousedown", this._ddOutside, true);
     this._kd = (e) => {
-      if (e.ctrlKey && e.key === '\u0060') { e.preventDefault(); const s=this.state; if (!s.revealed) { const fp=s.panes.find(p=>p.id===s.focused); if (fp && fp.unbound) return; } this.setState(st => ({ revealed: !st.revealed, surface: null })); }
+      if (e.ctrlKey && e.key === '\u0060') { e.preventDefault(); const s=this.state; if (!s.revealed) { const fp=s.panes.find(p=>p.id===s.focused); const fs=(s.controllerSnapshots||{})[s.focused]; if (fp && fp.unbound && !(fs && fs.sessionId)) return; } this.setState(st => ({ revealed: !st.revealed, surface: null })); }
       if (e.metaKey && (e.key === 'd' || e.key === 'D')) { e.preventDefault(); this._split(e.shiftKey ? 'down' : 'right'); }
       if (e.metaKey && (e.key === 'f' || e.key === 'F')) { e.preventDefault(); this.setState(s => ({ findOpen: !s.findOpen, findQ: '' })); }
       if (e.metaKey && e.key === ',') { e.preventDefault(); this.setState({ showSettings: true }); }
@@ -980,6 +989,10 @@ class Component extends DCLogic {
       // reads the same before any split.
       gridCol: (p.col || 1) + ' / span ' + (p.cw || state.cols),
       gridRow: (p.row || 1) + ' / span ' + (p.rh || state.rows),
+      // A single pane's top bar is the window's top edge, under the macOS window buttons, and
+      // keeps their inset (reveal.ts, Electron stylesheet). Split panes sit below the window's
+      // own bar, so none of their top bars has buttons above it.
+      corner: state.panes.length === 1 ? '1' : '0',
     }, {
       unbound: !!p.unbound, bound: !p.unbound,
       // 19a picker per Substrate Shell Directions v3.dc.html:
@@ -1147,8 +1160,8 @@ class Component extends DCLogic {
       nameMin: compact ? '44px' : '64px',
       wsLabel: p.unbound ? '⌥ —' : compact ? '⌥' : '⌥ ' + (p.shape === 'worktree' ? 'substrate/' + (p.name || 'main') : (p.ws || p.name || '')),
       revealText: compact ? '⌃`' : '⌃` reveal',
-      id: p.id, name: p.name, driver: p.driver || state.driverDefault || 'deterministic',
-      driverLabel: this._resolveDriverLabel(state, p.driver || state.driverDefault || 'deterministic'),
+      id: p.id, name: p.name, driver: this._paneDriver(state, p),
+      driverLabel: this._resolveDriverLabel(state, this._paneDriver(state, p)),
       // isMain gates the full machinery lens (transcript + prompt +
       // find bar). Every bound pane, not just pane 1, should render
       // it — otherwise a newly-split pane falls through to the
@@ -1281,7 +1294,7 @@ class Component extends DCLogic {
         this.setState(s => ({ focused: p.id, ddFor: s.ddFor === p.id ? null : p.id, wsFor: null }));
       },
       toggleWsP: () => this.setState(s => ({ focused: p.id, wsFor: s.wsFor === p.id ? null : p.id, ddFor: null })),
-      driverOpts: this._buildDriverOpts(state, p.id, p.driver),
+      driverOpts: this._buildDriverOpts(state, p.id, this._paneDriver(state, p)),
       caretColor: p.id === state.focused ? '#82a5c8' : '#4a4e55',
       promptHint: p.id === state.focused ? 'type to talk · / for commands' : 'click to focus',
       focus: () => this.setState({ focused: p.id }),
@@ -1332,7 +1345,7 @@ class Component extends DCLogic {
       // Participant messages — bright.
       ToolCall: '#a08fc9', ToolResult: '#7fb3b8',
       UserMessage: '#88b0d0', ModelReply: '#88b0d0', FinalAnswer: '#88b0d0',
-      Park: '#82a5c8', SessionEnded: '#88b0d0',
+      Park: '#82a5c8', Returned: '#82a5c8', SessionEnded: '#88b0d0',
       // Runtime plumbing — gray.
       TriggerFired: '#62676f', ProducerStarted: '#62676f', ProducerCompleted: '#62676f',
       RunStarted: '#62676f', RunFinalised: '#62676f', TerminationMatched: '#62676f',
@@ -1371,13 +1384,17 @@ class Component extends DCLogic {
     // strip it so the lane derivation below matches on bare kind
     // names, the way the prototype's demoFullSessionEnvelopes demo did.
     const _liveEnvelopes = (_vmSnap && Array.isArray(_vmSnap.rawEnvelopes)) ? _vmSnap.rawEnvelopes : [];
+    // A turn ends with `Returned` from the `return` producer (vocabulary v0.3); records written
+    // before it end with `Park` from the `park` producer. The graph reads both alike.
+    const _isTurnEnd = (k) => k === EnvelopeKind.Returned || k === EnvelopeKind.Park;
+    const _isReturnProducer = (k) => k === 'return' || k === 'park';
     const stripSubstratePrefix = (k) => (typeof k === 'string' && k.indexOf('substrate.') === 0) ? k.slice('substrate.'.length) : k;
     // Bucket every producer kind onto one of four swim lanes.
     const laneForProducerKind = (producerKind) => {
       const k = producerKind || '';
       if (k === 'model') return 'model';
       if (k === 'tool') return 'tool';
-      if (k === 'park') return 'park';
+      if (_isReturnProducer(k)) return 'park';
       return 'runtime';
     };
     // Prototype v7 convention for the `prod` column and gist per kind
@@ -1392,7 +1409,7 @@ class Component extends DCLogic {
       if (kind === EnvelopeKind.ToolCall) return 'model';
       if (kind === EnvelopeKind.ToolResult) return payload.tool ? `tool · ${payload.tool}` : 'tool';
       if (kind === EnvelopeKind.FinalAnswer || kind === EnvelopeKind.ModelReply) return 'model';
-      if (kind === EnvelopeKind.Park) return 'park';
+      if (kind === EnvelopeKind.Park || kind === EnvelopeKind.Returned) return 'return';
       if (kind === EnvelopeKind.PromptFragment || kind === EnvelopeKind.PromptComposed || kind === EnvelopeKind.SessionStarted) return 'runtime';
       return producerKind || 'runtime';
     };
@@ -1421,6 +1438,7 @@ class Component extends DCLogic {
       if (kind === 'ProducerStarted') return (payload.kind || (payload.producer && payload.producer.kind) || 'producer');
       if (kind === 'ProducerCompleted') return (payload.kind || (payload.producer && payload.producer.kind) || 'producer');
       if (kind === EnvelopeKind.Park) return `await ${payload.awaiting || EnvelopeKind.UserMessage}`;
+      if (kind === EnvelopeKind.Returned) return `returned · ${payload.reason || ''}`;
       if (kind === EnvelopeKind.SessionStarted) return `seed · driver ${payload.driver_model || '?'}`;
       if (kind === EnvelopeKind.SessionEnded) return `end · ${payload.reason || 'server_end'}`;
       return '';
@@ -1453,7 +1471,7 @@ class Component extends DCLogic {
         gist,
         // Lane hint mirrors the prototype's demoFullSessionEnvelopes shape.
         lanes: (kind === EnvelopeKind.ToolCall || kind === EnvelopeKind.ToolResult) ? 'mt'
-          : (kind === EnvelopeKind.Park || kind === 'TriggerFired' && payload.starts === 'park') ? ''
+          : (_isTurnEnd(kind) || kind === 'TriggerFired' && _isReturnProducer(payload.starts)) ? ''
           : 'm',
         payload,
         content: [],
@@ -1485,24 +1503,28 @@ class Component extends DCLogic {
     // (right). The model is the session's durable participant — one
     // continuous span from the first envelope to SessionEnded (or to
     // the last envelope for a live session). Every OTHER producer is
-    // a delegation from the model: session_started, session_open,
-    // tools_suite_fragment, per_turn_fragment, prompt_composer, the
-    // tool_loop tools, session_end, session_warning — each renders as
+    // a delegation from the model: session_started, first_message,
+    // session_prompt, interrupt_fragment, the tool_loop tools, return,
+    // session_end — each renders as
     // a span in the delegation lane from its ProducerStarted to its
     // matching ProducerCompleted (paired by producer instance). Park
     // rides its own lane so the return-to-idle beat reads cleanly.
     const _lastSeq = envelopes.length ? envelopes[envelopes.length - 1].seq : 0;
     const _firstSeq = envelopes.length ? envelopes[0].seq : 0;
-    const _endedSeq = (function () {
-      for (const x of envelopes) if (x.kind === EnvelopeKind.SessionEnded) return x.seq;
-      return _lastSeq;
-    })();
+    // One model span per stretch the session was open: each SessionEnded closes one, the next
+    // envelope (a resume) opens the next. A single span to the FIRST SessionEnded left a
+    // resumed session's model lane empty from its first end on (2026-10-09).
     const spansByKind = { model: [], delegation: [], external: [] };
-    if (envelopes.length) {
-      spansByKind.model.push({
-        start: _firstSeq, end: _endedSeq,
-        color: '#3d5166', bright: '#82a5c8',
-      });
+    let _modelOpen = envelopes.length ? _firstSeq : null;
+    for (const x of envelopes) {
+      if (_modelOpen === null) _modelOpen = x.seq;
+      if (x.kind === EnvelopeKind.SessionEnded) {
+        spansByKind.model.push({ start: _modelOpen, end: x.seq, color: '#3d5166', bright: '#82a5c8' });
+        _modelOpen = null;
+      }
+    }
+    if (_modelOpen !== null) {
+      spansByKind.model.push({ start: _modelOpen, end: _lastSeq, color: '#3d5166', bright: '#82a5c8' });
     }
     const _calls = {};
     const _producerStarts = {}; // instance → {seq, kind} — non-park only
@@ -1512,7 +1534,7 @@ class Component extends DCLogic {
     // ToolResult on the Delegate lifeline.
     let _parkOpen = null;
     envelopes.forEach(e => {
-      if (e.kind === 'ProducerStarted' && e.producerInstance && e.payload && e.payload.kind && e.payload.kind !== 'park') {
+      if (e.kind === 'ProducerStarted' && e.producerInstance && e.payload && e.payload.kind && !_isReturnProducer(e.payload.kind)) {
         _producerStarts[e.producerInstance] = { seq: e.seq, kind: e.payload.kind };
       }
       if (e.kind === 'ProducerCompleted' && e.producerInstance && _producerStarts[e.producerInstance]) {
@@ -1526,7 +1548,7 @@ class Component extends DCLogic {
           color: '#4d6b6e', bright: '#7fb3b8', kind: started.kind, plumbing: true,
         });
       }
-      if (e.kind === 'TriggerFired' && e.payload && e.payload.starts === 'park' && _parkOpen === null) {
+      if (e.kind === 'TriggerFired' && e.payload && _isReturnProducer(e.payload.starts) && _parkOpen === null) {
         _parkOpen = e.seq;
       }
       if (e.kind === EnvelopeKind.UserMessage && _parkOpen !== null) {
@@ -1574,13 +1596,13 @@ class Component extends DCLogic {
       // belongs to one. A row's "own kind" decides which lane cell
       // renders bright.
       const pkind = (e.payload && e.payload.kind) || '';
-      if (pkind === 'park' || e.kind === EnvelopeKind.Park) return 'external';
+      if (_isReturnProducer(pkind) || _isTurnEnd(e.kind)) return 'external';
       if (e.kind === EnvelopeKind.UserMessage) return 'external';
       if (e.kind === EnvelopeKind.ToolCall || e.kind === EnvelopeKind.ToolResult) return 'delegation';
       if (pkind && pkind !== 'model') return 'delegation';
       if (e.kind === 'TriggerFired') {
         const starts = e.payload && e.payload.starts;
-        if (starts === 'park') return 'external';
+        if (_isReturnProducer(starts)) return 'external';
         if (starts && starts !== 'model') return 'delegation';
       }
       return 'model';
@@ -1607,7 +1629,7 @@ class Component extends DCLogic {
       // Every other TriggerFired keeps the runtime-stub arrow.
       if (e.kind === 'TriggerFired') {
         const starts = e.payload && e.payload.starts;
-        if (starts === 'park') {
+        if (_isReturnProducer(starts)) {
           const a = cx(laneIdx.model), b = cx(laneIdx.external);
           return { c: '#82a5c8', l: Math.min(a, b), w: Math.abs(b - a), dot: b };
         }
@@ -1629,7 +1651,7 @@ class Component extends DCLogic {
       // return arrow. Model's own ProducerCompleted stays a lifeline dot.
       if (e.kind === 'ProducerCompleted') {
         const pkind = (e.payload && e.payload.kind) || '';
-        if (pkind && pkind !== 'model' && pkind !== 'park') {
+        if (pkind && pkind !== 'model' && !_isReturnProducer(pkind)) {
           const a = cx(laneIdx.delegation), b = cx(laneIdx.model);
           return { c: '#7fb3b8', l: Math.min(a, b), w: Math.abs(b - a), dot: b };
         }
@@ -1644,7 +1666,7 @@ class Component extends DCLogic {
       // Park envelope = the await moment inside the open park span.
       // Dot only, no line — the arrow lives on TriggerFired and on the
       // UserMessage that closes it.
-      if (e.kind === EnvelopeKind.Park) {
+      if (_isTurnEnd(e.kind)) {
         const b = cx(laneIdx.external);
         return { c: '#82a5c8', l: b, w: 0, dot: b };
       }
@@ -1714,10 +1736,10 @@ class Component extends DCLogic {
         segs: spans.map(sp => segOf(sp.start, sp.end + 0.6, isDelegate ? '#665f7d' : '#4d6b6e', sp.start)),
       });
     }
-    const _parkSeqs = envelopes.filter(e => e.kind === EnvelopeKind.Park).map(e => e.seq);
+    const _parkSeqs = envelopes.filter(e => _isTurnEnd(e.kind)).map(e => e.seq);
     if (_parkSeqs.length) {
       _sideLanes.push({
-        label: 'park', color: '#82a5c8',
+        label: 'returned', color: '#82a5c8',
         segs: _parkSeqs.map(seq => segOf(Math.max(0, seq - 0.5), seq + 0.6, '#82a5c8', seq)),
       });
     }
@@ -2045,7 +2067,7 @@ class Component extends DCLogic {
         this.setState(s => ({ ddFor: s.ddFor === fp.id ? null : fp.id, wsFor: null }));
       },
       fpWsOpen: state.wsFor === fp.id && state.revealed, fpToggleWs: () => this.setState(s => ({ wsFor: s.wsFor === fp.id ? null : fp.id, ddFor: null })),
-      fpDriverOpts: this._buildDriverOpts(state, fp.id, fp.driver),
+      fpDriverOpts: this._buildDriverOpts(state, fp.id, this._paneDriver(state, fp)),
       recordsColor: surf === Surface.Records ? '#e2e5e9' : '#9aa0a8',
       studioColor: surf === Surface.Studio ? '#e2e5e9' : '#9aa0a8',
       showTerminal: !surf && !state.revealed, showRevealed: !surf && state.revealed,
@@ -2276,7 +2298,7 @@ class Component extends DCLogic {
       showStrip: !surf && !state.revealed && state.panes.length > 1,
       showFullHeader: !!surf || state.revealed,
       splitRight: () => this._split('right'),
-      driverName: this._resolveDriverLabel(state, fp.driver || state.driverDefault || 'deterministic'), driverOpen: state.driverOpen,
+      driverName: this._resolveDriverLabel(state, this._paneDriver(state, fp)), driverOpen: state.driverOpen,
       toggleDriverMenu: () => this.setState(s => ({ driverOpen: !s.driverOpen, wsOpen: false })),
       driverOptions: ['kimi-k2', 'deepseek-r1:8b', 'qwen3-coder:480b-cloud', 'nemotron-3-super', 'claude (cli)', 'gemini (cli)', 'deterministic'].map(m => ({
         label: m, color: m === fp.driver ? '#e2e5e9' : '#9aa0a8',
