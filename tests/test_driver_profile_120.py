@@ -35,15 +35,16 @@ def _sources() -> list[Path]:
     return [p for p in files if p.is_file() and "/records/" not in str(p)]
 
 
-# The one passage allowed to name the forbidden strings is the rule that forbids them: the copied
-# CLAUDE.md section in the default guidance (kernel K275), from its heading to the next heading.
-_BAN = "# No model attribution in git, ever"
+# The one passage allowed to name the forbidden strings is the rule that forbids them: each
+# guidance level's "No model attribution in git" section (kernel K275, K287), from its heading to
+# the next heading.
+_BAN = "# No model attribution in git"
 
 
 def _without_the_ban(text: str) -> str:
-    if _BAN not in text:
+    start = text.find(_BAN)
+    if start == -1:
         return text
-    start = text.index(_BAN)
     end = text.find("\n# ", start + len(_BAN))
     return text[:start] + (text[end:] if end != -1 else "")
 
