@@ -136,24 +136,25 @@
             </sc-for>
            </sc-if>
           </sc-for>
+          <div style="height:{{ pn.guidanceSpacer }}"></div>
          </div>
          <div data-model-half="1" data-armed="{{ pn.modelArmed }}" style="flex:1;min-width:0;position:relative;border-left:{{ pn.modelBorderL }};border-top:{{ pn.modelBorderT }}">
-          <div data-model-scroll="1" style="position:{{ pn.modelInnerPos }};top:0;left:0;right:0;bottom:0;max-height:{{ pn.modelMaxH }};overflow-y:auto;padding:6px 0;font-size:11.5px;line-height:2.1">
+          <div data-model-scroll="1" style="position:{{ pn.modelInnerPos }};top:0;left:0;right:0;bottom:{{ pn.modelScrollBottom }};max-height:{{ pn.modelMaxH }};overflow-y:auto;padding:6px 0;font-size:11.5px;line-height:2.1">
           <div style="padding:0 14px;font-size:9.5px;letter-spacing:.14em;color:{{ pn.modelHeadColor }}">MODEL</div>
           <sc-for list="{{ pn.modelRows }}" as="mr" hint-placeholder-count="4">
            <sc-if value="{{ mr.liveRow }}" hint-placeholder-val="{{ false }}"><div data-model-row="{{ mr.label }}" data-lit="{{ mr.lit }}" style="display:flex;gap:8px;padding:0 14px 0 {{ mr.indent }}px;background:{{ mr.bg }};white-space:nowrap;overflow:hidden;align-items:center;cursor:{{ mr.cursor }}" style-hover="background:#2e3138"><span onClick="{{ mr.pick }}" style="flex:1;color:{{ mr.color }};overflow:hidden;text-overflow:ellipsis">{{ mr.label }}</span><span onClick="{{ mr.toggleExpand }}" style="color:#62676f;width:12px;flex:none;text-align:center;cursor:{{ mr.cursor }};font-size:11px">{{ mr.chevron }}</span></div></sc-if>
            <sc-if value="{{ mr.greyRow }}" hint-placeholder-val="{{ true }}"><div data-model-row="{{ mr.label }}" data-lit="{{ mr.lit }}" style="display:flex;gap:8px;padding:0 14px 0 {{ mr.indent }}px;background:{{ mr.bg }};white-space:nowrap;overflow:hidden;align-items:center;cursor:{{ mr.cursor }}"><span onClick="{{ mr.pick }}" style="flex:1;color:{{ mr.color }};overflow:hidden;text-overflow:ellipsis">{{ mr.label }}</span><span onClick="{{ mr.toggleExpand }}" style="color:#62676f;width:12px;flex:none;text-align:center;cursor:{{ mr.cursor }};font-size:11px">{{ mr.chevron }}</span></div></sc-if>
           </sc-for>
           </div>
+          <div data-guidance-half="1" data-armed="{{ pn.modelArmed }}" style="position:{{ pn.guidancePos }};left:0;right:0;bottom:0;height:31px;box-sizing:border-box;display:flex;gap:4px;align-items:center;padding:0 14px;border-top:1px solid rgba(255,255,255,.08);font-size:11.5px;white-space:nowrap;overflow:hidden">
+           <span style="font-size:9.5px;letter-spacing:.14em;color:{{ pn.guidanceHeadColor }};margin-right:8px">GUIDANCE</span>
+           <sc-for list="{{ pn.guidanceRows }}" as="gr" hint-placeholder-count="5">
+            <sc-if value="{{ gr.live }}" hint-placeholder-val="{{ false }}"><span data-guidance-row="{{ gr.label }}" data-lit="{{ gr.lit }}" title="{{ gr.meta }}" onClick="{{ gr.pick }}" style="color:{{ gr.color }};background:{{ gr.bg }};border-radius:4px;padding:0 8px;cursor:pointer" style-hover="background:#2e3138">{{ gr.label }}</span></sc-if>
+            <sc-if value="{{ gr.grey }}" hint-placeholder-val="{{ true }}"><span data-guidance-row="{{ gr.label }}" data-lit="{{ gr.lit }}" title="{{ gr.meta }}" style="color:#4a4e55;padding:0 8px;cursor:default">{{ gr.label }}</span></sc-if>
+           </sc-for>
+           <span style="margin-left:auto;color:#62676f;overflow:hidden;text-overflow:ellipsis">{{ pn.guidanceNote }}</span>
+          </div>
          </div>
-         </div>
-         <div data-guidance-half="1" data-armed="{{ pn.modelArmed }}" style="display:flex;gap:4px;align-items:center;padding:4px 14px;border-top:1px solid rgba(255,255,255,.08);font-size:11.5px;white-space:nowrap;overflow:hidden">
-          <span style="font-size:9.5px;letter-spacing:.14em;color:{{ pn.modelHeadColor }};margin-right:8px">GUIDANCE</span>
-          <sc-for list="{{ pn.guidanceRows }}" as="gr" hint-placeholder-count="5">
-           <sc-if value="{{ gr.live }}" hint-placeholder-val="{{ false }}"><span data-guidance-row="{{ gr.label }}" data-lit="{{ gr.lit }}" title="{{ gr.meta }}" onClick="{{ gr.pick }}" style="color:{{ gr.color }};background:{{ gr.bg }};border-radius:4px;padding:0 8px;cursor:pointer" style-hover="background:#2e3138">{{ gr.label }}</span></sc-if>
-           <sc-if value="{{ gr.grey }}" hint-placeholder-val="{{ true }}"><span data-guidance-row="{{ gr.label }}" data-lit="{{ gr.lit }}" title="{{ gr.meta }}" style="color:#4a4e55;padding:0 8px;cursor:default">{{ gr.label }}</span></sc-if>
-          </sc-for>
-          <span style="margin-left:auto;color:#62676f;overflow:hidden;text-overflow:ellipsis">{{ pn.guidanceNote }}</span>
          </div>
          <div style="display:flex;gap:10px;padding:9px 13px;border-top:1px solid rgba(255,255,255,.08)"><span style="color:#82a5c8">›</span><input data-ws-input="{{ pn.id }}" value="{{ pn.wsQ }}" onChange="{{ pn.onWsQ }}" onKeyDown="{{ pn.onWsKey }}" placeholder="{{ pn.wsPlaceholder }}" style="flex:1;background:none;border:none;outline:none;color:#e2e5e9;font-family:inherit;font-size:12px"></input></div>
         </div>

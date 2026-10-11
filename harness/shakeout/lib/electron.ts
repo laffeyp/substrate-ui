@@ -63,6 +63,10 @@ export async function bindPaneAsUser(win: Page, model?: string): Promise<void> {
     if (await header.isVisible()) await header.click();
   }
   await row.click();
+  // UI sprint 132: the guidance line under the model column opens next; `auto` leaves the level to
+  // the model, and picking it starts the session.
+  await win.locator('[data-guidance-half] [data-guidance-row="auto"][data-lit="1"]').first().waitFor({ state: "visible", timeout: 15_000 });
+  await win.locator('[data-guidance-row="auto"]').first().click();
   await win.locator('[placeholder^="type to talk"]').first().waitFor({ state: "visible", timeout: 15_000 });
 }
 

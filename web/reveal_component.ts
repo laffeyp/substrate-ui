@@ -487,6 +487,21 @@ class Component extends DCLogic {
       ? Object.assign({}, x, { armed: null, pickerHalf: 'ws', modelSelIdx: null })
       : x) }));
   }
+  _enterGuidance(paneId) {
+    this.setState(st => ({ panes: st.panes.map(x => {
+      if (x.id !== paneId) return x;
+      const at = GUIDANCE_OPTIONS.findIndex((g) => g.level === (x.guidance ?? null));
+      return Object.assign({}, x, { pickerHalf: 'guidance', guidanceSel: at < 0 ? 0 : at });
+    }) }));
+  }
+  _pickGuidance(paneId, option) {
+    const pane = (this.state.panes || []).find(x => x.id === paneId);
+    if (!pane || !pane.armed || pane.pickerHalf !== 'guidance') return;
+    this.setState(st => ({ panes: st.panes.map(x => x.id === paneId ? Object.assign({}, x, { guidance: option.level }) : x) }));
+    const vm = window.__vm;
+    if (vm && typeof vm.pickBundle === 'function') vm.pickBundle(option.bundle);
+    this._commitPane(paneId, pane.armed);
+  }
   _commitPane(paneId, armed) {
     if (!armed) return;
     const vm = window.__vm;
@@ -833,6 +848,15 @@ class Component extends DCLogic {
     const reveal = (half) => setTimeout(() => {
       for (const el of document.querySelectorAll(half)) el.scrollIntoView({ block: 'nearest' });
     }, 0);
+    if (p.pickerHalf === 'guidance' && p.armed) {
+      const n = GUIDANCE_OPTIONS.length;
+      const at = Math.max(0, Math.min(p.guidanceSel ?? 0, n - 1));
+      if (ev.key === 'ArrowRight') { ev.preventDefault(); setPane({ guidanceSel: (at + 1) % n }); return; }
+      if (ev.key === 'ArrowLeft') { ev.preventDefault(); setPane({ guidanceSel: (at - 1 + n) % n }); return; }
+      if (ev.key === 'Enter') { ev.preventDefault(); this._pickGuidance(paneId, GUIDANCE_OPTIONS[at]); return; }
+      if (ev.key === 'Escape' || ev.key === 'ArrowUp') { ev.preventDefault(); setPane({ pickerHalf: 'model' }); return; }
+      return;
+    }
     if (p.pickerHalf === 'model' && p.armed) {
       const opts = this._modelHalfRows(this.state, p).filter(o => o.notHeader);
       if (!opts.length) return;
@@ -874,7 +898,11 @@ class Component extends DCLogic {
   // bar. A pick commits the armed folder; with nothing armed the half is greyed and inert.
   _modelHalfRows(state, p) {
     const armed = p.armed || null;
-    return this._buildDriverOpts(state, p.id, this._paneDriver(state, p), () => this._commitPane(p.id, armed));
+    // UI sprint 132: picking a model moves on to the guidance line under it; picking a level there
+    // starts the session.
+    return this._buildDriverOpts(state, p.id, this._paneDriver(state, p), () => {
+      if (armed) this._enterGuidance(p.id);
+    });
   }
   _modelSelIdx(p, picks) {
     if (typeof p.modelSelIdx === 'number') return p.modelSelIdx;
@@ -1258,24 +1286,27 @@ class Component extends DCLogic {
       })(),
       // UI sprint 132 (kernel K288): the guidance level for the session the bar will open. Auto
       // leaves it to the daemon, which picks the model's default level at creation.
-      guidanceRows: GUIDANCE_OPTIONS.map((g) => {
-        const lit = (p.guidance ?? null) === g.level;
+      guidanceRows: GUIDANCE_OPTIONS.map((g, i) => {
+        const open = !!p.armed && p.pickerHalf === 'guidance';
+        const lit = open && i === (p.guidanceSel ?? 0);
         return {
           label: g.label, meta: g.meta, lit: lit ? '1' : '0',
-          live: !!p.armed, grey: !p.armed,
+          live: open, grey: !open,
           color: lit ? '#e2e5e9' : '#b9bec5',
-          metaColor: lit ? '#9aa0a8' : '#62676f',
           bg: lit ? '#2e3138' : 'transparent',
-          pick: () => {
-            if (!p.armed) return;
-            this.setState(st => ({ panes: st.panes.map(x => x.id === p.id ? Object.assign({}, x, { guidance: g.level }) : x) }));
-            const vm = window.__vm;
-            if (vm && typeof vm.pickBundle === 'function') vm.pickBundle(g.bundle);
-          },
+          pick: () => this._pickGuidance(p.id, g),
         };
       }),
-      // The chosen level's description, at the end of the guidance line.
-      guidanceNote: (GUIDANCE_OPTIONS.find((g) => g.level === (p.guidance ?? null)) || GUIDANCE_OPTIONS[0]).meta,
+      guidanceHeadColor: p.armed && p.pickerHalf === 'guidance' ? '#62676f' : '#4a4e55',
+      // The lit level's description, at the end of the guidance line.
+      guidanceNote: p.armed && p.pickerHalf === 'guidance'
+        ? GUIDANCE_OPTIONS[Math.max(0, Math.min(p.guidanceSel ?? 0, GUIDANCE_OPTIONS.length - 1))].meta
+        : 'pick a model first',
+      // Guidance is the model column's bottom line; the workspace column carries a blank line of
+      // the same height so the bar keeps its height and the model list keeps its rows.
+      guidanceSpacer: paneW < 480 ? '0px' : '31px',
+      guidancePos: paneW < 480 ? 'static' : 'absolute',
+      modelScrollBottom: paneW < 480 ? 'auto' : '31px',
       modelHeadColor: p.armed ? '#62676f' : '#4a4e55',
       pickerDir: paneW < 480 ? 'column' : 'row',
       modelBorderL: paneW < 480 ? 'none' : '1px solid rgba(255,255,255,.08)',
@@ -1285,9 +1316,11 @@ class Component extends DCLogic {
       // and scrolls inside; stacked under a narrow pane it caps at 140px.
       modelInnerPos: paneW < 480 ? 'static' : 'absolute',
       modelMaxH: paneW < 480 ? '140px' : 'none',
-      wsPlaceholder: p.pickerHalf === 'model' && p.armed
-        ? 'type a path to change folder · ↑↓ moves · ⇧↵ opens · ↵ picks and starts · esc back'
-        : 'type a path · ↑↓ moves · ⇧↵ opens · ↵ picks the folder · ⇥ fills nearest recent',
+      wsPlaceholder: p.pickerHalf === 'guidance' && p.armed
+        ? 'type a path to change folder · ← → moves · ↵ picks the guidance and starts · esc back to models'
+        : p.pickerHalf === 'model' && p.armed
+          ? 'type a path to change folder · ↑↓ moves · ⇧↵ opens · ↵ picks the model · esc back'
+          : 'type a path · ↑↓ moves · ⇧↵ opens · ↵ picks the folder · ⇥ fills nearest recent',
       wsQ: p.wsQ || '',
       onWsQ: (ev) => this.setState(st => ({ panes: st.panes.map(x => x.id === p.id ? Object.assign({}, x, { wsQ: ev.target.value, wsSelIdx: 0, armed: null, pickerHalf: 'ws', modelSelIdx: null }) : x) })),
       onWsKey: (ev) => this._wsKey(p.id, ev),
