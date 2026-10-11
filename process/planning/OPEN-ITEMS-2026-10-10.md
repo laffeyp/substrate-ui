@@ -42,4 +42,4 @@ Items 1–3 closed on 2026-10-10 (roadmap `substrate/process/planning/ROADMAP-20
 
 13. **Workspace.** The WORKSPACE heading (`web/reveal.html:122`) gets a grey hint on the same line that says what the column is for: choosing where to work, or opening a previous session. The Architect's wording to start from: "choose where you want to work · or open a previous session".
 14. **Model.** The MODEL heading (`web/reveal.html:143`) gets the same kind of hint: "choose a model to work with".
-15. **Guidance.** This section needs design work before it gets a hint. It is to grow from one level picker into a set of controls chosen after the model: source discipline, verbosity, register, and how readily the model delegates or runs a topology. Research: `substrate/process/planning/RESEARCH-2026-10-10-guidance-controls-r2.md`.
+15. **Guidance.** This section needs design work before it gets a hint. It is to grow from one level picker into a set of controls chosen after the model: source discipline, verbosity, register, and how readily the model delegates or runs a topology. Research: `substrate/process/planning/RESEARCH-2026-10-10-guidance-controls-r3.md`.
