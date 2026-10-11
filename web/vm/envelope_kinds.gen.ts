@@ -22,6 +22,7 @@ export const EnvelopeKind = {
   Returned: "Returned",
   RunFinalised: "substrate.RunFinalised",
   RunStarted: "substrate.RunStarted",
+  SessionChanged: "SessionChanged",
   SessionEndRequested: "SessionEndRequested",
   SessionEnded: "SessionEnded",
   SessionStarted: "SessionStarted",

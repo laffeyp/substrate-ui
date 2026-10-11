@@ -52,7 +52,8 @@ def test_a_workspace_role_prompt_rides_the_record(
     manifest = app.registry.get(sid)
     fragments = [
         e["payload"]
-        for e in api.read_record(Path(manifest.record_root))
+        # The default bundle's fragments are large enough to be stored as blobs (UI sprint 121).
+        for e in api.read_record(Path(manifest.record_root), resolve_blobs=True)
         if e["kind"] == "PromptFragment" and e["payload"]["source"] == "role"
     ]
     assert len(fragments) == 1, "the role producer never ran"

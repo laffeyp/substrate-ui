@@ -93,15 +93,15 @@ def test_records_exclude_sessions_hides_launch_prefixed(base: str) -> None:
 
 
 def test_bundles_lists_shipped_defaults(base: str) -> None:
-    """GET /api/bundles returns the shipped default bundles (session + the
-    application bundles piece H sprint 231 shipped)."""
+    """GET /api/bundles returns the shipped default bundles (harness, named `session` before
+    session vocabulary v0.4, and the application bundles piece H sprint 231 shipped)."""
     status, bundles = _get(base + "/api/bundles")
     assert status == 200
     assert isinstance(bundles, list)
     names = {b["name"] for b in bundles}
-    assert "session" in names, f"shipped session default missing; got {names}"
-    # Piece H sprint 231 ships five default bundles alongside session.
-    assert len(bundles) >= 2, f"expected ≥2 bundles (session + at least one app); got {names}"
+    assert "harness" in names, f"shipped harness bundle missing; got {names}"
+    # Piece H sprint 231 ships the application bundles alongside it.
+    assert len(bundles) >= 2, f"expected ≥2 bundles (harness + at least one app); got {names}"
 
 
 def test_bundles_shape(base: str) -> None:

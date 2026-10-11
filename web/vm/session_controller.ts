@@ -40,6 +40,7 @@ const LEGACY_SESSION_END_REASONS: Record<string, string> = { timeout: "turn_cap"
 const KIND_DISPOSITION: Record<EnvelopeKindValue, "rendered" | "ignored"> = {
   [EnvelopeKind.SessionStarted]: "rendered",
   [EnvelopeKind.BackgroundTaskEnded]: "rendered",
+  [EnvelopeKind.SessionChanged]: "rendered",
   [EnvelopeKind.UserMessage]: "rendered",
   [EnvelopeKind.ModelReply]: "rendered",
   [EnvelopeKind.FinalAnswer]: "rendered",
@@ -154,7 +155,7 @@ const EMPTY_SNAPSHOT: Snapshot = {
   // reveal-shell session opens with the bundle's system-prompt fragments
   // wired. `substrate/bundles.py` line 72 declares this as the canonical
   // daily-driver bundle. Callers can still override via openSession({bundle}).
-  bundleSlug: "session",
+  bundleSlug: "standard",
   workspacePath: null,
   workspaceShape: null,
   turnIndex: 0,
@@ -501,7 +502,7 @@ export class SessionController {
     await this.refreshTasks();
   }
 
-  async sendTurn(text: string): Promise<void> {
+  async sendTurn(text: string, opts: { skill?: string; driverCommand?: boolean } = {}): Promise<void> {
     const trimmed = text.trim();
     if (!trimmed) return;
     if (!this.snap.sessionId) await this.openSession();
@@ -526,7 +527,14 @@ export class SessionController {
     this.emit("TURN_SUBMITTED", { session_id: sessionId, turn_index: turnIndex, text_length: trimmed.length });
     const result = await this.client.fetchJson<unknown>(
       `/api/session/${encodeURIComponent(sessionId)}/turn`,
-      { method: "POST", body: { text: trimmed } },
+      {
+        method: "POST",
+        body: opts.skill
+          ? { text: trimmed, skill: opts.skill }
+          : opts.driverCommand
+            ? { text: trimmed, driver_command: true }
+            : { text: trimmed },
+      },
     );
     if (!result.ok) {
       this.appendTranscript({
@@ -778,6 +786,11 @@ export class SessionController {
       await this.sendTurn(text);
       return false;
     }
+    // UI sprint 123: `//<command>` passes `/<command>` to the driver itself (e.g. Claude's /context).
+    if (text.startsWith("//")) {
+      await this.sendTurn(text.slice(1), { driverCommand: true });
+      return true;
+    }
     const parts = text.slice(1).split(/\s+/);
     const cmd = parts[0].toLowerCase();
     const rest = parts.slice(1).join(" ");
@@ -839,6 +852,12 @@ export class SessionController {
         },
       },
       { names: ["interrupt", "int"], usage: "/interrupt", run: () => this.interruptTurn() },
+      {
+        // UI sprint 122: load the dellm skill for this session and send the text after it as the
+        // turn (kernel K277). The skill stays loaded for the rest of the session.
+        names: ["dellm"], usage: "/dellm <text>",
+        run: (rest) => this.sendTurn(rest || "Apply the dellm skill to your next reply.", { skill: "dellm" }),
+      },
       { names: ["clear"], usage: "/clear", run: () => { this.patch({ transcript: [] }); } },
       {
         names: ["help", "?"], usage: "/help",
@@ -1153,6 +1172,16 @@ export class SessionController {
           : `stopped (${String(payload.stopped_because ?? "")})`;
         const cmd = String(payload.command ?? "").slice(0, 80);
         this.appendTranscript({ seq: env.seq, kind: env.kind, role: "system", text: `task ${id} ${how} · ${cmd}` });
+        return;
+      }
+      case EnvelopeKind.SessionChanged: {
+        // Kernel K274 (session vocabulary § P.4): the session's driver, bundle, reminder line or
+        // date differs from the record; the model was told the same line beside the message.
+        const field = String(payload.field ?? "");
+        const text = field === "per_turn"
+          ? "environment update: the reminder line beside each message changed"
+          : `environment update: ${field} changed from ${String(payload.old ?? "") || "(none)"} to ${String(payload.new ?? "") || "(none)"}`;
+        this.appendTranscript({ seq: env.seq, kind: env.kind, role: "system", text });
         return;
       }
       case EnvelopeKind.SessionWarning: {
