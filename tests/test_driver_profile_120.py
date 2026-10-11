@@ -37,7 +37,7 @@ def _sources() -> list[Path]:
 
 # The one passage allowed to name the forbidden strings is the rule that forbids them: the copied
 # CLAUDE.md section in the default guidance (kernel K275), from its heading to the next heading.
-_BAN = "# No Claude attribution in git, ever"
+_BAN = "# No model attribution in git"
 
 
 def _without_the_ban(text: str) -> str:
