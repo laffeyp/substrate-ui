@@ -14,22 +14,14 @@
 
 ## Guidance
 
-1. **Review the imported Claude text, line by line.**
-   - **What it is.** The `standard` bundle (`style.md`, `methodology.md`, `per-turn.md`), `standard-small`, the `dellm` and `dellm-small` skills and `prompts/default-small.md` were copied from this machine's Claude Code setup, as "copy first, improve later".
-   - **What to do.** Make every text generic to any model and harness, run it through `dellm`, and check each line makes sense to a model that is not Claude.
-   - **Found so far.** `standard/methodology.md` opens with Claude Code's own header ("Codebase and user instructions are shown below…"). Its "No Claude attribution in git, ever" section names Claude six times; it should state the rule for any model.
-2. **Three guidance levels, plus the default.**
-   - high: today's `standard`, after item 1's edit;
-   - medium: an edited-down version;
-   - low: a basic version;
-   - default: the bare `harness` bundle, which already exists.
-
-   Today's model classes (`harness_agent`, `large`, `small`) pick between `standard` and `standard-small`; the levels replace or extend that mapping.
-3. **A control for the level, in the workspace bar.** Divide the model half again, or add a row below it, where a session's guidance level is chosen. Name to settle: "level of control" or "harness prompting level".
+Items 1–3 closed on 2026-10-10 (roadmap `substrate/process/planning/ROADMAP-2026-10-10-guidance-levels.md`, K287, K288, U132):
+1. **The imported text.** It is generic: no model, vendor or person named, the operator's memory index removed, one voice, `dellm`-ed. A test scans all 17 shipped texts.
+2. **Four levels.** `harness` (291 tokens), low (562), medium (1,218) and high (2,995).
+3. **The control.** A GUIDANCE line in the workspace bar, with a default level that follows the model.
 
 ## Harness drivers
 
-4. **New spec rounds for K286.** Product round 14, tech round 8 and design round 3 still describe MCP calls as `HarnessToolCall` with `via = mcp`. They need product round 15, tech round 9 and design round 4, matching vocabulary § Q.6: Substrate's tools are `ToolCall` and `ToolResult` with `origin = mcp`.
+4. *Closed (K289).* Product round 15, tech round 9 and design round 4 describe MCP calls as Substrate's `ToolCall` with `origin = mcp`, along with the guidance levels.
 5. **`electron_smoke` fails on the first launch after an install.** It failed once with 0 signals, then passed on the next two runs (U131). Cause not found.
 6. **The `deterministic` stand-in compacts every turn.** The `standard` guidance (head, system part and reminder line) measures about 4,988 tokens, more than the stand-in's declared 4,096-token context. So every turn after the first drops the earlier turns. Real drivers declare far more room (CLI drivers 100,000 tokens; Ollama models their advertised context), and none of the 70 sessions on this machine holds a `TranscriptCompacted` event. To decide: raise the stand-in's context, or keep it small as the compaction test bed.
    - *Closed, the display half.* The console read `dropped_seq_start` and `dropped_seq_end`, but the kernel's event carries one pair, `dropped_seq_range`. So every compaction row printed "?–?". Fixed, with a unit test.
