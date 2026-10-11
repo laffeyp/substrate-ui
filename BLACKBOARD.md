@@ -872,6 +872,23 @@ Twelve PNGs at `captures/pixel-baseline-2026-09-23/`: six states (`empty`, `one_
 
 *Agent maintains. Last 10 increment closes; older roll into ## Built as compressed paragraphs.*
 
+### UI U124, U128, the Codex git check, and CLI drivers that cannot write (2026-10-10)
+- **U124 (built, `35a7e47`).** The unbound pane's bar holds the workspace picker on the left and the model picker on the right. The model half holds the header dropdown's rows: cli agents, ollama · cloud and ollama · local, folded at first, as bright as the workspace rows. It is greyed until a folder is picked, and a model pick starts the session. It fills the workspace half's height and scrolls inside. Roadmap `process/planning/ROADMAP-2026-10-10-model-picker-in-the-workspace-bar.md`.
+- **U128 (built, `35a7e47`).** ↵ picks, and ⇧↵ or ⌥↵ opens a row; a group opens on ↵. An open folder's sessions join the key list. On a focused empty pane the keys reach the bar without a click. A key-only run went ↓ ↵ ↵ ↓ ⇧↵ ↓ ↵ and started a session on `claude` (opus).
+- **Codex git check (`4bf111c`, installed).** `codex exec` exited 1 in every per-session sandbox ("Not inside a trusted directory"). The command now carries `--skip-git-repo-check`, and Codex answers in the installed app.
+- **Open: CLI drivers cannot write.** Found in the installed app the same evening:
+  - **cursor-agent** stops at "Workspace Trust Required" (`s_96a5fa1e54ca4ba0997f834c`).
+  - **Codex** runs read-only. Its own log records `sandbox_policy: read-only` and `approval_policy: never`, and its `exec` write failed with "operation not permitted" (`s_a5f8ec2bdd124d4d80cde27f`, `~/.codex/sessions/2026/10/10/rollout-2026-10-10T18-07-58-….jsonl`).
+  - **Claude Code** has had its own tools off since U120's `--tools ""`, which the Architect never asked for. Claude still writes through Substrate's text tools (`s_ee1209c1e7b84cbabe13c647`).
+  - **The Architect's direction:** every driver gets full permission, with no prompt and no read-only option.
+  - **The flags:** codex `--dangerously-bypass-approvals-and-sandbox`; cursor-agent `--trust --force --sandbox disabled`; claude drops `--tools ""` and adds `--dangerously-skip-permissions`. They are not applied: Claude Code's auto-mode classifier refused the `server.py` edit, so the change waits on the Architect. Research: `process/planning/RESEARCH-2026-10-10-driver-workspace-permission.md`.
+- **Still open on the roadmap:**
+  - U125: the header indicator.
+  - U126: the gates. `model_half_starts_session.ts` clicks a row that is not in the real roster.
+  - U127: the specs.
+  - The resume-from-session-row check.
+  - Removing "ready to pick a session" from `AuthPromptCard.tsx:213`.
+
 ### UI U120–U123 (2026-10-10) — Claude switched off, standard by default, /dellm, //
 - **U120.** The Claude driver runs with its tools, MCP servers and settings sources off, `--system-prompt` always sent, and its git instructions removed (`KNOWN_CLI_ADAPTERS["claude"]`). The gate `test_driver_profile_120.py` checks that no e-mail or attribution string appears in Substrate, and that `/context` through the profile is 0 tokens. A real commit test runs on demand with `SUBSTRATE_LIVE_DRIVER_TESTS=1`. Through the installed app, Claude reported no CLAUDE.md, output style or hook.
 - **U121.** New sessions open on `standard`. `driver_params.cache_layout` is an opt-in for `claude` only, refused with a 400 for any other driver. A `/model` between turns shows as an environment-update row.
