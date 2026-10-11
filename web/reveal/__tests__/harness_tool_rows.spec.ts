@@ -50,3 +50,10 @@ test("Substrate's own ToolCall rows still count as tool cards", () => {
   assert.ok(isToolResultRow({ kind: EnvelopeKind.ToolResult }));
   assert.ok(!isToolCallRow({ kind: EnvelopeKind.ModelReply }));
 });
+
+test("a compaction row shows the range the kernel wrote", () => {
+  const c = controller();
+  feed(c, { seq: 29, kind: EnvelopeKind.TranscriptCompacted, payload: { strategy: "drop_oldest", dropped_seq_range: [17, 27], kept_seq_start: 28, reason: "budget", tokens_before: 6000, tokens_after: 4000 } });
+  const row = c.snapshot().transcript.find((r) => r.kind === EnvelopeKind.TranscriptCompacted);
+  assert.strictEqual(row?.text, "— transcript compacted (dropped seq 17–27)");
+});

@@ -1247,8 +1247,12 @@ export class SessionController {
         return;
       }
       case EnvelopeKind.TranscriptCompacted: {
-        const droppedStart = payload.dropped_seq_start ?? "?";
-        const droppedEnd = payload.dropped_seq_end ?? "?";
+        // The kernel writes the range as one pair, `dropped_seq_range: [start, end]`
+        // (session vocabulary § D). This row read `dropped_seq_start` / `_end`, which no event
+        // has, and always printed "?–?".
+        const range = Array.isArray(payload.dropped_seq_range) ? payload.dropped_seq_range : [];
+        const droppedStart = typeof range[0] === "number" ? range[0] : "?";
+        const droppedEnd = typeof range[1] === "number" ? range[1] : "?";
         this.appendTranscript({
           seq: env.seq, kind: env.kind, role: "system",
           text: `— transcript compacted (dropped seq ${droppedStart}–${droppedEnd})`,
