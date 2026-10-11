@@ -53,7 +53,23 @@ test("Substrate's own ToolCall rows still count as tool cards", () => {
 
 test("a compaction row shows the range the kernel wrote", () => {
   const c = controller();
-  feed(c, { seq: 29, kind: EnvelopeKind.TranscriptCompacted, payload: { strategy: "drop_oldest", dropped_seq_range: [17, 27], kept_seq_start: 28, reason: "budget", tokens_before: 6000, tokens_after: 4000 } });
+  feed(c, { seq: 29, kind: EnvelopeKind.TranscriptCompacted, payload: { strategy: "rolling_window", dropped_seq_range: [17, 27], kept_seq_start: 28, reason: "driver_window_exceeded", tokens_before: 6000, tokens_after: 4000 } });
   const row = c.snapshot().transcript.find((r) => r.kind === EnvelopeKind.TranscriptCompacted);
-  assert.strictEqual(row?.text, "— transcript compacted (dropped seq 17–27)");
+  assert.strictEqual(row?.text, "— prompt history: earlier turns dropped (seq 17–27)");
+});
+
+test("a v0.7 compaction row names the cleared tool output (§ S.4)", () => {
+  const c = controller();
+  feed(c, { seq: 40, kind: EnvelopeKind.TranscriptCompacted, payload: { strategy: "tool_output_cleared", cleared_through_seq: 33, kept_seq_start: 17, reason: "driver_window_exceeded", tokens_before: 70000, tokens_after: 28000, token_scale: 1.2 } });
+  const row = c.snapshot().transcript.find((r) => r.kind === EnvelopeKind.TranscriptCompacted);
+  assert.strictEqual(row?.text, "— prompt history: older tool output cleared (results through seq 33)");
+});
+
+test("a repeated cut adds no row (the codex record repeats 17–146 three times)", () => {
+  const c = controller();
+  for (const seq of [150, 169, 180]) {
+    feed(c, { seq, kind: EnvelopeKind.TranscriptCompacted, payload: { strategy: "rolling_window", dropped_seq_range: [17, 146], kept_seq_start: 147, reason: "driver_window_exceeded", tokens_before: 228114, tokens_after: 9322 } });
+  }
+  const rows = c.snapshot().transcript.filter((r) => r.kind === EnvelopeKind.TranscriptCompacted);
+  assert.strictEqual(rows.length, 1);
 });
