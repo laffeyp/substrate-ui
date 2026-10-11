@@ -17,11 +17,18 @@ export interface Launch {
 
 /** Each launch gets its own user-data dir (Electron's single-instance lock keys on it) and its own
  * state root (SUBSTRATE_HOME), so a gate never touches the user's app or ~/.substrate.
+ * The model roster is isolated the same way: by default Ollama points at a closed port and no CLI
+ * is discovered, so the bar offers its one fallback row, `deterministic`, on every machine and every
+ * launch. A gate that needs this machine's real models passes `{ roster: "live" }`.
  * SHAKEOUT_APP=<Substrate.app> runs the packaged bundle. */
-export function launchArgs(): Launch {
+export function launchArgs(opts: { roster?: "offline" | "live" } = {}): Launch {
   const dir = scratchDir("electron-shakeout-");
   const state = scratchDir("electron-shakeout-state-");
   const env = { ...process.env, SUBSTRATE_HOME: state } as Record<string, string>;
+  if ((opts.roster ?? "offline") === "offline") {
+    env.OLLAMA_BASE_URL = "http://127.0.0.1:9";
+    env.SUBSTRATE_CLI_ADAPTERS = "";
+  }
   const app = process.env.SHAKEOUT_APP || "";
   return {
     options: app
@@ -44,15 +51,21 @@ export async function waitForApp(win: Page, timeout = 30_000): Promise<void> {
 /** Bind the focused unbound pane the way a first-run user does: Enter in the path input picks the
  * first row, the per-session sandbox, and arms the bar's model half (UI sprint 124). The model
  * groups start folded (UI sprint 128), so the user opens them and clicks a model: `model`, or the
- * roster's default. Resolves once the chat prompt is visible. */
+ * roster's default (`deterministic` on an offline roster). Resolves once the chat prompt is visible. */
 export async function bindPaneAsUser(win: Page, model?: string): Promise<void> {
   const path = win.locator('input[placeholder^="type a path"]').first();
   await path.waitFor({ state: "visible", timeout: 15_000 });
   await path.click();
   await win.keyboard.press("Enter");
   await win.locator('[data-model-half][data-armed="1"]').first().waitFor({ state: "visible", timeout: 15_000 });
+  // The roster's default, once the roster has loaded; an offline roster has none, and its one row
+  // is `deterministic`.
   const target = model ?? await win.waitForFunction(
-    () => (window as unknown as { __vm?: { snapshot(): { driverDefault: string | null } } }).__vm?.snapshot().driverDefault ?? null,
+    () => {
+      const w = window as unknown as { __vm?: { snapshot(): { driverDefault: string | null } }; __vmSignals?: { name: string }[] };
+      if (!(w.__vmSignals ?? []).some((s) => s.name === "DRIVER_ROSTER_LOADED")) return null;
+      return w.__vm?.snapshot().driverDefault ?? "deterministic";
+    },
     undefined,
     { timeout: 15_000 },
   ).then((h) => h.jsonValue() as Promise<string>);

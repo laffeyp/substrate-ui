@@ -32,7 +32,7 @@ async function chipText(win: import("playwright").Page): Promise<string> {
 }
 
 async function main(): Promise<void> {
-  const launch = launchArgs();
+  const launch = launchArgs({ roster: "live" });
   const app = await electron.launch({ ...launch.options, timeout: 60_000 });
   let code = 1;
   try {

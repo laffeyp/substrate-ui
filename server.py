@@ -1506,10 +1506,16 @@ def _agent_models(app: App) -> dict[str, object]:
 
     ollama_cloud = [t for t in ollama if _is_cloud(t)]
     ollama_local = [t for t in ollama if not _is_cloud(t)]
+    # SUBSTRATE_CLI_ADAPTERS, when set, limits discovery to the comma-separated names it lists
+    # (empty: none), as OLLAMA_BASE_URL moves the Ollama side. The offline gates set both, so the
+    # roster they bind from does not depend on what this machine has installed.
+    allowed_env = os.environ.get("SUBSTRATE_CLI_ADAPTERS")
+    allowed = None if allowed_env is None else {n.strip() for n in allowed_env.split(",") if n.strip()}
     cli = sorted(
         name
         for name, entry in KNOWN_CLI_ADAPTERS.items()
-        if (cmd := entry.get("command")) and isinstance(cmd, list) and shutil.which(cmd[0])
+        if (allowed is None or name in allowed)
+        and (cmd := entry.get("command")) and isinstance(cmd, list) and shutil.which(cmd[0])
     )
     # Sprint 085 followup — subset of cli entries with a login_command
     # the AuthPromptCard can host. Opencode is present as a driver but
