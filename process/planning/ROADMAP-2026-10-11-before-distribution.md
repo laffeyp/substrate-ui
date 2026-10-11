@@ -11,6 +11,14 @@
 - **10. The login card.** Remove "ready to pick a session" (`AuthPromptCard.tsx:213`) and check the layout of that bottom row.
 - **The input bar's hint.** Before a session exists, the hint in the input bar lists its keys. Two parts are false and come out: "type a path" (typed text is not treated as a folder path) and "‹symbol› fills nearest" (nothing autocompletes). The other key hints stay where they are true: ↑↓ moves, shift-enter opens, enter picks the folder. The input bar itself, the program's text input, is unchanged.
 
+### One top bar
+
+Today the app has two top bars: one in the terminal view and one in the reveal view. They have the same elements at different sizes and layouts, and some contents differ. Split panes each carry their own header.
+
+- **Only the reveal view's top bar is kept,** with its sizes and layout. It always sits at the top of the app. The terminal view's top bar is removed.
+- **Panes carry no top bar of their own.** Splitting no longer creates, moves or duplicates a top bar per pane.
+- **The bar shows the focused pane.** When focus moves to another pane, the same bar changes its contents to that pane's: the reveal button's state, the model indicator, the workspace indicator, the pane name and the session name.
+
 ### The workspace bar
 
 - **Picker steps in sequence.** Model and guidance come after the workspace step, not to its right. The order is: workspace; then, unless a previous session was picked, model; then the guidance row beneath it. Picking each in turn starts the session. Nothing is greyed out: each step appears when its turn comes. The model list is left-aligned like the workspace list, and its carets point the same way. A control added later becomes the next step in the sequence.
@@ -28,7 +36,7 @@
 
 Cmd+T opens a terminal pane in the pane system. It runs the user's shell (`$SHELL`, with the user's own config files) and draws it, so the pane works as the user's terminal does. The user can set a different shell.
 
-The terminal pane has no reveal pane, no records or studio top bar, and no model picker. It has no tie to Substrate's runs or record. It opens in the workspace of the place it was opened from.
+The terminal pane has no reveal view, no records, no studio and no model picker. It has no tie to Substrate's runs or record. It opens in the workspace of the place it was opened from. While it is the focused pane, the one top bar shows it.
 
 ## After distribution
 
