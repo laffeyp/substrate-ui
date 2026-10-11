@@ -48,7 +48,12 @@ from substrate.topologies import bundled
 from substrate.topologies.session.environment import session_baseline
 from substrate.adapters.harness_streams import SUBSTRATE_MCP_SERVER
 from substrate.topologies.session.mcp_channel import handle_jsonrpc
-from substrate.topologies.session.model_class import class_variant, classify
+from substrate.topologies.session.model_class import (
+    class_variant,
+    classify,
+    guidance_bundle,
+    guidance_level,
+)
 from substrate.topologies.session.skills import make_skill_tool
 from substrate.topologies.tool_loop.delegate import make_delegate
 from substrate.topologies.tool_loop.tools import full_suite
@@ -719,10 +724,9 @@ def _build_session_topology_from_manifest(
         # Sprint 240 wires SessionStarted; thread the manifest fields
         # required by that envelope's schema.
         workspace_shape=manifest.workspace_shape,
-        # Kernel K278: a small model reads the compressed default in place of `standard`.
-        bundle=class_variant(manifest.bundle, model_class)
-        if manifest.bundle == "standard"
-        else manifest.bundle,
+        # UI sprint 132: the guidance level was resolved at creation and is on the manifest; the
+        # session reads that bundle every turn (no per-turn remap by model class).
+        bundle=manifest.bundle,
         parent_session_id=manifest.composite_of,
         script=None,
         first_turn_user_message=first_turn_user_message,
@@ -1028,8 +1032,8 @@ _MODEL_CLASS_CACHE: dict[str, str] = {}
 
 
 def _model_class(name: str) -> str:
-    """Kernel K278: harness_agent for a CLI adapter; for an Ollama model, small below 30B
-    parameters (from /api/show `details.parameter_size`), else large. Cached per model; an
+    """Kernels K278, K288: harness_agent for a CLI adapter; for an Ollama model, small below 14B
+    parameters, medium below 70B (from /api/show `details.parameter_size`), else large. Cached per model; an
     unreachable Ollama answers large for this call only."""
     if name in KNOWN_CLI_ADAPTERS:
         return classify(is_cli=True)
@@ -2589,7 +2593,14 @@ class Handler(BaseHTTPRequestHandler):
         # driver runs without its intended system-prompt fragments. Callers
         # can still pass `null` explicitly to opt out; only a MISSING field
         # defaults.
-        bundle = body.get("bundle", "standard")
+        # UI sprint 132 (kernel K288): with no bundle named, the session gets its model's default
+        # guidance level (high for a CLI or a large model, medium, or low), resolved once, here,
+        # and stored on the manifest. A bundle the caller names, a level's bundle included, is
+        # used as given; `null` still opts out.
+        if "bundle" in body:
+            bundle = body.get("bundle")
+        else:
+            bundle = guidance_bundle(guidance_level(_model_class(driver)))
         # Sprint 223a: `role` per TECH-SPEC §1.6.5. Resolve at create time so
         # a nonexistent role name fails 400 immediately rather than at first
         # `/turn`. The resolver's `RegistrationError` carries the four-layer

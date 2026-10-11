@@ -158,7 +158,9 @@ const EMPTY_SNAPSHOT: Snapshot = {
   // reveal-shell session opens with the bundle's system-prompt fragments
   // wired. `substrate/bundles.py` line 72 declares this as the canonical
   // daily-driver bundle. Callers can still override via openSession({bundle}).
-  bundleSlug: "standard",
+  // UI sprint 132: no bundle picked means "auto": the daemon gives the session its model's
+  // default guidance level.
+  bundleSlug: null,
   workspacePath: null,
   workspaceShape: null,
   turnIndex: 0,
