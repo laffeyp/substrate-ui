@@ -6,6 +6,8 @@
 export const EnvelopeKind = {
   BackgroundTaskEnded: "BackgroundTaskEnded",
   FinalAnswer: "FinalAnswer",
+  HarnessToolCall: "HarnessToolCall",
+  HarnessToolResult: "HarnessToolResult",
   InjectionApplied: "substrate.InjectionApplied",
   InputBuildFailed: "substrate.InputBuildFailed",
   InterruptRequested: "InterruptRequested",
