@@ -40,7 +40,18 @@ async function waitForReplies(win: Page, n: number): Promise<void> {
 function readRecord(state: string, sid: string): Env[] {
   const dir = join(state, "sessions", sid, "record");
   const files = readdirSync(dir).filter((f) => /^events-\d+.*\.jsonl$/.test(f)).sort();
-  return files.flatMap((f) => readFileSync(join(dir, f), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as Env));
+  // A large payload is stored as {"$blob": "sha256:<hex>"} under blobs/sha256/<hex[0:2]>/<hex>;
+  // the default bundle (UI sprint 121) makes PromptComposed large enough to be one.
+  const resolve = (env: Env): Env => {
+    const ref = (env.payload as { $blob?: string } | undefined)?.$blob;
+    if (typeof ref !== "string" || !ref.startsWith("sha256:")) return env;
+    const hex = ref.slice("sha256:".length);
+    const payload = JSON.parse(readFileSync(join(dir, "blobs", "sha256", hex.slice(0, 2), hex), "utf8"));
+    return { ...env, payload } as Env;
+  };
+  return files.flatMap((f) =>
+    readFileSync(join(dir, f), "utf8").split("\n").filter(Boolean).map((l) => resolve(JSON.parse(l) as Env)),
+  );
 }
 
 async function main(): Promise<void> {

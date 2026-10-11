@@ -872,6 +872,12 @@ Twelve PNGs at `captures/pixel-baseline-2026-09-23/`: six states (`empty`, `one_
 
 *Agent maintains. Last 10 increment closes; older roll into ## Built as compressed paragraphs.*
 
+### UI U120–U123 (2026-10-10) — Claude switched off, standard by default, /dellm, //
+- **U120.** The Claude driver runs with its tools, MCP servers and settings sources off, `--system-prompt` always sent, and its git instructions removed (`KNOWN_CLI_ADAPTERS["claude"]`). The gate `test_driver_profile_120.py` checks that no e-mail or attribution string appears in Substrate, and that `/context` through the profile is 0 tokens. A real commit test runs on demand with `SUBSTRATE_LIVE_DRIVER_TESTS=1`. Through the installed app, Claude reported no CLAUDE.md, output style or hook.
+- **U121.** New sessions open on `standard`. `driver_params.cache_layout` is an opt-in for `claude` only, refused with a 400 for any other driver. A `/model` between turns shows as an environment-update row.
+- **U122.** `/dellm <text>` sends the turn with the `dellm` skill loaded for the session.
+- **U123.** `//<command>` sends `/<command>` to a driver that has slash commands, today `claude`; the model's history leaves it out.
+
 ### Kernel K265 follow-through (2026-10-09) — prompt pieces once across a restart; skips named
 - New gate `session_prompt_once_across_restart.ts` (in `gates:electron`): one turn, quit, reopen, attach, one turn; the record holds its session-open fragments once, before the first message, under one `RunStarted`, and the second turn's prompt names the same ones.
 - New `pytest.ini` (`addopts = -ra`): the UI suite now ends with a line per skipped or failed test and its reason.

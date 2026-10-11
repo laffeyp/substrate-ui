@@ -84,7 +84,7 @@ def test_patch_bundle_unknown_name_returns_400(app: server.App, base: str, tmp_p
     assert status == 400, body
     assert "does-not-exist" in body["error"] or "bundle" in body["error"]
     manifest = app.registry.get(sid)
-    assert manifest.bundle == "session"  # unchanged: the sprint-054 default, not the rejected name
+    assert manifest.bundle == "standard"  # unchanged: the default bundle, not the rejected name
 
 
 def test_patch_bundle_non_string_non_null_returns_400(base: str, tmp_path: Path) -> None:

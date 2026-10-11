@@ -44,6 +44,9 @@ from urllib.parse import parse_qs, unquote, urlparse
 import msgspec
 from substrate import api
 from substrate.topologies import bundled
+from substrate.topologies.session.environment import session_baseline
+from substrate.topologies.session.model_class import class_variant, classify
+from substrate.topologies.session.skills import make_skill_tool
 from substrate.topologies.tool_loop.delegate import make_delegate
 from substrate.topologies.tool_loop.tools import full_suite
 
@@ -235,7 +238,14 @@ def _daemon_driver_resolver(
         # Responder.name carries the version too so log lines and
         # error messages point at the exact model that failed.
         display_name = f"{name}:{version}" if version else name
-        responder: Any = CliResponder(cli_cmd, name=display_name, cwd=cli_workspace)
+        profile = KNOWN_CLI_ADAPTERS[name]
+        responder: Any = CliResponder(
+            cli_cmd,
+            name=display_name,
+            cwd=cli_workspace,
+            system_flag=profile.get("system_flag"),
+            env=profile.get("env"),
+        )
     else:
         p = params or {}
         # Sprint 051: num_ctx must match the model's advertised context, not
@@ -615,6 +625,9 @@ def _build_session_topology_from_manifest(
             model_resolver=lambda name: _daemon_driver_resolver(app, name),
         ),
     }
+    # Kernel K277: the `skill` tool loads a named guide (dellm) when the user asks for it.
+    model_class = _model_class(manifest.driver)
+    session_tools["skill"] = make_skill_tool(Path(manifest.workspace), model_class)
     allowed = _allowed_tool_names(manifest)
     if allowed is not None:
         session_tools = {name: tool for name, tool in session_tools.items() if name in allowed}
@@ -632,15 +645,31 @@ def _build_session_topology_from_manifest(
         # Sprint 240 wires SessionStarted; thread the manifest fields
         # required by that envelope's schema.
         workspace_shape=manifest.workspace_shape,
-        bundle=manifest.bundle,
+        # Kernel K278: a small model reads the compressed default in place of `standard`.
+        bundle=class_variant(manifest.bundle, model_class)
+        if manifest.bundle == "standard"
+        else manifest.bundle,
         parent_session_id=manifest.composite_of,
         script=None,
         first_turn_user_message=first_turn_user_message,
         # The role prompt resolves against the session's workspace, the same root the create-time
         # check used. Before 2026-10-08 neither argument was passed and no UI session carried its
         # role's prompt (lens audit F316, N004).
-        role=manifest.role,
+        role=class_variant(manifest.role, model_class) if manifest.role == "default" else manifest.role,
         role_repo_root=Path(manifest.workspace),
+        # Kernel sprint K273: the environment the model is told about, computed here because it
+        # reads git, the clock and the platform. The session records it once, at open.
+        baseline=session_baseline(
+            manifest.workspace,
+            manifest.driver,
+            tuple(str(a) for a in getattr(responder, "command", ())),
+        ),
+        # UI sprint 121: the opt-in layout, only where the driver has a system channel.
+        cache_layout=_cache_layout_refusal(manifest.driver, manifest.driver_params) is None
+        and bool((manifest.driver_params or {}).get("cache_layout")),
+        # Kernel K276: the operator's and the workspace repo's memory indexes, at session open.
+        memory=True,
+        model_class=model_class,
     )
     return topo
 
@@ -710,6 +739,18 @@ KNOWN_CLI_ADAPTERS: dict[str, Any] = {
     # CLIs never touch this block.
     "claude": {
         "command": ["claude", "-p"],
+        # The driver profile (UI sprint 120; RESEARCH-2026-10-10-substrate-default-guidance-r7).
+        # `isolation_flags` switch off what Claude Code would load from this machine: its own
+        # tools, MCP servers, and every settings source (CLAUDE.md, hooks, output style, memory).
+        # Measured 2026-10-10: with them, `/context` lists an 11-token system prompt and nothing
+        # else. `system_flag` carries Substrate's system text (session vocabulary § P.3).
+        # `env` removes Claude Code's git and commit instructions, where its attribution
+        # trailer lives. `slash_commands`: `claude -p "/<command>"` runs the command locally
+        # (UI sprint 123).
+        "isolation_flags": ["--tools", "", "--strict-mcp-config", "--setting-sources", ""],
+        "system_flag": ["--system-prompt"],
+        "env": {"CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS": "1"},
+        "slash_commands": True,
         "login_command": ["claude", "auth", "login"],
         "logout_command": ["claude", "auth", "logout"],
         "status_command": ["claude", "auth", "status"],
@@ -871,6 +912,40 @@ KNOWN_CLI_ADAPTERS: dict[str, Any] = {
     # dropdown section lands.
     # gemini removed 2026-09-25 — the Gemini CLI is deprecated upstream.
 }
+
+
+# UI sprint 122: a skill name is one path component the kernel resolves under a skills directory.
+_SKILL_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}")
+
+_MODEL_CLASS_CACHE: dict[str, str] = {}
+
+
+def _model_class(name: str) -> str:
+    """Kernel K278: harness_agent for a CLI adapter; for an Ollama model, small below 30B
+    parameters (from /api/show `details.parameter_size`), else large. Cached per model; an
+    unreachable Ollama answers large for this call only."""
+    if name in KNOWN_CLI_ADAPTERS:
+        return classify(is_cli=True)
+    if name == "deterministic":
+        return ""
+    if name in _MODEL_CLASS_CACHE:
+        return _MODEL_CLASS_CACHE[name]
+    import urllib.request as _u
+
+    try:
+        req = _u.Request(  # noqa: S310 - localhost
+            f"{ollama_base_url()}/api/show",
+            data=msgspec.json.encode({"name": name}),
+            headers={"Content-Type": "application/json"},
+        )
+        with _u.urlopen(req, timeout=3) as r:  # noqa: S310
+            info = msgspec.json.decode(r.read())
+        size = (info.get("details") or {}).get("parameter_size")
+    except Exception:  # noqa: BLE001 — Ollama unreachable: large, uncached
+        return classify(is_cli=False)
+    result = classify(is_cli=False, parameter_size=size)
+    _MODEL_CLASS_CACHE[name] = result
+    return result
 
 
 def _model_supports_thinking(app: App, name: str) -> bool:
@@ -1047,18 +1122,30 @@ def _probe_cli_versions(app: App, name: str) -> dict[str, Any]:
     return curated
 
 
+def _cache_layout_refusal(driver: str, params: dict[str, Any] | None) -> str | None:
+    """UI sprint 121: `driver_params.cache_layout` puts every session-stable text on the system
+    channel, so only a driver whose profile names a system flag can take it. The reason a
+    request is refused, or None."""
+    if not params or not params.get("cache_layout"):
+        return None
+    if (KNOWN_CLI_ADAPTERS.get(driver) or {}).get("system_flag"):
+        return None
+    return f"driver_params.cache_layout needs a driver with a system channel flag; {driver!r} has none"
+
+
 def _cli_command(app: App, name: str, version: str | None = None) -> list[str] | None:
     """Argv for a CLI adapter. Reads the LIVE version tree from
     _probe_cli_versions so a client that picks a live-listed pin id
     resolves against the same tree the picker rendered — not a stale
     curated snapshot. `version` selects a family or a pin from that
-    tree; the resolved pin's flag is appended after the base command.
-    Missing entry / no pin resolved → base command only.
+    tree; the resolved pin's flag is appended after the base command and
+    the profile's `isolation_flags` (UI sprint 120).
+    Missing entry / no pin resolved → base command and isolation flags only.
     """
     entry = KNOWN_CLI_ADAPTERS.get(name)
     if entry is None:
         return None
-    cmd = list(entry["command"])
+    cmd = list(entry["command"]) + list(entry.get("isolation_flags") or [])
     tree = _probe_cli_versions(app, name)
     # `_resolve_pin` works on any shape whose families carry pins with
     # `id` and `flag`; both the curated and the live tree do.
@@ -1839,13 +1926,13 @@ def _bundles_index() -> list[dict[str, object]]:
         {name, description, tools_enabled, slot_count}
 
     `slot_count` counts the three prose slots present per §7b (methodology,
-    personality, per_turn). A bundle with only methodology has slot_count=1.
+    style, per_turn). A bundle with only methodology has slot_count=1.
     """
     list_bundles = api.list_bundles  # F-API-6: public surface only (Sprint 097)
 
     out: list[dict[str, object]] = []
     for b in list_bundles():
-        prose_slots = [b.methodology, b.personality, b.per_turn]
+        prose_slots = [b.methodology, b.style, b.per_turn]
         slot_count = sum(1 for slot in prose_slots if slot)
         out.append(
             {
@@ -2383,11 +2470,11 @@ class Handler(BaseHTTPRequestHandler):
         # Sprint 054: default the session bundle to substrate's shipped
         # `session` bundle when the caller omits it. Without a bundle,
         # substrate/topologies/session/__init__.py line 896 skips the
-        # bundle_methodology + bundle_personality producers and the daily
+        # bundle_methodology + bundle_style producers and the daily
         # driver runs without its intended system-prompt fragments. Callers
         # can still pass `null` explicitly to opt out; only a MISSING field
         # defaults.
-        bundle = body.get("bundle", "session")
+        bundle = body.get("bundle", "standard")
         # Sprint 223a: `role` per TECH-SPEC §1.6.5. Resolve at create time so
         # a nonexistent role name fails 400 immediately rather than at first
         # `/turn`. The resolver's `RegistrationError` carries the four-layer
@@ -2432,6 +2519,10 @@ class Handler(BaseHTTPRequestHandler):
             # set_driver_params after create — cleaner than duplicating validation
             # here. Store the raw dict on the manifest at create; validate below.
             driver_params = dict(driver_params_raw)
+            refusal = _cache_layout_refusal(str(driver), driver_params)
+            if refusal:
+                self._error(400, refusal)
+                return
         session_id = _forced_session_id or f"s_{uuid.uuid4().hex[:24]}"
         try:
             manifest = self.app.registry.create(
@@ -2560,6 +2651,31 @@ class Handler(BaseHTTPRequestHandler):
                 "parent_seq_range": tuple(seq_range),
                 "kinds": tuple(kinds),
             }
+        # UI sprint 122: `/dellm` sends {"skill": "dellm"}. The turn's UserMessage carries
+        # slash_source "skill:<name>", and the session loads the skill before the model starts
+        # (kernel K277, session vocabulary § P.10).
+        skill_raw = body.get("skill")
+        slash_source = "daemon"
+        if skill_raw is not None:
+            if not isinstance(skill_raw, str) or not skill_raw:
+                self._error(400, "skill must be a non-empty string or absent")
+                return
+            if not _SKILL_NAME.fullmatch(skill_raw):
+                self._error(400, f"skill name {skill_raw!r} must be letters, digits, '-' or '_'")
+                return
+            slash_source = f"skill:{skill_raw}"
+        # UI sprint 123: `//<command>` sends {"text": "/<command>", "driver_command": true}. Only a
+        # driver whose profile takes slash commands gets it, as written (session vocabulary
+        # § P.11); the model's history leaves the turn out.
+        if body.get("driver_command"):
+            driver_name = self.app.registry.get(session_id).driver
+            if not (KNOWN_CLI_ADAPTERS.get(driver_name) or {}).get("slash_commands"):
+                self._error(400, f"This driver has no slash commands ({driver_name}).")
+                return
+            if not text.startswith("/"):
+                self._error(400, "a driver command starts with /")
+                return
+            slash_source = "driver"
         # Sprint 216: per-session queue cap. Increment the counter under the
         # registry's fast lock; refuse the (cap+1)th caller with 429
         # immediately (no block). Every admission MUST pair with
@@ -2609,7 +2725,7 @@ class Handler(BaseHTTPRequestHandler):
                 text=text,
                 turn_index=next_turn_index,
                 assembled_prompt=assembled_prompt,
-                slash_source="daemon",
+                slash_source=slash_source,
             )
 
         try:
@@ -3608,6 +3724,10 @@ class Handler(BaseHTTPRequestHandler):
                 )
                 return
             params_value: dict[str, Any] | None = dict(params_raw) if params_raw else None
+            refusal = _cache_layout_refusal(updated.driver, params_value)
+            if refusal:
+                self._error(400, refusal)
+                return
             try:
                 updated = self.app.registry.set_driver_params(session_id, params_value)
             except ValueError as exc:

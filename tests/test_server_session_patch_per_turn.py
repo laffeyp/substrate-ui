@@ -96,8 +96,12 @@ def test_per_turn_reaches_the_next_turns_prompt_once(
 
     record_root = Path(app.registry.get(sid).record_root)
     prompts = [
-        e["payload"]["text"] for e in api.read_record(record_root) if e["kind"] == "PromptComposed"
+        e["payload"]["text"]
+        # The default bundle's prompt is large enough to be stored as a blob (UI sprint 121).
+        for e in api.read_record(record_root, resolve_blobs=True)
+        if e["kind"] == "PromptComposed"
     ]
     assert prompts, "no PromptComposed on the record after /turn"
     assert prompts[-1].count("PREFIX::") == 1, prompts[-1]
-    assert prompts[-1].index("PREFIX::") < prompts[-1].index("hello"), prompts[-1]
+    # Kernel K274 (session vocabulary § P.2): the reminder line sits right after the message.
+    assert prompts[-1].index("hello") < prompts[-1].index("PREFIX::"), prompts[-1]
