@@ -41,7 +41,7 @@ test("a failed turn stops pulsing and says how it ended", () => {
   assert.ok(a);
   assert.strictEqual(a.kind, "failed");
   assert.strictEqual(a.pulseOn, false);
-  assert.match(a.restText, /^2\.5m · 1 tool · ended: TimeoutError: exceeded 600\.0s$/);
+  assert.match(a.restText, /^2m30s · 1 tool · ended: TimeoutError: exceeded 600\.0s$/);
 });
 
 test("a turn sent after the failure is live again", () => {
@@ -130,4 +130,19 @@ test("background tasks: refresh fills the snapshot; stop posts and refreshes", a
   await c.stopTask("bg_1");
   assert.ok(calls.some((x) => x.path === "/api/session/s_1/tasks/bg_1/stop" && x.method === "POST"));
   assert.strictEqual(c.snapshot().backgroundTasks[0].status, "stopped");
+});
+
+test("a turn that ended with Returned is over: no pulse, no ticking clock", () => {
+  // Kernel K259: turns end with Returned. Reading only Park left every turn since looking live.
+  const envs = [
+    um(17, T0, 0),
+    { seq: 22, t: T0 + 1.38, kind: EnvelopeKind.ModelReply, payload: { stop_reason: "end_turn", text: "hi" } },
+    { seq: 26, t: T0 + 1.38, kind: EnvelopeKind.Returned, payload: { reason: "replied", turn_index: 0 } },
+  ];
+  const a = liveActivity(snap(envs));
+  assert.ok(a);
+  assert.strictEqual(a.kind, "recap");
+  assert.strictEqual(a.pulseOn, false);
+  assert.strictEqual(a.turnWord, "turn 0");
+  assert.strictEqual(a.restText, "1.38s · no tools · returned (replied)");
 });

@@ -35,7 +35,7 @@ import {
   EnvelopeKind, TranscriptRole, Surface, GraphMode, RevealLevel, GraphDirection,
 } from "./vm/kinds";
 import { isToolCallRow, isToolResultRow } from "./vm/types";
-import { describeEventTime, eventTimes, formatElapsed } from "./reveal/timeline";
+import { describeEventTime, eventTimes, formatClock, formatElapsed } from "./reveal/timeline";
 
 // UI sprint 132 (kernel K288, session vocabulary § R): the guidance levels the bar offers, each
 // with the bundle that carries it. `auto` names none, so the daemon picks the model's default.
@@ -175,7 +175,7 @@ class Component extends DCLogic {
   _taskBindings(paneId, snap) {
     const tasks = (snap && Array.isArray(snap.backgroundTasks)) ? snap.backgroundTasks : [];
     const running = tasks.filter((t) => t.status === 'running');
-    const fmt = (s) => (s >= 60 ? `${Math.floor(s / 60)}m` : `${Math.floor(s)}s`);
+    const fmt = (s) => formatClock(s);
     return {
       tasksShow: running.length > 0,
       taskRows: running.map((t) => ({

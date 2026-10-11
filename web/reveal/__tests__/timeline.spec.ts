@@ -7,7 +7,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert";
-import { describeEventTime, eventTimes, formatElapsed } from "../timeline";
+import { describeEventTime, eventTimes, formatClock, formatElapsed } from "../timeline";
 import { EnvelopeKind } from "../../vm/kinds";
 
 const T0 = 1_791_688_700;
@@ -18,6 +18,19 @@ test("the unit fits the span", () => {
   assert.strictEqual(formatElapsed(2.3149), "t+2.31s");
   assert.strictEqual(formatElapsed(12.44), "t+12.4s");
   assert.strictEqual(formatElapsed(125.9), "t+2m05s");
+  assert.strictEqual(formatElapsed(3840), "t+1h04m");
+  assert.strictEqual(formatElapsed(2 * 86400 + 3 * 3600 + 59), "t+2d03h");
+  assert.strictEqual(formatElapsed(34 * 86400), "t+1mo04d");
+});
+
+test("a ticking clock counts whole seconds, then the two largest units", () => {
+  assert.strictEqual(formatClock(0), "0s");
+  assert.strictEqual(formatClock(59.9), "59s");
+  assert.strictEqual(formatClock(60), "1m00s");
+  assert.strictEqual(formatClock(3599), "59m59s");
+  assert.strictEqual(formatClock(3600), "1h00m");
+  assert.strictEqual(formatClock(86400 + 7200), "1d02h");
+  assert.strictEqual(formatClock(30 * 86400), "1mo00d");
 });
 
 test("the column only increases; the detail adds the time into the turn", () => {

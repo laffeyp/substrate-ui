@@ -50,14 +50,34 @@ export function eventTimes(events: readonly TimedEvent[]): Map<number, EventTime
   return out;
 }
 
-/** `143ms`, `2.31s`, `12.4s`, `2m05s`: the unit that fits the span. */
+const MINUTE = 60;
+const HOUR = 60 * MINUTE;
+const DAY = 24 * HOUR;
+const MONTH = 30 * DAY;
+
+/** The two largest units that fit: `2m05s`, `1h04m`, `2d03h`, `1mo04d`. */
+function coarse(seconds: number): string {
+  const s = Math.floor(seconds);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  if (s < HOUR) return `${Math.floor(s / MINUTE)}m${pad(s % MINUTE)}s`;
+  if (s < DAY) return `${Math.floor(s / HOUR)}h${pad(Math.floor((s % HOUR) / MINUTE))}m`;
+  if (s < MONTH) return `${Math.floor(s / DAY)}d${pad(Math.floor((s % DAY) / HOUR))}h`;
+  return `${Math.floor(s / MONTH)}mo${pad(Math.floor((s % MONTH) / DAY))}d`;
+}
+
+/** `143ms`, `2.31s`, `12.4s`, then the two largest units that fit: `2m05s`, `1h04m`, `2d03h`,
+ *  `1mo04d` (a month counted as 30 days). */
 export function formatDuration(seconds: number): string {
   if (seconds < 1) return `${Math.round(seconds * 1000)}ms`;
   if (seconds < 10) return `${seconds.toFixed(2)}s`;
-  if (seconds < 60) return `${seconds.toFixed(1)}s`;
-  const m = Math.floor(seconds / 60);
-  const s = Math.floor(seconds - m * 60);
-  return `${m}m${String(s).padStart(2, "0")}s`;
+  if (seconds < MINUTE) return `${seconds.toFixed(1)}s`;
+  return coarse(seconds);
+}
+
+/** A ticking clock in whole seconds: `12s`, then `2m05s`, `1h04m`, `2d03h`, `1mo04d`. */
+export function formatClock(seconds: number): string {
+  const s = Math.max(0, Math.floor(seconds));
+  return s < MINUTE ? `${s}s` : coarse(s);
 }
 
 /** The column's label: time since the session's first event, `t+42.6s`. */
