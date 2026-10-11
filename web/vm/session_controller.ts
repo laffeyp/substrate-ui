@@ -41,6 +41,9 @@ const KIND_DISPOSITION: Record<EnvelopeKindValue, "rendered" | "ignored"> = {
   [EnvelopeKind.SessionStarted]: "rendered",
   [EnvelopeKind.BackgroundTaskEnded]: "rendered",
   [EnvelopeKind.SessionChanged]: "rendered",
+  // Kernel K282: a harness driver's own tool calls. The transcript draws them from UI sprint 129.
+  [EnvelopeKind.HarnessToolCall]: "ignored",
+  [EnvelopeKind.HarnessToolResult]: "ignored",
   [EnvelopeKind.UserMessage]: "rendered",
   [EnvelopeKind.ModelReply]: "rendered",
   [EnvelopeKind.FinalAnswer]: "rendered",
