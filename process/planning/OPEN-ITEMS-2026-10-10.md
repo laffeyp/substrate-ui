@@ -22,7 +22,7 @@ Items 1–3 closed on 2026-10-10 (roadmap `substrate/process/planning/ROADMAP-20
 ## Harness drivers
 
 4. *Closed (K289).* Product round 15, tech round 9 and design round 4 describe MCP calls as Substrate's `ToolCall` with `origin = mcp`, along with the guidance levels.
-5. **`electron_smoke` fails on the first launch after an install.** It has failed on the first gate run after three installs on 2026-10-10 (U131: 1 bug; the activity-strip install: 2 bugs) and passed on every rerun, twice each time. It has not failed on a rerun. Cause not found; the first launch of a freshly copied app is the common factor.
+5. **`electron_smoke` fails on the first launch after an install.** It has failed on the first gate run after two of the night's installs (U131: 1 bug; the activity-strip install: 2 bugs), passed on the first run after the others, and passed on every rerun. It has never failed on a rerun. Cause not found; the first launch of a freshly copied app is the common factor.
 6. **The `deterministic` stand-in compacts every turn.** The `standard` guidance (head, system part and reminder line) measures about 4,988 tokens, more than the stand-in's declared 4,096-token context. So every turn after the first drops the earlier turns. Real drivers declare far more room (CLI drivers 100,000 tokens; Ollama models their advertised context), and none of the 70 sessions on this machine holds a `TranscriptCompacted` event. To decide: raise the stand-in's context, or keep it small as the compaction test bed.
    - *Closed, the display half.* The console read `dropped_seq_start` and `dropped_seq_end`, but the kernel's event carries one pair, `dropped_seq_range`. So every compaction row printed "?–?". Fixed, with a unit test.
 
