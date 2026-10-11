@@ -10,7 +10,6 @@
 - **8 (U126). `model_half_starts_session.ts` clicks a model row that is not in the real roster.** The test picks models as a user does.
 - **10. The login card.** Remove "ready to pick a session" (`AuthPromptCard.tsx:213`) and check the layout of that bottom row.
 - **Precompiled Python bytecode in the bundle.** The bundle ships without `.pyc` files, so the first launch writes 298 of them into `/Applications/Substrate.app`. A signed app must not change after signing; the build compiles the bytecode before signing (found in sprint 133).
-- **Tool outputs sent twice.** Broken: every tool output in the current turn reaches the model twice, once in the history and again under "Tool results so far". A bug in the prompt builder (`substrate/process/planning/RESEARCH-2026-10-11-compaction.md`).
 - **Harness tool calls in the session bar.** The session bar's turn line (turns, seconds, tools) reports no tools used when a harness driver's tools ran. A `HarnessToolCall` counts there as a `ToolCall` does.
 - **The input bar's hint.** Before a session exists, the hint in the input bar lists its keys. Two parts are false and come out: "type a path" (typed text is not treated as a folder path) and "‹symbol› fills nearest" (nothing autocompletes). The other key hints stay where they are true: ↑↓ moves, shift-enter opens, enter picks the folder. The input bar itself, the program's text input, is unchanged.
 
@@ -43,9 +42,17 @@ Cmd+T opens a terminal pane in the pane system. It runs the user's shell (`$SHEL
 
 The terminal pane has no reveal view, no records, no studio and no model picker. It has no tie to Substrate's runs or record. It opens in the workspace of the place it was opened from. While it is the focused pane, the one top bar shows it.
 
-### Compaction
+### Compaction (release step 2)
 
-Substrate drops whole turns, oldest first, user requests and replies with them, once an estimate of the history passes 60% of the driver's window. It never clears old tool output, counts tokens as characters ÷ 4 against real counts it already records, and gives every CLI driver a flat 100,000-token window. A codex session lost both earlier turns, its deep review among them, to one heavy turn. The rework follows first-source practice: clear old tool outputs first behind a placeholder, keep the user's requests and replies, summarise only when that is not enough, budget on real counts, bound the current turn, and show a repeated cut as the same cut. Research: `substrate/process/planning/RESEARCH-2026-10-11-compaction.md`.
+Today Substrate drops whole turns, oldest first, the user's requests and the model's replies with them, once an estimate of the history passes 60% of the driver's window. It never clears old tool output, counts tokens as characters ÷ 4 against real counts it already records, and gives every CLI driver a flat 100,000-token window. A codex session lost both earlier turns, its deep review among them, to one heavy turn. And it is broken now: every tool output in the current turn reaches the model twice.
+
+What gets built, in the Substrate way (the record never changes; the prompt stays a pure function of it; every cut is recorded):
+- **K290. Tool outputs sent once.** The double send is removed.
+- **K291. Vocabulary round.** `TranscriptCompacted` gains the `tool_output_cleared` strategy and the cleared seqs; user messages are never cut while a later turn is kept; no event unless the cut changes.
+- **K292. Clearing, budget, cadence.** Old tool-output bodies are cleared first behind a one-line placeholder; user messages and final replies stay; whole turns drop only as a last resort; the current turn is bounded the same way; the budget uses the drivers' reported token counts; CLI windows are set per model; clearing runs in batches so the prompt's start stays stable.
+- **K293. Console row and live test.** The console names what was cleared, shows a repeated cut once, and a live test reruns the codex case.
+
+Roadmap: `substrate/process/planning/ROADMAP-2026-10-11-compaction.md`. Research: `substrate/process/planning/RESEARCH-2026-10-11-compaction.md`.
 
 ### Topologies: real and useful from a session, or dropped from it
 
@@ -58,13 +65,13 @@ The app is not released with a topology the session can reach that has not passe
 
 ## Order
 
-Set from each item's dependencies. Sprint cards are written one step at a time: cards for a step, the step, then cards for the next.
+Reordered 2026-10-11: compaction moved ahead of the small fixes, since it damages every real session in use now. Set from each item's dependencies. Sprint cards are written one step at a time: cards for a step, the step, then cards for the next.
 
 | # | Item | Why here |
 |---|---|---|
 | 1 | 5. `electron_smoke` fails on first launch | The Electron gates check every later step; they must report truly first. |
-| 2 | 10. Login card; the input bar's false hints; harness tool calls in the session bar; precompiled bytecode; tool outputs sent twice | Small fixes; depend on nothing, block nothing. |
-| 3 | Compaction | A kernel change no UI step waits on, and the topology audit runs real sessions whose results depend on it. |
+| 2 | Compaction (K290–K293) | Broken now and damaging every real session; the topology audit runs real sessions whose results depend on it. |
+| 3 | 10. Login card; the input bar's false hints; harness tool calls in the session bar; precompiled bytecode | Small fixes; depend on nothing, block nothing. |
 | 4 | Topology audit | Depends on no UI step and is the largest unknown; starting early shows its size. What it drops leaves the guidance text that step 10 then builds on. |
 | 5 | One top bar | Steps 6, 7 and 13 put things in the top bar. |
 | 6 | 7 (U125). Model chip becomes an indicator | Lives in the top bar; built once, on the single bar. |
