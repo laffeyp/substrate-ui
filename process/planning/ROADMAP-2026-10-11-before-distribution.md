@@ -24,11 +24,11 @@
 
 - **The session-start line.** Before the first message, the empty transcript shows a line in its top left, such as "session started with ‹model› at ‹workspace›". The user's first message appears below it, beside its blue caret. The line tells the user that the empty area is where the conversation will appear.
 
-### 18. The terminal window
+### 18. The terminal pane
 
-Cmd+T opens a terminal window inside Substrate. It runs the user's shell (`$SHELL`, with the user's own config files) and draws it, so the window works as the user's terminal does. The user can set a different shell.
+Cmd+T opens a terminal pane in the pane system. It runs the user's shell (`$SHELL`, with the user's own config files) and draws it, so the pane works as the user's terminal does. The user can set a different shell.
 
-The window has no reveal pane, no records or studio top bar, and no model picker. It has no tie to Substrate's runs or record. It opens in the workspace of the place it was opened from.
+The terminal pane has no reveal pane, no records or studio top bar, and no model picker. It has no tie to Substrate's runs or record. It opens in the workspace of the place it was opened from.
 
 ## After distribution
 
