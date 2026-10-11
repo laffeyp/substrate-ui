@@ -872,6 +872,13 @@ Twelve PNGs at `captures/pixel-baseline-2026-09-23/`: six states (`empty`, `one_
 
 *Agent maintains. Last 10 increment closes; older roll into ## Built as compressed paragraphs.*
 
+### UI U131 with kernel K286 (2026-10-10) — Substrate's tools stay Substrate's
+- **What was wrong.** K284 recorded a harness driver's MCP call to Substrate's tools as `HarnessToolCall(via=mcp)` and ran it in the model step. The Architect caught it: that mixes the two tool sets and bypasses the tool producer.
+- **K286.** The model step writes `ToolCall(origin=mcp)`. The tool producer runs it and writes `ToolResult(origin=mcp)`, and the session hands the result back over MCP. The continue-triggers skip `origin=mcp`, so no second CLI process starts. `HarnessToolCall` covers the harness's own tools only.
+- **U131.** The rows read `(mcp)` and `(harness)`.
+- **Gates.** Kernel 1,424 passed, UI 237 passed, Electron 11 of 11. In the installed app all three drivers made one model step each, with the pair written by the model and tool producers. Commits: kernel `309c7e2c`; UI `182ebe5` and the commit carrying this entry.
+- **Open.** `electron_smoke` failed once on the first launch after an install, then passed twice (kit diary 66).
+
 ### UI U129–U130 with kernel K282–K285 (2026-10-10) — a harness driver's tool calls on the record
 - **Recording.** claude, codex and cursor-agent stream their own tool calls, and each lands on the record as `HarnessToolCall`/`HarnessToolResult` with `via=harness`.
 - **MCP.** Substrate's tools reach them as registered tools through `POST /api/session/<id>/mcp`, and each call lands with `via=mcp`. cursor-agent gets MCP only in a per-session sandbox, because it reads `.cursor/mcp.json` from its workspace alone.
