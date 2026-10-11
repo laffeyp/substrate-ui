@@ -9,7 +9,6 @@ prompt, no read-only sandbox, no approvals (2026-10-10, Architect).
 
 from __future__ import annotations
 
-import json
 import os
 import re
 import shutil
@@ -179,10 +178,8 @@ def test_claude_through_the_profile_loads_nothing_from_this_machine(app: server.
     agents, system prompt, or skill from ~/.claude (measured 2026-10-10: 12.1k tokens of tools,
     13 built-in skills)."""
     responder = server._daemon_driver_resolver(app, "claude", workspace="/tmp")
-    argv = responder._argv("/context", "")
-    argv[-1:-1] = ["--output-format", "json"]  # the prompt stays last
-    out = subprocess.run(argv, capture_output=True, text=True, timeout=120, cwd="/tmp")
-    report = json.loads(out.stdout)["result"]
+    # The profile streams (UI sprint 129); the reply is the stream's closing `result`.
+    report = responder.respond("/context")
     for absent in ("Memory files", "MCP tools", "Custom agents", "System prompt", "dellm"):
         assert absent not in report, report
     assert "| System tools |" in report, report  # its own tools stay on

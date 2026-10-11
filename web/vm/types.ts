@@ -4,6 +4,7 @@
 // reads its render input from `Snapshot` and calls the SessionController's
 // actions. No DOM, no framework — just the vocabulary the two Views share.
 import type { TaskStatusValue } from "./statuses.gen";
+import { EnvelopeKind } from "./envelope_kinds.gen";
 
 /** One envelope on the SSE record stream, mirrored from substrate-side. */
 export interface RecordEnvelope {
@@ -38,6 +39,19 @@ export interface TranscriptRow {
   output?: string;
   error?: string;
   toolStep?: number;
+  /** UI sprint 129 (kernel K282): a harness driver's call — `harness` (its own tool) or `mcp`
+   *  (the session's tool over MCP). Absent on Substrate's own tool calls. */
+  toolRoute?: string;
+}
+
+/** A tool card's call row: Substrate's `ToolCall` or a harness driver's `HarnessToolCall`. */
+export function isToolCallRow(row: { kind: string }): boolean {
+  return row.kind === EnvelopeKind.ToolCall || row.kind === EnvelopeKind.HarnessToolCall;
+}
+
+/** A tool card's result row, folded into its call's card. */
+export function isToolResultRow(row: { kind: string }): boolean {
+  return row.kind === EnvelopeKind.ToolResult || row.kind === EnvelopeKind.HarnessToolResult;
 }
 
 /** One bash background task, as the daemon describes it (UI sprint 105). */

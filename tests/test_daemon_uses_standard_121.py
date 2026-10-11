@@ -46,7 +46,7 @@ def test_a_model_change_mid_session_is_told(
     monkeypatch.setattr(
         server,
         "_daemon_driver_resolver",
-        lambda app, name, params=None, workspace=None: DeterministicResponder(seed=0)
+        lambda app, name, params=None, workspace=None, session_id=None: DeterministicResponder(seed=0)
         if name == "stand-in"
         else real(app, name, params, workspace=workspace),
     )

@@ -14,6 +14,7 @@ export type {
   TriggerEdge,
   WorkspaceRow,
 } from "./types";
+export { isToolCallRow, isToolResultRow } from "./types";
 export type {
   FetchOpts,
   FetchResult,

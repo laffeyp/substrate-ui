@@ -27,6 +27,7 @@ import os
 import re
 import shutil
 import signal
+import json
 import subprocess
 import tempfile
 import threading
@@ -45,6 +46,8 @@ import msgspec
 from substrate import api
 from substrate.topologies import bundled
 from substrate.topologies.session.environment import session_baseline
+from substrate.adapters.harness_streams import SUBSTRATE_MCP_SERVER
+from substrate.topologies.session.mcp_channel import handle_jsonrpc
 from substrate.topologies.session.model_class import class_variant, classify
 from substrate.topologies.session.skills import make_skill_tool
 from substrate.topologies.tool_loop.delegate import make_delegate
@@ -111,8 +114,8 @@ class App:
     # must bound the whole process (REVIEW-2026-08-28 Q9). DeterministicResponder is never cached:
     # its seed is state.
     # Key: (driver, params, workspace); the workspace is set for CLI drivers only (sprint 114).
-    responder_cache: dict[tuple[str, tuple[tuple[str, Any], ...], str | None], Any] = field(
-        default_factory=dict
+    responder_cache: dict[tuple[str, tuple[tuple[str, Any], ...], str | None, str | None], Any] = (
+        field(default_factory=dict)
     )
     model_thinking_cache: dict[str, bool] = field(default_factory=dict)
     version_cache: dict[str, dict[str, Any]] = field(default_factory=dict)
@@ -124,6 +127,9 @@ class App:
     )
     record_summary_lock: threading.Lock = field(default_factory=threading.Lock)
     assay_cache: dict[str, tuple[float, dict[str, object]]] = field(default_factory=dict)
+    # The address a harness driver reaches this daemon's MCP endpoint on (UI sprint 129); set when
+    # the TCP server binds. None: no TCP server, so no driver is given MCP.
+    mcp_base: str | None = None
 
     def install_registry(
         self, base: Path | None = None, *, turn_queue_cap: int = 4, auto_boot: bool = True
@@ -144,6 +150,7 @@ class AppHTTPServer(ThreadingHTTPServer):
     def __init__(self, address: tuple[str, int], app: App) -> None:
         super().__init__(address, Handler)
         self.app = app
+        app.mcp_base = f"http://127.0.0.1:{self.server_address[1]}"
 
 
 # REVIEW-2026-08-28 Q6: the six "record mid-write; poll again" sites
@@ -187,8 +194,62 @@ def _params_cache_key(params: dict[str, Any] | None) -> tuple[tuple[str, Any], .
     return tuple(sorted(params.items()))
 
 
+def _mcp_url(app: App, session_id: str) -> str:
+    return f"{app.mcp_base}/api/session/{session_id}/mcp"
+
+
+def _owned_workspace(workspace: str | None) -> bool:
+    """Whether a workspace is a per-session sandbox, which only Substrate uses."""
+    if not workspace:
+        return False
+    try:
+        return Path(workspace).resolve().is_relative_to(_sessions_base().resolve())
+    except OSError:
+        return False
+
+
+def _mcp_flags(
+    app: App, name: str, session_id: str | None, workspace: str | None = None
+) -> list[str]:
+    """The flags that hand a harness driver this daemon's MCP endpoint for one session (UI sprint
+    129, kernel K284), or none: the driver's profile names no MCP style, there is no session, or
+    the daemon has no TCP address. cursor-agent reads MCP servers only from `.cursor/mcp.json` in
+    its workspace (a parent folder's is not read, tested 2026-10-10), so it gets MCP only in a
+    per-session sandbox, where `_write_mcp_config` puts that file; in a folder the operator picked
+    it gets the stream alone and nothing is written there."""
+    style = KNOWN_CLI_ADAPTERS.get(name, {}).get("mcp_style")
+    if not style or not session_id or not app.mcp_base:
+        return []
+    url = _mcp_url(app, session_id)
+    if style == "cursor-workspace-file":
+        return ["--approve-mcps"] if _owned_workspace(workspace) else []
+    if style == "claude-mcp-config":
+        server = {"mcpServers": {SUBSTRATE_MCP_SERVER: {"type": "http", "url": url}}}
+        return ["--mcp-config", json.dumps(server)]
+    if style == "codex-config":
+        return ["-c", f"mcp_servers.{SUBSTRATE_MCP_SERVER}.url={json.dumps(url)}"]
+    raise ValueError(f"{name}: unknown mcp_style {style!r}")
+
+
+def _write_mcp_config(app: App, name: str, session_id: str, workspace: str) -> None:
+    """cursor-agent's MCP config, in a per-session sandbox only (see `_mcp_flags`)."""
+    if KNOWN_CLI_ADAPTERS.get(name, {}).get("mcp_style") != "cursor-workspace-file":
+        return
+    if not app.mcp_base or not _owned_workspace(workspace):
+        return
+    config = Path(workspace) / ".cursor" / "mcp.json"
+    config.parent.mkdir(parents=True, exist_ok=True)
+    servers = {"mcpServers": {SUBSTRATE_MCP_SERVER: {"url": _mcp_url(app, session_id)}}}
+    config.write_text(json.dumps(servers), encoding="utf-8")
+
+
 def _daemon_driver_resolver(
-    app: App, name: str, params: dict[str, Any] | None = None, *, workspace: str | None = None
+    app: App,
+    name: str,
+    params: dict[str, Any] | None = None,
+    *,
+    workspace: str | None = None,
+    session_id: str | None = None,
 ) -> Any:
     """Daemon-side resolver: `deterministic` → seeded stub; `claude` / `gemini` →
     CliResponder; anything else → OllamaResponder (a real local or `:cloud` tag).
@@ -214,7 +275,9 @@ def _daemon_driver_resolver(
     Responders. The Ollama and deterministic branches ignore it.
     """
     cli_workspace = workspace if name in KNOWN_CLI_ADAPTERS else None
-    key = (name, _params_cache_key(params), cli_workspace)
+    mcp_flags = _mcp_flags(app, name, session_id, cli_workspace)
+    # A responder carrying a session's MCP address belongs to that session alone.
+    key = (name, _params_cache_key(params), cli_workspace, session_id if mcp_flags else None)
     cached = app.responder_cache.get(key)
     if cached is not None:
         return cached
@@ -240,11 +303,13 @@ def _daemon_driver_resolver(
         display_name = f"{name}:{version}" if version else name
         profile = KNOWN_CLI_ADAPTERS[name]
         responder: Any = CliResponder(
-            cli_cmd,
+            cli_cmd + mcp_flags,
             name=display_name,
             cwd=cli_workspace,
             system_flag=profile.get("system_flag"),
             env=profile.get("env"),
+            stream_format=profile.get("stream_format"),
+            stream_flags=profile.get("stream_flags"),
         )
     else:
         p = params or {}
@@ -580,8 +645,17 @@ def _build_session_topology_from_manifest(
     from substrate.topologies.session.transcript import resolve_driver_context_tokens
 
     responder = _daemon_driver_resolver(
-        app, manifest.driver, manifest.driver_params, workspace=manifest.workspace
+        app,
+        manifest.driver,
+        manifest.driver_params,
+        workspace=manifest.workspace,
+        session_id=manifest.session_id,
     )
+    # UI sprint 129: a harness driver given this daemon's MCP endpoint takes the session's tools
+    # as registered MCP tools (kernel K284).
+    mcp_on = bool(_mcp_flags(app, manifest.driver, manifest.session_id, manifest.workspace))
+    if mcp_on:
+        _write_mcp_config(app, manifest.driver, manifest.session_id, manifest.workspace)
     session_tools = _tools_for_manifest(manifest)
     # Sprint 228: fold the substrate toolkit (piece F sprints 226-228)
     # into every session's tool suite alongside full_suite. The tools
@@ -652,10 +726,13 @@ def _build_session_topology_from_manifest(
         parent_session_id=manifest.composite_of,
         script=None,
         first_turn_user_message=first_turn_user_message,
+        mcp=mcp_on,
         # The role prompt resolves against the session's workspace, the same root the create-time
         # check used. Before 2026-10-08 neither argument was passed and no UI session carried its
         # role's prompt (lens audit F316, N004).
-        role=class_variant(manifest.role, model_class) if manifest.role == "default" else manifest.role,
+        role=class_variant(manifest.role, model_class)
+        if manifest.role == "default"
+        else manifest.role,
         role_repo_root=Path(manifest.workspace),
         # Kernel sprint K273: the environment the model is told about, computed here because it
         # reads git, the clock and the platform. The session records it once, at open.
@@ -756,6 +833,11 @@ KNOWN_CLI_ADAPTERS: dict[str, Any] = {
         ],
         "system_flag": ["--system-prompt"],
         "env": {"CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS": "1"},
+        # UI sprint 129 (kernel K283, K284): its event stream carries every tool call it makes,
+        # and it takes Substrate's tools as an MCP server named in `--mcp-config`.
+        "stream_format": "claude-stream-json",
+        "stream_flags": ["--output-format", "stream-json", "--verbose"],
+        "mcp_style": "claude-mcp-config",
         "slash_commands": True,
         "login_command": ["claude", "auth", "login"],
         "logout_command": ["claude", "auth", "logout"],
@@ -826,6 +908,10 @@ KNOWN_CLI_ADAPTERS: dict[str, Any] = {
             "--skip-git-repo-check",
             "--dangerously-bypass-approvals-and-sandbox",
         ],
+        # UI sprint 129: `exec --json` streams every item; an MCP server is a config override.
+        "stream_format": "codex-json",
+        "stream_flags": ["--json"],
+        "mcp_style": "codex-config",
         # `--device-auth` prints URL + one-time code to stdout without
         # spawning a local callback server, so the pty renders cleanly
         # even when Substrate is sandboxed.
@@ -872,6 +958,11 @@ KNOWN_CLI_ADAPTERS: dict[str, Any] = {
         # Headless, cursor-agent stops at "Workspace Trust Required" without `--trust`, and only
         # proposes file changes without `--force`. A session driver has to work and write.
         "command": ["cursor-agent", "-p", "--trust", "--force", "--sandbox", "disabled"],
+        # UI sprint 129: its stream carries every tool call.
+        "stream_format": "cursor-stream-json",
+        "stream_flags": ["--output-format", "stream-json"],
+        # Its MCP servers come from `.cursor/mcp.json` in the workspace (see `_mcp_flags`).
+        "mcp_style": "cursor-workspace-file",
         # NO_OPEN_BROWSER=1 keeps the auth URL in stdout instead of also
         # spawning an OS browser open — the pty renders the URL as a
         # click for the user.
@@ -1148,7 +1239,9 @@ def _cache_layout_refusal(driver: str, params: dict[str, Any] | None) -> str | N
         return None
     if (KNOWN_CLI_ADAPTERS.get(driver) or {}).get("system_flag"):
         return None
-    return f"driver_params.cache_layout needs a driver with a system channel flag; {driver!r} has none"
+    return (
+        f"driver_params.cache_layout needs a driver with a system channel flag; {driver!r} has none"
+    )
 
 
 def _cli_command(app: App, name: str, version: str | None = None) -> list[str] | None:
@@ -2233,6 +2326,10 @@ class Handler(BaseHTTPRequestHandler):
                 session_id = path[len("/api/session/") : -len("/interrupt")]
                 self._session_interrupt(session_id)
                 return
+            m_mcp = re.fullmatch(r"/api/session/([^/]+)/mcp", path)
+            if m_mcp:  # UI sprint 129
+                self._session_mcp(m_mcp.group(1))
+                return
             if path.startswith("/api/topology/") and path.endswith("/run"):
                 # Sprint 225a: POST /api/topology/<name>/run — piece-E
                 # application dispatch endpoint per TECH-SPEC §7.6 line
@@ -2788,6 +2885,21 @@ class Handler(BaseHTTPRequestHandler):
             )
         finally:
             self.app.registry.dequeue_turn(session_id)
+
+    def _session_mcp(self, session_id: str) -> None:
+        """UI sprint 129: POST /api/session/<id>/mcp, the MCP endpoint a harness driver calls
+        (streamable HTTP, JSON responses). Each JSON-RPC message goes to the kernel's
+        `handle_jsonrpc`; a `tools/call` waits while the session's running model step runs the
+        tool and records it (kernel K284). A notification gets 202 and no body."""
+        if self.app.registry is None or self.app.registry.get(session_id) is None:
+            self._error(404, f"unknown session_id {session_id!r}")
+            return
+        message = self._read_json_body()
+        reply = handle_jsonrpc(session_id, message)
+        if reply is None:
+            self._send(202, b"", "application/json")
+            return
+        self._json(reply)
 
     def _session_end(self, session_id: str) -> None:
         """Sprint 215a: POST /api/session/<id>/end. Body optional:
