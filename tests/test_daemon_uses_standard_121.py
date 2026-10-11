@@ -33,7 +33,7 @@ def test_a_new_session_opens_on_standard(app: server.App, base: str) -> None:
     call("POST", base + f"/api/session/{sid}/turn", {"text": "hello"}, timeout=60)
     composed = next(e["payload"] for e in _events(app, sid) if e["kind"] == "PromptComposed")
     assert composed["system"].startswith("# Every output is writing")
-    assert "They override any default behaviour" in composed["text"]
+    assert "OVERRIDE any default behavior" in composed["text"]
     assert composed["text"].index("USER: hello") < composed["text"].index("STYLE: Write like")
 
 
