@@ -1,9 +1,10 @@
 """UI sprint 120: the Claude driver profile, and the attribution and e-mail gate.
 
 Substrate never writes model attribution and never handles an e-mail address. A harness driver
-runs with its own setup switched off: for `claude`, its tools, MCP servers and settings sources
-(CLAUDE.md, hooks, output style, memory), and its git instructions, where its attribution trailer
-lives.
+runs with its own setup switched off: for `claude`, its MCP servers and settings sources (CLAUDE.md,
+hooks, output style, memory), and its git instructions, where its attribution trailer lives. Its
+own tools stay on. Every harness driver runs with full permission in its workspace: no trust
+prompt, no read-only sandbox, no approvals (2026-10-10, Architect).
 """
 
 from __future__ import annotations
@@ -62,7 +63,13 @@ def test_no_email_or_attribution_in_substrate_code_or_texts() -> None:
 def test_the_claude_profile_switches_off_its_own_setup() -> None:
     entry = server.KNOWN_CLI_ADAPTERS["claude"]
     flags = entry["isolation_flags"]
-    assert flags == ["--tools", "", "--strict-mcp-config", "--setting-sources", ""]
+    assert flags == [
+        "--strict-mcp-config",
+        "--setting-sources",
+        "",
+        "--dangerously-skip-permissions",
+    ]
+    assert "--tools" not in flags  # its own tools stay on
     assert entry["system_flag"] == ["--system-prompt"]
     assert entry["env"] == {"CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS": "1"}
     assert "--disable-slash-commands" not in flags  # it blocks `/context` (UI sprint 123)
@@ -72,17 +79,60 @@ def test_the_daemon_builds_claude_with_the_profile(app: server.App) -> None:
     responder = server._daemon_driver_resolver(app, "claude", workspace="/tmp")
     assert isinstance(responder, CliResponder)
     assert responder.command[:2] == ("claude", "-p")
-    assert responder.command[2:7] == ("--tools", "", "--strict-mcp-config", "--setting-sources", "")
+    assert responder.command[2:6] == (
+        "--strict-mcp-config",
+        "--setting-sources",
+        "",
+        "--dangerously-skip-permissions",
+    )
     assert responder.system_channel
     assert responder._argv("P", "")[-3:] == ["--system-prompt", "", "P"]
 
 
 def test_the_daemon_builds_codex_to_run_outside_a_git_repo(app: server.App) -> None:
     """A per-session sandbox is a plain directory. `codex exec` without --skip-git-repo-check
-    exits 1 there: "Not inside a trusted directory" (found 2026-10-10 in the installed app)."""
+    exits 1 there: "Not inside a trusted directory"; without a sandbox setting it runs read-only
+    (both found 2026-10-10 in the installed app)."""
     responder = server._daemon_driver_resolver(app, "codex", workspace="/tmp")
     assert isinstance(responder, CliResponder)
-    assert responder.command[:3] == ("codex", "exec", "--skip-git-repo-check")
+    assert responder.command[:4] == (
+        "codex",
+        "exec",
+        "--skip-git-repo-check",
+        "--dangerously-bypass-approvals-and-sandbox",
+    )
+
+
+def test_the_cursor_model_list_heading_is_not_a_model() -> None:
+    """`cursor-agent --list-models` (2026.09.23) opens with "Available models", no colon; it was
+    parsed as a model and sent as `--model Available`, which cursor-agent refused."""
+    text = (
+        "Available models\n\n"
+        "auto - Auto (default)\n"
+        "gpt-5.3-codex-low - Codex 5.3 Low\n"
+        "composer-2.5 - Composer 2.5\n"
+    )
+    parsed = server._parse_cursor_agent_list_models(text)
+    assert parsed is not None
+    pins = [p["id"] for fam in parsed["families"] for p in fam["pins"]]
+    assert pins == ["auto", "gpt-5.3-codex-low", "composer-2.5"]
+    assert parsed["default_pin_id"] == "auto"
+    assert parsed["default_family"] == "auto"
+
+
+def test_the_daemon_builds_cursor_agent_trusted_and_forced(app: server.App) -> None:
+    """Headless cursor-agent stops at "Workspace Trust Required" without --trust (found
+    2026-10-10 in the installed app) and only proposes edits without --force."""
+    responder = server._daemon_driver_resolver(app, "cursor-agent", workspace="/tmp")
+    assert isinstance(responder, CliResponder)
+    assert responder.command[:6] == (
+        "cursor-agent",
+        "-p",
+        "--trust",
+        "--force",
+        "--sandbox",
+        "disabled",
+    )
 
 
 @pytest.mark.skipif(
@@ -99,23 +149,45 @@ def test_codex_answers_in_a_plain_directory(
     assert "ready" in responder.respond("Reply with the single word: ready").lower()
 
 
+@pytest.mark.skipif(
+    os.environ.get("SUBSTRATE_LIVE_DRIVER_TESTS") != "1",
+    reason="real driver turns; run on demand with SUBSTRATE_LIVE_DRIVER_TESTS=1",
+)
+@pytest.mark.parametrize("driver", ["claude", "codex", "cursor-agent"])
+def test_each_harness_driver_writes_a_file_in_a_plain_directory(
+    app: server.App, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, driver: str
+) -> None:
+    """A session driver has to change its workspace. Each harness driver, built exactly as a
+    session builds it, creates a file in a plain (non-git) directory with its own tools."""
+    import pwd
+
+    if shutil.which(driver) is None:
+        pytest.skip(f"{driver} not installed")
+    monkeypatch.setenv("HOME", pwd.getpwuid(os.getuid()).pw_dir)  # the real logins
+    responder = server._daemon_driver_resolver(app, driver, workspace=str(tmp_path))
+    responder.respond("Create a file named probe.txt in the current directory containing ok.")
+    assert (tmp_path / "probe.txt").read_text().strip() == "ok"
+
+
 _live = pytest.mark.skipif(shutil.which("claude") is None, reason="claude CLI not installed")
 
 
 @_live
 def test_claude_through_the_profile_loads_nothing_from_this_machine(app: server.App) -> None:
-    """`/context` runs locally (no model turn). Through the profile it lists no memory files,
-    skills, MCP tools, custom agents or system prompt; measured 2026-10-10, the whole context is
-    0 to 21 tokens."""
+    """`/context` runs locally (no model turn). Through the profile it lists Claude Code's own
+    tools and built-in skills, and nothing from this machine: no memory files, MCP tools, custom
+    agents, system prompt, or skill from ~/.claude (measured 2026-10-10: 12.1k tokens of tools,
+    13 built-in skills)."""
     responder = server._daemon_driver_resolver(app, "claude", workspace="/tmp")
     argv = responder._argv("/context", "")
     argv[-1:-1] = ["--output-format", "json"]  # the prompt stays last
     out = subprocess.run(argv, capture_output=True, text=True, timeout=120, cwd="/tmp")
     report = json.loads(out.stdout)["result"]
-    for absent in ("Memory files", "Skills", "MCP tools", "Custom agents", "System prompt"):
+    for absent in ("Memory files", "MCP tools", "Custom agents", "System prompt", "dellm"):
         assert absent not in report, report
-    tokens = re.search(r"\*\*Tokens:\*\* ([0-9.]+)(k?) /", report)
-    assert tokens is not None and tokens.group(2) == "" and float(tokens.group(1)) < 100, report
+    assert "| System tools |" in report, report  # its own tools stay on
+    skill_rows = re.findall(r"^\| [\w-]+ \| (\w[\w -]*) \| ~\d+ \|$", report, re.M)
+    assert skill_rows and set(skill_rows) == {"Built-in"}, report
 
 
 @pytest.mark.skipif(
