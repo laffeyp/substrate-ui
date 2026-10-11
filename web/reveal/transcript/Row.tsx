@@ -14,6 +14,7 @@
 
 import * as React from "react";
 import type { TranscriptRow } from "../../vm";
+import { isToolCallRow } from "../../vm";
 import { ModelReply } from "./ModelReply";
 import { ToolCard } from "./ToolCard";
 import { AuthPromptCard } from "./AuthPromptCard";
@@ -63,7 +64,7 @@ const RowInner: React.FC<RowProps> = ({ row, paired, progressText, progressEof, 
   const style = styleFor(row);
   const text = row.text ?? "";
   const isModel = row.role === "model";
-  const isTool = row.role === "tool" && row.kind === "ToolCall";
+  const isTool = row.role === "tool" && isToolCallRow(row);
   const isAuthPrompt = row.role === "system" && row.kind === "AuthPrompt";
   const streamingShow = progressText.length > 0;
   const refCb = React.useCallback(

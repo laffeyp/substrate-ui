@@ -10,7 +10,7 @@ import * as React from "react";
 import { useController } from "./useController";
 import { Row } from "./Row";
 import { useScrollAnchor } from "./useScrollAnchor";
-import { EnvelopeKind } from "../../vm/kinds";
+import { isToolResultRow } from "../../vm";
 import type { Snapshot, TranscriptRow } from "../../vm";
 
 export interface TranscriptProps {
@@ -28,7 +28,7 @@ function buildResultByCallId(snapshot: Snapshot): Map<string, TranscriptRow> {
   const paired = new Map<string, TranscriptRow>();
   for (const row of snapshot.transcript) {
     const id = row.callKey ?? row.callId;
-    if (row.kind === EnvelopeKind.ToolResult && id) paired.set(id, row);
+    if (isToolResultRow(row) && id) paired.set(id, row);
   }
   return paired;
 }
@@ -37,7 +37,7 @@ export function Transcript(props: TranscriptProps): React.ReactElement | null {
   const snapshot = useController(props.paneId);
   const { registerRow, attachTo } = useScrollAnchor(`${props.view}:${props.paneId}`);
   const resultByCallId = React.useMemo(() => buildResultByCallId(snapshot), [snapshot.transcript]);
-  const rows: TranscriptRow[] = snapshot.transcript.filter((row) => row.kind !== EnvelopeKind.ToolResult);
+  const rows: TranscriptRow[] = snapshot.transcript.filter((row) => !isToolResultRow(row));
   return (
     <div ref={attachTo}>
       {rows.map((row) => {

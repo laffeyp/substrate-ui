@@ -41,9 +41,9 @@ const KIND_DISPOSITION: Record<EnvelopeKindValue, "rendered" | "ignored"> = {
   [EnvelopeKind.SessionStarted]: "rendered",
   [EnvelopeKind.BackgroundTaskEnded]: "rendered",
   [EnvelopeKind.SessionChanged]: "rendered",
-  // Kernel K282: a harness driver's own tool calls. The transcript draws them from UI sprint 129.
-  [EnvelopeKind.HarnessToolCall]: "ignored",
-  [EnvelopeKind.HarnessToolResult]: "ignored",
+  // Kernel K282, UI sprint 129: a harness driver's tool calls, drawn as tool cards.
+  [EnvelopeKind.HarnessToolCall]: "rendered",
+  [EnvelopeKind.HarnessToolResult]: "rendered",
   [EnvelopeKind.UserMessage]: "rendered",
   [EnvelopeKind.ModelReply]: "rendered",
   [EnvelopeKind.FinalAnswer]: "rendered",
@@ -190,6 +190,8 @@ export class SessionController {
   private lastSeq = -1;
   /** callId → callKey of the ToolCall currently open under that id (UI sprint 101). */
   private openCallKey = new Map<string, string>();
+  /** UI sprint 129: a harness call's tool name by call id, for its result row. */
+  private harnessToolNames = new Map<string, string>();
   /** UI sprint 105: the refresh timer that runs while a background task is running. */
   private tasksTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -451,6 +453,7 @@ export class SessionController {
     const ack = result.data;
     this.lastSeq = -1;
     this.openCallKey.clear();
+    this.harnessToolNames.clear();
     this.endedEmittedFor = null;
     // Sprint 085b follow-up: AuthPrompt rows persist across session boundaries
     // as a receipt that the user authenticated a CLI. Every other row type
@@ -565,6 +568,7 @@ export class SessionController {
     if (this.unsubscribeStream) { this.unsubscribeStream(); this.unsubscribeStream = null; }
     this.lastSeq = -1;
     this.openCallKey.clear();
+    this.harnessToolNames.clear();
     this.endedEmittedFor = null;
     this.patch({
       sessionId: null,
@@ -613,6 +617,7 @@ export class SessionController {
     const manifest = result.data;
     this.lastSeq = -1;
     this.openCallKey.clear();
+    this.harnessToolNames.clear();
     this.endedEmittedFor = null;
     this.patch({
       sessionId: manifest.session_id,
@@ -1067,6 +1072,44 @@ export class SessionController {
           seq: env.seq, kind: env.kind, role: "tool",
           text: preview ? `${toolName} ${preview}` : `call ${toolName}`,
           toolName, callId, callKey, args, toolStep: step,
+        });
+        return;
+      }
+      case EnvelopeKind.HarnessToolCall: {
+        // UI sprint 129: a harness driver's call inside one model step, its own tool (`harness`)
+        // or the session's over MCP (`mcp`). Same card as a ToolCall; the route shows in the row.
+        const toolName = payload.tool ? String(payload.tool) : "";
+        const callId = payload.call_id ? String(payload.call_id) : "";
+        const route = payload.via ? String(payload.via) : "";
+        const raw = payload.args && typeof payload.args === "object" ? payload.args : {};
+        const args = Object.entries(raw as Record<string, unknown>).map(
+          ([k, v]) => `${k}=${typeof v === "string" ? v : JSON.stringify(v)}`,
+        );
+        const first = Object.values(raw as Record<string, unknown>)[0];
+        const preview = first === undefined ? "" : typeof first === "string" ? first : JSON.stringify(first);
+        const step = typeof payload.step === "number" ? payload.step : undefined;
+        const callKey = callId ? `${callId}@${env.seq}` : "";
+        if (callId) {
+          this.openCallKey.set(callId, callKey);
+          this.harnessToolNames.set(callId, toolName);
+        }
+        this.appendTranscript({
+          seq: env.seq, kind: env.kind, role: "tool",
+          text: `${toolName} (${route})${preview ? ` ${preview}` : ""}`,
+          toolName, callId, callKey, args, toolStep: step, toolRoute: route,
+        });
+        return;
+      }
+      case EnvelopeKind.HarnessToolResult: {
+        const callId = payload.call_id ? String(payload.call_id) : "";
+        const toolName = this.harnessToolNames.get(callId) ?? "";
+        const ok = payload.ok !== false;
+        const output = typeof payload.output === "string" ? payload.output : "";
+        const callKey = this.openCallKey.get(callId) ?? callId;
+        this.appendTranscript({
+          seq: env.seq, kind: env.kind, role: "tool",
+          text: ok ? `${toolName} → ok` : `${toolName} → err`,
+          toolName, callId, callKey, output: ok ? output : "", error: ok ? "" : output, toolOk: ok,
         });
         return;
       }

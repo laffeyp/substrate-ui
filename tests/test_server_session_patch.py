@@ -158,7 +158,12 @@ def test_patch_driver_composes_with_next_turn_topology_build(
     resolved: list[str] = []
 
     def resolver(
-        app: server.App, name: str, params: object = None, *, workspace: str | None = None
+        app: server.App,
+        name: str,
+        params: object = None,
+        *,
+        workspace: str | None = None,
+        session_id: str | None = None,
     ) -> DeterministicResponder:
         resolved.append(name)
         return DeterministicResponder(seed=0)

@@ -34,6 +34,7 @@ declare const ReactDOM: any;
 import {
   EnvelopeKind, TranscriptRole, Surface, GraphMode, RevealLevel, GraphDirection,
 } from "./vm/kinds";
+import { isToolCallRow, isToolResultRow } from "./vm/types";
 import { mdBlocks, mdInlines, renderBlock, renderInline } from "./reveal/markdown";
 import { liveActivity } from "./reveal/activity";
 
@@ -183,7 +184,7 @@ class Component extends DCLogic {
     const findQ = (state.findOpen && state.findScope === 'transcript' ? (state.findQ || '') : '').toLowerCase();
     const resultByCallId = new Map();
     for (const row of transcript) {
-      if (row.kind === EnvelopeKind.ToolResult && row.callId) resultByCallId.set(row.callId, row);
+      if (isToolResultRow(row) && row.callId) resultByCallId.set(row.callId, row);
     }
     const toolOpen = state.toolOpen || {};
     const rows = transcript.map(row => {
@@ -209,7 +210,7 @@ class Component extends DCLogic {
       // with no matching ToolResult is running (◌); with one is done
       // (⚙); a failed result stamps ⚠ onto the CALL row so the arg
       // preview stays legible.
-      const isToolCall = row.kind === EnvelopeKind.ToolCall;
+      const isToolCall = isToolCallRow(row);
       const progressMap = (snap && snap.progressByCallId) || {};
       const progressEntry = (isToolCall && row.callId) ? progressMap[row.callId] : null;
       const streamingShow = !!(progressEntry && progressEntry.text);
@@ -355,7 +356,7 @@ class Component extends DCLogic {
     });
     // Only KEEP one row per (ToolCall, ToolResult) pair — the ToolCall
     // row is the surface; the ToolResult row folds into its card.
-    const filteredRows = rows.filter((r, i) => transcript[i].kind !== EnvelopeKind.ToolResult);
+    const filteredRows = rows.filter((r, i) => !isToolResultRow(transcript[i]));
     const hasSession = !!(snap && snap.sessionId);
     const activity = this._liveActivity(snap);
     return {

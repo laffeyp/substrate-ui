@@ -18,7 +18,13 @@ from substrate.topologies.applications.registry import load_manifests  # noqa: E
 
 import server  # noqa: E402
 
-_PWD = [sys.executable, "-c", "import os; print(os.getcwd())"]
+# Prints its working directory as a Claude Code stream would end (UI sprint 129: the claude
+# profile reads `--output-format stream-json`, whose closing `result` event is the reply).
+_PWD = [
+    sys.executable,
+    "-c",
+    "import json, os; print(json.dumps({'type': 'result', 'result': os.getcwd(), 'usage': {}}))",
+]
 
 
 @pytest.fixture
