@@ -1068,19 +1068,23 @@ export class SessionController {
         const preview = args.length ? args[0] : "";
         const callKey = callId ? `${callId}@${env.seq}` : "";
         if (callId) this.openCallKey.set(callId, callKey);
+        // Kernel K286: a harness driver's call to Substrate's tools over MCP is Substrate's own
+        // ToolCall with origin `mcp`; the row says so.
+        const route = payload.origin === "mcp" ? "mcp" : undefined;
+        const name = route ? `${toolName} (mcp)` : toolName;
         this.appendTranscript({
           seq: env.seq, kind: env.kind, role: "tool",
-          text: preview ? `${toolName} ${preview}` : `call ${toolName}`,
-          toolName, callId, callKey, args, toolStep: step,
+          text: preview ? `${name} ${preview}` : `call ${name}`,
+          toolName, callId, callKey, args, toolStep: step, toolRoute: route,
         });
         return;
       }
       case EnvelopeKind.HarnessToolCall: {
-        // UI sprint 129: a harness driver's call inside one model step, its own tool (`harness`)
-        // or the session's over MCP (`mcp`). Same card as a ToolCall; the route shows in the row.
+        // UI sprints 129, 131: a harness driver's call to its OWN tool inside one model step,
+        // read from its stream. Same card as a ToolCall; the row says `(harness)`.
         const toolName = payload.tool ? String(payload.tool) : "";
         const callId = payload.call_id ? String(payload.call_id) : "";
-        const route = payload.via ? String(payload.via) : "";
+        const route = "harness";
         const raw = payload.args && typeof payload.args === "object" ? payload.args : {};
         const args = Object.entries(raw as Record<string, unknown>).map(
           ([k, v]) => `${k}=${typeof v === "string" ? v : JSON.stringify(v)}`,

@@ -39,8 +39,8 @@ export interface TranscriptRow {
   output?: string;
   error?: string;
   toolStep?: number;
-  /** UI sprint 129 (kernel K282): a harness driver's call — `harness` (its own tool) or `mcp`
-   *  (the session's tool over MCP). Absent on Substrate's own tool calls. */
+  /** UI sprints 129, 131: `harness` on a harness driver's call to its own tool
+   *  (HarnessToolCall); `mcp` on Substrate's ToolCall a harness made over MCP; absent otherwise. */
   toolRoute?: string;
 }
 
