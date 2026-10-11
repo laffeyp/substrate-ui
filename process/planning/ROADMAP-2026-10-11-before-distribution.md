@@ -40,8 +40,18 @@ Cmd+T opens a terminal pane in the pane system. It runs the user's shell (`$SHEL
 
 The terminal pane has no reveal view, no records, no studio and no model picker. It has no tie to Substrate's runs or record. It opens in the workspace of the place it was opened from. While it is the focused pane, the one top bar shows it.
 
+### Topologies: real and useful from a session, or dropped from it
+
+Every topology that ships with Substrate and that a session can run is gone through one by one. Each is either made real and useful in an actual session, or dropped from what the session can see. Today none of this has been tested from a session: a coding topology, for example, cannot be loaded and run from a session and be relied on to work.
+
+- **Kept:** the session can load it, run it and use its result, and that has been tested from a session against a real model.
+- **Dropped:** removed from Substrate UI and from what the session topology is told exists (`list_topologies`, `run_topology`, the guidance). The topology stays in Substrate itself.
+
+The app is not released with a topology the session can reach that has not passed this.
+
 ## After distribution
 
+- **Authoring new topologies.** The ability to make new topologies, taken up after the audit above.
 - **The centred menu.** The picker's steps move into one box in the middle of the empty pane, detached from the input bar, with no left and right halves. Same steps, same order. Taken up once the sequential picker is in and looks right.
 - **6.** The `deterministic` stand-in's 4,096-token context.
 - **11 (K269).** The parallel test suite.
