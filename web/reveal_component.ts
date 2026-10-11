@@ -35,6 +35,7 @@ import {
   EnvelopeKind, TranscriptRole, Surface, GraphMode, RevealLevel, GraphDirection,
 } from "./vm/kinds";
 import { isToolCallRow, isToolResultRow } from "./vm/types";
+import { describeEventTime, eventTimes, formatElapsed } from "./reveal/timeline";
 import { mdBlocks, mdInlines, renderBlock, renderInline } from "./reveal/markdown";
 import { liveActivity } from "./reveal/activity";
 
@@ -1570,6 +1571,7 @@ class Component extends DCLogic {
       return {
         seq: env.seq,
         kind,
+        t: typeof env.t === 'number' ? env.t : null,
         schema: env.schema || '',
         prod,
         producerInstance,
@@ -1584,8 +1586,14 @@ class Component extends DCLogic {
     });
     const _evTexts = envelopes.map(e => (e.kind + ' ' + e.prod + ' ' + e.gist).toLowerCase());
     const findCount = !findQuery ? 'scope: ' + state.findScope + ' — click a lens to move it' : (FSTREAM ? _evTexts.filter(t => t.includes(findQuery)).length + ' matching events · scope: stream' : Object.keys(demoFindTranscriptText).filter(k => demoFindTranscriptText[k].toLowerCase().includes(findQuery)).length + ' matching lines · scope: transcript');
-    const seqToTimeLabel = { 0: 't+0.0s', 1: 't+0.0s', 214: 't+0.0s', 215: 't+0.0s', 216: 't+0.0s', 242: 't+49s', 243: 't+49s', 244: 't+49s' };
-    const formatElapsedTimeForSeq = (seq) => seqToTimeLabel[seq] || ('t+' + (seq < 222 ? '2' : seq < 227 ? '4' : seq < 232 ? '8' : seq < 237 ? '10' : '43') + 's');
+    // Each event's time into its turn, from the record's own `t` (reveal/timeline.ts). This
+    // replaced a table copied from the prototype's sample record, which put every real event at
+    // "t+0.0s" or "t+2s".
+    const _eventTimes = eventTimes(envelopes);
+    const formatElapsedTimeForSeq = (seq) => {
+      const time = _eventTimes.get(seq);
+      return time ? formatElapsed(time.elapsed) : '';
+    };
     // LOW = runtime plumbing, hidden in `app`. Derived from envelopeKindColor by the
     // color rule: any envelope colored #62676f is plumbing. Kept as an
     // explicit set so a stray color change cannot silently move an
@@ -2243,7 +2251,7 @@ class Component extends DCLogic {
       downColor: state.dir === GraphDirection.Down ? '#d7dade' : '#62676f', downBg: state.dir === GraphDirection.Down ? '#2e3138' : 'transparent',
       sideColor: state.dir === GraphDirection.Side ? '#d7dade' : '#62676f', sideBg: state.dir === GraphDirection.Side ? '#2e3138' : 'transparent',
       selSeq: selE ? selE.seq : 0, selKind: selE ? selE.kind : '', selSchema: selE ? selE.schema : '',
-      selTime: selE ? formatElapsedTimeForSeq(selE.seq) + ' into turn 9' : '', selProducer: selE ? selE.prod : '',
+      selTime: selE ? describeEventTime(_eventTimes.get(selE.seq)) : '', selProducer: selE ? selE.prod : '',
       selColor: selE ? (envelopeKindColor[selE.kind] || '#9aa0a8') : '#9aa0a8',
       selContent: selE ? selE.content : [], selPayload: selE ? JSON.stringify(selE.payload, null, 1) : '',
       // IO lens: the application-visible input/output documents on
