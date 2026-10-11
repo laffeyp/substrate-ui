@@ -872,6 +872,14 @@ Twelve PNGs at `captures/pixel-baseline-2026-09-23/`: six states (`empty`, `one_
 
 *Agent maintains. Last 10 increment closes; older roll into ## Built as compressed paragraphs.*
 
+### UI U132 with kernel K287–K289 (2026-10-10) — guidance levels
+- **K287.** The imported guidance is generic. Claude Code's header, vendor names, operator-voiced rules and one operator's memory index are gone; a test scans all 17 texts.
+- **K288.** Four levels: `harness`, `standard-low` (was `standard-small`), `standard-medium` and `standard`. The classes are small (under 14B), medium (14B to under 70B) and large, and each class has a default level.
+- **U132.** A GUIDANCE line in the workspace bar. The daemon resolves the level once, at creation, and a chosen level wins.
+- **K289.** Specs: product round 15, tech round 9, design round 4.
+- **Gates.** Kernel 1,468 passed (`test_realmodel_background_bash_103` failed under load and passed alone in 6.25 s); UI 241 passed; Electron 11 of 11. In the installed app, claude and kimi cloud default to high, qwen 7B and llama 1B to low, and a chosen `harness` or `medium` opens on that bundle.
+- **Commits.** Kernel `794b397f`, `93b81ec9` and the commit carrying K289; UI `aeea707`, `4e56a5f` and the commit carrying this entry.
+
 ### UI U131 with kernel K286 (2026-10-10) — Substrate's tools stay Substrate's
 - **What was wrong.** K284 recorded a harness driver's MCP call to Substrate's tools as `HarnessToolCall(via=mcp)` and ran it in the model step. The Architect caught it: that mixes the two tool sets and bypasses the tool producer.
 - **K286.** The model step writes `ToolCall(origin=mcp)`. The tool producer runs it and writes `ToolResult(origin=mcp)`, and the session hands the result back over MCP. The continue-triggers skip `origin=mcp`, so no second CLI process starts. `HarnessToolCall` covers the harness's own tools only.
