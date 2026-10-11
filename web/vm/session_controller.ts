@@ -198,6 +198,8 @@ export class SessionController {
   private tasksTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private endedEmittedFor: string | null = null;
+  // The last compaction cut shown, so a repeated cut adds no row (session vocabulary § S.4).
+  private lastCompactionCut: string | null = null;
   /** Sprint 085 followup — subset of driverGroups.cli that the
    *  AuthPromptCard supports (server sends cli_login_supported).
    *  pickDriver only fires the card for names in this list. */
@@ -457,6 +459,7 @@ export class SessionController {
     this.openCallKey.clear();
     this.harnessToolNames.clear();
     this.endedEmittedFor = null;
+    this.lastCompactionCut = null;
     // Sprint 085b follow-up: AuthPrompt rows persist across session boundaries
     // as a receipt that the user authenticated a CLI. Every other row type
     // is session-bound and clears with the session.
@@ -572,6 +575,7 @@ export class SessionController {
     this.openCallKey.clear();
     this.harnessToolNames.clear();
     this.endedEmittedFor = null;
+    this.lastCompactionCut = null;
     this.patch({
       sessionId: null,
       sessionName: recordRoot,
@@ -621,6 +625,7 @@ export class SessionController {
     this.openCallKey.clear();
     this.harnessToolNames.clear();
     this.endedEmittedFor = null;
+    this.lastCompactionCut = null;
     this.patch({
       sessionId: manifest.session_id,
       sessionName: manifest.name ?? null,
@@ -1249,15 +1254,21 @@ export class SessionController {
         return;
       }
       case EnvelopeKind.TranscriptCompacted: {
-        // The kernel writes the range as one pair, `dropped_seq_range: [start, end]`
-        // (session vocabulary § D). This row read `dropped_seq_start` / `_end`, which no event
-        // has, and always printed "?–?".
-        const range = Array.isArray(payload.dropped_seq_range) ? payload.dropped_seq_range : [];
-        const droppedStart = typeof range[0] === "number" ? range[0] : "?";
-        const droppedEnd = typeof range[1] === "number" ? range[1] : "?";
+        // Session vocabulary § D, § S.4: `dropped_seq_range` is one pair, or absent when only
+        // tool output was cleared; `cleared_through_seq` is the clearing boundary (v0.7). A record
+        // before v0.7 can repeat the same cut on every turn; a cut equal to the last one adds no row.
+        const range = Array.isArray(payload.dropped_seq_range) ? payload.dropped_seq_range : null;
+        const cleared = typeof payload.cleared_through_seq === "number" ? payload.cleared_through_seq : null;
+        const cut = JSON.stringify([cleared, range]);
+        if (cut === this.lastCompactionCut) return;
+        this.lastCompactionCut = cut;
+        const parts: string[] = [];
+        if (range) parts.push(`earlier turns dropped (seq ${range[0]}–${range[1]})`);
+        if (cleared !== null) parts.push(`older tool output cleared (results through seq ${cleared})`);
+        if (!parts.length) parts.push("compacted");
         this.appendTranscript({
           seq: env.seq, kind: env.kind, role: "system",
-          text: `— transcript compacted (dropped seq ${droppedStart}–${droppedEnd})`,
+          text: `— prompt history: ${parts.join("; ")}`,
         });
         return;
       }

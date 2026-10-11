@@ -52,6 +52,8 @@ What gets built, in the Substrate way (the record never changes; the prompt stay
 - **K292. Clearing, budget, cadence.** Old tool-output bodies are cleared first behind a one-line placeholder; user messages and final replies stay; whole turns drop only as a last resort; the current turn is bounded the same way; the budget uses the drivers' reported token counts; CLI windows are set per model; clearing runs in batches so the prompt's start stays stable.
 - **K293. Console row and live test.** The console names what was cleared, shows a repeated cut once, and a live test reruns the codex case.
 
+*Done 2026-10-11 (K290–K293), except CLI windows per model, which waits on the Architect's choice of source for each model's window.*
+
 Roadmap: `substrate/process/planning/ROADMAP-2026-10-11-compaction.md`. Research: `substrate/process/planning/RESEARCH-2026-10-11-compaction.md`.
 
 ### Topologies: real and useful from a session, or dropped from it
