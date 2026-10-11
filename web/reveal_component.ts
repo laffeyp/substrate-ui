@@ -1586,13 +1586,13 @@ class Component extends DCLogic {
     });
     const _evTexts = envelopes.map(e => (e.kind + ' ' + e.prod + ' ' + e.gist).toLowerCase());
     const findCount = !findQuery ? 'scope: ' + state.findScope + ' — click a lens to move it' : (FSTREAM ? _evTexts.filter(t => t.includes(findQuery)).length + ' matching events · scope: stream' : Object.keys(demoFindTranscriptText).filter(k => demoFindTranscriptText[k].toLowerCase().includes(findQuery)).length + ' matching lines · scope: transcript');
-    // Each event's time into its turn, from the record's own `t` (reveal/timeline.ts). This
-    // replaced a table copied from the prototype's sample record, which put every real event at
-    // "t+0.0s" or "t+2s".
+    // When each event happened: time since the session's first event, from the record's own `t`
+    // (reveal/timeline.ts). This replaced a table copied from the prototype's sample record,
+    // which put every real event at "t+0.0s" or "t+2s".
     const _eventTimes = eventTimes(envelopes);
     const formatElapsedTimeForSeq = (seq) => {
       const time = _eventTimes.get(seq);
-      return time ? formatElapsed(time.elapsed) : '';
+      return time ? formatElapsed(time.sinceStart) : '';
     };
     // LOW = runtime plumbing, hidden in `app`. Derived from envelopeKindColor by the
     // color rule: any envelope colored #62676f is plumbing. Kept as an
