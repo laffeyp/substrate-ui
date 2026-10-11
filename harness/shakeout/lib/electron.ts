@@ -42,11 +42,14 @@ export async function waitForApp(win: Page, timeout = 30_000): Promise<void> {
 }
 
 /** Bind the focused unbound pane the way a first-run user does: Enter in the path input picks the
- * first row, the per-session sandbox. Resolves once the chat prompt is visible. */
+ * first row, the per-session sandbox, and moves to the bar's model half; a second Enter starts on
+ * the current model (UI sprint 124). Resolves once the chat prompt is visible. */
 export async function bindPaneAsUser(win: Page): Promise<void> {
   const path = win.locator('input[placeholder^="type a path"]').first();
   await path.waitFor({ state: "visible", timeout: 15_000 });
   await path.click();
+  await win.keyboard.press("Enter");
+  await win.locator('[data-model-half][data-armed="1"]').first().waitFor({ state: "visible", timeout: 15_000 });
   await win.keyboard.press("Enter");
   await win.locator('[placeholder^="type to talk"]').first().waitFor({ state: "visible", timeout: 15_000 });
 }
