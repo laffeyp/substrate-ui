@@ -872,6 +872,19 @@ Twelve PNGs at `captures/pixel-baseline-2026-09-23/`: six states (`empty`, `one_
 
 *Agent maintains. Last 10 increment closes; older roll into ## Built as compressed paragraphs.*
 
+### UI U129–U130 with kernel K282–K285 (2026-10-10) — a harness driver's tool calls on the record
+- **Recording.** claude, codex and cursor-agent stream their own tool calls, and each lands on the record as `HarnessToolCall`/`HarnessToolResult` with `via=harness`.
+- **MCP.** Substrate's tools reach them as registered tools through `POST /api/session/<id>/mcp`, and each call lands with `via=mcp`. cursor-agent gets MCP only in a per-session sandbox, because it reads `.cursor/mcp.json` from its workspace alone.
+- **Transcript.** Each call shows as a tool card that names its route.
+- **Gates.** Kernel 1,423 passed; UI 237 passed; Electron 11 of 11 on the installed app. In the installed app all three drivers wrote one file per route, each MCP call recorded once.
+- **Commits.** Kernel `fd0b6381`, `8429c3b9`, `896c03ad`, `9f7e270e`; UI `f5c4433`, `c7388f8`, and the commit carrying this entry.
+- **Roadmap.** `substrate/process/planning/ROADMAP-2026-10-10-harness-tool-calls.md`. Specs: product round 14, tech round 8, design round 3.
+- **Still open from the picker roadmap.**
+  - U125: the header indicator.
+  - U126: gates. `model_half_starts_session.ts` still clicks a row not in the real roster, though `bindPaneAsUser` now picks models as a user does.
+  - U127: the specs.
+  - The "ready to pick a session" line in `AuthPromptCard.tsx:213`.
+
 ### UI U124, U128, the Codex git check, and CLI drivers that cannot write (2026-10-10)
 - **U124 (built, `35a7e47`).** The unbound pane's bar holds the workspace picker on the left and the model picker on the right. The model half holds the header dropdown's rows: cli agents, ollama · cloud and ollama · local, folded at first, as bright as the workspace rows. It is greyed until a folder is picked, and a model pick starts the session. It fills the workspace half's height and scrolls inside. Roadmap `process/planning/ROADMAP-2026-10-10-model-picker-in-the-workspace-bar.md`.
 - **U128 (built, `35a7e47`).** ↵ picks, and ⇧↵ or ⌥↵ opens a row; a group opens on ↵. An open folder's sessions join the key list. On a focused empty pane the keys reach the bar without a click. A key-only run went ↓ ↵ ↵ ↓ ⇧↵ ↓ ↵ and started a session on `claude` (opus).

@@ -26,13 +26,14 @@ export const flow: Flow = {
     try {
       const win = await app.firstWindow({ timeout: 20_000 });
       await waitForApp(win);
+      // Bind as a user does (the bar's model half picks a roster model), then switch to the
+      // offline deterministic driver before the session opens, as transcript_follow does.
+      await bindPaneAsUser(win);
       await win.evaluate(async () => {
         const vm = (window as unknown as { __vm: { get(id: number): unknown; spawn(id: number): unknown } }).__vm;
-        const c = (vm.get(1) ?? vm.spawn(1)) as { loadDriverRoster: () => Promise<void>; pickDriver: (n: string) => void };
-        await c.loadDriverRoster();
+        const c = (vm.get(1) ?? vm.spawn(1)) as { pickDriver: (n: string) => void };
         c.pickDriver("deterministic");
       });
-      await bindPaneAsUser(win);
       const prompt = win.locator('[placeholder^="type to talk"]').first();
       await prompt.click();
       await prompt.type("hello", { delay: 5 });
