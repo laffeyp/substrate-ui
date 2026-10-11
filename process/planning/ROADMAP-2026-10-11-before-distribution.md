@@ -49,6 +49,29 @@ Every topology that ships with Substrate and that a session can run is gone thro
 
 The app is not released with a topology the session can reach that has not passed this.
 
+## Order
+
+Set from each item's dependencies. Sprint cards are written one step at a time: cards for a step, the step, then cards for the next.
+
+| # | Item | Why here |
+|---|---|---|
+| 1 | 5. `electron_smoke` fails on first launch | The Electron gates check every later step; they must report truly first. |
+| 2 | 10. Login card; the input bar's false hints | Two text fixes; depend on nothing, block nothing. |
+| 3 | Topology audit | Depends on no UI step and is the largest unknown; starting early shows its size. What it drops leaves the guidance text that step 9 then builds on. |
+| 4 | One top bar | Steps 5, 6 and 12 put things in the top bar. |
+| 5 | 7 (U125). Model chip becomes an indicator | Lives in the top bar; built once, on the single bar. |
+| 6 | Tool-output toggle | Its control sits in the top bar. |
+| 7 | Picker steps in sequence, with 8 (U126) | U126 tests the model step this rewrites, so the test is fixed once, here. |
+| 8 | 13–14. WORKSPACE and MODEL hints | The headings move in step 7. |
+| 9 | 16. Length and Tone rows | The next steps in the new sequence. |
+| 10 | 15. GUIDANCE hint | Worded once the rows exist. |
+| 11 | Session-start line | Names the model and workspace the finished picker chose. |
+| 12 | 18. Terminal pane | Needs the single top bar. A shell drawn in Electron needs a terminal emulator and a native pty module, which must be rebuilt for Electron and signed with the app; doing it before the end leaves room for signing trouble. |
+| 13 | 9 (U127). Spec rounds | Describe the final form, so after every UI change. |
+| 14 | Full gates, signed build, distribution | Full suites and all Electron gates once on the installed app, then the signed build ships. |
+
+Steps 4–6 are one top-bar group; steps 7–10 are one picker group.
+
 ## After distribution
 
 - **Authoring new topologies.** The ability to make new topologies, taken up after the audit above.
