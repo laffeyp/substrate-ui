@@ -25,7 +25,7 @@ function snap(win: Page, pane: number): Promise<Snap | null> {
 }
 
 async function main(): Promise<void> {
-  const launch = launchArgs();
+  const launch = launchArgs({ roster: "live" });
   const app = await electron.launch({ ...launch.options, timeout: 60_000 });
   const shots = process.env.SHAKEOUT_SHOTS || "";
   let code = 1;

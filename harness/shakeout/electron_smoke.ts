@@ -1,4 +1,4 @@
-// Electron smoke flow. Launches the app, binds the first pane through the path input as a user
+// Electron smoke flow. Launches the app on an offline roster, binds the first pane as a user
 // does, drives one deterministic turn through the prompt input, and reports the controller
 // signals the renderer actually emitted (window.__vmSignals). A tag the app did not emit is not
 // reported, so a broken open/turn/park path shows as missing coverage as well as a defect.
@@ -26,14 +26,9 @@ export const flow: Flow = {
     try {
       const win = await app.firstWindow({ timeout: 20_000 });
       await waitForApp(win);
-      // Bind as a user does (the bar's model half picks a roster model), then switch to the
-      // offline deterministic driver before the session opens, as transcript_follow does.
+      // Bind as a user does. The launch's roster is offline, so the one model row is
+      // `deterministic`, the driver this turn runs on.
       await bindPaneAsUser(win);
-      await win.evaluate(async () => {
-        const vm = (window as unknown as { __vm: { get(id: number): unknown; spawn(id: number): unknown } }).__vm;
-        const c = (vm.get(1) ?? vm.spawn(1)) as { pickDriver: (n: string) => void };
-        c.pickDriver("deterministic");
-      });
       const prompt = win.locator('[placeholder^="type to talk"]').first();
       await prompt.click();
       await prompt.type("hello", { delay: 5 });
