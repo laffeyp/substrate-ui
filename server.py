@@ -740,14 +740,20 @@ KNOWN_CLI_ADAPTERS: dict[str, Any] = {
     "claude": {
         "command": ["claude", "-p"],
         # The driver profile (UI sprint 120; RESEARCH-2026-10-10-substrate-default-guidance-r7).
-        # `isolation_flags` switch off what Claude Code would load from this machine: its own
-        # tools, MCP servers, and every settings source (CLAUDE.md, hooks, output style, memory).
-        # Measured 2026-10-10: with them, `/context` lists an 11-token system prompt and nothing
-        # else. `system_flag` carries Substrate's system text (session vocabulary § P.3).
+        # `isolation_flags` switch off what Claude Code would load from this machine: its MCP
+        # servers and every settings source (CLAUDE.md, hooks, output style, memory). Its own
+        # tools stay on, and `--dangerously-skip-permissions` lets them write and run without a
+        # prompt; headless `-p` otherwise starts read-only. `system_flag` carries Substrate's
+        # system text (session vocabulary § P.3).
         # `env` removes Claude Code's git and commit instructions, where its attribution
         # trailer lives. `slash_commands`: `claude -p "/<command>"` runs the command locally
         # (UI sprint 123).
-        "isolation_flags": ["--tools", "", "--strict-mcp-config", "--setting-sources", ""],
+        "isolation_flags": [
+            "--strict-mcp-config",
+            "--setting-sources",
+            "",
+            "--dangerously-skip-permissions",
+        ],
         "system_flag": ["--system-prompt"],
         "env": {"CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS": "1"},
         "slash_commands": True,
@@ -811,9 +817,15 @@ KNOWN_CLI_ADAPTERS: dict[str, Any] = {
         "default_family": "opus",
     },
     "codex": {
-        # `exec` refuses to run outside a git repo it trusts; a per-session sandbox is a plain
-        # directory, so every session turn failed with "Not inside a trusted directory".
-        "command": ["codex", "exec", "--skip-git-repo-check"],
+        # `exec` refuses to run outside a git repo it trusts, and by default runs read-only. A
+        # per-session sandbox is a plain directory, and a session driver has to write: no git
+        # check, no sandbox, no approvals.
+        "command": [
+            "codex",
+            "exec",
+            "--skip-git-repo-check",
+            "--dangerously-bypass-approvals-and-sandbox",
+        ],
         # `--device-auth` prints URL + one-time code to stdout without
         # spawning a local callback server, so the pty renders cleanly
         # even when Substrate is sandboxed.
@@ -857,7 +869,9 @@ KNOWN_CLI_ADAPTERS: dict[str, Any] = {
         "default_family": "gpt-6",
     },
     "cursor-agent": {
-        "command": ["cursor-agent", "-p"],
+        # Headless, cursor-agent stops at "Workspace Trust Required" without `--trust`, and only
+        # proposes file changes without `--force`. A session driver has to work and write.
+        "command": ["cursor-agent", "-p", "--trust", "--force", "--sandbox", "disabled"],
         # NO_OPEN_BROWSER=1 keeps the auth URL in stdout instead of also
         # spawning an OS browser open — the pty renders the URL as a
         # click for the user.
@@ -1031,12 +1045,14 @@ def _parse_cursor_agent_list_models(text: str) -> dict[str, Any] | None:
         line = raw.strip()
         if not line or line.startswith("#"):
             continue
-        # Trim any "(default)" or trailing whitespace marker.
-        head = line.split()[0]
-        if not head or not head[0].isalpha():
+        # A model line is `<id>`, `<id> (default)` or, since 2026.09, `<id> - <Label>`. Any other
+        # line is a heading: "Available models:" once, "Available models" with no colon now, which
+        # was taken as a model id and sent as `--model Available`.
+        parts = line.split()
+        head = parts[0]
+        if not head[0].isalpha() or head.endswith(":"):
             continue
-        # Drop labels like "Available models:".
-        if head.endswith(":"):
+        if len(parts) > 1 and parts[1] not in ("-", "(default)"):
             continue
         ids.append(head)
         if "(default)" in line and default is None:
