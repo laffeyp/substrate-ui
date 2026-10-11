@@ -872,6 +872,12 @@ Twelve PNGs at `captures/pixel-baseline-2026-09-23/`: six states (`empty`, `one_
 
 *Agent maintains. Last 10 increment closes; older roll into ## Built as compressed paragraphs.*
 
+### Guidance follow-through and the workspace bar (2026-10-10, late night)
+- **Guidance under the model column.** The GUIDANCE line moved from full width to the bottom of the model column; the workspace column holds a blank line of the same height. Picking a model opens the line, and picking a level (`auto` included) starts the session. Keys: ← → along the line, ↵ starts, esc or ↑ goes back to the models. `bindPaneAsUser` picks `auto`. Commit `6359ffa`.
+- **The attribution gate** (`test_driver_profile_120.py`) skips each level's own "No model attribution in git" section; it had flagged medium's rule for naming the footer it forbids. Commit `a59d6a0`.
+- **Process slip.** One command ran the UI tests, the build and the install together, so the build was installed before the gate's failure was read. The failure was in the test, not the product. Read the tests before building.
+- **Kernel side:** see `substrate/process/BLACKBOARD.md` for the high text restored, medium and low rebuilt, and the memory section.
+
 ### UI U132 with kernel K287–K289 (2026-10-10) — guidance levels
 - **K287.** The imported guidance is generic. Claude Code's header, vendor names, operator-voiced rules and one operator's memory index are gone; a test scans all 17 texts.
 - **K288.** Four levels: `harness`, `standard-low` (was `standard-small`), `standard-medium` and `standard`. The classes are small (under 14B), medium (14B to under 70B) and large, and each class has a default level.
