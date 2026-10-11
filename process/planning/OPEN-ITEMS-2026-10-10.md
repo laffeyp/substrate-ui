@@ -52,3 +52,5 @@ Items 1–3 closed on 2026-10-10 (roadmap `substrate/process/planning/ROADMAP-20
 ## Before release (Architect, 2026-10-11)
 
 18. **A terminal, opened with Cmd+T.** A plain terminal session inside the app, with no tie to Substrate's runs or record, for ordinary shell work. It uses whatever terminal the machine uses by default, and the user can set another. Nothing exists yet: the only terminal-related code in substrate-ui is the ANSI colour renderer for transcripts (`web/reveal/transcript/ansi.ts`). To settle in design: whether the session is a pane inside the app (a terminal emulator running the user's login shell from `$SHELL`) or a window of the user's terminal app opened at the workspace path. macOS has no single "default terminal" setting; which app counts as the default has to be found or chosen.
+
+*2026-10-11: the order and scope for items 5–18 and the new picker items are in `ROADMAP-2026-10-11-before-distribution.md`, which supersedes item 18's open design question.*
