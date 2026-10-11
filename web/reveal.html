@@ -88,14 +88,14 @@
    <div data-vm-transcript-scroller="{{ pn.id }}" style="flex:1;overflow-y:auto;overflow-x:hidden;padding:16px 22px;line-height:2;font-size:{{ fontSize }}px;min-width:0">
     <div data-vm-transcript-mount="terminal" data-pane-id="{{ pn.id }}"></div>
    </div>
-   <sc-if value="{{ activityShow }}" hint-placeholder-val="{{ false }}">
-    <div style="flex:none;padding:0 22px 8px;font-size:11px;line-height:1.6;color:{{ activityColor }}">
-     <span class="{{ activityPulseClass }}" style="color:{{ activityTurnColor }}">{{ activityTurnWord }}</span><sc-if value="{{ activityRest }}" hint-placeholder-val="{{ false }}"><span> · {{ activityRestText }}</span></sc-if>
+   <sc-if value="{{ pn.activityShow }}" hint-placeholder-val="{{ false }}">
+    <div style="flex:none;padding:0 22px 8px;font-size:11px;line-height:1.6;color:{{ pn.activityColor }}">
+     <span class="{{ pn.activityPulseClass }}" style="color:{{ pn.activityTurnColor }}">{{ pn.activityTurnWord }}</span><sc-if value="{{ pn.activityRest }}" hint-placeholder-val="{{ false }}"><span> · {{ pn.activityRestText }}</span></sc-if>
     </div>
    </sc-if>
-   <sc-if value="{{ tasksShow }}" hint-placeholder-val="{{ false }}">
+   <sc-if value="{{ pn.tasksShow }}" hint-placeholder-val="{{ false }}">
     <div data-vm-tasks="terminal" style="flex:none;padding:0 22px 8px;font-size:11px;line-height:1.6;color:#9aa0a8">
-     <sc-for list="{{ taskRows }}" as="tr" hint-placeholder-count="1">
+     <sc-for list="{{ pn.taskRows }}" as="tr" hint-placeholder-count="1">
       <div><span>task {{ tr.label }}</span> · <span data-vm-task-stop="{{ tr.id }}" onClick="{{ tr.stop }}" style="color:#c86464;cursor:pointer">stop</span></div>
      </sc-for>
     </div>

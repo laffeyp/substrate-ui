@@ -3,6 +3,7 @@
 // template runtime; Component._liveActivity delegates here.
 
 import { EnvelopeKind } from "../vm/kinds";
+import { formatClock, formatDuration } from "./timeline";
 
 export interface Activity {
   kind: "live" | "recap" | "failed";
@@ -36,7 +37,10 @@ export function liveActivity(snap: any): Activity | null {
   let lastUM = null, lastPark = null, lastParkKind = '';
   for (let i = envs.length - 1; i >= 0; i--) {
     const e = envs[i];
-    if (!lastPark && (e.kind === EnvelopeKind.Park || e.kind === EnvelopeKind.SessionEnded)) { lastPark = e; lastParkKind = e.kind; }
+    // A turn ends with `Returned` (vocabulary v0.3, kernel K259); records written before v0.3 end
+    // it with `Park`. Reading only `Park` left every turn since K259 looking live, its clock
+    // counting for ever (found 2026-10-10).
+    if (!lastPark && (e.kind === EnvelopeKind.Returned || e.kind === EnvelopeKind.Park || e.kind === EnvelopeKind.SessionEnded)) { lastPark = e; lastParkKind = e.kind; }
     if (!lastUM && e.kind === EnvelopeKind.UserMessage) lastUM = e;
     if (lastUM && lastPark) break;
   }
@@ -58,7 +62,7 @@ export function liveActivity(snap: any): Activity | null {
     }
     const lastT = envs.reduce((m: number, e: any) => (typeof e.t === 'number' && e.t > m ? e.t : m), umTime);
     const ran = Math.max(0, Math.min(fail.atT, Math.max(lastT, umTime)) - umTime);
-    const ranTxt = ran >= 60 ? `${(ran / 60).toFixed(1)}m` : `${ran.toFixed(1)}s`;
+    const ranTxt = formatDuration(ran);
     const toolTxt = failTools === 0 ? 'no tools' : `${failTools} tool${failTools === 1 ? '' : 's'}`;
     const detail = String(fail.detail).replace(/^\{"error":"?|"?\}$/g, '').slice(0, 140);
     return {
@@ -92,7 +96,7 @@ export function liveActivity(snap: any): Activity | null {
     // turn progresses. Zero tools reads "no tools"; the field is
     // always present.
     const turnWord = turnIdx !== null ? `turn ${turnIdx}` : 'turn';
-    const restParts = [`${secs}s`];
+    const restParts = [formatClock(secs)];
     restParts.push(tools === 0 ? 'no tools' : `${tools} tool${tools === 1 ? '' : 's'}`);
     if (liveToolName) restParts.push(liveToolName);
     restParts.push('ctrl+c to stop');
@@ -118,9 +122,11 @@ export function liveActivity(snap: any): Activity | null {
   const startT = typeof lastUM.t === 'number' ? lastUM.t : 0;
   const endT = typeof lastPark.t === 'number' ? lastPark.t : 0;
   const elapsed = Math.max(0, endT - startT);
-  const elapsedTxt = elapsed >= 60 ? `${(elapsed / 60).toFixed(1)}m` : `${elapsed.toFixed(1)}s`;
+  const elapsedTxt = formatDuration(elapsed);
   const parkReason = (lastPark.payload && lastPark.payload.reason) || '';
-  const parkLabel = lastParkKind === EnvelopeKind.SessionEnded ? 'session ended' : `parked${parkReason ? ' (' + parkReason + ')' : ''}`;
+  const parkLabel = lastParkKind === EnvelopeKind.SessionEnded
+    ? 'session ended'
+    : `${lastParkKind === EnvelopeKind.Returned ? 'returned' : 'parked'}${parkReason ? ' (' + parkReason + ')' : ''}`;
   const toolLabel = tools.length === 0 ? 'no tools' : `${tools.length} tool${tools.length === 1 ? '' : 's'}`;
   // Recap keeps the same head/tail split so the strip layout does
   // not change between states — only the pulse stops.
