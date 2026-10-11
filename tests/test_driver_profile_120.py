@@ -77,6 +77,28 @@ def test_the_daemon_builds_claude_with_the_profile(app: server.App) -> None:
     assert responder._argv("P", "")[-3:] == ["--system-prompt", "", "P"]
 
 
+def test_the_daemon_builds_codex_to_run_outside_a_git_repo(app: server.App) -> None:
+    """A per-session sandbox is a plain directory. `codex exec` without --skip-git-repo-check
+    exits 1 there: "Not inside a trusted directory" (found 2026-10-10 in the installed app)."""
+    responder = server._daemon_driver_resolver(app, "codex", workspace="/tmp")
+    assert isinstance(responder, CliResponder)
+    assert responder.command[:3] == ("codex", "exec", "--skip-git-repo-check")
+
+
+@pytest.mark.skipif(
+    os.environ.get("SUBSTRATE_LIVE_DRIVER_TESTS") != "1" or shutil.which("codex") is None,
+    reason="a real Codex turn; run on demand with SUBSTRATE_LIVE_DRIVER_TESTS=1",
+)
+def test_codex_answers_in_a_plain_directory(
+    app: server.App, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import pwd
+
+    monkeypatch.setenv("HOME", pwd.getpwuid(os.getuid()).pw_dir)  # the real Codex login
+    responder = server._daemon_driver_resolver(app, "codex", workspace=str(tmp_path))
+    assert "ready" in responder.respond("Reply with the single word: ready").lower()
+
+
 _live = pytest.mark.skipif(shutil.which("claude") is None, reason="claude CLI not installed")
 
 

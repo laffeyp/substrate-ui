@@ -811,7 +811,9 @@ KNOWN_CLI_ADAPTERS: dict[str, Any] = {
         "default_family": "opus",
     },
     "codex": {
-        "command": ["codex", "exec"],
+        # `exec` refuses to run outside a git repo it trusts; a per-session sandbox is a plain
+        # directory, so every session turn failed with "Not inside a trusted directory".
+        "command": ["codex", "exec", "--skip-git-repo-check"],
         # `--device-auth` prints URL + one-time code to stdout without
         # spawning a local callback server, so the pty renders cleanly
         # even when Substrate is sandboxed.
