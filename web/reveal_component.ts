@@ -36,6 +36,16 @@ import {
 } from "./vm/kinds";
 import { isToolCallRow, isToolResultRow } from "./vm/types";
 import { describeEventTime, eventTimes, formatElapsed } from "./reveal/timeline";
+
+// UI sprint 132 (kernel K288, session vocabulary § R): the guidance levels the bar offers, each
+// with the bundle that carries it. `auto` names none, so the daemon picks the model's default.
+const GUIDANCE_OPTIONS = [
+  { level: null, bundle: null, label: 'auto', meta: 'follows the model' },
+  { level: 'harness', bundle: 'harness', label: 'harness', meta: 'loop rules only' },
+  { level: 'low', bundle: 'standard-low', label: 'low', meta: 'one line a rule' },
+  { level: 'medium', bundle: 'standard-medium', label: 'medium', meta: 'rules, no examples' },
+  { level: 'high', bundle: 'standard', label: 'high', meta: 'the full standard' },
+];
 import { mdBlocks, mdInlines, renderBlock, renderInline } from "./reveal/markdown";
 import { liveActivity } from "./reveal/activity";
 
@@ -1246,6 +1256,26 @@ class Component extends DCLogic {
           return Object.assign({}, o, { color: lit ? '#e2e5e9' : o.color, bg: lit ? '#2e3138' : 'transparent', cursor: 'pointer', liveRow: o.notHeader, greyRow: false, lit: lit ? '1' : '0' });
         });
       })(),
+      // UI sprint 132 (kernel K288): the guidance level for the session the bar will open. Auto
+      // leaves it to the daemon, which picks the model's default level at creation.
+      guidanceRows: GUIDANCE_OPTIONS.map((g) => {
+        const lit = (p.guidance ?? null) === g.level;
+        return {
+          label: g.label, meta: g.meta, lit: lit ? '1' : '0',
+          live: !!p.armed, grey: !p.armed,
+          color: lit ? '#e2e5e9' : '#b9bec5',
+          metaColor: lit ? '#9aa0a8' : '#62676f',
+          bg: lit ? '#2e3138' : 'transparent',
+          pick: () => {
+            if (!p.armed) return;
+            this.setState(st => ({ panes: st.panes.map(x => x.id === p.id ? Object.assign({}, x, { guidance: g.level }) : x) }));
+            const vm = window.__vm;
+            if (vm && typeof vm.pickBundle === 'function') vm.pickBundle(g.bundle);
+          },
+        };
+      }),
+      // The chosen level's description, at the end of the guidance line.
+      guidanceNote: (GUIDANCE_OPTIONS.find((g) => g.level === (p.guidance ?? null)) || GUIDANCE_OPTIONS[0]).meta,
       modelHeadColor: p.armed ? '#62676f' : '#4a4e55',
       pickerDir: paneW < 480 ? 'column' : 'row',
       modelBorderL: paneW < 480 ? 'none' : '1px solid rgba(255,255,255,.08)',
