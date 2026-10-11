@@ -10,6 +10,7 @@
 - **8 (U126). `model_half_starts_session.ts` clicks a model row that is not in the real roster.** The test picks models as a user does.
 - **10. The login card.** Remove "ready to pick a session" (`AuthPromptCard.tsx:213`) and check the layout of that bottom row.
 - **Precompiled Python bytecode in the bundle.** The bundle ships without `.pyc` files, so the first launch writes 298 of them into `/Applications/Substrate.app`. A signed app must not change after signing; the build compiles the bytecode before signing (found in sprint 133).
+- **Tool outputs sent twice.** Broken: every tool output in the current turn reaches the model twice, once in the history and again under "Tool results so far". A bug in the prompt builder (`substrate/process/planning/RESEARCH-2026-10-11-compaction.md`).
 - **Harness tool calls in the session bar.** The session bar's turn line (turns, seconds, tools) reports no tools used when a harness driver's tools ran. A `HarnessToolCall` counts there as a `ToolCall` does.
 - **The input bar's hint.** Before a session exists, the hint in the input bar lists its keys. Two parts are false and come out: "type a path" (typed text is not treated as a folder path) and "‹symbol› fills nearest" (nothing autocompletes). The other key hints stay where they are true: ↑↓ moves, shift-enter opens, enter picks the folder. The input bar itself, the program's text input, is unchanged.
 
@@ -42,6 +43,10 @@ Cmd+T opens a terminal pane in the pane system. It runs the user's shell (`$SHEL
 
 The terminal pane has no reveal view, no records, no studio and no model picker. It has no tie to Substrate's runs or record. It opens in the workspace of the place it was opened from. While it is the focused pane, the one top bar shows it.
 
+### Compaction
+
+Substrate drops whole turns, oldest first, user requests and replies with them, once an estimate of the history passes 60% of the driver's window. It never clears old tool output, counts tokens as characters ÷ 4 against real counts it already records, and gives every CLI driver a flat 100,000-token window. A codex session lost both earlier turns, its deep review among them, to one heavy turn. The rework follows first-source practice: clear old tool outputs first behind a placeholder, keep the user's requests and replies, summarise only when that is not enough, budget on real counts, bound the current turn, and show a repeated cut as the same cut. Research: `substrate/process/planning/RESEARCH-2026-10-11-compaction.md`.
+
 ### Topologies: real and useful from a session, or dropped from it
 
 Every topology that ships with Substrate and that a session can run is gone through one by one. Each is either made real and useful in an actual session, or dropped from what the session can see. Today none of this has been tested from a session: a coding topology, for example, cannot be loaded and run from a session and be relied on to work.
@@ -58,21 +63,22 @@ Set from each item's dependencies. Sprint cards are written one step at a time: 
 | # | Item | Why here |
 |---|---|---|
 | 1 | 5. `electron_smoke` fails on first launch | The Electron gates check every later step; they must report truly first. |
-| 2 | 10. Login card; the input bar's false hints; harness tool calls in the session bar; precompiled bytecode | Small fixes; depend on nothing, block nothing. |
-| 3 | Topology audit | Depends on no UI step and is the largest unknown; starting early shows its size. What it drops leaves the guidance text that step 9 then builds on. |
-| 4 | One top bar | Steps 5, 6 and 12 put things in the top bar. |
-| 5 | 7 (U125). Model chip becomes an indicator | Lives in the top bar; built once, on the single bar. |
-| 6 | Tool-output toggle | Its control sits in the top bar. |
-| 7 | Picker steps in sequence, with 8 (U126) | U126 tests the model step this rewrites, so the test is fixed once, here. |
-| 8 | 13–14. WORKSPACE and MODEL hints | The headings move in step 7. |
-| 9 | 16. Length and Tone rows | The next steps in the new sequence. |
-| 10 | 15. GUIDANCE hint | Worded once the rows exist. |
-| 11 | Session-start line | Names the model and workspace the finished picker chose. |
-| 12 | 18. Terminal pane | Needs the single top bar. A shell drawn in Electron needs a terminal emulator and a native pty module, which must be rebuilt for Electron and signed with the app; doing it before the end leaves room for signing trouble. |
-| 13 | 9 (U127). Spec rounds | Describe the final form, so after every UI change. |
-| 14 | Full gates, signed build, distribution | Full suites and all Electron gates once on the installed app, then the signed build ships. |
+| 2 | 10. Login card; the input bar's false hints; harness tool calls in the session bar; precompiled bytecode; tool outputs sent twice | Small fixes; depend on nothing, block nothing. |
+| 3 | Compaction | A kernel change no UI step waits on, and the topology audit runs real sessions whose results depend on it. |
+| 4 | Topology audit | Depends on no UI step and is the largest unknown; starting early shows its size. What it drops leaves the guidance text that step 10 then builds on. |
+| 5 | One top bar | Steps 6, 7 and 13 put things in the top bar. |
+| 6 | 7 (U125). Model chip becomes an indicator | Lives in the top bar; built once, on the single bar. |
+| 7 | Tool-output toggle | Its control sits in the top bar. |
+| 8 | Picker steps in sequence, with 8 (U126) | U126 tests the model step this rewrites, so the test is fixed once, here. |
+| 9 | 13–14. WORKSPACE and MODEL hints | The headings move in step 8. |
+| 10 | 16. Length and Tone rows | The next steps in the new sequence. |
+| 11 | 15. GUIDANCE hint | Worded once the rows exist. |
+| 12 | Session-start line | Names the model and workspace the finished picker chose. |
+| 13 | 18. Terminal pane | Needs the single top bar. A shell drawn in Electron needs a terminal emulator and a native pty module, which must be rebuilt for Electron and signed with the app; doing it before the end leaves room for signing trouble. |
+| 14 | 9 (U127). Spec rounds | Describe the final form, so after every UI change. |
+| 15 | Full gates, signed build, distribution | Full suites and all Electron gates once on the installed app, then the signed build ships. |
 
-Steps 4–6 are one top-bar group; steps 7–10 are one picker group.
+Steps 5–7 are one top-bar group; steps 8–11 are one picker group.
 
 ## After distribution
 
