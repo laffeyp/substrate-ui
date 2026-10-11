@@ -1,12 +1,13 @@
-// web/reveal/timeline.ts — each event's time into its turn, from the record's own clock.
+// web/reveal/timeline.ts — when each event happened, from the record's own clock.
 //
 // Every envelope carries `t`, the Unix time its write was committed, to the microsecond. Before
 // 2026-10-10 the graph's time column read a table copied from the design prototype's sample
 // record (seqs 214–244) and a fallback keyed on seq ranges, so a real session's events all read
 // "t+0.0s" or "t+2s", and the selected event always said "into turn 9".
 //
-// An event's time is measured from the start of its turn, the turn's UserMessage. Events before
-// the first message are measured from the session's first event.
+// The column is the time since the session's first event, so it only increases and the gap
+// between turns shows. The selected event's line adds its time into its turn, measured from the
+// turn's UserMessage.
 
 import { EnvelopeKind } from "../vm/kinds";
 
@@ -18,44 +19,56 @@ export interface TimedEvent {
 }
 
 export interface EventTime {
-  /** Seconds since the start of the event's turn (or of the session, before the first turn). */
-  elapsed: number;
+  /** Seconds since the session's first event. */
+  sinceStart: number;
+  /** Seconds since the event's turn began, or null before the first UserMessage. */
+  intoTurn: number | null;
   /** The turn's index, or null before the first UserMessage. */
   turn: number | null;
 }
 
-/** Each event's time into its turn, by seq. Events with no `t` are left out. */
+/** Each event's time, by seq. Events with no `t` are left out. */
 export function eventTimes(events: readonly TimedEvent[]): Map<number, EventTime> {
   const out = new Map<number, EventTime>();
-  let base: number | null = null;
+  let start: number | null = null;
+  let turnStart: number | null = null;
   let turn: number | null = null;
   for (const e of events) {
     if (typeof e.t !== "number") continue;
+    if (start === null) start = e.t;
     if (e.kind === EnvelopeKind.UserMessage) {
-      base = e.t;
+      turnStart = e.t;
       const idx = e.payload?.turn_index;
       turn = typeof idx === "number" ? idx : turn === null ? 0 : turn + 1;
-    } else if (base === null) {
-      base = e.t;
     }
-    out.set(e.seq, { elapsed: Math.max(0, e.t - base), turn });
+    out.set(e.seq, {
+      sinceStart: Math.max(0, e.t - start),
+      intoTurn: turnStart === null ? null : Math.max(0, e.t - turnStart),
+      turn,
+    });
   }
   return out;
 }
 
-/** `t+143ms`, `t+2.31s`, `t+12.4s`, `t+2m05s`: the unit that fits the span. */
-export function formatElapsed(seconds: number): string {
-  if (seconds < 1) return `t+${Math.round(seconds * 1000)}ms`;
-  if (seconds < 10) return `t+${seconds.toFixed(2)}s`;
-  if (seconds < 60) return `t+${seconds.toFixed(1)}s`;
+/** `143ms`, `2.31s`, `12.4s`, `2m05s`: the unit that fits the span. */
+export function formatDuration(seconds: number): string {
+  if (seconds < 1) return `${Math.round(seconds * 1000)}ms`;
+  if (seconds < 10) return `${seconds.toFixed(2)}s`;
+  if (seconds < 60) return `${seconds.toFixed(1)}s`;
   const m = Math.floor(seconds / 60);
   const s = Math.floor(seconds - m * 60);
-  return `t+${m}m${String(s).padStart(2, "0")}s`;
+  return `${m}m${String(s).padStart(2, "0")}s`;
 }
 
-/** The selected event's line: `t+2.31s into turn 3`, or `t+40ms after session open`. */
+/** The column's label: time since the session's first event, `t+42.6s`. */
+export function formatElapsed(seconds: number): string {
+  return `t+${formatDuration(seconds)}`;
+}
+
+/** The selected event's line: `t+42.6s · 1.38s into turn 0`, or `t+4ms · session open`. */
 export function describeEventTime(time: EventTime | undefined): string {
   if (!time) return "";
-  const label = formatElapsed(time.elapsed);
-  return time.turn === null ? `${label} after session open` : `${label} into turn ${time.turn}`;
+  const at = formatElapsed(time.sinceStart);
+  if (time.turn === null || time.intoTurn === null) return `${at} · session open`;
+  return `${at} · ${formatDuration(time.intoTurn)} into turn ${time.turn}`;
 }

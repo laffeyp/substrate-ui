@@ -5,7 +5,12 @@
 ## Closed tonight
 
 - **The compaction row's "?–?".** See item 6.
-- **The graph's time column.** Every event read `t+0.0s` or `t+2s`, and the selected event always said "into turn 9". The labels came from a table copied from the design prototype's sample record (`seqToTimeLabel`, keyed on seqs 214–244), plus a fallback keyed on seq ranges (`reveal_component.ts:1587-1588`). They never read the record's own clock. The intent, visible in the "into turn" detail, was each event's time into its turn. `web/reveal/timeline.ts` now measures that from each envelope's `t`, the commit time to the microsecond. Times run from the turn's `UserMessage`, or from the session's first event before any turn, and use the unit that fits: `t+143ms`, `t+2.31s`, `t+12.4s`, `t+2m05s`. Checked in a running build: each turn restarts at `t+0ms`.
+- **The graph's time column.** Every event read `t+0.0s` or `t+2s`, and the selected event always said "into turn 9". The labels came from a table copied from the design prototype's sample record (`seqToTimeLabel`, keyed on seqs 214–244), plus a fallback keyed on seq ranges (`reveal_component.ts:1587-1588`). They never read the record's own clock. `web/reveal/timeline.ts` now uses each envelope's `t`, the commit time to the microsecond.
+  - **The column** is the time since the session's first event. It only increases, and the gap between turns shows.
+  - **The selected event's line** adds its time into its turn, for example `t+42.6s · 1.38s into turn 0`.
+  - **Units fit the span:** `t+143ms`, `t+2.31s`, `t+12.4s`, `t+2m05s`.
+  - **A first version reset the column at every message.** The Architect caught it, and it was corrected the same night.
+  - **Checked in a running build:** the second message landed at `t+2.27s`.
 
 ## Guidance
 
