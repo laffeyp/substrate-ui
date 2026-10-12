@@ -872,6 +872,11 @@ Twelve PNGs at `captures/pixel-baseline-2026-09-23/`: six states (`empty`, `one_
 
 *Agent maintains. Last 10 increment closes; older roll into ## Built as compressed paragraphs.*
 
+### Slash commands, gate timing, and a postmortem (2026-10-12)
+- **U162** one slash-command table: the menu, its choices and `/help` read `slashCatalog()`; the session status look is one module; a test holds the session PATCH allow-list equal to its handlers; fifteen fixed sleeps before reads in eleven gates wait for a condition or a drawn frame (`settled()`), after one failed under load.
+- **U163–U166** (`ROADMAP-2026-10-12-slash-entry.md`): one match closes the menu and a grey hint, in one fixed column, names the command's choices and description, before and after the space; ↑ ↓ ↵ esc in the choice menu; Tab completes command names.
+- **Postmortem** (kernel `process/planning/POSTMORTEM-2026-10-12-mid-session-changes-arrive-late.md`): every mid-session change reaches the model one message late. U161's gate checked the manifest and the recorded event, not the prompt; "it applies from the next message" is false until the fix (`substrate/process/planning/ROADMAP-2026-10-12-changes-on-time.md`).
+
 ### Release step 18, picker keys, records page, errors, controls mid-session (2026-10-12)
 - **U152** ← on a session in the workspace column folds its row. **U153, U154** (step 18, done): the records page's workspaces in the picker box's style; "sessions get worktrees" was false (`_session_worktree` has no caller), a git workspace reads "git".
 - **U155** the graph's app view keeps the delegate lane on the rows it shows. **U156** the records page takes the picker's keys through one shared method, `_treeKey`. **U157** the records box is the picker box's width. **U158** the meta view's stream follows the bottom until scrolled up (`web/reveal/follow_bottom.ts`; `STICK_PX` in `web/reveal/scroll_stick.ts`).
