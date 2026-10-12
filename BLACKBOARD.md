@@ -872,6 +872,12 @@ Twelve PNGs at `captures/pixel-baseline-2026-09-23/`: six states (`empty`, `one_
 
 *Agent maintains. Last 10 increment closes; older roll into ## Built as compressed paragraphs.*
 
+### Changes reach the next message: U167 with kernel K299–K301 (2026-10-12)
+- **Kernel K299** (vocabulary v0.10 § V, `6d2d5114`): a setting changed mid-session now reaches the prompt for the very next message; the session-prompt producer records the change and writes its text before the model starts. K300's 7 tests were red on the old kernel.
+- **U167**: `controls_mid_session` reads, through the kernel (`harness/shakeout/lib/prompt_after_change.py`), the prompt for the message after `/tone blunt` and `/guidance low`; red on the old kernel, green after. Its first version passed on the old kernel on an empty check and was fixed. Live on deepseek-v4-pro: the terse text reached the next message's prompt. The transcript's "it applies from the next message" now holds.
+- **Installed** `/Applications/Substrate.app` runs kernel `6d2d5114` (Info.plist `SubstrateKernelCommit`).
+- **K301**: the length experiment on the fixed kernel: glm does not move; kimi shortens 7–18%; no drift back (`substrate/process/planning/RESEARCH-2026-10-12-length-drift-r3.md`).
+
 ### Slash commands, gate timing, and a postmortem (2026-10-12)
 - **U162** one slash-command table: the menu, its choices and `/help` read `slashCatalog()`; the session status look is one module; a test holds the session PATCH allow-list equal to its handlers; fifteen fixed sleeps before reads in eleven gates wait for a condition or a drawn frame (`settled()`), after one failed under load.
 - **U163–U166** (`ROADMAP-2026-10-12-slash-entry.md`): one match closes the menu and a grey hint, in one fixed column, names the command's choices and description, before and after the space; ↑ ↓ ↵ esc in the choice menu; Tab completes command names.
