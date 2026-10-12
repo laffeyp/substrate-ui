@@ -96,5 +96,6 @@ Steps 5–7 are one top-bar group; steps 8–11 are one picker group.
 - **Authoring new topologies.** The ability to make new topologies, taken up after the audit above.
 - **The centred menu.** The picker's steps move into one box in the middle of the empty pane, detached from the input bar, with no left and right halves. Same steps, same order. Taken up once the sequential picker is in and looks right.
 - **6.** The `deterministic` stand-in's 4,096-token context.
+- **I/O lens: core and expanded.** A toggle on the i/o lens like stream+graph's all/app. Core shows only user messages and model replies. Expanded opens each one into sections: under a user message, the text that actually reached the model (the composed prompt), and the steps in between. Asked 2026-10-11; not a release blocker.
 - **11 (K269).** The parallel test suite.
 - **17.** Language measurement, its own project: `substrate/process/planning/RESEARCH-2026-10-10-language-metrics.md` and rounds 2–4.

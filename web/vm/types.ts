@@ -93,19 +93,39 @@ export interface ProducerNode {
   kind: string;
   emits: string[];
   initial: boolean;
+  deterministic: boolean;
 }
 
 /** One trigger edge inside the topology graph. */
 export interface TriggerEdge {
   id: string;
   onKind: string;
+  /** The subscribed event kinds, one per entry (`onKind` joins them). */
+  on: string[];
   starts: string;
+  /** PerEvent or Once. */
+  policy: string;
+}
+
+/** One route: it stages an event's data into a named slot. */
+export interface RouteEdge {
+  id: string;
+  slot: string;
 }
 
 /** The topology graph the reveal-view structure lens renders. */
 export interface TopologyGraph {
   producers: ProducerNode[];
   triggers: TriggerEdge[];
+  /** The record's View names, and its termination policy, as the RunStarted manifest gives them. */
+  views: string[];
+  termination: string[];
+  routes: RouteEdge[];
+  /** Kinds written into the record from outside the topology (UI sprint 138, server `_topology_graph`). */
+  outside: string[];
+  exports: string[];
+  baseline: Record<string, unknown>;
+  config: Record<string, unknown>;
 }
 
 /** The connection lifecycle the transcript reflects. */

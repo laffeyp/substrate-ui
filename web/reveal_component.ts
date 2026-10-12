@@ -39,6 +39,21 @@ import { describeEventTime, eventTimes, formatClock, formatElapsed } from "./rev
 
 // UI sprint 132 (kernel K288, session vocabulary § R): the guidance levels the bar offers, each
 // with the bundle that carries it. `auto` names none, so the daemon picks the model's default.
+// UI sprint 138: one or two sentences per structure-lens heading, from Substrate's docs
+// (docs/api.md, docs/tutorial.md, docs/adding-a-topology.md, kernel/topology.py).
+const STRUCTURE_DEFS = {
+  events: 'An event is a typed record a producer emits. The run\u2019s record is its events in order, and every other part reads them. Runtime: lifecycle events the runtime writes. Outside: written into the record by the app, for the user.',
+  producers: 'A producer is a callable that takes typed input and yields typed events. The runtime starts one each time a trigger fires and records its start and its end.',
+  triggers: 'A trigger starts a producer when an event it subscribes to arrives and its predicate holds over the views. PerEvent fires on every match; Once fires a single time.',
+  routes: 'A route stages data from an event into a named slot, and a later trigger reads it. Context reaches a producer\u2019s next instantiation this way.',
+  views: 'A view is a deterministic projection the runtime keeps current over the events. Triggers read views by name to decide whether to fire and what to pass.',
+  ends: 'The termination policy decides when the run stops: it finalises the record, or pauses it to wait for input.',
+  run: 'The baseline is metadata recorded when the run opens (environment, fixtures, seeds), so the record reads from a known state. Exports are what a run composed inside another hands back to its parent.',
+  initial: 'An initial producer starts when the run opens, before any trigger.',
+  instrument: 'An instrument is a producer and its trigger registered together: it starts once for every event of one kind.',
+  deterministic: 'A deterministic producer gives the same events for the same input, so replay can run it again.',
+};
+
 const GUIDANCE_OPTIONS = [
   { level: null, bundle: null, label: 'auto', meta: 'follows the model' },
   { level: 'harness', bundle: 'harness', label: 'harness', meta: 'loop rules only' },
@@ -441,7 +456,6 @@ class Component extends DCLogic {
   }
   _newPane() {
     const id = (this._nextId = (this._nextId || Math.max(...this.state.panes.map(p => p.id), ...(this.state.allSessions || []).map(s => s.id)) + 1)) && this._nextId++;
-    const defaultDriver = this.state.driverDefault || null;
     // Split-pane multi-session: each pane owns its own SessionController.
     // The registry lazily spawns one on first ask; roster loaders fire
     // once so a new pane starts with the drivers/bundles already known.
@@ -452,7 +466,8 @@ class Component extends DCLogic {
       c.loadBundleRoster && c.loadBundleRoster().catch(() => undefined);
       c.loadRecentWorkspaces && c.loadRecentWorkspaces().catch(() => undefined);
     }
-    return { id, name: 'pane-' + id, driver: defaultDriver, unbound: true, wsQ: '', editing: false, nameVal: '', pv: '', lines: [] };
+    // No model until the user picks one: a new pane names none and preselects none.
+    return { id, name: 'pane-' + id, driver: null, unbound: true, wsQ: '', editing: false, nameVal: '', pv: '', lines: [] };
   }
   _bindPane(id, ws, opts) {
     this.setState(s => {
@@ -616,11 +631,12 @@ class Component extends DCLogic {
 
   // The driver a pane's chip shows. A bound session runs the driver on its manifest, which the
   // pane's controller reads at attach (`attachExisting`); a resumed session must show that, not
-  // the roster default. An unbound pane shows the driver picked for its next session.
+  // the roster default. An unbound pane shows the driver picked for its next session, and none
+  // before one is picked: the roster's default is never shown or preselected.
   _paneDriver(state, pane) {
     const snap = (state.controllerSnapshots || {})[pane.id];
     if (snap && snap.sessionId && snap.driver) return snap.driver;
-    return pane.driver || state.driverDefault || 'deterministic';
+    return pane.driver || null;
   }
 
   _buildDriverOpts(state, paneId, currentDriver, onPicked) {
@@ -1008,7 +1024,8 @@ class Component extends DCLogic {
           return;
         }
       }
-      if (e.ctrlKey && e.key === '\u0060') { e.preventDefault(); const s=this.state; if (!s.revealed) { const fp=s.panes.find(p=>p.id===s.focused); const fs=(s.controllerSnapshots||{})[s.focused]; if (fp && fp.unbound && !(fs && fs.sessionId)) return; } this.setState(st => ({ revealed: !st.revealed, surface: null })); }
+      // ⌘M toggles meta and panes (the menu's Minimize gives up the key, electron/menu.js).
+      if (e.metaKey && !e.shiftKey && !e.altKey && !e.ctrlKey && (e.key === 'm' || e.key === 'M')) { e.preventDefault(); const s=this.state; if (!s.revealed) { const fp=s.panes.find(p=>p.id===s.focused); const fs=(s.controllerSnapshots||{})[s.focused]; if (fp && fp.unbound && !(fs && fs.sessionId)) return; } this.setState(st => ({ revealed: !st.revealed, surface: null })); }
       if (e.metaKey && (e.key === 'd' || e.key === 'D')) { e.preventDefault(); this._split(e.shiftKey ? 'down' : 'right'); }
       if (e.metaKey && (e.key === 'f' || e.key === 'F')) { e.preventDefault(); this.setState(s => ({ findOpen: !s.findOpen, findQ: '' })); }
       if (e.metaKey && e.key === ',') { e.preventDefault(); this.setState({ showSettings: true }); }
@@ -1230,7 +1247,6 @@ class Component extends DCLogic {
       fdPark: 'parked' };
     const fdOf = (k) => (!findQuery || !FTRANS ? 1 : (demoFindTranscriptText[k].toLowerCase().includes(findQuery) ? 1 : 0.3));
     const paneW = (state.winW || window.innerWidth) / state.cols;
-    const compact = paneW < 480;
     // Slash-router command table. `pick(paneId)` clears that pane's
     // prompt input and submits the slash line on that pane's own
     // controller. The pane loop below hands each rendered pane its
@@ -1259,10 +1275,6 @@ class Component extends DCLogic {
       // reads the same before any split.
       gridCol: (p.col || 1) + ' / span ' + (p.cw || state.cols),
       gridRow: (p.row || 1) + ' / span ' + (p.rh || state.rows),
-      // A single pane's top bar is the window's top edge, under the macOS window buttons, and
-      // keeps their inset (reveal.ts, Electron stylesheet). Split panes sit below the window's
-      // own bar, so none of their top bars has buttons above it.
-      corner: state.panes.length === 1 ? '1' : '0',
     }, {
       unbound: !!p.unbound, bound: !p.unbound,
       // 19a picker per Substrate Shell Directions v3.dc.html:
@@ -1324,13 +1336,7 @@ class Component extends DCLogic {
       wsQ: p.wsQ || '',
       onWsQ: (ev) => this.setState(st => ({ panes: st.panes.map(x => x.id === p.id ? Object.assign({}, x, { wsQ: ev.target.value, wsSelIdx: 0, armed: null, pickerHalf: 'ws', modelSelIdx: null }) : x) })),
       onWsKey: (ev) => this._wsKey(p.id, ev),
-      showChips: paneW >= 340,
-      hdrGap: compact ? '5px' : '8px',
-      nameMin: compact ? '44px' : '64px',
-      wsLabel: p.unbound ? '⌥ —' : compact ? '⌥' : '⌥ ' + (p.shape === 'worktree' ? 'substrate/' + (p.name || 'main') : (p.ws || p.name || '')),
-      revealText: compact ? '⌃`' : '⌃` reveal',
       id: p.id, name: p.name, driver: this._paneDriver(state, p),
-      driverLabel: this._resolveDriverLabel(state, this._paneDriver(state, p)),
       // isMain gates the full machinery lens (transcript + prompt +
       // find bar). Every bound pane, not just pane 1, should render
       // it — otherwise a newly-split pane falls through to the
@@ -1415,7 +1421,6 @@ class Component extends DCLogic {
       })(),
       sentLines: (p.sent || []).map(t => ({ text: t })),
       editing: p.editing, notEditing: !p.editing, nameVal: p.nameVal,
-      nameColor: p.id === state.focused ? '#e2e5e9' : '#9aa0a8',
       // Status dot per pane. (19i's hollow "rate-limited" dot was removed in Sprint 096:
       // it keyed on a RateLimitedWaiting kind the kernel never emits.)
       dot: (() => {
@@ -1444,26 +1449,6 @@ class Component extends DCLogic {
       hintL: state.dropHint && state.dropHint.zone === 'e' ? '50%' : '0', hintT: state.dropHint && state.dropHint.zone === 's' ? '50%' : '0',
       hintW: state.dropHint && (state.dropHint.zone === 'w' || state.dropHint.zone === 'e') ? '50%' : '100%',
       hintH: state.dropHint && (state.dropHint.zone === 'n' || state.dropHint.zone === 's') ? '50%' : (state.dropHint && (state.dropHint.zone === 'w' || state.dropHint.zone === 'e') ? '100%' : '100%'),
-      branch: p.shape === 'worktree' ? 'substrate/' + (p.name || 'main') : (p.ws || ''),
-      wsPath: p.ws || '~/.substrate/sandbox',
-      wsShape: p.shape || 'sandbox',
-      ddOpen: state.ddFor === p.id, wsOpenP: state.wsFor === p.id,
-      // Clip the header by default so a narrow pane's chip row does not
-      // bleed sideways into the next pane. Restore `visible` while a
-      // dropdown (driver picker or workspace popup) is open, because
-      // those are `position:absolute; top:20px` inside the header and
-      // rely on the header not clipping to be visible below it.
-      hdrOverflow: (state.ddFor === p.id || state.wsFor === p.id) ? 'visible' : 'hidden',
-      toggleDd: () => {
-        // Sprint 085 followup — freeze picker once this pane has a bound
-        // session. Switching driver mid-session triggers auth flows for
-        // a driver the session is not using.
-        const paneSnap = (state.controllerSnapshots || {})[p.id];
-        if (paneSnap && paneSnap.sessionId) return;
-        this.setState(s => ({ focused: p.id, ddFor: s.ddFor === p.id ? null : p.id, wsFor: null }));
-      },
-      toggleWsP: () => this.setState(s => ({ focused: p.id, wsFor: s.wsFor === p.id ? null : p.id, ddFor: null })),
-      driverOpts: this._buildDriverOpts(state, p.id, this._paneDriver(state, p)),
       caretColor: p.id === state.focused ? '#82a5c8' : '#4a4e55',
       promptHint: p.id === state.focused ? 'type to talk · / for commands' : 'click to focus',
       focus: () => this.setState({ focused: p.id }),
@@ -1492,16 +1477,6 @@ class Component extends DCLogic {
           return { panes, focused: from, dropHint: null };
         });
       },
-      goRecords: () => {
-        this.setState({ focused: p.id, surface: Surface.Records });
-        const vm = window.__vm;
-        if (vm) {
-          if (typeof vm.loadLiveSessions === 'function') vm.loadLiveSessions().catch(() => undefined);
-          if (typeof vm.loadRecentWorkspaces === 'function') vm.loadRecentWorkspaces().catch(() => undefined);
-        }
-      },
-      goStudio: () => this.setState({ focused: p.id, surface: Surface.Studio }),
-      goReveal: () => this.setState({ focused: p.id, revealed: true, surface: null }),
       startEdit: () => this.setState(s => ({ panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, { editing: true, nameVal: x.name }) : x) })),
       updName: (ev) => this.setState(s => ({ panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, { nameVal: ev.target.value }) : x) })),
       nameKey: (ev) => { if (ev.key === 'Enter') this.setState(s => ({ panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, { editing: false, name: x.nameVal.trim() || x.name }) : x), allSessions: (s.allSessions || []).map(x => x.id === p.id ? Object.assign({}, x, { name: (s.panes.find(pp => pp.id === p.id) || {}).nameVal || x.name }) : x) })); if (ev.key === 'Escape') this.setState(s => ({ panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, { editing: false }) : x) })); },
@@ -2202,18 +2177,66 @@ class Component extends DCLogic {
           this.setState({ addWsBusy: false });
         }
       },
-      topoProducerRows: (_vmSnap && _vmSnap.topologyGraph && _vmSnap.topologyGraph.producers ? _vmSnap.topologyGraph.producers : []).map(p => ({
-        name: p.kind,
-        emits: (p.emits && p.emits.length ? p.emits.join(', ') : '(no emissions)'),
-        initialTag: p.initial ? '▸ initial' : '',
-      })),
-      topoTriggerRows: (_vmSnap && _vmSnap.topologyGraph && _vmSnap.topologyGraph.triggers ? _vmSnap.topologyGraph.triggers : []).map(t => ({
-        id: t.id, onKind: t.onKind, starts: t.starts,
-      })),
-      topoProducerCount: (_vmSnap && _vmSnap.topologyGraph && _vmSnap.topologyGraph.producers) ? _vmSnap.topologyGraph.producers.length : 0,
-      topoTriggerCount: (_vmSnap && _vmSnap.topologyGraph && _vmSnap.topologyGraph.triggers) ? _vmSnap.topologyGraph.triggers.length : 0,
-      topoAny: !!(_vmSnap && _vmSnap.topologyGraph && _vmSnap.topologyGraph.producers && _vmSnap.topologyGraph.producers.length),
-      topoEmpty: !(_vmSnap && _vmSnap.topologyGraph && _vmSnap.topologyGraph.producers && _vmSnap.topologyGraph.producers.length),
+      // UI sprint 138: every primitive of the record's topology in its own section, each heading
+      // defined on hover (STRUCTURE_DEFS). Events lead: what emits each kind, and what it fires.
+      ...(() => {
+        const g = (_vmSnap && _vmSnap.topologyGraph) || null;
+        const producers = g ? g.producers : [];
+        const triggers = g ? g.triggers : [];
+        const outside = new Set(g && g.outside ? g.outside : []);
+        // b.instrument registers a trigger named after the producer it starts (kernel/topology.py).
+        const instruments = new Set(triggers.filter(t => t.id === t.starts).map(t => t.starts));
+        const kinds = new Set();
+        producers.forEach(p => p.emits.forEach(k => kinds.add(k)));
+        triggers.forEach(t => (t.on || []).forEach(k => kinds.add(k)));
+        outside.forEach(k => kinds.add(k));
+        const lifecycle = (k) => String(k).startsWith('substrate.');
+        const order = [...kinds].sort((a, b) => (lifecycle(a) === lifecycle(b) ? (a < b ? -1 : a > b ? 1 : 0) : lifecycle(a) ? 1 : -1));
+        const list = (xs) => xs.map(x => ({ name: x }));
+        // a break point after `substrate.` for display only, so a narrow panel never splits a word.
+        const label = (k) => String(k).replace(/^substrate\./, 'substrate.\u200b');
+        const kindList = (xs) => xs.map(x => ({ name: x, label: label(x) }));
+        const baseline = g && g.baseline ? g.baseline : {};
+        const config = g && g.config ? g.config : {};
+        return {
+          topoDefs: STRUCTURE_DEFS,
+          topoEventRows: order.map(k => {
+            const by = producers.filter(p => p.emits.includes(k)).map(p => p.kind);
+            if (lifecycle(k)) by.push('runtime');
+            if (outside.has(k)) by.push('outside');
+            const fires = triggers.filter(t => (t.on || []).includes(k)).map(t => t.id);
+            return { name: k, label: label(k), by: list(by), fires: list(fires.length ? fires : ['—']) };
+          }),
+          topoEventCount: order.length,
+          topoProducerRows: producers.map(p => ({
+            name: p.kind,
+            emits: (p.emits && p.emits.length ? p.emits.join(', ') : '—'),
+            initialTag: p.initial ? 'initial' : '',
+            instrumentTag: instruments.has(p.kind) ? 'instrument' : '',
+            detTag: p.deterministic ? 'deterministic' : '',
+          })),
+          topoTriggerRows: triggers.map(t => ({
+            id: t.id, onKind: t.onKind, starts: t.starts, policy: t.policy || '—',
+            onKinds: kindList(t.on && t.on.length ? t.on : String(t.onKind || '').split(', ').filter(Boolean)),
+          })),
+          topoRouteRows: (g && g.routes ? g.routes : []).map(r => ({ id: r.id, slot: r.slot })),
+          topoRouteCount: g && g.routes ? g.routes.length : 0,
+          topoRoutesNone: !(g && g.routes && g.routes.length),
+          topoRoutesAny: !!(g && g.routes && g.routes.length),
+          topoViewRows: list(g && g.views ? g.views : []),
+          topoViewCount: g && g.views ? g.views.length : 0,
+          topoTermination: (g && g.termination ? g.termination : []).join(' · ') || '—',
+          topoRunRows: [
+            { k: 'vocab version', v: String(config.vocab_version ?? '—') },
+            { k: 'exports', v: g && g.exports && g.exports.length ? g.exports.join(', ') : 'none' },
+            ...Object.keys(baseline).sort().map(k => ({ k: 'baseline · ' + k, v: String(baseline[k]) })),
+          ],
+          topoProducerCount: producers.length,
+          topoTriggerCount: triggers.length,
+          topoAny: producers.length > 0,
+          topoEmpty: producers.length === 0,
+        };
+      })(),
       assaysEmpty: arms.length === 0,
       assaysAny: arms.length > 0,
       // Reveal view transcript reads the SAME rich rows the per-pane
@@ -2235,14 +2258,14 @@ class Component extends DCLogic {
           }))
         : (state.allSessions || []).map(x => { const open = state.panes.some(pp => pp.id === x.id); const nm = (state.panes.find(pp => pp.id === x.id) || x).name; return { name: nm, meta: x.driver + ' · worktree substrate/' + nm, where: open ? 'open in a pane ▸' : 'no pane — still yours' }; })
       ),
-      fpDdOpen: state.ddFor === fp.id && state.revealed, fpToggleDd: () => {
+      fpDdOpen: state.ddFor === fp.id, fpToggleDd: () => {
         // Sprint 085 followup — freeze picker once the focused pane's
         // session is bound. Same reason as the per-pane toggle above.
         const focusedSnap = (state.controllerSnapshots || {})[fp.id];
         if (focusedSnap && focusedSnap.sessionId) return;
         this.setState(s => ({ ddFor: s.ddFor === fp.id ? null : fp.id, wsFor: null }));
       },
-      fpWsOpen: state.wsFor === fp.id && state.revealed, fpToggleWs: () => this.setState(s => ({ wsFor: s.wsFor === fp.id ? null : fp.id, ddFor: null })),
+      fpWsOpen: state.wsFor === fp.id, fpToggleWs: () => this.setState(s => ({ wsFor: s.wsFor === fp.id ? null : fp.id, ddFor: null })),
       fpDriverOpts: this._buildDriverOpts(state, fp.id, this._paneDriver(state, fp)),
       recordsColor: surf === Surface.Records ? '#e2e5e9' : '#9aa0a8',
       studioColor: surf === Surface.Studio ? '#e2e5e9' : '#9aa0a8',
@@ -2260,7 +2283,7 @@ class Component extends DCLogic {
         }
         this.setState(st => ({ revealed: !st.revealed, surface: null }));
       },
-      revealLabel: state.revealed ? '⌃` terminal' : '⌃` reveal',
+      revealLabel: state.revealed ? 'panes' : 'meta',
       revealBtnColor: state.revealed && !surf ? '#212327' : '#9aa0a8', revealBtnBg: state.revealed && !surf ? '#82a5c8' : '#3d434c',
       fontSize: state.fontOverride ?? this.props.transcriptFontSize ?? 13,
       childOpen: state.childOpen, toggleChild: () => this.setState(s => ({ childOpen: !s.childOpen })),
@@ -2470,9 +2493,20 @@ class Component extends DCLogic {
       // notMainFocused branch showed only the scripted pane.lines and
       // is dead.
       isMainFocused: true, notMainFocused: false,
-      singlePane: state.panes.length === 1,
-      showStrip: !surf && !state.revealed && state.panes.length > 1,
-      showFullHeader: !!surf || state.revealed,
+      // UI sprint 136: the one top bar shows the focused pane — its status dot, its name (double-click
+      // renames it), and its driver and workspace chips in every view but records, assay and studio.
+      ...(() => {
+        const row = panes.find(x => x.id === fp.id) || panes[0];
+        return {
+          fpDot: row.dot, fpDotBg: row.dotBg,
+          fpEditing: row.editing, fpNotEditing: row.notEditing, fpNameVal: row.nameVal,
+          fpStartEdit: row.startEdit, fpUpdName: row.updName, fpNameKey: row.nameKey,
+        };
+      })(),
+      showBarChips: !surf,
+      showDriverChip: !surf && !!this._paneDriver(state, fp),
+      // No workspace yet reads ⌥ —; a per-session sandbox has no path of its own and reads ⌥ sandbox.
+      fpWsLabel: fp.unbound ? '⌥ —' : '⌥ ' + (fp.shape === 'worktree' ? 'substrate/' + (fp.name || 'main') : (fp.ws || 'sandbox')),
       splitRight: () => this._split('right'),
       driverName: this._resolveDriverLabel(state, this._paneDriver(state, fp)), driverOpen: state.driverOpen,
       toggleDriverMenu: () => this.setState(s => ({ driverOpen: !s.driverOpen, wsOpen: false })),
@@ -2505,7 +2539,7 @@ class Component extends DCLogic {
           : fp.name
             ? 'session ' + fp.name
             : '',
-      footHint: surf ? 'esc back to session' : descended ? 'esc climbs one level' : '⌃` toggles the reveal',
+      footHint: surf ? 'esc back to session' : descended ? 'esc climbs one level' : '⌘M toggles meta',
       footStatus: (this.props.simulateRateLimit ?? false) ? '◌ rate-limited · retry 3/6 in 14s' : state.ended ? '● finalised' : '● live',
       footStatusColor: (this.props.simulateRateLimit ?? false) ? '#7fb3b8' : state.ended ? '#62676f' : '#82a5c8',
       // ── descend (turn 20) ──

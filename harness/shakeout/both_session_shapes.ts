@@ -35,7 +35,7 @@ async function main(): Promise<void> {
     const win = await app.firstWindow({ timeout: 30_000 });
     await waitForApp(win);
     await bindPaneAsUser(win);
-    await win.keyboard.press("Control+`");
+    await win.keyboard.press("Meta+m");
 
     const seen: Record<string, { replies: string[]; ends: string[]; lane: number }> = {};
     const warnings: Record<string, string[]> = {};

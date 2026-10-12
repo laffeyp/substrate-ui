@@ -310,16 +310,17 @@ export class SessionController {
     const triggersRaw = Array.isArray((raw as { triggers?: unknown[] }).triggers)
       ? ((raw as { triggers: unknown[] }).triggers) : [];
     const producers: ProducerNode[] = producersRaw.map((p) => {
-      const row = p as { kind?: string; emits?: string[]; initial?: boolean; is_initial?: boolean };
+      const row = p as { kind?: string; emits?: string[]; initial?: boolean; is_initial?: boolean; deterministic?: boolean };
       return {
         kind: String(row.kind ?? "?"),
         emits: Array.isArray(row.emits) ? row.emits.map((e) => String(e)) : [],
         // Server uses `is_initial`; older shapes used `initial`. Accept both.
         initial: !!(row.is_initial ?? row.initial),
+        deterministic: !!row.deterministic,
       };
     });
     const triggers: TriggerEdge[] = triggersRaw.map((t, idx) => {
-      const row = t as { id?: string; on?: string | string[]; on_kind?: string; kind?: string; starts?: string };
+      const row = t as { id?: string; on?: string | string[]; on_kind?: string; kind?: string; starts?: string; policy?: string };
       // Server sends `on` as an array of event kinds (`["substrate.RunStarted"]`).
       // Older shapes used a scalar `on_kind`. Handle both.
       let onKind: string;
@@ -330,10 +331,25 @@ export class SessionController {
       return {
         id: String(row.id ?? `trigger_${idx}`),
         onKind,
+        on: Array.isArray(row.on) ? row.on.map((k) => String(k)) : onKind.split(", ").filter(Boolean),
         starts: String(row.starts ?? "?"),
+        policy: String(row.policy ?? ""),
       };
     });
-    this.patch({ topologyGraph: { producers, triggers } });
+    const strings = (v: unknown): string[] => (Array.isArray(v) ? v.map((x) => String(x)) : []);
+    const views = strings((raw as { views?: unknown }).views);
+    const termination = strings((raw as { termination?: unknown }).termination);
+    const routesRaw = (raw as { routes?: unknown }).routes;
+    const routes = (Array.isArray(routesRaw) ? routesRaw : []).map((r) => {
+      const row = r as { id?: string; slot?: string };
+      return { id: String(row.id ?? "?"), slot: String(row.slot ?? "?") };
+    });
+    const outside = strings((raw as { outside?: unknown }).outside);
+    const exports = strings((raw as { exports?: unknown }).exports);
+    const obj = (v: unknown): Record<string, unknown> => (v && typeof v === "object" && !Array.isArray(v) ? v as Record<string, unknown> : {});
+    const baseline = obj((raw as { baseline?: unknown }).baseline);
+    const config = obj((raw as { config?: unknown }).config);
+    this.patch({ topologyGraph: { producers, triggers, views, termination, routes, outside, exports, baseline, config } });
     this.emit("TOPOLOGY_LOADED", { producer_count: producers.length, trigger_count: triggers.length });
   }
 
@@ -410,17 +426,10 @@ export class SessionController {
   // ── session lifecycle ───────────────────────────────────────────────
   async openSession(request: OpenSessionRequest = {}): Promise<void> {
     if (this.snap.sessionId) return;
-    // Never open a session with a made-up driver. If the caller passed
-    // none and the roster hasn't landed, wait for it — /api/models
-    // resolves in a few milliseconds and its `default` is the honest
-    // driver to use.
-    if (!request.driver && !this.snap.driver && !this.snap.driverDefault) {
-      await this.loadDriverRoster();
-    }
-    const driver = request.driver
-      ?? this.snap.driver
-      ?? this.snap.driverDefault
-      ?? "deterministic";
+    // A session runs the model the user picked, never the roster's default or a stand-in: with
+    // no driver picked, nothing opens.
+    const driver = request.driver ?? this.snap.driver;
+    if (!driver) return;
     const body: Record<string, unknown> = { driver };
     // Sprint 087 — fold the per-CLI version pick into driver_params
     // before the request goes out. An explicit driver_params.driver_version
@@ -836,7 +845,7 @@ export class SessionController {
           else this.appendTranscript({
             seq: -Math.round(Date.now()) - 2,
             kind: "SlashHelp", role: "system",
-            text: `current driver: ${this.snap.driver ?? this.snap.driverDefault ?? "deterministic"}. use /model <name> to switch.`,
+            text: this.snap.driver ? `current driver: ${this.snap.driver}. use /model <name> to switch.` : "no model picked yet. use /model <name> to pick one.",
           });
         },
       },

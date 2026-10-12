@@ -54,7 +54,7 @@ async function main(): Promise<void> {
       return at >= 0 && rows.slice(at + 1).some((r) => r.role === "model");
     }, undefined, { timeout: 15_000 });
 
-    await win.keyboard.press("Control+`");
+    await win.keyboard.press("Meta+m");
     const rowSel = 'div[title="click to inspect · click again to close"]';
     await win.locator(rowSel).first().waitFor({ state: "visible", timeout: 15_000 });
 
