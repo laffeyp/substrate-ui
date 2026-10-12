@@ -465,7 +465,9 @@ export class SessionController {
     const tone = request.tone ?? this.snap.tone;
     if (tone) body.tone = tone;
     if (request.tools) body.tools = request.tools;
-    if (request.name) body.name = request.name;
+    // UI sprint 145: a name given in the top bar before the session opened goes with the open.
+    const name = request.name ?? this.snap.sessionName;
+    if (name) body.name = name;
     if (request.isolate) body.isolate = request.isolate;
     this.patch({ connection: "connecting", lastError: null, driver });
     this.emit("SESSION_OPEN_REQUESTED", { driver, workspace: request.workspace ?? null, bundle: request.bundle ?? null });
@@ -926,6 +928,15 @@ export class SessionController {
 
   /** Rename the current session. PATCH /api/session/<id> body
    * `{name: <new>}`. Refreshes the snapshot's sessionName on ACK. */
+  /** UI sprint 145: name this pane's session from the top bar. With a session open this is
+   * renameSession (PATCH); before it opens, the name is held and sent when it opens. */
+  async nameSession(newName: string): Promise<void> {
+    const name = newName.trim();
+    if (!name) return;
+    if (this.snap.sessionId) { await this.renameSession(name); return; }
+    this.patch({ sessionName: name });
+  }
+
   async renameSession(newName: string): Promise<void> {
     const sessionId = this.snap.sessionId;
     if (!sessionId) return;

@@ -44,3 +44,4 @@ build/python-native/
 runs/packaged/release-*
 # the shakeout harness's server log, written next to each run's report.json
 captures/shakeout-*/server.log
+harness/shakeout/.scratch/

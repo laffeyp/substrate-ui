@@ -42,7 +42,7 @@ Items 1–3 closed on 2026-10-10 (roadmap `substrate/process/planning/ROADMAP-20
 
 *13–14 tried 2026-10-11 and taken out (Architect: not appropriate); see sprint 142.* 13. **Workspace.** The WORKSPACE heading (`web/reveal.html:122`) gets a grey hint on the same line that says what the column is for: choosing where to work, or opening a previous session. The Architect's wording to start from: "choose where you want to work · or open a previous session".
 14. **Model.** The MODEL heading (`web/reveal.html:143`) gets the same kind of hint: "choose a model to work with".
-15. **Guidance.** This section needs design work before it gets a hint. It is to grow from one level picker into a set of controls chosen after the model: induced language patterns (verbosity, tone, controlled languages, specification forms, order, argument and evidence shape, range, language) and subtle behaviour dials (delegation, topologies, autonomy, reporting, scope). Research: `substrate/process/planning/RESEARCH-2026-10-10-guidance-controls-r4.md`.
+*15 dropped 2026-10-11 (Architect): no GUIDANCE hint.* 15. **Guidance.** This section needs design work before it gets a hint. It is to grow from one level picker into a set of controls chosen after the model: induced language patterns (verbosity, tone, controlled languages, specification forms, order, argument and evidence shape, range, language) and subtle behaviour dials (delegation, topologies, autonomy, reporting, scope). Research: `substrate/process/planning/RESEARCH-2026-10-10-guidance-controls-r4.md`.
 
 ## Guidance: two rows first, measurement later (Architect, 2026-10-11)
 
@@ -69,6 +69,7 @@ Items 1–3 closed on 2026-10-10 (roadmap `substrate/process/planning/ROADMAP-20
 
 ## Future direction (Architect, 2026-10-11)
 
+28. **Future: the session's guidance, length and tone, shown in the pane and changeable mid-session.** A session's picks (for example low, normal, neutral) are visible in the panes view while it runs, and can be changed during the session (the kernel already records a change as SessionChanged and rewrites the text, § T.3). Where they go is undecided and needs best-practice research first. Two shapes named (Architect, 2026-10-11): the values alone appended to the session bar line ("turn 3 · 12s · 2 tools · returned · low · normal · neutral", no labels), or one chip per control in the top bar ("guidance-low", "length-normal", "tone-formal"), with more controls adding more chips.
 25. **Substrate makes the topology the user needs.** A make-topology tool builds topologies that replicate the user's own workflows. Example: a parallel swarm whose typed input is sprint cards and a roadmap; a stronger model finds the dependency graph, the smallest capable models each implement one card in their own worktree, the main model merges and tests, and the result returns to the session topology, where the user keeps or replaces the topology. Any topology's inputs, outputs and whole history can feed another topology (the adversarial pair, made real, is one such flow). The roadmap's "After distribution" section has it in full.
 
 19. **Child runs shown inside Substrate.** When a session delegates or starts a topology, the child run can be watched where it happens.

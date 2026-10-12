@@ -32,6 +32,13 @@ if ! npm run --silent typecheck; then
 fi
 echo "[pre-commit] typecheck clean." >&2
 
+# The signal-vocabulary parity check (every emit is a locked tag); it had no runner after phase 6.
+echo "[pre-commit] signal vocabulary parity..." >&2
+if ! npm run --silent signals; then
+  echo "[pre-commit] BLOCKED — an emit names a tag the locked vocabulary does not have." >&2
+  exit 1
+fi
+
 # The status-literal gate also runs here (lens audit F292: it lived only in the kernel's hook,
 # so a UI-only commit never ran it). One script, kept in the kernel repo.
 GATE="$REPO_ROOT/../substrate/scripts/check_status_literals.sh"

@@ -60,6 +60,19 @@
 
 ## Entries
 
+### 2026-10-12 — A gate that measured the wrong thing, and two keys with two owners
+
+**Context.** Release steps 12 and 15–17 closed with a card and a red-then-green gate each. Then the Architect called out the workspace picker from the installed app, and it took three cards (148, 150, 151) to get right.
+
+**What got in the way.**
+- **A gate that proved the ask, not the design.** Card 148's gate checked that the box's top did not move and that the list scrolled. Both were true while the list used 92 of the column's 197 pixels, with a 93px blank under it. The blank was there to match three lines that belong to the model column only, so the list stopped short. The gate passed and the card closed. A layout gate needs the user's words as assertions ("the top never moves") and also the neighbours' geometry: does the element fill the space it was given?
+- **"Go back to how it used to work."** The Architect remembered a downward picker. The history shows the box has sat at the pane's bottom and grown upward since it was built. Reading `git show` at three commits settled it in a minute and stopped a revert to a state that never existed.
+- **Two owners for one key.** A native menu accelerator and a renderer keydown both claimed ⌘M. Playwright's synthetic keys reach only the renderer (a synthetic ⌘N opened no window), and System Events was refused Accessibility access, so no test could show what a real press does. Each key now has one owner.
+
+**What the kit could say.** An observation contract for a layout names what fills the space, not only what holds still. A shortcut has one owner, written beside the code that registers it.
+
+---
+
 ### 2026-10-11 — Piecemeal asks from the installed app: write each down, do one, stop
 
 **Context.** The Architect drove the release roadmap by trying the installed app and calling out what was wrong, one item at a time. Steps 5–10 landed, and each needed a new build to see.

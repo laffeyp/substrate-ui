@@ -103,12 +103,15 @@ Reordered 2026-10-11: compaction moved ahead of the small fixes, since it damage
 | 18 | The records page: workspaces in the main view's style; the worktree copy checked and reworded | Added 2026-10-11. |
 | 19 | Full gates, signed build, distribution | Full suites and all Electron gates once on the installed app, then the signed build ships. (Was step 15, then 18.) |
 
+*Order from 2026-10-11, late (Architect): step 11 (the GUIDANCE hint) is dropped. The remaining steps run 12, 15, 16, 17, 18, then 13 (the terminal pane, the most work), then 14 and 19. A sprint card for every step; a roadmap only for large work.*
+
 Steps 5–7 are one top-bar group; steps 8–11 are one picker group. *(2026-10-11: step 8 is now the text-entry sweep; the picker sequence moved to After distribution.)*
 
 *Corrected 2026-10-11: two step-3 items were not defects. The bundle's bytecode is built in and sealed: the installed app holds the same 149 `__pycache__` files as the build, all copied at install, and `codesign --verify --deep --strict` passes. The cursor model list was fixed in `a6374e1` (2026-10-10 18:34); the session with `--model Available` started at 18:14.*
 
 ## After distribution
 
+- **Future: the session's guidance, length and tone, shown in the pane and changeable mid-session.** A session's picks (for example low, normal, neutral) are visible in the panes view while it runs, and can be changed during the session (the kernel already records a change as SessionChanged and rewrites the text, § T.3). Where they go is undecided and needs best-practice research first. Two shapes named (Architect, 2026-10-11): the values alone appended to the session bar line ("turn 3 · 12s · 2 tools · returned · low · normal · neutral", no labels), or one chip per control in the top bar ("guidance-low", "length-normal", "tone-formal"), with more controls adding more chips.
 - **The long-term direction: Substrate makes the topology the user needs** (Architect, 2026-10-11). A primary use: the user says what work they need, and a make-topology tool builds the topology for it, because Substrate has been set up to replicate the workflows the user already runs.
   - *Example, a parallel swarm.* Its input is typed: sprint cards and a roadmap in one format, with shared context. A stronger model, with automated tools, reads the cards and the roadmap and finds the dependency graph that lets the work run in parallel. It starts the smallest capable models in separate worktrees, each given one sprint card as exact instructions ("write this code"). The main model collates their work, merges it and runs the tests. If that passes, the topology returns its result to the session topology, and the user decides whether to keep running it or start another.
   - *Information flows compose.* Any topology's inputs and outputs can feed another topology; so can a run's entire history. The adversarial pair (a writer and a reviewer) can be made real this way with little work. Topologies are transformations of the flow of information, and this composition is the strongest direction the project has.

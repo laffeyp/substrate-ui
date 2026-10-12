@@ -52,10 +52,12 @@ export async function waitForApp(win: Page, timeout = 30_000): Promise<void> {
  * first row, the per-session sandbox, and arms the bar's model half (UI sprint 124). The model
  * groups start folded (UI sprint 128), so the user opens them and clicks a model: `model`, or the
  * roster's default (`deterministic` on an offline roster). Resolves once the chat prompt is visible. */
-export async function bindPaneAsUser(win: Page, model?: string): Promise<void> {
+export async function bindPaneAsUser(win: Page, model?: string, opts: { folder?: string } = {}): Promise<void> {
   const path = win.locator('input[data-ws-input]').first();
   await path.waitFor({ state: "visible", timeout: 15_000 });
   await path.click();
+  // A typed folder becomes the first row, and ↵ picks it.
+  if (opts.folder) await path.fill(opts.folder);
   await win.keyboard.press("Enter");
   await win.locator('[data-model-half][data-armed="1"]').first().waitFor({ state: "visible", timeout: 15_000 });
   // The roster's default, once the roster has loaded; an offline roster has none, and its one row
