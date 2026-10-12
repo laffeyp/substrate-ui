@@ -26,6 +26,7 @@ import { emit as sddEmit } from "./instrumentation/sdd";
 import { EnvelopeKind } from "./kinds";
 import { setToolOutputMode, toggleToolOutputMode } from "./tool_output_mode";
 import { SessionStatus, TaskStatus } from "./statuses.gen";
+import { GUIDANCE_LEVEL_BUNDLES, LENGTH_DEFAULT, LengthPosition, TONE_DEFAULT, TonePosition } from "./controls.gen";
 import type { EnvelopeKindValue } from "./kinds";
 
 // Sprint 096 — every generated envelope kind must be classified here: `rendered` (handleEnvelope
@@ -909,6 +910,17 @@ export class SessionController {
         names: ["dellm"], usage: "/dellm <text>",
         run: (rest) => this.sendTurn(rest || "Apply the dellm skill to your next reply.", { skill: "dellm" }),
       },
+      // UI sprint 161: guidance, length and tone, mid-session. No argument names the current value.
+      ...([
+        ["guidance", ["auto", ...Object.keys(GUIDANCE_LEVEL_BUNDLES)], () => this.guidanceLevel() ?? "auto"],
+        ["length", Object.values(LengthPosition), () => this.snap.length ?? LENGTH_DEFAULT],
+        ["tone", Object.values(TonePosition), () => this.snap.tone ?? TONE_DEFAULT],
+      ] as const).map(([field, choices, current]) => ({
+        names: [field], usage: `/${field} <${choices.join("|")}>`,
+        run: (rest: string) => rest
+          ? this.setControl(field, rest.trim())
+          : this.controlRow(`${field}: ${current()}. use /${field} <${choices.join("|")}>.`, false),
+      })),
       // UI sprint 140: fold or unfold every tool card, as ⌘E does. /fold flips; /unfold unfolds.
       { names: ["fold"], usage: "/fold", run: () => { toggleToolOutputMode(); } },
       { names: ["unfold"], usage: "/unfold", run: () => { setToolOutputMode("expanded"); } },
@@ -935,6 +947,46 @@ export class SessionController {
     if (!name) return;
     if (this.snap.sessionId) { await this.renameSession(name); return; }
     this.patch({ sessionName: name });
+  }
+
+  /** UI sprint 161 (kernel K296, K298; vocabulary § U): change guidance, length or tone. Before a
+   * session opens it is the pick the open carries; after, a PATCH the next turn records as
+   * SessionChanged and draws in the history. The snapshot follows the server's reply. */
+  async setControl(field: "guidance" | "length" | "tone", value: string): Promise<void> {
+    const sessionId = this.snap.sessionId;
+    if (!sessionId) {
+      if (field === "guidance") {
+        const bundle = value === "auto" ? null : (GUIDANCE_LEVEL_BUNDLES as Record<string, string>)[value];
+        if (bundle === undefined) { this.controlRow(`unknown guidance level ${value}`, true); return; }
+        this.patch({ bundleSlug: bundle });
+      } else {
+        this.patch(field === "length" ? { length: value } : { tone: value });
+      }
+      this.controlRow(`${field} ${value} for the session this pane opens`, false);
+      return;
+    }
+    const result = await this.client.fetchJson<{ bundle?: string | null; length?: string | null; tone?: string | null }>(
+      `/api/session/${encodeURIComponent(sessionId)}`,
+      { method: "PATCH", body: { [field]: value } },
+    );
+    if (!result.ok) { this.controlRow(`${field} not changed: ${result.detail}`, true); return; }
+    this.patch({ bundleSlug: result.data.bundle ?? null, length: result.data.length ?? null, tone: result.data.tone ?? null });
+    this.controlRow(`${field} set to ${value}; it applies from the next message`, false);
+  }
+
+  private controlRow(text: string, refused: boolean): void {
+    this.appendTranscript({
+      seq: -Math.round(Date.now()) - 11,
+      kind: refused ? "ControlRefused" : "ControlSet", role: refused ? "warning" : "system",
+      text,
+    });
+  }
+
+  /** The session's guidance level, read from its bundle (§ U); null when the bundle is no level's. */
+  guidanceLevel(): string | null {
+    const bundle = this.snap.bundleSlug;
+    const hit = Object.entries(GUIDANCE_LEVEL_BUNDLES).find(([, b]) => b === bundle);
+    return hit ? hit[0] : null;
   }
 
   async renameSession(newName: string): Promise<void> {

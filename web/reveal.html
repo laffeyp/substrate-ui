@@ -79,7 +79,7 @@
     <div data-vm-transcript-mount="terminal" data-pane-id="{{ pn.id }}"></div>
    </div>
    <sc-if value="{{ pn.activityShow }}" hint-placeholder-val="{{ false }}">
-    <div style="flex:none;padding:0 22px 8px;font-size:11px;line-height:1.6;color:{{ pn.activityColor }}">
+    <div data-session-bar-line="1" style="flex:none;padding:0 22px 8px;font-size:11px;line-height:1.6;color:{{ pn.activityColor }}">
      <span class="{{ pn.activityPulseClass }}" style="color:{{ pn.activityTurnColor }}">{{ pn.activityTurnWord }}</span><sc-if value="{{ pn.activityRest }}" hint-placeholder-val="{{ false }}"><span> · {{ pn.activityRestText }}</span></sc-if>
     </div>
    </sc-if>
@@ -189,7 +189,7 @@
     </sc-if>
     <sc-if value="{{ notDescended }}" hint-placeholder-val="{{ true }}">
     <sc-if value="{{ activityShow }}" hint-placeholder-val="{{ false }}">
-     <div style="flex:none;padding:0 26px 6px;font-size:11px;line-height:1.6;color:{{ activityColor }}">
+     <div data-session-bar-line="1" style="flex:none;padding:0 26px 6px;font-size:11px;line-height:1.6;color:{{ activityColor }}">
       <span class="{{ activityPulseClass }}" style="color:{{ activityTurnColor }}">{{ activityTurnWord }}</span><sc-if value="{{ activityRest }}" hint-placeholder-val="{{ false }}"><span> · {{ activityRestText }}</span></sc-if>
      </div>
     </sc-if>
