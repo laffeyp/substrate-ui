@@ -647,7 +647,7 @@ def _build_session_topology_from_manifest(
     and `Runtime.resume(topology, resume_event=UserMessage)` continues the run.
     """
     from substrate.topologies.session import session_topology
-    from substrate.topologies.session.transcript import resolve_driver_context_tokens
+    from substrate.topologies.session.transcript import resolve_driver_context
 
     responder = _daemon_driver_resolver(
         app,
@@ -710,10 +710,13 @@ def _build_session_topology_from_manifest(
     allowed = _allowed_tool_names(manifest)
     if allowed is not None:
         session_tools = {name: tool for name, tool in session_tools.items() if name in allowed}
+    # § S.9: the window and the layer it came from (CLI settings, documented, config, default).
+    context_tokens, context_source = resolve_driver_context(manifest.driver, responder)
     topo = session_topology(
         driver=responder,
         driver_name=manifest.driver,
-        driver_context_tokens=resolve_driver_context_tokens(manifest.driver, responder),
+        driver_context_tokens=context_tokens,
+        driver_context_source=context_source,
         seed=manifest.seed,
         tools=session_tools,
         per_turn=manifest.per_turn,
