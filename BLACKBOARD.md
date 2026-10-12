@@ -872,6 +872,13 @@ Twelve PNGs at `captures/pixel-baseline-2026-09-23/`: six states (`empty`, `one_
 
 *Agent maintains. Last 10 increment closes; older roll into ## Built as compressed paragraphs.*
 
+### Release step 18, picker keys, records page, errors, controls mid-session (2026-10-12)
+- **U152** ← on a session in the workspace column folds its row. **U153, U154** (step 18, done): the records page's workspaces in the picker box's style; "sessions get worktrees" was false (`_session_worktree` has no caller), a git workspace reads "git".
+- **U155** the graph's app view keeps the delegate lane on the rows it shows. **U156** the records page takes the picker's keys through one shared method, `_treeKey`. **U157** the records box is the picker box's width. **U158** the meta view's stream follows the bottom until scrolled up (`web/reveal/follow_bottom.ts`; `STICK_PX` in `web/reveal/scroll_stick.ts`).
+- **U159** an old session's `~` workspace resolves before a turn (a 14-day-old claude session failed every turn). **U160** the server's errors go through `api.describe_error`; the error row keeps a trailing path whole.
+- **U161** `/guidance`, `/length`, `/tone` change a session mid-session; the session bar line ends with the three values; the guidance levels are generated into `controls.gen.ts`. Live on kimi: 200, 186 words at normal, then 133, 75, 185 after `/length terse`.
+- **Gates.** Each card's gate red on the old code and green after; `gates:electron` lists 33 commands; it ran whole once, at 27, exit 0, before U155.
+
 ### The SDD audit's repairs, release steps 12 and 15–17, and the picker (2026-10-11 to 2026-10-12)
 - **Audit** (`process/reviews/AUDIT-2026-10-11-sdd-and-code-standards.md`). Repaired as the Architect directed: both working agreements in new rounds (prior copies in `process/archive/`); `npm run signals` back, run first by `test:unit` and by the pre-commit hook; `Control` members in place of retyped `"length"`/`"tone"`/`"control"` strings in kernel and server; LENGTH and TONE positions generated (`web/vm/controls.gen.ts` by `scripts/gen_kinds.py`, with a freshness test); the input bar and the choice lines written once as build-time partials (`web/partials/`, Vite `includePartials`); dead code out (`gripStart`, drag-swap, `promptHint`, the old `toolOpen` path and others). Card form was left as is (Architect).
 - **Step 12, session-start line** (U144). The empty transcript reads "session started with <model> at <workspace>" and stays first. Gate `session_start_line.ts`.
