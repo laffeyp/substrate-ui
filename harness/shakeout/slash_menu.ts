@@ -1,7 +1,7 @@
 // One slash-command table (UI sprint 162): the menu lists every command the controller runs, a
 // command's choices appear after it and a space, and /help writes one row per command.
 //
-// Steps: bind pane 1; "/" lists slashCatalog()'s commands in order; "/to" lists /tone alone;
+// Steps: bind pane 1; "/" lists slashCatalog()'s commands in order; "/to" closes the menu and hints /tone;
 // "/tone " lists the four tones with neutral marked current; picking formal sets the manifest's
 // tone; "/help" writes one row per command.
 
@@ -40,9 +40,11 @@ async function main(): Promise<void> {
     const all = (await rows(win)).map((r) => r.cmd);
     if (JSON.stringify(all) !== JSON.stringify(catalog)) throw new Error(`"/" lists ${JSON.stringify(all)}; the table is ${JSON.stringify(catalog)}`);
 
+    // UI sprint 163: one match closes the menu; its hint sits in the input row instead.
     await fill(win, "/to");
     const to = (await rows(win)).map((r) => r.cmd);
-    if (JSON.stringify(to) !== JSON.stringify(["/tone"])) throw new Error(`"/to" lists ${JSON.stringify(to)}`);
+    const toHint = await win.evaluate(`(document.querySelector('[data-pane="1"] [data-slash-hint]')?.textContent || "").trim()`) as string;
+    if (to.length || !toHint.includes("blunt|neutral|formal|dry")) throw new Error(`"/to" lists ${JSON.stringify(to)}, hint ${JSON.stringify(toHint)}`);
 
     await fill(win, "/tone ");
     const tones = await rows(win);
