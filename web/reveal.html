@@ -360,21 +360,23 @@
  <!-- ══ SURFACE · records ══ -->
  <sc-if value="{{ showRecords }}" hint-placeholder-val="{{ false }}">
   <div style="flex:1;overflow:auto;background:#212327;padding:22px 40px">
-   <div style="max-width:760px">
+   <div data-records-column="1" style="max-width:760px;margin:0 auto">
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
      <div style="font-size:10px;letter-spacing:.14em;color:#62676f">WORKSPACES</div>
      <sc-if value="{{ addWorkspaceAvailable }}" hint-placeholder-val="{{ true }}"><span onClick="{{ addWorkspace }}" style="margin-left:auto;font-size:10.5px;color:#82a5c8;border:1px solid rgba(255,255,255,.09);border-radius:4px;padding:2px 9px;cursor:pointer;user-select:none" style-hover="color:#a0c0e0">+ add workspace</span></sc-if>
     </div>
+    <!-- UI sprint 153: the workspace bar's box (picker box border, radius, background; rows at 14px). -->
+    <div data-records-workspaces="1" style="border:1px solid rgba(255,255,255,.13);border-radius:6px;background:#1a1c20;padding:0 0 16px">
     <sc-for list="{{ workspaceGroups }}" as="ws" hint-placeholder-count="1">
      <div style="margin-top:16px">
-      <div onClick="{{ ws.toggleExpand }}" style="color:#d7dade;font-size:13px;cursor:pointer;display:flex;align-items:baseline;gap:8px" style-hover="color:#e2e5e9">
+      <div onClick="{{ ws.toggleExpand }}" style="color:#d7dade;font-size:13px;cursor:pointer;display:flex;align-items:baseline;gap:8px;padding:0 14px" style-hover="color:#e2e5e9">
        <span style="color:#62676f;font-size:11px;width:12px">{{ ws.chevron }}</span>
        <span>{{ ws.path }}</span>
        <span style="color:#62676f;font-size:11px">{{ ws.shapeLabel }}</span>
        <span style="margin-left:auto;color:#62676f;font-size:11px">{{ ws.countLabel }}</span>
       </div>
       <sc-if value="{{ ws.expanded }}" hint-placeholder-val="{{ false }}">
-       <div onScroll="{{ ws.loadMoreOnScroll }}" style="margin:6px 0 0 20px;max-height:340px;overflow-y:auto;border:1px solid rgba(255,255,255,.05);border-radius:6px;background:rgba(0,0,0,.12);padding:4px 0">
+       <div onScroll="{{ ws.loadMoreOnScroll }}" style="margin:6px 14px 0 34px;max-height:340px;overflow-y:auto;border:1px solid rgba(255,255,255,.05);border-radius:6px;background:rgba(0,0,0,.12);padding:4px 0">
         <sc-for list="{{ ws.sessions }}" as="s" hint-placeholder-count="1">
          <div onClick="{{ s.pick }}" style="padding:8px 14px;font-size:12px;display:flex;gap:9px;align-items:center;cursor:pointer" style-hover="background:#26292e">
           <span style="width:7px;height:7px;border-radius:50%;background:{{ s.dotColor }};flex:none"></span>
@@ -393,6 +395,7 @@
     <sc-if value="{{ workspaceGroupsEmpty }}" hint-placeholder-val="{{ false }}">
      <div style="padding:8px 14px;color:#62676f;font-size:11.5px">no workspaces on record — open one via + add workspace</div>
     </sc-if>
+    </div>
    </div>
   </div>
  </sc-if>
