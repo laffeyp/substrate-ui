@@ -22,7 +22,7 @@ import { backendPids } from "./shakeout/lib/procs";
 const REPO_ROOT = path.resolve(__dirname, "..");
 const STATE = process.env.STARTUP_STATE || scratchDir("startup-state-");
 const RUNS = Number(process.env.STARTUP_RUNS || 2);
-const PROMPT = '[placeholder^="type to talk"], [placeholder^="type a path"]';
+const PROMPT = '[placeholder^="type to talk"], input[data-ws-input]';
 
 function backendsFor(state: string): number[] {
   return backendPids(state);
