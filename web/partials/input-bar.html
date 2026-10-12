@@ -3,9 +3,13 @@
     <sc-if value="{{ %o%.routerOpen }}" hint-placeholder-val="{{ false }}">
      <div style="border-radius:6px 6px 0 0;background:#1a1c20;padding:6px 0;font-size:12.5px;line-height:2.2;border-bottom:1px solid rgba(255,255,255,.055)">
       <sc-for list="{{ %o%.routerRows }}" as="r" hint-placeholder-count="4">
-       <div data-slash-row="{{ r.cmd }}" data-current="{{ r.current }}" style="padding:0 16px;display:flex;gap:16px;cursor:pointer" style-hover="background:#2e3138" onClick="{{ r.pick }}"><span style="color:#9aa0a8;width:160px;flex:none">{{ r.cmd }}</span><span style="color:#62676f">{{ r.desc }}</span></div>
+       <div data-slash-row="{{ r.cmd }}" data-current="{{ r.current }}" data-lit="{{ r.lit }}" style="padding:0 16px;display:flex;gap:16px;cursor:pointer;background:{{ r.bg }}" style-hover="background:#2e3138" onClick="{{ r.pick }}"><span style="color:#9aa0a8;width:160px;flex:none">{{ r.cmd }}</span><span style="color:#62676f">{{ r.desc }}</span></div>
       </sc-for>
      </div>
     </sc-if>
     <!-- UI sprint 141: the one input bar. The meta view draws the same bar, bound to the focused pane. -->
-    <div style="display:flex;gap:12px;align-items:flex-start;border-radius:{{ %o%.promptRadius }};padding:11px 16px;background:#1a1c20"><span style="color:#82a5c8;line-height:1.4">›</span><textarea data-input-bar="1" rows="1" value="{{ %o%.promptVal }}" onChange="{{ %o%.onPrompt }}" onKeyDown="{{ %o%.onPromptKey }}" placeholder="type to input · / for commands · ↵ to send" style="flex:1;background:none;border:none;outline:none;color:#e2e5e9;font-family:inherit;font-size:13px;line-height:1.4;padding:0;margin:0;resize:none;field-sizing:content;max-height:40vh;overflow-y:auto"></textarea></div>
+    <div style="display:flex;gap:12px;align-items:flex-start;border-radius:{{ %o%.promptRadius }};padding:11px 16px;background:#1a1c20"><span style="color:#82a5c8;line-height:1.4">›</span><div style="position:relative;flex:1;display:flex;min-width:0">
+     <!-- UI sprint 163: a mirror behind the textarea, the typed text transparent, so the hint starts where the text ends. -->
+     <sc-if value="{{ %o%.slashHintShow }}" hint-placeholder-val="{{ false }}"><div style="position:absolute;left:0;top:0;right:0;pointer-events:none;white-space:pre;overflow:hidden;font-size:13px;line-height:1.4"><span style="color:transparent">{{ %o%.slashHintTyped }}</span><span data-slash-hint="1" style="color:var(--tx-hint)">{{ %o%.slashHint }}</span></div></sc-if>
+     <textarea data-input-bar="1" rows="1" value="{{ %o%.promptVal }}" onChange="{{ %o%.onPrompt }}" onKeyDown="{{ %o%.onPromptKey }}" placeholder="type to input · / for commands · ↵ to send" style="position:relative;flex:1;background:none;border:none;outline:none;color:#e2e5e9;font-family:inherit;font-size:13px;line-height:1.4;padding:0;margin:0;resize:none;field-sizing:content;max-height:40vh;overflow-y:auto"></textarea>
+    </div></div>

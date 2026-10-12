@@ -1022,6 +1022,32 @@ class Component extends DCLogic {
     const setPane = (patch) => this.setState(s => ({ panes: s.panes.map(x => x.id === paneId ? Object.assign({}, x, patch) : x) }));
     const el = ev.target;
     const plain = !ev.shiftKey && !ev.altKey && !ev.metaKey && !ev.ctrlKey;
+    // UI sprint 165: Tab completes a command name: one match becomes "/<name> " (its choices
+    // then open); several complete to their longest common prefix. Focus stays in the bar.
+    if (ev.key === 'Tab' && plain && /^\/\S*$/.test(pane.pv || '')) {
+      ev.preventDefault();
+      const vm = window.__vm;
+      const ctl = vm && typeof vm.get === 'function' ? vm.get(paneId) : null;
+      const typed = (pane.pv || '').slice(1).toLowerCase();
+      const names = (ctl && typeof ctl.slashCatalog === 'function' ? ctl.slashCatalog() : []).map(c => c.name).filter(n => n.startsWith(typed));
+      if (names.length === 1) { setPane({ pv: '/' + names[0] + ' ', slashSel: null }); return; }
+      if (names.length > 1) {
+        let common = names[0];
+        for (const n of names) while (!n.startsWith(common)) common = common.slice(0, -1);
+        if (common.length > typed.length) setPane({ pv: '/' + common, slashSel: null });
+      }
+      return;
+    }
+    // UI sprint 164: with a command's choices open, ↑ enters the menu at the row nearest the bar,
+    // ↑ ↓ move, ↓ off the bottom returns to the bar, ↵ picks, esc returns. History waits.
+    const choices = ((this._slashRows || {})[paneId] || []).filter(r => r.choice);
+    if (choices.length && plain && ['ArrowUp', 'ArrowDown', 'Enter', 'Escape'].includes(ev.key)) {
+      const sel = typeof pane.slashSel === 'number' && pane.slashSel < choices.length ? pane.slashSel : null;
+      if (ev.key === 'ArrowUp') { ev.preventDefault(); setPane({ slashSel: sel === null ? choices.length - 1 : Math.max(0, sel - 1) }); return; }
+      if (ev.key === 'ArrowDown') { ev.preventDefault(); setPane({ slashSel: sel === null || sel + 1 >= choices.length ? null : sel + 1 }); return; }
+      if (ev.key === 'Enter' && sel !== null) { ev.preventDefault(); setPane({ slashSel: null }); choices[sel].pick(); return; }
+      if (ev.key === 'Escape' && sel !== null) { ev.preventDefault(); setPane({ slashSel: null }); return; }
+    }
     if (ev.key === 'Enter' && plain) {
       ev.preventDefault();
       const v = (pane.pv || '').trim();
@@ -1201,17 +1227,36 @@ class Component extends DCLogic {
         if (!c || !c.choices) return [];
         // The picker's own notes for each choice (one copy each, above).
         const notes = { guidance: Object.assign({ auto: GUIDANCE_AUTO_META }, GUIDANCE_META), length: LENGTH_META, tone: TONE_META }[c.name] || {};
-        return c.choices.filter(ch => ch.startsWith(m[2].toLowerCase())).map(ch => ({
+        return c.choices.filter(ch => ch.startsWith(m[2].toLowerCase())).map((ch, i) => ({
+          choice: true, lit: p.slashSel === i ? '1' : '0', bg: p.slashSel === i ? '#2e3138' : 'transparent',
           cmd: '/' + c.name + ' ' + ch, desc: [notes[ch], ch === c.current ? 'current' : ''].filter(Boolean).join(' · '),
           current: ch === c.current ? '1' : '0', pick: () => send('/' + c.name + ' ' + ch),
         }));
       }
       const q = raw.trim().toLowerCase();
-      return catalog.filter(c => ('/' + c.name).startsWith(q)).map(c => ({
+      const matches = catalog.filter(c => ('/' + c.name).startsWith(q));
+      // UI sprint 163: one match closes the menu; its hint sits in the input row (_slashHint).
+      if (matches.length === 1 && q.length > 1) return [];
+      return matches.map(c => ({
+        choice: false, lit: '0', bg: 'transparent',
         cmd: '/' + c.name, desc: c.usage === '/' + c.name ? c.about : c.usage.slice(c.name.length + 2) + ' · ' + c.about,
         current: '0',
         pick: c.usage === '/' + c.name ? () => send('/' + c.name) : () => fill('/' + c.name + ' '),
       }));
+    };
+    // UI sprint 163: the hint after the typed text once one command matches and no space is typed:
+    // the command's argument part and description, or its description alone. Never its name.
+    const _slashHint = (p) => {
+      const raw = p.pv || '';
+      if (!/^\/\S+$/.test(raw)) return '';
+      const vm = window.__vm;
+      const ctl = vm && typeof vm.get === 'function' ? vm.get(p.id) : null;
+      const catalog = ctl && typeof ctl.slashCatalog === 'function' ? ctl.slashCatalog() : [];
+      const matches = catalog.filter(c => ('/' + c.name).startsWith(raw.toLowerCase()));
+      if (matches.length !== 1) return '';
+      const c = matches[0];
+      const args = c.usage.slice(c.name.length + 2);
+      return args ? args + ' · ' + c.about : c.about;
     };
     const panes = state.panes.map(p => { const wsRows = this._wsPickerRows(state, p); return Object.assign({
       // Grid placement. Single-pane state has no col/row on the pane
@@ -1365,7 +1410,7 @@ class Component extends DCLogic {
       pv: p.pv || '',
       promptVal: p.pv || '',
       onPv: (ev) => this.setState(s => ({ panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, { pv: ev.target.value }) : x) })),
-      onPrompt: (ev) => this.setState(s => ({ panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, { pv: ev.target.value, histAt: null }) : x) })),
+      onPrompt: (ev) => this.setState(s => ({ panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, { pv: ev.target.value, histAt: null, slashSel: null }) : x) })),
       onPvKey: (ev) => {
         if (ev.key !== 'Enter') return;
         const v = (p.pv || '').trim();
@@ -1380,7 +1425,12 @@ class Component extends DCLogic {
       onPromptKey: (ev) => this._barKey(p.id, ev),
       ...(() => {
         const rows = _slashMenu(p);
-        return { routerRows: rows, routerOpen: rows.length > 0, promptRadius: rows.length ? '0 0 6px 6px' : '6px' };
+        this._slashRows = Object.assign(this._slashRows || {}, { [p.id]: rows });
+        const hint = _slashHint(p);
+        return {
+          routerRows: rows, routerOpen: rows.length > 0, promptRadius: rows.length ? '0 0 6px 6px' : '6px',
+          slashHintShow: !!hint, slashHintTyped: p.pv || '', slashHint: '  ' + hint,
+        };
       })(),
       sentLines: (p.sent || []).map(t => ({ text: t })),
       editing: p.editing, notEditing: !p.editing, nameVal: p.nameVal,
