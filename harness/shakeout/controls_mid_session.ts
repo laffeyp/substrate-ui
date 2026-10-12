@@ -1,11 +1,14 @@
 // Guidance, length and tone on the session bar, changed mid-session by slash commands (UI sprint
-// 161; kernel K296, K298).
+// 161; kernel K296, K298); the prompt for the message after each change carries the new text (UI
+// sprint 167; kernel K299).
 //
 // Steps: bind pane 1 (deterministic) and send; the bar line ends with guidance, normal, neutral.
 // /tone blunt: manifest and bar line read blunt; the next turn records SessionChanged(tone).
 // /guidance low: the bundle is standard-low and the bar line reads low; the next turn records
 // SessionChanged(bundle). /length enormous: refused, nothing changes.
 
+import { execFileSync } from "node:child_process";
+import { join } from "node:path";
 import { _electron as electron } from "playwright";
 import type { Page } from "playwright";
 import { bindPaneAsUser, launchArgs, waitForApp } from "./lib/electron";
@@ -24,6 +27,14 @@ async function turn(win: Page, text: string): Promise<void> {
   const before = await win.evaluate(`window.__vm.get(1).snapshot().transcript.filter((r) => r.role === "model").length`) as number;
   await type(win, text);
   await win.waitForFunction(`window.__vm.get(1).snapshot().transcript.filter((r) => r.role === "model").length > ${before} && /returned/.test(${BAR})`, undefined, { timeout: 20_000 });
+}
+
+// UI sprint 167: what the model received with the message after each change, read from the record
+// through the kernel (long prompt text sits in blobs).
+type Delivery = { field: string; old: string; new: string; message: string; written: number; new_text_in_prompt: boolean; old_text_in_prompt: boolean };
+function deliveries(state: string, sid: string): Delivery[] {
+  const out = execFileSync("uv", ["run", "--project", join(__dirname, "..", "..", "..", "substrate"), "python", join(__dirname, "lib", "prompt_after_change.py"), join(state, "sessions", sid, "record")], { encoding: "utf8" });
+  return JSON.parse(out.trim().split("\n").pop() as string) as Delivery[];
 }
 
 const manifest = (win: Page) => win.evaluate(`fetch("/api/session/" + ${SID}).then((r) => r.json())`) as Promise<Record<string, unknown>>;
@@ -56,6 +67,15 @@ async function main(): Promise<void> {
     await turn(win, "once more");
     const bundle = (await changes(win)).find((c) => c.field === "bundle");
     if (!bundle || bundle.new !== "standard-low") throw new Error(`the record's changes: ${JSON.stringify(await changes(win))}`);
+
+    // UI sprint 167: the prompt for the message after each change carries the new text, not the old.
+    const sid = await win.evaluate(SID) as string;
+    const got = deliveries(launch.state, sid).filter((d) => d.field === "tone" || d.field === "bundle");
+    if (got.length < 2) throw new Error(`the record holds ${got.length} tone/bundle changes: ${JSON.stringify(got)}`);
+    for (const d of got) {
+      // A tone or bundle change writes text; with none written the check would pass on nothing.
+      if (d.written === 0 || !d.new_text_in_prompt || d.old_text_in_prompt) throw new Error(`the prompt for ${JSON.stringify(d.message)} after ${d.field} ${d.old}→${d.new} lacks the new text or keeps the old: ${JSON.stringify(d)}`);
+    }
 
     const barBefore = await win.evaluate(BAR) as string;
     await type(win, "/length enormous");
