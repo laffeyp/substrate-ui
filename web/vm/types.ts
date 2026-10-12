@@ -42,6 +42,8 @@ export interface TranscriptRow {
   /** UI sprints 129, 131: `harness` on a harness driver's call to its own tool
    *  (HarnessToolCall); `mcp` on Substrate's ToolCall a harness made over MCP; absent otherwise. */
   toolRoute?: string;
+  /** UI sprint 162: `/help`'s list, one entry per command, drawn as rows. */
+  helpRows?: { usage: string; about: string }[];
 }
 
 /** A tool card's call row: Substrate's `ToolCall` or a harness driver's `HarnessToolCall`. */

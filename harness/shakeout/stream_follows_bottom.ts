@@ -7,7 +7,7 @@
 
 import { _electron as electron } from "playwright";
 import type { Page } from "playwright";
-import { bindPaneAsUser, launchArgs, waitForApp } from "./lib/electron";
+import { bindPaneAsUser, launchArgs, settled, waitForApp } from "./lib/electron";
 
 // Plain-string evaluates: esbuild's __name helper does not exist in the page.
 const SCROLLER = `Array.from(document.querySelectorAll("[data-stream-scroll]")).find((e) => e.offsetParent !== null)`;
@@ -19,7 +19,7 @@ async function send(win: Page, text: string): Promise<void> {
   const before = await win.evaluate(ROWS) as number;
   await win.evaluate(`window.__vm.get(1).sendTurn(${JSON.stringify(text)})`);
   await win.waitForFunction(`${ROWS} > ${before} + 5`, undefined, { timeout: 20_000 });
-  await win.waitForTimeout(400);
+  await settled(win);
 }
 
 async function main(): Promise<void> {
@@ -44,14 +44,14 @@ async function main(): Promise<void> {
     if (p.gap > 24) throw new Error(`a turn at the bottom left the view ${p.gap.toFixed(0)}px above it`);
 
     await win.evaluate(`(() => { const s = ${SCROLLER}; s.scrollTop = Math.max(0, s.scrollTop - 200); s.dispatchEvent(new Event("scroll")); })()`);
-    await win.waitForTimeout(150);
+    await settled(win);
     const held = await win.evaluate(POS) as Pos;
     await send(win, "while scrolled up");
     p = await win.evaluate(POS) as Pos;
     if (Math.abs(p.top - held.top) > 1) throw new Error(`scrolled up, a turn moved the view from ${held.top} to ${p.top}`);
 
     await win.evaluate(`(() => { const s = ${SCROLLER}; s.scrollTop = s.scrollHeight; s.dispatchEvent(new Event("scroll")); })()`);
-    await win.waitForTimeout(150);
+    await settled(win);
     await send(win, "back at the bottom");
     p = await win.evaluate(POS) as Pos;
     if (p.gap > 24) throw new Error(`back at the bottom, a turn left the view ${p.gap.toFixed(0)}px above it`);

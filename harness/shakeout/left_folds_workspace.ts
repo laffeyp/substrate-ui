@@ -8,7 +8,7 @@ import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { _electron as electron } from "playwright";
 import type { Page } from "playwright";
-import { launchArgs, waitForApp } from "./lib/electron";
+import { launchArgs, settled, waitForApp } from "./lib/electron";
 
 // Plain-string evaluates: esbuild's __name helper does not exist in the page.
 const STATE = `(() => {
@@ -23,7 +23,7 @@ const STATE = `(() => {
 type S = { lit: string; litIsSession: boolean; sessions: number };
 async function press(win: Page, key: string): Promise<S> {
   await win.keyboard.press(key);
-  await win.waitForTimeout(120);
+  await settled(win);
   return win.evaluate(STATE) as Promise<S>;
 }
 

@@ -8,7 +8,7 @@
 
 import { _electron as electron } from "playwright";
 import type { Page } from "playwright";
-import { launchArgs, waitForApp } from "./lib/electron";
+import { launchArgs, settled, waitForApp } from "./lib/electron";
 
 const CLOUD = "ollama · cloud";
 const LOCAL = "ollama · local";
@@ -28,7 +28,7 @@ async function lit(win: Page): Promise<{ label: string; open: boolean; scrolls: 
 
 async function down(win: Page): Promise<{ label: string; open: boolean; scrolls: boolean }> {
   await win.keyboard.press("ArrowDown");
-  await win.waitForTimeout(60);
+  await settled(win);
   return lit(win);
 }
 
@@ -52,7 +52,7 @@ async function main(): Promise<void> {
     at = await down(win);
     if (at.label !== CLOUD || at.open) throw new Error(`↓ from a folded cli agents gave ${JSON.stringify(at)}; the landed group should stay folded`);
     await win.keyboard.press("ArrowRight");
-    await win.waitForTimeout(60);
+    await settled(win);
 
     const walked: string[] = [];
     for (let i = 0; i < 40; i++) {

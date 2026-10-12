@@ -3,7 +3,7 @@
     <sc-if value="{{ %o%.routerOpen }}" hint-placeholder-val="{{ false }}">
      <div style="border-radius:6px 6px 0 0;background:#1a1c20;padding:6px 0;font-size:12.5px;line-height:2.2;border-bottom:1px solid rgba(255,255,255,.055)">
       <sc-for list="{{ %o%.routerRows }}" as="r" hint-placeholder-count="4">
-       <div style="padding:0 16px;display:flex;gap:16px;cursor:pointer" style-hover="background:#2e3138" onClick="{{ r.pick }}"><span style="color:#9aa0a8;width:130px;flex:none">{{ r.cmd }}</span><span style="color:#62676f">{{ r.desc }}</span></div>
+       <div data-slash-row="{{ r.cmd }}" data-current="{{ r.current }}" style="padding:0 16px;display:flex;gap:16px;cursor:pointer" style-hover="background:#2e3138" onClick="{{ r.pick }}"><span style="color:#9aa0a8;width:160px;flex:none">{{ r.cmd }}</span><span style="color:#62676f">{{ r.desc }}</span></div>
       </sc-for>
      </div>
     </sc-if>

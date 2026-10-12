@@ -112,3 +112,10 @@ export async function observedSignals(win: Page): Promise<EmittedRecord[]> {
     return buf.map((s) => ({ tag: s.name, payload: s.payload }));
   });
 }
+
+/** Resolve once the page has drawn a frame after the current one (UI sprint 162). A key handler
+ * that sets state is drawn by the next frame; a fixed sleep read state before the draw when the
+ * machine was busy (left_folds_workspace read the folder row still lit after ↓). */
+export async function settled(win: Page): Promise<void> {
+  await win.evaluate("new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r(null))))");
+}

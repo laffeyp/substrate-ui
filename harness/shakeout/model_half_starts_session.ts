@@ -16,7 +16,7 @@
 import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { _electron as electron, type Page } from "playwright";
-import { launchArgs, waitForApp } from "./lib/electron";
+import { launchArgs, settled, waitForApp } from "./lib/electron";
 
 type Snap = { sessionId: string | null; driver: string | null };
 
@@ -47,7 +47,7 @@ async function main(): Promise<void> {
     if (shots) await win.screenshot({ path: join(shots, "1-greyed.png") });
 
     await model.click();
-    await win.waitForTimeout(300);
+    await settled(win);
     if (await win.locator('[data-input-bar]').first().isVisible()) {
       throw new Error("a click on a greyed model row started a session");
     }

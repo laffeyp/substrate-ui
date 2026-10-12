@@ -11,7 +11,7 @@ import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { _electron as electron } from "playwright";
 import type { Page } from "playwright";
-import { launchArgs, waitForApp } from "./lib/electron";
+import { launchArgs, settled, waitForApp } from "./lib/electron";
 
 // Plain-string evaluates: esbuild's __name helper does not exist in the page.
 const MEASURE = `(() => {
@@ -64,7 +64,7 @@ async function main(): Promise<void> {
     await win.evaluate(`${findRow}.firstElementChild.click()`);
     await win.waitForFunction(`Array.from(document.querySelectorAll("[data-ws-scroll] [data-ws-lit]")).some((e) => e.style.padding.endsWith("40px"))`, undefined, { timeout: 10_000 })
       .catch(() => { throw new Error("opening the row showed no session"); });
-    await win.waitForTimeout(200);
+    await settled(win);
     const opened = await measure(win);
     if (Math.abs(opened.top - folded.top) > 0.5) throw new Error(`the box's top moved from ${folded.top} to ${opened.top}`);
     if (!opened.sessionInView) throw new Error("the first session is not in the room under the rows");
@@ -76,7 +76,7 @@ async function main(): Promise<void> {
     await win.keyboard.press("Enter");
     await win.locator('[data-model-half][data-armed="1"]').first().waitFor({ state: "visible", timeout: 10_000 });
     await win.keyboard.press("ArrowLeft");
-    await win.waitForTimeout(100);
+    await settled(win);
     const afterLeft = await keysIn(win);
     if (afterLeft.armed !== "0" || !afterLeft.wsLit) throw new Error(`← on a folded cli agents left ${JSON.stringify(afterLeft)}`);
 
@@ -87,7 +87,7 @@ async function main(): Promise<void> {
     await win.waitForFunction(`!Array.from(document.querySelectorAll("[data-ws-scroll] [data-ws-lit]")).some((e) => e.style.padding.endsWith("40px"))`, undefined, { timeout: 5_000 });
     const at = await win.evaluate(`(() => { const r = document.querySelector("[data-ws-scroll]").getBoundingClientRect(); return { x: r.left + r.width - 30, y: r.bottom - 4 }; })()`) as { x: number; y: number };
     await win.mouse.click(at.x, at.y);
-    await win.waitForTimeout(100);
+    await settled(win);
     const afterClick = await keysIn(win);
     if (afterClick.armed !== "0" || !afterClick.wsLit) throw new Error(`a click on the list's empty space left ${JSON.stringify(afterClick)}`);
 

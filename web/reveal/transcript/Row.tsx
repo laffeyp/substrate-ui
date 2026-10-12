@@ -92,6 +92,16 @@ const RowInner: React.FC<RowProps> = ({ row, paired, progressText, progressEof, 
         />
       ) : isAuthPrompt ? (
         <AuthPromptCard cli={text} />
+      ) : row.helpRows ? (
+        // UI sprint 162: /help as the menu draws commands: usage, then its description in grey.
+        <span style={{ display: "inline-block", verticalAlign: "top" }}>
+          {row.helpRows.map((h) => (
+            <span key={h.usage} data-help-row="1" style={{ display: "flex", gap: 16 }}>
+              <span style={{ color: "#9aa0a8", minWidth: 260 }}>{h.usage}</span>
+              <span style={{ color: "#62676f" }}>{h.about}</span>
+            </span>
+          ))}
+        </span>
       ) : (
         <span>{text}</span>
       )}
