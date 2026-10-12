@@ -6,7 +6,7 @@ id: 167
 status: open
 phase: 1
 pass_kind: functional
-roadmap: substrate/process/planning/ROADMAP-2026-10-12-changes-on-time.md
+roadmap: substrate/process/planning/ROADMAP-2026-10-12-changes-on-time-r2.md
 postmortem: substrate/process/planning/POSTMORTEM-2026-10-12-mid-session-changes-arrive-late-r2.md
 context_files:
   - harness/shakeout/controls_mid_session.ts
