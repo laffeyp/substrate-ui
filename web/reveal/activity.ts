@@ -5,6 +5,13 @@
 import { EnvelopeKind } from "../vm/kinds";
 import { formatClock, formatDuration } from "./timeline";
 
+// UI sprint 135: a harness driver's own tool calls (session vocabulary § Q) count as tools, and
+// their results close them, as Substrate's own ToolCall and ToolResult do.
+const isCall = (kind: unknown): boolean =>
+  kind === EnvelopeKind.ToolCall || kind === EnvelopeKind.HarnessToolCall;
+const isResult = (kind: unknown): boolean =>
+  kind === EnvelopeKind.ToolResult || kind === EnvelopeKind.HarnessToolResult;
+
 export interface Activity {
   kind: "live" | "recap" | "failed";
   verb?: string;
@@ -58,7 +65,7 @@ export function liveActivity(snap: any): Activity | null {
   if (turnIsLive && fail && umTime <= fail.atT) {
     let failTools = 0;
     for (const e of envs) {
-      if (typeof e.seq === 'number' && e.seq >= umSeq && e.kind === EnvelopeKind.ToolCall) failTools++;
+      if (typeof e.seq === 'number' && e.seq >= umSeq && isCall(e.kind)) failTools++;
     }
     const lastT = envs.reduce((m: number, e: any) => (typeof e.t === 'number' && e.t > m ? e.t : m), umTime);
     const ran = Math.max(0, Math.min(fail.atT, Math.max(lastT, umTime)) - umTime);
@@ -80,10 +87,10 @@ export function liveActivity(snap: any): Activity | null {
     for (const e of envs) {
       if (typeof e.seq !== 'number' || e.seq < umSeq) continue;
       const p = e.payload || {};
-      if (e.kind === EnvelopeKind.ToolCall && typeof p.call_id === 'string') {
+      if (isCall(e.kind) && typeof p.call_id === 'string') {
         tools++;
         outstanding.set(p.call_id, typeof p.tool === 'string' ? p.tool : 'tool');
-      } else if (e.kind === EnvelopeKind.ToolResult && typeof p.call_id === 'string') {
+      } else if (isResult(e.kind) && typeof p.call_id === 'string') {
         outstanding.delete(p.call_id);
       }
     }
@@ -114,7 +121,7 @@ export function liveActivity(snap: any): Activity | null {
   for (const e of envs) {
     if (typeof e.seq !== 'number') continue;
     if (e.seq < umSeq || e.seq > parkSeq) continue;
-    if (e.kind === EnvelopeKind.ToolCall) {
+    if (isCall(e.kind)) {
       const p = e.payload || {};
       if (typeof p.tool === 'string') tools.push(p.tool);
     }

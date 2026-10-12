@@ -227,7 +227,7 @@ async function run(): Promise<void> {
     //    drained).
     // 7. Bind pane 1 to a sandbox path. On first launch every pane is
     //    unbound: the reveal shell renders a path-binding input
-    //    (placeholder "type a path · ↑↓ picks…"), not the chat prompt.
+    //    (the folder input, `data-ws-input`), not the chat prompt.
     //    The transcript mount only appears once a pane is bound. The
     //    smoke binds it as a first-run user does: Enter in the path
     //    input picks the per-session sandbox (lib/electron.ts).

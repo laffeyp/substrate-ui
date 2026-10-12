@@ -210,7 +210,7 @@ const AuthPromptCardInner: React.FC<Props> = ({ cli }) => {
       ) : (
         <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 8 }}>
           <span style={{ color: MUTED, fontSize: 11 }}>
-            {state.postAuth?.authed ? "ready to pick a session" : "not authenticated yet"}
+            {state.postAuth?.authed ? "" : "not authenticated yet"}
           </span>
           <button
             onClick={() => void start()}

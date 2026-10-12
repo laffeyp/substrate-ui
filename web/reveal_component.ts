@@ -435,7 +435,7 @@ class Component extends DCLogic {
     // Non-Electron fallback: focus the type-a-path input.
     this.setState(st => ({ panes: st.panes.map(p => p.id === paneId ? Object.assign({}, p, { wsQ: '', wsHint: 'no native folder picker — type the path here' }) : p) }));
     setTimeout(() => {
-      const el = document.querySelector('input[placeholder^="type a path"]');
+      const el = document.querySelector('input[data-ws-input]');
       if (el) el.focus();
     }, 40);
   }
@@ -1317,10 +1317,10 @@ class Component extends DCLogic {
       modelInnerPos: paneW < 480 ? 'static' : 'absolute',
       modelMaxH: paneW < 480 ? '140px' : 'none',
       wsPlaceholder: p.pickerHalf === 'guidance' && p.armed
-        ? 'type a path to change folder · ← → moves · ↵ picks the guidance and starts · esc back to models'
+        ? '← → moves · ↵ picks the guidance and starts · esc back to models'
         : p.pickerHalf === 'model' && p.armed
-          ? 'type a path to change folder · ↑↓ moves · ⇧↵ opens · ↵ picks the model · esc back'
-          : 'type a path · ↑↓ moves · ⇧↵ opens · ↵ picks the folder · ⇥ fills nearest recent',
+          ? '↑↓ moves · ⇧↵ opens · ↵ picks the model · esc back'
+          : '↑↓ moves · ⇧↵ opens · ↵ picks the folder',
       wsQ: p.wsQ || '',
       onWsQ: (ev) => this.setState(st => ({ panes: st.panes.map(x => x.id === p.id ? Object.assign({}, x, { wsQ: ev.target.value, wsSelIdx: 0, armed: null, pickerHalf: 'ws', modelSelIdx: null }) : x) })),
       onWsKey: (ev) => this._wsKey(p.id, ev),

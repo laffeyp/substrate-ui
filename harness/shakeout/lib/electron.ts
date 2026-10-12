@@ -53,7 +53,7 @@ export async function waitForApp(win: Page, timeout = 30_000): Promise<void> {
  * groups start folded (UI sprint 128), so the user opens them and clicks a model: `model`, or the
  * roster's default (`deterministic` on an offline roster). Resolves once the chat prompt is visible. */
 export async function bindPaneAsUser(win: Page, model?: string): Promise<void> {
-  const path = win.locator('input[placeholder^="type a path"]').first();
+  const path = win.locator('input[data-ws-input]').first();
   await path.waitFor({ state: "visible", timeout: 15_000 });
   await path.click();
   await win.keyboard.press("Enter");
