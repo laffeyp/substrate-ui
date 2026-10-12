@@ -712,8 +712,9 @@ class Component extends DCLogic {
     const rows = this._wsPickerRows(this.state, p);
     const flat = [];
     for (const r of rows) {
-      flat.push({ pick: r.pick, toggle: r.toggleExpand, expandable: !!r.expandable, expanded: !!r.expanded });
-      for (const s of r.sessions) flat.push({ pick: s.pick, toggle: null, expandable: false, expanded: false });
+      const parent = flat.length;
+      flat.push({ pick: r.pick, toggle: r.toggleExpand, expandable: !!r.expandable, expanded: !!r.expanded, parent: null });
+      for (const s of r.sessions) flat.push({ pick: s.pick, toggle: null, expandable: false, expanded: false, parent });
     }
     if (!flat.length) return;
     const cur = Math.max(0, Math.min(p.wsSelIdx || 0, flat.length - 1));
@@ -723,6 +724,8 @@ class Component extends DCLogic {
     if (ev.key === 'ArrowUp') { ev.preventDefault(); move((cur - 1 + flat.length) % flat.length); return; }
     if (ev.key === 'ArrowRight' && item.expandable && !item.expanded) { ev.preventDefault(); item.toggle(); return; }
     if (ev.key === 'ArrowLeft' && item.expandable && item.expanded) { ev.preventDefault(); item.toggle(); return; }
+    // UI sprint 152: ← on a session lights its workspace row and folds it, as in the model column.
+    if (ev.key === 'ArrowLeft' && item.parent !== null) { ev.preventDefault(); move(item.parent); flat[item.parent].toggle(); return; }
     if (ev.key === 'Tab') {
       const firstRecent = rows.find(r => r.kind === 'recent' || r.kind === 'inherit' || r.kind === 'sandbox');
       if (firstRecent) { ev.preventDefault(); setPane({ wsQ: firstRecent.path, wsSelIdx: 0 }); }
@@ -1992,7 +1995,9 @@ class Component extends DCLogic {
       const total = paged ? paged.total : totalInMemory;
       _workspaceGroups.push({
         path: ws.path,
-        shapeLabel: ws.shape === 'worktree' ? 'git · sessions get worktrees'
+        // UI sprint 154: sessions do not get worktrees (no caller of _session_worktree), so a git
+        // folder reads only "git".
+        shapeLabel: ws.shape === 'worktree' ? 'git'
           : ws.shape === 'sandbox' ? 'sandbox'
           : ws.shape === 'per-session-sandboxes' ? 'per-session sandboxes · substrate-managed'
           : ws.shape,
