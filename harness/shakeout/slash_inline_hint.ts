@@ -1,9 +1,10 @@
-// Once one slash command matches, its hint sits in the input row (UI sprint 163; roadmap
+// The slash hint sits in one fixed column and stays (UI sprints 163, 166; roadmap
 // ROADMAP-2026-10-12-slash-entry.md).
 //
-// Steps: bind pane 1; "/l" lists /length and /list and shows no hint; "/guid" shows no menu and a
-// hint naming guidance's choices and description, starting where the typed text ends; "/fold"
-// shows its description; "/guidance " opens the choices and drops the hint.
+// Steps: bind pane 1; the hint's left edge is the same for "/g", "/guid", "/guidance ",
+// "/guidance hig" and "/tone bl", lies right of the width of "/guidance harness", and reads the
+// command's choices and description; "/l" (two matches) shows none and lists both; "/name " with
+// text past the column shows none.
 
 import { _electron as electron } from "playwright";
 import type { Page } from "playwright";
@@ -15,17 +16,18 @@ const READ = `(() => {
   const rows = Array.from(pane.querySelectorAll("[data-slash-row]")).filter((e) => e.offsetParent !== null).map((e) => e.getAttribute("data-slash-row"));
   const hint = pane.querySelector("[data-slash-hint]");
   const ta = pane.querySelector("[data-input-bar]");
-  let offset = null, expected = null;
-  if (hint && hint.offsetParent !== null && (hint.textContent || "").trim()) {
-    offset = hint.getBoundingClientRect().left - ta.getBoundingClientRect().left;
-    const ctx = document.createElement("canvas").getContext("2d");
-    const cs = getComputedStyle(ta);
-    ctx.font = cs.fontSize + " " + cs.fontFamily;
-    expected = ctx.measureText(ta.value).width;
-  }
-  return { rows, hint: hint && hint.offsetParent !== null ? (hint.textContent || "").replace(/\\s+/g, " ").trim() : "", offset, expected };
+  const shown = !!hint && hint.offsetParent !== null && !!(hint.textContent || "").trim();
+  const ctx = document.createElement("canvas").getContext("2d");
+  const cs = getComputedStyle(ta);
+  ctx.font = cs.fontSize + " " + cs.fontFamily;
+  return {
+    rows,
+    hint: shown ? (hint.textContent || "").replace(/\\s+/g, " ").trim() : "",
+    left: shown ? hint.getBoundingClientRect().left - ta.getBoundingClientRect().left : null,
+    longest: ctx.measureText("/guidance harness").width,
+  };
 })()`;
-type R = { rows: string[]; hint: string; offset: number | null; expected: number | null };
+type R = { rows: string[]; hint: string; left: number | null; longest: number };
 
 async function fill(win: Page, text: string): Promise<R> {
   const bar = win.locator('[data-pane="1"] [data-input-bar]').first();
@@ -44,21 +46,22 @@ async function main(): Promise<void> {
     await waitForApp(win);
     await bindPaneAsUser(win);
 
+    const guidance = "auto|harness|low|medium|high";
+    const cases: [string, string][] = [["/g", guidance], ["/guid", guidance], ["/guidance ", guidance], ["/guidance hig", guidance], ["/tone bl", "blunt|neutral|formal|dry"]];
+    const lefts: number[] = [];
+    for (const [text, want] of cases) {
+      const r = await fill(win, text);
+      if (!r.hint.includes(want)) throw new Error(`${JSON.stringify(text)} hint reads ${JSON.stringify(r.hint)}`);
+      if (r.left === null || r.left <= r.longest) throw new Error(`${JSON.stringify(text)} hint starts at ${r.left}px, inside "/guidance harness" (${r.longest.toFixed(1)}px)`);
+      lefts.push(r.left);
+    }
+    if (Math.max(...lefts) - Math.min(...lefts) > 1) throw new Error(`the hint moved: ${lefts.map((x) => x.toFixed(1)).join(", ")}px`);
+
     const many = await fill(win, "/l");
     if (JSON.stringify(many.rows) !== JSON.stringify(["/length", "/list"]) || many.hint) throw new Error(`"/l" gave ${JSON.stringify(many)}`);
-
-    const one = await fill(win, "/guid");
-    if (one.rows.length) throw new Error(`"/guid" still lists ${JSON.stringify(one.rows)} above the bar`);
-    if (!one.hint.includes("auto|harness|low|medium|high") || !one.hint.includes("how much of the working standard")) throw new Error(`"/guid" hint reads ${JSON.stringify(one.hint)}`);
-    if (one.hint.includes("/guidance")) throw new Error(`the hint completes the name: ${JSON.stringify(one.hint)}`);
-    if (one.offset === null || one.expected === null || Math.abs(one.offset - one.expected) > 2) throw new Error(`the hint starts at ${one.offset}px, the typed text ends at ${one.expected}px`);
-
-    const fold = await fill(win, "/fold");
-    if (fold.rows.length || !fold.hint.includes("fold or unfold all tool output")) throw new Error(`"/fold" gave ${JSON.stringify(fold)}`);
-
-    const space = await fill(win, "/guidance ");
-    if (space.rows.length !== 5 || space.hint) throw new Error(`"/guidance " gave ${JSON.stringify(space)}`);
-    console.log(`slash_inline_hint: ok — "/l" lists two; "/guid" hint ${JSON.stringify(one.hint)} at ${one.offset?.toFixed(1)}px (text ends ${one.expected?.toFixed(1)}px); "/guidance " lists 5 choices`);
+    const long = await fill(win, "/name a much longer session name than the column");
+    if (long.hint) throw new Error(`text past the column still shows the hint: ${JSON.stringify(long.hint)}`);
+    console.log(`slash_inline_hint: ok — the hint holds at ${lefts[0].toFixed(1)}px for ${cases.map((c) => JSON.stringify(c[0])).join(", ")} (right of ${many.longest.toFixed(1)}px); "/l" lists two; long /name text hides it`);
     code = 0;
   } catch (e) {
     console.error(`slash_inline_hint: FAIL — ${(e as Error).message}`);

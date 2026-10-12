@@ -1244,19 +1244,26 @@ class Component extends DCLogic {
         pick: c.usage === '/' + c.name ? () => send('/' + c.name) : () => fill('/' + c.name + ' '),
       }));
     };
-    // UI sprint 163: the hint after the typed text once one command matches and no space is typed:
-    // the command's argument part and description, or its description alone. Never its name.
+    // UI sprints 163, 166: the hint for the one command the bar's text names (a unique prefix, or a
+    // full name or alias with a space and anything after it): its argument part and description,
+    // never its name. It sits in one column for every command, right of the longest command with
+    // its longest choice, so typing never moves it; free text that reaches the column hides it.
     const _slashHint = (p) => {
       const raw = p.pv || '';
-      if (!/^\/\S+$/.test(raw)) return '';
+      if (!raw.startsWith('/') || raw.includes('\n')) return null;
       const vm = window.__vm;
       const ctl = vm && typeof vm.get === 'function' ? vm.get(p.id) : null;
       const catalog = ctl && typeof ctl.slashCatalog === 'function' ? ctl.slashCatalog() : [];
-      const matches = catalog.filter(c => ('/' + c.name).startsWith(raw.toLowerCase()));
-      if (matches.length !== 1) return '';
+      const col = Math.max(0, ...catalog.map(c => c.name.length + 1 + (c.choices ? 1 + Math.max(...c.choices.map(ch => ch.length)) : 0))) + 3;
+      const named = raw.match(/^\/(\S+)\s/);
+      const word = named ? named[1].toLowerCase() : raw.slice(1).toLowerCase();
+      const matches = named
+        ? catalog.filter(c => c.name === word || c.aliases.includes(word))
+        : catalog.filter(c => c.name.startsWith(word));
+      if (matches.length !== 1 || raw.length >= col) return null;
       const c = matches[0];
       const args = c.usage.slice(c.name.length + 2);
-      return args ? args + ' · ' + c.about : c.about;
+      return { text: args ? args + ' · ' + c.about : c.about, left: col + 'ch' };
     };
     const panes = state.panes.map(p => { const wsRows = this._wsPickerRows(state, p); return Object.assign({
       // Grid placement. Single-pane state has no col/row on the pane
@@ -1429,7 +1436,7 @@ class Component extends DCLogic {
         const hint = _slashHint(p);
         return {
           routerRows: rows, routerOpen: rows.length > 0, promptRadius: rows.length ? '0 0 6px 6px' : '6px',
-          slashHintShow: !!hint, slashHintTyped: p.pv || '', slashHint: '  ' + hint,
+          slashHintShow: !!hint, slashHint: hint ? hint.text : '', slashHintLeft: hint ? hint.left : '0',
         };
       })(),
       sentLines: (p.sent || []).map(t => ({ text: t })),
