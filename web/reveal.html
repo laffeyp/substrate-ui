@@ -17,6 +17,9 @@
 @keyframes actglyph{0%{opacity:.4}50%{opacity:1}100%{opacity:.4}}
 .act-pulse{animation:actglyph 1.4s ease-in-out infinite}
 /* UI sprint 138: the structure lens keeps its tables; only when the panel is too narrow for them does each row stack, with labels. */
+/* UI sprint 142: the lowest text level, for a hint in the workspace bar ("pick a model first"): one step fainter than #4a4e55. */
+:root{--tx-hint:#3c3f45}
+.tx-hint{color:var(--tx-hint)}
 .st{container-type:inline-size;container-name:st}
 .st-lab{display:none;color:#62676f;font-size:10.5px;margin-right:6px}
 .st-tag{white-space:nowrap}
@@ -28,8 +31,9 @@
    <span style="display:inline-flex;align-items:baseline;flex:none"><span style="color:#e2e5e9;font-weight:600">substrate</span><span title="the dot is this session's status" style="width:6px;height:6px;border-radius:50%;background:{{ fpDotBg }};border:1px solid {{ fpDot }};box-sizing:border-box;display:inline-block;margin-left:3px"></span></span>
    <sc-if value="{{ fpEditing }}" hint-placeholder-val="{{ false }}"><input value="{{ fpNameVal }}" onChange="{{ fpUpdName }}" onKeyDown="{{ fpNameKey }}" style="background:#1a1c20;border:1px solid #82a5c8;border-radius:4px;color:#e2e5e9;font-family:inherit;font-size:11px;padding:1px 6px;outline:none;width:160px"></input></sc-if>
    <sc-if value="{{ fpNotEditing }}" hint-placeholder-val="{{ true }}"><span data-crumb="1" onDoubleClick="{{ fpStartEdit }}" title="{{ crumb }} · double-click to rename" style="color:#9aa0a8;font-size:11px;overflow:hidden;text-overflow:ellipsis;flex:0 1 auto;min-width:24px;cursor:text">{{ crumb }}</span></sc-if>
-   <sc-if value="{{ showBarChips }}" hint-placeholder-val="{{ true }}"><sc-if value="{{ showDriverChip }}" hint-placeholder-val="{{ true }}"><span data-dropdown-region="driver" style="position:relative;flex:0 3 auto;min-width:18px;max-width:100%;display:inline-flex;align-items:center"><span onClick="{{ fpToggleDd }}" style="font-size:10.5px;color:#9aa0a8;border:1px solid rgba(255,255,255,.08);border-radius:4px;padding:1px 7px;cursor:pointer;display:inline-flex;align-items:center;line-height:1;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" style-hover="color:#d7dade">{{ driverName }} ▾</span>
-   <sc-if value="{{ fpDdOpen }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;left:0;top:22px;z-index:30;background:#26292e;border:1px solid rgba(255,255,255,.12);border-radius:6px;padding:5px 0;display:flex;flex-direction:column;min-width:220px;box-shadow:0 8px 24px rgba(0,0,0,.4)"><sc-for list="{{ fpDriverOpts }}" as="d" hint-placeholder-count="8"><sc-if value="{{ d.isHeader }}" hint-placeholder-val="{{ false }}"><span style="padding:6px 12px 2px;font-size:9px;letter-spacing:.14em;color:#62676f;text-transform:uppercase;cursor:default;white-space:nowrap">{{ d.label }}</span></sc-if><sc-if value="{{ d.notHeader }}" hint-placeholder-val="{{ true }}"><span style="display:flex;gap:6px;padding:4px 12px 4px {{ d.indent }}px;cursor:pointer;font-size:10.5px;color:{{ d.color }};white-space:nowrap;align-items:center" style-hover="background:#2e3138"><span onClick="{{ d.pick }}" style="flex:1">{{ d.label }}</span><span onClick="{{ d.toggleExpand }}" style="color:#62676f;width:14px;text-align:center;cursor:pointer">{{ d.chevron }}</span></span></sc-if></sc-for></span></sc-if></span></sc-if>
+   <sc-if value="{{ showBarChips }}" hint-placeholder-val="{{ true }}"><sc-if value="{{ showDriverChip }}" hint-placeholder-val="{{ true }}"><span data-dropdown-region="driver" style="position:relative;flex:0 3 auto;min-width:18px;max-width:100%;display:inline-flex;align-items:center"><span data-model-chip="1" onClick="{{ fpToggleDd }}" style="font-size:10.5px;color:#9aa0a8;border:1px solid rgba(255,255,255,.08);border-radius:4px;padding:1px 7px;cursor:pointer;display:inline-flex;align-items:center;line-height:1;max-width:100%;box-sizing:border-box;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" style-hover="color:#d7dade">{{ driverName }}</span>
+   <!-- UI sprint 139 (U125): the chip is an indicator; the model is picked in the workspace bar, or changed with /model. -->
+   <sc-if value="{{ fpDdOpen }}" hint-placeholder-val="{{ false }}"><span data-model-card="1" style="position:absolute;left:0;top:22px;z-index:30;background:#26292e;border:1px solid rgba(255,255,255,.12);border-radius:6px;padding:9px 13px;display:block;min-width:270px;box-shadow:0 8px 24px rgba(0,0,0,.4);font-size:10.5px;line-height:1.8;color:#9aa0a8;white-space:nowrap">model <span data-model-card-driver="1" style="color:#e2e5e9">{{ fpModel }}</span><br>version <span style="color:#e2e5e9">{{ fpModelVersion }}</span> · guidance <span style="color:#e2e5e9">{{ fpGuidance }}</span><br>length <span style="color:#e2e5e9">{{ fpLength }}</span> · tone <span style="color:#e2e5e9">{{ fpTone }}</span><br><span style="color:#62676f">change it with /model</span></span></sc-if></span></sc-if>
   <span data-dropdown-region="workspace" style="position:relative;flex:0 4 auto;min-width:18px;display:inline-flex;align-items:center"><span onClick="{{ fpToggleWs }}" style="font-size:10.5px;color:#62676f;border:1px solid rgba(255,255,255,.08);border-radius:4px;padding:1px 7px;cursor:pointer;display:inline-flex;align-items:center;line-height:1;max-width:100%;box-sizing:border-box;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" style-hover="color:#9aa0a8">{{ fpWsLabel }}</span>
    <sc-if value="{{ fpWsOpen }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;left:0;top:22px;z-index:30;background:#26292e;border:1px solid rgba(255,255,255,.12);border-radius:6px;padding:9px 13px;display:block;min-width:270px;box-shadow:0 8px 24px rgba(0,0,0,.4);font-size:10.5px;line-height:1.8;color:#9aa0a8;white-space:nowrap">workspace <span style="color:#e2e5e9">{{ focusedWorkspace }}</span><br>shape <span style="color:#e2e5e9">{{ focusedShape }}</span> · branch <span style="color:#e2e5e9">{{ focusedBranch }}</span></span></sc-if></span></sc-if>
    <span style="font-size:10.5px;color:#62676f;flex:none">{{ escHint }}</span>
@@ -95,7 +99,8 @@
       </sc-for>
      </div>
     </sc-if>
-    <div style="display:flex;gap:12px;align-items:center;border-radius:{{ pn.promptRadius }};padding:11px 16px;background:#1a1c20"><span style="color:#82a5c8">›</span><input value="{{ pn.promptVal }}" onChange="{{ pn.onPrompt }}" onKeyDown="{{ pn.onPromptKey }}" placeholder="type to talk · / for commands · ↵ to send" style="flex:1;background:none;border:none;outline:none;color:#e2e5e9;font-family:inherit;font-size:13px"></input></div>
+    <!-- UI sprint 141: the one input bar. The meta view draws the same bar, bound to the focused pane. -->
+    <div style="display:flex;gap:12px;align-items:flex-start;border-radius:{{ pn.promptRadius }};padding:11px 16px;background:#1a1c20"><span style="color:#82a5c8;line-height:1.4">›</span><textarea data-input-bar="1" rows="1" value="{{ pn.promptVal }}" onChange="{{ pn.onPrompt }}" onKeyDown="{{ pn.onPromptKey }}" placeholder="type to input · / for commands · ↵ to send" style="flex:1;background:none;border:none;outline:none;color:#e2e5e9;font-family:inherit;font-size:13px;line-height:1.4;padding:0;margin:0;resize:none;field-sizing:content;max-height:40vh;overflow-y:auto"></textarea></div>
    </div>
    </sc-if>
      </sc-if>
@@ -133,13 +138,29 @@
            <sc-if value="{{ mr.greyRow }}" hint-placeholder-val="{{ true }}"><div data-model-row="{{ mr.label }}" data-lit="{{ mr.lit }}" style="display:flex;gap:8px;padding:0 14px 0 {{ mr.indent }}px;background:{{ mr.bg }};white-space:nowrap;overflow:hidden;align-items:center;cursor:{{ mr.cursor }}"><span onClick="{{ mr.pick }}" style="flex:1;color:{{ mr.color }};overflow:hidden;text-overflow:ellipsis">{{ mr.label }}</span><span onClick="{{ mr.toggleExpand }}" style="color:#62676f;width:12px;flex:none;text-align:center;cursor:{{ mr.cursor }};font-size:11px">{{ mr.chevron }}</span></div></sc-if>
           </sc-for>
           </div>
-          <div data-guidance-half="1" data-armed="{{ pn.modelArmed }}" style="position:{{ pn.guidancePos }};left:0;right:0;bottom:0;height:31px;box-sizing:border-box;display:flex;gap:4px;align-items:center;padding:0 14px;border-top:1px solid rgba(255,255,255,.08);font-size:11.5px;white-space:nowrap;overflow:hidden">
+          <div data-guidance-half="1" data-armed="{{ pn.modelArmed }}" style="position:{{ pn.guidancePos }};left:0;right:0;bottom:{{ pn.guidanceBottom }};height:31px;box-sizing:border-box;display:flex;gap:4px;align-items:center;padding:0 14px;border-top:1px solid rgba(255,255,255,.08);font-size:11.5px;white-space:nowrap;overflow:hidden">
            <span style="font-size:9.5px;letter-spacing:.14em;color:{{ pn.guidanceHeadColor }};margin-right:8px">GUIDANCE</span>
            <sc-for list="{{ pn.guidanceRows }}" as="gr" hint-placeholder-count="5">
             <sc-if value="{{ gr.live }}" hint-placeholder-val="{{ false }}"><span data-guidance-row="{{ gr.label }}" data-lit="{{ gr.lit }}" title="{{ gr.meta }}" onClick="{{ gr.pick }}" style="color:{{ gr.color }};background:{{ gr.bg }};border-radius:4px;padding:0 8px;cursor:pointer" style-hover="background:#2e3138">{{ gr.label }}</span></sc-if>
-            <sc-if value="{{ gr.grey }}" hint-placeholder-val="{{ true }}"><span data-guidance-row="{{ gr.label }}" data-lit="{{ gr.lit }}" title="{{ gr.meta }}" style="color:#4a4e55;padding:0 8px;cursor:default">{{ gr.label }}</span></sc-if>
+            <sc-if value="{{ gr.grey }}" hint-placeholder-val="{{ true }}"><span data-guidance-row="{{ gr.label }}" data-lit="{{ gr.lit }}" title="{{ gr.meta }}" style="color:{{ gr.greyColor }};padding:0 8px;cursor:default">{{ gr.label }}</span></sc-if>
            </sc-for>
-           <span style="margin-left:auto;color:#62676f;overflow:hidden;text-overflow:ellipsis">{{ pn.guidanceNote }}</span>
+           <span class="{{ pn.guidanceNoteClass }}" style="margin-left:auto;color:{{ pn.guidanceNoteColor }};overflow:hidden;text-overflow:ellipsis">{{ pn.guidanceNote }}</span>
+          </div>
+          <div data-length-half="1" data-armed="{{ pn.modelArmed }}" style="position:{{ pn.guidancePos }};left:0;right:0;bottom:{{ pn.lengthBottom }};height:31px;box-sizing:border-box;display:flex;gap:4px;align-items:center;padding:0 14px;border-top:1px solid rgba(255,255,255,.08);font-size:11.5px;white-space:nowrap;overflow:hidden">
+           <span style="font-size:9.5px;letter-spacing:.14em;color:{{ pn.lengthHeadColor }};margin-right:8px">LENGTH</span>
+           <sc-for list="{{ pn.lengthRows }}" as="gr" hint-placeholder-count="5">
+            <sc-if value="{{ gr.live }}" hint-placeholder-val="{{ false }}"><span data-length-row="{{ gr.label }}" data-lit="{{ gr.lit }}" title="{{ gr.meta }}" onClick="{{ gr.pick }}" style="color:{{ gr.color }};background:{{ gr.bg }};border-radius:4px;padding:0 8px;cursor:pointer" style-hover="background:#2e3138">{{ gr.label }}</span></sc-if>
+            <sc-if value="{{ gr.grey }}" hint-placeholder-val="{{ true }}"><span data-length-row="{{ gr.label }}" data-lit="{{ gr.lit }}" title="{{ gr.meta }}" style="color:{{ gr.greyColor }};padding:0 8px;cursor:default">{{ gr.label }}</span></sc-if>
+           </sc-for>
+           <span style="margin-left:auto;color:#62676f;overflow:hidden;text-overflow:ellipsis">{{ pn.lengthNote }}</span>
+          </div>
+          <div data-tone-half="1" data-armed="{{ pn.modelArmed }}" style="position:{{ pn.guidancePos }};left:0;right:0;bottom:0;height:31px;box-sizing:border-box;display:flex;gap:4px;align-items:center;padding:0 14px;border-top:1px solid rgba(255,255,255,.08);font-size:11.5px;white-space:nowrap;overflow:hidden">
+           <span style="font-size:9.5px;letter-spacing:.14em;color:{{ pn.toneHeadColor }};margin-right:8px">TONE</span>
+           <sc-for list="{{ pn.toneRows }}" as="gr" hint-placeholder-count="5">
+            <sc-if value="{{ gr.live }}" hint-placeholder-val="{{ false }}"><span data-tone-row="{{ gr.label }}" data-lit="{{ gr.lit }}" title="{{ gr.meta }}" onClick="{{ gr.pick }}" style="color:{{ gr.color }};background:{{ gr.bg }};border-radius:4px;padding:0 8px;cursor:pointer" style-hover="background:#2e3138">{{ gr.label }}</span></sc-if>
+            <sc-if value="{{ gr.grey }}" hint-placeholder-val="{{ true }}"><span data-tone-row="{{ gr.label }}" data-lit="{{ gr.lit }}" title="{{ gr.meta }}" style="color:{{ gr.greyColor }};padding:0 8px;cursor:default">{{ gr.label }}</span></sc-if>
+           </sc-for>
+           <span style="margin-left:auto;color:#62676f;overflow:hidden;text-overflow:ellipsis">{{ pn.toneNote }}</span>
           </div>
          </div>
          </div>
@@ -220,7 +241,17 @@
      </sc-for>
     </div>
    </sc-if>
-    <div style="flex:none;padding:12px 26px 18px"><div style="display:flex;gap:12px;align-items:flex-start;border-radius:6px;padding:10px 15px;background:#1a1c20"><span style="color:#82a5c8;margin-top:2px">›</span><textarea ref="{{ promptRef }}" rows="1" onInput="{{ onPrompt }}" onKeyDown="{{ onPromptKey }}" placeholder="type to talk · ↵ to send · ⇧↵ for newline" style="flex:1;background:none;border:none;outline:none;color:#e2e5e9;font-family:inherit;font-size:13px;resize:none;overflow:hidden;line-height:1.4;padding:0;margin:0"></textarea></div></div>
+    <div style="flex:none;padding:12px 26px 18px">
+    <sc-if value="{{ fpRow.routerOpen }}" hint-placeholder-val="{{ false }}">
+     <div style="border-radius:6px 6px 0 0;background:#1a1c20;padding:6px 0;font-size:12.5px;line-height:2.2;border-bottom:1px solid rgba(255,255,255,.055)">
+      <sc-for list="{{ fpRow.routerRows }}" as="r" hint-placeholder-count="4">
+       <div style="padding:0 16px;display:flex;gap:16px;cursor:pointer" style-hover="background:#2e3138" onClick="{{ r.pick }}"><span style="color:#9aa0a8;width:130px;flex:none">{{ r.cmd }}</span><span style="color:#62676f">{{ r.desc }}</span></div>
+      </sc-for>
+     </div>
+    </sc-if>
+    <!-- UI sprint 141: the one input bar. The meta view draws the same bar, bound to the focused pane. -->
+    <div style="display:flex;gap:12px;align-items:flex-start;border-radius:{{ fpRow.promptRadius }};padding:11px 16px;background:#1a1c20"><span style="color:#82a5c8;line-height:1.4">›</span><textarea data-input-bar="1" rows="1" value="{{ fpRow.promptVal }}" onChange="{{ fpRow.onPrompt }}" onKeyDown="{{ fpRow.onPromptKey }}" placeholder="type to input · / for commands · ↵ to send" style="flex:1;background:none;border:none;outline:none;color:#e2e5e9;font-family:inherit;font-size:13px;line-height:1.4;padding:0;margin:0;resize:none;field-sizing:content;max-height:40vh;overflow-y:auto"></textarea></div>
+    </div>
     </sc-if>
    </div>
    <div style="flex:1;display:flex;flex-direction:column;min-width:0;background:#1a1c20">
@@ -527,6 +558,7 @@
      <div style="display:flex;flex-direction:column;gap:5px;flex:1;font-size:11.5px">
       <div style="display:flex"><span style="color:#b9bec5">meta / panes</span><span style="margin-left:auto;color:#9aa0a8;background:#1a1c20;border:1px solid rgba(255,255,255,.08);border-radius:4px;padding:0 7px">⌘M</span></div>
       <div style="display:flex"><span style="color:#b9bec5">split right / down</span><span style="margin-left:auto;color:#9aa0a8;background:#1a1c20;border:1px solid rgba(255,255,255,.08);border-radius:4px;padding:0 7px">⌘D · ⌘⇧D</span></div>
+      <div style="display:flex"><span style="color:#b9bec5">all tool output, open or closed</span><span style="margin-left:auto;color:#9aa0a8;background:#1a1c20;border:1px solid rgba(255,255,255,.08);border-radius:4px;padding:0 7px">⌘E</span></div>
       <div style="display:flex"><span style="color:#b9bec5">find in focused lens</span><span style="margin-left:auto;color:#9aa0a8;background:#1a1c20;border:1px solid rgba(255,255,255,.08);border-radius:4px;padding:0 7px">⌘F</span></div>
       <div style="display:flex"><span style="color:#b9bec5">full-line divider drag</span><span style="margin-left:auto;color:#9aa0a8;background:#1a1c20;border:1px solid rgba(255,255,255,.08);border-radius:4px;padding:0 7px">⌥ drag</span></div>
      </div>

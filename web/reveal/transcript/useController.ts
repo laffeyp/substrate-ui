@@ -23,6 +23,8 @@ const EMPTY_SNAPSHOT: Snapshot = {
   sessionName: null,
   driver: null,
   bundleSlug: null,
+  length: null,
+  tone: null,
   workspacePath: null,
   workspaceShape: null,
   turnIndex: 0,

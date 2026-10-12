@@ -119,6 +119,7 @@ export class PaneRegistry {
   pickDriver(name: string): void { this.active().pickDriver(name); }
   pickDriverVersion(driver: string, versionId: string | null): void { this.active().pickDriverVersion(driver, versionId); }
   pickBundle(slug: string | null): void { this.active().pickBundle(slug); }
+  pickControls(length: string | null, tone: string | null): void { this.active().pickControls(length, tone); }
   pickWorkspace(path: string | null): void { this.active().pickWorkspace(path); }
   interruptTurn(tier: "soft" | "hard" = "hard", recordRoot?: string): Promise<void> { return this.active().interruptTurn(tier, recordRoot); }
   validateSpec(spec: Record<string, unknown>): Promise<{ valid: boolean; error?: string }> { return this.active().validateSpec(spec); }

@@ -40,7 +40,7 @@ Items 1–3 closed on 2026-10-10 (roadmap `substrate/process/planning/ROADMAP-20
 
 ## The workspace bar: a hint beside each heading (Architect, 2026-10-10)
 
-13. **Workspace.** The WORKSPACE heading (`web/reveal.html:122`) gets a grey hint on the same line that says what the column is for: choosing where to work, or opening a previous session. The Architect's wording to start from: "choose where you want to work · or open a previous session".
+*13–14 tried 2026-10-11 and taken out (Architect: not appropriate); see sprint 142.* 13. **Workspace.** The WORKSPACE heading (`web/reveal.html:122`) gets a grey hint on the same line that says what the column is for: choosing where to work, or opening a previous session. The Architect's wording to start from: "choose where you want to work · or open a previous session".
 14. **Model.** The MODEL heading (`web/reveal.html:143`) gets the same kind of hint: "choose a model to work with".
 15. **Guidance.** This section needs design work before it gets a hint. It is to grow from one level picker into a set of controls chosen after the model: induced language patterns (verbosity, tone, controlled languages, specification forms, order, argument and evidence shape, range, language) and subtle behaviour dials (delegation, topologies, autonomy, reporting, scope). Research: `substrate/process/planning/RESEARCH-2026-10-10-guidance-controls-r4.md`.
 
@@ -52,5 +52,29 @@ Items 1–3 closed on 2026-10-10 (roadmap `substrate/process/planning/ROADMAP-20
 ## Before release (Architect, 2026-10-11)
 
 18. **A terminal, opened with Cmd+T.** A plain terminal session inside the app, with no tie to Substrate's runs or record, for ordinary shell work. It uses whatever terminal the machine uses by default, and the user can set another. Nothing exists yet: the only terminal-related code in substrate-ui is the ANSI colour renderer for transcripts (`web/reveal/transcript/ansi.ts`). To settle in design: whether the session is a pane inside the app (a terminal emulator running the user's login shell from `$SHELL`) or a window of the user's terminal app opened at the workspace path. macOS has no single "default terminal" setting; which app counts as the default has to be found or chosen.
+
+## Before release, added 2026-10-11 (Architect)
+
+20. **Text entry in the input bar.** Shift+Enter makes a new line (it does not today), and a sweep for the other standard behaviour a text box like this has. Release roadmap step 8, in place of the picker sequence. *Found 2026-10-11:* the panes view and the meta view draw two different input bars with two handlers; the meta view takes the panes view's bar, so there is one. Card `process/sprints/sprint-141-one-input-bar.md`.
+21. **Tool output: no clickable control.** Fold and unfold every tool card with ⌘E or the slash commands `/fold` (flips: fold, unfold, fold) and `/unfold`.
+
+22. **Naming sessions.** A user names a session, and the name holds in the top bar, in records, in the list of previous sessions, and across a restart.
+23. **A new pane from the meta view returns to the panes view.** ⌘D in meta makes the pane and leaves the user in meta, where it cannot be seen.
+24. **New windows, and the macOS menu bar.** After the window is closed nothing makes a new one. Check the menu bar against macOS conventions while building it.
+
+26. **The records page: workspaces in the main view's style.** The list of workspaces takes the panes view's workspace-bar style (darker background, rounded corners) and is centred. Style only; the page's content stays its own.
+27. **"sessions get work trees".** Check whether it is true for a git workspace; wherever the phrase appears, a workspace with worktrees reads "git · worktree".
+
+*Item 8 (U126) moves with the picker sequence to after distribution: the workspace, model and guidance steps stay as they are for now.*
+
+## Future direction (Architect, 2026-10-11)
+
+25. **Substrate makes the topology the user needs.** A make-topology tool builds topologies that replicate the user's own workflows. Example: a parallel swarm whose typed input is sprint cards and a roadmap; a stronger model finds the dependency graph, the smallest capable models each implement one card in their own worktree, the main model merges and tests, and the result returns to the session topology, where the user keeps or replaces the topology. Any topology's inputs, outputs and whole history can feed another topology (the adversarial pair, made real, is one such flow). The roadmap's "After distribution" section has it in full.
+
+19. **Child runs shown inside Substrate.** When a session delegates or starts a topology, the child run can be watched where it happens.
+    - **In a new pane.** The child opens in a pane of its own with the same controls as any pane. If the topology takes messages, its input bar takes them; if not, the pane only watches. Its header says plainly that it is a child and whose, and the controls a child cannot use are restricted.
+    - **Along the Z axis, the long-term default.** Panes tile across the window, and child runs also tile in depth, behind the pane that started them. The front pane is the one in use; the children sit behind it, blurred, their text still moving, several levels deep. With the input bar not focused, WASD or the arrow keys move forward and back through the levels, with a short animation.
+    - **Breaking out.** A child held in depth can move out to its own pane or its own window, and keeps the child header.
+    - An experimental design for the depth view exists outside this repo; the build starts from it. Also on the roadmap, under "After distribution".
 
 *2026-10-11: the order and scope for items 5–18 and the new picker items are in `ROADMAP-2026-10-11-before-distribution.md`, which supersedes item 18's open design question.*

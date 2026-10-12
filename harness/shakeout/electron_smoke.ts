@@ -29,7 +29,7 @@ export const flow: Flow = {
       // Bind as a user does. The launch's roster is offline, so the one model row is
       // `deterministic`, the driver this turn runs on.
       await bindPaneAsUser(win);
-      const prompt = win.locator('[placeholder^="type to talk"]').first();
+      const prompt = win.locator('[data-input-bar]').first();
       await prompt.click();
       await prompt.type("hello", { delay: 5 });
       await win.keyboard.press("Enter");

@@ -60,6 +60,21 @@
 
 ## Entries
 
+### 2026-10-11 — Piecemeal asks from the installed app: write each down, do one, stop
+
+**Context.** The Architect drove the release roadmap by trying the installed app and calling out what was wrong, one item at a time. Steps 5–10 landed, and each needed a new build to see.
+
+**What got in the way.**
+- **Acting before writing the ask down.** Twice an ask with several parts was half-recorded: on the roadmap but not the to-do list. Three times the work ran on from one item into the next until the Architect stopped it. Two rules came out of it: write every ask into both lists before acting on it, and in this mode finish one item, report, and stop.
+- **Scope beyond the ask.** "Add the missing sections and hover definitions" became a redesign: new order, new column styles, and a stacked layout from 720px of panel down. On a 14-inch MacBook at full screen the panel is 671px, so the tables the Architect liked were gone. The fix restored the old page and added only what was asked. The breakpoint came out of a measurement (the trigger table needs 524px), not a guess. And a 1440-point screenshot already showed the stacked layout; nobody looked at it.
+- **One element built twice.** The input bar was two elements, an `<input>` in the panes view and a `<textarea>` in the meta view, and they drifted: ⇧↵ worked in one view only. The Architect saw it at once; no gate covered it, because each gate drove only one view. The gate that replaced them (`input_bar.ts`) runs both views and compares the elements.
+- **"Gates pass on the source build" was not true for one gate.** `resume_ended_session.ts` launches `dist-electron`'s package unless told otherwise.
+- **Two bundles, two module copies.** `reveal_component.ts` is compiled by esbuild apart from the rest; a module-level store imported from both sides would have existed twice, silently.
+
+**What the kit could say.** A UI increment's card should name the viewports it is checked at, taken from the user's real screens. And an element a user sees as one thing should exist once in the code; two copies are a finding before any behaviour differs.
+
+---
+
 ### 2026-10-09 — Kernel K259–K266 in the console: gates that ran from source, and a row no gate rendered
 
 **Gates that claimed the installed app.** Three gates (`transcript_follow`, `lifecycle_gates`, `resume_ended_session`) launched Electron from source even with `SHAKEOUT_APP` set: two read their own variables, and `gates:electron` forced the third to source. Earlier "all gates against the installed app" reports covered four of seven. A gate's target has to come from one variable that every gate reads; the report should name the binary it launched.
@@ -745,4 +760,4 @@ lessons for the kit sit under the finding-30 series above.
 
 ---
 
-*KIT_DIARY.md for substrate-ui. 34 entries, 2026-06-17 to 2026-10-08. 45 hypothesis definitions under 39 IDs (H1–H39); H17, H18, H19, H20, H21, H22 carry more than one definition. Merged with `process/KIT_DIARY.md` on 2026-10-01; that copy is at `_deprecated/process-KIT_DIARY-2026-10-01.md`.*
+*KIT_DIARY.md for substrate-ui. 35 entries, 2026-06-17 to 2026-10-11. 45 hypothesis definitions under 39 IDs (H1–H39); H17, H18, H19, H20, H21, H22 carry more than one definition. Merged with `process/KIT_DIARY.md` on 2026-10-01; that copy is at `_deprecated/process-KIT_DIARY-2026-10-01.md`.*

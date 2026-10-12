@@ -46,6 +46,7 @@ import msgspec
 from substrate import api
 from substrate.topologies import bundled
 from substrate.topologies.session.environment import session_baseline
+from substrate.topologies.session.vocabulary import LENGTH_DEFAULT, TONE_DEFAULT
 from substrate.adapters.harness_streams import SUBSTRATE_MCP_SERVER
 from substrate.topologies.session.mcp_channel import handle_jsonrpc
 from substrate.topologies.session.model_class import (
@@ -717,6 +718,9 @@ def _build_session_topology_from_manifest(
         driver_name=manifest.driver,
         driver_context_tokens=context_tokens,
         driver_context_source=context_source,
+        # Kernel K296: the Length and Tone positions, at their defaults when the manifest names none.
+        length=manifest.length or LENGTH_DEFAULT,
+        tone=manifest.tone or TONE_DEFAULT,
         seed=manifest.seed,
         tools=session_tools,
         per_turn=manifest.per_turn,
@@ -1513,12 +1517,16 @@ def _agent_models(app: App) -> dict[str, object]:
     # (empty: none), as OLLAMA_BASE_URL moves the Ollama side. The offline gates set both, so the
     # roster they bind from does not depend on what this machine has installed.
     allowed_env = os.environ.get("SUBSTRATE_CLI_ADAPTERS")
-    allowed = None if allowed_env is None else {n.strip() for n in allowed_env.split(",") if n.strip()}
+    allowed = (
+        None if allowed_env is None else {n.strip() for n in allowed_env.split(",") if n.strip()}
+    )
     cli = sorted(
         name
         for name, entry in KNOWN_CLI_ADAPTERS.items()
         if (allowed is None or name in allowed)
-        and (cmd := entry.get("command")) and isinstance(cmd, list) and shutil.which(cmd[0])
+        and (cmd := entry.get("command"))
+        and isinstance(cmd, list)
+        and shutil.which(cmd[0])
     )
     # Sprint 085 followup — subset of cli entries with a login_command
     # the AuthPromptCard can host. Opencode is present as a driver but
@@ -2184,7 +2192,8 @@ def _topology_graph(events: list[dict[str, Any]]) -> dict[str, Any]:
     producer emits, or a kind the record holds with no producer (the app's `inject_event` and a
     resume's input). Lifecycle kinds (`substrate.*`) are the runtime's and are left out."""
     graph = _builtins(api.topology_graph(events))
-    assert isinstance(graph, dict)
+    if not isinstance(graph, dict):
+        raise TypeError(f"topology_graph projected to {type(graph).__name__}, not an object")
     emitted = {k for p in graph.get("producers", []) for k in p.get("emits", [])}
     subscribed = {k for t in graph.get("triggers", []) for k in t.get("on", [])}
     unproduced = {
@@ -2686,6 +2695,15 @@ class Handler(BaseHTTPRequestHandler):
             if refusal:
                 self._error(400, refusal)
                 return
+        # Kernel K296 (session vocabulary § T): the Length and Tone positions; absent or null is
+        # the default. The registry refuses an unknown position.
+        controls: dict[str, str | None] = {}
+        for control in ("length", "tone"):
+            raw = body.get(control)
+            if raw is not None and not isinstance(raw, str):
+                self._error(400, f"{control} must be a string or null; got {type(raw).__name__}")
+                return
+            controls[control] = raw or None
         session_id = _forced_session_id or f"s_{uuid.uuid4().hex[:24]}"
         try:
             manifest = self.app.registry.create(
@@ -2699,6 +2717,8 @@ class Handler(BaseHTTPRequestHandler):
                 role=role,
                 tools=tools,
                 driver_params=driver_params,
+                length=controls["length"],
+                tone=controls["tone"],
             )
             # Validate driver_params at the same boundary as PATCH does. If
             # the client sent bad shape/values, roll back the create so the
@@ -2715,6 +2735,9 @@ class Handler(BaseHTTPRequestHandler):
                 {"error": "name already taken", "existing_session_id": exc.existing_session_id},
                 409,
             )
+            return
+        except ValueError as exc:  # an unknown Length or Tone position (K296)
+            self._error(400, str(exc))
             return
         except Exception as exc:  # noqa: BLE001 — the handler boundary: anything else is a 500 naming its type
             self._error(500, f"{type(exc).__name__}: {exc}")
@@ -2735,6 +2758,8 @@ class Handler(BaseHTTPRequestHandler):
                 "workspace": manifest.workspace,
                 "workspace_shape": manifest.workspace_shape,
                 "bundle": manifest.bundle,
+                "length": manifest.length,  # kernel K296
+                "tone": manifest.tone,
                 "role": manifest.role,
                 "driver_params": dict(current.driver_params)
                 if current.driver_params is not None
@@ -3200,6 +3225,8 @@ class Handler(BaseHTTPRequestHandler):
                 "workspace": manifest.workspace,
                 "workspace_shape": manifest.workspace_shape,
                 "bundle": manifest.bundle,
+                "length": manifest.length,  # kernel K296
+                "tone": manifest.tone,
                 "record": manifest.record_root,
                 "created_at": manifest.created_at,
                 "status": manifest.status,
@@ -3804,7 +3831,16 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError as exc:
             self._error(400, str(exc))
             return
-        _PATCHABLE = {"driver", "name", "tools", "per_turn", "bundle", "driver_params"}
+        _PATCHABLE = {
+            "driver",
+            "name",
+            "tools",
+            "per_turn",
+            "bundle",
+            "driver_params",
+            "length",
+            "tone",
+        }
         _NOT_YET = {"workspace", "workspace_shape", "seed"}
         keys = set(body.keys())
         deferred = keys & _NOT_YET
@@ -3889,6 +3925,26 @@ class Handler(BaseHTTPRequestHandler):
             except ValueError as exc:  # a name that is not one path component (substrate.naming)
                 self._error(400, str(exc))
                 return
+        if "length" in body or "tone" in body:
+            # Kernel K296: either control; null returns it to the default. The next turn records
+            # SessionChanged and writes the `control` text again (vocabulary § T.3).
+            values: dict[str, str | None] = {"length": updated.length, "tone": updated.tone}
+            for control in ("length", "tone"):
+                if control in body:
+                    raw = body[control]
+                    if raw is not None and not isinstance(raw, str):
+                        self._error(
+                            400, f"{control} must be a string or null; got {type(raw).__name__}"
+                        )
+                        return
+                    values[control] = raw or None
+            try:
+                updated = self.app.registry.set_controls(
+                    session_id, length=values["length"], tone=values["tone"]
+                )
+            except ValueError as exc:
+                self._error(400, str(exc))
+                return
         if "driver_params" in body:
             # Sprint 032c (piece G mechanical translation): per-session
             # driver params (think/max_tokens/timeout/num_ctx). null clears
@@ -3919,6 +3975,8 @@ class Handler(BaseHTTPRequestHandler):
                 "workspace": updated.workspace,
                 "workspace_shape": updated.workspace_shape,
                 "bundle": updated.bundle,
+                "length": updated.length,  # kernel K296
+                "tone": updated.tone,
                 "driver_params": dict(updated.driver_params)
                 if updated.driver_params is not None
                 else None,
