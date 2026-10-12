@@ -241,7 +241,7 @@
        </div>
       </div>
 </sc-if>
-    <div ref="{{ streamRef }}" onScroll="{{ onStreamScroll }}" onClick="{{ focusStream }}" style="flex:1;overflow:auto;min-height:0">
+    <div ref="{{ streamRef }}" data-stream-scroll="1" onScroll="{{ onStreamScroll }}" onClick="{{ focusStream }}" style="flex:1;overflow:auto;min-height:0">
      <sc-if value="{{ isStream }}" hint-placeholder-val="{{ true }}">
       <sc-if value="{{ isDown }}" hint-placeholder-val="{{ true }}">
        <div style="display:flex;gap:8px;padding:2px 16px 4px;font-size:10px;color:#62676f;flex-wrap:wrap;align-items:baseline"><span style="color:#4a4e55" title="one lane per producer kind, derived from the record — spans run ToolCall→ToolResult; ⑂ child spans violet on the tool lane; sub-tracks appear only under real concurrency">lanes ·</span><sc-for list="{{ laneLegend }}" as="ld" hint-placeholder-count="4"><span style="color:{{ ld.color }}">{{ ld.label }}</span></sc-for></div>
@@ -359,8 +359,9 @@
 
  <!-- ══ SURFACE · records ══ -->
  <sc-if value="{{ showRecords }}" hint-placeholder-val="{{ false }}">
-  <div style="flex:1;overflow:auto;background:#212327;padding:22px 40px">
-   <div data-records-column="1" style="max-width:760px;margin:0 auto">
+  <div style="flex:1;overflow:auto;background:#212327;padding:22px 22px">
+   <!-- UI sprint 157: the column is the picker box's width (the pane less 22px a side). -->
+   <div data-records-column="1">
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
      <div style="font-size:10px;letter-spacing:.14em;color:#62676f">WORKSPACES</div>
      <sc-if value="{{ addWorkspaceAvailable }}" hint-placeholder-val="{{ true }}"><span onClick="{{ addWorkspace }}" style="margin-left:auto;font-size:10.5px;color:#82a5c8;border:1px solid rgba(255,255,255,.09);border-radius:4px;padding:2px 9px;cursor:pointer;user-select:none" style-hover="color:#a0c0e0">+ add workspace</span></sc-if>
@@ -369,7 +370,7 @@
     <div data-records-workspaces="1" style="border:1px solid rgba(255,255,255,.13);border-radius:6px;background:#1a1c20;padding:0 0 16px">
     <sc-for list="{{ workspaceGroups }}" as="ws" hint-placeholder-count="1">
      <div style="margin-top:16px">
-      <div onClick="{{ ws.toggleExpand }}" style="color:#d7dade;font-size:13px;cursor:pointer;display:flex;align-items:baseline;gap:8px;padding:0 14px" style-hover="color:#e2e5e9">
+      <div onClick="{{ ws.toggleExpand }}" data-records-lit="{{ ws.litAttr }}" style="color:#d7dade;font-size:13px;cursor:pointer;display:flex;align-items:baseline;gap:8px;padding:0 14px;background:{{ ws.bg }}" style-hover="color:#e2e5e9">
        <span style="color:#62676f;font-size:11px;width:12px">{{ ws.chevron }}</span>
        <span>{{ ws.path }}</span>
        <span style="color:#62676f;font-size:11px">{{ ws.shapeLabel }}</span>
@@ -378,7 +379,7 @@
       <sc-if value="{{ ws.expanded }}" hint-placeholder-val="{{ false }}">
        <div onScroll="{{ ws.loadMoreOnScroll }}" style="margin:6px 14px 0 34px;max-height:340px;overflow-y:auto;border:1px solid rgba(255,255,255,.05);border-radius:6px;background:rgba(0,0,0,.12);padding:4px 0">
         <sc-for list="{{ ws.sessions }}" as="s" hint-placeholder-count="1">
-         <div onClick="{{ s.pick }}" style="padding:8px 14px;font-size:12px;display:flex;gap:9px;align-items:center;cursor:pointer" style-hover="background:#26292e">
+         <div onClick="{{ s.pick }}" data-records-session="1" data-records-lit="{{ s.litAttr }}" style="padding:8px 14px;font-size:12px;display:flex;gap:9px;align-items:center;cursor:pointer;background:{{ s.bg }}" style-hover="background:#26292e">
           <span style="width:7px;height:7px;border-radius:50%;background:{{ s.dotColor }};flex:none"></span>
           <span style="color:#e2e5e9">{{ s.name }}</span>
           <span style="color:#62676f;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ s.statusLabel }} · {{ s.driver }} · {{ s.when }}</span>

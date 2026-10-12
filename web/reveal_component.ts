@@ -83,6 +83,7 @@ const LENGTH_DEFAULT_AT = LENGTH_OPTIONS.findIndex(o => o.value === LENGTH_DEFAU
 const TONE_DEFAULT_AT = TONE_OPTIONS.findIndex(o => o.value === TONE_DEFAULT);
 import { mdBlocks, mdInlines, renderBlock, renderInline } from "./reveal/markdown";
 import { liveActivity } from "./reveal/activity";
+import { followBottom } from "./reveal/follow_bottom";
 
 
 class Component extends DCLogic {
@@ -718,21 +719,41 @@ class Component extends DCLogic {
     }
     if (!flat.length) return;
     const cur = Math.max(0, Math.min(p.wsSelIdx || 0, flat.length - 1));
-    const item = flat[cur];
     const move = (i) => { setPane({ wsSelIdx: i }); reveal('[data-ws-lit="1"]'); };
-    if (ev.key === 'ArrowDown') { ev.preventDefault(); move((cur + 1) % flat.length); return; }
-    if (ev.key === 'ArrowUp') { ev.preventDefault(); move((cur - 1 + flat.length) % flat.length); return; }
-    if (ev.key === 'ArrowRight' && item.expandable && !item.expanded) { ev.preventDefault(); item.toggle(); return; }
-    if (ev.key === 'ArrowLeft' && item.expandable && item.expanded) { ev.preventDefault(); item.toggle(); return; }
-    // UI sprint 152: ← on a session lights its workspace row and folds it, as in the model column.
-    if (ev.key === 'ArrowLeft' && item.parent !== null) { ev.preventDefault(); move(item.parent); flat[item.parent].toggle(); return; }
     if (ev.key === 'Tab') {
       const firstRecent = rows.find(r => r.kind === 'recent' || r.kind === 'inherit' || r.kind === 'sandbox');
       if (firstRecent) { ev.preventDefault(); setPane({ wsQ: firstRecent.path, wsSelIdx: 0 }); }
       return;
     }
-    if (opens) { ev.preventDefault(); if (item.expandable) item.toggle(); return; }
-    if (ev.key === 'Enter') { ev.preventDefault(); item.pick(); }
+    this._treeKey(flat, cur, ev, move);
+  }
+  // The workspace tree's keys, shared by the picker's workspace column and the records page (UI
+  // sprint 156). `flat` lists rows and, under an open row, its sessions ({ pick, toggle,
+  // expandable, expanded, parent }). ↑ ↓ move and wrap; → opens; ← folds an open row, and on a
+  // session lights its row and folds it (152); ⇧↵ or ⌥↵ opens or folds; ↵ picks.
+  _treeKey(flat, cur, ev, move) {
+    if (!flat.length) return false;
+    const item = flat[cur];
+    const opens = ev.key === 'Enter' && (ev.shiftKey || ev.altKey);
+    if (ev.key === 'ArrowDown') { ev.preventDefault(); move((cur + 1) % flat.length); return true; }
+    if (ev.key === 'ArrowUp') { ev.preventDefault(); move((cur - 1 + flat.length) % flat.length); return true; }
+    if (ev.key === 'ArrowRight' && item.expandable && !item.expanded) { ev.preventDefault(); item.toggle(); return true; }
+    if (ev.key === 'ArrowLeft' && item.expandable && item.expanded) { ev.preventDefault(); item.toggle(); return true; }
+    if (ev.key === 'ArrowLeft' && item.parent !== null) { ev.preventDefault(); move(item.parent); flat[item.parent].toggle(); return true; }
+    if (opens) { ev.preventDefault(); if (item.expandable) item.toggle(); return true; }
+    if (ev.key === 'Enter') { ev.preventDefault(); item.pick(); return true; }
+    return false;
+  }
+  // The records page's keys: the workspace tree's, over the rows the last render drew.
+  _recordsKey(ev) {
+    const flat = this._recordsFlat || [];
+    if (!flat.length) return;
+    const cur = Math.max(0, Math.min(this.state.recordsSel || 0, flat.length - 1));
+    const move = (i) => {
+      this.setState({ recordsSel: i });
+      setTimeout(() => { const el = document.querySelector('[data-records-lit="1"]'); if (el) el.scrollIntoView({ block: 'nearest' }); }, 0);
+    };
+    this._treeKey(flat, cur, ev, move);
   }
   // UI sprint 124 — the model half of the workspace bar: the header dropdown's rows, in the
   // bar. A pick commits the armed folder; with nothing armed the half is greyed and inert.
@@ -841,6 +862,11 @@ class Component extends DCLogic {
         const barKey = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter', 'Escape'].includes(e.key) && !e.metaKey && !e.ctrlKey;
         const fp = (s.panes || []).find(p => p.id === s.focused);
         const fsnap = (s.controllerSnapshots || {})[s.focused];
+        if (barKey && e.key !== 'Escape' && !typing && s.surface === Surface.Records
+          && !s.showSettings && !s.showExport && !s.showEndConfirm && !s.findOpen) {
+          this._recordsKey(e);
+          return;
+        }
         if (barKey && !typing && fp && fp.unbound && !(fsnap && fsnap.sessionId) && !s.revealed && !s.surface
           && !s.showSettings && !s.showExport && !s.showEndConfirm && !s.findOpen) {
           const box = document.querySelector('[data-ws-input="' + fp.id + '"]');
@@ -1602,7 +1628,7 @@ class Component extends DCLogic {
         // are runtime plumbing under the color rule.
         spansByKind.delegation.push({
           start: started.seq, end: e.seq,
-          color: '#4d6b6e', bright: '#7fb3b8', kind: started.kind, plumbing: true,
+          color: '#4d6b6e', bright: '#7fb3b8', kind: started.kind,
         });
       }
       if (e.kind === 'TriggerFired' && e.payload && _isReturnProducer(e.payload.starts) && _parkOpen === null) {
@@ -1619,7 +1645,7 @@ class Component extends DCLogic {
           start: c.start, end: e.seq,
           color: c.tool === 'delegate' ? '#665f7d' : '#4d6b6e',
           bright: c.tool === 'delegate' ? '#a08fc9' : '#7fb3b8',
-          kind: c.tool || 'tool', plumbing: false,
+          kind: c.tool || 'tool',
         });
       }
     });
@@ -1629,7 +1655,7 @@ class Component extends DCLogic {
     for (const inst of Object.keys(_producerStarts)) {
       const st = _producerStarts[inst];
       if (st.kind === 'model') continue;
-      spansByKind.delegation.push({ start: st.seq, end: _lastSeq, color: '#4d6b6e', bright: '#7fb3b8', kind: st.kind, plumbing: true });
+      spansByKind.delegation.push({ start: st.seq, end: _lastSeq, color: '#4d6b6e', bright: '#7fb3b8', kind: st.kind });
     }
     if (_parkOpen !== null) {
       spansByKind.external.push({ start: _parkOpen, end: _parkOpen, color: '#3d5166', bright: '#82a5c8', kind: 'park' });
@@ -1639,14 +1665,15 @@ class Component extends DCLogic {
     // cell. Sub-track expansion under real concurrency remains a
     // design option (D29) but the daily-driver session topology
     // reads cleaner without it.
-    const _laneFilter = (sp) => state.level === RevealLevel.App ? !sp.plumbing : true;
+    // UI sprint 155: app view hides plumbing rows, not spans; a row it keeps draws its lanes as
+    // all view does, so a user message inside a producer span keeps its delegate cell.
     const laneDefs = [
       { kind: 'model', label: 'model' },
       { kind: 'delegation', label: 'delegate' },
       { kind: 'external', label: 'external' },
     ].map(ld => ({
       ...ld,
-      spans: (spansByKind[ld.kind] || []).filter(_laneFilter).slice().sort((a, b) => a.start - b.start),
+      spans: (spansByKind[ld.kind] || []).slice().sort((a, b) => a.start - b.start),
     }));
     const kindOf = (e) => {
       // Three lifelines: model / delegate / external. Every envelope
@@ -1985,6 +2012,8 @@ class Component extends DCLogic {
     }
     const _perSessionSandboxRoot = (_workspaces.find(w => w.shape === 'per-session-sandboxes') || {}).path;
     const _workspaceGroups = [];
+    const _recordsFlat = [];
+    const _recordsSel = state.recordsSel || 0;
     for (const ws of _workspaces) {
       const isPerSessionRoot = ws.shape === 'per-session-sandboxes';
       const countKey = isPerSessionRoot ? '__PER_SESSION_SANDBOXES__' : ws.path;
@@ -1993,15 +2022,24 @@ class Component extends DCLogic {
       const expanded = !!_expandedWs[ws.path];
       const shownRows = expanded && paged ? paged.rows : [];
       const total = paged ? paged.total : totalInMemory;
+      const _rowNav = _recordsFlat.length;
+      _recordsFlat.push({ pick: () => _toggleExpand(ws.path), toggle: () => _toggleExpand(ws.path), expandable: true, expanded, parent: null });
+      const _sessions = shownRows.map((r) => {
+        const m = _mapSession(r);
+        const nav = _recordsFlat.length;
+        _recordsFlat.push({ pick: m.pick, toggle: null, expandable: false, expanded: false, parent: _rowNav });
+        return Object.assign(m, { litAttr: nav === _recordsSel ? '1' : '0', bg: nav === _recordsSel ? '#2e3138' : 'transparent' });
+      });
       _workspaceGroups.push({
         path: ws.path,
+        litAttr: _rowNav === _recordsSel ? '1' : '0', bg: _rowNav === _recordsSel ? '#2e3138' : 'transparent',
         // UI sprint 154: sessions do not get worktrees (no caller of _session_worktree), so a git
         // folder reads only "git".
         shapeLabel: ws.shape === 'worktree' ? 'git'
           : ws.shape === 'sandbox' ? 'sandbox'
           : ws.shape === 'per-session-sandboxes' ? 'per-session sandboxes · substrate-managed'
           : ws.shape,
-        sessions: shownRows.map(_mapSession),
+        sessions: _sessions,
         countLabel: total === 1 ? '1 session' : `${total} sessions`,
         expanded, notExpanded: !expanded, chevron: expanded ? '▾' : '▸',
         toggleExpand: () => _toggleExpand(ws.path),
@@ -2017,6 +2055,7 @@ class Component extends DCLogic {
         remainingLabel: paged ? `load next ${Math.min(50, Math.max(0, paged.total - paged.rows.length))}` : '',
       });
     }
+    this._recordsFlat = _recordsFlat;
     void _perSessionSandboxRoot; // available for future use
     // Everything else lands under "isolated sessions" — most sessions
     // in a fresh install run in a per-session sandbox and belong here.
@@ -2204,7 +2243,8 @@ class Component extends DCLogic {
       // to the focused pane's pv, so the same field the terminal-view
       // pane input mutates is what the reveal-view input shows.
       promptVal: (fp && fp.pv) || '',
-      streamRef: (el) => { this._streamEl = el; },
+      // UI sprint 158: the stream follows the bottom until scrolled up, as the transcript does.
+      streamRef: (el) => { this._streamEl = el; if (el) followBottom(el); },
       // Transcript scroll used to live here (Sprint 076 retired
       // the pane's dc-runtime scroll ref / onScroll bindings). The
       // atom transcript React tree at web/reveal/transcript/ owns
