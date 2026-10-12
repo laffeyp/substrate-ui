@@ -58,9 +58,10 @@ const STRUCTURE_DEFS = {
 
 // UI sprint 161: the levels and their bundles are generated from the kernel (vm/controls.gen.ts);
 // only the one-line notes are the UI's own.
+const GUIDANCE_AUTO_META = 'follows the model';
 const GUIDANCE_META = { harness: 'loop rules only', low: 'one line a rule', medium: 'rules, no examples', high: 'the full standard' };
 const GUIDANCE_OPTIONS = [
-  { level: null, bundle: null, label: 'auto', meta: 'follows the model' },
+  { level: null, bundle: null, label: 'auto', meta: GUIDANCE_AUTO_META },
   ...Object.entries(GUIDANCE_LEVEL_BUNDLES).map(([level, bundle]) => ({ level, bundle, label: level, meta: GUIDANCE_META[level] || '' })),
 ];
 // UI sprint 143 (kernel K296, session vocabulary § T): the Length and Tone lines under GUIDANCE.
@@ -84,6 +85,7 @@ const TONE_DEFAULT_AT = TONE_OPTIONS.findIndex(o => o.value === TONE_DEFAULT);
 import { mdBlocks, mdInlines, renderBlock, renderInline } from "./reveal/markdown";
 import { liveActivity } from "./reveal/activity";
 import { followBottom } from "./reveal/follow_bottom";
+import { sessionStatusLook } from "./reveal/session_status";
 
 
 class Component extends DCLogic {
@@ -615,11 +617,8 @@ class Component extends DCLogic {
             sessionIdShort: (s.sessionId || '').slice(0, 12),
             name: s.name || (s.sessionId || '').slice(0, 8),
             driver: s.driver || '?',
-            statusLabel: s.status === 'live' ? '● running'
-              : s.status === 'parked' ? '◐ parked'
-              : s.status === 'interrupted' ? '! interrupted'
-              : '◇ ended',
-            dotColor: s.status === 'live' ? '#7fb3b8' : s.status === 'parked' ? '#82a5c8' : s.status === 'interrupted' ? '#c26058' : '#4a4e55',
+            statusLabel: sessionStatusLook(s.status).label,
+            dotColor: sessionStatusLook(s.status).dot,
             pick: () => _attachToExisting(p.id, s),
             nav: sNav,
             bg: p.pickerHalf !== 'model' && sNav === sel ? '#2e3138' : 'transparent',
@@ -1185,17 +1184,35 @@ class Component extends DCLogic {
       else if (typeof vm.submitLine === 'function') vm.submitLine(line);
     };
     const _clearPv = (paneId) => this.setState(s => ({ panes: s.panes.map(x => x.id === paneId ? Object.assign({}, x, { pv: '' }) : x) }));
-    const CMDS = [
-      ['/exit', 'end this session cleanly', (paneId) => { _clearPv(paneId); this.setState({ showEndConfirm: true }); }],
-      ['/model', 'swap driver — /model <name>', null],
-      ['/name', 'rename this session — /name <new>', null],
-      ['/list', 'list sessions on the server', (paneId) => { _clearPv(paneId); _vmSubmitFor(paneId, '/list'); }],
-      ['/interrupt', 'stop the in-flight turn (also ^C)', (paneId) => { _clearPv(paneId); _vmSubmitFor(paneId, '/interrupt'); }],
-      ['/fold', 'fold or unfold all tool output (also ⌘E)', (paneId) => { _clearPv(paneId); _vmSubmitFor(paneId, '/fold'); }],
-      ['/unfold', 'unfold all tool output', (paneId) => { _clearPv(paneId); _vmSubmitFor(paneId, '/unfold'); }],
-      ['/clear', 'clear the transcript view', (paneId) => { _clearPv(paneId); _vmSubmitFor(paneId, '/clear'); }],
-      ['/help', 'show this list', (paneId) => { _clearPv(paneId); _vmSubmitFor(paneId, '/help'); }],
-    ];
+    // UI sprint 162: the slash menu reads the pane's controller (`slashCatalog`), the same table
+    // `submitLine` runs and `/help` prints. A pick sends the line; a command that takes free text
+    // fills the bar instead. `/exit` from the menu asks first.
+    const _slashMenu = (p) => {
+      const raw = p.pv || '';
+      if (!raw.startsWith('/') || raw.includes('\n')) return [];
+      const vm = window.__vm;
+      const ctl = vm && typeof vm.get === 'function' ? vm.get(p.id) : null;
+      const catalog = ctl && typeof ctl.slashCatalog === 'function' ? ctl.slashCatalog() : [];
+      const send = (line) => { _clearPv(p.id); if (line === '/exit') { this.setState({ showEndConfirm: true }); return; } _vmSubmitFor(p.id, line); };
+      const fill = (line) => this.setState(s => ({ panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, { pv: line }) : x) }));
+      const m = raw.match(/^\/(\S+)\s+(\S*)$/);
+      if (m) {
+        const c = catalog.find(e => e.name === m[1].toLowerCase() || e.aliases.includes(m[1].toLowerCase()));
+        if (!c || !c.choices) return [];
+        // The picker's own notes for each choice (one copy each, above).
+        const notes = { guidance: Object.assign({ auto: GUIDANCE_AUTO_META }, GUIDANCE_META), length: LENGTH_META, tone: TONE_META }[c.name] || {};
+        return c.choices.filter(ch => ch.startsWith(m[2].toLowerCase())).map(ch => ({
+          cmd: '/' + c.name + ' ' + ch, desc: [notes[ch], ch === c.current ? 'current' : ''].filter(Boolean).join(' · '),
+          current: ch === c.current ? '1' : '0', pick: () => send('/' + c.name + ' ' + ch),
+        }));
+      }
+      const q = raw.trim().toLowerCase();
+      return catalog.filter(c => ('/' + c.name).startsWith(q)).map(c => ({
+        cmd: '/' + c.name, desc: c.usage === '/' + c.name ? c.about : c.usage.slice(c.name.length + 2) + ' · ' + c.about,
+        current: '0',
+        pick: c.usage === '/' + c.name ? () => send('/' + c.name) : () => fill('/' + c.name + ' '),
+      }));
+    };
     const panes = state.panes.map(p => { const wsRows = this._wsPickerRows(state, p); return Object.assign({
       // Grid placement. Single-pane state has no col/row on the pane
       // record; treat the missing case as the whole grid so the layout
@@ -1361,23 +1378,9 @@ class Component extends DCLogic {
         else if (vm && typeof vm.submitLine === 'function') vm.submitLine(v);
       },
       onPromptKey: (ev) => this._barKey(p.id, ev),
-      routerRows: (() => {
-        const q = (p.pv || '').trim();
-        if (!q.startsWith('/')) return [];
-        return CMDS.filter(c => c[0].startsWith(q) || q === '/').map(c => ({
-          cmd: c[0], desc: c[1],
-          pick: c[2]
-            ? (() => { this.setState(s => ({ panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, { pv: '' }) : x) })); (c[2])(p.id); })
-            : (() => this.setState(s => ({ panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, { pv: c[0] + ' ' }) : x) }))),
-        }));
-      })(),
-      routerOpen: (() => {
-        const q = (p.pv || '').trim();
-        return q.startsWith('/') && CMDS.some(c => c[0].startsWith(q) || q === '/');
-      })(),
-      promptRadius: (() => {
-        const q = (p.pv || '').trim();
-        return (q.startsWith('/') && CMDS.some(c => c[0].startsWith(q) || q === '/')) ? '0 0 6px 6px' : '6px';
+      ...(() => {
+        const rows = _slashMenu(p);
+        return { routerRows: rows, routerOpen: rows.length > 0, promptRadius: rows.length ? '0 0 6px 6px' : '6px' };
       })(),
       sentLines: (p.sent || []).map(t => ({ text: t })),
       editing: p.editing, notEditing: !p.editing, nameVal: p.nameVal,
@@ -1928,15 +1931,8 @@ class Component extends DCLogic {
       list.push(row);
       _sessionsByWorkspace.set(key, list);
     }
-    const _labelStatus = (row) => row.status === 'live' ? '● running'
-      : row.status === 'parked' ? '◐ parked'
-      : row.status === 'interrupted' ? '! interrupted'
-      : row.status === 'ended' ? '◇ ended'
-      : '· ' + row.status;
-    const _dotFor = (row) => row.status === 'live' ? '#7fb3b8'
-      : row.status === 'parked' ? '#82a5c8'
-      : row.status === 'interrupted' ? '#c26058'
-      : '#4a4e55';
+    const _labelStatus = (row) => sessionStatusLook(row.status).label;
+    const _dotFor = (row) => sessionStatusLook(row.status).dot;
     const _relTime = (unixSeconds) => {
       if (!unixSeconds || typeof unixSeconds !== 'number') return '';
       const seconds = Math.max(0, Math.floor(Date.now() / 1000) - unixSeconds);

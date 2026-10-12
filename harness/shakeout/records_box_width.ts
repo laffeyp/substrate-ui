@@ -4,7 +4,7 @@
 // Steps at 1512 × 945: read the unbound pane's picker box; open the records page; read its box.
 
 import { _electron as electron } from "playwright";
-import { launchArgs, waitForApp } from "./lib/electron";
+import { launchArgs, settled, waitForApp } from "./lib/electron";
 
 // Plain-string evaluates: esbuild's __name helper does not exist in the page.
 const PICKER = `(() => { const i = Array.from(document.querySelectorAll("input[data-ws-input]")).find((e) => e.offsetParent !== null); const r = i.parentElement.parentElement.getBoundingClientRect(); return { left: r.left, width: r.width }; })()`;
@@ -19,11 +19,12 @@ async function main(): Promise<void> {
     await waitForApp(win);
     await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1512, 945));
     await win.locator("input[data-ws-input]").first().waitFor({ state: "visible", timeout: 15_000 });
-    await win.waitForTimeout(300);
+    await win.waitForFunction("window.innerWidth === 1512", undefined, { timeout: 10_000 });
+    await settled(win);
     const picker = await win.evaluate(PICKER) as { left: number; width: number };
     await win.locator("[data-top-bar] span", { hasText: /^records$/ }).first().click();
     await win.waitForFunction(`!!document.querySelector("[data-records-workspaces]")`, undefined, { timeout: 10_000 });
-    await win.waitForTimeout(300);
+    await settled(win);
     const records = await win.evaluate(RECORDS) as { left: number; width: number };
     if (Math.abs(records.left - picker.left) > 1 || Math.abs(records.width - picker.width) > 1) {
       throw new Error(`records box ${JSON.stringify(records)}, picker box ${JSON.stringify(picker)}`);

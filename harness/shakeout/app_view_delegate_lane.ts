@@ -6,7 +6,7 @@
 
 import { _electron as electron } from "playwright";
 import type { Page } from "playwright";
-import { bindPaneAsUser, launchArgs, waitForApp } from "./lib/electron";
+import { bindPaneAsUser, launchArgs, settled, waitForApp } from "./lib/electron";
 
 type Row = { seq: string; kind: string; lanes: string[] };
 // Plain-string evaluate: esbuild's __name helper does not exist in the page.
@@ -19,7 +19,7 @@ const EMPTY = "rgba(0, 0, 0, 0)";
 
 async function scope(win: Page, name: "all" | "app"): Promise<Row[]> {
   await win.locator("span", { hasText: new RegExp(`^${name}$`) }).first().click();
-  await win.waitForTimeout(300);
+  await settled(win);
   return win.evaluate(ROWS) as Promise<Row[]>;
 }
 

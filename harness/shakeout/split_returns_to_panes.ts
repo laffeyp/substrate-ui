@@ -33,8 +33,8 @@ async function main(): Promise<void> {
     if (one.meta || one.focused === "1" || one.focused === null) throw new Error(`after ⌘D from meta: ${JSON.stringify(one)}`);
 
     await win.locator("[data-top-bar] span", { hasText: /^records$/ }).first().click();
-    await win.waitForTimeout(400);
-    if ((await panesView(win)).panes !== 0) throw new Error("the records page did not open");
+    await win.waitForFunction(`Array.from(document.querySelectorAll("[data-pane]")).filter((e) => e.offsetParent !== null).length === 0`, undefined, { timeout: 5_000 })
+      .catch(() => { throw new Error("the records page did not open"); });
     await win.keyboard.press("Meta+Shift+d");
     await win.waitForFunction(() => Array.from(document.querySelectorAll("[data-pane]")).filter((e) => (e as HTMLElement).offsetParent !== null).length === 3, undefined, { timeout: 5_000 })
       .catch(async () => { throw new Error(`⌘⇧D on the records page left ${JSON.stringify(await panesView(win))}`); });

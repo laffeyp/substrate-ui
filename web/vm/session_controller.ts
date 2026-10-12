@@ -29,6 +29,26 @@ import { SessionStatus, TaskStatus } from "./statuses.gen";
 import { GUIDANCE_LEVEL_BUNDLES, LENGTH_DEFAULT, LengthPosition, TONE_DEFAULT, TonePosition } from "./controls.gen";
 import type { EnvelopeKindValue } from "./kinds";
 
+/** One slash command (UI sprint 162). */
+interface SlashCommand {
+  names: string[];
+  usage: string;
+  about: string;
+  choices?: readonly string[];
+  current?: () => string;
+  run: (rest: string) => Promise<void> | void;
+}
+
+/** A slash command as the menu reads it. */
+export interface SlashCatalogEntry {
+  name: string;
+  aliases: string[];
+  usage: string;
+  about: string;
+  choices: string[] | null;
+  current: string | null;
+}
+
 // Sprint 096 — every generated envelope kind must be classified here: `rendered` (handleEnvelope
 // has a case that shows it) or `ignored` (bookkeeping the transcript does not show). The Record
 // type makes tsc fail when the generator adds a kind this table does not name (TypeScript
@@ -861,13 +881,22 @@ export class SessionController {
     return true;
   }
 
-  /** The slash commands, in `/help` order. UI sprint 107: one table; the dispatch `switch` and
-   * the `/help` list were two hand-kept copies of the same seven commands. */
-  private slashCommands(): { names: string[]; usage: string; run: (rest: string) => Promise<void> | void }[] {
+  /** The slash commands: what the menu lists, what `/help` prints and what `submitLine` runs. UI
+   * sprint 107 made the dispatch and `/help` one table; UI sprint 162 made the menu read it too
+   * (`slashCatalog`), with a description per command and, for a fixed set, its choices. */
+  private slashCommands(): SlashCommand[] {
+    const control = (
+      field: "guidance" | "length" | "tone", about: string, choices: readonly string[], current: () => string,
+    ): SlashCommand => ({
+      names: [field], usage: `/${field} <${choices.join("|")}>`, about, choices, current,
+      run: (rest: string) => rest
+        ? this.setControl(field, rest.trim())
+        : this.controlRow(`${field}: ${current()}. use /${field} <${choices.join("|")}>.`, false),
+    });
     return [
-      { names: ["exit", "quit", "end"], usage: "/exit", run: () => this.endSession("user_end") },
+      { names: ["exit", "quit", "end"], usage: "/exit", about: "end this session", run: () => this.endSession("user_end") },
       {
-        names: ["model", "driver"], usage: "/model <name>",
+        names: ["model", "driver"], usage: "/model <name>", about: "switch the model this session runs on",
         run: (rest) => {
           if (rest) this.pickDriver(rest);
           else this.appendTranscript({
@@ -878,7 +907,7 @@ export class SessionController {
         },
       },
       {
-        names: ["name", "rename"], usage: "/name <new>",
+        names: ["name", "rename"], usage: "/name <new>", about: "rename this session",
         run: async (rest) => {
           if (rest) { await this.renameSession(rest); return; }
           this.appendTranscript({
@@ -888,8 +917,18 @@ export class SessionController {
           });
         },
       },
+      // UI sprint 161: guidance, length and tone, mid-session. No argument names the current value.
+      control("guidance", "how much of the working standard the model gets", ["auto", ...Object.keys(GUIDANCE_LEVEL_BUNDLES)], () => this.guidanceLevel() ?? "auto"),
+      control("length", "how long replies run", Object.values(LengthPosition), () => this.snap.length ?? LENGTH_DEFAULT),
+      control("tone", "the register of replies", Object.values(TonePosition), () => this.snap.tone ?? TONE_DEFAULT),
       {
-        names: ["list", "ls"], usage: "/list",
+        // UI sprint 122: load the dellm skill for this session and send the text after it as the
+        // turn (kernel K277). The skill stays loaded for the rest of the session.
+        names: ["dellm"], usage: "/dellm <text>", about: "load the plain-prose editing skill and send the text",
+        run: (rest) => this.sendTurn(rest || "Apply the dellm skill to your next reply.", { skill: "dellm" }),
+      },
+      {
+        names: ["list", "ls"], usage: "/list", about: "list the sessions on the server",
         run: async () => {
           await this.loadLiveSessions();
           const rows = this.snap.liveSessions;
@@ -903,39 +942,33 @@ export class SessionController {
           });
         },
       },
-      { names: ["interrupt", "int"], usage: "/interrupt", run: () => this.interruptTurn() },
-      {
-        // UI sprint 122: load the dellm skill for this session and send the text after it as the
-        // turn (kernel K277). The skill stays loaded for the rest of the session.
-        names: ["dellm"], usage: "/dellm <text>",
-        run: (rest) => this.sendTurn(rest || "Apply the dellm skill to your next reply.", { skill: "dellm" }),
-      },
-      // UI sprint 161: guidance, length and tone, mid-session. No argument names the current value.
-      ...([
-        ["guidance", ["auto", ...Object.keys(GUIDANCE_LEVEL_BUNDLES)], () => this.guidanceLevel() ?? "auto"],
-        ["length", Object.values(LengthPosition), () => this.snap.length ?? LENGTH_DEFAULT],
-        ["tone", Object.values(TonePosition), () => this.snap.tone ?? TONE_DEFAULT],
-      ] as const).map(([field, choices, current]) => ({
-        names: [field], usage: `/${field} <${choices.join("|")}>`,
-        run: (rest: string) => rest
-          ? this.setControl(field, rest.trim())
-          : this.controlRow(`${field}: ${current()}. use /${field} <${choices.join("|")}>.`, false),
-      })),
+      { names: ["interrupt", "int"], usage: "/interrupt", about: "stop the turn in flight (also ^C)", run: () => this.interruptTurn() },
       // UI sprint 140: fold or unfold every tool card, as ⌘E does. /fold flips; /unfold unfolds.
-      { names: ["fold"], usage: "/fold", run: () => { toggleToolOutputMode(); } },
-      { names: ["unfold"], usage: "/unfold", run: () => { setToolOutputMode("expanded"); } },
-      { names: ["clear"], usage: "/clear", run: () => { this.patch({ transcript: [] }); } },
+      { names: ["fold"], usage: "/fold", about: "fold or unfold all tool output (also ⌘E)", run: () => { toggleToolOutputMode(); } },
+      { names: ["unfold"], usage: "/unfold", about: "unfold all tool output", run: () => { setToolOutputMode("expanded"); } },
+      { names: ["clear"], usage: "/clear", about: "clear the transcript view", run: () => { this.patch({ transcript: [] }); } },
       {
-        names: ["help", "?"], usage: "/help",
+        names: ["help", "?"], usage: "/help", about: "list these commands",
         run: () => {
           this.appendTranscript({
             seq: -Math.round(Date.now()) - 3,
             kind: "SlashHelp", role: "system",
-            text: `slash commands: ${this.slashCommands().map((c) => c.usage).join(" · ")}`,
+            text: "slash commands",
+            helpRows: this.slashCommands().map((c) => ({ usage: c.usage, about: c.about })),
           });
         },
       },
     ];
+  }
+
+  /** The slash commands as the menu shows them (UI sprint 162): each command's name, usage and
+   * description, and for a fixed set its choices and the session's current value. */
+  slashCatalog(): SlashCatalogEntry[] {
+    return this.slashCommands().map((c) => ({
+      name: c.names[0], aliases: c.names.slice(1), usage: c.usage, about: c.about,
+      choices: c.choices ? [...c.choices] : null,
+      current: c.current ? c.current() : null,
+    }));
   }
 
   /** Rename the current session. PATCH /api/session/<id> body

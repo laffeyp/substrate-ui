@@ -14,7 +14,7 @@
 
 import { _electron as electron } from "playwright";
 import type { Page } from "playwright";
-import { bindPaneAsUser, launchArgs, waitForApp } from "./lib/electron";
+import { bindPaneAsUser, launchArgs, settled, waitForApp } from "./lib/electron";
 
 type Vm = { get(id: number): { snapshot(): { transcript: { role: string; text: string }[] } } | null };
 
@@ -64,9 +64,12 @@ async function checkView(win: Page, app: Awaited<ReturnType<typeof electron.laun
 
   await win.keyboard.type("half");
   const rowsBefore = (await userRows(win)).length;
+  // A send records TURN_SUBMITTED in the key handler, before any network: count it, not rows later.
+  const submitted = "(window.__vmSignals || []).filter((s) => s.name === 'TURN_SUBMITTED').length";
+  const submittedBefore = await win.evaluate(submitted) as number;
   await bar(win).evaluate((el) => el.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", isComposing: true, bubbles: true, cancelable: true })));
-  await win.waitForTimeout(500);
-  if ((await userRows(win)).length !== rowsBefore) throw new Error(`${view}: ↵ during composition sent a message`);
+  await settled(win);
+  if ((await win.evaluate(submitted)) !== submittedBefore || (await userRows(win)).length !== rowsBefore) throw new Error(`${view}: ↵ during composition sent a message`);
   await clear(win);
 
   const look = await bar(win).evaluate((el) => ({ tag: el.tagName, hint: el.getAttribute("placeholder") }));

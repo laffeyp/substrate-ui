@@ -6,7 +6,7 @@
 
 import { _electron as electron } from "playwright";
 import type { Page } from "playwright";
-import { launchArgs, waitForApp } from "./lib/electron";
+import { launchArgs, settled, waitForApp } from "./lib/electron";
 
 // Plain-string evaluate: esbuild's __name helper does not exist in the page.
 const STATE = `(() => {
@@ -21,7 +21,7 @@ const STATE = `(() => {
 type S = { armed: string; lit: string; open: boolean };
 async function press(win: Page, key: string): Promise<S> {
   await win.keyboard.press(key);
-  await win.waitForTimeout(80);
+  await settled(win);
   return win.evaluate(STATE) as Promise<S>;
 }
 
