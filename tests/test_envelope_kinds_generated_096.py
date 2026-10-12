@@ -24,6 +24,13 @@ def test_generated_statuses_file_is_current() -> None:
     )
 
 
+def test_generated_controls_file_is_current() -> None:
+    """UI sprint 143 / kernel K296: the Length and Tone positions come from the kernel's enums."""
+    assert gen_kinds.CONTROLS_OUT.read_text() == gen_kinds.render_controls(), (
+        "web/vm/controls.gen.ts is stale: run `python scripts/gen_kinds.py`"
+    )
+
+
 def test_lifecycle_kinds_carry_the_reserved_prefix() -> None:
     kinds = gen_kinds.session_kinds()
     assert "substrate.RunFinalised" in kinds

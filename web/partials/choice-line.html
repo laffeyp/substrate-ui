@@ -1,0 +1,10 @@
+<!-- UI sprint 143 / the 2026-10-11 audit: one line of the workspace bar's model column (GUIDANCE, LENGTH, TONE).
+     Inlined at build time by vite.config.ts (includePartials); %key% and %HEAD% are its parameters. -->
+          <div data-%key%-half="1" data-armed="{{ pn.modelArmed }}" style="position:{{ pn.guidancePos }};left:0;right:0;bottom:{{ pn.%key%Bottom }};height:31px;box-sizing:border-box;display:flex;gap:4px;align-items:center;padding:0 14px;border-top:1px solid rgba(255,255,255,.08);font-size:11.5px;white-space:nowrap;overflow:hidden">
+           <span style="font-size:9.5px;letter-spacing:.14em;color:{{ pn.%key%HeadColor }};margin-right:8px">%HEAD%</span>
+           <sc-for list="{{ pn.%key%Rows }}" as="gr" hint-placeholder-count="5">
+            <sc-if value="{{ gr.live }}" hint-placeholder-val="{{ false }}"><span data-%key%-row="{{ gr.label }}" data-lit="{{ gr.lit }}" title="{{ gr.meta }}" onClick="{{ gr.pick }}" style="color:{{ gr.color }};background:{{ gr.bg }};border-radius:4px;padding:0 8px;cursor:pointer" style-hover="background:#2e3138">{{ gr.label }}</span></sc-if>
+            <sc-if value="{{ gr.grey }}" hint-placeholder-val="{{ true }}"><span data-%key%-row="{{ gr.label }}" data-lit="{{ gr.lit }}" title="{{ gr.meta }}" style="color:{{ gr.greyColor }};padding:0 8px;cursor:default">{{ gr.label }}</span></sc-if>
+           </sc-for>
+           <span class="{{ pn.%key%NoteClass }}" style="margin-left:auto;color:{{ pn.%key%NoteColor }};overflow:hidden;text-overflow:ellipsis">{{ pn.%key%Note }}</span>
+          </div>

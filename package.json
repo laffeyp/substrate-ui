@@ -11,7 +11,8 @@
     "lint": "eslint web/",
     "smoke:vm": "npx tsx harness/vm_smoke.ts",
     "shakeout": "npx tsx harness/shakeout/run.ts",
-    "test:unit": "npx tsx --test web/reveal/__tests__/*.spec.ts",
+    "signals": "npx tsx web/vm/tools/check-vocabulary-parity.ts",
+    "test:unit": "npm run --silent signals && npx tsx --test web/reveal/__tests__/*.spec.ts",
     "electron": "SUBSTRATE_HOME=$HOME/.substrate-dev electron .",
     "electron:smoke": "SHAKEOUT_AXIS=C SHAKEOUT_RUNS=1 npx tsx harness/shakeout/run.ts",
     "smoke:packaged": "npx tsx harness/shakeout/packaged_app_smoke.ts",
@@ -24,7 +25,7 @@
     "gates:scroll": "npx tsx harness/shakeout/transcript_follow.ts",
     "gates:tasks": "npx tsx harness/shakeout/tasks_gate.ts",
     "test:py": "uv run --project ../substrate python -m pytest tests/ -q -p no:cacheprovider",
-    "gates:electron": "SHAKEOUT_AXIS=C SHAKEOUT_RUNS=1 npx tsx harness/shakeout/run.ts && npx tsx harness/shakeout/lifecycle_gates.ts && npx tsx harness/shakeout/transcript_follow.ts && npx tsx harness/shakeout/resume_ended_session.ts && npx tsx harness/shakeout/driver_chip_on_resume.ts && npx tsx harness/shakeout/resume_after_two_ends.ts && npx tsx harness/shakeout/graph_model_lane_on_resume.ts && npx tsx harness/shakeout/one_top_bar.ts && npx tsx harness/shakeout/no_default_model.ts && npx tsx harness/shakeout/model_chip_indicator.ts && npx tsx harness/shakeout/tool_output_toggle.ts && npx tsx harness/shakeout/input_bar.ts && npx tsx harness/shakeout/length_tone_rows.ts && npx tsx harness/shakeout/both_session_shapes.ts && npx tsx harness/shakeout/structure_lists_producers.ts && npx tsx harness/shakeout/session_prompt_once_across_restart.ts",
+    "gates:electron": "SHAKEOUT_AXIS=C SHAKEOUT_RUNS=1 npx tsx harness/shakeout/run.ts && npx tsx harness/shakeout/lifecycle_gates.ts && npx tsx harness/shakeout/transcript_follow.ts && npx tsx harness/shakeout/resume_ended_session.ts && npx tsx harness/shakeout/driver_chip_on_resume.ts && npx tsx harness/shakeout/resume_after_two_ends.ts && npx tsx harness/shakeout/graph_model_lane_on_resume.ts && npx tsx harness/shakeout/one_top_bar.ts && npx tsx harness/shakeout/no_default_model.ts && npx tsx harness/shakeout/model_chip_indicator.ts && npx tsx harness/shakeout/tool_output_toggle.ts && npx tsx harness/shakeout/input_bar.ts && npx tsx harness/shakeout/length_tone_rows.ts && npx tsx harness/shakeout/session_start_line.ts && npx tsx harness/shakeout/naming_sessions.ts && npx tsx harness/shakeout/split_returns_to_panes.ts && npx tsx harness/shakeout/new_window.ts && npx tsx harness/shakeout/ws_column_opens_down.ts && npx tsx harness/shakeout/model_down_drills.ts && npx tsx harness/shakeout/left_folds_parent.ts && npx tsx harness/shakeout/both_session_shapes.ts && npx tsx harness/shakeout/structure_lists_producers.ts && npx tsx harness/shakeout/session_prompt_once_across_restart.ts",
     "test": "npm run test:py && npm run test:unit && npx tsx harness/vm_smoke.ts && SHAKEOUT_RUNS=1 npm run shakeout && npm run gates:electron"
   },
   "devDependencies": {

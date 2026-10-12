@@ -37,6 +37,7 @@ import {
 import { isToolCallRow, isToolResultRow } from "./vm/types";
 import { describeEventTime, eventTimes, formatClock, formatElapsed } from "./reveal/timeline";
 import { toggleToolOutputMode } from "./vm/tool_output_mode";
+import { LENGTH_DEFAULT, LengthPosition, TONE_DEFAULT, TonePosition } from "./vm/controls.gen";
 
 // UI sprint 132 (kernel K288, session vocabulary § R): the guidance levels the bar offers, each
 // with the bundle that carries it. `auto` names none, so the daemon picks the model's default.
@@ -63,26 +64,29 @@ const GUIDANCE_OPTIONS = [
   { level: 'high', bundle: 'standard', label: 'high', meta: 'the full standard' },
 ];
 // UI sprint 143 (kernel K296, session vocabulary § T): the Length and Tone lines under GUIDANCE.
-// `value` is the position the daemon takes; the defaults (normal, neutral) write no text.
-const LENGTH_OPTIONS = [
-  { value: 'terse', label: 'terse', meta: 'the answer and its facts' },
-  { value: 'normal', label: 'normal', meta: 'as the guidance has it' },
-  { value: 'full', label: 'full', meta: 'complete, not padded' },
-];
-const TONE_OPTIONS = [
-  { value: 'blunt', label: 'blunt', meta: 'plain judgements, no softening' },
-  { value: 'neutral', label: 'neutral', meta: 'as the guidance has it' },
-  { value: 'formal', label: 'formal', meta: 'for readers outside the conversation' },
-  { value: 'dry', label: 'dry', meta: 'understated and factual' },
-];
-const LENGTH_DEFAULT_AT = 1;
-const TONE_DEFAULT_AT = 1;
+// The positions and defaults are generated from the kernel (vm/controls.gen.ts); only the one-line
+// descriptions are the UI's own. The defaults write no text.
+const LENGTH_META = {
+  [LengthPosition.TERSE]: 'the answer and its facts',
+  [LengthPosition.NORMAL]: 'as the guidance has it',
+  [LengthPosition.FULL]: 'complete, not padded',
+};
+const TONE_META = {
+  [TonePosition.BLUNT]: 'plain judgements, no softening',
+  [TonePosition.NEUTRAL]: 'as the guidance has it',
+  [TonePosition.FORMAL]: 'for readers outside the conversation',
+  [TonePosition.DRY]: 'understated and factual',
+};
+const LENGTH_OPTIONS = Object.values(LengthPosition).map(v => ({ value: v, label: v, meta: LENGTH_META[v] || '' }));
+const TONE_OPTIONS = Object.values(TonePosition).map(v => ({ value: v, label: v, meta: TONE_META[v] || '' }));
+const LENGTH_DEFAULT_AT = LENGTH_OPTIONS.findIndex(o => o.value === LENGTH_DEFAULT);
+const TONE_DEFAULT_AT = TONE_OPTIONS.findIndex(o => o.value === TONE_DEFAULT);
 import { mdBlocks, mdInlines, renderBlock, renderInline } from "./reveal/markdown";
 import { liveActivity } from "./reveal/activity";
 
 
 class Component extends DCLogic {
-  state = { revealed: false, mode: GraphMode.Stream, dir: GraphDirection.Down, sel: 240, childOpen: false, promptVal: '', surface: null, studioView: 'form', studioOut: 'author a topology, then validate or build.', studioOutColor: '#62676f', level: RevealLevel.All, sent: [], toolOpen: {},
+  state = { revealed: false, mode: GraphMode.Stream, dir: GraphDirection.Down, sel: 240, childOpen: false, promptVal: '', surface: null, studioView: 'form', studioOut: 'author a topology, then validate or build.', studioOutColor: '#62676f', level: RevealLevel.All, sent: [],
     topoName: 'adversarial_pair_review',
     prods: [{ name: 'builder', initial: true, emits: 'Draft' }, { name: 'attacker', initial: false, emits: 'Critique' }, { name: 'judge', initial: false, emits: 'Verdict' }],
     sviews: [{ name: 'draft_count', def: 'KindCount(of Draft)' }, { name: 'critique_buf', def: 'KindBuffer(of Critique)' }],
@@ -105,7 +109,7 @@ class Component extends DCLogic {
     // bookmark or menu action; the picker state itself carries the
     // frame.
     panes: [{ id: 1, name: 'pane-1', driver: null, editing: false, nameVal: '', unbound: true }],
-    focused: 1, cols: 1, rows: 1, colW: [1], rowW: [1], revealL: 1.15, ddFor: null, wsFor: null, driverExpandedCli: null, driverExpandedFamily: null, allSessions: [], dropHint: null,
+    focused: 1, cols: 1, rows: 1, colW: [1], rowW: [1], revealL: 1.15, ddFor: null, wsFor: null, driverExpandedCli: null, driverExpandedFamily: null, allSessions: [],
     descent: [], descPv: '', descExtra: {}, fanOpen: false, fanSel: 0, findOpen: false, findQ: '', findScope: 'transcript', nestedDescent: false,
     showSettings: false, showExport: false, showEndConfirm: false, ended: false, frDone: false, theme: 'dark', fontOverride: null, settingsNote: '',
   // Sprint 086 — Records surface: per-workspace expand state and
@@ -219,256 +223,6 @@ class Component extends DCLogic {
         },
       })),
     };
-  }
-  _liveBindingsForRetired(paneId, state) {
-    const snap = (state.controllerSnapshots || {})[paneId] || null;
-    const transcript = (snap && Array.isArray(snap.transcript)) ? snap.transcript : [];
-    const findQ = (state.findOpen && state.findScope === 'transcript' ? (state.findQ || '') : '').toLowerCase();
-    const resultByCallId = new Map();
-    for (const row of transcript) {
-      if (isToolResultRow(row) && row.callId) resultByCallId.set(row.callId, row);
-    }
-    const toolOpen = state.toolOpen || {};
-    const rows = transcript.map(row => {
-      let glyph = '·', glyphColor = '#4a4e55', textColor = '#9aa0a8', marginTop = '2px';
-      if (row.role === TranscriptRole.User) { glyph = '›'; glyphColor = '#82a5c8'; textColor = '#e2e5e9'; marginTop = '12px'; }
-      else if (row.role === TranscriptRole.Model) { glyph = '◆'; glyphColor = '#7fb3b8'; textColor = '#b9bec5'; marginTop = '6px'; }
-      else if (row.role === TranscriptRole.Tool) {
-        const failed = row.toolOk === false;
-        glyph = failed ? '⚠' : '⚙';
-        glyphColor = failed ? '#c26058' : '#62676f';
-        textColor = failed ? '#c26058' : '#62676f';
-      }
-      else if (row.role === TranscriptRole.Park) { glyph = '◐'; glyphColor = '#82a5c8'; textColor = '#82a5c8'; marginTop = '10px'; }
-      else if (row.role === TranscriptRole.Ended) { glyph = '◇'; glyphColor = '#62676f'; textColor = '#62676f'; marginTop = '10px'; }
-      else if (row.role === TranscriptRole.Warning) { glyph = '!'; glyphColor = '#c26058'; textColor = '#c26058'; }
-      const text = row.text || '';
-      const rawBlocks = row.role === TranscriptRole.Model ? this._mdBlocks(text) : [];
-      const blocks = rawBlocks.map(b => this._mdRenderBlock(b));
-      const isModel = row.role === TranscriptRole.Model;
-      const matches = !findQ || text.toLowerCase().includes(findQ);
-      const opacity = findQ ? (matches ? '1' : '.35') : '1';
-      // 21a/21b/21c: only ToolCall rows carry the card. A ToolCall
-      // with no matching ToolResult is running (◌); with one is done
-      // (⚙); a failed result stamps ⚠ onto the CALL row so the arg
-      // preview stays legible.
-      const isToolCall = isToolCallRow(row);
-      const progressMap = (snap && snap.progressByCallId) || {};
-      const progressEntry = (isToolCall && row.callId) ? progressMap[row.callId] : null;
-      const streamingShow = !!(progressEntry && progressEntry.text);
-      const streamingText = progressEntry ? progressEntry.text : '';
-      const streamingEof = !!(progressEntry && progressEntry.eof);
-      let toolCardOpen = false, toolGlyph = '', toolPreview = '', toolArgs = [], toolOutput = '', toolError = '', toolCallId = '', toolStep = '', toolBytes = '', toolStatus = '', toolStatusColor = '#62676f', toolRunning = false;
-      let descendShow = false, descendPath = '';
-      if (isToolCall && row.callId) {
-        const paired = resultByCallId.get(row.callId);
-        toolRunning = !paired;
-        const failed = paired && paired.toolOk === false;
-        toolGlyph = toolRunning ? '◌' : failed ? '⚠' : '⚙';
-        glyph = toolGlyph;
-        glyphColor = toolRunning ? '#7fb3b8' : failed ? '#c26058' : '#62676f';
-        textColor = toolRunning ? '#b9bec5' : failed ? '#c26058' : '#9aa0a8';
-        toolPreview = (row.args && row.args[0]) ? String(row.args[0]) : '';
-        toolArgs = row.args || [];
-        // delegate returns {answer, child_root, steps} — a dict. String()
-        // over a dict yields "[object Object]"; render the answer text as
-        // the card body and expose child_root as a "· descend ⏎"
-        // affordance the user clicks to attach the pane's controller to
-        // the child record via SessionController.attachRecordRoot (item 4).
-        const output = paired ? paired.output : null;
-        const isDelegate = row.toolName === 'delegate' && output && typeof output === 'object';
-        // Sprint 055: fan-out delegate carries `answers` + `child_roots`
-        // (dicts keyed by child name) instead of the single-child
-        // `answer` + `child_root` strings. Detect and render as the
-        // D72 aggregation shape: one header line + per-child rows.
-        const isDelegateFanout = isDelegate && output && output.answers
-          && typeof output.answers === 'object' && !Array.isArray(output.answers);
-        if (isDelegateFanout) {
-          const answers = output.answers || {};
-          const roots = output.child_roots || {};
-          const failed = output.failed || {};
-          const names = Object.keys({ ...answers, ...failed });
-          const nSuccess = Object.keys(answers).length;
-          const nFailed = Object.keys(failed).length;
-          const header = '⑂ delegate → ' + names.length + ' children · '
-            + nSuccess + ' answered · ' + nFailed + ' failed';
-          const lines = [header, ''];
-          for (const name of names) {
-            const root = String(roots[name] || '');
-            const answer = String(answers[name] || '');
-            const fail = failed[name];
-            if (fail) {
-              lines.push('  ' + name + ' — failed: ' + String(fail.error || fail));
-            } else {
-              lines.push('  ' + name + ' — ' + (answer.length > 200 ? answer.slice(0, 200) + '…' : answer));
-            }
-            if (root) lines.push('    ' + root);
-          }
-          toolOutput = lines.join('\n');
-          // Descend affordance on the first child; keyboard walk + per-
-          // row descend land in a follow-up sprint. For now the user
-          // clicks descend to attach the pane to the first child, then
-          // navigates further by hand.
-          const firstRoot = Object.values(roots)[0];
-          if (typeof firstRoot === 'string' && firstRoot.length > 0) {
-            descendPath = firstRoot;
-            descendShow = true;
-          }
-        } else if (isDelegate) {
-          toolOutput = String((output && output.answer) || '');
-          if (output && typeof output.child_root === 'string') {
-            descendPath = output.child_root;
-            descendShow = descendPath.length > 0;
-          }
-        } else if (output && typeof output === 'object') {
-          toolOutput = JSON.stringify(output, null, 2);
-        } else {
-          toolOutput = paired ? String(output || '') : '';
-        }
-        toolError = paired ? String(paired.error || '') : '';
-        toolCallId = row.callId;
-        toolStep = row.toolStep !== undefined ? String(row.toolStep) : '';
-        toolBytes = paired ? String(toolOutput.length) + ' bytes' : '';
-        toolStatus = toolRunning ? 'running' : failed ? 'err · ' + toolError : 'ok';
-        toolStatusColor = toolRunning ? '#7fb3b8' : failed ? '#c26058' : '#9aa0a8';
-        // Auto-open a running tool's card so streaming is visible without
-        // a click. A user who explicitly collapses it (toolOpen[cid] === false)
-        // keeps it closed. Otherwise: open while running OR while streaming
-        // chunks are pending. A sealed tool with no explicit state stays
-        // collapsed by default (post-hoc review click).
-        const explicit = toolOpen[row.callId];
-        if (explicit === true) toolCardOpen = true;
-        else if (explicit === false) toolCardOpen = false;
-        else toolCardOpen = toolRunning || streamingShow;
-      }
-      const isTool = row.role === TranscriptRole.Tool && isToolCall;
-      const notTool = !isTool;
-      const cardCaret = toolCardOpen ? '▾' : '▸';
-      // Toggle flips the visibly-open state. Three inputs: explicit true,
-      // explicit false, unset (auto-open while running or streaming).
-      // A click on a card the user sees open sets false; a click on a
-      // card the user sees closed sets true. Without this, a streamed
-      // tool (bash) traps the user: clearing the flag hands control
-      // back to auto, and auto reopens the card in the same render
-      // because streamingShow stays true after eof.
-      const bindToggleTool = (cid) => () => this.setState(st => {
-        const next = Object.assign({}, st.toolOpen || {});
-        if (next[cid]) delete next[cid]; else next[cid] = true;
-        return { toolOpen: next };
-      });
-      // Phase 8 item 9 prerequisite — descent click on a delegate row.
-      // Clicking calls SessionController.attachRecordRoot(child_root)
-      // (item 4 endpoint) and pushes the child_root onto state.descent so
-      // the descent crumbs and depth-ramp accent apply to the child
-      // scope. Consumed only when the paired ToolResult carried a
-      // child_root string (delegate always does; other tools never).
-      const bindDescend = (rootPath) => () => {
-        const vm = window.__vm;
-        if (!vm) return;
-        if (typeof vm.setActive === 'function') vm.setActive(paneId);
-        if (typeof vm.attachRecordRoot === 'function') {
-          vm.attachRecordRoot(rootPath).catch(() => undefined);
-        }
-        this.setState(st => ({
-          descent: [...(st.descent || []), rootPath],
-          descPv: '',
-        }));
-      };
-      // The output pane in the card waits for the STREAM to close, not
-      // just for the ToolResult. A streaming tool's ToolResult carries
-      // the same bytes the chunks already delivered; showing both makes
-      // the output panel fill while the streaming pane below it is still
-      // ticking. Rule: if streaming happened, output shows only after
-      // streamingEof; a non-streaming tool shows output the moment the
-      // ToolResult lands.
-      const hasResult = !toolRunning && (!streamingShow || streamingEof);
-      return {
-        glyph, glyphColor, textColor, marginTop, text, blocks, isModel, notModel: !isModel, opacity,
-        isTool, notTool,
-        toolName: row.toolName || '',
-        toolPreview, toolCardOpen, cardCaret,
-        toolArgs: toolArgs.map((a, i) => ({ i: '[' + i + ']', v: String(a) })),
-        toolOutput, toolError, toolCallId, toolStep, toolBytes, toolStatus, toolStatusColor,
-        toolRunning, hasResult, hasError: !!toolError,
-        openCard: isTool && row.callId ? bindToggleTool(row.callId) : (() => {}),
-        descendShow, descendPath,
-        descend: descendShow ? bindDescend(descendPath) : (() => {}),
-        streamingShow, streamingText, streamingEof,
-      };
-    });
-    // Only KEEP one row per (ToolCall, ToolResult) pair — the ToolCall
-    // row is the surface; the ToolResult row folds into its card.
-    const filteredRows = rows.filter((r, i) => !isToolResultRow(transcript[i]));
-    const hasSession = !!(snap && snap.sessionId);
-    const activity = this._liveActivity(snap);
-    return {
-      liveOn: true,
-      scriptedOn: false,
-      liveTranscript: filteredRows,
-      // Activity strip above the prompt (live producer / turn recap).
-      // "turn N" is the head word and pulses in the live state; the
-      // tail lists tool name / seconds / tool count. Recap replaces
-      // the tail with elapsed / tool count / park reason.
-      activityShow: !!activity,
-      activityTurnWord: activity ? activity.turnWord : '',
-      activityTurnColor: activity ? activity.turnColor : '#4a4e55',
-      activityRest: activity ? activity.hasRest : false,
-      activityRestText: activity ? activity.restText : '',
-      activityColor: activity ? activity.color : '#62676f',
-      activityPulseClass: activity && activity.pulseOn ? 'act-pulse' : '',
-      liveEmpty: hasSession && rows.length === 0,
-      liveSessionLabel: snap && snap.sessionName ? snap.sessionName
-        : (snap && snap.sessionId ? snap.sessionId.slice(0, 12) : ''),
-      liveEventCount: rows.length,
-      liveConnection: snap ? snap.connection : 'idle',
-    };
-  }
-  _linesForPane(p, state) {
-    const snaps = state.controllerSnapshots || {};
-    const snap = snaps[p.id];
-    if (!snap || !Array.isArray(snap.transcript) || !snap.transcript.length) return p.lines || [];
-    const out = [];
-    for (const row of snap.transcript) {
-      const c = row.role === TranscriptRole.User ? '#e2e5e9'
-        : row.role === TranscriptRole.Model ? '#88b0d0'
-        : row.role === TranscriptRole.Tool ? '#7fb3b8'
-        : row.role === TranscriptRole.Park ? '#82a5c8'
-        : row.role === TranscriptRole.Warning ? '#c9a0b8'
-        : row.role === TranscriptRole.Ended ? '#62676f'
-        : '#9aa0a8';
-      const prefix = row.role === TranscriptRole.User ? '› ' : row.role === TranscriptRole.Tool ? '◦ ' : '';
-      out.push({ t: prefix + (row.text || ''), c });
-    }
-    return out;
-  }
-  async _pickFolder(paneId) {
-    // Prefer Electron's native folder dialog — returns the folder's
-    // real absolute path, which the session actually opens in.
-    // The old showDirectoryPicker path returned only the folder's
-    // basename ('substrate-ui'), which caused every "choose folder"
-    // session to silently fall back to a per-session sandbox and
-    // never persist.
-    const native = window.native;
-    if (native && typeof native.pickFolder === 'function') {
-      try {
-        const path = await native.pickFolder();
-        if (!path) return; // user cancelled
-        // Persist to ~/.substrate/recent-workspaces.json.
-        const vm = window.__vm;
-        if (vm && typeof vm.addWorkspace === 'function') {
-          await vm.addWorkspace(path);
-        }
-        // Arm the folder; the model pick in the bar's right half binds it.
-        this._armWorkspace(paneId, path, false);
-      } catch (_e) { /* dialog failed */ }
-      return;
-    }
-    // Non-Electron fallback: focus the type-a-path input.
-    this.setState(st => ({ panes: st.panes.map(p => p.id === paneId ? Object.assign({}, p, { wsQ: '', wsHint: 'no native folder picker — type the path here' }) : p) }));
-    setTimeout(() => {
-      const el = document.querySelector('input[data-ws-input]');
-      if (el) el.focus();
-    }, 40);
   }
   _newPane() {
     const id = (this._nextId = (this._nextId || Math.max(...this.state.panes.map(p => p.id), ...(this.state.allSessions || []).map(s => s.id)) + 1)) && this._nextId++;
@@ -922,10 +676,34 @@ class Component extends DCLogic {
       const at = Math.max(0, Math.min(this._modelSelIdx(p, opts), opts.length - 1));
       const row = opts[at];
       const move = (i) => { setPane({ modelSelIdx: i }); reveal('[data-model-half] [data-lit="1"]'); };
-      if (ev.key === 'ArrowDown') { ev.preventDefault(); move((at + 1) % opts.length); return; }
+      // UI sprint 149: ↓ keeps drilling. Landing on a folded group whose group above is open opens
+      // it; on the last row ↓ stays put while the column scrolls, and wraps only when it all fits.
+      if (ev.key === 'ArrowDown') {
+        ev.preventDefault();
+        if (at + 1 >= opts.length) {
+          const scroll = document.querySelector('[data-pane="' + paneId + '"] [data-model-scroll]');
+          move(scroll && scroll.scrollHeight > scroll.clientHeight ? at : 0);
+          return;
+        }
+        const next = opts[at + 1];
+        const above = opts.slice(0, at + 1).reverse().find(o => o.isGroup);
+        if (next.isGroup && !next.expanded && above && above.expanded) next.toggleExpand();
+        move(at + 1);
+        return;
+      }
       if (ev.key === 'ArrowUp') { ev.preventDefault(); move((at - 1 + opts.length) % opts.length); return; }
       if (ev.key === 'ArrowRight' && row.expandable && !row.expanded) { ev.preventDefault(); move(at); row.toggleExpand(); return; }
       if (ev.key === 'ArrowLeft' && row.expandable && row.expanded) { ev.preventDefault(); move(at); row.toggleExpand(); return; }
+      // UI sprint 151: ← inside an open row folds that row (the nearest row above with a smaller
+      // indent) and lights it; on a top-level row it goes back to the workspace column (150).
+      if (ev.key === 'ArrowLeft') {
+        ev.preventDefault();
+        let up = at - 1;
+        while (up >= 0 && opts[up].indent >= row.indent) up--;
+        if (up >= 0 && opts[up].expanded) { move(up); opts[up].toggleExpand(); return; }
+        this._disarmWorkspace(paneId);
+        return;
+      }
       if (opens) { ev.preventDefault(); move(at); if (row.expandable) row.toggleExpand(); return; }
       if (ev.key === 'Enter') { ev.preventDefault(); move(at); row.pick(); return; }
       if (ev.key === 'Escape') { ev.preventDefault(); this._disarmWorkspace(paneId); return; }
@@ -993,7 +771,8 @@ class Component extends DCLogic {
         const newPane = Object.assign(this._newPane(), { col: target.col + half, row: target.row, cw: half, rh: target.rh });
         target.cw = half;
         panes.push(newPane);
-        return { cols, rows, colW, rowW, panes, focused: newPane.id };
+        // UI sprint 146: a new pane is drawn in the panes view, so making one goes there.
+        return { cols, rows, colW, rowW, panes, focused: newPane.id, revealed: false, surface: null };
       }
       // dir === 'down'
       if (target.rh < 2) {
@@ -1005,7 +784,7 @@ class Component extends DCLogic {
       const newPane = Object.assign(this._newPane(), { col: target.col, row: target.row + half, cw: target.cw, rh: half });
       target.rh = half;
       panes.push(newPane);
-      return { cols, rows, colW, rowW, panes, focused: newPane.id };
+      return { cols, rows, colW, rowW, panes, focused: newPane.id, revealed: false, surface: null };
     });
   }
   componentDidMount() {
@@ -1068,7 +847,7 @@ class Component extends DCLogic {
         }
       }
       // ⌘M toggles meta and panes (the menu's Minimize gives up the key, electron/menu.js).
-      if (e.metaKey && !e.shiftKey && !e.altKey && !e.ctrlKey && (e.key === 'm' || e.key === 'M')) { e.preventDefault(); const s=this.state; if (!s.revealed) { const fp=s.panes.find(p=>p.id===s.focused); const fs=(s.controllerSnapshots||{})[s.focused]; if (fp && fp.unbound && !(fs && fs.sessionId)) return; } this.setState(st => ({ revealed: !st.revealed, surface: null })); }
+      if (e.metaKey && !e.shiftKey && !e.altKey && !e.ctrlKey && (e.key === 'm' || e.key === 'M')) { e.preventDefault(); this._toggleMeta(); }
       // UI sprint 140: ⌘E expands or collapses every tool card.
       if (e.metaKey && !e.shiftKey && !e.altKey && !e.ctrlKey && (e.key === 'e' || e.key === 'E')) { e.preventDefault(); this._toggleTools(); }
       if (e.metaKey && (e.key === 'd' || e.key === 'D')) { e.preventDefault(); this._split(e.shiftKey ? 'down' : 'right'); }
@@ -1184,6 +963,17 @@ class Component extends DCLogic {
   _toggleTools() {
     toggleToolOutputMode();
   }
+  // ⌘M and View → Meta (UI sprint 147). Into meta is refused while the focused pane is still at
+  // its picker with no session; back to the panes always works.
+  _toggleMeta() {
+    const s = this.state;
+    if (!s.revealed) {
+      const fp = s.panes.find(p => p.id === s.focused);
+      const fs = (s.controllerSnapshots || {})[s.focused];
+      if (fp && fp.unbound && !(fs && fs.sessionId)) return;
+    }
+    this.setState(st => ({ revealed: !st.revealed, surface: null }));
+  }
   // UI sprint 141: the input bar's keys, the same in the panes view and the meta view. ↵ sends;
   // ⇧↵ (and ⌥↵) make a new line; ↵ while an input method composes finishes the composition;
   // ↑ on the first line and ↓ on the last walk this pane's sent messages, back to the draft.
@@ -1224,6 +1014,12 @@ class Component extends DCLogic {
       if (next >= hist.length) setPane({ pv: pane.histDraft || '', histAt: null, histDraft: '' });
       else setPane({ pv: hist[next], histAt: next });
     }
+  }
+  // UI sprint 145: what the top bar calls a pane: its session's name when it has one, else the
+  // pane's label.
+  _paneTitle(state, pane) {
+    const snap = (state.controllerSnapshots || {})[pane.id];
+    return (snap && snap.sessionName) || pane.name;
   }
   _toggleSurface(name) {
     this.setState(s => ({ surface: s.surface === name ? null : name }));
@@ -1362,7 +1158,7 @@ class Component extends DCLogic {
       ['/clear', 'clear the transcript view', (paneId) => { _clearPv(paneId); _vmSubmitFor(paneId, '/clear'); }],
       ['/help', 'show this list', (paneId) => { _clearPv(paneId); _vmSubmitFor(paneId, '/help'); }],
     ];
-    const panes = state.panes.map(p => Object.assign({
+    const panes = state.panes.map(p => { const wsRows = this._wsPickerRows(state, p); return Object.assign({
       // Grid placement. Single-pane state has no col/row on the pane
       // record; treat the missing case as the whole grid so the layout
       // reads the same before any split.
@@ -1374,7 +1170,7 @@ class Component extends DCLogic {
       //   [inherit-from-split] · [recent…] · [~/.substrate/sandbox] · [choose folder…]
       // Filter the server's fallback list so per-session sandbox paths
       // do not swamp the picker (D66f expects a curated list).
-      wsRows: this._wsPickerRows(state, p),
+      wsRows,
       modelRows: (() => {
         if (!p.unbound) return [];
         const rows = this._modelHalfRows(state, p);
@@ -1429,8 +1225,8 @@ class Component extends DCLogic {
         const len = line('length', LENGTH_OPTIONS, 'lengthSel', (o) => this._pickLength(p.id, o), 'length', LENGTH_DEFAULT_AT);
         const tone = line('tone', TONE_OPTIONS, 'toneSel', (o) => this._pickTone(p.id, o), 'tone', TONE_DEFAULT_AT);
         return {
-          lengthRows: len.rows, lengthHeadColor: len.head, lengthNote: len.note,
-          toneRows: tone.rows, toneHeadColor: tone.head, toneNote: tone.note,
+          lengthRows: len.rows, lengthHeadColor: len.head, lengthNote: len.note, lengthNoteClass: '', lengthNoteColor: '#62676f',
+          toneRows: tone.rows, toneHeadColor: tone.head, toneNote: tone.note, toneNoteClass: '', toneNoteColor: '#62676f',
         };
       })(),
       // The lit level's description, at the end of the guidance line.
@@ -1441,13 +1237,21 @@ class Component extends DCLogic {
       guidanceNote: p.armed && p.pickerHalf === 'guidance'
         ? GUIDANCE_OPTIONS[Math.max(0, Math.min(p.guidanceSel ?? 0, GUIDANCE_OPTIONS.length - 1))].meta
         : p.armed && (p.pickerHalf === 'length' || p.pickerHalf === 'tone') ? '' : 'pick a model first',
-      // Guidance is the model column's bottom line; the workspace column carries a blank line of
-      // the same height so the bar keeps its height and the model list keeps its rows.
-      // UI sprint 143: three 31px lines now (guidance, length, tone).
-      guidanceSpacer: paneW < 480 ? '0px' : '93px',
+      // UI sprint 150: the workspace list fills its column: the folded rows (the header at 9.5px and
+      // each row at 11.5px, both at line-height 2.1) plus, side by side, the 93px of the model
+      // column's GUIDANCE, LENGTH and TONE lines. An opened row's sessions drop into the room under
+      // the rows, then the list scrolls; the bar's height, and so its top, never change.
+      wsListH: (9.5 * 2.1 + wsRows.length * 11.5 * 2.1 + (paneW < 480 ? 0 : 93)).toFixed(2) + 'px',
+      // A click on the list's empty space, with a workspace armed, goes back to the workspace
+      // column, as esc and ← do; a click on a row still picks it.
+      onWsListClick: (ev) => {
+        const t = ev && ev.target;
+        if (p.armed && !(t && typeof t.closest === 'function' && t.closest('[data-ws-lit]'))) this._disarmWorkspace(p.id);
+      },
       guidancePos: paneW < 480 ? 'static' : 'absolute',
       guidanceBottom: paneW < 480 ? '0' : '62px',
       lengthBottom: paneW < 480 ? '0' : '31px',
+      toneBottom: '0',
       modelScrollBottom: paneW < 480 ? 'auto' : '93px',
       modelHeadColor: p.armed ? '#62676f' : '#4a4e55',
       pickerDir: paneW < 480 ? 'column' : 'row',
@@ -1496,12 +1300,6 @@ class Component extends DCLogic {
       // window does not blank an unfocused pane. Each pane reads its
       // own controller's snapshot; focus only controls emphasis.
       ...this._liveBindingsFor(p.id, state),
-      // Each pane's transcript lines come from its own controller's
-      // snapshot. Non-focused panes still show live transcript from
-      // their own session — no cross-pane bleed. `_linesForPane` is
-      // computed above the .map so the closure captures the pane id
-      // by value, not the enclosing iterator.
-      lines: this._linesForPane(p, state),
       // Prompt row bindings — every rendered pane owns its own. A
       // global `state.promptVal` field would mirror the same string
       // into every visible input on every render, so a keystroke in
@@ -1569,42 +1367,23 @@ class Component extends DCLogic {
       })(),
       outline: 'none',
       dim: (state.panes.length > 1 && p.id !== state.focused) ? '.55' : '1',
-      hintOn: !!(state.dropHint && state.dropHint.id === p.id),
-      hintL: state.dropHint && state.dropHint.zone === 'e' ? '50%' : '0', hintT: state.dropHint && state.dropHint.zone === 's' ? '50%' : '0',
-      hintW: state.dropHint && (state.dropHint.zone === 'w' || state.dropHint.zone === 'e') ? '50%' : '100%',
-      hintH: state.dropHint && (state.dropHint.zone === 'n' || state.dropHint.zone === 's') ? '50%' : (state.dropHint && (state.dropHint.zone === 'w' || state.dropHint.zone === 'e') ? '100%' : '100%'),
       caretColor: p.id === state.focused ? '#82a5c8' : '#4a4e55',
-      promptHint: p.id === state.focused ? 'type to talk · / for commands' : 'click to focus',
       focus: () => this.setState({ focused: p.id }),
-      gripStart: (ev) => { ev.stopPropagation(); this._dragPaneId = p.id; if (ev.dataTransfer) { ev.dataTransfer.setData('text/plain', String(p.id)); const pane = ev.currentTarget.parentElement; if (pane && ev.dataTransfer.setDragImage) ev.dataTransfer.setDragImage(pane, 60, 14); } },
-      splitR: (ev) => { ev.stopPropagation(); this.setState({ focused: p.id }); this._split('right'); },
-      splitD: (ev) => { ev.stopPropagation(); this.setState({ focused: p.id }); this._split('down'); },
-      dragOver: (ev) => {
-        ev.preventDefault();
-        if (!this._dragPaneId || this._dragPaneId === p.id) return;
-        const r = ev.currentTarget.getBoundingClientRect();
-        const x = (ev.clientX - r.left) / r.width, y = (ev.clientY - r.top) / r.height;
-        const zone = x < .3 ? 'w' : x > .7 ? 'e' : y < .3 ? 'n' : y > .7 ? 's' : 'c';
-        if (!this.state.dropHint || this.state.dropHint.id !== p.id || this.state.dropHint.zone !== zone) this.setState({ dropHint: { id: p.id, zone } });
-      },
-      dragLeave: () => { if (this.state.dropHint && this.state.dropHint.id === p.id) this.setState({ dropHint: null }); },
-      dropSwap: (ev) => {
-        ev.preventDefault(); const from = this._dragPaneId; const hint = this.state.dropHint; this._dragPaneId = null;
-        if (!from || from === p.id) { this.setState({ dropHint: null }); return; }
-        this.setState(s => {
-          const panes = s.panes.slice();
-          const a = panes.findIndex(x => x.id === from), b = panes.findIndex(x => x.id === p.id);
-          if (a < 0 || b < 0) return { dropHint: null };
-          const zone = (hint && hint.id === p.id) ? hint.zone : 'c';
-          if (zone === 'c') { const t = panes[a]; panes[a] = panes[b]; panes[b] = t; }
-          else { const [moved] = panes.splice(a, 1); let bi = panes.findIndex(x => x.id === p.id); const before = (zone === 'w' || zone === 'n'); panes.splice(before ? bi : bi + 1, 0, moved); }
-          return { panes, focused: from, dropHint: null };
-        });
-      },
-      startEdit: () => this.setState(s => ({ panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, { editing: true, nameVal: x.name }) : x) })),
+      startEdit: () => this.setState(s => ({ panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, { editing: true, nameVal: this._paneTitle(s, x) }) : x) })),
       updName: (ev) => this.setState(s => ({ panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, { nameVal: ev.target.value }) : x) })),
-      nameKey: (ev) => { if (ev.key === 'Enter') this.setState(s => ({ panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, { editing: false, name: x.nameVal.trim() || x.name }) : x), allSessions: (s.allSessions || []).map(x => x.id === p.id ? Object.assign({}, x, { name: (s.panes.find(pp => pp.id === p.id) || {}).nameVal || x.name }) : x) })); if (ev.key === 'Escape') this.setState(s => ({ panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, { editing: false }) : x) })); },
-    }));
+      // UI sprint 145: ↵ names the session (the daemon keeps it); esc cancels; empty changes nothing.
+      nameKey: (ev) => {
+        if (ev.key === 'Escape') { this.setState(s => ({ panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, { editing: false }) : x) })); return; }
+        if (ev.key !== 'Enter') return;
+        const pane = (this.state.panes || []).find(x => x.id === p.id);
+        const name = ((pane && pane.nameVal) || '').trim();
+        this.setState(s => ({ panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, { editing: false }) : x) }));
+        if (!name) return;
+        const vm = window.__vm;
+        const controller = vm && typeof vm.get === 'function' ? vm.get(p.id) : null;
+        if (controller && typeof controller.nameSession === 'function') controller.nameSession(name);
+      },
+    }); });
     // Color = participant relevance. Bright = participant-to-participant
     // message (Model, Delegate, External); shown in both `all` and `app`.
     // Gray = runtime plumbing (scheduling, lifecycle, bookkeeping);
@@ -2358,7 +2137,7 @@ class Component extends DCLogic {
       // cards, Markdown blocks, opacity from find, running seconds —
       // reuse it here for the focused pane so both views stay in sync.
       ...this._liveBindingsFor(fp.id, state),
-      crumb: surf === Surface.Records ? fp.name + ' › records' : surf === Surface.Assay ? fp.name + ' › assays › rev_kimi_vs_glm' : surf === Surface.Studio ? fp.name + ' › studio' : descended ? fp.name + state.descent.map(k => ' › ⑂ ' + demoDescentChildren[k].name).join('') : fp.name,
+      crumb: ((title) => surf === Surface.Records ? title + ' › records' : surf === Surface.Assay ? title + ' › assays › rev_kimi_vs_glm' : surf === Surface.Studio ? title + ' › studio' : descended ? title + state.descent.map(k => ' › ⑂ ' + demoDescentChildren[k].name).join('') : title)(this._paneTitle(state, fp)),
       escHint: surf ? 'esc — back' : descended ? 'esc — up one level' : '',
       openRecords: () => this._toggleSurface('records'),
       openStudio: () => this._toggleSurface('studio'),
@@ -2387,8 +2166,8 @@ class Component extends DCLogic {
           fpModelVersion: auto ? 'Auto — chosen by ' + driver + ', which does not report the model' : (version || 'default'),
           fpGuidance: (snap && snap.bundleSlug) || 'auto',
           // UI sprint 143: the Length and Tone positions; null is the default.
-          fpLength: (snap && snap.length) || 'normal',
-          fpTone: (snap && snap.tone) || 'neutral',
+          fpLength: (snap && snap.length) || LENGTH_DEFAULT,
+          fpTone: (snap && snap.tone) || TONE_DEFAULT,
           fpAuto: auto,
         };
       })(),
@@ -2579,7 +2358,7 @@ class Component extends DCLogic {
       },
       studioOut: state.studioOut, studioOutColor: state.studioOutColor,
       sentLines: (fp && fp.sent) ? fp.sent.map(t => ({ text: t })) : [],
-      panes, paneCols: state.colW.map(w => w.toFixed(3) + 'fr').join(' '), paneRows: state.rowW.map(w => w.toFixed(3) + 'fr').join(' '), focusedName: fp.name, focusedId: fp.id, fpLines: fp.lines || [],
+      panes, paneCols: state.colW.map(w => w.toFixed(3) + 'fr').join(' '), paneRows: state.rowW.map(w => w.toFixed(3) + 'fr').join(' '), focusedName: fp.name, focusedId: fp.id,
       revealFlexL: state.revealL.toFixed(3) + ' 1 0%',
       revealGutterLeft: (state.revealL / (state.revealL + 1) * 100).toFixed(2) + '%',
       revealGrab: (ev) => { ev.preventDefault(); this._gut = { type: 'reveal' }; },
@@ -2587,11 +2366,10 @@ class Component extends DCLogic {
       rowGutters: state.rowW.slice(0, -1).map((_, i) => { const total = state.rowW.reduce((a, b) => a + b, 0); const top = state.rowW.slice(0, i + 1).reduce((a, b) => a + b, 0) / total * 100; return { top: top.toFixed(2) + '%', grab: (ev) => { ev.preventDefault(); this._gut = { type: 'row', i: i + 1 }; } }; }), focusedBranch: fp.shape === 'worktree' ? 'substrate/' + (fp.name || 'main') : (fp.ws || ''),
       focusedWorkspace: fp.ws || '~/.substrate/sandbox',
       focusedShape: fp.shape || 'sandbox',
-      // Every pane's reveal view renders the full machinery lens now
-      // that every pane has its own controller. The old
-      // notMainFocused branch showed only the scripted pane.lines and
-      // is dead.
-      isMainFocused: true, notMainFocused: false,
+
+      // The meta view's machinery lens wraps in this gate; every pane has its own controller, so it
+      // always shows (the old notMainFocused branch, scripted lines, is gone).
+      isMainFocused: true,
       // UI sprint 136: the one top bar shows the focused pane — its status dot, its name (double-click
       // renames it), and its driver and workspace chips in every view but records, assay and studio.
       ...(() => {

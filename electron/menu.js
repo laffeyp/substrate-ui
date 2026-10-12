@@ -2,19 +2,27 @@
 // Sprint 080 — native macOS menu bar.
 //
 // Every menu item that carries a command (File · View items with an
-// id starting with "menu-") dispatches to the renderer via
-// webContents.send("menu:<command>", payload). The renderer's
+// id starting with "menu-") dispatches to the focused window's renderer
+// via webContents.send("menu:<command>", payload). The renderer's
 // preload exposes window.native.onMenuCommand for the shell to
 // subscribe. Standard Edit / Window / Help entries use Electron's
-// built-in roles.
+// built-in roles. UI sprint 147 checked the bar against Apple's HIG
+// ("The menu bar", "Keyboards"); the card lists each item and the
+// deviations kept (⌘M toggles meta, not Minimize).
+//
+// One owner per key. The renderer's keydown owns ⌘M, ⌘, ⌘D, ⌘E and ⌘F;
+// the menu owns ⌘N, ⌘O, ⌘W, ⇧⌘W and ⌃⌘F. Meta and Settings… carry no
+// accelerator: on macOS Electron cannot show a key without registering
+// it (registerAccelerator is Linux/Windows only), and a registered one
+// would compete with the renderer's handler for the same press.
 
-const { Menu, app, dialog } = require("electron");
+const { Menu, dialog } = require("electron");
 
 function send(win, command, payload) {
   if (win && !win.isDestroyed()) win.webContents.send("menu:" + command, payload ?? null);
 }
 
-function buildTemplate(getWin) {
+function buildTemplate(getWin, newWindow) {
   const isMac = process.platform === "darwin";
   const appName = "substrate";
   return [
@@ -22,6 +30,12 @@ function buildTemplate(getWin) {
       label: appName,
       submenu: [
         { role: "about" },
+        { type: "separator" },
+        {
+          id: "menu-settings",
+          label: "Settings…",
+          click: () => send(getWin(), "settings"),
+        },
         { type: "separator" },
         { role: "services" },
         { type: "separator" },
@@ -36,10 +50,10 @@ function buildTemplate(getWin) {
       label: "File",
       submenu: [
         {
-          id: "menu-new-session",
-          label: "New Session",
+          id: "menu-new-window",
+          label: "New Window",
           accelerator: "CmdOrCtrl+N",
-          click: () => send(getWin(), "new-session"),
+          click: () => newWindow(),
         },
         {
           id: "menu-open-record",
@@ -81,11 +95,12 @@ function buildTemplate(getWin) {
       label: "View",
       submenu: [
         {
-          id: "menu-toggle-reveal",
-          label: "Toggle Reveal",
-          accelerator: "Ctrl+`",
-          click: () => send(getWin(), "toggle-reveal"),
+          id: "menu-toggle-meta",
+          label: "Meta",
+          click: () => send(getWin(), "toggle-meta"),
         },
+        { type: "separator" },
+        { role: "togglefullscreen" },
         { type: "separator" },
         { role: "resetZoom" },
         { role: "zoomIn" },
@@ -106,20 +121,13 @@ function buildTemplate(getWin) {
         { role: "front" },
       ],
     },
-    {
-      role: "help",
-      submenu: [
-        {
-          label: "About substrate",
-          click: () => app.showAboutPanel?.(),
-        },
-      ],
-    },
+    // About lives in the app menu only; macOS adds the search field here.
+    { role: "help", submenu: [] },
   ];
 }
 
-function installMenu(getWin) {
-  const template = buildTemplate(getWin);
+function installMenu(getWin, newWindow) {
+  const template = buildTemplate(getWin, newWindow);
   const menu = Menu.buildFromTemplate(template);
   Menu.setApplicationMenu(menu);
   return menu;

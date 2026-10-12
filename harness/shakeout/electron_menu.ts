@@ -1,7 +1,8 @@
-// Electron menu flow. Binds the first pane, then clicks two native menu items through
-// Menu.getMenuItemById(...).click() and checks what each did:
-//   menu-toggle-reveal — the reveal transcript mount appears, and a second click removes it;
-//   menu-new-session   — a second pane opens with its own transcript (the menu binds it at once).
+// Electron menu flow. Binds the first pane, then clicks a native menu item through
+// Menu.getMenuItemById(...).click() and checks what it did:
+//   menu-toggle-meta — the meta view's transcript mount appears, and a second click removes it.
+// File → New Window has its own gate (new_window.ts, UI sprint 147); the New Session item it
+// replaced is gone.
 // No controller tags are declared: the menu drives the shell, not a session, so the checks are the
 // observations above and any failure is a defect.
 
@@ -35,24 +36,18 @@ export const flow: Flow = {
       await bindPaneAsUser(win);
 
       const REVEAL = '[data-vm-transcript-mount="reveal"]';
-      if ((await count(win, REVEAL)) !== 0) throw new Error("reveal mount present before toggle-reveal");
-      await clickMenu(app, "menu-toggle-reveal");
+      if ((await count(win, REVEAL)) !== 0) throw new Error("meta mount present before toggle-meta");
+      await clickMenu(app, "menu-toggle-meta");
       await win.waitForFunction((s) => document.querySelectorAll(s).length === 1, REVEAL, { timeout: 10_000 })
-        .catch(() => { throw new Error("menu-toggle-reveal did not show the reveal view"); });
-      await clickMenu(app, "menu-toggle-reveal");
+        .catch(() => { throw new Error("menu-toggle-meta did not show the meta view"); });
+      await clickMenu(app, "menu-toggle-meta");
       await win.waitForFunction((s) => document.querySelectorAll(s).length === 0, REVEAL, { timeout: 10_000 })
-        .catch(() => { throw new Error("second menu-toggle-reveal did not return to the terminal view"); });
-
-      const PANE = '[data-vm-transcript-mount="terminal"]';
-      const before = await count(win, PANE);
-      await clickMenu(app, "menu-new-session");
-      await win.waitForFunction(([s, b]) => document.querySelectorAll(s as string).length > (b as number), [PANE, before] as const, { timeout: 10_000 })
-        .catch(() => { throw new Error(`menu-new-session did not add a pane (${before} before)`); });
+        .catch(() => { throw new Error("second menu-toggle-meta did not return to the panes view"); });
     } catch (err) {
       defects.push({
         category: "electron_menu_failed",
         observed: err instanceof Error ? err.message : String(err),
-        expected: "toggle-reveal shows and hides the reveal view; new-session adds a pane",
+        expected: "View → Meta shows and hides the meta view",
         reproduces: true,
         severity: "high",
       });

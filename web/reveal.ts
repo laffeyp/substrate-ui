@@ -247,29 +247,10 @@ function boot(): void {
       const live = component ?? reachComponent();
       if (!live) return;
       component = live;
-      if (command === "new-session") {
-        const logic = live as unknown as {
-          state: { panes: { id: number; unbound?: boolean }[] };
-          _split?: (dir: string) => void;
-          _bindPane?: (id: number, ws: string) => void;
-        };
-        if (typeof logic._split === "function") {
-          logic._split("right");
-          const newest = logic.state.panes[logic.state.panes.length - 1];
-          if (newest?.unbound && typeof logic._bindPane === "function") {
-            logic._bindPane(newest.id, "~/.substrate/sandbox");
-          }
-        }
-      } else if (command === "toggle-reveal") {
-        // Reveal → terminal always works. Terminal → reveal blocks only
-        // if the focused pane is on its workspace picker (which only
-        // renders in the terminal view).
-        const s = live.state as { revealed?: boolean; focused?: number; panes?: { id?: number; unbound?: boolean }[] };
-        if (!s.revealed) {
-          const fp = (s.panes || []).find((pn) => pn.id === s.focused);
-          if (fp && fp.unbound) return;
-        }
-        live.setState({ revealed: !s.revealed, surface: null });
+      if (command === "toggle-meta") {
+        (live as unknown as { _toggleMeta?: () => void })._toggleMeta?.();
+      } else if (command === "settings") {
+        live.setState({ showSettings: true });
       } else if (command === "open-record") {
         const rec = payload as { path?: string } | null;
         if (rec?.path) controller.attachRecordRoot(rec.path).catch(() => undefined);

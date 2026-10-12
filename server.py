@@ -46,7 +46,7 @@ import msgspec
 from substrate import api
 from substrate.topologies import bundled
 from substrate.topologies.session.environment import session_baseline
-from substrate.topologies.session.vocabulary import LENGTH_DEFAULT, TONE_DEFAULT
+from substrate.topologies.session.vocabulary import LENGTH_DEFAULT, TONE_DEFAULT, Control
 from substrate.adapters.harness_streams import SUBSTRATE_MCP_SERVER
 from substrate.topologies.session.mcp_channel import handle_jsonrpc
 from substrate.topologies.session.model_class import (
@@ -2698,7 +2698,7 @@ class Handler(BaseHTTPRequestHandler):
         # Kernel K296 (session vocabulary § T): the Length and Tone positions; absent or null is
         # the default. The registry refuses an unknown position.
         controls: dict[str, str | None] = {}
-        for control in ("length", "tone"):
+        for control in Control:
             raw = body.get(control)
             if raw is not None and not isinstance(raw, str):
                 self._error(400, f"{control} must be a string or null; got {type(raw).__name__}")
@@ -2717,8 +2717,8 @@ class Handler(BaseHTTPRequestHandler):
                 role=role,
                 tools=tools,
                 driver_params=driver_params,
-                length=controls["length"],
-                tone=controls["tone"],
+                length=controls[Control.LENGTH],
+                tone=controls[Control.TONE],
             )
             # Validate driver_params at the same boundary as PATCH does. If
             # the client sent bad shape/values, roll back the create so the
@@ -2758,8 +2758,8 @@ class Handler(BaseHTTPRequestHandler):
                 "workspace": manifest.workspace,
                 "workspace_shape": manifest.workspace_shape,
                 "bundle": manifest.bundle,
-                "length": manifest.length,  # kernel K296
-                "tone": manifest.tone,
+                Control.LENGTH: manifest.length,  # kernel K296
+                Control.TONE: manifest.tone,
                 "role": manifest.role,
                 "driver_params": dict(current.driver_params)
                 if current.driver_params is not None
@@ -3225,8 +3225,8 @@ class Handler(BaseHTTPRequestHandler):
                 "workspace": manifest.workspace,
                 "workspace_shape": manifest.workspace_shape,
                 "bundle": manifest.bundle,
-                "length": manifest.length,  # kernel K296
-                "tone": manifest.tone,
+                Control.LENGTH: manifest.length,  # kernel K296
+                Control.TONE: manifest.tone,
                 "record": manifest.record_root,
                 "created_at": manifest.created_at,
                 "status": manifest.status,
@@ -3838,8 +3838,7 @@ class Handler(BaseHTTPRequestHandler):
             "per_turn",
             "bundle",
             "driver_params",
-            "length",
-            "tone",
+            *Control,
         }
         _NOT_YET = {"workspace", "workspace_shape", "seed"}
         keys = set(body.keys())
@@ -3925,11 +3924,14 @@ class Handler(BaseHTTPRequestHandler):
             except ValueError as exc:  # a name that is not one path component (substrate.naming)
                 self._error(400, str(exc))
                 return
-        if "length" in body or "tone" in body:
+        if any(control in body for control in Control):
             # Kernel K296: either control; null returns it to the default. The next turn records
             # SessionChanged and writes the `control` text again (vocabulary § T.3).
-            values: dict[str, str | None] = {"length": updated.length, "tone": updated.tone}
-            for control in ("length", "tone"):
+            values: dict[str, str | None] = {
+                Control.LENGTH: updated.length,
+                Control.TONE: updated.tone,
+            }
+            for control in Control:
                 if control in body:
                     raw = body[control]
                     if raw is not None and not isinstance(raw, str):
@@ -3940,7 +3942,7 @@ class Handler(BaseHTTPRequestHandler):
                     values[control] = raw or None
             try:
                 updated = self.app.registry.set_controls(
-                    session_id, length=values["length"], tone=values["tone"]
+                    session_id, length=values[Control.LENGTH], tone=values[Control.TONE]
                 )
             except ValueError as exc:
                 self._error(400, str(exc))
@@ -3975,8 +3977,8 @@ class Handler(BaseHTTPRequestHandler):
                 "workspace": updated.workspace,
                 "workspace_shape": updated.workspace_shape,
                 "bundle": updated.bundle,
-                "length": updated.length,  # kernel K296
-                "tone": updated.tone,
+                Control.LENGTH: updated.length,  # kernel K296
+                Control.TONE: updated.tone,
                 "driver_params": dict(updated.driver_params)
                 if updated.driver_params is not None
                 else None,

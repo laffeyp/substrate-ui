@@ -1,6 +1,7 @@
 import { defineConfig, type Plugin } from "vite";
 import { resolve } from "path";
 import { buildSync } from "esbuild";
+import { readFileSync } from "fs";
 
 // Substrate-ui build config. Phase 6 closed 2026-09-22: the reveal shell
 // is the only entry. The classic shell (index.html) and the Studio
@@ -59,9 +60,36 @@ function inlineDcScript(): Plugin {
   };
 }
 
+// The 2026-10-11 audit: reveal.html's template language has no include, so blocks the app
+// shows more than once (the input bar in two views; the GUIDANCE / LENGTH / TONE lines) were
+// copies. `<!-- include partials/<file>.html key=value ... -->` inlines web/partials/<file>.html,
+// replacing each `%key%` with its value. A missing file or an unfilled `%key%` fails the build.
+function includePartials(): Plugin {
+  const marker = /<!-- include (\S+)((?: [A-Za-z]+=\S+)*) -->/g;
+  return {
+    name: "substrate-include-partials",
+    transformIndexHtml: {
+      order: "pre",
+      handler(html, ctx) {
+        if (!ctx.filename.endsWith("reveal.html")) return html;
+        return html.replace(marker, (_match, file: string, rawParams: string) => {
+          let text = readFileSync(resolve(__dirname, "web", file), "utf8").replace(/^<!--[\s\S]*?-->\n/, "");
+          for (const pair of rawParams.trim().split(/\s+/).filter(Boolean)) {
+            const [key, value] = pair.split("=");
+            text = text.split(`%${key}%`).join(value);
+          }
+          const unfilled = text.match(/%[A-Za-z]+%/);
+          if (unfilled) throw new Error(`includePartials: ${file} has an unfilled ${unfilled[0]}`);
+          return text.replace(/\n$/, "");
+        });
+      },
+    },
+  };
+}
+
 export default defineConfig({
   root: "web",
-  plugins: [inlineDcScript()],
+  plugins: [includePartials(), inlineDcScript()],
   build: {
     target: "es2020",
     outDir: "dist",

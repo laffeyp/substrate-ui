@@ -21,11 +21,11 @@ const { contextBridge, ipcRenderer } = require("electron");
 const menuListeners = new Set();
 const deepLinkListeners = new Set();
 
-ipcRenderer.on("menu:new-session", (_e, p) => dispatchMenu("new-session", p));
 ipcRenderer.on("menu:open-record", (_e, p) => dispatchMenu("open-record", p));
 ipcRenderer.on("menu:close-pane", (_e, p) => dispatchMenu("close-pane", p));
 ipcRenderer.on("menu:close-window", (_e, p) => dispatchMenu("close-window", p));
-ipcRenderer.on("menu:toggle-reveal", (_e, p) => dispatchMenu("toggle-reveal", p));
+ipcRenderer.on("menu:toggle-meta", (_e, p) => dispatchMenu("toggle-meta", p));
+ipcRenderer.on("menu:settings", (_e, p) => dispatchMenu("settings", p));
 ipcRenderer.on("deep-link", (_e, url) => dispatchDeepLink(url));
 
 function dispatchMenu(command, payload) {

@@ -164,16 +164,24 @@ function setupLogFile() {
 const SOURCE_SUBSTRATE_ROOT = path.resolve(__dirname, "..", "..", "substrate");
 const SOURCE_SERVER_PATH = path.resolve(__dirname, "..", "server.py");
 
-let mainWindow = null;
+// UI sprint 147: any number of windows share the one backend. Commands act on the focused window,
+// or the most recently focused one when none is (a menu click with every window minimised).
+let lastFocused = null;
+function currentWindow() {
+  const focused = BrowserWindow.getFocusedWindow();
+  if (focused) return focused;
+  if (lastFocused && !lastFocused.isDestroyed()) return lastFocused;
+  return BrowserWindow.getAllWindows()[0] || null;
+}
 let serverProc = null;
 let serverPort = null;
 let stdoutBuf = "";
 // Sprint 081 — buffered-pending dispatch for deep-links that fire
 // before the renderer is ready. Reuses the pattern the 2026-09-12
 // electron/main.js:51-72 used (see _deprecated/electron-bridge-
-// 2026-09-12/main.js). rendererReady flips true on did-finish-load;
-// pending deep-links flush in order at that moment.
-let rendererReady = false;
+// 2026-09-12/main.js). A window joins readyWindows on did-finish-load;
+// pending deep-links flush in order to the first window that loads.
+const readyWindows = new WeakSet();
 const pendingDeepLinks = [];
 
 function log(...args) { process.stderr.write("[electron] " + args.join(" ") + "\n"); }
@@ -259,9 +267,7 @@ function spawnServer() {
   serverProc.on("exit", (code, signal) => {
     serverExited = true;
     log("server exited code=" + code + " signal=" + signal);
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send("server:dead", { code, signal });
-    }
+    for (const win of BrowserWindow.getAllWindows()) win.webContents.send("server:dead", { code, signal });
     // UI sprint 102: the backend died while the app was in use (not quitting, not starting).
     // Nothing listened for `server:dead`, so the window sat with dead streams and failing turns
     // and no word why. Say so, and offer the two ways out.
@@ -300,8 +306,9 @@ function pollHealth(port, deadline) {
 }
 
 function forwardDeepLink(url) {
-  if (rendererReady && mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send("deep-link", url);
+  const win = currentWindow();
+  if (win && readyWindows.has(win)) {
+    win.webContents.send("deep-link", url);
   } else {
     pendingDeepLinks.push(url);
   }
@@ -316,9 +323,13 @@ function createWindow() {
   const workArea = screen.getPrimaryDisplay().workAreaSize;
   const minW = Math.floor(workArea.width / 3);
   const minH = Math.floor(workArea.height / 3);
-  mainWindow = new BrowserWindow({
+  // A new window cascades from the focused one, as macOS document windows do.
+  const from = currentWindow();
+  const at = from ? (([x, y]) => ({ x: x + 22, y: y + 22 }))(from.getPosition()) : {};
+  const win = new BrowserWindow({
     width: 1440,
     height: 900,
+    ...at,
     minWidth: minW,
     minHeight: minH,
     title: "substrate",
@@ -333,11 +344,13 @@ function createWindow() {
       webSecurity: true,
     },
   });
-  mainWindow.webContents.on("did-finish-load", () => {
-    rendererReady = true;
+  win.on("focus", () => { lastFocused = win; });
+  lastFocused = win;
+  win.webContents.on("did-finish-load", () => {
+    readyWindows.add(win);
     if (pendingDeepLinks.length > 0) {
       log("flushing " + pendingDeepLinks.length + " buffered deep-link(s)");
-      for (const url of pendingDeepLinks) mainWindow.webContents.send("deep-link", url);
+      for (const url of pendingDeepLinks) win.webContents.send("deep-link", url);
       pendingDeepLinks.length = 0;
     }
   });
@@ -354,17 +367,18 @@ function createWindow() {
       return new URL(url).origin !== app_origin;
     } catch (_) { return true; }
   };
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+  win.webContents.setWindowOpenHandler(({ url }) => {
     if (isExternal(url)) shell.openExternal(url);
     return { action: "deny" };
   });
-  mainWindow.webContents.on("will-navigate", (event, url) => {
+  win.webContents.on("will-navigate", (event, url) => {
     if (isExternal(url)) { event.preventDefault(); shell.openExternal(url); }
   });
-  mainWindow.loadURL("http://127.0.0.1:" + serverPort + "/?atom-transcript=1&electron=1");
+  win.loadURL("http://127.0.0.1:" + serverPort + "/?atom-transcript=1&electron=1");
   if (process.env.SUBSTRATE_UI_DEBUG === "1") {
-    mainWindow.webContents.openDevTools({ mode: "detach" });
+    win.webContents.openDevTools({ mode: "detach" });
   }
+  return win;
 }
 
 // Sprint 081 — deep-link protocol handler. Register substrate:// so
@@ -388,9 +402,10 @@ if (!singleInstanceLock) {
   app.quit();
 } else {
   app.on("second-instance", (_e, argv) => {
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.focus();
+    const win = currentWindow();
+    if (win) {
+      if (win.isMinimized()) win.restore();
+      win.focus();
     }
     for (const arg of argv) {
       if (typeof arg === "string" && arg.startsWith("substrate://")) forwardDeepLink(arg);
@@ -453,7 +468,7 @@ app.whenReady().then(async () => {
     return;
   }
   createWindow();
-  installMenu(() => mainWindow);
+  installMenu(currentWindow, createWindow);
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
@@ -487,18 +502,19 @@ app.on("before-quit", (event) => {
   killServerGroup();
 });
 
-// Sprint 085 followup — renderer asks main to close the current window
+// Sprint 085 followup — renderer asks main to close its window
 // when Cmd-W closes the last remaining pane.
-ipcMain.on("native:close-window", () => {
-  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.close();
+ipcMain.on("native:close-window", (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (win && !win.isDestroyed()) win.close();
 });
 
 // Sprint 086 — Records surface "Add workspace" folder picker.
 // Returns the chosen path or null on cancel. Same shape as
 // menu:open-record's dialog, but the picked path is a workspace not
 // a record.
-ipcMain.handle("native:pick-folder", async () => {
-  const win = mainWindow;
+ipcMain.handle("native:pick-folder", async (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
   const r = await dialog.showOpenDialog(win, {
     title: "Add workspace",
     properties: ["openDirectory"],
