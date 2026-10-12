@@ -650,6 +650,15 @@ def _build_session_topology_from_manifest(
     from substrate.topologies.session import session_topology
     from substrate.topologies.session.transcript import resolve_driver_context
 
+    # UI sprint 159: a session opened before workspaces were expanded at open stores
+    # `~/.substrate/sandbox`; a CLI driver given that as its cwd fails with FileNotFoundError on
+    # every turn. Resolve it once, by the open's own rule, for every use below; the manifest on
+    # disk is left as it is.
+    if isinstance(manifest, msgspec.Struct) and str(manifest.workspace).startswith("~"):
+        manifest = msgspec.structs.replace(
+            manifest, workspace=_resolve_workspace_arg(manifest.workspace)
+        )
+
     responder = _daemon_driver_resolver(
         app,
         manifest.driver,
