@@ -10,6 +10,7 @@
 - **8 (U126). `model_half_starts_session.ts` clicks a model row that is not in the real roster.** The test picks models as a user does.
 - **10. The login card.** Remove "ready to pick a session" (`AuthPromptCard.tsx:213`) and check the layout of that bottom row.
 - **Precompiled Python bytecode in the bundle.** The bundle ships without `.pyc` files, so the first launch writes 298 of them into `/Applications/Substrate.app`. A signed app must not change after signing; the build compiles the bytecode before signing (found in sprint 133).
+- **`bash` cuts stdout at 8,000 bytes with no marker** (`substrate/src/substrate/topologies/tool_loop/tools.py:513`). A model read 222 lines of a 4,000-line file and answered 222. The output needs a marker naming the cut and where the rest is.
 - **Harness tool calls in the session bar.** The session bar's turn line (turns, seconds, tools) reports no tools used when a harness driver's tools ran. A `HarnessToolCall` counts there as a `ToolCall` does.
 - **The input bar's hint.** Before a session exists, the hint in the input bar lists its keys. Two parts are false and come out: "type a path" (typed text is not treated as a folder path) and "‹symbol› fills nearest" (nothing autocompletes). The other key hints stay where they are true: ↑↓ moves, shift-enter opens, enter picks the folder. The input bar itself, the program's text input, is unchanged.
 
@@ -73,7 +74,7 @@ Reordered 2026-10-11: compaction moved ahead of the small fixes, since it damage
 |---|---|---|
 | 1 | 5. `electron_smoke` fails on first launch | The Electron gates check every later step; they must report truly first. |
 | 2 | Compaction (K290–K293) | Broken now and damaging every real session; the topology audit runs real sessions whose results depend on it. |
-| 3 | 10. Login card; the input bar's false hints; harness tool calls in the session bar; precompiled bytecode | Small fixes; depend on nothing, block nothing. |
+| 3 | 10. Login card; the input bar's false hints; harness tool calls in the session bar; precompiled bytecode; `bash` output cut without a marker | Small fixes; depend on nothing, block nothing. |
 | 4 | Topology audit | Depends on no UI step and is the largest unknown; starting early shows its size. What it drops leaves the guidance text that step 10 then builds on. |
 | 5 | One top bar | Steps 6, 7 and 13 put things in the top bar. |
 | 6 | 7 (U125). Model chip becomes an indicator | Lives in the top bar; built once, on the single bar. |
