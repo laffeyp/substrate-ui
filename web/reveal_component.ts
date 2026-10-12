@@ -36,6 +36,7 @@ import {
 } from "./vm/kinds";
 import { isToolCallRow, isToolResultRow } from "./vm/types";
 import { describeEventTime, eventTimes, formatClock, formatElapsed } from "./reveal/timeline";
+import { toggleToolOutputMode } from "./vm/tool_output_mode";
 
 // UI sprint 132 (kernel K288, session vocabulary § R): the guidance levels the bar offers, each
 // with the bundle that carries it. `auto` names none, so the daemon picks the model's default.
@@ -61,6 +62,21 @@ const GUIDANCE_OPTIONS = [
   { level: 'medium', bundle: 'standard-medium', label: 'medium', meta: 'rules, no examples' },
   { level: 'high', bundle: 'standard', label: 'high', meta: 'the full standard' },
 ];
+// UI sprint 143 (kernel K296, session vocabulary § T): the Length and Tone lines under GUIDANCE.
+// `value` is the position the daemon takes; the defaults (normal, neutral) write no text.
+const LENGTH_OPTIONS = [
+  { value: 'terse', label: 'terse', meta: 'the answer and its facts' },
+  { value: 'normal', label: 'normal', meta: 'as the guidance has it' },
+  { value: 'full', label: 'full', meta: 'complete, not padded' },
+];
+const TONE_OPTIONS = [
+  { value: 'blunt', label: 'blunt', meta: 'plain judgements, no softening' },
+  { value: 'neutral', label: 'neutral', meta: 'as the guidance has it' },
+  { value: 'formal', label: 'formal', meta: 'for readers outside the conversation' },
+  { value: 'dry', label: 'dry', meta: 'understated and factual' },
+];
+const LENGTH_DEFAULT_AT = 1;
+const TONE_DEFAULT_AT = 1;
 import { mdBlocks, mdInlines, renderBlock, renderInline } from "./reveal/markdown";
 import { liveActivity } from "./reveal/activity";
 
@@ -512,9 +528,22 @@ class Component extends DCLogic {
   _pickGuidance(paneId, option) {
     const pane = (this.state.panes || []).find(x => x.id === paneId);
     if (!pane || !pane.armed || pane.pickerHalf !== 'guidance') return;
-    this.setState(st => ({ panes: st.panes.map(x => x.id === paneId ? Object.assign({}, x, { guidance: option.level }) : x) }));
+    // UI sprint 143: the guidance level no longer starts the session; LENGTH comes next.
+    this.setState(st => ({ panes: st.panes.map(x => x.id === paneId ? Object.assign({}, x, { guidance: option.level, pickerHalf: 'length', lengthSel: LENGTH_DEFAULT_AT }) : x) }));
     const vm = window.__vm;
     if (vm && typeof vm.pickBundle === 'function') vm.pickBundle(option.bundle);
+  }
+  _pickLength(paneId, option) {
+    const pane = (this.state.panes || []).find(x => x.id === paneId);
+    if (!pane || !pane.armed || pane.pickerHalf !== 'length') return;
+    this.setState(st => ({ panes: st.panes.map(x => x.id === paneId ? Object.assign({}, x, { length: option.value, pickerHalf: 'tone', toneSel: TONE_DEFAULT_AT }) : x) }));
+  }
+  _pickTone(paneId, option) {
+    const pane = (this.state.panes || []).find(x => x.id === paneId);
+    if (!pane || !pane.armed || pane.pickerHalf !== 'tone') return;
+    this.setState(st => ({ panes: st.panes.map(x => x.id === paneId ? Object.assign({}, x, { tone: option.value }) : x) }));
+    const vm = window.__vm;
+    if (vm && typeof vm.pickControls === 'function') vm.pickControls(pane.length || null, option.value);
     this._commitPane(paneId, pane.armed);
   }
   _commitPane(paneId, armed) {
@@ -873,6 +902,20 @@ class Component extends DCLogic {
       if (ev.key === 'Escape' || ev.key === 'ArrowUp') { ev.preventDefault(); setPane({ pickerHalf: 'model' }); return; }
       return;
     }
+    // UI sprint 143: LENGTH and TONE take the guidance line's keys; esc or ↑ steps back a line.
+    for (const [half, opts, selKey, pick, back] of [
+      ['length', LENGTH_OPTIONS, 'lengthSel', (o) => this._pickLength(paneId, o), 'guidance'],
+      ['tone', TONE_OPTIONS, 'toneSel', (o) => this._pickTone(paneId, o), 'length'],
+    ]) {
+      if (p.pickerHalf !== half || !p.armed) continue;
+      const n = opts.length;
+      const at = Math.max(0, Math.min(p[selKey] ?? 1, n - 1));
+      if (ev.key === 'ArrowRight') { ev.preventDefault(); setPane({ [selKey]: (at + 1) % n }); return; }
+      if (ev.key === 'ArrowLeft') { ev.preventDefault(); setPane({ [selKey]: (at - 1 + n) % n }); return; }
+      if (ev.key === 'Enter') { ev.preventDefault(); pick(opts[at]); return; }
+      if (ev.key === 'Escape' || ev.key === 'ArrowUp') { ev.preventDefault(); setPane({ pickerHalf: back }); return; }
+      return;
+    }
     if (p.pickerHalf === 'model' && p.armed) {
       const opts = this._modelHalfRows(this.state, p).filter(o => o.notHeader);
       if (!opts.length) return;
@@ -1026,6 +1069,8 @@ class Component extends DCLogic {
       }
       // ⌘M toggles meta and panes (the menu's Minimize gives up the key, electron/menu.js).
       if (e.metaKey && !e.shiftKey && !e.altKey && !e.ctrlKey && (e.key === 'm' || e.key === 'M')) { e.preventDefault(); const s=this.state; if (!s.revealed) { const fp=s.panes.find(p=>p.id===s.focused); const fs=(s.controllerSnapshots||{})[s.focused]; if (fp && fp.unbound && !(fs && fs.sessionId)) return; } this.setState(st => ({ revealed: !st.revealed, surface: null })); }
+      // UI sprint 140: ⌘E expands or collapses every tool card.
+      if (e.metaKey && !e.shiftKey && !e.altKey && !e.ctrlKey && (e.key === 'e' || e.key === 'E')) { e.preventDefault(); this._toggleTools(); }
       if (e.metaKey && (e.key === 'd' || e.key === 'D')) { e.preventDefault(); this._split(e.shiftKey ? 'down' : 'right'); }
       if (e.metaKey && (e.key === 'f' || e.key === 'F')) { e.preventDefault(); this.setState(s => ({ findOpen: !s.findOpen, findQ: '' })); }
       if (e.metaKey && e.key === ',') { e.preventDefault(); this.setState({ showSettings: true }); }
@@ -1133,6 +1178,52 @@ class Component extends DCLogic {
     studioState.sroutes.forEach(r => consumed.add(r.kind));
     emitted.forEach(k => { if (!consumed.has(k)) errs.push('emitted kind ' + k + ' is neither consumed nor terminal'); });
     return errs;
+  }
+  // UI sprint 140: ⌘E folds or unfolds every tool card (ToolCard reads the setting). No control
+  // on screen: the Architect's call; /fold and /unfold do the same from the input bar.
+  _toggleTools() {
+    toggleToolOutputMode();
+  }
+  // UI sprint 141: the input bar's keys, the same in the panes view and the meta view. ↵ sends;
+  // ⇧↵ (and ⌥↵) make a new line; ↵ while an input method composes finishes the composition;
+  // ↑ on the first line and ↓ on the last walk this pane's sent messages, back to the draft.
+  _barKey(paneId, ev) {
+    // React's keyboard event leaves isComposing on the browser's own event.
+    if (ev.isComposing || (ev.nativeEvent && ev.nativeEvent.isComposing) || ev.keyCode === 229) return;
+    const pane = (this.state.panes || []).find(x => x.id === paneId);
+    if (!pane) return;
+    const setPane = (patch) => this.setState(s => ({ panes: s.panes.map(x => x.id === paneId ? Object.assign({}, x, patch) : x) }));
+    const el = ev.target;
+    const plain = !ev.shiftKey && !ev.altKey && !ev.metaKey && !ev.ctrlKey;
+    if (ev.key === 'Enter' && plain) {
+      ev.preventDefault();
+      const v = (pane.pv || '').trim();
+      if (!v) return;
+      const hist = [...(pane.hist || []), v].slice(-200);
+      setPane({ pv: '', hist, histAt: null, histDraft: '' });
+      const vm = window.__vm;
+      if (vm && typeof vm.setActive === 'function') vm.setActive(paneId);
+      const controller = vm && typeof vm.get === 'function' ? vm.get(paneId) : null;
+      if (controller && typeof controller.submitLine === 'function') controller.submitLine(v);
+      else if (vm && typeof vm.submitLine === 'function') vm.submitLine(v);
+      return;
+    }
+    if (!plain || !el || typeof el.selectionStart !== 'number' || el.selectionStart !== el.selectionEnd) return;
+    const hist = pane.hist || [];
+    const text = String(el.value || '');
+    if (ev.key === 'ArrowUp' && !text.slice(0, el.selectionStart).includes('\n') && hist.length) {
+      const at = pane.histAt == null ? hist.length : pane.histAt;
+      if (at === 0) return;
+      ev.preventDefault();
+      setPane({ pv: hist[at - 1], histAt: at - 1, histDraft: pane.histAt == null ? (pane.pv || '') : pane.histDraft });
+      return;
+    }
+    if (ev.key === 'ArrowDown' && pane.histAt != null && !text.slice(el.selectionEnd).includes('\n')) {
+      ev.preventDefault();
+      const next = pane.histAt + 1;
+      if (next >= hist.length) setPane({ pv: pane.histDraft || '', histAt: null, histDraft: '' });
+      else setPane({ pv: hist[next], histAt: next });
+    }
   }
   _toggleSurface(name) {
     this.setState(s => ({ surface: s.surface === name ? null : name }));
@@ -1266,6 +1357,8 @@ class Component extends DCLogic {
       ['/name', 'rename this session — /name <new>', null],
       ['/list', 'list sessions on the server', (paneId) => { _clearPv(paneId); _vmSubmitFor(paneId, '/list'); }],
       ['/interrupt', 'stop the in-flight turn (also ^C)', (paneId) => { _clearPv(paneId); _vmSubmitFor(paneId, '/interrupt'); }],
+      ['/fold', 'fold or unfold all tool output (also ⌘E)', (paneId) => { _clearPv(paneId); _vmSubmitFor(paneId, '/fold'); }],
+      ['/unfold', 'unfold all tool output', (paneId) => { _clearPv(paneId); _vmSubmitFor(paneId, '/unfold'); }],
       ['/clear', 'clear the transcript view', (paneId) => { _clearPv(paneId); _vmSubmitFor(paneId, '/clear'); }],
       ['/help', 'show this list', (paneId) => { _clearPv(paneId); _vmSubmitFor(paneId, '/help'); }],
     ];
@@ -1301,24 +1394,61 @@ class Component extends DCLogic {
       guidanceRows: GUIDANCE_OPTIONS.map((g, i) => {
         const open = !!p.armed && p.pickerHalf === 'guidance';
         const lit = open && i === (p.guidanceSel ?? 0);
+        // UI sprint 143: once LENGTH or TONE is open, the picked level shows in white.
+        const picked = !!p.armed && (p.pickerHalf === 'length' || p.pickerHalf === 'tone') && (p.guidance ?? null) === g.level;
         return {
           label: g.label, meta: g.meta, lit: lit ? '1' : '0',
           live: open, grey: !open,
-          color: lit ? '#e2e5e9' : '#b9bec5',
+          color: lit || picked ? '#e2e5e9' : '#b9bec5',
+          greyColor: picked ? '#e2e5e9' : '#4a4e55',
           bg: lit ? '#2e3138' : 'transparent',
           pick: () => this._pickGuidance(p.id, g),
         };
       }),
       guidanceHeadColor: p.armed && p.pickerHalf === 'guidance' ? '#62676f' : '#4a4e55',
+      ...(() => {
+        const line = (half, opts, selKey, pick, chosenKey, defaultAt) => {
+          const open = !!p.armed && p.pickerHalf === half;
+          const sel = Math.max(0, Math.min(p[selKey] ?? defaultAt, opts.length - 1));
+          const chosen = p[chosenKey];
+          return {
+            rows: opts.map((o, i) => {
+              const lit = open && i === sel;
+              const picked = !open && chosen === o.value;
+              return {
+                label: o.label, meta: o.meta, lit: lit ? '1' : '0', live: open, grey: !open,
+                color: lit || picked ? '#e2e5e9' : '#b9bec5', bg: lit ? '#2e3138' : 'transparent',
+                greyColor: picked ? '#e2e5e9' : '#4a4e55',
+                pick: () => pick(o),
+              };
+            }),
+            head: open ? '#62676f' : '#4a4e55',
+            note: open ? opts[sel].meta : '',
+          };
+        };
+        const len = line('length', LENGTH_OPTIONS, 'lengthSel', (o) => this._pickLength(p.id, o), 'length', LENGTH_DEFAULT_AT);
+        const tone = line('tone', TONE_OPTIONS, 'toneSel', (o) => this._pickTone(p.id, o), 'tone', TONE_DEFAULT_AT);
+        return {
+          lengthRows: len.rows, lengthHeadColor: len.head, lengthNote: len.note,
+          toneRows: tone.rows, toneHeadColor: tone.head, toneNote: tone.note,
+        };
+      })(),
       // The lit level's description, at the end of the guidance line.
+      // UI sprint 142: before a model is picked the slot holds a hint, at the hint level (.tx-hint);
+      // once the guidance line opens it describes the lit level, at the ordinary grey.
+      guidanceNoteClass: p.armed && p.pickerHalf === 'guidance' ? '' : 'tx-hint',
+      guidanceNoteColor: p.armed && p.pickerHalf === 'guidance' ? '#62676f' : 'var(--tx-hint)',
       guidanceNote: p.armed && p.pickerHalf === 'guidance'
         ? GUIDANCE_OPTIONS[Math.max(0, Math.min(p.guidanceSel ?? 0, GUIDANCE_OPTIONS.length - 1))].meta
-        : 'pick a model first',
+        : p.armed && (p.pickerHalf === 'length' || p.pickerHalf === 'tone') ? '' : 'pick a model first',
       // Guidance is the model column's bottom line; the workspace column carries a blank line of
       // the same height so the bar keeps its height and the model list keeps its rows.
-      guidanceSpacer: paneW < 480 ? '0px' : '31px',
+      // UI sprint 143: three 31px lines now (guidance, length, tone).
+      guidanceSpacer: paneW < 480 ? '0px' : '93px',
       guidancePos: paneW < 480 ? 'static' : 'absolute',
-      modelScrollBottom: paneW < 480 ? 'auto' : '31px',
+      guidanceBottom: paneW < 480 ? '0' : '62px',
+      lengthBottom: paneW < 480 ? '0' : '31px',
+      modelScrollBottom: paneW < 480 ? 'auto' : '93px',
       modelHeadColor: p.armed ? '#62676f' : '#4a4e55',
       pickerDir: paneW < 480 ? 'column' : 'row',
       modelBorderL: paneW < 480 ? 'none' : '1px solid rgba(255,255,255,.08)',
@@ -1328,8 +1458,12 @@ class Component extends DCLogic {
       // and scrolls inside; stacked under a narrow pane it caps at 140px.
       modelInnerPos: paneW < 480 ? 'static' : 'absolute',
       modelMaxH: paneW < 480 ? '140px' : 'none',
-      wsPlaceholder: p.pickerHalf === 'guidance' && p.armed
-        ? '← → moves · ↵ picks the guidance and starts · esc back to models'
+      wsPlaceholder: p.pickerHalf === 'tone' && p.armed
+        ? '← → moves · ↵ picks the tone and starts · esc back to length'
+        : p.pickerHalf === 'length' && p.armed
+        ? '← → moves · ↵ picks the length · esc back to guidance'
+        : p.pickerHalf === 'guidance' && p.armed
+        ? '← → moves · ↵ picks the guidance · esc back to models'
         : p.pickerHalf === 'model' && p.armed
           ? '↑↓ moves · ⇧↵ opens · ↵ picks the model · esc back'
           : '↑↓ moves · ⇧↵ opens · ↵ picks the folder',
@@ -1378,7 +1512,7 @@ class Component extends DCLogic {
       pv: p.pv || '',
       promptVal: p.pv || '',
       onPv: (ev) => this.setState(s => ({ panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, { pv: ev.target.value }) : x) })),
-      onPrompt: (ev) => this.setState(s => ({ panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, { pv: ev.target.value }) : x) })),
+      onPrompt: (ev) => this.setState(s => ({ panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, { pv: ev.target.value, histAt: null }) : x) })),
       onPvKey: (ev) => {
         if (ev.key !== 'Enter') return;
         const v = (p.pv || '').trim();
@@ -1390,17 +1524,7 @@ class Component extends DCLogic {
         if (controller && typeof controller.submitLine === 'function') controller.submitLine(v);
         else if (vm && typeof vm.submitLine === 'function') vm.submitLine(v);
       },
-      onPromptKey: (ev) => {
-        if (ev.key !== 'Enter') return;
-        const v = (p.pv || '').trim();
-        if (!v) return;
-        this.setState(s => ({ panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, { pv: '' }) : x) }));
-        const vm = window.__vm;
-        if (vm && typeof vm.setActive === 'function') vm.setActive(p.id);
-        const controller = vm && typeof vm.get === 'function' ? vm.get(p.id) : null;
-        if (controller && typeof controller.submitLine === 'function') controller.submitLine(v);
-        else if (vm && typeof vm.submitLine === 'function') vm.submitLine(v);
-      },
+      onPromptKey: (ev) => this._barKey(p.id, ev),
       routerRows: (() => {
         const q = (p.pv || '').trim();
         if (!q.startsWith('/')) return [];
@@ -1908,16 +2032,6 @@ class Component extends DCLogic {
       pick: () => this.setState(id === GraphMode.Stream ? { mode: id } : { mode: id, dir: GraphDirection.Down }),
       color: state.mode === id ? '#d7dade' : '#62676f', bg: state.mode === id ? '#2e3138' : 'transparent',
     }));
-    // CMDS moved earlier — see the block above panes.map that
-    // instantiates it once and hands each pane its own bound pick
-    // callbacks. Two legacy references below are kept as no-ops so any
-    // downstream reference does not crash; the real work lives per pane.
-    const q = (fp && fp.pv ? fp.pv : (state.promptVal || '')).trim();
-    const routerRows = q.startsWith('/') ? CMDS.filter(c => c[0].startsWith(q) || q === '/').map(c => ({
-      cmd: c[0], desc: c[1],
-      pick: c[2] ? (() => (c[2])(fp && fp.id ? fp.id : 1))
-        : (() => { const cmd = c[0] + ' '; this.setState(s => ({ panes: s.panes.map(x => x.id === (fp && fp.id ? fp.id : 1) ? Object.assign({}, x, { pv: cmd }) : x) })); if (this._promptEl) { this._promptEl.value = cmd; this._promptEl.focus(); } }),
-    })) : [];
     // Detect a 2-D numeric grid inside the bound session's envelopes.
     // game_of_life-style topologies emit `payload.grid` on their
     // Generation event; session records don't. When none is found the
@@ -2258,15 +2372,27 @@ class Component extends DCLogic {
           }))
         : (state.allSessions || []).map(x => { const open = state.panes.some(pp => pp.id === x.id); const nm = (state.panes.find(pp => pp.id === x.id) || x).name; return { name: nm, meta: x.driver + ' · worktree substrate/' + nm, where: open ? 'open in a pane ▸' : 'no pane — still yours' }; })
       ),
-      fpDdOpen: state.ddFor === fp.id, fpToggleDd: () => {
-        // Sprint 085 followup — freeze picker once the focused pane's
-        // session is bound. Same reason as the per-pane toggle above.
-        const focusedSnap = (state.controllerSnapshots || {})[fp.id];
-        if (focusedSnap && focusedSnap.sessionId) return;
-        this.setState(s => ({ ddFor: s.ddFor === fp.id ? null : fp.id, wsFor: null }));
-      },
+      // UI sprint 139 (U125): the model chip opens a card, as the workspace chip does; it picks nothing.
+      fpDdOpen: state.ddFor === fp.id, fpToggleDd: () => this.setState(s => ({ ddFor: s.ddFor === fp.id ? null : fp.id, wsFor: null })),
+      ...(() => {
+        const driver = this._paneDriver(state, fp) || '';
+        const label = this._resolveDriverLabel(state, driver);
+        const version = label.slice(String(driver).toLowerCase().length).trim();
+        const snap = (state.controllerSnapshots || {})[fp.id];
+        // A CLI on its own Auto mode picks the model itself and does not report which (cursor-agent:
+        // the stream, `about` and `models` all say Auto). Say so; never name a model it did not report.
+        const auto = /^auto\b/.test(version);
+        return {
+          fpModel: driver || '—',
+          fpModelVersion: auto ? 'Auto — chosen by ' + driver + ', which does not report the model' : (version || 'default'),
+          fpGuidance: (snap && snap.bundleSlug) || 'auto',
+          // UI sprint 143: the Length and Tone positions; null is the default.
+          fpLength: (snap && snap.length) || 'normal',
+          fpTone: (snap && snap.tone) || 'neutral',
+          fpAuto: auto,
+        };
+      })(),
       fpWsOpen: state.wsFor === fp.id, fpToggleWs: () => this.setState(s => ({ wsFor: s.wsFor === fp.id ? null : fp.id, ddFor: null })),
-      fpDriverOpts: this._buildDriverOpts(state, fp.id, this._paneDriver(state, fp)),
       recordsColor: surf === Surface.Records ? '#e2e5e9' : '#9aa0a8',
       studioColor: surf === Surface.Studio ? '#e2e5e9' : '#9aa0a8',
       showTerminal: !surf && !state.revealed, showRevealed: !surf && state.revealed,
@@ -2294,17 +2420,6 @@ class Component extends DCLogic {
       // to the focused pane's pv, so the same field the terminal-view
       // pane input mutates is what the reveal-view input shows.
       promptVal: (fp && fp.pv) || '',
-      promptRef: (el) => { this._promptEl = el; },
-      onPrompt: (ev) => {
-        const paneId = (fp && fp.id) || 1;
-        const el = ev.target;
-        const val = el.value;
-        this.setState(s => ({ panes: s.panes.map(x => x.id === paneId ? Object.assign({}, x, { pv: val }) : x) }));
-        el.style.height = 'auto';
-        el.style.height = el.scrollHeight + 'px';
-      },
-      routerOpen: routerRows.length > 0, routerRows,
-      promptRadius: routerRows.length > 0 ? '0 0 6px 6px' : '6px',
       streamRef: (el) => { this._streamEl = el; },
       // Transcript scroll used to live here (Sprint 076 retired
       // the pane's dc-runtime scroll ref / onScroll bindings). The
@@ -2464,22 +2579,6 @@ class Component extends DCLogic {
       },
       studioOut: state.studioOut, studioOutColor: state.studioOutColor,
       sentLines: (fp && fp.sent) ? fp.sent.map(t => ({ text: t })) : [],
-      onPromptKey: (ev) => {
-        if (ev.key !== 'Enter') return;
-        if (ev.shiftKey) return;
-        ev.preventDefault();
-        const paneId = (fp && fp.id) || 1;
-        const pane = this.state.panes.find(x => x.id === paneId);
-        const v = ((pane && pane.pv) || '').trim();
-        if (!v) return;
-        this.setState(s => ({ panes: s.panes.map(x => x.id === paneId ? Object.assign({}, x, { pv: '' }) : x) }));
-        if (this._promptEl) { this._promptEl.value = ''; this._promptEl.style.height = 'auto'; }
-        const vm = window.__vm;
-        if (vm && typeof vm.setActive === 'function') vm.setActive(paneId);
-        const controller = vm && typeof vm.get === 'function' ? vm.get(paneId) : null;
-        if (controller && typeof controller.submitLine === 'function') controller.submitLine(v);
-        else if (vm && typeof vm.submitLine === 'function') vm.submitLine(v);
-      },
       panes, paneCols: state.colW.map(w => w.toFixed(3) + 'fr').join(' '), paneRows: state.rowW.map(w => w.toFixed(3) + 'fr').join(' '), focusedName: fp.name, focusedId: fp.id, fpLines: fp.lines || [],
       revealFlexL: state.revealL.toFixed(3) + ' 1 0%',
       revealGutterLeft: (state.revealL / (state.revealL + 1) * 100).toFixed(2) + '%',
@@ -2498,6 +2597,8 @@ class Component extends DCLogic {
       ...(() => {
         const row = panes.find(x => x.id === fp.id) || panes[0];
         return {
+          // UI sprint 141: the meta view's input bar is the focused pane's own bar.
+          fpRow: row,
           fpDot: row.dot, fpDotBg: row.dotBg,
           fpEditing: row.editing, fpNotEditing: row.notEditing, fpNameVal: row.nameVal,
           fpStartEdit: row.startEdit, fpUpdName: row.updName, fpNameKey: row.nameKey,
@@ -2508,7 +2609,12 @@ class Component extends DCLogic {
       // No workspace yet reads ⌥ —; a per-session sandbox has no path of its own and reads ⌥ sandbox.
       fpWsLabel: fp.unbound ? '⌥ —' : '⌥ ' + (fp.shape === 'worktree' ? 'substrate/' + (fp.name || 'main') : (fp.ws || 'sandbox')),
       splitRight: () => this._split('right'),
-      driverName: this._resolveDriverLabel(state, this._paneDriver(state, fp)), driverOpen: state.driverOpen,
+      driverName: (() => {
+        const d = this._paneDriver(state, fp) || '';
+        const label = this._resolveDriverLabel(state, d);
+        // On Auto the chip names the CLI only; the card says why (UI sprint 139).
+        return /^auto\b/.test(label.slice(String(d).toLowerCase().length).trim()) ? String(d).toLowerCase() : label;
+      })(), driverOpen: state.driverOpen,
       toggleDriverMenu: () => this.setState(s => ({ driverOpen: !s.driverOpen, wsOpen: false })),
       driverOptions: ['kimi-k2', 'deepseek-r1:8b', 'qwen3-coder:480b-cloud', 'nemotron-3-super', 'claude (cli)', 'gemini (cli)', 'deterministic'].map(m => ({
         label: m, color: m === fp.driver ? '#e2e5e9' : '#9aa0a8',

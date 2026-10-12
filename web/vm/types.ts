@@ -142,6 +142,9 @@ export interface Snapshot {
   sessionName: string | null;
   driver: string | null;
   bundleSlug: string | null;
+  /** UI sprint 143 (kernel K296): the Length and Tone positions; null is the default. */
+  length: string | null;
+  tone: string | null;
   workspacePath: string | null;
   workspaceShape: string | null;
   turnIndex: number;

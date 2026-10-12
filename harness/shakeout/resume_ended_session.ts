@@ -115,7 +115,7 @@ async function main(): Promise<void> {
     ).catch(() => die("attach did not replay the ended session's transcript"));
 
     // 4. Type through the real prompt input.
-    const prompt = win.locator('input[placeholder^="type to talk"]').first();
+    const prompt = win.locator('[data-input-bar]').first();
     await prompt.waitFor({ state: "visible", timeout: 15_000 });
     await prompt.click();
     await prompt.type(SECOND, { delay: 10 });

@@ -281,7 +281,7 @@ async function run(): Promise<void> {
     //    httpx` — if the bundled runtime is missing httpx (as it was
     //    on 2026-09-28), the daemon 500s here and the literal never
     //    appears in the transcript.
-    const prompt = win.locator('[placeholder^="type to talk"]').first();
+    const prompt = win.locator('[data-input-bar]').first();
     await prompt.waitFor({ state: "visible", timeout: 10_000 });
     mark("prompt_visible");
     await prompt.click();

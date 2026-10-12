@@ -8,6 +8,8 @@
 import * as React from "react";
 import type { TranscriptRow } from "../../vm";
 import { ProgressStream } from "./ProgressStream";
+import { defaultOpen } from "../../vm/tool_output_mode";
+import { useToolOutputMode } from "./useToolOutputMode";
 
 interface Props {
   call: TranscriptRow;                 // the ToolCall row
@@ -30,7 +32,9 @@ function statusColor(toolRunning: boolean, failed: boolean): string {
 // snapshot tick and the caret glyph would flip back to the closed
 // direction under the user. The map below outlives re-mounts and is
 // keyed by callId — the atom identity.
-const openByCallId: Map<string, boolean> = new Map();
+// Each entry keeps the toggle generation it was clicked under (UI sprint 140): a flip of the
+// expand/collapse-all toggle supersedes every earlier click.
+const openByCallId: Map<string, { open: boolean; generation: number }> = new Map();
 
 const ToolCardInner: React.FC<Props> = ({ call, result, progressText, progressEof, streamingShow, onDescend }) => {
   const toolRunning = !result;
@@ -38,14 +42,24 @@ const ToolCardInner: React.FC<Props> = ({ call, result, progressText, progressEo
   const callId = call.callId ?? "";
   // open state per call, not per recurring call id (UI sprint 101)
   const openKey = call.callKey ?? callId;
-  const seededOpen = openKey ? openByCallId.get(openKey) : undefined;
-  const initialOpen = seededOpen !== undefined ? seededOpen : toolRunning;
+  const toggle = useToolOutputMode();
+  const seeded = openKey ? openByCallId.get(openKey) : undefined;
+  const initialOpen = seeded !== undefined && seeded.generation === toggle.generation
+    ? seeded.open
+    : defaultOpen(toggle.mode, toolRunning);
   const [isOpen, setIsOpen] = React.useState<boolean>(initialOpen);
+  // A flip while this card is drawn opens or closes it at once.
+  const seenGeneration = React.useRef(toggle.generation);
+  React.useEffect(() => {
+    if (seenGeneration.current === toggle.generation) return;
+    seenGeneration.current = toggle.generation;
+    setIsOpen(defaultOpen(toggle.mode, toolRunning));
+  }, [toggle.generation, toggle.mode, toolRunning]);
   const onDetailsToggle = React.useCallback((event: React.SyntheticEvent<HTMLDetailsElement>) => {
     const next = event.currentTarget.open;
     setIsOpen(next);
-    if (openKey) openByCallId.set(openKey, next);
-  }, [openKey]);
+    if (openKey) openByCallId.set(openKey, { open: next, generation: toggle.generation });
+  }, [openKey, toggle.generation]);
 
   const toolName = call.toolName ?? "";
   const toolPreview = call.args?.[0] ?? "";

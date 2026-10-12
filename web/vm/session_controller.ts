@@ -24,6 +24,7 @@ import type {
 import type { SubstrateClient, Unsubscribe } from "./client";
 import { emit as sddEmit } from "./instrumentation/sdd";
 import { EnvelopeKind } from "./kinds";
+import { setToolOutputMode, toggleToolOutputMode } from "./tool_output_mode";
 import { SessionStatus, TaskStatus } from "./statuses.gen";
 import type { EnvelopeKindValue } from "./kinds";
 
@@ -97,6 +98,9 @@ export interface OpenSessionRequest {
   tools?: string[];
   name?: string;
   isolate?: boolean;
+  /** UI sprint 143 (kernel K296): the Length and Tone positions; absent is the default. */
+  length?: string;
+  tone?: string;
 }
 
 /** ACK shape POST /api/session returns; only fields the controller reads. */
@@ -107,6 +111,8 @@ interface OpenSessionAck {
   workspace?: string | null;
   workspace_shape?: string | null;
   driver_params?: Record<string, unknown> | null;
+  length?: string | null;
+  tone?: string | null;
 }
 
 interface ModelsRoster {
@@ -161,6 +167,8 @@ const EMPTY_SNAPSHOT: Snapshot = {
   // UI sprint 132: no bundle picked means "auto": the daemon gives the session its model's
   // default guidance level.
   bundleSlug: null,
+  length: null,
+  tone: null,
   workspacePath: null,
   workspaceShape: null,
   turnIndex: 0,
@@ -452,6 +460,10 @@ export class SessionController {
     if (request.workspaceShape) body.workspace_shape = request.workspaceShape;
     const bundle = request.bundle ?? this.snap.bundleSlug;
     if (bundle) body.bundle = bundle;
+    const length = request.length ?? this.snap.length;
+    if (length) body.length = length;
+    const tone = request.tone ?? this.snap.tone;
+    if (tone) body.tone = tone;
     if (request.tools) body.tools = request.tools;
     if (request.name) body.name = request.name;
     if (request.isolate) body.isolate = request.isolate;
@@ -624,6 +636,8 @@ export class SessionController {
       workspace_shape?: string | null;
       bundle?: string | null;
       status?: string | null;
+      length?: string | null;
+      tone?: string | null;
     }>(`/api/session/${encodeURIComponent(sessionId)}`);
     if (!result.ok) {
       this.patch({ lastError: `attach: ${result.detail}` });
@@ -640,6 +654,8 @@ export class SessionController {
       sessionName: manifest.name ?? null,
       driver: manifest.driver ?? this.snap.driver,
       bundleSlug: manifest.bundle ?? null,
+      length: manifest.length ?? null,
+      tone: manifest.tone ?? null,
       workspacePath: manifest.workspace ?? null,
       workspaceShape: manifest.workspace_shape ?? null,
       turnIndex: 0,
@@ -738,6 +754,15 @@ export class SessionController {
   /** Choose the bundle openSession will pass unless overridden. Null
    * clears the choice. Silent no-op after a session opens; the bundle
    * is fixed on the record at that point. */
+  /** UI sprint 143 (kernel K296): the Length and Tone positions for the session the bar opens.
+   * Silent no-op after a session opens: a change then is a PATCH, recorded as SessionChanged. */
+  pickControls(length: string | null, tone: string | null): void {
+    if (this.snap.sessionId) return;
+    // No signal of its own: the pick travels in POST /api/session and lands on the manifest and,
+    // as SessionStarted.length/tone and the `control` fragments, on the record.
+    this.patch({ length, tone });
+  }
+
   pickBundle(slug: string | null): void {
     if (this.snap.sessionId) return;
     this.patch({ bundleSlug: slug });
@@ -882,6 +907,9 @@ export class SessionController {
         names: ["dellm"], usage: "/dellm <text>",
         run: (rest) => this.sendTurn(rest || "Apply the dellm skill to your next reply.", { skill: "dellm" }),
       },
+      // UI sprint 140: fold or unfold every tool card, as ⌘E does. /fold flips; /unfold unfolds.
+      { names: ["fold"], usage: "/fold", run: () => { toggleToolOutputMode(); } },
+      { names: ["unfold"], usage: "/unfold", run: () => { setToolOutputMode("expanded"); } },
       { names: ["clear"], usage: "/clear", run: () => { this.patch({ transcript: [] }); } },
       {
         names: ["help", "?"], usage: "/help",

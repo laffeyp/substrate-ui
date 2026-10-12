@@ -872,6 +872,16 @@ Twelve PNGs at `captures/pixel-baseline-2026-09-23/`: six states (`empty`, `one_
 
 *Agent maintains. Last 10 increment closes; older roll into ## Built as compressed paragraphs.*
 
+### Release roadmap steps 6–10, the input bar, and asks written down (2026-10-11, evening)
+- **Step 6, the model chip is an indicator** (U139). No caret, no dropdown; a click opens a card: model, version, guidance, length, tone, "change it with /model". cursor-agent on Auto reads "cursor-agent", and the card says Auto was chosen by cursor-agent, which does not report the model: Cursor's stream init, `about` and `models` all say Auto. Gate `model_chip_indicator.ts`.
+- **Step 7, fold all tool output** (U140). ⌘E, `/fold` (flips) and `/unfold`; no control on screen (Architect). The setting lives on one global object in `web/vm/tool_output_mode.ts`, because `reveal_component.ts` is a separate esbuild bundle and a module variable would exist twice. Gate `tool_output_toggle.ts`.
+- **Step 8, one input bar** (U141). The panes view drew an `<input>` and the meta view a separate `<textarea>`, with two key handlers. The meta view now draws the panes view's bar. ⇧↵ new line, multi-line paste, growth to 40% of the window, ↑/↓ history, the input-method guard; hint "type to input · / for commands · ↵ to send". Gate `input_bar.ts`.
+- **Step 9, heading hints** (U142): tried, then taken out (Architect: not appropriate). Kept: "pick a model first" at a new, fainter text level, `--tx-hint`.
+- **Step 10, Length and Tone** (U143 with kernel K296). LENGTH and TONE lines under GUIDANCE; the tone pick starts the session; positions reach the manifest, `SessionStarted` and `control` fragments. Gate `length_tone_rows.ts`.
+- **Moved and added.** The picker sequence (old step 8, with U126) moved to after distribution. New before release: naming sessions, a new pane from meta returns to panes, new windows and the macOS menu bar, the records page's workspace style and its worktree copy (roadmap steps 15–18; OPEN-ITEMS 20–27). After distribution: child runs shown inside Substrate (new pane, depth along Z); Substrate makes the topology the user needs (the parallel swarm; composable flows).
+- **Found.** `resume_ended_session.ts` runs `dist-electron`'s package, not the source; the package is rebuilt before every gate run now. `structure_lists_producers` and `transcript_follow` pressed the old ⌃` and were fixed.
+- **Gates.** Electron 16/16 on a package built from the source; unit specs 37/37; UI Python 244. Installed at `/Applications/Substrate.app` (signed, not notarized).
+
 ### Release roadmap steps 3–5, and polish from the installed app (2026-10-11)
 - **Step 3, small fixes** (U134, U135; kernel K295). Committed and pushed: kernel `5dcffe88`; UI `3e46f96`, `7eded2a`.
 - **Step 4, topology audit.** Findings only, in `substrate/process/planning/AUDIT-2026-10-11-topologies.md`. No session has completed a topology run: across 86 sessions there were 3 `run_topology` calls, all failed. `list_topologies` offers 18 names and `run_topology` runs 3. Verdicts: session real; code_review, best_of_n_verified, research_sweep partly real; pair_coding broken; seven demos toys. The Architect moved on; the roadmap's drop-or-make-real rule is still open.
@@ -881,7 +891,8 @@ Twelve PNGs at `captures/pixel-baseline-2026-09-23/`: six states (`empty`, `one_
 - **Structure lens** (U137). Checked against the record: accurate, but views and the end policy were missing; added. Grid tables; the gate compares the page to the record's `topology_graph`. U138 (closed): seven sections (events, producers, triggers, routes, views, ends, run), each defined on hover; events show what emits them, including `outside` and `runtime`; the lens reflows below 720px of panel. `transcript_follow.ts` had kept the old ⌃` key and now presses ⌘M.
 - **I/O core/expanded toggle** added under "After distribution".
 - **Installed.** `/Applications/Substrate.app` rebuilt from the working tree after each change (signed, not notarized); previous builds in the Trash. Electron gates 12 of 12 on the source build after U138.
-- **Not committed:** everything after step 3, in both repos.
+- **Correction.** The `fragment_source_failed · role · FileNotFoundError('reviewer.md')` row in `both_session_shapes` is the gate's own fixture (`harness/shakeout/fixtures/write_session_shapes.py` writes that `SessionWarning` so the gate can check the warning row). No role file is missing.
+- **Child runs inside Substrate** (new pane; depth along Z) recorded as a future direction: roadmap "After distribution" and OPEN-ITEMS item 19.
 
 ### Guidance follow-through and the workspace bar (2026-10-10, late night)
 - **Guidance under the model column.** The GUIDANCE line moved from full width to the bottom of the model column; the workspace column holds a blank line of the same height. Picking a model opens the line, and picking a level (`auto` included) starts the session. Keys: ← → along the line, ↵ starts, esc or ↑ goes back to the models. `bindPaneAsUser` picks `auto`. Commit `6359ffa`.

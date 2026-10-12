@@ -80,7 +80,13 @@ export async function bindPaneAsUser(win: Page, model?: string): Promise<void> {
   // the model, and picking it starts the session.
   await win.locator('[data-guidance-half] [data-guidance-row="auto"][data-lit="1"]').first().waitFor({ state: "visible", timeout: 15_000 });
   await win.locator('[data-guidance-row="auto"]').first().click();
-  await win.locator('[placeholder^="type to talk"]').first().waitFor({ state: "visible", timeout: 15_000 });
+  // UI sprint 143: LENGTH and TONE follow; the defaults (normal, neutral) write no text, and the
+  // tone pick starts the session.
+  await win.locator('[data-length-half] [data-length-row="normal"][data-lit="1"]').first().waitFor({ state: "visible", timeout: 15_000 });
+  await win.locator('[data-length-row="normal"]').first().click();
+  await win.locator('[data-tone-half] [data-tone-row="neutral"][data-lit="1"]').first().waitFor({ state: "visible", timeout: 15_000 });
+  await win.locator('[data-tone-row="neutral"]').first().click();
+  await win.locator('[data-input-bar]').first().waitFor({ state: "visible", timeout: 15_000 });
 }
 
 /** After a window reload, wait for pane 1 to reattach `sessionId` by itself. The window keeps the

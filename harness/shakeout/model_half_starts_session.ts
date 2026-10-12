@@ -41,7 +41,7 @@ async function main(): Promise<void> {
 
     await model.click();
     await win.waitForTimeout(300);
-    if (await win.locator('[placeholder^="type to talk"]').first().isVisible()) {
+    if (await win.locator('[data-input-bar]').first().isVisible()) {
       throw new Error("a click on a greyed model row started a session");
     }
 
@@ -50,7 +50,7 @@ async function main(): Promise<void> {
     if (shots) await win.screenshot({ path: join(shots, "2-armed.png") });
 
     await model.click();
-    const prompt = win.locator('[placeholder^="type to talk"]').first();
+    const prompt = win.locator('[data-input-bar]').first();
     await prompt.waitFor({ state: "visible", timeout: 15_000 });
     await prompt.click();
     await win.keyboard.type("hello");
