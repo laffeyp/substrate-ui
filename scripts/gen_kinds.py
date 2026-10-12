@@ -120,8 +120,10 @@ def render_statuses() -> str:
 
 
 def render_controls() -> str:
-    """`LengthPosition` and `TonePosition` (session vocabulary § T) as `const` objects, and each
-    control's default, so the workspace bar offers exactly the positions the daemon accepts."""
+    """`LengthPosition` and `TonePosition` (session vocabulary § T) as `const` objects, each
+    control's default, and the guidance levels with their bundles (§ R.1), so the workspace bar
+    and the slash commands offer exactly what the daemon accepts."""
+    from substrate.topologies.session.model_class import LEVEL_BUNDLES
     from substrate.topologies.session.vocabulary import (
         LENGTH_DEFAULT,
         TONE_DEFAULT,
@@ -149,6 +151,13 @@ def render_controls() -> str:
     lines += [
         f'export const LENGTH_DEFAULT = LengthPosition.{LENGTH_DEFAULT.name};',
         f'export const TONE_DEFAULT = TonePosition.{TONE_DEFAULT.name};',
+        "",
+        # UI sprint 161 (§ R.1, § U): each guidance level and the bundle that carries it.
+        "export const GUIDANCE_LEVEL_BUNDLES = {",
+        *[f'  "{level.value}": "{bundle}",' for level, bundle in LEVEL_BUNDLES.items()],
+        "} as const;",
+        "",
+        "export type GuidanceLevelValue = keyof typeof GUIDANCE_LEVEL_BUNDLES;",
         "",
     ]
     return "\n".join(lines)

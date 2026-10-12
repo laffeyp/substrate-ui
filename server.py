@@ -50,6 +50,7 @@ from substrate.topologies.session.vocabulary import LENGTH_DEFAULT, TONE_DEFAULT
 from substrate.adapters.harness_streams import SUBSTRATE_MCP_SERVER
 from substrate.topologies.session.mcp_channel import handle_jsonrpc
 from substrate.topologies.session.model_class import (
+    GuidanceLevel,
     class_variant,
     classify,
     guidance_bundle,
@@ -3846,6 +3847,7 @@ class Handler(BaseHTTPRequestHandler):
             "tools",
             "per_turn",
             "bundle",
+            "guidance",  # UI sprint 161: a level, set as its bundle (vocabulary § U)
             "driver_params",
             *Control,
         }
@@ -3932,6 +3934,25 @@ class Handler(BaseHTTPRequestHandler):
                 return
             except ValueError as exc:  # a name that is not one path component (substrate.naming)
                 self._error(400, str(exc))
+                return
+        if "guidance" in body:
+            # UI sprint 161 (vocabulary § U): a guidance level is its bundle. `auto` is the model's
+            # default level, resolved as at open; the bundle path records SessionChanged and
+            # writes the level's text again at the next turn.
+            level_raw = body["guidance"]
+            if not isinstance(level_raw, str) or not level_raw:
+                self._error(400, f"guidance must be a level name; got {level_raw!r}")
+                return
+            try:
+                level = (
+                    guidance_level(_model_class(updated.driver))
+                    if level_raw == "auto"
+                    else level_raw
+                )
+                updated = self.app.registry.set_bundle(session_id, guidance_bundle(level))
+            except ValueError:
+                levels = ", ".join(["auto", *(str(lv) for lv in GuidanceLevel)])
+                self._error(400, f"unknown guidance level {level_raw!r}; one of {levels}")
                 return
         if any(control in body for control in Control):
             # Kernel K296: either control; null returns it to the default. The next turn records

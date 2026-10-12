@@ -22,3 +22,12 @@ export type TonePositionValue = typeof TonePosition[keyof typeof TonePosition];
 
 export const LENGTH_DEFAULT = LengthPosition.NORMAL;
 export const TONE_DEFAULT = TonePosition.NEUTRAL;
+
+export const GUIDANCE_LEVEL_BUNDLES = {
+  "harness": "harness",
+  "low": "standard-low",
+  "medium": "standard-medium",
+  "high": "standard",
+} as const;
+
+export type GuidanceLevelValue = keyof typeof GUIDANCE_LEVEL_BUNDLES;

@@ -37,7 +37,7 @@ import {
 import { isToolCallRow, isToolResultRow } from "./vm/types";
 import { describeEventTime, eventTimes, formatClock, formatElapsed } from "./reveal/timeline";
 import { toggleToolOutputMode } from "./vm/tool_output_mode";
-import { LENGTH_DEFAULT, LengthPosition, TONE_DEFAULT, TonePosition } from "./vm/controls.gen";
+import { GUIDANCE_LEVEL_BUNDLES, LENGTH_DEFAULT, LengthPosition, TONE_DEFAULT, TonePosition } from "./vm/controls.gen";
 
 // UI sprint 132 (kernel K288, session vocabulary § R): the guidance levels the bar offers, each
 // with the bundle that carries it. `auto` names none, so the daemon picks the model's default.
@@ -56,12 +56,12 @@ const STRUCTURE_DEFS = {
   deterministic: 'A deterministic producer gives the same events for the same input, so replay can run it again.',
 };
 
+// UI sprint 161: the levels and their bundles are generated from the kernel (vm/controls.gen.ts);
+// only the one-line notes are the UI's own.
+const GUIDANCE_META = { harness: 'loop rules only', low: 'one line a rule', medium: 'rules, no examples', high: 'the full standard' };
 const GUIDANCE_OPTIONS = [
   { level: null, bundle: null, label: 'auto', meta: 'follows the model' },
-  { level: 'harness', bundle: 'harness', label: 'harness', meta: 'loop rules only' },
-  { level: 'low', bundle: 'standard-low', label: 'low', meta: 'one line a rule' },
-  { level: 'medium', bundle: 'standard-medium', label: 'medium', meta: 'rules, no examples' },
-  { level: 'high', bundle: 'standard', label: 'high', meta: 'the full standard' },
+  ...Object.entries(GUIDANCE_LEVEL_BUNDLES).map(([level, bundle]) => ({ level, bundle, label: level, meta: GUIDANCE_META[level] || '' })),
 ];
 // UI sprint 143 (kernel K296, session vocabulary § T): the Length and Tone lines under GUIDANCE.
 // The positions and defaults are generated from the kernel (vm/controls.gen.ts); only the one-line
@@ -188,6 +188,14 @@ class Component extends DCLogic {
   _mdInlines(text) { return mdInlines(text); }
   _mdBlocks(text) { return mdBlocks(text); }
   _liveActivity(snap) { return liveActivity(snap); }
+  _controlsTail(paneId, snap) {
+    if (!snap || !snap.sessionId) return '';
+    const vm = window.__vm;
+    const ctl = vm && typeof vm.get === 'function' ? vm.get(paneId) : null;
+    const level = ctl && typeof ctl.guidanceLevel === 'function' ? ctl.guidanceLevel() : null;
+    const guidance = level || snap.bundleSlug || 'none';
+    return ' · ' + [guidance, snap.length || LENGTH_DEFAULT, snap.tone || TONE_DEFAULT].join(' · ');
+  }
   _liveBindingsFor(paneId, state) {
     // Sprint 076 retirement: dc-runtime no longer renders transcript
     // rows. This helper now surfaces the activity strip alone (the
@@ -200,7 +208,8 @@ class Component extends DCLogic {
       activityTurnWord: activity ? activity.turnWord : '',
       activityTurnColor: activity ? activity.turnColor : '#4a4e55',
       activityRest: activity ? activity.hasRest : false,
-      activityRestText: activity ? activity.restText : '',
+      // UI sprint 161: the session's guidance, length and tone end the line (§ U).
+      activityRestText: activity ? activity.restText + this._controlsTail(paneId, snap) : '',
       activityColor: activity ? activity.color : '#62676f',
       activityPulseClass: activity && activity.pulseOn ? 'act-pulse' : '',
       // UI sprint 105: one line per running bash background task, with a stop link (Claude
