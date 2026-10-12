@@ -60,6 +60,18 @@
 
 ## Entries
 
+### 2026-10-12 — A rerun-to-green, and a gate that checked the event instead of the effect
+
+**Context.** U162–U166 (slash commands) and the postmortem on mid-session changes.
+
+**What got in the way.**
+- **A failure called a flake.** `left_folds_workspace` failed once in a run of eleven gates and passed three reruns. The Architect: "There's no such thing as a flake in a test. It's just an error." The cause was the gate's fixed 120 ms sleep before reading the screen; under load it read before the redraw. Fifteen such sleeps in eleven gates now wait for a condition or two animation frames.
+- **A gate checked that something was recorded, not that it worked.** `controls_mid_session` (U161) asserted the manifest, the bar line and the `SessionChanged` event, and passed while every change reached the model a message late. The effect lives in the prompt for the next message, which no gate read.
+
+**What the kit could say.** A one-off failure has a cause; a rerun proves nothing. And a gate for a feature that changes what a model receives reads what the model received.
+
+---
+
 ### 2026-10-12 — A gate that measured the wrong thing, and two keys with two owners
 
 **Context.** Release steps 12 and 15–17 closed with a card and a red-then-green gate each. Then the Architect called out the workspace picker from the installed app, and it took three cards (148, 150, 151) to get right.
