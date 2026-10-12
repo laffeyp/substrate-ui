@@ -379,7 +379,7 @@ def _load_daemon_config(config_path: Path | None = None) -> dict[str, Any]:
         with path.open("rb") as fp:
             data = tomllib.load(fp)
     except (OSError, tomllib.TOMLDecodeError) as exc:
-        print(f"daemon config at {path}: {type(exc).__name__}: {exc}; using defaults", flush=True)
+        print(f"daemon config at {path}: {api.describe_error(exc)}; using defaults", flush=True)
         return defaults
     session_section = data.get("session") if isinstance(data.get("session"), dict) else {}
     cap = session_section.get("turn_queue_cap", defaults["turn_queue_cap"])
@@ -2436,7 +2436,7 @@ class Handler(BaseHTTPRequestHandler):
                 return
             self._error(404, f"no control endpoint {path!r}")
         except Exception as exc:  # noqa: BLE001 — top-level do_POST boundary: a runaway inside any endpoint must become a JSON 500, not kill the daemon thread.
-            self._error(500, f"{type(exc).__name__}: {exc}")
+            self._error(500, api.describe_error(exc))
 
     def _clear_runs(self) -> None:
         """Prune the accumulating session runs under runs/ — the hash-suffixed launch_/build_/resume_
@@ -2749,7 +2749,7 @@ class Handler(BaseHTTPRequestHandler):
             self._error(400, str(exc))
             return
         except Exception as exc:  # noqa: BLE001 — the handler boundary: anything else is a 500 naming its type
-            self._error(500, f"{type(exc).__name__}: {exc}")
+            self._error(500, api.describe_error(exc))
             return
         # Sprint 086 — remember this workspace on session open so the
         # Records surface can offer it as a bindable row later.
@@ -2953,7 +2953,7 @@ class Handler(BaseHTTPRequestHandler):
                 )
                 return
             except Exception as exc:  # noqa: BLE001 — the handler boundary: anything else is a 500 naming its type
-                self._error(500, f"{type(exc).__name__}: {exc}")
+                self._error(500, api.describe_error(exc))
                 return
             # Return the record's tail seq so the caller can page /events from there.
             final_seq = _tail_seq(root_after)
@@ -3062,7 +3062,7 @@ class Handler(BaseHTTPRequestHandler):
             )
             return
         except Exception as exc:  # noqa: BLE001 — the handler boundary: anything else is a 500 naming its type
-            self._error(500, f"{type(exc).__name__}: {exc}")
+            self._error(500, api.describe_error(exc))
             return
         final_seq = _tail_seq(root_after)
         self._json(
@@ -3504,7 +3504,7 @@ class Handler(BaseHTTPRequestHandler):
             topology_factory = builder(self.app, resolved, folder)
         except Exception as exc:  # noqa: BLE001 — application builder can raise anything a topology constructor does; malformed inputs → 400 naming the class.
             shutil.rmtree(folder, ignore_errors=True)
-            self._error(400, f"{type(exc).__name__}: {exc}")
+            self._error(400, api.describe_error(exc))
             return
 
         run_id = f"s_topo_{uuid.uuid4().hex[:20]}"
@@ -3523,7 +3523,7 @@ class Handler(BaseHTTPRequestHandler):
                     api.Runtime(record_root).run(topology_factory, name=application_name)
                 )
             except Exception as exc:  # noqa: BLE001 — topology run boundary: any Producer/View failure surfaces as HTTP 500 with the class name.
-                self._error(500, f"{type(exc).__name__}: {exc}")
+                self._error(500, api.describe_error(exc))
                 return
             finally:
                 shutil.rmtree(folder, ignore_errors=True)
@@ -3554,7 +3554,7 @@ class Handler(BaseHTTPRequestHandler):
                 traceback.print_exc()
                 # UI sprint 102: a run that raised left no RunFinalised, and the status poll
                 # read "running" forever. The error is kept for it to report.
-                run_handle["error"] = f"{type(exc).__name__}: {exc}"
+                run_handle["error"] = api.describe_error(exc)
             finally:
                 shutil.rmtree(folder, ignore_errors=True)
 
@@ -3692,7 +3692,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             builder_manifest, reviewer_manifest = builder(self.app.registry, resolved)
         except Exception as exc:  # noqa: BLE001 — composite builder can raise anything a topology constructor does; malformed inputs → 400 naming the class.
-            self._error(400, f"{type(exc).__name__}: {exc}")
+            self._error(400, api.describe_error(exc))
             return
         self._json(
             {
@@ -3808,7 +3808,7 @@ class Handler(BaseHTTPRequestHandler):
             )
             return
         except Exception as exc:  # noqa: BLE001 — bridge surfaces the class + text
-            self._error(500, f"{type(exc).__name__}: {exc}")
+            self._error(500, api.describe_error(exc))
             return
 
         self._json(
@@ -4010,7 +4010,7 @@ class Handler(BaseHTTPRequestHandler):
                 return
             self._error(404, f"no patch endpoint {path!r}")
         except Exception as exc:  # noqa: BLE001 — top-level do_PATCH boundary: same shape as do_POST — never let a per-endpoint exception kill the daemon thread.
-            self._error(500, f"{type(exc).__name__}: {exc}")
+            self._error(500, api.describe_error(exc))
 
     def do_DELETE(self) -> None:  # noqa: N802 — sprint 214b: DELETE /api/session/<id>
         if self._refuse_foreign_host():
@@ -4031,7 +4031,7 @@ class Handler(BaseHTTPRequestHandler):
                 return
             self._error(404, f"no delete endpoint {path!r}")
         except Exception as exc:  # noqa: BLE001 — top-level do_DELETE boundary: same shape as do_POST / do_PATCH.
-            self._error(500, f"{type(exc).__name__}: {exc}")
+            self._error(500, api.describe_error(exc))
 
     def do_GET(self) -> None:  # noqa: N802
         if self._refuse_foreign_host():
@@ -4192,7 +4192,7 @@ class Handler(BaseHTTPRequestHandler):
                 try:
                     self._json(_worktree_diff(Path(wt)))
                 except Exception as exc:  # noqa: BLE001 — not a worktree / git issue -> typed error
-                    self._json({"error": str(exc), "diff": "", "files": []})
+                    self._json({"error": api.describe_error(exc), "diff": "", "files": []})
                 return
             if path == "/api/assays":
                 self._json(_assays_index())
@@ -4218,7 +4218,7 @@ class Handler(BaseHTTPRequestHandler):
             # do NOT leak a full traceback (absolute paths, internals) in the response body; the
             # typed name + message is enough for the client. Log the traceback server-side instead.
             traceback.print_exc()
-            self._error(500, f"{type(exc).__name__}: {exc}")
+            self._error(500, api.describe_error(exc))
 
     def _api_record(self, rest: str) -> None:
         parts = rest.split("/")

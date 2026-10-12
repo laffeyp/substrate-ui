@@ -1436,7 +1436,12 @@ function summariseModelError(raw: string): string {
     .replace(/\\n/g, " ")
     .replace(/\s+/g, " ")
     .trim();
-  return stripped.length > 200 ? stripped.slice(0, 200) + "…" : stripped;
+  if (stripped.length <= 200) return stripped;
+  // UI sprint 160: an OSError ends with the path it failed on (`…: '<path>'`); the cap shortens the
+  // text before it and keeps the path whole, since the path is what the reader acts on.
+  const os = stripped.match(/^(.*): '([^']+)'$/s);
+  if (os) return `${os[1].length > 160 ? os[1].slice(0, 160) + "…" : os[1]}: '${os[2]}'`;
+  return stripped.slice(0, 200) + "…";
 }
 
 
