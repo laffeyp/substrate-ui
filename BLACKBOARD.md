@@ -872,6 +872,17 @@ Twelve PNGs at `captures/pixel-baseline-2026-09-23/`: six states (`empty`, `one_
 
 *Agent maintains. Last 10 increment closes; older roll into ## Built as compressed paragraphs.*
 
+### Release roadmap steps 3–5, and polish from the installed app (2026-10-11)
+- **Step 3, small fixes** (U134, U135; kernel K295). Committed and pushed: kernel `5dcffe88`; UI `3e46f96`, `7eded2a`.
+- **Step 4, topology audit.** Findings only, in `substrate/process/planning/AUDIT-2026-10-11-topologies.md`. No session has completed a topology run: across 86 sessions there were 3 `run_topology` calls, all failed. `list_topologies` offers 18 names and `run_topology` runs 3. Verdicts: session real; code_review, best_of_n_verified, research_sweep partly real; pair_coding broken; seven demos toys. The Architect moved on; the roadmap's drop-or-make-real rule is still open.
+- **Step 5, one top bar** (U136). One bar in every view shows the focused pane; pane headers are gone. Gate `one_top_bar.ts` replaces `split_pane_header_inset.ts`.
+- **No default model.** A new pane names no driver; the chip hides until a pick; `openSession` refuses without one. Gate `no_default_model.ts`, red on the old code.
+- **Meta and panes.** The toggle reads "meta" / "panes"; ⌘M toggles; the Window menu's Minimize gave up ⌘M and stays clickable.
+- **Structure lens** (U137). Checked against the record: accurate, but views and the end policy were missing; added. Grid tables; the gate compares the page to the record's `topology_graph`. U138 (closed): seven sections (events, producers, triggers, routes, views, ends, run), each defined on hover; events show what emits them, including `outside` and `runtime`; the lens reflows below 720px of panel. `transcript_follow.ts` had kept the old ⌃` key and now presses ⌘M.
+- **I/O core/expanded toggle** added under "After distribution".
+- **Installed.** `/Applications/Substrate.app` rebuilt from the working tree after each change (signed, not notarized); previous builds in the Trash. Electron gates 12 of 12 on the source build after U138.
+- **Not committed:** everything after step 3, in both repos.
+
 ### Guidance follow-through and the workspace bar (2026-10-10, late night)
 - **Guidance under the model column.** The GUIDANCE line moved from full width to the bottom of the model column; the workspace column holds a blank line of the same height. Picking a model opens the line, and picking a level (`auto` included) starts the session. Keys: ← → along the line, ↵ starts, esc or ↑ goes back to the models. `bindPaneAsUser` picks `auto`. Commit `6359ffa`.
 - **The attribution gate** (`test_driver_profile_120.py`) skips each level's own "No model attribution in git" section; it had flagged medium's rule for naming the footer it forbids. Commit `a59d6a0`.

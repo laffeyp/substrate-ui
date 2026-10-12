@@ -95,7 +95,17 @@ function buildTemplate(getWin) {
         { role: "toggleDevTools" },
       ],
     },
-    { role: "windowMenu" },
+    // The Window menu without Minimize's ⌘M: ⌘M toggles meta and panes (renderer keydown).
+    // Minimize stays here, by click.
+    {
+      role: "window",
+      submenu: [
+        { label: "Minimize", click: () => { const w = getWin(); if (w && !w.isDestroyed()) w.minimize(); } },
+        { role: "zoom" },
+        { type: "separator" },
+        { role: "front" },
+      ],
+    },
     {
       role: "help",
       submenu: [

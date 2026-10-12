@@ -2175,11 +2175,39 @@ def _io(events: list[dict[str, object]]) -> dict[str, object]:
     }
 
 
+def _topology_graph(events: list[dict[str, Any]]) -> dict[str, Any]:
+    """The record's structure (`api.topology_graph`), plus what the structure lens needs and the
+    manifest projection leaves out (UI sprint 138): the kinds written from outside the topology,
+    and the RunStarted manifest's exports, baseline and config.
+
+    `outside` is read from the record, for any topology: a kind some trigger subscribes to that no
+    producer emits, or a kind the record holds with no producer (the app's `inject_event` and a
+    resume's input). Lifecycle kinds (`substrate.*`) are the runtime's and are left out."""
+    graph = _builtins(api.topology_graph(events))
+    assert isinstance(graph, dict)
+    emitted = {k for p in graph.get("producers", []) for k in p.get("emits", [])}
+    subscribed = {k for t in graph.get("triggers", []) for k in t.get("on", [])}
+    unproduced = {
+        str(e.get("kind"))
+        for e in events
+        if e.get("producer") is None and not str(e.get("kind", "")).startswith("substrate.")
+    }
+    outside = {k for k in subscribed if k not in emitted} | unproduced
+    graph["outside"] = sorted(k for k in outside if not k.startswith("substrate."))
+    started = next((e for e in events if e.get("kind") == api.RUN_STARTED), None)
+    payload = (started.get("payload") or {}) if started else {}
+    topology = payload.get("topology") or {}
+    graph["exports"] = topology.get("exports") or []
+    graph["baseline"] = payload.get("baseline") or {}
+    graph["config"] = payload.get("config") or {}
+    return graph
+
+
 # route name -> function(events) -> JSON-able
 _PROJECTIONS = {
     "events": lambda ev: ev,
     "run_graph": lambda ev: _builtins(api.run_graph(ev)),
-    "topology_graph": lambda ev: _builtins(api.topology_graph(ev)),
+    "topology_graph": _topology_graph,
     "summary": lambda ev: _builtins(api.narration_summary(ev)),
     "narrate": lambda ev: [_builtins(line) for line in api.narrate(ev)],
     "narrate_full": lambda ev: [_builtins(line) for line in api.narrate(ev, lifecycle=True)],

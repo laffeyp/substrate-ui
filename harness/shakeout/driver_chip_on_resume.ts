@@ -9,7 +9,8 @@
 //   1. bind pane 1 and open a session on `deterministic` (not the roster default);
 //   2. reload the window: the pane reattaches the session from the URL and has no picked
 //      driver, as after a restart;
-//   3. assert: the pane chip names `deterministic`, not the default.
+//   3. assert: the top bar's driver chip, which shows the focused pane, names `deterministic`,
+//      not the default (UI sprint 136: panes carry no bar of their own).
 
 import { _electron as electron } from "playwright";
 import { bindPaneAsUser, launchArgs, waitForApp, waitForReattached } from "./lib/electron";
@@ -26,7 +27,7 @@ type Vm = {
 };
 
 async function chipText(win: import("playwright").Page): Promise<string> {
-  const chip = win.locator('[data-dropdown-region="driver-pane"] > span').first();
+  const chip = win.locator('[data-dropdown-region="driver"] > span').first();
   await chip.waitFor({ state: "visible", timeout: 15_000 });
   return (await chip.innerText()).replace("▾", "").trim();
 }

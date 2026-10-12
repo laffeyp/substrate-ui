@@ -110,9 +110,7 @@ async function turn(win: Page): Promise<void> {
 
 async function toggleView(win: Page): Promise<void> {
   const revealed = await win.evaluate(() => document.querySelectorAll('[data-vm-transcript-mount="reveal"]').length > 0);
-  await win.keyboard.down("Control");
-  await win.keyboard.press("`");
-  await win.keyboard.up("Control");
+  await win.keyboard.press("Meta+m"); // ⌘M toggles meta and panes
   await win.waitForFunction(
     (was) => (document.querySelectorAll('[data-vm-transcript-mount="reveal"]').length > 0) !== was,
     revealed,

@@ -101,9 +101,10 @@ function boot(): void {
   // electron/main.js loadURL) flips body[data-electron="1"]. A single
   // scoped stylesheet then hides the decorative dot triads (Chromium
   // draws the real traffic-lights over that same inset under
-  // titleBarStyle:'hiddenInset'), left-pads the four top-bar
-  // containers by 78px to yield the inset, and marks the containers
-  // draggable while keeping interactive descendants no-drag.
+  // titleBarStyle:'hiddenInset'), left-pads the top bar
+  // by 78px to yield the inset, and marks the bar draggable while
+  // keeping interactive descendants no-drag (the name renames on double-click, which a drag
+  // region would take as a window zoom).
   if (params.get("electron") === "1") {
     document.body.setAttribute("data-electron", "1");
     const style = document.createElement("style");
@@ -111,12 +112,11 @@ function boot(): void {
     style.textContent = [
       'body[data-electron="1"] [data-fake-lights]{display:none!important}',
       'body[data-electron="1"] [data-top-bar]{padding-left:78px!important;min-height:38px!important;box-sizing:border-box!important;-webkit-app-region:drag}',
-      // A split pane sits below the window's own bar, with no window buttons above it.
-      'body[data-electron="1"] [data-top-bar][data-corner="0"]{padding-left:10px!important}',
       'body[data-electron="1"] [data-top-bar] input,',
       'body[data-electron="1"] [data-top-bar] button,',
       'body[data-electron="1"] [data-top-bar] [style*="cursor:pointer"],',
-      'body[data-electron="1"] [data-top-bar] [style*="cursor: pointer"]{-webkit-app-region:no-drag}',
+      'body[data-electron="1"] [data-top-bar] [style*="cursor: pointer"],',
+      'body[data-electron="1"] [data-top-bar] [style*="cursor:text"]{-webkit-app-region:no-drag}',
     ].join("\n");
     document.head.appendChild(style);
   }

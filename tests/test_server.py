@@ -81,6 +81,9 @@ def test_topology_graph_endpoint_nodes_and_edges(base: str) -> None:
     assert any(p["kind"] == "judge" and not p["is_initial"] for p in g["producers"])
     adj = next(t for t in g["triggers"] if t["id"] == "adjudicate")
     assert adj["starts"] == "judge" and adj["on"] == ["CritiquePosted"]
+    # UI sprint 138: no kind in code_review comes from outside the topology; the manifest's
+    # exports, baseline and config ride along.
+    assert g["outside"] == [] and g["exports"] == [] and isinstance(g["config"], dict)
 
 
 def test_summary_endpoint_is_honest(base: str) -> None:
