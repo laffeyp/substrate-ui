@@ -29,8 +29,9 @@ export interface ScrollAnchor {
   attachTo: (mount: HTMLElement | null) => void;
 }
 
-/** Distance from the bottom, in px, that still counts as "at the bottom". */
-export const STICK_PX = 24;
+// Distance from the bottom, in px, that still counts as "at the bottom" (shared with the stream).
+import { STICK_PX } from "../scroll_stick";
+export { STICK_PX };
 
 interface Saved { scrollTop: number; following: boolean }
 const savedByKey = new Map<string, Saved>();
