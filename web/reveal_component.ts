@@ -87,6 +87,7 @@ import { liveActivity } from "./reveal/activity";
 import { followBottom } from "./reveal/follow_bottom";
 import { sessionStatusLook } from "./reveal/session_status";
 import { buildLanguageLens, LANGUAGE_STREAM_TABS, LANGUAGE_VIEW_TABS, LanguageStreamId, LanguageViewMode } from "./reveal/language_lens";
+import { settingsTail } from "./reveal/settings_tail";
 
 
 class Component extends DCLogic {
@@ -191,13 +192,17 @@ class Component extends DCLogic {
   _mdInlines(text) { return mdInlines(text); }
   _mdBlocks(text) { return mdBlocks(text); }
   _liveActivity(snap) { return liveActivity(snap); }
-  _controlsTail(paneId, snap) {
-    if (!snap || !snap.sessionId) return '';
+  // UI sprints 161, 172: the bar line ends with the settings, each named, and each language shift
+  // since the last change written after the setting its measure answers to.
+  _tailSegs(paneId, snap) {
+    if (!snap || !snap.sessionId) return [];
     const vm = window.__vm;
     const ctl = vm && typeof vm.get === 'function' ? vm.get(paneId) : null;
     const level = ctl && typeof ctl.guidanceLevel === 'function' ? ctl.guidanceLevel() : null;
-    const guidance = level || snap.bundleSlug || 'none';
-    return ' · ' + [guidance, snap.length || LENGTH_DEFAULT, snap.tone || TONE_DEFAULT].join(' · ');
+    return settingsTail({
+      guidance: level || snap.bundleSlug || 'none', length: snap.length || LENGTH_DEFAULT, tone: snap.tone || TONE_DEFAULT,
+      language: snap.language || null, off: !!snap.languageOff, clearedSeq: snap.languageClearedSeq ?? -1,
+    }).map(sg => ({ ...sg, deco: sg.shift ? 'underline dotted' : 'none', cursor: sg.shift ? 'help' : 'inherit', shiftAttr: sg.shift ? sg.text : '' }));
   }
   _liveBindingsFor(paneId, state) {
     // Sprint 076 retirement: dc-runtime no longer renders transcript
@@ -212,7 +217,8 @@ class Component extends DCLogic {
       activityTurnColor: activity ? activity.turnColor : '#4a4e55',
       activityRest: activity ? activity.hasRest : false,
       // UI sprint 161: the session's guidance, length and tone end the line (§ U).
-      activityRestText: activity ? activity.restText + this._controlsTail(paneId, snap) : '',
+      activityRestText: activity ? activity.restText : '',
+      tailSegs: activity ? this._tailSegs(paneId, snap) : [],
       activityColor: activity ? activity.color : '#62676f',
       activityPulseClass: activity && activity.pulseOn ? 'act-pulse' : '',
       // UI sprint 105: one line per running bash background task, with a stop link (Claude
@@ -888,7 +894,9 @@ class Component extends DCLogic {
       // turn in the stream (the selection is the seq, shared with stream+graph).
       {
         const s = this.state;
-        const el = document.activeElement;
+        // Judge the key by where it was typed: the Enter that runs `/language` opens the lens and
+        // unmounts the input box before this handler runs.
+        const el = e.target;
         const typing = !!(el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable));
         const turns = this._langTurns || [];
         if (s.revealed && s.mode === GraphMode.Language && !s.surface && !typing && turns.length

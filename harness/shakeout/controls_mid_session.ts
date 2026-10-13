@@ -50,10 +50,10 @@ async function main(): Promise<void> {
     await bindPaneAsUser(win);
     await turn(win, "hello");
     const start = await win.evaluate(BAR) as string;
-    if (!/ · normal · neutral$/.test(start)) throw new Error(`the bar line reads ${JSON.stringify(start)}`);
+    if (!/ · guidance \S+ · length normal · tone neutral$/.test(start)) throw new Error(`the bar line reads ${JSON.stringify(start)}`);
 
     await type(win, "/tone blunt");
-    await win.waitForFunction(`/ · blunt$/.test(${BAR})`, undefined, { timeout: 5_000 })
+    await win.waitForFunction(`/ · tone blunt$/.test(${BAR})`, undefined, { timeout: 5_000 })
       .catch(async () => { throw new Error(`after /tone blunt the bar line reads ${JSON.stringify(await win.evaluate(BAR))}`); });
     if ((await manifest(win)).tone !== "blunt") throw new Error(`the manifest's tone is ${JSON.stringify((await manifest(win)).tone)}`);
     await turn(win, "again");
@@ -61,7 +61,7 @@ async function main(): Promise<void> {
     if (!tone || tone.old !== "neutral" || tone.new !== "blunt") throw new Error(`the record's changes: ${JSON.stringify(await changes(win))}`);
 
     await type(win, "/guidance low");
-    await win.waitForFunction(`/ · low · normal · blunt$/.test(${BAR})`, undefined, { timeout: 5_000 })
+    await win.waitForFunction(`/ · guidance low · length normal · tone blunt$/.test(${BAR})`, undefined, { timeout: 5_000 })
       .catch(async () => { throw new Error(`after /guidance low the bar line reads ${JSON.stringify(await win.evaluate(BAR))}; last rows ${await win.evaluate(`JSON.stringify(window.__vm.get(1).snapshot().transcript.slice(-2).map((r) => r.text))`)}`); });
     if ((await manifest(win)).bundle !== "standard-low") throw new Error(`the manifest's bundle is ${JSON.stringify((await manifest(win)).bundle)}`);
     await turn(win, "once more");

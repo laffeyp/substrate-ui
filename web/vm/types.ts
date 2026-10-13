@@ -162,6 +162,11 @@ export interface Snapshot {
   /** UI sprint 169 — the kernel's language view of the record (GET /api/session/<id>/language);
    *  null until fetched. Refreshed after each turn returns. */
   language: LanguageView | null;
+  /** UI sprint 172 — `/language off` hides the bar line's shifts; `/language clear` hides those
+   *  recorded up to this seq; `/language` (or `open`) bumps the tick and the meta view opens the lens. */
+  languageOff: boolean;
+  languageClearedSeq: number;
+  languageOpenTick: number;
   endedReason: string | null;
   driverRoster: string[];
   driverDefault: string | null;
