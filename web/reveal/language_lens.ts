@@ -28,6 +28,18 @@ export const LANGUAGE_STREAM_TABS: { id: LanguageStreamIdValue; label: string }[
   { id: LanguageStreamId.Relation, label: "turns" },
 ];
 
+export const LanguageViewMode = {
+  Bars: "bars",
+  Deviation: "deviation",
+  Ribbons: "ribbons",
+} as const;
+export type LanguageViewModeValue = (typeof LanguageViewMode)[keyof typeof LanguageViewMode];
+export const LANGUAGE_VIEW_TABS: LanguageViewModeValue[] = [LanguageViewMode.Bars, LanguageViewMode.Deviation, LanguageViewMode.Ribbons];
+
+// Deviation view: ±4 warm-up SDs fill the lane; guides at ±2 SD; a value past them is emphasised.
+const SD_SPAN = 4;
+const SD_GUIDE = 2;
+
 export const GROUP_COLOR: Record<string, string> = {
   [LanguageGroup.LENGTH]: "#82a5c8",
   [LanguageGroup.TONE]: "#7fb3b8",
@@ -47,7 +59,12 @@ const DIM = "#4a4e55";
 
 export interface LensCell {
   left: number;
+  barLeft: number;
+  barTop: number;
+  barH: number;
   barW: number;
+  hairLeft: number;
+  hairW: number;
   color: string;
   title: string;
   mark: string;
@@ -80,6 +97,7 @@ export interface Lens {
   lanes: LensLane[];
   rows: LensRow[];
   paths: { d: string; stroke: string }[];
+  guides: { left: number; color: string }[];
   width: number;
   height: number;
   readout: { label: string; cells: { left: number; text: string; color: string }[] };
@@ -95,6 +113,11 @@ export function fmt(v: number | null | undefined): string {
   return v.toFixed(a >= 1 ? 1 : 2).replace(/\.?0+$/, "") || "0";
 }
 
+export function fmtSigned(v: number | null | undefined): string {
+  if (v === null || v === undefined || Number.isNaN(v)) return "—";
+  return `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v).toFixed(1)}`;
+}
+
 function scaled(key: string, v: number): number {
   const m = LANGUAGE_MEASURES[key];
   const f = (v - m.low) / Math.max(m.high - m.low, 1e-9);
@@ -105,18 +128,19 @@ interface Series {
   turns: { turn: number; seq: number }[];
   value: (key: string, turn: number) => number | null;
   window: (key: string, turn: number) => number | null;
+  deviation: (key: string, turn: number) => number | null;
   seqOf: (key: string, turn: number) => number | null;
   lane: (key: string) => LanguageLane | null;
 }
 
 function laneSeries(view: LanguageView, stream: string, keys: readonly string[]): Series {
   const lanes = view.lanes[stream] || {};
-  const at = new Map<string, Map<number, { seq: number; value: number; window: number | null }>>();
+  const at = new Map<string, Map<number, { seq: number; value: number; window: number | null; deviation: number | null }>>();
   const turnSeq = new Map<number, number>();
   for (const key of keys) {
-    const m = new Map<number, { seq: number; value: number; window: number | null }>();
+    const m = new Map<number, { seq: number; value: number; window: number | null; deviation: number | null }>();
     for (const p of lanes[key]?.points || []) {
-      m.set(p.turn, { seq: p.seq, value: p.value, window: p.window });
+      m.set(p.turn, { seq: p.seq, value: p.value, window: p.window, deviation: p.deviation });
       if (!turnSeq.has(p.turn)) turnSeq.set(p.turn, p.seq);
     }
     at.set(key, m);
@@ -125,6 +149,7 @@ function laneSeries(view: LanguageView, stream: string, keys: readonly string[])
     turns: [...turnSeq.entries()].sort((a, b) => a[0] - b[0]).map(([turn, seq]) => ({ turn, seq })),
     value: (k, t) => at.get(k)?.get(t)?.value ?? null,
     window: (k, t) => at.get(k)?.get(t)?.window ?? null,
+    deviation: (k, t) => at.get(k)?.get(t)?.deviation ?? null,
     seqOf: (k, t) => at.get(k)?.get(t)?.seq ?? null,
     lane: (k) => lanes[k] || null,
   };
@@ -139,6 +164,7 @@ function relationSeries(view: LanguageView, keys: readonly string[]): Series {
     turns: [...byTurn.entries()].sort((a, b) => a[0] - b[0]).map(([turn, l]) => ({ turn, seq: l.seq })),
     value: (k, t) => (keys.includes(k) ? num(byTurn.get(t)?.values[k]) : null),
     window: () => null,
+    deviation: () => null,
     seqOf: (_k, t) => byTurn.get(t)?.seq ?? null,
     lane: () => null,
   };
@@ -153,16 +179,20 @@ function settingAt(view: LanguageView, seq: number | null, control: string): str
 
 export function buildLanguageLens(
   view: LanguageView | null,
-  opts: { stream: LanguageStreamIdValue; selTurn: number | null; lane: number },
+  opts: { stream: LanguageStreamIdValue; selTurn: number | null; lane: number; view?: LanguageViewModeValue },
 ): Lens {
   const empty: Lens = {
-    has: false, empty: "", groups: [], lanes: [], rows: [], paths: [], width: 0, height: 0,
+    has: false, empty: "", groups: [], lanes: [], rows: [], paths: [], guides: [], width: 0, height: 0,
     readout: { label: "", cells: [] }, turns: [],
   };
   if (!view) return { ...empty, empty: "measuring this session's language…" };
   const keys: readonly string[] = opts.stream === LanguageStreamId.Relation ? LANGUAGE_RELATION_LANES : LANGUAGE_WATCHED;
   const s = opts.stream === LanguageStreamId.Relation ? relationSeries(view, keys) : laneSeries(view, opts.stream, keys);
   if (!s.turns.length) return { ...empty, empty: "no measured turns yet — measurements land as each turn returns." };
+  const mode = opts.view || LanguageViewMode.Bars;
+  if (mode === LanguageViewMode.Deviation && opts.stream === LanguageStreamId.Relation) {
+    return { ...empty, empty: "deviation is measured against the drift detector's warm-up, which runs on replies and messages, not turns." };
+  }
 
   const lanes: LensLane[] = keys.map((key, i) => {
     const m = LANGUAGE_MEASURES[key];
@@ -229,20 +259,47 @@ export function buildLanguageLens(
         if (intent) markTitle += `; its text asks for ${intent[1] === "down" ? "less" : "more"} of this.`;
         else if (control && position) markTitle += ".";
       }
+      const cx = lane.left + BAR_X + BAR_MAX / 2;
+      const base = { left: lane.left + BAR_X, title, mark: sh ? (sh.direction === "up" ? "▲" : "▼") : "", markTitle, hairLeft: 0, hairW: 0 };
+      if (mode === LanguageViewMode.Deviation) {
+        const dev = s.deviation(lane.key, turn);
+        if (dev === null) title += ` No deviation until the warm-up ends.`;
+        else title += ` ${fmtSigned(dev)} SD from the warm-up's mean.`;
+        const per = BAR_MAX / 2 / SD_SPAN;
+        const clamped = dev === null ? 0 : Math.max(-SD_SPAN, Math.min(SD_SPAN, dev));
+        return {
+          ...base, title, barLeft: cx + Math.min(0, clamped) * per, barTop: 5, barH: 8,
+          barW: dev === null ? 0 : Math.max(1, Math.round(Math.abs(clamped) * per)),
+          color: dev !== null && Math.abs(dev) >= SD_GUIDE ? lane.color : `${lane.color}55`,
+        };
+      }
+      if (mode === LanguageViewMode.Ribbons) {
+        const ww = win === null ? 0 : Math.round(scaled(lane.key, win) * BAR_MAX);
+        const vw = v === null ? 0 : Math.max(v === 0 ? 0 : 1, Math.round(scaled(lane.key, v) * BAR_MAX));
+        return {
+          ...base, barLeft: cx - ww / 2, barTop: 0, barH: ROW_H, barW: ww, color: `${lane.color}33`,
+          hairLeft: cx - vw / 2, hairW: vw,
+        };
+      }
       return {
-        left: lane.left + BAR_X,
+        ...base, barLeft: lane.left + BAR_X, barTop: 5, barH: 8,
         barW: v === null || v === 0 ? 0 : Math.max(1, Math.round(scaled(lane.key, v) * BAR_MAX)),
         color: sh ? lane.color : v === 0 ? DIM : `${lane.color}88`,
-        title,
-        mark: sh ? (sh.direction === "up" ? "▲" : "▼") : "",
-        markTitle,
       };
     });
     rows.push({ isTurn: true, isRule: false, turn, seq, label: `t${turn}`, top, selected: turn === selTurn, ruleText: "", cells });
     top += ROW_H;
   }
 
-  const paths = lanes.map((lane) => {
+  const guides: Lens["guides"] = [];
+  if (mode === LanguageViewMode.Deviation) {
+    const per = BAR_MAX / 2 / SD_SPAN;
+    for (const lane of lanes) {
+      const cx = lane.left + BAR_X + BAR_MAX / 2;
+      guides.push({ left: cx, color: "#33373d" }, { left: cx - SD_GUIDE * per, color: "#2a2d33" }, { left: cx + SD_GUIDE * per, color: "#2a2d33" });
+    }
+  }
+  const paths = mode !== LanguageViewMode.Bars ? [] : lanes.map((lane) => {
     const pts = s.turns
       .map(({ turn }) => ({ win: s.window(lane.key, turn), y: (rowTop.get(turn) ?? 0) + ROW_H / 2 }))
       .filter((p): p is { win: number; y: number } => p.win !== null);
@@ -251,16 +308,16 @@ export function buildLanguageLens(
   }).filter((p) => p.d);
 
   const readoutCells = lanes.map((lane) => {
-    const v = s.value(lane.key, selTurn);
+    const v = mode === LanguageViewMode.Deviation ? s.deviation(lane.key, selTurn) : s.value(lane.key, selTurn);
     const sh = shifts.get(`${selTurn}|${lane.key}`);
     return {
-      left: lane.left, text: `${fmt(v)}${sh ? (sh.direction === "up" ? " ▲" : " ▼") : ""}`,
+      left: lane.left, text: `${mode === LanguageViewMode.Deviation ? fmtSigned(v) : fmt(v)}${sh ? (sh.direction === "up" ? " ▲" : " ▼") : ""}`,
       color: sh ? lane.color : v === 0 || v === null ? DIM : "#d7dade",
     };
   });
 
   return {
-    has: true, empty: "", groups, lanes, rows, paths,
+    has: true, empty: "", groups, lanes, rows, paths, guides,
     width: TURN_COL + lanes.length * LANE_W, height: top,
     readout: { label: `t${selTurn}`, cells: readoutCells },
     turns: s.turns,
