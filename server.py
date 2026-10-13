@@ -748,6 +748,9 @@ def _build_session_topology_from_manifest(
         script=None,
         first_turn_user_message=first_turn_user_message,
         mcp=mcp_on,
+        # Kernel K310-K311 (vocabulary v0.11 § W): each turn's language is measured before it
+        # returns, and LanguageProfile / LanguageDrift land on the record.
+        language=True,
         # The role prompt resolves against the session's workspace, the same root the create-time
         # check used. Before 2026-10-08 neither argument was passed and no UI session carried its
         # role's prompt (lens audit F316, N004).

@@ -1495,6 +1495,7 @@ class Component extends DCLogic {
       TriggerFired: '#62676f', ProducerStarted: '#62676f', ProducerCompleted: '#62676f',
       RunStarted: '#62676f', RunFinalised: '#62676f', TerminationMatched: '#62676f',
       SessionStarted: '#62676f', PromptFragment: '#62676f', PromptComposed: '#62676f',
+      LanguageProfile: '#62676f', LanguageDrift: '#62676f',
     };
     // full-granularity turn slice — every tool cycle is ToolCall · TriggerFired · ProducerStarted · ToolResult · ProducerCompleted, as on a real record
     const cycle = (base, tool, callId, step, args, gist, resultGist, resultPayload, resultContent, child) => ([
@@ -1641,6 +1642,7 @@ class Component extends DCLogic {
       TriggerFired: 1, ProducerStarted: 1, ProducerCompleted: 1,
       RunStarted: 1, RunFinalised: 1, TerminationMatched: 1,
       SessionStarted: 1, PromptFragment: 1, PromptComposed: 1,
+      LanguageProfile: 1, LanguageDrift: 1,
     };
     const shownEV = state.level === RevealLevel.App ? envelopes.filter(e => !LOW[e.kind]) : envelopes;
     const selE = envelopes.find(e => e.seq === state.sel);
