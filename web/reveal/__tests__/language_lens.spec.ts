@@ -5,7 +5,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert";
-import { buildLanguageLens, fmt, LANE_W, LanguageStreamId, ROW_H, TURN_COL } from "../language_lens";
+import { buildLanguageLens, fmt, fmtSigned, LANE_W, LanguageStreamId, LanguageViewMode, ROW_H, TURN_COL } from "../language_lens";
 import { LANGUAGE_MEASURES, LANGUAGE_WATCHED } from "../../vm/language_measures.gen";
 import type { LanguageLane, LanguageView } from "../../vm/types";
 
@@ -85,4 +85,43 @@ test("no view, and a view with no turns, say so", () => {
 
 test("numbers read plainly", () => {
   assert.deepStrictEqual([fmt(0), fmt(412.3), fmt(14.94), fmt(2.25), fmt(0.083), fmt(null)], ["0", "412", "14.9", "2.3", "0.08", "—"]);
+});
+
+function viewWithDeviation(): LanguageView {
+  const v = view();
+  v.lanes.model.words.points = v.lanes.model.words.points.map((p, i) => ({ ...p, deviation: [null, 1.0, 3.5][i] }));
+  return v;
+}
+
+test("deviation: bars from the lane's centre in warm-up SDs, emphasised past ±2, guides drawn", () => {
+  const lens = buildLanguageLens(viewWithDeviation(), { stream: LanguageStreamId.Model, selTurn: null, lane: 0, view: LanguageViewMode.Deviation });
+  const turns = lens.rows.filter((r) => r.isTurn).map((r) => r.cells[0]);
+  assert.strictEqual(turns[0].barW, 0);
+  assert.match(turns[0].title, /No deviation until the warm-up ends\./);
+  assert.ok(turns[2].barW > turns[1].barW);
+  assert.strictEqual(turns[1].color.length, 9); // the lane colour with alpha: within ±2 SD
+  assert.strictEqual(turns[2].color, lens.lanes[0].color); // past +2 SD: full colour
+  assert.strictEqual(lens.guides.length, LANGUAGE_WATCHED.length * 3);
+  assert.strictEqual(lens.readout.cells[0].text, "+3.5 ▲");
+  assert.strictEqual(lens.paths.length, 0);
+});
+
+test("deviation is not drawn for the turns stream", () => {
+  const lens = buildLanguageLens(view(), { stream: LanguageStreamId.Relation, selTurn: null, lane: 0, view: LanguageViewMode.Deviation });
+  assert.strictEqual(lens.has, false);
+});
+
+test("ribbons: width is the window, the hairline is the reply's own value, both centred", () => {
+  const lens = buildLanguageLens(view(), { stream: LanguageStreamId.Model, selTurn: null, lane: 0, view: LanguageViewMode.Ribbons });
+  const cells = lens.rows.filter((r) => r.isTurn).map((r) => r.cells[0]);
+  // words: values 40, 80, 400; windows 41, 81, 401 (the fixture adds one).
+  assert.ok(cells[0].barW < cells[1].barW && cells[1].barW < cells[2].barW);
+  for (const c of cells) {
+    assert.ok(Math.abs((c.barLeft + c.barW / 2) - (c.hairLeft + c.hairW / 2)) < 1);
+    assert.ok(c.hairW <= c.barW + 1);
+  }
+});
+
+test("signed numbers", () => {
+  assert.deepStrictEqual([fmtSigned(1.74), fmtSigned(-0.92), fmtSigned(0), fmtSigned(null)], ["+1.7", "−0.9", "0.0", "—"]);
 });
