@@ -49,6 +49,7 @@ def session_kinds() -> set[str]:
             session_id="s_generator",
             workspace_path="/nonexistent",
             bundle="session",
+            language=True,  # vocabulary v0.11 (§ W): LanguageProfile, LanguageDrift
         )
     b = api.TopologyBuilder()
     topo(b)

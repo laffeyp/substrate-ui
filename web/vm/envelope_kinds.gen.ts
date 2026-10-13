@@ -11,6 +11,8 @@ export const EnvelopeKind = {
   InjectionApplied: "substrate.InjectionApplied",
   InputBuildFailed: "substrate.InputBuildFailed",
   InterruptRequested: "InterruptRequested",
+  LanguageDrift: "LanguageDrift",
+  LanguageProfile: "LanguageProfile",
   ModelReply: "ModelReply",
   Park: "Park",
   PredicateQuarantined: "substrate.PredicateQuarantined",

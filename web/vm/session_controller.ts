@@ -87,6 +87,9 @@ const KIND_DISPOSITION: Record<EnvelopeKindValue, "rendered" | "ignored"> = {
   [EnvelopeKind.ProducerCancelled]: "ignored",
   [EnvelopeKind.PromptFragment]: "ignored",
   [EnvelopeKind.PromptComposed]: "ignored",
+  // Kernel K310 (vocabulary § W): measurements of the turn, not part of the conversation.
+  [EnvelopeKind.LanguageProfile]: "ignored",
+  [EnvelopeKind.LanguageDrift]: "ignored",
   [EnvelopeKind.InterruptRequested]: "ignored",
   [EnvelopeKind.SessionEndRequested]: "ignored",
   [EnvelopeKind.RunStarted]: "ignored",
