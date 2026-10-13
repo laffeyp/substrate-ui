@@ -165,13 +165,12 @@ def render_controls() -> str:
 
 
 def render_language_measures() -> str:
-    """The kernel's language catalog (`substrate.language.catalog`): each measure's short name,
+    """The kernel's language catalog (`substrate.app.language_catalog`): each measure's short name,
     unit, family, group, display range and explanation; the 13 watched measures in the detector's
     order; and the length and tone intents (`vocabulary.LANGUAGE_INTENTS`)."""
     import json
 
-    from substrate.language.catalog import CATALOG, RELATION_LANES, Group
-    from substrate.language.drift import DEFAULT_DRIFT, WATCHED
+    from substrate.app import language_catalog, language_drift
     from substrate.topologies.session.vocabulary import LANGUAGE_INTENTS
 
     q = json.dumps
@@ -181,7 +180,7 @@ def render_language_measures() -> str:
         "// tests/test_envelope_kinds_generated_096.py fails when this file is stale.",
         "",
         "export const LanguageGroup = {",
-        *[f"  {g.name}: {q(g.value)}," for g in Group],
+        *[f"  {g.name}: {q(g.value)}," for g in language_catalog.Group],
         "} as const;",
         "",
         "export type LanguageGroupValue = typeof LanguageGroup[keyof typeof LanguageGroup];",
@@ -193,7 +192,7 @@ def render_language_measures() -> str:
         "",
         "export const LANGUAGE_MEASURES: Record<string, LanguageMeasure> = {",
     ]
-    for m in CATALOG.values():
+    for m in language_catalog.CATALOG.values():
         lines.append(
             f"  {q(m.name)}: {{ short: {q(m.short)}, unit: {q(m.unit)}, family: {q(m.family.value)}, "
             f"group: {q(m.group.value)}, low: {m.low:g}, high: {m.high:g}, "
@@ -203,10 +202,10 @@ def render_language_measures() -> str:
         "};",
         "",
         "// The measures the live drift detector watches, in its order.",
-        f"export const LANGUAGE_WATCHED = {q(list(WATCHED))} as const;",
-        f"export const LANGUAGE_WARMUP = {DEFAULT_DRIFT.warmup};",
+        f"export const LANGUAGE_WATCHED = {q(list(language_drift.WATCHED))} as const;",
+        f"export const LANGUAGE_WARMUP = {language_drift.DEFAULT_DRIFT.warmup};",
         "// The relation measures the turns stream shows, in order.",
-        f"export const LANGUAGE_RELATION_LANES = {q(list(RELATION_LANES))} as const;",
+        f"export const LANGUAGE_RELATION_LANES = {q(list(language_catalog.RELATION_LANES))} as const;",
         "",
         "// control -> position -> [measure, direction]: what each length and tone text states.",
         "export const LANGUAGE_INTENTS: Record<string, Record<string, [string, string][]>> = {",

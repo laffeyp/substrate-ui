@@ -80,7 +80,7 @@
    </div>
    <sc-if value="{{ pn.activityShow }}" hint-placeholder-val="{{ false }}">
     <div data-session-bar-line="1" style="flex:none;padding:0 22px 8px;font-size:11px;line-height:1.6;color:{{ pn.activityColor }}">
-     <span class="{{ pn.activityPulseClass }}" style="color:{{ pn.activityTurnColor }}">{{ pn.activityTurnWord }}</span><sc-if value="{{ pn.activityRest }}" hint-placeholder-val="{{ false }}"><span> · {{ pn.activityRestText }}</span></sc-if>
+     <span class="{{ pn.activityPulseClass }}" style="color:{{ pn.activityTurnColor }}">{{ pn.activityTurnWord }}</span><sc-if value="{{ pn.activityRest }}" hint-placeholder-val="{{ false }}"><span> · {{ pn.activityRestText }}</span></sc-if><span data-settings-tail="1" style="white-space:nowrap;display:inline-block"><sc-for list="{{ pn.tailSegs }}" as="sg" hint-placeholder-count="0"><span data-lang-shift="{{ sg.shiftAttr }}" title="{{ sg.title }}" style="color:{{ sg.color }};text-decoration:{{ sg.deco }};text-underline-offset:3px;cursor:{{ sg.cursor }};white-space:pre">{{ sg.text }}</span></sc-for></span>
     </div>
    </sc-if>
    <sc-if value="{{ pn.tasksShow }}" hint-placeholder-val="{{ false }}">
@@ -190,7 +190,7 @@
     <sc-if value="{{ notDescended }}" hint-placeholder-val="{{ true }}">
     <sc-if value="{{ activityShow }}" hint-placeholder-val="{{ false }}">
      <div data-session-bar-line="1" style="flex:none;padding:0 26px 6px;font-size:11px;line-height:1.6;color:{{ activityColor }}">
-      <span class="{{ activityPulseClass }}" style="color:{{ activityTurnColor }}">{{ activityTurnWord }}</span><sc-if value="{{ activityRest }}" hint-placeholder-val="{{ false }}"><span> · {{ activityRestText }}</span></sc-if>
+      <span class="{{ activityPulseClass }}" style="color:{{ activityTurnColor }}">{{ activityTurnWord }}</span><sc-if value="{{ activityRest }}" hint-placeholder-val="{{ false }}"><span> · {{ activityRestText }}</span></sc-if><span data-settings-tail="1" style="white-space:nowrap;display:inline-block"><sc-for list="{{ tailSegs }}" as="sg" hint-placeholder-count="0"><span data-lang-shift="{{ sg.shiftAttr }}" title="{{ sg.title }}" style="color:{{ sg.color }};text-decoration:{{ sg.deco }};text-underline-offset:3px;cursor:{{ sg.cursor }};white-space:pre">{{ sg.text }}</span></sc-for></span>
      </div>
     </sc-if>
    <sc-if value="{{ tasksShow }}" hint-placeholder-val="{{ false }}">

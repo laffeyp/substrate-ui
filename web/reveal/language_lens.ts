@@ -47,7 +47,7 @@ export const GROUP_COLOR: Record<string, string> = {
   [LanguageGroup.OTHER]: "#9aa0a8",
 };
 // The settings a group answers to, as the session's controls name them.
-const GROUP_CONTROL: Record<string, string> = { [LanguageGroup.LENGTH]: "length", [LanguageGroup.TONE]: "tone" };
+export const GROUP_CONTROL: Record<string, string> = { [LanguageGroup.LENGTH]: "length", [LanguageGroup.TONE]: "tone" };
 
 export const LANE_W = 84;
 export const ROW_H = 18;
@@ -111,6 +111,19 @@ export function fmt(v: number | null | undefined): string {
   if (a >= 100) return String(Math.round(v));
   if (a >= 10) return v.toFixed(1).replace(/\.0$/, "");
   return v.toFixed(a >= 1 ? 1 : 2).replace(/\.?0+$/, "") || "0";
+}
+
+/** The hover text of one shift, in the lens and on the bar line: what moved, where it was flagged,
+ *  and, where the setting's text states one, the direction that text asks for. */
+export function shiftNote(measure: string, direction: string, turn: number, position: string | null): string {
+  const m = LANGUAGE_MEASURES[measure];
+  let note = `${m.short} ${direction}, flagged at turn ${turn}.`;
+  const control = GROUP_CONTROL[m.group];
+  if (!control || !position) return note;
+  const intent = (LANGUAGE_INTENTS[control]?.[position] || []).find(([k]) => k === measure);
+  note += ` ${control[0].toUpperCase()}${control.slice(1)} is ${position}`;
+  note += intent ? `; its text asks for ${intent[1] === "down" ? "less" : "more"} of this.` : ".";
+  return note;
 }
 
 export function fmtSigned(v: number | null | undefined): string {
@@ -249,16 +262,10 @@ export function buildLanguageLens(
         const n = ln.points.length;
         title += ` Shift marks start once ${LANGUAGE_WARMUP} values have varied; this lane has ${n}.`;
       }
-      let markTitle = "";
-      if (sh) {
-        markTitle = `${m.short} ${sh.direction}, flagged at turn ${turn}.`;
-        const control = GROUP_CONTROL[m.group];
-        const position = control ? settingAt(view, s.seqOf(lane.key, turn), control) : null;
-        const intent = control && position ? (LANGUAGE_INTENTS[control]?.[position] || []).find(([k]) => k === lane.key) : undefined;
-        if (control && position) markTitle += ` ${control[0].toUpperCase()}${control.slice(1)} is ${position}`;
-        if (intent) markTitle += `; its text asks for ${intent[1] === "down" ? "less" : "more"} of this.`;
-        else if (control && position) markTitle += ".";
-      }
+      const control = GROUP_CONTROL[m.group];
+      const markTitle = sh
+        ? shiftNote(lane.key, sh.direction, turn, control ? settingAt(view, s.seqOf(lane.key, turn), control) : null)
+        : "";
       const cx = lane.left + BAR_X + BAR_MAX / 2;
       const base = { left: lane.left + BAR_X, title, mark: sh ? (sh.direction === "up" ? "▲" : "▼") : "", markTitle, hairLeft: 0, hairW: 0 };
       if (mode === LanguageViewMode.Deviation) {

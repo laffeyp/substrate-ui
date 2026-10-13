@@ -12,6 +12,7 @@ import * as ReactDOMClient from "react-dom/client";
 import type { Snapshot } from "./vm";
 import { BrowserSubstrateClient, PaneRegistry } from "./vm";
 import { Transcript } from "./reveal/transcript";
+import { GraphMode } from "./vm/kinds";
 
 interface DCLogicHandle {
   state: Record<string, unknown>;
@@ -131,12 +132,22 @@ function boot(): void {
     component = reachComponent();
     if (!component) return false;
     const sessionIds: Record<number, string | null> = {};
+    // UI sprint 172: `/language` bumps the pane's open tick; the meta view opens on the lens, at the
+    // latest shift's reply when there is one (the lens selects the turn that holds `sel`).
+    const languageTicks: Record<number, number> = {};
     registry.subscribe((paneId, snap) => {
       if (!component) return;
       perPane[paneId] = snap;
       const focusedId = (component.state as { focused?: number }).focused ?? 1;
       const patch: Record<string, unknown> = { controllerSnapshots: { ...perPane } };
       if (paneId === focusedId) Object.assign(patch, computeStatePatch(snap));
+      const tick = snap.languageOpenTick ?? 0;
+      if (paneId === focusedId && tick > (languageTicks[paneId] ?? 0)) {
+        Object.assign(patch, { revealed: true, surface: null, mode: GraphMode.Language });
+        const shifts = snap.language?.shifts ?? [];
+        if (shifts.length) patch.sel = shifts[shifts.length - 1].source_seq;
+      }
+      languageTicks[paneId] = tick;
       component.setState(patch);
       // Reflect the focused pane's session in the URL. Sticky-bottom
       // autoscroll used to live here; the atom-transcript React tree

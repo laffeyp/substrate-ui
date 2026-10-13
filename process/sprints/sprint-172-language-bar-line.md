@@ -3,7 +3,8 @@
 ```yaml
 ---
 id: 172
-status: open
+status: closed
+closed_at: 2026-10-13
 phase: language
 pass_kind: functional
 depends_on: [168]
@@ -19,3 +20,9 @@ The bar line's settings tail reads `guidance <level> · length <position> · ton
 ## observation contract
 
 Gate `language_bar_line`: after a drift the line shows the shift after its setting; the hover text matches the record; each command does what it says; `controls_mid_session` reads the named form.
+
+## result
+
+- **Built.** `web/reveal/settings_tail.ts` writes the tail `· guidance <level> · length <position> · tone <position>`. Model-stream shifts since the last setting change or `/language clear` sit after their group's setting as short name and ↑/↓, in the group's colour with a dotted underline; more than two in a group collapse to "N shifts". The hover text is `shiftNote()` from `language_lens.ts`, the same text as the lens's ▲/▼ marks. The tail is one unbreakable span, so in a narrow pane it drops under the turn recap whole. `/language [open|clear|off|on]` is in the slash table. `open` refreshes the view and bumps a per-pane tick; `reveal.ts` then opens meta on the language lens and selects the latest shift's reply, so the lens shows that turn.
+- **Fixed on the way.** The lens's key handler judged "typing" by `document.activeElement`. The Enter that runs `/language` unmounts the input bar before the handler runs, so the handler read that Enter as "open the stream" and switched the lens straight back. It now judges by the key's target. The UI boundary test (`test_ui_imports_only_sanctioned_substrate_surfaces`) had been failing since sprint 168: `scripts/gen_kinds.py` imported `substrate.language.catalog` and `.drift` directly. The kernel now exports both modules from `substrate.app` as `language_catalog` and `language_drift`, and the generator imports them from there; the generated files came out byte-identical.
+- **Tests.** Unit `settings_tail.spec.ts` (4). Server `tests/test_language_shift_route_172.py`: a scripted driver's replies jump in length, and a words shift reaches `/api/session/<id>/language` at turn 22. Gate `language_bar_line` (in `gates:electron`): the deterministic driver's replies never vary, so the gate injects one words shift on turn 0's reply and says so. The line reads "length normal words ↑" with the shift's note as hover; off, on and clear each do what they say; `/language` opens the lens on t0. Removing the selection line makes it fail on t1. `controls_mid_session` now expects the named form.

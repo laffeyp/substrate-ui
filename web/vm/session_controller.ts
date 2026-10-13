@@ -202,6 +202,9 @@ const EMPTY_SNAPSHOT: Snapshot = {
       turnFailure: null,
       backgroundTasks: [],
   language: null,
+  languageOff: false,
+  languageClearedSeq: -1,
+  languageOpenTick: 0,
   endedReason: null,
   driverRoster: [],
   driverDefault: null,
@@ -529,6 +532,9 @@ export class SessionController {
       turnFailure: null,
       backgroundTasks: [],
       language: null,
+      languageOff: false,
+      languageClearedSeq: -1,
+      languageOpenTick: 0,
       endedReason: null,
     });
     this.attachStream(ack.session_id);
@@ -658,6 +664,9 @@ export class SessionController {
       turnFailure: null,
       backgroundTasks: [],
       language: null,
+      languageOff: false,
+      languageClearedSeq: -1,
+      languageOpenTick: 0,
       endedReason: null,
       connection: "connecting",
     });
@@ -721,6 +730,9 @@ export class SessionController {
           ? { detail: `the turn ended without parking (session ${manifest.status})`, atT: Date.now() / 1000 }
           : null,
       language: null,
+      languageOff: false,
+      languageClearedSeq: -1,
+      languageOpenTick: 0,
       endedReason: null,
     });
     this.attachStream(manifest.session_id);
@@ -973,6 +985,23 @@ export class SessionController {
         },
       },
       { names: ["interrupt", "int"], usage: "/interrupt", about: "stop the turn in flight (also ^C)", run: () => this.interruptTurn() },
+      {
+        // UI sprint 172: the language lens and the bar line's shifts.
+        names: ["language"], usage: "/language [open|clear|off|on]",
+        about: "open the language lens; clear, hide or show the shifts on the bar line",
+        choices: ["open", "clear", "off", "on"], current: () => (this.snap.languageOff ? "off" : "on"),
+        run: (rest) => {
+          const arg = rest.trim();
+          if (arg === "clear") this.patch({ languageClearedSeq: this.snap.language?.last_seq ?? -1 });
+          else if (arg === "off") this.patch({ languageOff: true });
+          else if (arg === "on") this.patch({ languageOff: false });
+          else if (arg === "" || arg === "open") {
+            this.refreshLanguage();
+            this.patch({ languageOpenTick: this.snap.languageOpenTick + 1 });
+          }
+          else this.controlRow(`language: unknown option ${JSON.stringify(arg)}. use /language [open|clear|off|on].`, false);
+        },
+      },
       // UI sprint 140: fold or unfold every tool card, as ⌘E does. /fold flips; /unfold unfolds.
       { names: ["fold"], usage: "/fold", about: "fold or unfold all tool output (also ⌘E)", run: () => { toggleToolOutputMode(); } },
       { names: ["unfold"], usage: "/unfold", about: "unfold all tool output", run: () => { setToolOutputMode("expanded"); } },
