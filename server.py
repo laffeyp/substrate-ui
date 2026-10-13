@@ -73,6 +73,7 @@ from substrate.app import (
     SessionRegistry,
     SessionStatus,
     TornRecordOnResume,
+    language_view,
 )
 from substrate.app import daemon_client as _substrate_daemon_client
 from substrate.adapters.models import (
@@ -116,6 +117,9 @@ class App:
     topology_runs: dict[str, dict[str, Any]] = field(default_factory=dict)
     # Set once shutdown starts, so a second SIGTERM is a no-op.
     shutdown_started: threading.Event = field(default_factory=threading.Event)
+    # UI sprint 168: session_id -> (the record's size on disk, its language view). The view is
+    # recomputed only when the record has grown.
+    language_cache: dict[str, tuple[int, dict[str, Any]]] = field(default_factory=dict)
     # Responders by (driver name, params key), shared across sessions on purpose: an
     # OllamaResponder's connection pool is costly to rebuild per turn, and a rate-limit semaphore
     # must bound the whole process (REVIEW-2026-08-28 Q9). DeterministicResponder is never cached:
@@ -3363,6 +3367,40 @@ class Handler(BaseHTTPRequestHandler):
         except (OSError, BrokenPipeError):
             return
 
+    def _session_language(self, session_id: str) -> None:
+        """UI sprint 168: GET /api/session/<id>/language. The kernel's language view of the
+        session's record (`app.language_view`: lines, lanes, shifts, changes), cached until the
+        record grows. A session with no record yet answers an empty view."""
+        if self.app.registry is None:
+            self._error(503, "session registry not initialized (boot ordering)")
+            return
+        manifest = self.app.registry.get(session_id)
+        if manifest is None:
+            self._error(404, f"unknown session_id {session_id!r}")
+            return
+        record_root = Path(manifest.record_root)
+        size = (
+            sum(f.stat().st_size for f in record_root.glob("*") if f.is_file())
+            if record_root.is_dir()
+            else -1
+        )
+        cached = self.app.language_cache.get(session_id)
+        if cached is not None and cached[0] == size:
+            self._json(cached[1])
+            return
+        if size < 0:
+            view: dict[str, Any] = {
+                "lines": [],
+                "lanes": {},
+                "shifts": [],
+                "changes": [],
+                "last_seq": -1,
+            }
+        else:
+            view = language_view(record_root)
+        self.app.language_cache[session_id] = (size, view)
+        self._json(view)
+
     def _session_events(self, session_id: str, since_seq: int) -> None:
         """Sprint 214c: GET /api/session/<id>/events?since_seq=N. Server-Sent
         Events stream of the session's record. Each envelope arrives as
@@ -4095,6 +4133,10 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if path.startswith("/api/session/") and "/" not in path[len("/api/session/") :]:
                 self._session_get(path[len("/api/session/") :])
+                return
+            m_language = re.fullmatch(r"/api/session/([^/]+)/language", path)
+            if m_language:  # UI sprint 168
+                self._session_language(m_language.group(1))
                 return
             m_tasks = re.fullmatch(r"/api/session/([^/]+)/tasks", path)
             if m_tasks:  # UI sprint 105

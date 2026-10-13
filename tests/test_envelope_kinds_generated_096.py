@@ -36,3 +36,10 @@ def test_lifecycle_kinds_carry_the_reserved_prefix() -> None:
     assert "substrate.RunFinalised" in kinds
     assert "RunFinalised" not in kinds  # the Sep 23 – Oct 1 drift
     assert "ToolProgress" in kinds  # injected, not registered (tool_loop.INJECTED_EVENT_KINDS)
+
+
+def test_language_measures_gen_is_current() -> None:
+    # UI sprint 168: the kernel's language catalog, watched measures and intents.
+    assert gen_kinds.LANGUAGE_OUT.read_text() == gen_kinds.render_language_measures(), (
+        "web/vm/language_measures.gen.ts is stale: run `python scripts/gen_kinds.py`"
+    )
