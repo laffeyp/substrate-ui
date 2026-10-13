@@ -12,6 +12,7 @@ import type {
   BackgroundTaskRow,
   BundleRow,
   ConnectionState,
+  LanguageView,
   ProducerNode,
   RecordEnvelope,
   Snapshot,
@@ -200,6 +201,7 @@ const EMPTY_SNAPSHOT: Snapshot = {
   parkReason: null,
       turnFailure: null,
       backgroundTasks: [],
+  language: null,
   endedReason: null,
   driverRoster: [],
   driverDefault: null,
@@ -228,6 +230,7 @@ export class SessionController {
   private harnessToolNames = new Map<string, string>();
   /** UI sprint 105: the refresh timer that runs while a background task is running. */
   private tasksTimer: ReturnType<typeof setTimeout> | null = null;
+  private languageTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private endedEmittedFor: string | null = null;
   // The last compaction cut shown, so a repeated cut adds no row (session vocabulary § S.4).
@@ -525,6 +528,7 @@ export class SessionController {
       parkReason: null,
       turnFailure: null,
       backgroundTasks: [],
+      language: null,
       endedReason: null,
     });
     this.attachStream(ack.session_id);
@@ -547,6 +551,26 @@ export class SessionController {
     if (tasks.some((t) => t.status === TaskStatus.RUNNING)) {
       this.tasksTimer = setTimeout(() => { this.tasksTimer = null; void this.refreshTasks(); }, 3000);
     }
+  }
+
+  /** UI sprint 169: fetch the kernel's language view of this session's record. Calls within
+   *  200 ms collapse to one (a record's backlog replays many Returned events at attach). */
+  refreshLanguage(): void {
+    if (this.languageTimer) clearTimeout(this.languageTimer);
+    this.languageTimer = setTimeout(() => {
+      this.languageTimer = null;
+      void this.loadLanguage();
+    }, 200);
+  }
+
+  private async loadLanguage(): Promise<void> {
+    const sessionId = this.snap.sessionId;
+    if (!sessionId) return;
+    const result = await this.client.fetchJson<LanguageView>(
+      `/api/session/${encodeURIComponent(sessionId)}/language`,
+    );
+    if (!result.ok || this.snap.sessionId !== sessionId || !result.data) return;
+    this.patch({ language: result.data });
   }
 
   /** UI sprint 105: stop one background task from the app; the model hears about it. */
@@ -633,6 +657,7 @@ export class SessionController {
       parkReason: null,
       turnFailure: null,
       backgroundTasks: [],
+      language: null,
       endedReason: null,
       connection: "connecting",
     });
@@ -695,10 +720,12 @@ export class SessionController {
         manifest.status && manifest.status !== SessionStatus.RUNNING
           ? { detail: `the turn ended without parking (session ${manifest.status})`, atT: Date.now() / 1000 }
           : null,
+      language: null,
       endedReason: null,
     });
     this.attachStream(manifest.session_id);
     this.loadTopologyGraph(manifest.session_id).catch(() => undefined);
+    this.refreshLanguage();
   }
 
   async endSession(reason: string = "user_exit"): Promise<void> {
@@ -1321,6 +1348,7 @@ export class SessionController {
         const reason = LEGACY_PARK_REASONS[raw] ?? raw;
         const detail = String(payload.detail ?? "");
         this.patch({ parkReason: reason });
+        this.refreshLanguage(); // UI sprint 169: the turn's measurements are on the record
         // A park with a non-happy reason names its cause. `model_error`
         // is the primary one: the ProducerFailed's `error` field carries
         // the exception (a network hiccup, a 502 from the provider, a

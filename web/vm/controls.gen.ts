@@ -2,7 +2,6 @@
 // Do not edit. Regenerate: uv run --project ../substrate python scripts/gen_kinds.py
 // tests/test_envelope_kinds_generated_096.py fails when this file is stale.
 
-/* eslint-disable no-restricted-syntax */
 export const LengthPosition = {
   TERSE: "terse",
   NORMAL: "normal",

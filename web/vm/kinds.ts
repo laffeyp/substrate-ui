@@ -36,6 +36,7 @@ export const GraphMode = {
   Scene: "scene",
   Structure: "structure",
   IO: "io",
+  Language: "language",
 } as const;
 
 export const RevealLevel = {

@@ -2,7 +2,6 @@
 // Do not edit. Regenerate: uv run --project ../substrate python scripts/gen_kinds.py
 // tests/test_envelope_kinds_generated_096.py fails when this file is stale.
 
-/* eslint-disable no-restricted-syntax */
 export const LanguageGroup = {
   LENGTH: "length",
   TONE: "tone",
@@ -92,11 +91,21 @@ export const LANGUAGE_MEASURES: Record<string, LanguageMeasure> = {
   "rate_liwc_assent": { short: "assent", unit: "per 1,000 words", family: "LIWC2007 categories", group: "other", low: 0, high: 30, explanation: "Words of agreement (“yes”, “ok”, “cool”), LIWC2007.", count: false },
   "rate_liwc_nonfluencies": { short: "nonfluent", unit: "per 1,000 words", family: "LIWC2007 categories", group: "other", low: 0, high: 10, explanation: "Nonfluencies (“um”, “er”), LIWC2007.", count: false },
   "rate_liwc_fillers": { short: "fillers", unit: "per 1,000 words", family: "LIWC2007 categories", group: "other", low: 0, high: 10, explanation: "Fillers (“blah”, “like”), LIWC2007. Its multi-word fillers are written run together (“youknow”) and do not match the words apart.", count: false },
+  "length_ratio": { short: "length ratio", unit: "ratio", family: "the user's text and the reply", group: "other", low: 0, high: 20, explanation: "Words in the reply for each word in the user's message.", count: false },
+  "lexical_echo": { short: "echo", unit: "share", family: "the user's text and the reply", group: "other", low: 0, high: 1, explanation: "The share of the user's own content words the reply uses. 1 means every one of them.", count: false },
+  "phrase_copy_shared": { short: "shared phrases", unit: "phrases", family: "the user's text and the reply", group: "other", low: 0, high: 20, explanation: "Four-word phrases the reply shares with the user's message.", count: false },
+  "phrase_copy_share": { short: "copied", unit: "share", family: "the user's text and the reply", group: "other", low: 0, high: 1, explanation: "The share of the reply's four-word phrases that also occur in the user's message.", count: false },
+  "phrase_copy_longest_run": { short: "longest copy", unit: "words", family: "the user's text and the reply", group: "other", low: 0, high: 20, explanation: "The longest run of words the reply copies from the user's message.", count: false },
+  "ncd": { short: "distance", unit: "NCD", family: "the user's text and the reply", group: "other", low: 0, high: 1.2, explanation: "How different the two texts look to a compressor (Cilibrasi and Vitányi 2005): near 0 alike, near 1 unrelated.", count: false },
+  "lsm": { short: "style match", unit: "score", family: "the user's text and the reply", group: "other", low: 0, high: 1, explanation: "How closely the reply's small words (pronouns, articles, prepositions) match the user's, from 0 to 1 (the categories of Ireland and colleagues, 2011). Needs 1,600 words on each side.", count: false },
+  "window_lsm": { short: "style match (window)", unit: "score", family: "the user's text and the reply", group: "other", low: 0, high: 1, explanation: "Style matching over the latest 3,200 words of each side, where one turn is too short to measure it.", count: false },
 };
 
 // The measures the live drift detector watches, in its order.
 export const LANGUAGE_WATCHED = ["words", "sentence_length_mean", "rate_padding_restatement_opening", "rate_padding_offer_of_more_closing", "rate_hedges_hyland", "rate_boosters_hyland", "rate_contractions", "rate_liwc_positive_emotion", "format_exclamations", "rate_kobak_style", "format_em_dashes", "format_bold_spans", "format_list_items"] as const;
 export const LANGUAGE_WARMUP = 20;
+// The relation measures the turns stream shows, in order.
+export const LANGUAGE_RELATION_LANES = ["length_ratio", "lexical_echo", "phrase_copy_share", "phrase_copy_longest_run", "ncd", "window_lsm"] as const;
 
 // control -> position -> [measure, direction]: what each length and tone text states.
 export const LANGUAGE_INTENTS: Record<string, Record<string, [string, string][]>> = {

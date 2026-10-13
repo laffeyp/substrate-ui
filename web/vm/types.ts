@@ -159,6 +159,9 @@ export interface Snapshot {
   turnFailure: { detail: string; atT: number } | null;
   /** UI sprint 105 — the session's bash background tasks (GET /api/session/<id>/tasks). */
   backgroundTasks: BackgroundTaskRow[];
+  /** UI sprint 169 — the kernel's language view of the record (GET /api/session/<id>/language);
+   *  null until fetched. Refreshed after each turn returns. */
+  language: LanguageView | null;
   endedReason: string | null;
   driverRoster: string[];
   driverDefault: string | null;
@@ -197,4 +200,40 @@ export interface Snapshot {
    * beneath the running row and seals when the paired ToolResult lands.
    * Empty for calls that never streamed (calculator, read_file, etc.). */
   progressByCallId: Record<string, { text: string; eof: boolean }>;
+}
+
+/** UI sprint 169: one point of a watched measure's series (kernel `app.language_view`). */
+export interface LanguagePoint {
+  seq: number;
+  turn: number;
+  value: number;
+  window: number | null;
+  /** The value in standard deviations of the detector's warm-up; null before the warm-up ends. */
+  deviation: number | null;
+}
+
+export interface LanguageLane {
+  warmup_span: number | null;
+  warmup_end_seq: number | null;
+  mean: number | null;
+  sd: number | null;
+  points: LanguagePoint[];
+}
+
+/** A `substrate language` line (kernel `language_lines`); only the fields the lens reads. */
+export interface LanguageLine {
+  seq: number;
+  stream: string;
+  turn?: number;
+  pairing?: string;
+  values: Record<string, unknown>;
+}
+
+export interface LanguageView {
+  lines: LanguageLine[];
+  lanes: Record<string, Record<string, LanguageLane>>;
+  shifts: { seq: number; turn: number; stream: string; measure: string; direction: string; source_seq: number }[];
+  changes: { seq: number; turn: number; field: string; old: string; new: string }[];
+  warmup?: number;
+  last_seq: number;
 }
