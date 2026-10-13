@@ -86,10 +86,11 @@ import { mdBlocks, mdInlines, renderBlock, renderInline } from "./reveal/markdow
 import { liveActivity } from "./reveal/activity";
 import { followBottom } from "./reveal/follow_bottom";
 import { sessionStatusLook } from "./reveal/session_status";
+import { buildLanguageLens, LANGUAGE_STREAM_TABS, LanguageStreamId } from "./reveal/language_lens";
 
 
 class Component extends DCLogic {
-  state = { revealed: false, mode: GraphMode.Stream, dir: GraphDirection.Down, sel: 240, childOpen: false, promptVal: '', surface: null, studioView: 'form', studioOut: 'author a topology, then validate or build.', studioOutColor: '#62676f', level: RevealLevel.All, sent: [],
+  state = { revealed: false, mode: GraphMode.Stream, dir: GraphDirection.Down, sel: 240, langStream: LanguageStreamId.Model, langLane: 0, childOpen: false, promptVal: '', surface: null, studioView: 'form', studioOut: 'author a topology, then validate or build.', studioOutColor: '#62676f', level: RevealLevel.All, sent: [],
     topoName: 'adversarial_pair_review',
     prods: [{ name: 'builder', initial: true, emits: 'Draft' }, { name: 'attacker', initial: false, emits: 'Critique' }, { name: 'judge', initial: false, emits: 'Verdict' }],
     sviews: [{ name: 'draft_count', def: 'KindCount(of Draft)' }, { name: 'critique_buf', def: 'KindBuffer(of Critique)' }],
@@ -883,6 +884,26 @@ class Component extends DCLogic {
           return;
         }
       }
+      // UI sprint 169: in the language lens, ↑↓ move between turns, ←→ between lanes, ↵ opens the
+      // turn in the stream (the selection is the seq, shared with stream+graph).
+      {
+        const s = this.state;
+        const el = document.activeElement;
+        const typing = !!(el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable));
+        const turns = this._langTurns || [];
+        if (s.revealed && s.mode === GraphMode.Language && !s.surface && !typing && turns.length
+          && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter'].includes(e.key) && !e.metaKey && !e.ctrlKey) {
+          e.preventDefault();
+          let at = 0;
+          turns.forEach((t, i) => { if (t.seq <= s.sel) at = i; });
+          if (e.key === 'ArrowUp') this.setState({ sel: turns[Math.max(0, at - 1)].seq });
+          else if (e.key === 'ArrowDown') this.setState({ sel: turns[Math.min(turns.length - 1, at + 1)].seq });
+          else if (e.key === 'ArrowLeft') this.setState({ langLane: Math.max(0, s.langLane - 1) });
+          else if (e.key === 'ArrowRight') this.setState({ langLane: Math.min((this._langLaneCount || 1) - 1, s.langLane + 1) });
+          else this.setState({ mode: GraphMode.Stream });
+          return;
+        }
+      }
       // ⌘M toggles meta and panes (the menu's Minimize gives up the key, electron/menu.js).
       if (e.metaKey && !e.shiftKey && !e.altKey && !e.ctrlKey && (e.key === 'm' || e.key === 'M')) { e.preventDefault(); this._toggleMeta(); }
       // UI sprint 140: ⌘E expands or collapses every tool card.
@@ -1646,6 +1667,21 @@ class Component extends DCLogic {
     };
     const shownEV = state.level === RevealLevel.App ? envelopes.filter(e => !LOW[e.kind]) : envelopes;
     const selE = envelopes.find(e => e.seq === state.sel);
+    // UI sprint 169: the language lens. The selected turn is the one the selected seq falls in,
+    // so a pick here moves stream+graph and a pick there moves this.
+    let _langSelTurn = null;
+    for (const env of _liveEnvelopes) {
+      if (env.seq > state.sel) break;
+      if (env.kind === EnvelopeKind.UserMessage && env.payload) _langSelTurn = Number(env.payload.turn_index);
+    }
+    const _lang = buildLanguageLens((_vmSnap && _vmSnap.language) || null, { stream: state.langStream, selTurn: _langSelTurn, lane: state.langLane });
+    this._langTurns = _lang.turns;
+    this._langLaneCount = _lang.lanes.length;
+    const langRows = _lang.rows.map(r => ({ ...r, pick: () => this.setState({ sel: r.seq }), bg: r.selected ? '#2a2d33' : 'transparent' }));
+    const langStreams = LANGUAGE_STREAM_TABS.map(t => ({
+      label: t.label, pick: () => this.setState({ langStream: t.id, langLane: 0 }),
+      color: state.langStream === t.id ? '#d7dade' : '#62676f',
+    }));
     // lanes: one per producer KIND (fixed width). A lane's bars are SPANS — a tool span runs
     // ToolCall → ToolResult; the model span runs its ProducerStarted → FinalAnswer; park spans
     // TriggerFired → Park. Concurrent spans of one kind pack into sub-tracks that appear ONLY
@@ -1899,7 +1935,7 @@ class Component extends DCLogic {
       });
     }
     const sideLanes = _sideLanes;
-    const modes = [['stream', 'stream+graph'], ['io', 'i/o'], ['structure', 'structure'], ['scene', 'scene']];
+    const modes = [['stream', 'stream+graph'], ['io', 'i/o'], ['structure', 'structure'], [GraphMode.Language, 'language'], ['scene', 'scene']];
     // Direction (down/side) is a property of the stream lens; the
     // io/structure/scene lenses render their own layouts and the
     // direction toggle is not visible for them. Carrying `dir=Side`
@@ -1909,7 +1945,14 @@ class Component extends DCLogic {
     // user leaves stream.
     const modeChips = modes.map(([id, label]) => ({
       label,
-      pick: () => this.setState(id === GraphMode.Stream ? { mode: id } : { mode: id, dir: GraphDirection.Down }),
+      pick: () => {
+        this.setState(id === GraphMode.Stream ? { mode: id } : { mode: id, dir: GraphDirection.Down });
+        if (id === GraphMode.Language) {
+          const vm = window.__vm;
+          const ctl = vm && typeof vm.get === 'function' ? vm.get(state.focused) : null;
+          if (ctl && typeof ctl.refreshLanguage === 'function') ctl.refreshLanguage();
+        }
+      },
       color: state.mode === id ? '#d7dade' : '#62676f', bg: state.mode === id ? '#2e3138' : 'transparent',
     }));
     // Detect a 2-D numeric grid inside the bound session's envelopes.
@@ -2332,6 +2375,7 @@ class Component extends DCLogic {
       events, modeChips, sideLanes, laneDefs, laneW, laneLegend,
       sideAxisA: firstSeq, sideAxisB: lastSeq,
       isStream: state.mode === GraphMode.Stream, isIo: state.mode === GraphMode.IO, isStructure: state.mode === GraphMode.Structure, isScene: state.mode === GraphMode.Scene,
+      isLanguage: state.mode === GraphMode.Language, lang: _lang, langRows, langStreams, langHas: _lang.has, langEmpty: !_lang.has,
       isDown: state.dir === GraphDirection.Down, isSide: state.dir === GraphDirection.Side,
       setAll: () => this.setState({ level: RevealLevel.All }), setApp: () => this.setState({ level: RevealLevel.App }),
       allColor: state.level === RevealLevel.All ? '#d7dade' : '#62676f', allBg: state.level === RevealLevel.All ? '#2e3138' : 'transparent',

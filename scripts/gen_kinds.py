@@ -107,7 +107,6 @@ def render_statuses() -> str:
         "// Do not edit. Regenerate: uv run --project ../substrate python scripts/gen_kinds.py",
         "// tests/test_envelope_kinds_generated_096.py fails when this file is stale.",
         "",
-        "/* eslint-disable no-restricted-syntax */",
     ]
     for enum in (SessionStatus, TaskStatus):
         name = enum.__name__
@@ -139,7 +138,6 @@ def render_controls() -> str:
         "// Do not edit. Regenerate: uv run --project ../substrate python scripts/gen_kinds.py",
         "// tests/test_envelope_kinds_generated_096.py fails when this file is stale.",
         "",
-        "/* eslint-disable no-restricted-syntax */",
     ]
     for enum, default in ((LengthPosition, LENGTH_DEFAULT), (TonePosition, TONE_DEFAULT)):
         name = enum.__name__
@@ -172,7 +170,7 @@ def render_language_measures() -> str:
     order; and the length and tone intents (`vocabulary.LANGUAGE_INTENTS`)."""
     import json
 
-    from substrate.language.catalog import CATALOG, Group
+    from substrate.language.catalog import CATALOG, RELATION_LANES, Group
     from substrate.language.drift import DEFAULT_DRIFT, WATCHED
     from substrate.topologies.session.vocabulary import LANGUAGE_INTENTS
 
@@ -182,7 +180,6 @@ def render_language_measures() -> str:
         "// Do not edit. Regenerate: uv run --project ../substrate python scripts/gen_kinds.py",
         "// tests/test_envelope_kinds_generated_096.py fails when this file is stale.",
         "",
-        "/* eslint-disable no-restricted-syntax */",
         "export const LanguageGroup = {",
         *[f"  {g.name}: {q(g.value)}," for g in Group],
         "} as const;",
@@ -208,6 +205,8 @@ def render_language_measures() -> str:
         "// The measures the live drift detector watches, in its order.",
         f"export const LANGUAGE_WATCHED = {q(list(WATCHED))} as const;",
         f"export const LANGUAGE_WARMUP = {DEFAULT_DRIFT.warmup};",
+        "// The relation measures the turns stream shows, in order.",
+        f"export const LANGUAGE_RELATION_LANES = {q(list(RELATION_LANES))} as const;",
         "",
         "// control -> position -> [measure, direction]: what each length and tone text states.",
         "export const LANGUAGE_INTENTS: Record<string, Record<string, [string, string][]>> = {",
