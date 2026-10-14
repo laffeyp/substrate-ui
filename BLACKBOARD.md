@@ -19,6 +19,7 @@
   - **How it was found.** The Architect opened the Studio: "This is not what the studio is … you've lost the granularity of substrate." The Studio's form, inert by design, asks for Substrate's own parts: producers with the kinds they emit, `KindCount`/`KindBuffer` views, triggers whose predicate reads a view (`≥ n`), routes into slots, and termination policies with `any_of`/`all_of`. The agent had replaced it with the plan editor.
   - **Zeroed.** `3b2ed96` reverts U188. `dd8f390` returns `server.py`, the controller, the pane registry, `gen_kinds.py` and the generated files, the tool-suite tests and the shakeout tool flows to `8ca8f55`. It removes `composed_run_pane.ts` and `compose_live.ts`, and undoes U186's footer change. 17 files, 566 lines out.
   - **Kept.** U186's removal of the dead `src/` tree and its generators, `builder.py` in the packaging and the shell's unreachable sample code; ⌘F counting the real transcript (`find_counts_transcript.ts`); the scroll fix `7905f91`.
+  - **Where everything stands, and the open work:** the Sprint tail's entry "The create-topology tool zeroed" (below), and the open-items list `process/planning/OPEN-ITEMS-2026-10-10.md`.
   - **Verified.** App Python 257 passed, 5 skipped; `gen_kinds --check` current; `npm run build` passes. `run_panes`, `delegate_pane`, `find_counts_transcript`, `transcript_follow`, `structure_lists_producers`, `session_start_line` and `one_top_bar` pass. The app is rebuilt and reinstalled from these commits.
 
 - **2026-10-08 Claude — The lens audit is read; remediation opens.** The read covered both repos in full: 444 findings, grouped into ten patterns with a primary source quoted for each (`REVIEW-2026-10-08-whole-project-findings.md`, workspace root; raw notes beside it). The Architect asked for a roadmap that addresses every finding, then the cards and execution, and retired dc-runtime "only if you don't break anything". Roadmap: `process/planning/ROADMAP-2026-10-08-lens-audit-remediation.md`. Its ledger gives each of the 471 rows an ID, a sprint and a close. Cards: UI 108–113 and kernel 250–258. Defaults taken where the Architect's answer is still open, each reversible: the coding bank grows to at least 160 problems; the Studio and legacy endpoints are deleted; the heavy SWE-bench topology is deleted. Order: gates that can fail (108) first, so every later fix is checked, then security (110), hermetic tests (109), the kernel sprints, the server (111), the renderer port (112, gated on 108's recorded baseline), packaging (113), and the 1.1.2 release.
@@ -894,6 +895,29 @@ Twelve PNGs at `captures/pixel-baseline-2026-09-23/`: six states (`empty`, `one_
 - **The footer.** "● live" again, from `state.ended` (never set) and the `simulateRateLimit` prop: open item 34.
 - **Cards.** U187 and U189 `withdrawn`, U188 `reverted`, U186 notes the footer undone; U185's live review-and-build run stands.
 - **Open-items list** (`process/planning/OPEN-ITEMS-2026-10-10.md`): a 2026-10-14 status section. Items 5, 7, 10, 16, 17, 20–24, 26–28 closed by their cards; item 25 (make-topology) open again; new items 31 (pause and resume), 32 (autonomous build and swarm), 33 (`finalise_on`), 34 (the footer), 35 (the Studio's dead endpoints).
+
+- **Where everything stands (2026-10-14, after the zero-out).**
+  - **The list we work from:** `process/planning/OPEN-ITEMS-2026-10-10.md`. Its section "Where the list stands (2026-10-14)" holds the current state; an item leaves the list when its card closes.
+  - **Open, by item number on that list:**
+    - **25. Substrate makes the topology the user needs.** Open again. A tool that builds with Substrate's own parts: producer kinds and their schemas, views, triggers with predicates and policies, routes, terminations, instruments, composition. The zeroed attempt and why it failed: `substrate/process/planning/POSTMORTEM-2026-10-14-create-topology-without-substrate-r2.md`.
+    - **31. Pause and resume for held runs.** Roadmap r3 closes K330 on them; `run` refuses `pause`.
+    - **32. The autonomous build and the swarm.** Research r9 § 8.2, § 8.4; the last line of roadmap r3.
+    - **19. Child runs inside Substrate.** Half done: run panes (U182) and delegate panes (U183) exist; the depth view and breaking out do not.
+    - **30.** A window of its own for a run with several sessions.
+    - **33.** `finalise_on(K)` misses `K` when a trigger also waits on `K`.
+    - **34.** The footer reads "● live" in every state.
+    - **35.** The Studio is inert, and its calls go to `/api/validate` and `/api/build`, which the server does not handle.
+    - **6.** The `deterministic` stand-in compacts every turn.
+    - **11.** The parallel test suite, kernel K269.
+    - **12.** Distribution.
+    - **18.** A terminal opened with ⌘T.
+    - **29.** Excluding turns from what is sent to the model.
+  - **The code as it stands:**
+    - Kernel `main` at `8398561b`: K327–K334 (round 9's rebuild) and K339 in force; K335–K338 withdrawn; session vocabulary v0.15 in force, v0.16–v0.16.3 withdrawn.
+    - App `main` at `ea4d178`: U182–U184 and U186 (without its footer change) in force, plus the scroll fix; U187 and U189 withdrawn; U188 reverted.
+    - Nothing pushed since the push before round 9.
+  - **The installed app:** `/Applications/Substrate.app`, built from these commits (kernel `8398561b`), signed with the Developer ID; notarization skipped (no credentials in the build shell).
+  - **Tests and gates at this state:** kernel suite 1,684 passed, 14 skipped; app Python 257 passed, 5 skipped; `gates:electron` passes whole; `gen_kinds --check` current.
 
 ### [WITHDRAWN 2026-10-14: zeroed; see the entry above] The create-topology tool: U185–U189 with kernel K335–K339 (2026-10-14)
 - **Kernel.** Session vocabulary v0.16–v0.16.3 (§ AA): a plan of five standard parts (`model`, `agent`, `command`, `collect`, `split`), read from JSON or lines and written back with every default filled; `topology_plan` checks it through the kernel (nine findings, each with its fix; a dry run on stand-in answers, again with every `if` failing; a fixed plan when every fix is certain); `topology_run` starts it as a run its caller holds; `topology_help` teaches the language. Six shipped plans. `build`, `review`, `run` and `delegate` now say what comes next. Research `../substrate/process/planning/RESEARCH-2026-10-14-create-topology.md`, roadmap beside it.
