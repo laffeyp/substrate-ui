@@ -121,7 +121,9 @@ def test_worktree_diff_refuses_a_repository_outside_the_session_worktrees(
 
 def test_worktree_diff_shows_new_files_without_writing_the_index(base: str, tmp_path: Path) -> None:
     repo = _repo(tmp_path / "repo")
-    wt, _branch = server._session_worktree(repo, "s_sec")
+    from substrate.app import workspace
+
+    wt = workspace.make_worktree(repo, "substrate/s_sec", server._sessions_base() / "wt" / "s_sec")
     (wt / "new.py").write_text("print('hi')\n")
     (wt / "a.txt").write_text("changed\n")
     before = _git(wt, "status", "--porcelain")

@@ -79,3 +79,7 @@ Items 1–3 closed on 2026-10-10 (roadmap `substrate/process/planning/ROADMAP-20
     - An experimental design for the depth view exists outside this repo; the build starts from it. Also on the roadmap, under "After distribution".
 
 *2026-10-11: the order and scope for items 5–18 and the new picker items are in `ROADMAP-2026-10-11-before-distribution.md`, which supersedes item 18's open design question.*
+
+## Future direction (Architect, 2026-10-13)
+
+29. **Exclude turns from what is sent to the model.** In the transcript, the user selects a stretch (for example four off-topic turns) and excludes it. Nothing is deleted: the turns stay in the transcript and the record, and the history sent to the model leaves them out from then on. The exclusion is an event on the record, so it can be undone and replayed, and each later prompt shows what it left out. Finding such stretches: the language measures can suggest turns whose relation to the session's main thread drops (research and design first). "Click highlight and click exclude."

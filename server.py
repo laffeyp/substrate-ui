@@ -1927,63 +1927,17 @@ def _sessions_base() -> Path:
 # `?workspace=<name>` resolves under there; an absolute path is a project the user picked.
 
 
-def _session_worktree(repo: Path, session_id: str) -> tuple[Path, str]:
-    """Git-worktree-per-session isolation (Galley/Sculptor pattern, from the research): a session
-    driven against a REPO operates in its own worktree — a checkout on a fresh branch
-    `substrate/<session>` at `~/.substrate/sessions/wt/<repo>-<session>` — so the agent works ADJACENT
-    to your repo, on a diffable branch, without touching your working tree, and parallel sessions do
-    not collide. Idempotent (reuse the worktree if it exists). Raises if `repo` is not a git repo."""
-    repo = repo.expanduser().resolve()
-    if not (repo / ".git").exists():
-        raise ValueError(f"{repo} is not a git repository")
-    wt = _sessions_base() / "wt" / f"{repo.name}-{session_id}"
-    branch = f"substrate/{session_id}"
-    if wt.exists():
-        return wt, branch
-    wt.parent.mkdir(parents=True, exist_ok=True)
-    subprocess.run(  # -B reuses/creates the branch; worktree off HEAD
-        ["git", "-C", str(repo), "worktree", "add", "-B", branch, str(wt), "HEAD"],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    return wt, branch
-
-
 def _worktree_diff(wt: Path) -> dict[str, object]:
-    """What the agent CHANGED in a session worktree — the 'show me what it did' half of B. `git diff`
-    including new files, plus the changed-file list. Read-only: new files are marked
-    intent-to-add in a scratch copy of the index (GIT_INDEX_FILE), so the worktree's own index is
-    never written (lens audit F301: a GET changed an arbitrary repository's index). Only the
-    session worktrees this server creates (`_session_worktree`) are served. Raises otherwise."""
-    import shutil
-    import tempfile
+    """What the agent changed in a session worktree (`substrate.app.workspace.worktree_diff`,
+    read-only). Only worktrees under the sessions' `wt/` folder, where the registry makes them
+    (kernel K315), are served; any other path is refused (lens audit F301)."""
+    from substrate.app import workspace
 
     wt = Path(wt).expanduser().resolve()
     root = (_sessions_base() / "wt").resolve()
     if not wt.is_relative_to(root) or wt == root:
         raise ValueError(f"{wt} is not a session worktree")
-    if not (wt / ".git").exists():
-        raise ValueError(f"{wt} is not a git worktree")
-    index = subprocess.run(
-        ["git", "-C", str(wt), "rev-parse", "--git-path", "index"], capture_output=True, text=True
-    ).stdout.strip()
-    index_path = (wt / index) if index and not Path(index).is_absolute() else Path(index)
-    with tempfile.TemporaryDirectory(prefix="substrate-wtdiff-") as tmp:
-        scratch = Path(tmp) / "index"
-        if index_path.is_file():
-            shutil.copyfile(index_path, scratch)
-        env = {**os.environ, "GIT_INDEX_FILE": str(scratch)}
-
-        def git(*args: str) -> str:
-            return subprocess.run(
-                ["git", "-C", str(wt), *args], capture_output=True, text=True, env=env, timeout=60
-            ).stdout
-
-        git("add", "-A", "--intent-to-add")
-        diff = git("diff")
-        names = git("diff", "--name-status")
-    return {"diff": diff, "files": names.strip().splitlines()}
+    return workspace.worktree_diff(wt)
 
 
 _SESSION_PREFIXES = (
