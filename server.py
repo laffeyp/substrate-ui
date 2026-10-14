@@ -707,17 +707,12 @@ def _build_session_topology_from_manifest(
         # Sprint 053: fold `delegate` in, closing the Sprint 228 card-vs-implementation
         # drift the shakeout (sprint 052) surfaced. Sprint 228's card specified eight
         # substrate-toolkit tools including delegate; commit c455b5a shipped seven.
-        # `make_delegate` is daemon-aware — it takes the session's own responder, the
-        # session registry, and the manifest fields so a delegated child can inherit
-        # a standing session or resolve model names against the daemon's roster.
+        # Kernel K333: every child is a session in the registry, on this session's model unless
+        # the call names another, with this session's bundle, controls and tools.
         "delegate": make_delegate(
-            responder=responder,
-            root=Path(manifest.workspace),
-            child_suite_factory=full_suite,
             session_registry=app.registry,
             parent_session_id=manifest.session_id,
             parent_record_root=Path(manifest.record_root),
-            model_resolver=lambda name: _daemon_driver_resolver(app, name),
         ),
     }
     # Kernel K277: the `skill` tool loads a named guide (dellm) when the user asks for it.
@@ -2985,7 +2980,8 @@ class Handler(BaseHTTPRequestHandler):
         # before ending itself. Per-child failure is best-effort — logged
         # and continued — so a single stuck child does not block the parent's
         # SessionEnded from landing on the record.
-        children = self.app.registry.list_children(session_id)
+        # Kernel K333: delegate children nest; every descendant ends, deepest first.
+        children = self.app.registry.descendants(session_id)
         for child_manifest in children:
             try:
                 _interrupt_then_end(
@@ -3239,7 +3235,7 @@ class Handler(BaseHTTPRequestHandler):
         # entries drop. Per-child KeyError is a race (child dropped
         # between list_children and delete); ignore per the best-effort
         # contract.
-        children = self.app.registry.list_children(session_id)
+        children = self.app.registry.descendants(session_id)  # K333: deepest first
         for child_manifest in children:
             try:
                 self.app.registry.delete(child_manifest.session_id)
