@@ -206,6 +206,8 @@ def render_language_measures() -> str:
         f"export const LANGUAGE_WARMUP = {language_drift.DEFAULT_DRIFT.warmup};",
         "// The relation measures the turns stream shows, in order.",
         f"export const LANGUAGE_RELATION_LANES = {q(list(language_catalog.RELATION_LANES))} as const;",
+        "// The words each side's window needs before style match is measured.",
+        f"export const LANGUAGE_LSM_MIN_WORDS = {language_catalog.LSM_MIN_WORDS};",
         "",
         "// control -> position -> [measure, direction]: what each length and tone text states.",
         "export const LANGUAGE_INTENTS: Record<string, Record<string, [string, string][]>> = {",

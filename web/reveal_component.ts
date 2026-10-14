@@ -86,7 +86,7 @@ import { mdBlocks, mdInlines, renderBlock, renderInline } from "./reveal/markdow
 import { liveActivity } from "./reveal/activity";
 import { followBottom } from "./reveal/follow_bottom";
 import { sessionStatusLook } from "./reveal/session_status";
-import { buildLanguageLens, LANGUAGE_STREAM_TABS, LANGUAGE_VIEW_TABS, LanguageStreamId, LanguageViewMode } from "./reveal/language_lens";
+import { buildLanguageLens, LANGUAGE_STREAM_TABS, languageView, languageViewTabs, LanguageStreamId, LanguageViewMode } from "./reveal/language_lens";
 import { settingsTail } from "./reveal/settings_tail";
 
 
@@ -1687,9 +1687,11 @@ class Component extends DCLogic {
     this._langTurns = _lang.turns;
     this._langLaneCount = _lang.lanes.length;
     const langRows = _lang.rows.map(r => ({ ...r, pick: () => this.setState({ sel: r.seq }), bg: r.selected ? '#2a2d33' : 'transparent' }));
-    const langViews = LANGUAGE_VIEW_TABS.map(v => ({
+    // UI sprint 174: each stream offers its own views; one it lacks falls back to its first.
+    const _langViewNow = languageView(state.langStream, state.langView);
+    const langViews = languageViewTabs(state.langStream).map(v => ({
       label: v, pick: () => this.setState({ langView: v }),
-      color: state.langView === v ? '#d7dade' : '#62676f', bg: state.langView === v ? '#2e3138' : 'transparent',
+      color: _langViewNow === v ? '#d7dade' : '#62676f', bg: _langViewNow === v ? '#2e3138' : 'transparent',
     }));
     const langStreams = LANGUAGE_STREAM_TABS.map(t => ({
       label: t.label, pick: () => this.setState({ langStream: t.id, langLane: 0 }),

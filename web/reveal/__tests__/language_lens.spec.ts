@@ -5,7 +5,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert";
-import { buildLanguageLens, fmt, fmtSigned, LANE_W, LanguageStreamId, LanguageViewMode, niceCeil, ROW_H, TURN_COL } from "../language_lens";
+import { buildLanguageLens, fmt, fmtSigned, LANE_W, languageView, languageViewTabs, LanguageStreamId, LanguageViewMode, niceCeil, ROW_H, TURN_COL } from "../language_lens";
 import { LANGUAGE_MEASURES, LANGUAGE_WATCHED } from "../../vm/language_measures.gen";
 import type { LanguageLane, LanguageView } from "../../vm/types";
 
@@ -106,9 +106,11 @@ test("deviation: bars from the lane's centre in warm-up SDs, emphasised past ±2
   assert.strictEqual(lens.paths.length, 0);
 });
 
-test("deviation is not drawn for the turns stream", () => {
-  const lens = buildLanguageLens(view(), { stream: LanguageStreamId.Relation, selTurn: null, lane: 0, view: LanguageViewMode.Deviation });
-  assert.strictEqual(lens.has, false);
+test("turns offer side by side and measures; a view the stream lacks falls back to its first", () => {
+  assert.deepStrictEqual(languageViewTabs(LanguageStreamId.Relation), [LanguageViewMode.Sides, LanguageViewMode.Measures]);
+  assert.deepStrictEqual(languageViewTabs(LanguageStreamId.Model), [LanguageViewMode.Bars, LanguageViewMode.Deviation, LanguageViewMode.Ribbons]);
+  assert.strictEqual(languageView(LanguageStreamId.Relation, LanguageViewMode.Deviation), LanguageViewMode.Sides);
+  assert.strictEqual(languageView(LanguageStreamId.Model, LanguageViewMode.Measures), LanguageViewMode.Bars);
 });
 
 test("ribbons: width is the window, the hairline is the reply's own value, both centred", () => {
@@ -142,6 +144,7 @@ test("a lane above its catalog range scales to its own values and never sits at 
   assert.deepStrictEqual(widths, [44.4, 42.3, 24.4].map((x) => Math.round((x / 50) * BAR_MAX)));
   assert.ok(widths.every((width) => width < BAR_MAX) && widths[2] < widths[0]);
   assert.match(lens.lanes[i].scaleTitle, /^A full bar is 50 per 1,000 words/);
+  assert.strictEqual(lens.lanes[i].unit, "per 1k words");
   const ribbons = buildLanguageLens(v, { stream: LanguageStreamId.Model, selTurn: null, lane: 0, view: LanguageViewMode.Ribbons });
   const rw = ribbons.rows.filter((r) => r.isTurn).map((r) => r.cells[i].barW);
   assert.ok(rw.every((width) => width < BAR_MAX) && rw[2] < rw[0]);
@@ -154,7 +157,8 @@ test("an all-zero lane has no scale and says so; the header names the unit", () 
   const zero = lens.lanes.find((l) => l.key === "format_list_items")!;
   assert.strictEqual(zero.top, 0);
   assert.strictEqual(zero.scaleTitle, "Every value so far is zero.");
-  assert.strictEqual(zero.unit, "per 1,000 words");
+  assert.strictEqual(zero.unit, "per 1k words");
+  assert.strictEqual(lens.paths.length, LANGUAGE_WATCHED.length - 1); // no window curve on a lane with no scale
 });
 
 test("a divider at each lane's left edge, stronger where a group starts", () => {
@@ -168,4 +172,53 @@ test("deviation before the warm-up says when it starts and how far the session i
   const lens = buildLanguageLens(view(), { stream: LanguageStreamId.Model, selTurn: null, lane: 0, view: LanguageViewMode.Deviation });
   assert.strictEqual(lens.note, "Deviation starts when a lane's warm-up ends: 20 replies whose values vary. This session has 3 so far.");
   assert.strictEqual(buildLanguageLens(view(), { stream: LanguageStreamId.Model, selTurn: null, lane: 0 }).note, "");
+});
+
+// UI sprint 174: the turns stream.
+function turnsView(): LanguageView {
+  const v = view();
+  v.lanes.user = Object.fromEntries(LANGUAGE_WATCHED.map((m) => [m, lane([0, 0, 0], [5, 25, 45])]));
+  v.lanes.user.words = lane([9, 12, 30], [5, 25, 45]);
+  const rel = (seq: number, turn: number, values: Record<string, number | null>) => ({ seq, stream: "relation", turn, pairing: "final", values });
+  const win = (seq: number, stream: string, words: number) => ({ seq, stream, values: { text: {}, window: { words } } });
+  v.lines = [
+    win(5, "user", 9), win(10, "model", 40), rel(11, 0, { length_ratio: 4.4, lexical_echo: 0.5, window_lsm: null }),
+    win(25, "user", 21), win(30, "model", 120), rel(31, 1, { length_ratio: 6.7, lexical_echo: 0.6, window_lsm: null }),
+    win(45, "user", 51), win(50, "model", 520), rel(51, 2, { length_ratio: 13.3, lexical_echo: 0.4, window_lsm: null }),
+  ] as never;
+  return v;
+}
+
+test("side by side: the message left of centre, the reply right, one scale for both", () => {
+  const lens = buildLanguageLens(turnsView(), { stream: LanguageStreamId.Relation, selTurn: null, lane: 0 });
+  assert.deepStrictEqual(lens.lanes.map((l) => l.key), [...LANGUAGE_WATCHED]);
+  const words = lens.lanes[0];
+  assert.strictEqual(words.top, 500); // the reply's 400 is the highest of either side
+  const half = (LANE_W - 14) / 2 - 1;
+  const cells = lens.rows.filter((r) => r.isTurn).map((r) => r.cells[0]);
+  assert.deepStrictEqual(cells.map((c) => c.barW), [9, 12, 30].map((x) => Math.max(1, Math.round((x / 500) * half))));
+  assert.deepStrictEqual(cells.map((c) => c.bar2W), [40, 80, 400].map((x) => Math.round((x / 500) * half)));
+  const cx = words.left + 6 + (LANE_W - 14) / 2;
+  for (const c of cells) {
+    assert.strictEqual(c.barLeft + c.barW, cx - 1);
+    assert.strictEqual(c.bar2Left, cx + 1);
+  }
+  assert.strictEqual(lens.readout.cells[0].text, "30 · 400");
+  assert.match(lens.note, /message left of the centre line, the reply right/);
+});
+
+test("measures: the pair measures in the palette's colours, grouped LENGTH, ECHO, STYLE", () => {
+  const lens = buildLanguageLens(turnsView(), { stream: LanguageStreamId.Relation, selTurn: null, lane: 0, view: LanguageViewMode.Measures });
+  assert.deepStrictEqual(lens.groups.map((grp) => grp.label), ["LENGTH", "ECHO", "STYLE"]);
+  assert.ok(lens.lanes.every((l) => l.color !== "#9aa0a8"));
+  assert.strictEqual(lens.lanes[0].top, 20);
+});
+
+test("style match before its threshold: the shorter side's progress, both sides named", () => {
+  const lens = buildLanguageLens(turnsView(), { stream: LanguageStreamId.Relation, selTurn: null, lane: 0, view: LanguageViewMode.Measures });
+  const i = lens.lanes.findIndex((l) => l.key === "window_lsm");
+  const last = lens.rows.filter((r) => r.isTurn).map((r) => r.cells[i]);
+  assert.strictEqual(last[2].title, "style match (window): needs 1,600 words from each side; so far the messages have 51, the replies 520.");
+  assert.strictEqual(last[2].barW, Math.round((51 / 1600) * (LANE_W - 14)));
+  assert.strictEqual(lens.readout.cells[i].text, "51 of 1,600");
 });
