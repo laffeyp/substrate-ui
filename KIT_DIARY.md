@@ -60,6 +60,19 @@
 
 ## Entries
 
+### 2026-10-13 — A display range set from the catalog, and a build that failed silently under a gate
+
+**Context.** U173–U175, from the Architect's first use of the language lens on a live session.
+
+**What got in the way.**
+- **A fixed range was a guess about every model.** The lens drew each lane on a catalog range and clipped above it. Real replies passed five of the thirteen ranges on the first live session. I proposed surveying real outputs to set better ranges; the Architect stopped it: a lane should scale to its data. The survey would have tuned the numbers inside the wrong rule.
+- **Gates ran against a stale build twice.** `npm run build` failed on lint (one-letter names), its output went to a log, and the next command ran the gates against the previous build; one gate "passed". The build's exit code now gates the run.
+- **An invariant that held only because the picture was squeezed.** "No hairline wider than its ribbon" passed while every width was a pixel or two; at a real scale a message's value can exceed its window's.
+
+**What the kit could say.** A display scale comes from the data shown, never from a constant chosen for one kind of text. A gate chained after a build runs only on the build's success.
+
+---
+
 ### 2026-10-13 — A red test that ran in no card's check, and focus read after the fact
 
 **Context.** The language lens and bar line (U168–U172).
