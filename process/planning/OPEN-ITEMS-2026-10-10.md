@@ -83,3 +83,7 @@ Items 1–3 closed on 2026-10-10 (roadmap `substrate/process/planning/ROADMAP-20
 ## Future direction (Architect, 2026-10-13)
 
 29. **Exclude turns from what is sent to the model.** In the transcript, the user selects a stretch (for example four off-topic turns) and excludes it. Nothing is deleted: the turns stay in the transcript and the record, and the history sent to the model leaves them out from then on. The exclusion is an event on the record, so it can be undone and replayed, and each later prompt shows what it left out. Finding such stretches: the language measures can suggest turns whose relation to the session's main thread drops (research and design first). "Click highlight and click exclude."
+
+## Topologies (2026-10-13)
+
+30. **A run with several sessions opens a window of its own** (research r8 § 3.6). Panes for runs (UI sprint 176) open one pane per run session beside the caller; Swarm is the first run with several sessions, and its card carries this window and its gate. The app has no second-window code yet.

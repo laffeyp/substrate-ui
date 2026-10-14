@@ -9,6 +9,7 @@ through its public TopologyBuilder:
   - every schema a Producer kind registers (what Producers can emit),
   - every kind a Trigger or View subscribes to (what can be injected: UserMessage, ...),
   - every kind a topology injects without registering it (`tool_loop.INJECTED_EVENT_KINDS`),
+  - the same for a driven session (a run's), and the run start written into a caller's record,
   - every `substrate.*` lifecycle kind in `substrate.api.LIFECYCLE_KINDS`,
   - the turn-end kinds and the kinds older session records carry (vocabulary § K.3).
 
@@ -40,29 +41,48 @@ def session_kinds() -> set[str]:
     from substrate.topologies.session.vocabulary import LEGACY_SESSION_KINDS, TURN_END_KINDS
     from substrate.topologies.tool_loop import INJECTED_EVENT_KINDS
 
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")  # record_root=None warning: no run happens here
-        topo = session_topology(
-            driver=DeterministicResponder(0),
-            driver_name="deterministic",
-            driver_context_tokens=32768,
-            seed="",
-            tools={},
-            session_id="s_generator",
-            workspace_path="/nonexistent",
-            bundle="session",
-            language=True,  # vocabulary v0.11 (§ W): LanguageProfile, LanguageDrift
-        )
-    b = api.TopologyBuilder()
-    topo(b)
-    reg = b.build()
+    from substrate.topologies.runs.card import read_card
+    from substrate.topologies.runs.driven import DrivenRun
+    from substrate.topologies.session.vocabulary import TOPOLOGY_RUN_STARTED, RunLimits
+
+    # Vocabulary v0.12 (§ X): a run's session is driven, and registers the card, checks and report
+    # kinds a person's session does not; a pane shows both.
+    driven = DrivenRun(
+        card=read_card(
+            what="x", where=["x"], commands=["true"], statements=[], limits=RunLimits(1, 1)
+        ),
+        worktree=Path("/nonexistent"),
+        base="",
+        check_timeout_s=1,
+        first_message="",
+    )
     kinds: set[str] = set()
-    for pk in reg.producer_kinds.values():
-        kinds.update(pk.schemas.keys())
-    for t in reg.triggers:
-        kinds.update(t.subscription.kinds)
-    for v in reg.views.values():
-        kinds.update(getattr(v.subscription, "kinds", ()) or ())
+    for run in (None, driven):
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")  # record_root=None warning: no run happens here
+            topo = session_topology(
+                driver=DeterministicResponder(0),
+                driver_name="deterministic",
+                driver_context_tokens=32768,
+                seed="",
+                tools={},
+                session_id="s_generator",
+                workspace_path="/nonexistent",
+                bundle="session",
+                language=True,  # vocabulary v0.11 (§ W): LanguageProfile, LanguageDrift
+                driven=run,
+            )
+        b = api.TopologyBuilder()
+        topo(b)
+        reg = b.build()
+        for pk in reg.producer_kinds.values():
+            kinds.update(pk.schemas.keys())
+        for t in reg.triggers:
+            kinds.update(t.subscription.kinds)
+        for v in reg.views.values():
+            kinds.update(getattr(v.subscription, "kinds", ()) or ())
+    # The run table writes a run's start into its caller's record (K319); nothing registers it.
+    kinds.add(TOPOLOGY_RUN_STARTED)
     kinds.update(t.__name__ for t in INJECTED_EVENT_KINDS)
     kinds.update(api.LIFECYCLE_KINDS)
     # K260/U119: what a session record can end a turn with, and what older records carry.
