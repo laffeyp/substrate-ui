@@ -46,8 +46,17 @@ export function useScrollAnchor(key: string): ScrollAnchor {
   // The clicked header and its viewport offset; held until the user scrolls.
   const pinRef = useRef<{ el: HTMLElement; offset: number; height: number } | null>(null);
   const mountRef = useRef<HTMLElement | null>(null);
-  // scrollTop values this hook wrote, so their scroll events are not read as the user's.
-  const ownWritesRef = useRef<Set<number>>(new Set());
+  // scrollTop values this hook wrote, so their scroll events are not read as the user's. Each lasts
+  // two frames: a write's scroll event fires in the next frame's scroll steps, before its animation
+  // callbacks. A value kept longer swallowed a user's later scroll to the same place (2026-10-14:
+  // the bottom, written while following, matched the user's scroll back to the bottom, which then
+  // read as the hook's own; transcript_follow failed its switch step about one run in five).
+  const ownWritesRef = useRef<Map<number, number>>(new Map());
+  // The scrollTop this hook last wrote or read. A different one at settle time is the user's
+  // scroll, its event not yet dispatched: settle reads it first rather than writing over it
+  // (2026-10-14: a render in the same frame as a scroll to the bottom held the old reading place
+  // and the scroll was lost; transcript_follow's switch step failed one run in five).
+  const seenTopRef = useRef<number | null>(null);
 
   const findScroller = useCallback((mount: HTMLElement): HTMLElement | null => {
     let node: HTMLElement | null = mount.parentElement;
@@ -87,12 +96,39 @@ export function useScrollAnchor(key: string): ScrollAnchor {
   const write = useCallback((scroller: HTMLElement, top: number) => {
     const before = scroller.scrollTop;
     scroller.scrollTop = top;
-    if (scroller.scrollTop !== before) ownWritesRef.current.add(scroller.scrollTop);
+    seenTopRef.current = scroller.scrollTop;
+    if (scroller.scrollTop !== before) {
+      const own = ownWritesRef.current;
+      const at = scroller.scrollTop;
+      own.set(at, (own.get(at) ?? 0) + 1);
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        const n = (own.get(at) ?? 0) - 1;
+        if (n > 0) own.set(at, n); else own.delete(at);
+      }));
+    }
   }, []);
+
+  // The user moved the view: hold nothing they scrolled away from, follow again at the bottom.
+  const readUserScroll = useCallback((scroller: HTMLElement) => {
+    ownWritesRef.current.clear();
+    if (pinRef.current) {
+      pinRef.current = null; // the user scrolled: the clicked header is no longer held
+      if (mountRef.current) mountRef.current.style.paddingBottom = "";
+    }
+    const following = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <= STICK_PX;
+    followingRef.current = following;
+    seenTopRef.current = scroller.scrollTop;
+    savedByKey.set(key, { scrollTop: scroller.scrollTop, following });
+    updateAnchor();
+  }, [key, updateAnchor]);
 
   const settle = useCallback(() => {
     const scroller = scrollerRef.current;
     if (!scroller || scroller.clientHeight === 0) return;
+    const seen = seenTopRef.current;
+    if (seen !== null && scroller.scrollTop !== seen && !ownWritesRef.current.has(scroller.scrollTop)) {
+      readUserScroll(scroller);
+    }
     const pin = pinRef.current;
     if (pin && pin.el.isConnected) {
       const mount = mountRef.current;
@@ -114,22 +150,14 @@ export function useScrollAnchor(key: string): ScrollAnchor {
     if (!anchor) return;
     const delta = anchor.getBoundingClientRect().top - scroller.getBoundingClientRect().top - anchorOffsetRef.current;
     if (delta !== 0) write(scroller, scroller.scrollTop + delta);
-  }, [write]);
+  }, [write, readUserScroll]);
 
   const onScroll = useCallback(() => {
     const scroller = scrollerRef.current;
     if (!scroller || scroller.clientHeight === 0) return; // hidden: keep the saved state
-    if (ownWritesRef.current.delete(scroller.scrollTop)) return; // this hook moved it, not the user
-    ownWritesRef.current.clear();
-    if (pinRef.current) {
-      pinRef.current = null; // the user scrolled: the clicked header is no longer held
-      if (mountRef.current) mountRef.current.style.paddingBottom = "";
-    }
-    const following = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <= STICK_PX;
-    followingRef.current = following;
-    savedByKey.set(key, { scrollTop: scroller.scrollTop, following });
-    updateAnchor();
-  }, [key, updateAnchor]);
+    if (ownWritesRef.current.has(scroller.scrollTop)) return; // this hook moved it, not the user
+    readUserScroll(scroller);
+  }, [readUserScroll]);
 
   const attachTo = useCallback((mount: HTMLElement | null) => {
     if (cleanupRef.current) { cleanupRef.current(); cleanupRef.current = null; }
@@ -145,9 +173,11 @@ export function useScrollAnchor(key: string): ScrollAnchor {
     if (saved && !saved.following) {
       followingRef.current = false;
       scroller.scrollTop = saved.scrollTop;
+      seenTopRef.current = scroller.scrollTop;
     } else {
       followingRef.current = true;
       scroller.scrollTop = scroller.scrollHeight;
+      seenTopRef.current = scroller.scrollTop;
     }
     updateAnchor();
     scroller.addEventListener("scroll", onScroll, { passive: true });
@@ -171,7 +201,7 @@ export function useScrollAnchor(key: string): ScrollAnchor {
       lastHeight = scroller.clientHeight;
       if (wasHidden && lastHeight > 0) {
         const back = savedByKey.get(key);
-        if (back && !back.following) { scroller.scrollTop = back.scrollTop; updateAnchor(); return; }
+        if (back && !back.following) { scroller.scrollTop = back.scrollTop; seenTopRef.current = scroller.scrollTop; updateAnchor(); return; }
       }
       settle();
     });

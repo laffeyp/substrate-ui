@@ -14,13 +14,8 @@
 //   npx tsx harness/shakeout/transcript_follow.ts
 
 import { _electron as electron, type ElectronApplication, type Page } from "playwright";
-import { join, resolve } from "node:path";
-import { scratchDir } from "./lib/scratch";
-import { bindPaneAsUser } from "./lib/electron";
+import { bindPaneAsUser, launchArgs } from "./lib/electron";
 
-const REPO_ROOT = resolve(__dirname, "..", "..");
-// SHAKEOUT_APP is the one variable every Electron gate reads (lib/electron.ts).
-const APP = process.env.SCROLL_APP || process.env.SHAKEOUT_APP || "";
 const SCROLLER = '[data-vm-transcript-scroller="1"]';
 const fails: string[] = [];
 const check = (ok: boolean, what: string) => {
@@ -28,13 +23,15 @@ const check = (ok: boolean, what: string) => {
   if (!ok) fails.push(what);
 };
 
+// The shared launch: its own state and profile, and the offline roster, so the pane binds
+// `deterministic` on every machine. Its own launch used this machine's live roster, so its turns
+// went to a real cloud model and binding waited on Ollama's tag list (2026-10-14: one run in eight
+// timed out waiting for the default model's row).
 function launch(): Promise<ElectronApplication> {
-  const state = scratchDir("scroll-state-");
-  const userData = scratchDir("scroll-userdata-");
-  const env = { ...process.env, SUBSTRATE_HOME: state } as Record<string, string>;
-  return APP
-    ? electron.launch({ executablePath: join(APP, "Contents", "MacOS", "Substrate"), args: ["--user-data-dir=" + userData], env })
-    : electron.launch({ args: [REPO_ROOT, "--user-data-dir=" + userData], env });
+  if (process.env.SCROLL_APP && !process.env.SHAKEOUT_APP) process.env.SHAKEOUT_APP = process.env.SCROLL_APP;
+  const args = launchArgs();
+  process.on("exit", args.cleanup);
+  return electron.launch(args.options);
 }
 
 interface Geo { top: number; height: number; client: number; dist: number }
