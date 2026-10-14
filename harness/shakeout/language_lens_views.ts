@@ -4,12 +4,13 @@
 // them; the user's messages do. Steps: 23 messages of 3 to 13 words; reveal, pick language, the
 // messages stream. Deviation: every turn's words bar is as wide as the route's deviation for it
 // (±4 SD fill the lane), and the readout shows the signed SDs. Ribbons: every ribbon is as wide as
-// the route's window value on the lane's range, with the message's own value as its hairline.
+// the route's window value on the lane's scale (zero to its highest value or window, rounded up;
+// sprint 173), with the message's own value as its hairline; the unit's hover names that scale.
 
 import { _electron as electron } from "playwright";
 import type { Page } from "playwright";
 import { LANGUAGE_MEASURES, LANGUAGE_WATCHED } from "../../web/vm/language_measures.gen";
-import { fmtSigned, LANE_W } from "../../web/reveal/language_lens";
+import { fmt, fmtSigned, LANE_W, niceCeil } from "../../web/reveal/language_lens";
 import { bindPaneAsUser, launchArgs, settled, waitForApp } from "./lib/electron";
 
 const BAR = `(document.querySelector('[data-pane="1"] [data-session-bar-line]')?.textContent || "").replace(/\\s+/g, " ").trim()`;
@@ -70,12 +71,15 @@ async function main(): Promise<void> {
     await win.locator('[data-lang-view="ribbons"]').first().click();
     await settled(win);
     const rib = await bars(win);
-    const range = { low: 0, high: 800 }; // words' display range in the catalog
-    const scale = (v: number) => Math.max(0, Math.min(1, (v - range.low) / (range.high - range.low)));
+    const top = niceCeil(Math.max(...words.points.flatMap((p) => [p.value, p.window ?? 0])));
+    const scale = (v: number) => Math.max(0, Math.min(1, v / top));
+    const unitTitle = await win.evaluate(`${visible("data-lang-unit")}.find((e) => e.getAttribute("data-lang-unit") === "words")?.getAttribute("title")`);
+    if (unitTitle !== `A full bar is ${fmt(top)} words: the highest value so far, rounded up. The scale grows when a value passes it.`) throw new Error(`the words unit's hover reads ${JSON.stringify(unitTitle)}; the route's top is ${top}`);
     const wantRib = words.points.map((p) => (p.window === null ? 0 : Math.round(scale(p.window) * BAR_MAX)));
     if (JSON.stringify(rib.map((r) => r.bar)) !== JSON.stringify(wantRib)) throw new Error(`ribbon widths ${JSON.stringify(rib.map((r) => r.bar))}; from the route's windows ${JSON.stringify(wantRib)}`);
-    if (rib.some((r) => r.hair > r.bar + 1)) throw new Error(`a hairline is wider than its ribbon: ${JSON.stringify(rib)}`);
-    console.log(`language_lens_views: ok — 23 messages; deviation widths match the route (warm-up ${words.warmup_span} values, last ${fmtSigned(last.deviation)} SD); ribbon widths match the route's windows (${sid})`);
+    const wantHair = words.points.map((p) => Math.max(p.value === 0 ? 0 : 1, Math.round(scale(p.value) * BAR_MAX)));
+    if (JSON.stringify(rib.map((r) => r.hair)) !== JSON.stringify(wantHair)) throw new Error(`hairline widths ${JSON.stringify(rib.map((r) => r.hair))}; from the route's values ${JSON.stringify(wantHair)}`);
+    console.log(`language_lens_views: ok — 23 messages; deviation widths match the route (warm-up ${words.warmup_span} values, last ${fmtSigned(last.deviation)} SD); ribbon and hairline widths match the route's windows and values on a scale of 0–${top} (${sid})`);
     code = 0;
   } catch (e) {
     console.error(`language_lens_views: FAIL — ${(e as Error).message}`);

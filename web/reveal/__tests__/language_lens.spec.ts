@@ -5,7 +5,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert";
-import { buildLanguageLens, fmt, fmtSigned, LANE_W, LanguageStreamId, LanguageViewMode, ROW_H, TURN_COL } from "../language_lens";
+import { buildLanguageLens, fmt, fmtSigned, LANE_W, LanguageStreamId, LanguageViewMode, niceCeil, ROW_H, TURN_COL } from "../language_lens";
 import { LANGUAGE_MEASURES, LANGUAGE_WATCHED } from "../../vm/language_measures.gen";
 import type { LanguageLane, LanguageView } from "../../vm/types";
 
@@ -54,7 +54,7 @@ test("the shift mark sits at its reply and names the setting's stated intent", (
   assert.ok(lens.rows[1].cells.every((c) => c.mark === ""));
 });
 
-test("bars scale to the lane's range and zero draws nothing", () => {
+test("bars scale to the lane's highest value so far and zero draws nothing", () => {
   const lens = buildLanguageLens(view(), { stream: LanguageStreamId.Model, selTurn: null, lane: 0 });
   const words = lens.rows.filter((r) => r.isTurn).map((r) => r.cells[0].barW);
   assert.ok(words[0] < words[1] && words[1] < words[2]);
@@ -116,12 +116,56 @@ test("ribbons: width is the window, the hairline is the reply's own value, both 
   const cells = lens.rows.filter((r) => r.isTurn).map((r) => r.cells[0]);
   // words: values 40, 80, 400; windows 41, 81, 401 (the fixture adds one).
   assert.ok(cells[0].barW < cells[1].barW && cells[1].barW < cells[2].barW);
-  for (const c of cells) {
-    assert.ok(Math.abs((c.barLeft + c.barW / 2) - (c.hairLeft + c.hairW / 2)) < 1);
-    assert.ok(c.hairW <= c.barW + 1);
-  }
+  // The lane's top is 500 (401 rounded up); the hairline is the reply's value on it.
+  assert.deepStrictEqual(cells.map((c) => c.hairW), [40, 80, 400].map((x) => Math.round((x / 500) * (LANE_W - 14))));
+  for (const c of cells) assert.ok(Math.abs((c.barLeft + c.barW / 2) - (c.hairLeft + c.hairW / 2)) < 1);
 });
 
 test("signed numbers", () => {
   assert.deepStrictEqual([fmtSigned(1.74), fmtSigned(-0.92), fmtSigned(0), fmtSigned(null)], ["+1.7", "−0.9", "0.0", "—"]);
+});
+
+// UI sprint 173: each lane runs from zero to its highest value or window so far, rounded up.
+const BAR_MAX = LANE_W - 14;
+
+test("round tops", () => {
+  assert.deepStrictEqual([0, 0.3, 1, 7, 12, 22.2, 44.4, 401].map(niceCeil), [0, 0.5, 1, 10, 20, 25, 50, 500]);
+});
+
+test("a lane above its catalog range scales to its own values and never sits at full width", () => {
+  const v = view();
+  v.lanes.model.rate_kobak_style = lane([44.4, 42.3, 24.4], SEQS); // windows add one: 45.4 at most
+  const lens = buildLanguageLens(v, { stream: LanguageStreamId.Model, selTurn: null, lane: 0 });
+  const i = lens.lanes.findIndex((l) => l.key === "rate_kobak_style");
+  assert.strictEqual(lens.lanes[i].top, 50);
+  const widths = lens.rows.filter((r) => r.isTurn).map((r) => r.cells[i].barW);
+  assert.deepStrictEqual(widths, [44.4, 42.3, 24.4].map((x) => Math.round((x / 50) * BAR_MAX)));
+  assert.ok(widths.every((width) => width < BAR_MAX) && widths[2] < widths[0]);
+  assert.match(lens.lanes[i].scaleTitle, /^A full bar is 50 per 1,000 words/);
+  const ribbons = buildLanguageLens(v, { stream: LanguageStreamId.Model, selTurn: null, lane: 0, view: LanguageViewMode.Ribbons });
+  const rw = ribbons.rows.filter((r) => r.isTurn).map((r) => r.cells[i].barW);
+  assert.ok(rw.every((width) => width < BAR_MAX) && rw[2] < rw[0]);
+});
+
+test("an all-zero lane has no scale and says so; the header names the unit", () => {
+  const v = view();
+  v.lanes.model.format_list_items.points = v.lanes.model.format_list_items.points.map((p) => ({ ...p, value: 0, window: 0 }));
+  const lens = buildLanguageLens(v, { stream: LanguageStreamId.Model, selTurn: null, lane: 0 });
+  const zero = lens.lanes.find((l) => l.key === "format_list_items")!;
+  assert.strictEqual(zero.top, 0);
+  assert.strictEqual(zero.scaleTitle, "Every value so far is zero.");
+  assert.strictEqual(zero.unit, "per 1,000 words");
+});
+
+test("a divider at each lane's left edge, stronger where a group starts", () => {
+  const lens = buildLanguageLens(view(), { stream: LanguageStreamId.Model, selTurn: null, lane: 0 });
+  assert.deepStrictEqual(lens.dividers.map((d) => d.left), lens.lanes.map((l) => l.left - 3));
+  const strong = lens.dividers.map((d, i) => (d.color.endsWith(".10)") ? LANGUAGE_MEASURES[lens.lanes[i].key].group : null)).filter(Boolean);
+  assert.deepStrictEqual(strong, ["length", "tone", "guidance"]);
+});
+
+test("deviation before the warm-up says when it starts and how far the session is", () => {
+  const lens = buildLanguageLens(view(), { stream: LanguageStreamId.Model, selTurn: null, lane: 0, view: LanguageViewMode.Deviation });
+  assert.strictEqual(lens.note, "Deviation starts when a lane's warm-up ends: 20 replies whose values vary. This session has 3 so far.");
+  assert.strictEqual(buildLanguageLens(view(), { stream: LanguageStreamId.Model, selTurn: null, lane: 0 }).note, "");
 });
