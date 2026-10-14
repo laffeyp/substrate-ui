@@ -28,6 +28,10 @@ TOOLKIT = {
     "list_applications",
     "list_sessions",
     "delegate",
+    # Kernel K330-K332: the runs a session holds, and the build and review it can start.
+    "build",
+    "review",
+    "run",
 }
 
 

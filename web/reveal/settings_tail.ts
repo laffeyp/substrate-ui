@@ -17,11 +17,14 @@ export interface TailSeg {
 const NAME = "#62676f";
 const VALUE = "#9aa0a8";
 const MAX_LISTED = 2;
+const HANDOFF_NOTE =
+  "how readily the model hands work to delegate, review or build instead of doing it itself; /handoff rare|normal|eager";
 
 export function settingsTail(opts: {
   guidance: string;
   length: string;
   tone: string;
+  handoff: string;
   language: LanguageView | null;
   off: boolean;
   clearedSeq: number;
@@ -56,5 +59,9 @@ export function settingsTail(opts: {
       });
     }
   }
+  // UI sprint 184 (kernel K334): handoff has no language measure, so it carries no shifts.
+  segs.push({ text: " · ", color: NAME, title: "", shift: false });
+  segs.push({ text: "handoff ", color: NAME, title: HANDOFF_NOTE, shift: false });
+  segs.push({ text: opts.handoff, color: VALUE, title: HANDOFF_NOTE, shift: false });
   return segs;
 }

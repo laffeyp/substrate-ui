@@ -9,6 +9,7 @@ through its public TopologyBuilder:
   - every schema a Producer kind registers (what Producers can emit),
   - every kind a Trigger or View subscribes to (what can be injected: UserMessage, ...),
   - every kind a topology injects without registering it (`tool_loop.INJECTED_EVENT_KINDS`),
+  - the same for a run session, and the run start written into a caller's record,
   - every `substrate.*` lifecycle kind in `substrate.api.LIFECYCLE_KINDS`,
   - the turn-end kinds and the kinds older session records carry (vocabulary § K.3).
 
@@ -40,29 +41,39 @@ def session_kinds() -> set[str]:
     from substrate.topologies.session.vocabulary import LEGACY_SESSION_KINDS, TURN_END_KINDS
     from substrate.topologies.tool_loop import INJECTED_EVENT_KINDS
 
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")  # record_root=None warning: no run happens here
-        topo = session_topology(
-            driver=DeterministicResponder(0),
-            driver_name="deterministic",
-            driver_context_tokens=32768,
-            seed="",
-            tools={},
-            session_id="s_generator",
-            workspace_path="/nonexistent",
-            bundle="session",
-            language=True,  # vocabulary v0.11 (§ W): LanguageProfile, LanguageDrift
-        )
-    b = api.TopologyBuilder()
-    topo(b)
-    reg = b.build()
+    from substrate.topologies.runs.run import RunSpec
+    from substrate.topologies.session.vocabulary import TOPOLOGY_RUN_STARTED
+
+    # Vocabulary v0.14 (§ Z): a run session registers the report a person's session does not; a
+    # pane shows both.
+    run_spec = RunSpec(worktree=Path("/nonexistent"), base="", first_message="x")
     kinds: set[str] = set()
-    for pk in reg.producer_kinds.values():
-        kinds.update(pk.schemas.keys())
-    for t in reg.triggers:
-        kinds.update(t.subscription.kinds)
-    for v in reg.views.values():
-        kinds.update(getattr(v.subscription, "kinds", ()) or ())
+    for run in (None, run_spec):
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")  # record_root=None warning: no run happens here
+            topo = session_topology(
+                driver=DeterministicResponder(0),
+                driver_name="deterministic",
+                driver_context_tokens=32768,
+                seed="",
+                tools={},
+                session_id="s_generator",
+                workspace_path="/nonexistent",
+                bundle="session",
+                language=True,  # vocabulary v0.11 (§ W): LanguageProfile, LanguageDrift
+                run=run,
+            )
+        b = api.TopologyBuilder()
+        topo(b)
+        reg = b.build()
+        for pk in reg.producer_kinds.values():
+            kinds.update(pk.schemas.keys())
+        for t in reg.triggers:
+            kinds.update(t.subscription.kinds)
+        for v in reg.views.values():
+            kinds.update(getattr(v.subscription, "kinds", ()) or ())
+    # The run table writes a run's start into its caller's record (K330); nothing registers it.
+    kinds.add(TOPOLOGY_RUN_STARTED)
     kinds.update(t.__name__ for t in INJECTED_EVENT_KINDS)
     kinds.update(api.LIFECYCLE_KINDS)
     # K260/U119: what a session record can end a turn with, and what older records carry.
@@ -122,13 +133,16 @@ def render_statuses() -> str:
 
 
 def render_controls() -> str:
-    """`LengthPosition` and `TonePosition` (session vocabulary § T) as `const` objects, each
+    """`LengthPosition`, `TonePosition` and `HandoffPosition` (session vocabulary § T, § Y) as
+    `const` objects, each
     control's default, and the guidance levels with their bundles (§ R.1), so the workspace bar
     and the slash commands offer exactly what the daemon accepts."""
     from substrate.topologies.session.model_class import LEVEL_BUNDLES
     from substrate.topologies.session.vocabulary import (
+        HANDOFF_DEFAULT,
         LENGTH_DEFAULT,
         TONE_DEFAULT,
+        HandoffPosition,
         LengthPosition,
         TonePosition,
     )
@@ -139,7 +153,11 @@ def render_controls() -> str:
         "// tests/test_envelope_kinds_generated_096.py fails when this file is stale.",
         "",
     ]
-    for enum, default in ((LengthPosition, LENGTH_DEFAULT), (TonePosition, TONE_DEFAULT)):
+    for enum, default in (
+        (LengthPosition, LENGTH_DEFAULT),
+        (TonePosition, TONE_DEFAULT),
+        (HandoffPosition, HANDOFF_DEFAULT),  # § Y (K334)
+    ):
         name = enum.__name__
         lines += [
             f"export const {name} = {{",
@@ -152,6 +170,7 @@ def render_controls() -> str:
     lines += [
         f"export const LENGTH_DEFAULT = LengthPosition.{LENGTH_DEFAULT.name};",
         f"export const TONE_DEFAULT = TonePosition.{TONE_DEFAULT.name};",
+        f"export const HANDOFF_DEFAULT = HandoffPosition.{HANDOFF_DEFAULT.name};",
         "",
         # UI sprint 161 (§ R.1, § U): each guidance level and the bundle that carries it.
         "export const GUIDANCE_LEVEL_BUNDLES = {",
