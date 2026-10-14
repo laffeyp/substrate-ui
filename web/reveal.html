@@ -53,28 +53,6 @@
    <sc-if value="{{ findOpen }}" hint-placeholder-val="{{ false }}">
     <div style="display:flex;gap:10px;align-items:center;padding:8px 22px;border-bottom:1px solid rgba(255,255,255,.055);flex:none"><span style="color:#62676f;font-size:11px">find</span><div style="display:flex;gap:8px;border:1px solid rgba(255,255,255,.13);border-radius:5px;padding:4px 10px;background:#1a1c20;width:230px"><input value="{{ findQ }}" onChange="{{ onFindQ }}" placeholder="find in transcript" style="flex:1;background:none;border:none;outline:none;color:#e2e5e9;font-family:inherit;font-size:12px"></input></div><span style="color:#62676f;font-size:10.5px">{{ findCount }}</span><span onClick="{{ closeFind }}" style="margin-left:auto;color:#62676f;font-size:10.5px;cursor:pointer">esc</span></div>
    </sc-if>
-   <sc-if value="{{ descended }}" hint-placeholder-val="{{ false }}">
-    <div style="flex:1;overflow-y:auto;overflow-x:hidden;padding:16px 22px;line-height:2;font-size:{{ fontSize }}px;min-width:0">
-     <sc-if value="{{ nestedOn }}" hint-placeholder-val="{{ false }}">
-      <sc-for list="{{ descAncestors }}" as="an" hint-placeholder-count="0"><div style="opacity:.35;color:{{ an.c }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ an.t }}</div></sc-for>
-     </sc-if>
-     <div style="border-left:{{ descBorder }};padding-left:{{ descPad }}">
-      <div style="color:#9aa0a8">{{ descHead }} <span style="color:#4a4e55">{{ descWatchNote }}</span></div>
-      <sc-for list="{{ descLines }}" as="dl" hint-placeholder-count="4">
-       <div onClick="{{ dl.click }}" style="color:{{ dl.c }};cursor:{{ dl.cur }};white-space:{{ dl.ws }};overflow:hidden;text-overflow:ellipsis;margin-top:{{ dl.mt }};max-width:700px">{{ dl.t }}</div>
-      </sc-for>
-     </div>
-    </div>
-    <div style="flex:none;padding:0 22px 6px;font-size:10.5px;display:flex;gap:8px;align-items:center;white-space:nowrap;overflow:hidden">
-     <sc-for list="{{ descCrumbs }}" as="cr" hint-placeholder-count="2"><span onClick="{{ cr.jump }}" style="color:{{ cr.c }};cursor:pointer">{{ cr.t }}</span></sc-for>
-     <span style="margin-left:auto;color:#4a4e55;flex:none">{{ descEscHint }}</span>
-    </div>
-    <sc-if value="{{ descTalkable }}" hint-placeholder-val="{{ false }}">
-     <div style="flex:none;padding:0 22px 16px"><div style="display:flex;gap:12px;align-items:center;border-radius:6px;padding:11px 16px;background:#1a1c20;border-left:2px solid {{ descColor }}"><span style="color:{{ descColor }}">›</span><input value="{{ descPv }}" onChange="{{ onDescPv }}" onKeyDown="{{ onDescPvKey }}" placeholder="{{ descPlaceholder }}" style="flex:1;background:none;border:none;outline:none;color:#e2e5e9;font-family:inherit;font-size:13px"></input></div></div>
-    </sc-if>
-    <sc-if value="{{ descNotTalkable }}" hint-placeholder-val="{{ false }}"><div style="flex:none;padding:0 22px 16px;font-size:11px;color:#4a4e55">this topology takes no messages — watching · esc to leave</div></sc-if>
-   </sc-if>
-   <sc-if value="{{ notDescended }}" hint-placeholder-val="{{ true }}">
    <div data-vm-transcript-scroller="{{ pn.id }}" style="flex:1;overflow-y:auto;overflow-x:hidden;padding:16px 22px;line-height:2;font-size:{{ fontSize }}px;min-width:0">
     <div data-vm-transcript-mount="terminal" data-pane-id="{{ pn.id }}"></div>
    </div>
@@ -93,7 +71,6 @@
    <div style="flex:none;padding:0 22px 16px">
     <!-- include partials/input-bar.html o=pn -->
    </div>
-   </sc-if>
      </sc-if>
      <sc-if value="{{ pn.notMain }}" hint-placeholder-val="{{ false }}">
       <sc-if value="{{ pn.unbound }}" hint-placeholder-val="{{ false }}">
@@ -158,36 +135,10 @@
      <span onClick="{{ focusTranscript }}" style="display:none"></span>
      <div style="display:flex;gap:10px;align-items:center;padding:8px 26px;border-bottom:1px solid rgba(255,255,255,.055);flex:none"><span style="color:#62676f;font-size:11px">find</span><div style="display:flex;gap:8px;border:1px solid rgba(255,255,255,.13);border-radius:5px;padding:4px 10px;background:#1a1c20;width:230px"><input value="{{ findQ }}" onChange="{{ onFindQ }}" placeholder="find in transcript" style="flex:1;background:none;border:none;outline:none;color:#e2e5e9;font-family:inherit;font-size:12px"></input></div><span style="color:#62676f;font-size:10.5px">{{ findCount }}</span><span onClick="{{ closeFind }}" style="margin-left:auto;color:#62676f;font-size:10.5px;cursor:pointer">esc</span></div>
     </sc-if>
-    <sc-if value="{{ descended }}" hint-placeholder-val="{{ false }}">
-     <div style="flex:1;overflow-y:auto;overflow-x:hidden;padding:20px 26px;line-height:1.95;font-size:{{ fontSize }}px;min-width:0">
-      <sc-if value="{{ nestedOn }}" hint-placeholder-val="{{ false }}">
-       <sc-for list="{{ descAncestors }}" as="an" hint-placeholder-count="0"><div style="opacity:.35;color:{{ an.c }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ an.t }}</div></sc-for>
-      </sc-if>
-      <div style="border-left:{{ descBorder }};padding-left:{{ descPad }}">
-       <div style="color:#9aa0a8">{{ descHead }} <span style="color:#4a4e55">{{ descWatchNote }}</span></div>
-       <sc-for list="{{ descLines }}" as="dl" hint-placeholder-count="4">
-        <div onClick="{{ dl.click }}" style="color:{{ dl.c }};cursor:{{ dl.cur }};white-space:{{ dl.ws }};overflow:hidden;text-overflow:ellipsis;margin-top:{{ dl.mt }};max-width:700px">{{ dl.t }}</div>
-       </sc-for>
-      </div>
-     </div>
-    </sc-if>
-    <sc-if value="{{ notDescended }}" hint-placeholder-val="{{ true }}">
     <div onClick="{{ focusTranscript }}" style="flex:1;overflow-y:auto;overflow-x:hidden;padding:20px 26px;line-height:1.95;font-size:{{ fontSize }}px;min-width:0">
      <div data-vm-transcript-mount="reveal" data-pane-id="{{ focusedId }}"></div>
     </div>
     </sc-if>
-    </sc-if>
-    <sc-if value="{{ descended }}" hint-placeholder-val="{{ false }}">
-     <div style="flex:none;padding:0 26px 6px;font-size:10.5px;display:flex;gap:8px;align-items:center;white-space:nowrap;overflow:hidden">
-      <sc-for list="{{ descCrumbs }}" as="cr" hint-placeholder-count="2"><span onClick="{{ cr.jump }}" style="color:{{ cr.c }};cursor:pointer">{{ cr.t }}</span></sc-for>
-      <span style="margin-left:auto;color:#4a4e55;flex:none">{{ descEscHint }}</span>
-     </div>
-     <sc-if value="{{ descTalkable }}" hint-placeholder-val="{{ false }}">
-      <div style="flex:none;padding:0 26px 18px"><div style="display:flex;gap:12px;align-items:center;border-radius:6px;padding:10px 15px;background:#1a1c20;border-left:2px solid {{ descColor }}"><span style="color:{{ descColor }}">›</span><input value="{{ descPv }}" onChange="{{ onDescPv }}" onKeyDown="{{ onDescPvKey }}" placeholder="{{ descPlaceholder }}" style="flex:1;background:none;border:none;outline:none;color:#e2e5e9;font-family:inherit;font-size:13px"></input></div></div>
-     </sc-if>
-     <sc-if value="{{ descNotTalkable }}" hint-placeholder-val="{{ false }}"><div style="flex:none;padding:0 26px 18px;font-size:11px;color:#4a4e55">this topology takes no messages — watching · esc to leave</div></sc-if>
-    </sc-if>
-    <sc-if value="{{ notDescended }}" hint-placeholder-val="{{ true }}">
     <sc-if value="{{ activityShow }}" hint-placeholder-val="{{ false }}">
      <div data-session-bar-line="1" style="flex:none;padding:0 26px 6px;font-size:11px;line-height:1.6;color:{{ activityColor }}">
       <span class="{{ activityPulseClass }}" style="color:{{ activityTurnColor }}">{{ activityTurnWord }}</span><sc-if value="{{ activityRest }}" hint-placeholder-val="{{ false }}"><span> · {{ activityRestText }}</span></sc-if><span data-settings-tail="1" style="white-space:nowrap;display:inline-block"><sc-for list="{{ tailSegs }}" as="sg" hint-placeholder-count="0"><span data-lang-shift="{{ sg.shiftAttr }}" title="{{ sg.title }}" style="color:{{ sg.color }};text-decoration:{{ sg.deco }};text-underline-offset:3px;cursor:{{ sg.cursor }};white-space:pre">{{ sg.text }}</span></sc-for></span>
@@ -203,7 +154,6 @@
     <div style="flex:none;padding:12px 26px 18px">
     <!-- include partials/input-bar.html o=fpRow -->
     </div>
-    </sc-if>
    </div>
    <div style="flex:1;display:flex;flex-direction:column;min-width:0;background:#1a1c20">
     <div style="display:flex;flex-wrap:wrap;gap:6px 8px;padding:10px 16px 8px;font-size:11.5px;flex:none;align-items:center">
@@ -535,7 +485,7 @@
   </div>
  </sc-if>
 
- <div style="display:flex;gap:16px;padding:7px 16px;background:#2a2d33;font-size:11px;color:#62676f;flex:none"><span style="color:{{ footStatusColor }}">{{ footStatus }}</span><span>{{ footRecord }}</span><span style="margin-left:auto">{{ footHint }}</span></div>
+ <div style="display:flex;gap:16px;padding:7px 16px;background:#2a2d33;font-size:11px;color:#62676f;flex:none"><span data-foot-status="1" style="color:{{ footStatusColor }}">{{ footStatus }}</span><span>{{ footRecord }}</span><span style="margin-left:auto">{{ footHint }}</span></div>
 
  <!-- ══ DIALOGS · 19c settings / 19f export / 19g end-session (D40h: confirms are UI) ══ -->
  <sc-if value="{{ showSettings }}" hint-placeholder-val="{{ false }}">
@@ -545,7 +495,6 @@
     <div style="display:flex;align-items:center;gap:14px"><span style="color:#62676f;width:130px">appearance</span><span style="display:flex;border:1px solid rgba(255,255,255,.09);border-radius:5px;overflow:hidden"><sc-for list="{{ themeChips }}" as="tc" hint-placeholder-count="3"><span onClick="{{ tc.pick }}" style="padding:3px 12px;cursor:pointer;color:{{ tc.color }};background:{{ tc.bg }}">{{ tc.label }}</span></sc-for></span></div>
     <sc-if value="{{ settingsNote }}" hint-placeholder-val="{{ false }}"><div style="color:#62676f;font-size:11px;margin:-8px 0 0 144px">{{ settingsNote }}</div></sc-if>
     <div style="display:flex;align-items:center;gap:14px"><span style="color:#62676f;width:130px">type size</span><span onClick="{{ fontMinus }}" style="cursor:pointer;color:#9aa0a8;border:1px solid rgba(255,255,255,.09);border-radius:4px;padding:0 9px">−</span><span style="color:#e2e5e9">{{ fontLabel }}</span><span onClick="{{ fontPlus }}" style="cursor:pointer;color:#9aa0a8;border:1px solid rgba(255,255,255,.09);border-radius:4px;padding:0 9px">+</span></div>
-    <div style="display:flex;align-items:center;gap:14px"><span style="color:#62676f;width:130px">nested descent</span><span onClick="{{ toggleNested }}" style="cursor:pointer;color:#9aa0a8;font-size:11.5px;display:flex;gap:6px;align-items:center"><span style="width:11px;height:11px;border:1px solid {{ nestedBorder }};border-radius:2px;background:{{ nestedBox }};display:inline-block"></span>keep the parent text visibly nested when descended into a delegate (20d)</span></div>
     <div style="display:flex;align-items:flex-start;gap:14px"><span style="color:#62676f;width:130px;padding-top:2px">bindings</span>
      <div style="display:flex;flex-direction:column;gap:5px;flex:1;font-size:11.5px">
       <div style="display:flex"><span style="color:#b9bec5">meta / panes</span><span style="margin-left:auto;color:#9aa0a8;background:#1a1c20;border:1px solid rgba(255,255,255,.08);border-radius:4px;padding:0 7px">⌘M</span></div>

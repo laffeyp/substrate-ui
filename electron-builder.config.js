@@ -42,7 +42,6 @@ module.exports = {
   asarUnpack: [
     "server.py",
     "session_errors.py",
-    "builder.py",
     "demo_topologies.py",
     // Python's http server serves the reveal shell from disk via
     // `Path(__file__).parent / "web" / "dist"`. Inside asar the
@@ -57,7 +56,6 @@ module.exports = {
     "web/dist/**/*",
     "server.py",
     "session_errors.py",
-    "builder.py",
     "demo_topologies.py",
     "package.json",
     "!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}",

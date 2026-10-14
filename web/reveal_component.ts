@@ -32,7 +32,7 @@ declare const ReactDOM: any;
 // (vite.config.ts:inlineDcScript) bundles this import into the
 // injected script so dc-runtime sees one flat class body.
 import {
-  EnvelopeKind, TranscriptRole, Surface, GraphMode, RevealLevel, GraphDirection,
+  EnvelopeKind, Surface, GraphMode, RevealLevel, GraphDirection,
 } from "./vm/kinds";
 import { isToolCallRow, isToolResultRow } from "./vm/types";
 import { describeEventTime, eventTimes, formatClock, formatElapsed } from "./reveal/timeline";
@@ -93,7 +93,7 @@ import { settingsTail } from "./reveal/settings_tail";
 
 
 class Component extends DCLogic {
-  state = { revealed: false, mode: GraphMode.Stream, dir: GraphDirection.Down, sel: null, langStream: LanguageStreamId.Model, langLane: 0, langView: LanguageViewMode.Bars, childOpen: false, promptVal: '', surface: null, studioView: 'form', studioOut: 'author a topology, then validate or build.', studioOutColor: '#62676f', level: RevealLevel.All, sent: [],
+  state = { revealed: false, mode: GraphMode.Stream, dir: GraphDirection.Down, sel: null, langStream: LanguageStreamId.Model, langLane: 0, langView: LanguageViewMode.Bars, promptVal: '', surface: null, studioView: 'form', studioOut: 'author a topology, then validate or build.', studioOutColor: '#62676f', level: RevealLevel.All, sent: [],
     topoName: 'adversarial_pair_review',
     prods: [{ name: 'builder', initial: true, emits: 'Draft' }, { name: 'attacker', initial: false, emits: 'Critique' }, { name: 'judge', initial: false, emits: 'Verdict' }],
     sviews: [{ name: 'draft_count', def: 'KindCount(of Draft)' }, { name: 'critique_buf', def: 'KindBuffer(of Critique)' }],
@@ -104,8 +104,7 @@ class Component extends DCLogic {
     cardPos: { builder: { x: 80, y: 80 }, attacker: { x: 390, y: 190 }, judge: { x: 700, y: 86 } },
     // `driverName` in the top strip reads the pane's driver at render
     // time; null here means "read from the controller default."
-    driverName: null, driverOpen: false, wsOpen: false,
-    nsOpen: false, nsName: '', nsWorkspace: '~/.substrate/sandbox', nsIsolate: false, nsStatus: '',
+    driverName: null,
     // Pane driver stays null until the controller's /api/models roster
     // lands; then reveal.ts (or the picker) fills it with the server's
     // real default. Anything set at boot would be a guess.
@@ -117,8 +116,8 @@ class Component extends DCLogic {
     // frame.
     panes: [{ id: 1, name: 'pane-1', driver: null, editing: false, nameVal: '', unbound: true }],
     focused: 1, cols: 1, rows: 1, colW: [1], rowW: [1], revealL: 1.15, ddFor: null, wsFor: null, driverExpandedCli: null, driverExpandedFamily: null, allSessions: [],
-    descent: [], descPv: '', descExtra: {}, fanOpen: false, fanSel: 0, findOpen: false, findQ: '', findScope: 'transcript', nestedDescent: false,
-    showSettings: false, showExport: false, showEndConfirm: false, ended: false, frDone: false, theme: 'dark', fontOverride: null, settingsNote: '',
+    findOpen: false, findQ: '', findScope: 'transcript',
+    showSettings: false, showExport: false, showEndConfirm: false, frDone: false, theme: 'dark', fontOverride: null, settingsNote: '',
   // Sprint 086 — Records surface: per-workspace expand state and
   // paginated session buffers. Empty means "not expanded, not fetched
   // yet". On expand, loadSessionsByWorkspace(path, 0, 50) fills
@@ -895,7 +894,6 @@ class Component extends DCLogic {
         const patch = {};
         if (s.theme === 'dark' || s.theme === 'light' || s.theme === 'system') patch.theme = s.theme;
         if (typeof s.fontOverride === 'number' && s.fontOverride >= 9 && s.fontOverride <= 19) patch.fontOverride = s.fontOverride;
-        if (typeof s.nestedDescent === 'boolean') patch.nestedDescent = s.nestedDescent;
         if (Object.keys(patch).length) this.setState(patch);
       }
     } catch (_e) { /* localStorage unavailable / disabled — carry defaults */ }
@@ -903,7 +901,7 @@ class Component extends DCLogic {
       try {
         const s = this.state;
         window.localStorage.setItem('substrate-ui.settings', JSON.stringify({
-          theme: s.theme, fontOverride: s.fontOverride, nestedDescent: !!s.nestedDescent,
+          theme: s.theme, fontOverride: s.fontOverride,
         }));
       } catch (_e) { /* ignore */ }
     };
@@ -989,18 +987,11 @@ class Component extends DCLogic {
       if (e.metaKey && (e.key === 'd' || e.key === 'D')) { e.preventDefault(); this._split(e.shiftKey ? 'down' : 'right'); }
       if (e.metaKey && (e.key === 'f' || e.key === 'F')) { e.preventDefault(); this.setState(s => ({ findOpen: !s.findOpen, findQ: '' })); }
       if (e.metaKey && e.key === ',') { e.preventDefault(); this.setState({ showSettings: true }); }
-      if (this.state.fanOpen && !this.state.descent.length && !this.state.showSettings && !this.state.showExport && !this.state.showEndConfirm) {
-        if (e.key === 'ArrowDown') { e.preventDefault(); this.setState(s => ({ fanSel: Math.min(2, s.fanSel + 1) })); }
-        if (e.key === 'ArrowUp') { e.preventDefault(); this.setState(s => ({ fanSel: Math.max(0, s.fanSel - 1) })); }
-        if (e.key === 'Enter' && !(document.activeElement && document.activeElement.tagName === 'INPUT')) { e.preventDefault(); const k = ['floor_a', 'floor_b', 'floor_c'][this.state.fanSel]; this.setState({ descent: [k], descPv: '' }); }
-      }
       if (e.key === 'Escape') {
         const s = this.state;
         if (s.findOpen) this.setState({ findOpen: false, findQ: '' });
         else if (s.showSettings || s.showExport || s.showEndConfirm) this.setState({ showSettings: false, showExport: false, showEndConfirm: false });
-        else if (s.nsOpen || s.driverOpen || s.wsOpen || s.ddFor || s.wsFor) this.setState({ nsOpen: false, driverOpen: false, wsOpen: false, ddFor: null, wsFor: null, nsStatus: '' });
-        else if (s.descent.length) this.setState({ descent: s.descent.slice(0, -1), descPv: '' });
-        else if (s.fanOpen) this.setState({ fanOpen: false });
+        else if (s.ddFor || s.wsFor) this.setState({ ddFor: null, wsFor: null });
         else if (s.surface) this.setState({ surface: null });
         else {
           // Phase 8 item 5 · two-tier ESC. First press within the same
@@ -1016,14 +1007,7 @@ class Component extends DCLogic {
             // tool." Shift as the delay modifier reads naturally to a
             // user who has hit ESC once expecting immediate action.
             const tier = e.shiftKey ? 'soft' : 'hard';
-            // Phase 8 item 9 descent scope: when the pane is descended
-            // into a delegate, state.descent[-1] holds the child's
-            // record_root string (set by the descend click on a
-            // delegate ToolResult, b17960c). Passing it through routes
-            // the interrupt to the CHILD's runtime.
-            const desc = Array.isArray(s.descent) ? s.descent : [];
-            const descTarget = desc.length ? String(desc[desc.length - 1]) : undefined;
-            vm.interruptTurn(tier, descTarget);
+            vm.interruptTurn(tier);
           }
         }
       }
@@ -1213,88 +1197,10 @@ class Component extends DCLogic {
     // controller hasn't emitted anything since.
     const _vmSnap = ((state.controllerSnapshots || {})[state.focused]) || state.controllerSnapshot || null;
     const _hasVmSession = !!(_vmSnap && _vmSnap.sessionId);
-    // ── turn 20: delegate descent ──
-    // D70 (2026-09-06): the depth ramp for delegation. Session accent
-    // is #82a5c8 (depth 0); each descent step deepens toward violet.
-    // The step is deliberately subtle so adjacent levels look almost
-    // identical — the ramp reads only when levels are stacked (20f).
-    // Applied to the ⑂ line, inset border, path chip, and focused
-    // prompt at the corresponding depth.
-    const DEPTHC = ['#82a5c8', '#93a0cb', '#9a9bce', '#a096d0', '#ac92d4', '#b88fd9'];
-    const demoDescentChildren = {
-      'reviewer-a': { name: 'reviewer-a', driver: 'glm-4.6', rec: 'delegate_child_3e36', talkable: true,
-        head: 'reviewer-a · glm-4.6 · child record delegate_child_3e36 · 26 events',
-        lines: [
-          { t: 'delegated: check the stripe-count derivation · from fix-race-in-metering · turn 9', c: '#62676f' },
-          { t: '  ⚙ read_file src/substrate/metering.py ·· 312 lines', c: '#62676f' },
-          { t: '  ⚙ bash python -c "stripe_model.py --check" ·· ok', c: '#62676f' },
-          { t: 'The derivation holds for N≥4 stripes; below that CAS retry cost dominates. Checking the boundary case now.', c: '#b9bec5', wrap: 1 },
-          { t: '  ⑂ delegate → verifier "re-derive independently" · running · depth 2/2 · click to descend', c: '#b88fd9', go: 'verifier' },
-          { t: '◐ parked — awaiting your message', c: '#7fb3b8' }] },
-      'verifier': { name: 'verifier', driver: 'deterministic', rec: 'delegate_child_9a12', talkable: false,
-        head: 'verifier · deterministic · child record delegate_child_9a12 · 11 events',
-        lines: [
-          { t: 'delegated: re-derive independently · from ⑂ reviewer-a', c: '#62676f' },
-          { t: '  ⚙ read_file stripe_model.py ·· 88 lines', c: '#62676f' },
-          { t: '  ⚙ bash python stripe_rederive.py --independent ·· ok', c: '#62676f' },
-          { t: 'Re-derived from the queueing model directly: floor(N)=4 confirmed; N=3 degrades 2.1× under -n 8.', c: '#b9bec5', wrap: 1 },
-          { t: '  ⑂ delegate → checker · refused — ok false · "delegate depth cap reached (max_depth=2)"', c: '#c9a0b8' },
-          { t: '  ⚙ bash python stripe_rederive.py --sweep 2..16 ·· running 4s', c: '#62676f' },
-          { t: '◌ working — this topology takes no messages', c: '#4a4e55' }] },
-      'floor_a': { name: 'floor_a', driver: 'glm-4.6', rec: 'delegate_child_a1c8', talkable: true,
-        head: 'floor_a · glm-4.6 · child record delegate_child_a1c8 · 19 events',
-        lines: [
-          { t: 'delegated: derive the stripe floor independently · from fix-race-in-metering · turn 10', c: '#62676f' },
-          { t: '  ⚙ bash python stripe_floor.py --derive ·· ok', c: '#62676f' },
-          { t: 'floor(N)=4 — the CAS retry cost dominates below 4 stripes.', c: '#b9bec5', wrap: 1 },
-          { t: '◐ parked — awaiting your message', c: '#7fb3b8' }] },
-      'floor_b': { name: 'floor_b', driver: 'qwen3:8b', rec: 'delegate_child_b774', talkable: false,
-        head: 'floor_b · qwen3:8b · child record delegate_child_b774 · 11 events',
-        lines: [
-          { t: 'delegated: derive the stripe floor independently · from fix-race-in-metering · turn 10', c: '#62676f' },
-          { t: '  ⚙ bash python stripe_floor.py --sweep 2..16 ·· running 12s', c: '#62676f' },
-          { t: '◌ running — this topology takes no messages', c: '#4a4e55' }] },
-      'floor_c': { name: 'floor_c', driver: 'deterministic', rec: 'delegate_child_c093', talkable: false,
-        head: 'floor_c · deterministic · child record delegate_child_c093 · 6 events',
-        lines: [
-          { t: 'delegated: derive the stripe floor independently · from fix-race-in-metering · turn 10', c: '#62676f' },
-          { t: '  ⚙ bash python queueing_model.py ·· running 3s', c: '#62676f' },
-          { t: '◌ running — this topology takes no messages', c: '#4a4e55' }] },
-    };
-    const descTop = state.descent[state.descent.length - 1] || null;
-    const dChild = descTop ? demoDescentChildren[descTop] : null;
-    const descended = !!dChild && mainFocused;
-    const dColor = DEPTHC[Math.min(Math.max(state.descent.length - 1, 0), DEPTHC.length - 1)];
-    const descLines = !dChild ? [] : dChild.lines.concat((state.descExtra[descTop] || [])).map(L => ({
-      t: L.t, c: L.c, mt: L.wrap ? '6px' : '0', ws: L.wrap ? 'normal' : 'nowrap', cur: L.go ? 'pointer' : 'default',
-      click: L.go ? (() => this.setState(st => ({ descent: [...st.descent, L.go], descPv: '' }))) : (() => {}),
-    }));
-    const descCrumbs = [{ t: 'fix-race-in-metering', c: '#4a4e55', jump: () => this.setState({ descent: [], descPv: '' }) }]
-      .concat(state.descent.map((k, i) => ({ t: '› ⑂ ' + demoDescentChildren[k].name, c: i === state.descent.length - 1 ? DEPTHC[Math.min(i, 1)] : '#4a4e55', jump: () => this.setState({ descent: this.state.descent.slice(0, i + 1), descPv: '' }) })));
-    const descAncestors = !state.nestedDescent || !dChild ? [] : (() => {
-      const rows = [{ t: '› have someone review the locking change before we land it', c: '#62676f' }];
-      state.descent.slice(0, -1).forEach(k => rows.push({ t: '  ⑂ delegate → ' + demoDescentChildren[k].name + ' · running', c: '#a08fc9' }));
-      return rows;
-    })();
-    // ── 20g: fan-out ──
-    const fanRows = ['floor_a', 'floor_b', 'floor_c'].map((k, ki) => { const c = demoDescentChildren[k]; const parked = c.talkable; return {
-      name: c.name, driver: c.driver, meta: c.rec.replace('delegate_child_', '') + ' · ' + c.head.match(/(\d+) events/)[1] + ' ev',
-      st: parked ? '◐ parked — floor(N)=4' : '◌ running', stC: parked ? '#7fb3b8' : '#4a4e55',
-      bg: state.fanOpen && state.fanSel === ki ? '#2e3138' : 'transparent', go: () => this.setState({ descent: [k], descPv: '', fanSel: ki }) }; });
-    // ── 19h/k/l: find (transcript scope — the focused pane) ──
+    // ⌘F's query. The transcript scope counts the focused pane's own transcript rows (UI sprint 186;
+    // before, it counted lines of a sample session's text).
     const findQuery = state.findOpen ? state.findQ.trim().toLowerCase() : '';
     const FSTREAM = state.findOpen && state.findScope === 'stream';
-    const FTRANS = state.findOpen && state.findScope === 'transcript';
-    const demoFindTranscriptText = {
-      fdIntro: 'session fix-race-in-metering resumed turn 9 record 01M1684 244 events',
-      fdU1: 'the metering test flakes under load — find and fix the race',
-      fdGrep: 'grep meter_lock src 14 matches', fdRead: 'read_file src substrate metering.py 312 lines', fdEdit: 'edit_file metering.py ok',
-      fdU2: 'have someone review the locking change before we land it',
-      fdDel: 'delegate reviewer-a review the locking change answered',
-      fdBash: 'bash pytest -k metering -n 8 24 passed',
-      fdAns: 'the race was in _emit_log — an unlocked deque shared by two producers. wrapped it in the kernel lock; reviewer-a signed off. 24 24 green under -n 8.',
-      fdPark: 'parked' };
-    const fdOf = (k) => (!findQuery || !FTRANS ? 1 : (demoFindTranscriptText[k].toLowerCase().includes(findQuery) ? 1 : 0.3));
     const paneW = (state.winW || window.innerWidth) / state.cols;
     // Slash-router command table. `pick(paneId)` clears that pane's
     // prompt input and submits the slash line on that pane's own
@@ -1597,38 +1503,9 @@ class Component extends DCLogic {
       SessionStarted: '#62676f', PromptFragment: '#62676f', PromptComposed: '#62676f',
       LanguageProfile: '#62676f', LanguageDrift: '#62676f',
     };
-    // full-granularity turn slice — every tool cycle is ToolCall · TriggerFired · ProducerStarted · ToolResult · ProducerCompleted, as on a real record
-    const cycle = (base, tool, callId, step, args, gist, resultGist, resultPayload, resultContent, child) => ([
-      { seq: base, kind: EnvelopeKind.ToolCall, schema: 'tool_loop.ToolCall', prod: 'model', gist, lanes: child ? 'mc' : 'mt', payload: { call_id: callId, tool, args, step }, content: [] },
-      { seq: base + 1, kind: EnvelopeKind.TriggerFired, schema: EnvelopeKind.TriggerFired + '@1', prod: 'runtime', gist: 'fire-tool → tool', lanes: child ? 'mc' : 'mt', payload: { trigger_id: 'fire-tool', starts: 'tool' }, content: [] },
-      { seq: base + 2, kind: EnvelopeKind.ProducerStarted, schema: EnvelopeKind.ProducerStarted + '@1', prod: 'runtime', gist: 'tool · ' + tool, lanes: child ? 'mc' : 'mt', payload: { kind: 'tool', instance: 'tool_' + callId }, content: [] },
-      { seq: base + 3, kind: EnvelopeKind.ToolResult, schema: 'tool_loop.ToolResult', prod: 'tool · ' + tool, gist: resultGist, lanes: child ? 'mc' : 'mt', payload: Object.assign({ call_id: callId, tool, step, ok: true, error: '' }, resultPayload), content: resultContent },
-      { seq: base + 4, kind: EnvelopeKind.ProducerCompleted, schema: EnvelopeKind.ProducerCompleted + '@1', prod: 'runtime', gist: 'tool · ' + tool, lanes: child ? 'mc' : 'mt', payload: { kind: 'tool', instance: 'tool_' + callId }, content: [] },
-    ]);
-    const demoFullSessionEnvelopes = [
-      { seq: 214, kind: EnvelopeKind.UserMessage, schema: 'session.UserMessage', prod: 'runtime', gist: 'the metering test flakes…', lanes: 'm',
-        payload: { text: 'the metering test flakes under load — find and fix the race', turn_index: 9, slash_source: null },
-        content: [{ k: 'ASSEMBLED_PROMPT', v: '[system] You are the session driver…\n[turn 8] …compacted…\n[user] the metering test flakes under load — find and fix the race' }] },
-      { seq: 215, kind: EnvelopeKind.TriggerFired, schema: EnvelopeKind.TriggerFired + '@1', prod: 'runtime', gist: 'fire-model → model', lanes: 'm', payload: { trigger_id: 'fire-model', starts: 'model' }, content: [] },
-      { seq: 216, kind: EnvelopeKind.ProducerStarted, schema: EnvelopeKind.ProducerStarted + '@1', prod: 'runtime', gist: 'model', lanes: 'm', payload: { kind: 'model', instance: 'model_a1b2c3' }, content: [] },
-      ...cycle(217, 'grep', 'tc_0034', 34, ['meter_lock', 'src/'], 'grep "meter_lock" src/', 'ok · 14 matches', {}, [{ k: 'OUTPUT', v: 'src/substrate/metering.py:41: with meter_lock:\nsrc/substrate/metering.py:88: meter_lock = Lock()\n… 14 matches' }]),
-      ...cycle(222, 'read_file', 'tc_0035', 35, ['src/substrate/metering.py'], 'read_file metering.py', 'ok · 312 lines', {}, [{ k: 'OUTPUT', v: 'def _emit_log(self, entry):\n    self._log.append(entry)   # ← two producers share this deque\n… 312 lines' }]),
-      ...cycle(227, 'edit_file', 'tc_0036', 36, ['src/substrate/metering.py', 'self._log.append(entry)', 'with self._kernel_lock:\n    self._log.append(entry)'], 'edit_file metering.py', 'ok · 1 replacement', { output: 'ok — 1 replacement' }, []),
-      ...cycle(232, 'delegate', 'tc_0037', 37, ['review the locking change in metering.py'], 'delegate → reviewer-a', 'ok · answer folded', {}, [{ k: 'OUTPUT', v: 'lock scope is right — add a comment on why the deque needs the kernel lock\n\n(child record: delegate_child_3e366fe6_c0 · 47 events)' }], true),
-      ...cycle(237, 'bash', 'tc_0038', 38, ['pytest -k metering -n 8'], 'bash pytest -k metering -n 8', 'ok · 24 passed', { output: { exit: 0, stdout: '24 passed in 4.12s', stderr: '' } }, [{ k: 'OUTPUT.STDOUT', v: '24 passed in 4.12s' }]),
-      { seq: 242, kind: EnvelopeKind.FinalAnswer, schema: 'tool_loop.FinalAnswer', prod: 'model', gist: 'turn done', lanes: 'm', payload: { steps: 38 },
-        content: [{ k: 'TEXT', v: 'The race was in _emit_log — an unlocked deque shared by two producers. Wrapped it in the kernel lock; reviewer-a signed off. 24/24 green under -n 8.' }] },
-      { seq: 243, kind: EnvelopeKind.TriggerFired, schema: EnvelopeKind.TriggerFired + '@1', prod: 'runtime', gist: 'park-on-final-answer → park', lanes: '', payload: { trigger_id: 'park-on-final-answer', starts: 'park' }, content: [] },
-      { seq: 244, kind: EnvelopeKind.Park, schema: 'session.Park', prod: 'park', gist: 'await UserMessage', lanes: '', payload: { awaiting: EnvelopeKind.UserMessage, turn_index: 9, reason: 'final_answer' }, content: [] },
-    ];
-    const demoLiteSessionEnvelopes = [
-      { seq: 0, kind: EnvelopeKind.SessionStarted, schema: 'session.SessionStarted', prod: 'runtime', gist: 'seed · driver ' + fp.driver + ' · worktree substrate/' + fp.name, lanes: '', payload: { session_id: fp.name, driver_model: fp.driver, workspace_shape: 'worktree', bundle: null, parent_session_id: null }, content: [] },
-      { seq: 1, kind: EnvelopeKind.Park, schema: 'session.Park', prod: 'park', gist: 'await UserMessage', lanes: '', payload: { awaiting: EnvelopeKind.UserMessage, turn_index: 0, reason: 'session_open' }, content: [] },
-    ];
     // Stream lens is always fed off the controller's real envelopes.
     // Framework brackets carry the `substrate.` prefix on the wire;
-    // strip it so the lane derivation below matches on bare kind
-    // names, the way the prototype's demoFullSessionEnvelopes demo did.
+    // strip it so the lane derivation below matches on bare kind names.
     const _liveEnvelopes = (_vmSnap && Array.isArray(_vmSnap.rawEnvelopes)) ? _vmSnap.rawEnvelopes : [];
     // A turn ends with `Returned` from the `return` producer (vocabulary v0.3); records written
     // before it end with `Park` from the `park` producer. The graph reads both alike.
@@ -1643,10 +1520,8 @@ class Component extends DCLogic {
       if (_isReturnProducer(k)) return 'park';
       return 'runtime';
     };
-    // Prototype v7 convention for the `prod` column and gist per kind
-    // is hand-annotated in demoFullSessionEnvelopes (lines 803, 806, 810, 823, etc.).
-    // Real envelopes carry different fields; this map translates while
-    // keeping the visible strings identical to the prototype's shape.
+    // The `prod` column and the gist per kind, as the prototype v7 drew them, from the fields
+    // real envelopes carry.
     const formatProducerLabel = (kind, producerKind, payload) => {
       // Framework brackets always read as `runtime` — matches prototype.
       if (kind === 'TriggerFired' || kind === 'ProducerStarted' || kind === 'ProducerCompleted'
@@ -1716,7 +1591,7 @@ class Component extends DCLogic {
         prod,
         producerInstance,
         gist,
-        // Lane hint mirrors the prototype's demoFullSessionEnvelopes shape.
+        // Which lanes the row touches: m(odel), t(ool).
         lanes: (kind === EnvelopeKind.ToolCall || kind === EnvelopeKind.ToolResult) ? 'mt'
           : (_isTurnEnd(kind) || kind === 'TriggerFired' && _isReturnProducer(payload.starts)) ? ''
           : 'm',
@@ -1725,7 +1600,8 @@ class Component extends DCLogic {
       };
     });
     const _evTexts = envelopes.map(e => (e.kind + ' ' + e.prod + ' ' + e.gist).toLowerCase());
-    const findCount = !findQuery ? 'scope: ' + state.findScope + ' — click a lens to move it' : (FSTREAM ? _evTexts.filter(t => t.includes(findQuery)).length + ' matching events · scope: stream' : Object.keys(demoFindTranscriptText).filter(k => demoFindTranscriptText[k].toLowerCase().includes(findQuery)).length + ' matching lines · scope: transcript');
+    const _rowTexts = ((_vmSnap && Array.isArray(_vmSnap.transcript)) ? _vmSnap.transcript : []).map(r => String(r.text || '').toLowerCase());
+    const findCount = !findQuery ? 'scope: ' + state.findScope + ' — click a lens to move it' : (FSTREAM ? _evTexts.filter(t => t.includes(findQuery)).length + ' matching events · scope: stream' : _rowTexts.filter(t => t.includes(findQuery)).length + ' matching lines · scope: transcript');
     // When each event happened: time since the session's first event, from the record's own `t`
     // (reveal/timeline.ts). This replaced a table copied from the prototype's sample record,
     // which put every real event at "t+0.0s" or "t+2s".
@@ -2259,24 +2135,6 @@ class Component extends DCLogic {
     // paginated entry, so per-session sandbox sessions surface via
     // the by-workspace endpoint with `path=<sessions_root>` — the
     // same load-more code path every real workspace uses.
-    // (_hasVmSession hoisted with _vmSnap at renderVals top.)
-    const _vmTranscript = (_vmSnap && Array.isArray(_vmSnap.transcript)) ? _vmSnap.transcript : [];
-    const _liveTranscriptRows = _vmTranscript.map(row => {
-      let glyph = '·', glyphColor = '#4a4e55', textColor = '#9aa0a8', marginTop = '2px';
-      if (row.role === TranscriptRole.User) { glyph = '›'; glyphColor = '#82a5c8'; textColor = '#e2e5e9'; marginTop = '12px'; }
-      else if (row.role === TranscriptRole.Model) { glyph = '◆'; glyphColor = '#7fb3b8'; textColor = '#b9bec5'; marginTop = '6px'; }
-      else if (row.role === TranscriptRole.Tool) {
-        const failed = row.toolOk === false;
-        glyph = failed ? '⚠' : '⚙';
-        glyphColor = failed ? '#c26058' : '#62676f';
-        textColor = failed ? '#c26058' : '#62676f';
-      }
-      else if (row.role === TranscriptRole.Park) { glyph = '◐'; glyphColor = '#82a5c8'; textColor = '#82a5c8'; marginTop = '10px'; }
-      else if (row.role === TranscriptRole.Ended) { glyph = '◇'; glyphColor = '#62676f'; textColor = '#62676f'; marginTop = '10px'; }
-      else if (row.role === TranscriptRole.Warning) { glyph = '!'; glyphColor = '#c26058'; textColor = '#c26058'; }
-      return { glyph, glyphColor, textColor, marginTop, text: row.text || '' };
-    });
-
     return {
       workspaceGroups: _workspaceGroups,
       workspaceGroupsEmpty: _workspaceGroups.length === 0,
@@ -2373,20 +2231,12 @@ class Component extends DCLogic {
       // cards, Markdown blocks, opacity from find, running seconds —
       // reuse it here for the focused pane so both views stay in sync.
       ...this._liveBindingsFor(fp.id, state),
-      crumb: ((title) => surf === Surface.Records ? title + ' › records' : surf === Surface.Assay ? title + ' › assays › rev_kimi_vs_glm' : surf === Surface.Studio ? title + ' › studio' : descended ? title + state.descent.map(k => ' › ⑂ ' + demoDescentChildren[k].name).join('') : title)(this._paneTitle(state, fp)),
-      escHint: surf ? 'esc — back' : descended ? 'esc — up one level' : '',
+      crumb: ((title) => surf === Surface.Records ? title + ' › records' : surf === Surface.Assay ? title + ' › assays' : surf === Surface.Studio ? title + ' › studio' : title)(this._paneTitle(state, fp)),
+      escHint: surf ? 'esc — back' : '',
       openRecords: () => this._toggleSurface('records'),
       openStudio: () => this._toggleSurface('studio'),
       openAssay: () => this.setState({ surface: Surface.Assay }),
       backToSession: () => this.setState({ surface: null }),
-      extraSessions: (state.liveSessionsFromServer && state.liveSessionsFromServer.length
-        ? state.liveSessionsFromServer.map(row => ({
-            name: row.name || (row.sessionId || '').slice(0, 12),
-            meta: (row.driver || '?') + ' · ' + row.status,
-            where: 'open in a pane ▸',
-          }))
-        : (state.allSessions || []).map(x => { const open = state.panes.some(pp => pp.id === x.id); const nm = (state.panes.find(pp => pp.id === x.id) || x).name; return { name: nm, meta: x.driver + ' · worktree substrate/' + nm, where: open ? 'open in a pane ▸' : 'no pane — still yours' }; })
-      ),
       // UI sprint 139 (U125): the model chip opens a card, as the workspace chip does; it picks nothing.
       fpDdOpen: state.ddFor === fp.id, fpToggleDd: () => this.setState(s => ({ ddFor: s.ddFor === fp.id ? null : fp.id, wsFor: null })),
       ...(() => {
@@ -2427,10 +2277,6 @@ class Component extends DCLogic {
       revealLabel: state.revealed ? 'panes' : 'meta',
       revealBtnColor: state.revealed && !surf ? '#212327' : '#9aa0a8', revealBtnBg: state.revealed && !surf ? '#82a5c8' : '#3d434c',
       fontSize: state.fontOverride ?? this.props.transcriptFontSize ?? 13,
-      childOpen: state.childOpen, toggleChild: () => this.setState(s => ({ childOpen: !s.childOpen })),
-      descendReviewer: (ev) => { ev.stopPropagation(); this.setState({ descent: ['reviewer-a'], descPv: '', surface: null }); },
-      swallow: (ev) => ev.stopPropagation(),
-      childHint: state.childOpen ? '▾' : '· answered ▸',
       // Reveal view's single-pane prompt row (reveal.html:345). Bound
       // to the focused pane's pv, so the same field the terminal-view
       // pane input mutates is what the reveal-view input shows.
@@ -2596,7 +2442,6 @@ class Component extends DCLogic {
         this.setState({ studioOut: 'built — ' + runName + ' (' + status + ') ▸', studioOutColor: '#82a5c8' });
       },
       studioOut: state.studioOut, studioOutColor: state.studioOutColor,
-      sentLines: (fp && fp.sent) ? fp.sent.map(t => ({ text: t })) : [],
       panes, paneCols: state.colW.map(w => w.toFixed(3) + 'fr').join(' '), paneRows: state.rowW.map(w => w.toFixed(3) + 'fr').join(' '), focusedName: fp.name, focusedId: fp.id,
       revealFlexL: state.revealL.toFixed(3) + ' 1 0%',
       revealGutterLeft: (state.revealL / (state.revealL + 1) * 100).toFixed(2) + '%',
@@ -2636,21 +2481,6 @@ class Component extends DCLogic {
         return /^auto\b/.test(label.slice(String(d).toLowerCase().length).trim()) ? String(d).toLowerCase() : label;
       })(), driverOpen: state.driverOpen,
       toggleDriverMenu: () => this.setState(s => ({ driverOpen: !s.driverOpen, wsOpen: false })),
-      driverOptions: ['kimi-k2', 'deepseek-r1:8b', 'qwen3-coder:480b-cloud', 'nemotron-3-super', 'claude (cli)', 'gemini (cli)', 'deterministic'].map(m => ({
-        label: m, color: m === fp.driver ? '#e2e5e9' : '#9aa0a8',
-        pick: () => this.setState(s => ({ driverOpen: false, panes: s.panes.map(x => x.id === s.focused ? Object.assign({}, x, { driver: m }) : x) })),
-      })),
-      wsOpen: state.wsOpen, toggleWs: () => this.setState(s => ({ wsOpen: !s.wsOpen, driverOpen: false })),
-      nsOpen: state.nsOpen, openNs: () => this.setState({ nsOpen: true, driverOpen: false, wsOpen: false }),
-      closeNs: () => this.setState({ nsOpen: false, nsStatus: '' }),
-      nsName: state.nsName, updNsName: (ev) => this.setState({ nsName: ev.target.value }),
-      nsWorkspace: state.nsWorkspace, updNsWorkspace: (ev) => this.setState({ nsWorkspace: ev.target.value }),
-      nsShape: (() => { const w = state.nsWorkspace.trim(); if (!w) return 'sandbox — ~/.substrate/sessions/<id>/workspace/'; return 'plain directory → flat (same tree, same reflexes)'; })(),
-      nsIsolate: state.nsIsolate, toggleNsIsolate: () => this.setState(s => ({ nsIsolate: !s.nsIsolate })),
-      nsIsoBox: state.nsIsolate ? '#82a5c8' : 'transparent', nsIsoBorder: state.nsIsolate ? '#82a5c8' : '#4a4e55',
-      nsStatus: state.nsStatus, nsStatusColor: state.nsStatus.startsWith('created') ? '#82a5c8' : '#9aa0a8',
-      createNs: () => { const w = this.state.nsWorkspace.trim(); if (w && !w.startsWith('/') && !w.startsWith('~')) { this.setState({ nsStatus: 'workspace must be an absolute path (or blank for the sandbox)' }); return; } this.setState({ nsStatus: 'created (prototype — the real app POSTs /api/session and the rail picks it up)' }); },
-      logoDot: state.ended ? '#4a4e55' : '#62676f', // session status (D31); gray once finalised
       // Sprint 088c — footRecord + footStatus were both prototype
       // literals: `record 01M1684 · 244 events` and ` · clean` are
       // hardcoded, never change with real state. Show only what we
@@ -2658,36 +2488,20 @@ class Component extends DCLogic {
       // real session name otherwise; nothing when unbound. Status
       // reads the real live/finalised bit without the "clean" suffix
       // (which had no not-clean branch).
-      footRecord: descended
-        ? '⑂ depth ' + state.descent.length + '/2'
-        : fp.unbound
+      footRecord: fp.unbound
           ? 'unbound — pick a workspace'
           : fp.name
             ? 'session ' + fp.name
             : '',
-      footHint: surf ? 'esc back to session' : descended ? 'esc climbs one level' : '⌘M toggles meta',
-      footStatus: (this.props.simulateRateLimit ?? false) ? '◌ rate-limited · retry 3/6 in 14s' : state.ended ? '● finalised' : '● live',
-      footStatusColor: (this.props.simulateRateLimit ?? false) ? '#7fb3b8' : state.ended ? '#62676f' : '#82a5c8',
-      // ── descend (turn 20) ──
-      descended, notDescended: !descended, descLines, descCrumbs, descAncestors,
-      descHead: dChild ? dChild.head : '', descColor: dColor,
-      descTalkable: descended && dChild.talkable, descNotTalkable: descended && !dChild.talkable,
-      descWatchNote: dChild && !dChild.talkable ? '· watching' : '',
-      nestedOn: state.nestedDescent && descended, descBorder: state.nestedDescent && descended ? '2px solid ' + dColor : 'none', descPad: state.nestedDescent && descended ? '16px' : '0',
-      descEscHint: 'esc back to ' + (state.descent.length > 1 ? '⑂ ' + demoDescentChildren[state.descent[state.descent.length - 2]].name : 'session'),
-      descPlaceholder: dChild ? 'message ' + dChild.name + (dChild.talkable ? ' — delivers at its next park · / commands' : '') : '',
-      descPv: state.descPv, onDescPv: (ev) => this.setState({ descPv: ev.target.value }),
-      onDescPvKey: (ev) => { if (ev.key !== 'Enter') return; const v = this.state.descPv.trim(); if (!v) return; const k = descTop;
-        this.setState(st => ({ descPv: '', descExtra: Object.assign({}, st.descExtra, { [k]: [...(st.descExtra[k] || []), { t: '› ' + v, c: '#e2e5e9' }, { t: 'queued — delivers at the child\u2019s next park (prototype; needs park/resume wiring in the child topology, D70)', c: '#4a4e55' }] }) })); },
-      // ── fan-out (20g) ──
-      fanOpen: state.fanOpen, toggleFan: () => this.setState(st => ({ fanOpen: !st.fanOpen })),
-      fanHint: state.fanOpen ? '▾' : '· expand ▸', fanRows,
+      footHint: surf ? 'esc back to session' : '⌘M toggles meta',
+      // UI sprint 186: the focused pane's own state (it read '● live' always, from a flag nothing set).
+      footStatus: !_hasVmSession ? '' : _vmSnap.endedReason ? '◇ ended' : _vmSnap.connection === 'connected' ? '● live' : '○ ' + String(_vmSnap.connection || ''),
+      footStatusColor: _hasVmSession && !_vmSnap.endedReason && _vmSnap.connection === 'connected' ? '#82a5c8' : '#62676f',
       // ── find (19k/19l) ──
       findOpen: state.findOpen, findQ: state.findQ, onFindQ: (ev) => this.setState({ findQ: ev.target.value }), findCount,
       focusTranscript: () => { if (this.state.findScope !== 'transcript') this.setState({ findScope: 'transcript' }); },
       focusStream: () => { if (this.state.findScope !== 'stream') this.setState({ findScope: 'stream' }); },
       closeFind: () => this.setState({ findOpen: false, findQ: '' }),
-      fdIntro: fdOf('fdIntro'), fdU1: fdOf('fdU1'), fdGrep: fdOf('fdGrep'), fdRead: fdOf('fdRead'), fdEdit: fdOf('fdEdit'), fdU2: fdOf('fdU2'), fdDel: fdOf('fdDel'), fdBash: fdOf('fdBash'), fdAns: fdOf('fdAns'), fdPark: fdOf('fdPark'),
       // ── dialogs (19c/19f/19g) ──
       showSettings: state.showSettings, closeSettings: () => this.setState({ showSettings: false, settingsNote: '' }),
       themeChips: ['dark', 'light', 'system'].map(t => ({ label: t, color: state.theme === t ? '#e2e5e9' : '#62676f', bg: state.theme === t ? '#2e3138' : 'transparent',
@@ -2696,15 +2510,13 @@ class Component extends DCLogic {
       fontLabel: (state.fontOverride ?? this.props.transcriptFontSize ?? 13) + 'px',
       fontMinus: () => this.setState(st => ({ fontOverride: Math.max(9, (st.fontOverride ?? this.props.transcriptFontSize ?? 13) - 1) }), this._persistSettings),
       fontPlus: () => this.setState(st => ({ fontOverride: Math.min(19, (st.fontOverride ?? this.props.transcriptFontSize ?? 13) + 1) }), this._persistSettings),
-      nestedBox: state.nestedDescent ? '#82a5c8' : 'transparent', nestedBorder: state.nestedDescent ? '#82a5c8' : '#4a4e55',
-      toggleNested: () => this.setState(st => ({ nestedDescent: !st.nestedDescent }), this._persistSettings),
       showExport: state.showExport, closeExport: () => this.setState({ showExport: false }), doExport: () => this.setState({ showExport: false }),
       showEndConfirm: state.showEndConfirm, closeEndConfirm: () => this.setState({ showEndConfirm: false }),
       doEndSession: async () => {
         // D68: a LIVE session (turn in flight) interrupts the turn
         // first, then ends. Connection == 'connected' with a park
         // reason still unset means a turn is running.
-        this.setState({ showEndConfirm: false, descent: [] });
+        this.setState({ showEndConfirm: false });
         const vm = window.__vm;
         if (!vm) return;
         const snap = vm.snapshot ? vm.snapshot() : null;
@@ -2714,8 +2526,6 @@ class Component extends DCLogic {
         }
         vm.endSession('user_end');
       },
-      isEnded: state.ended,
-      simRL: this.props.simulateRateLimit ?? false,
       // ── first run (19m) ──
       // Gates: this.props.firstRun (for the dc-runtime scenario
       // switcher) OR ?firstrun=1 in the URL. `frDone` closes it once
