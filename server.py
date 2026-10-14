@@ -46,7 +46,12 @@ import msgspec
 from substrate import api
 from substrate.topologies import bundled
 from substrate.topologies.session.environment import session_baseline
-from substrate.topologies.session.vocabulary import LENGTH_DEFAULT, TONE_DEFAULT, Control
+from substrate.topologies.session.vocabulary import (
+    HANDOFF_DEFAULT,
+    LENGTH_DEFAULT,
+    TONE_DEFAULT,
+    Control,
+)
 from substrate.adapters.harness_streams import SUBSTRATE_MCP_SERVER
 from substrate.topologies.session.mcp_channel import handle_jsonrpc
 from substrate.topologies.session.model_class import (
@@ -687,17 +692,12 @@ def _build_session_topology_from_manifest(
         # Sprint 053: fold `delegate` in, closing the Sprint 228 card-vs-implementation
         # drift the shakeout (sprint 052) surfaced. Sprint 228's card specified eight
         # substrate-toolkit tools including delegate; commit c455b5a shipped seven.
-        # `make_delegate` is daemon-aware — it takes the session's own responder, the
-        # session registry, and the manifest fields so a delegated child can inherit
-        # a standing session or resolve model names against the daemon's roster.
+        # Kernel K323: every child is a session in the registry, on this session's model unless
+        # the call names another, with this session's bundle, controls and tools.
         "delegate": make_delegate(
-            responder=responder,
-            root=Path(manifest.workspace),
-            child_suite_factory=full_suite,
             session_registry=app.registry,
             parent_session_id=manifest.session_id,
             parent_record_root=Path(manifest.record_root),
-            model_resolver=lambda name: _daemon_driver_resolver(app, name),
         ),
         # Kernel K319-K321: the session holds the runs it starts. `build` works one card on a new
         # branch, `review` starts one reviewer per style; `run` stops, pauses, resumes, steps
@@ -726,6 +726,8 @@ def _build_session_topology_from_manifest(
         # Kernel K296: the Length and Tone positions, at their defaults when the manifest names none.
         length=manifest.length or LENGTH_DEFAULT,
         tone=manifest.tone or TONE_DEFAULT,
+        # Kernel K324 (§ Y): how readily the model hands work to a topology.
+        handoff=manifest.handoff or HANDOFF_DEFAULT,
         seed=manifest.seed,
         tools=session_tools,
         per_turn=manifest.per_turn,
@@ -2744,6 +2746,7 @@ class Handler(BaseHTTPRequestHandler):
                 driver_params=driver_params,
                 length=controls[Control.LENGTH],
                 tone=controls[Control.TONE],
+                handoff=controls[Control.HANDOFF],
             )
             # Validate driver_params at the same boundary as PATCH does. If
             # the client sent bad shape/values, roll back the create so the
@@ -2785,6 +2788,7 @@ class Handler(BaseHTTPRequestHandler):
                 "bundle": manifest.bundle,
                 Control.LENGTH: manifest.length,  # kernel K296
                 Control.TONE: manifest.tone,
+                Control.HANDOFF: manifest.handoff,  # kernel K324
                 "role": manifest.role,
                 "driver_params": dict(current.driver_params)
                 if current.driver_params is not None
@@ -3038,7 +3042,8 @@ class Handler(BaseHTTPRequestHandler):
         # before ending itself. Per-child failure is best-effort — logged
         # and continued — so a single stuck child does not block the parent's
         # SessionEnded from landing on the record.
-        children = self.app.registry.list_children(session_id)
+        # Kernel K323: delegate children nest; every descendant ends, deepest first.
+        children = self.app.registry.descendants(session_id)
         for child_manifest in children:
             try:
                 _interrupt_then_end(
@@ -3115,6 +3120,27 @@ class Handler(BaseHTTPRequestHandler):
             return
         _BG.stop(task, "stopped from the app")
         self._json(task.describe())
+
+    def _session_children(self, session_id: str) -> None:
+        """UI sprint 178: GET /api/session/<id>/children — the sessions whose parent it is (a
+        delegate's children, kernel K323), oldest first."""
+        if self.app.registry is None or self.app.registry.get(session_id) is None:
+            self._error(404, f"unknown session {session_id!r}")
+            return
+        children = sorted(self.app.registry.list_children(session_id), key=lambda m: m.created_at)
+        self._json(
+            {
+                "children": [
+                    {
+                        "session_id": m.session_id,
+                        "name": m.name,
+                        "driver": m.driver,
+                        "created_at": m.created_at,
+                    }
+                    for m in children
+                ]
+            }
+        )
 
     def _session_runs(self, session_id: str) -> None:
         """UI sprint 176: GET /api/session/<id>/runs — the runs the session started (kernel K319)."""
@@ -3273,6 +3299,7 @@ class Handler(BaseHTTPRequestHandler):
                 "bundle": manifest.bundle,
                 Control.LENGTH: manifest.length,  # kernel K296
                 Control.TONE: manifest.tone,
+                Control.HANDOFF: manifest.handoff,  # kernel K324
                 "record": manifest.record_root,
                 "created_at": manifest.created_at,
                 "status": manifest.status,
@@ -3313,7 +3340,7 @@ class Handler(BaseHTTPRequestHandler):
         # entries drop. Per-child KeyError is a race (child dropped
         # between list_children and delete); ignore per the best-effort
         # contract.
-        children = self.app.registry.list_children(session_id)
+        children = self.app.registry.descendants(session_id)  # K323: deepest first
         for child_manifest in children:
             try:
                 self.app.registry.delete(child_manifest.session_id)
@@ -4030,6 +4057,7 @@ class Handler(BaseHTTPRequestHandler):
             values: dict[str, str | None] = {
                 Control.LENGTH: updated.length,
                 Control.TONE: updated.tone,
+                Control.HANDOFF: updated.handoff,
             }
             for control in Control:
                 if control in body:
@@ -4042,7 +4070,10 @@ class Handler(BaseHTTPRequestHandler):
                     values[control] = raw or None
             try:
                 updated = self.app.registry.set_controls(
-                    session_id, length=values[Control.LENGTH], tone=values[Control.TONE]
+                    session_id,
+                    length=values[Control.LENGTH],
+                    tone=values[Control.TONE],
+                    handoff=values[Control.HANDOFF],
                 )
             except ValueError as exc:
                 self._error(400, str(exc))
@@ -4079,6 +4110,7 @@ class Handler(BaseHTTPRequestHandler):
                 "bundle": updated.bundle,
                 Control.LENGTH: updated.length,  # kernel K296
                 Control.TONE: updated.tone,
+                Control.HANDOFF: updated.handoff,  # kernel K324
                 "driver_params": dict(updated.driver_params)
                 if updated.driver_params is not None
                 else None,
@@ -4166,6 +4198,10 @@ class Handler(BaseHTTPRequestHandler):
             m_language = re.fullmatch(r"/api/session/([^/]+)/language", path)
             if m_language:  # UI sprint 168
                 self._session_language(m_language.group(1))
+                return
+            m_children = re.fullmatch(r"/api/session/([^/]+)/children", path)
+            if m_children:  # UI sprint 178
+                self._session_children(m_children.group(1))
                 return
             m_runs = re.fullmatch(r"/api/session/([^/]+)/runs", path)
             if m_runs:  # UI sprint 176

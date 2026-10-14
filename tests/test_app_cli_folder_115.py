@@ -76,8 +76,12 @@ def test_each_reviewer_runs_in_its_own_worktree(
     ended = {e.run_id: e for e in run_hold.TABLE.drain_ended("s_rev_115")}
     for rid in run_ids:
         wt = (sb / "wt" / rid).resolve()
-        assert ended[rid].outcome.value == "done"
-        assert Path(ended[rid].report.done.strip()).resolve() == wt  # the stand-in printed its cwd
+        report = ended[rid].report
+        assert Path(report.done.strip()).resolve() == wt  # the stand-in printed its cwd
+        # K322: the stand-in also judges the review's statement, and a printed path answers none.
+        (statement,) = report.checks
+        assert ended[rid].outcome.value == "stuck" and statement.passed is False
+        assert statement.note == "the judge's reply did not answer S1"
     assert {Path(r._cwd).resolve() for _, r in built} >= {
         (sb / "wt" / rid).resolve() for rid in run_ids
     }

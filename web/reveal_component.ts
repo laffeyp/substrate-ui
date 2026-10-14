@@ -37,7 +37,7 @@ import {
 import { isToolCallRow, isToolResultRow } from "./vm/types";
 import { describeEventTime, eventTimes, formatClock, formatElapsed } from "./reveal/timeline";
 import { toggleToolOutputMode } from "./vm/tool_output_mode";
-import { GUIDANCE_LEVEL_BUNDLES, LENGTH_DEFAULT, LengthPosition, TONE_DEFAULT, TonePosition } from "./vm/controls.gen";
+import { GUIDANCE_LEVEL_BUNDLES, HANDOFF_DEFAULT, LENGTH_DEFAULT, LengthPosition, TONE_DEFAULT, TonePosition } from "./vm/controls.gen";
 
 // UI sprint 132 (kernel K288, session vocabulary § R): the guidance levels the bar offers, each
 // with the bundle that carries it. `auto` names none, so the daemon picks the model's default.
@@ -203,6 +203,7 @@ class Component extends DCLogic {
     const level = ctl && typeof ctl.guidanceLevel === 'function' ? ctl.guidanceLevel() : null;
     return settingsTail({
       guidance: level || snap.bundleSlug || 'none', length: snap.length || LENGTH_DEFAULT, tone: snap.tone || TONE_DEFAULT,
+      handoff: snap.handoff || HANDOFF_DEFAULT,
       language: snap.language || null, off: !!snap.languageOff, clearedSeq: snap.languageClearedSeq ?? -1,
     }).map(sg => ({ ...sg, deco: sg.shift ? 'underline dotted' : 'none', cursor: sg.shift ? 'help' : 'inherit', shiftAttr: sg.shift ? sg.text : '' }));
   }
@@ -814,6 +815,25 @@ class Component extends DCLogic {
       }));
     }
   }
+  // UI sprint 178: a delegate child opens an interactive pane beside its caller, attached to the
+  // child's session, as any session a person writes to. A pane already showing it is focused.
+  _openSessionPane(callerPaneId, sessionId) {
+    if (!sessionId) return;
+    const vm = window.__vm;
+    const shown = (this.state.panes || []).find(p => p.childSid === sessionId);
+    if (shown) { this.setState({ focused: shown.id }); if (vm && vm.setActive) vm.setActive(shown.id); return; }
+    if ((this.state.panes || []).length >= 8) {
+      const caller = vm && vm.get ? vm.get(callerPaneId) : null;
+      if (caller && caller.noteLine) caller.noteLine(`delegate child ${sessionId}: eight panes are open; close one to see it`);
+      return;
+    }
+    this.setState({ focused: callerPaneId }, () => this._split('right', {
+      unbound: false, name: 'delegate ' + sessionId.slice(2, 10), childSid: sessionId, ws: '', shape: 'flat', lines: [],
+    }, (id) => {
+      const c = vm && vm.get ? vm.get(id) : null;
+      if (c && c.attachExisting) c.attachExisting(sessionId).catch(() => undefined);
+    }));
+  }
   _split(dir, patch, then) {
     // Each split adds exactly one pane, up to a hard cap of eight.
     // The focused pane's cell is halved along the requested axis; the
@@ -900,6 +920,7 @@ class Component extends DCLogic {
           if (typeof run.t === 'number' && Date.now() / 1000 - run.t > 60) return;
           this._openRunPanes(ev.paneId, run);
         } else if (ev.tag === 'RUN_FOCUS_REQUESTED') this._openRunPanes(ev.paneId, run);
+        else if (ev.tag === 'DELEGATE_CHILD_STARTED') this._openSessionPane(ev.paneId, String(run.session_id || ''));
       }); }
     // Sprint 085 followup — close driver/workspace dropdowns on
     // outside click. Each dropdown wrapper span in reveal.html carries

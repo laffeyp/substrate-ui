@@ -25,6 +25,7 @@ const EMPTY_SNAPSHOT: Snapshot = {
   bundleSlug: null,
   length: null,
   tone: null,
+  handoff: null,
   workspacePath: null,
   workspaceShape: null,
   turnIndex: 0,

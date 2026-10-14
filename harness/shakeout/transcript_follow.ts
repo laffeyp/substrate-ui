@@ -179,7 +179,7 @@ async function toggleView(win: Page): Promise<void> {
     await toggleView(win);
     await turn(win);
     const g4 = await geo(win);
-    check(g4.dist <= 2, `switch: at the bottom before the switch, following after it (gap ${g4.dist}px)`);
+    check(g4.dist <= 2, `switch: at the bottom before the switch, following after it (gap ${g4.dist}px; ${JSON.stringify(g4)})`);
   } catch (e) {
     check(false, `flow error: ${e instanceof Error ? e.message : String(e)}`);
   } finally {

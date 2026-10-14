@@ -5,7 +5,8 @@
 // Steps: bind pane 1 (deterministic) and send; the bar line ends with guidance, normal, neutral.
 // /tone blunt: manifest and bar line read blunt; the next turn records SessionChanged(tone).
 // /guidance low: the bundle is standard-low and the bar line reads low; the next turn records
-// SessionChanged(bundle). /length enormous: refused, nothing changes.
+// SessionChanged(bundle). /handoff eager (UI sprint 179): manifest and bar line read eager; the next
+// turn records SessionChanged(handoff) and its prompt carries the text. /length enormous: refused.
 
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
@@ -50,10 +51,10 @@ async function main(): Promise<void> {
     await bindPaneAsUser(win);
     await turn(win, "hello");
     const start = await win.evaluate(BAR) as string;
-    if (!/ · guidance \S+ · length normal · tone neutral$/.test(start)) throw new Error(`the bar line reads ${JSON.stringify(start)}`);
+    if (!/ · guidance \S+ · length normal · tone neutral · handoff normal$/.test(start)) throw new Error(`the bar line reads ${JSON.stringify(start)}`);
 
     await type(win, "/tone blunt");
-    await win.waitForFunction(`/ · tone blunt$/.test(${BAR})`, undefined, { timeout: 5_000 })
+    await win.waitForFunction(`/ · tone blunt · handoff normal$/.test(${BAR})`, undefined, { timeout: 5_000 })
       .catch(async () => { throw new Error(`after /tone blunt the bar line reads ${JSON.stringify(await win.evaluate(BAR))}`); });
     if ((await manifest(win)).tone !== "blunt") throw new Error(`the manifest's tone is ${JSON.stringify((await manifest(win)).tone)}`);
     await turn(win, "again");
@@ -61,17 +62,26 @@ async function main(): Promise<void> {
     if (!tone || tone.old !== "neutral" || tone.new !== "blunt") throw new Error(`the record's changes: ${JSON.stringify(await changes(win))}`);
 
     await type(win, "/guidance low");
-    await win.waitForFunction(`/ · guidance low · length normal · tone blunt$/.test(${BAR})`, undefined, { timeout: 5_000 })
+    await win.waitForFunction(`/ · guidance low · length normal · tone blunt · handoff normal$/.test(${BAR})`, undefined, { timeout: 5_000 })
       .catch(async () => { throw new Error(`after /guidance low the bar line reads ${JSON.stringify(await win.evaluate(BAR))}; last rows ${await win.evaluate(`JSON.stringify(window.__vm.get(1).snapshot().transcript.slice(-2).map((r) => r.text))`)}`); });
     if ((await manifest(win)).bundle !== "standard-low") throw new Error(`the manifest's bundle is ${JSON.stringify((await manifest(win)).bundle)}`);
     await turn(win, "once more");
     const bundle = (await changes(win)).find((c) => c.field === "bundle");
     if (!bundle || bundle.new !== "standard-low") throw new Error(`the record's changes: ${JSON.stringify(await changes(win))}`);
 
+    // UI sprint 179 (kernel K324): /handoff eager, as the other controls.
+    await type(win, "/handoff eager");
+    await win.waitForFunction(`/ · handoff eager$/.test(${BAR})`, undefined, { timeout: 5_000 })
+      .catch(async () => { throw new Error(`after /handoff eager the bar line reads ${JSON.stringify(await win.evaluate(BAR))}`); });
+    if ((await manifest(win)).handoff !== "eager") throw new Error(`the manifest's handoff is ${JSON.stringify((await manifest(win)).handoff)}`);
+    await turn(win, "hand it off");
+    const handoff = (await changes(win)).find((c) => c.field === "handoff");
+    if (!handoff || handoff.old !== "normal" || handoff.new !== "eager") throw new Error(`the record's changes: ${JSON.stringify(await changes(win))}`);
+
     // UI sprint 167: the prompt for the message after each change carries the new text, not the old.
     const sid = await win.evaluate(SID) as string;
-    const got = deliveries(launch.state, sid).filter((d) => d.field === "tone" || d.field === "bundle");
-    if (got.length < 2) throw new Error(`the record holds ${got.length} tone/bundle changes: ${JSON.stringify(got)}`);
+    const got = deliveries(launch.state, sid).filter((d) => ["tone", "bundle", "handoff"].includes(d.field));
+    if (got.length < 3) throw new Error(`the record holds ${got.length} tone/bundle/handoff changes: ${JSON.stringify(got)}`);
     for (const d of got) {
       // A tone or bundle change writes text; with none written the check would pass on nothing.
       if (d.written === 0 || !d.new_text_in_prompt || d.old_text_in_prompt) throw new Error(`the prompt for ${JSON.stringify(d.message)} after ${d.field} ${d.old}→${d.new} lacks the new text or keeps the old: ${JSON.stringify(d)}`);
@@ -82,7 +92,7 @@ async function main(): Promise<void> {
     await win.waitForFunction(`window.__vm.get(1).snapshot().transcript.some((r) => /enormous/.test(r.text || "") && r.role !== "user")`, undefined, { timeout: 5_000 })
       .catch(() => { throw new Error("/length enormous showed no refusal"); });
     if ((await manifest(win)).length === "enormous" || (await win.evaluate(BAR)) !== barBefore) throw new Error("/length enormous changed something");
-    console.log(`controls_mid_session: ok — bar ${JSON.stringify(start)} → ${JSON.stringify(barBefore)}; tone neutral→blunt and bundle ${bundle.old}→${bundle.new} recorded; /length enormous refused`);
+    console.log(`controls_mid_session: ok — bar ${JSON.stringify(start)} → ${JSON.stringify(barBefore)}; tone neutral→blunt, bundle ${bundle.old}→${bundle.new} and handoff normal→eager recorded, each in the next prompt; /length enormous refused`);
     code = 0;
   } catch (e) {
     console.error(`controls_mid_session: FAIL — ${(e as Error).message}`);

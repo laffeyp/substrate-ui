@@ -164,6 +164,8 @@ export interface Snapshot {
   /** UI sprint 143 (kernel K296): the Length and Tone positions; null is the default. */
   length: string | null;
   tone: string | null;
+  /** Kernel K324 (vocabulary § Y): how readily the model hands work to a topology; null is the default. */
+  handoff: string | null;
   workspacePath: string | null;
   workspaceShape: string | null;
   turnIndex: number;

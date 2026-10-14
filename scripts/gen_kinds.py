@@ -142,13 +142,16 @@ def render_statuses() -> str:
 
 
 def render_controls() -> str:
-    """`LengthPosition` and `TonePosition` (session vocabulary § T) as `const` objects, each
+    """`LengthPosition`, `TonePosition` and `HandoffPosition` (session vocabulary § T, § Y) as
+    `const` objects, each
     control's default, and the guidance levels with their bundles (§ R.1), so the workspace bar
     and the slash commands offer exactly what the daemon accepts."""
     from substrate.topologies.session.model_class import LEVEL_BUNDLES
     from substrate.topologies.session.vocabulary import (
+        HANDOFF_DEFAULT,
         LENGTH_DEFAULT,
         TONE_DEFAULT,
+        HandoffPosition,
         LengthPosition,
         TonePosition,
     )
@@ -159,7 +162,11 @@ def render_controls() -> str:
         "// tests/test_envelope_kinds_generated_096.py fails when this file is stale.",
         "",
     ]
-    for enum, default in ((LengthPosition, LENGTH_DEFAULT), (TonePosition, TONE_DEFAULT)):
+    for enum, default in (
+        (LengthPosition, LENGTH_DEFAULT),
+        (TonePosition, TONE_DEFAULT),
+        (HandoffPosition, HANDOFF_DEFAULT),  # § Y (K324)
+    ):
         name = enum.__name__
         lines += [
             f"export const {name} = {{",
@@ -172,6 +179,7 @@ def render_controls() -> str:
     lines += [
         f"export const LENGTH_DEFAULT = LengthPosition.{LENGTH_DEFAULT.name};",
         f"export const TONE_DEFAULT = TonePosition.{TONE_DEFAULT.name};",
+        f"export const HANDOFF_DEFAULT = HandoffPosition.{HANDOFF_DEFAULT.name};",
         "",
         # UI sprint 161 (§ R.1, § U): each guidance level and the bundle that carries it.
         "export const GUIDANCE_LEVEL_BUNDLES = {",

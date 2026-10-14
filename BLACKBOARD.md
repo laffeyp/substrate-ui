@@ -872,6 +872,12 @@ Twelve PNGs at `captures/pixel-baseline-2026-09-23/`: six states (`empty`, `one_
 
 *Agent maintains. Last 10 increment closes; older roll into ## Built as compressed paragraphs.*
 
+### Delegate panes and the handoff setting: U178–U179 with kernel K322–K324 (2026-10-14)
+- **U178** a delegate child opens an interactive pane beside its caller (`GET /api/session/<id>/children`; children announced by creation time while a delegate call is open; `attachExisting`); signal vocabulary 0.3 (`DELEGATE_CHILD_STARTED`). Gate `delegate_pane.ts`.
+- **U179** `/handoff rare|normal|eager` and the bar line's handoff segment; `controls_mid_session.ts` checks the change reaches the next prompt. The picker row waits for the picker-sequence item. Live (`handoff_live.ts`): no topology calls at either position on two models; card left open.
+- **Open: `transcript_follow` "switch at the bottom" failed twice in about 31 runs, both under heavy load (gap 806 px); not reproduced in 28 later runs.** The gate now prints the scroller's geometry on failure. Not a flake: an unfound error in the scroll anchor or the gate.
+- **Gates.** App Python 256 passed, 5 skipped; unit tests 62 passed. `gates:electron`: every command passes but `transcript_follow` (above); `language_bar_line` and `controls_mid_session` were updated for the handoff segment the bar line now ends with.
+
 ### Runs in the app: U176–U177 with kernel K314–K321 (2026-10-13)
 - **U176** panes for runs: a run a session starts opens a view-only pane per run session beside the caller, bound to its record; typing there is refused and the pane says why; the caller's transcript has a row per run; `/run [stop|focus] [run id]`; the server's `GET .../runs` and `POST .../runs/<id>/stop`. The generator now reads a driven session's kinds too (card, checks, report, pause, resume, run start and end), each drawn as a row. Signal vocabulary 0.2 (four tags; 0.1 stays). Every session has `build`, `review` and `run`. The `code_review` application builder is removed. A run with several sessions in a window of its own waits for Swarm (open item 30).
 - **U177** a real model in the installed app: `glm-5.2:cloud` reviewed `feature` ("[confirmed] major — `mean([])` raises `ZeroDivisionError`") and built a card whose branch passes both `python3` commands, each in its own pane as it ran. The first run found the packaged app's `PYTHONHOME` reaching every process the server starts; fixed by `substrate.interpreter`. That run's model had written `~/.local/bin/python3`; it was moved to the Trash.
