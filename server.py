@@ -3189,6 +3189,23 @@ class Handler(BaseHTTPRequestHandler):
         _BG.stop(task, "stopped from the app")
         self._json(task.describe())
 
+    def _session_topology_plans(self, session_id: str) -> None:
+        """UI sprint 188: GET /api/session/<id>/topology/plans — the plans there are for the
+        session, by name, as lines: the shipped ones and those saved in its workspace (a saved
+        plan wins over a shipped one of the same name)."""
+        from substrate.topologies.compose.tools import saved, shipped
+
+        manifest = self.app.registry.get(session_id) if self.app.registry is not None else None
+        if manifest is None:
+            self._error(404, f"unknown session {session_id!r}")
+            return
+        mine = saved(Path(manifest.workspace))
+        plans = [
+            {"name": name, "lines": text, "saved": name in mine}
+            for name, text in sorted({**shipped(), **mine}.items())
+        ]
+        self._json({"plans": plans})
+
     def _session_children(self, session_id: str) -> None:
         """UI sprint 183: GET /api/session/<id>/children — the sessions whose parent it is (a
         delegate's children, kernel K333), oldest first."""
@@ -4299,6 +4316,10 @@ class Handler(BaseHTTPRequestHandler):
             m_language = re.fullmatch(r"/api/session/([^/]+)/language", path)
             if m_language:  # UI sprint 168
                 self._session_language(m_language.group(1))
+                return
+            m_plans = re.fullmatch(r"/api/session/([^/]+)/topology/plans", path)
+            if m_plans:  # UI sprint 188: the plans the Studio lists
+                self._session_topology_plans(m_plans.group(1))
                 return
             m_children = re.fullmatch(r"/api/session/([^/]+)/children", path)
             if m_children:  # UI sprint 183

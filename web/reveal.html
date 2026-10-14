@@ -411,76 +411,40 @@
  </sc-if>
 
  <!-- ══ SURFACE · studio (parity with web/studio.html) ══ -->
+ <!-- UI sprint 188: the Studio checks and runs a plan in the language the model's topology tools take
+      (kernel K338). A plan from the list fills the box; check shows what will run; run starts it for
+      this pane's session. -->
  <sc-if value="{{ showStudio }}" hint-placeholder-val="{{ false }}">
-  <div style="flex:1;display:flex;flex-direction:column;min-height:0;background:#212327">
+  <div data-studio="1" style="flex:1;display:flex;flex-direction:column;min-height:0;background:#212327">
    <div style="display:flex;align-items:center;gap:14px;padding:12px 40px 0;font-size:11.5px;flex:none">
-    <span style="color:#62676f">studio · author a topology</span>
-    <span style="flex:none;display:flex;border:1px solid rgba(255,255,255,.09);border-radius:4px;overflow:hidden"><span onClick="{{ setStudioForm }}" style="cursor:pointer;padding:2px 10px;white-space:nowrap;color:{{ sFormColor }};background:{{ sFormBg }}">form</span><span onClick="{{ setStudioCanvas }}" style="cursor:pointer;padding:2px 10px;white-space:nowrap;color:{{ sCanvasColor }};background:{{ sCanvasBg }}">canvas</span></span>
-    <span style="margin-left:auto;color:#62676f">coming soon…</span>
+    <span style="color:#62676f">studio · a topology from standard parts</span>
+    <span style="margin-left:auto;color:#62676f">{{ studioNote }}</span>
    </div>
-   <!-- Studio surface is inert until the topology-picker rewrite lands
-        (see process/planning/FUTURE-DIRECTIONS-2026-09-27, section 1).
-        Everything below the header is dimmed and non-interactive. -->
-   <div style="opacity:0.4;pointer-events:none;flex:1;display:flex;flex-direction:column;min-height:0">
-   <sc-if value="{{ isStudioForm }}" hint-placeholder-val="{{ true }}">
-    <div style="flex:1;overflow:auto;padding:14px 40px 8px">
-     <div style="max-width:880px;font-size:12px">
-      <div style="font-size:10px;letter-spacing:.12em;color:#62676f;margin:8px 0 6px">TOPOLOGY NAME</div>
-      <input value="{{ topoName }}" onChange="{{ updTopoName }}" style="background:#1a1c20;border:1px solid rgba(255,255,255,.07);border-radius:5px;padding:5px 11px;color:#e2e5e9;font-family:inherit;font-size:12px;outline:none;min-width:240px"></input>
-      <div style="font-size:10px;letter-spacing:.12em;color:#62676f;margin:16px 0 6px">PRODUCERS <span onClick="{{ addProd }}" style="color:#82a5c8;border:1px solid rgba(255,255,255,.09);border-radius:4px;padding:0 7px;letter-spacing:0;cursor:pointer">+ producer</span></div>
-      <sc-for list="{{ prodRows }}" as="p" hint-placeholder-count="3">
-       <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px"><input value="{{ p.name }}" onChange="{{ p.updName }}" style="background:#1a1c20;border:1px solid rgba(255,255,255,.07);border-radius:5px;padding:5px 11px;color:#e2e5e9;font-family:inherit;font-size:12px;outline:none;width:130px"></input><span onClick="{{ p.toggleInit }}" style="cursor:pointer;color:#9aa0a8;font-size:11px;display:flex;gap:5px;align-items:center"><span style="width:11px;height:11px;border:1px solid {{ p.initBorder }};border-radius:2px;background:{{ p.initBox }};display:inline-block"></span>initial</span><span style="color:#62676f">emits</span><input value="{{ p.emits }}" onChange="{{ p.updEmits }}" style="background:#1a1c20;border:1px solid rgba(255,255,255,.07);border-radius:5px;padding:5px 11px;color:#e2e5e9;font-family:inherit;font-size:12px;outline:none;min-width:180px;color:#9aa0a8"></input><span onClick="{{ p.rm }}" style="color:#62676f;border:1px solid rgba(255,255,255,.09);border-radius:4px;padding:0 7px;cursor:pointer">✕</span></div>
-      </sc-for>
-      <div style="font-size:11px;color:#62676f">a Producer brings a computation; "initial" Producers run on the run's opening cohort. emits = comma-separated event kinds.</div>
-      <div style="font-size:10px;letter-spacing:.12em;color:#62676f;margin:16px 0 6px">VIEWS <span onClick="{{ addView }}" style="color:#82a5c8;border:1px solid rgba(255,255,255,.09);border-radius:4px;padding:0 7px;letter-spacing:0;cursor:pointer">+ view</span></div>
-      <sc-for list="{{ viewRows }}" as="v" hint-placeholder-count="2">
-       <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px"><input value="{{ v.name }}" onChange="{{ v.updName }}" style="background:#1a1c20;border:1px solid rgba(255,255,255,.07);border-radius:5px;padding:5px 11px;color:#e2e5e9;font-family:inherit;font-size:12px;outline:none;width:130px;color:#88b0d0"></input><span style="color:#62676f">=</span><input value="{{ v.def }}" onChange="{{ v.updDef }}" style="background:#1a1c20;border:1px solid rgba(255,255,255,.07);border-radius:5px;padding:5px 11px;color:#e2e5e9;font-family:inherit;font-size:12px;outline:none;min-width:210px;color:#9aa0a8"></input><span onClick="{{ v.rm }}" style="color:#62676f;border:1px solid rgba(255,255,255,.09);border-radius:4px;padding:0 7px;cursor:pointer">✕</span></div>
-      </sc-for>
-      <div style="font-size:11px;color:#62676f;margin-top:5px">a View is a running projection of the Bus a Predicate reads. KindCount(of) counts a kind; KindBuffer(of) buffers it.</div>
-      <div style="font-size:10px;letter-spacing:.12em;color:#62676f;margin:16px 0 6px">TRIGGERS <span onClick="{{ addTrig }}" style="color:#82a5c8;border:1px solid rgba(255,255,255,.09);border-radius:4px;padding:0 7px;letter-spacing:0;cursor:pointer">+ trigger</span></div>
-      <sc-for list="{{ trigRows }}" as="t" hint-placeholder-count="2">
-       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px"><input value="{{ t.id }}" onChange="{{ t.updId }}" style="background:#1a1c20;border:1px solid rgba(255,255,255,.07);border-radius:5px;padding:5px 11px;color:#e2e5e9;font-family:inherit;font-size:12px;outline:none;width:130px;color:#c9a0b8"></input><span style="color:#62676f">when</span><input value="{{ t.view }}" onChange="{{ t.updView }}" style="background:#1a1c20;border:1px solid rgba(255,255,255,.07);border-radius:5px;padding:5px 11px;color:#e2e5e9;font-family:inherit;font-size:12px;outline:none;width:130px;color:#88b0d0"></input><span style="color:#9aa0a8">≥</span><input value="{{ t.n }}" onChange="{{ t.updN }}" style="background:#1a1c20;border:1px solid rgba(255,255,255,.07);border-radius:5px;padding:5px 11px;color:#e2e5e9;font-family:inherit;font-size:12px;outline:none;width:44px"></input><span style="color:#62676f">→ starts</span><input value="{{ t.starts }}" onChange="{{ t.updStarts }}" style="background:#1a1c20;border:1px solid rgba(255,255,255,.07);border-radius:5px;padding:5px 11px;color:#e2e5e9;font-family:inherit;font-size:12px;outline:none;width:120px"></input><span onClick="{{ t.rm }}" style="color:#62676f;border:1px solid rgba(255,255,255,.09);border-radius:4px;padding:0 7px;cursor:pointer">✕</span></div>
-      </sc-for>
-      <div style="font-size:11px;color:#62676f;margin-top:5px">a Trigger starts a Producer when its Predicate over a View matures. predicate: View &lt;op&gt; n — leave the View blank for always.</div>
-      <div style="font-size:10px;letter-spacing:.12em;color:#62676f;margin:16px 0 6px">ROUTES <span onClick="{{ addRoute }}" style="color:#82a5c8;border:1px solid rgba(255,255,255,.09);border-radius:4px;padding:0 7px;letter-spacing:0;cursor:pointer">+ route</span></div>
-      <sc-for list="{{ routeRows }}" as="r" hint-placeholder-count="1">
-       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px"><input value="{{ r.id }}" onChange="{{ r.updId }}" style="background:#1a1c20;border:1px solid rgba(255,255,255,.07);border-radius:5px;padding:5px 11px;color:#e2e5e9;font-family:inherit;font-size:12px;outline:none;width:130px;color:#a08fc9"></input><span style="color:#62676f">stages</span><input value="{{ r.kind }}" onChange="{{ r.updKind }}" style="background:#1a1c20;border:1px solid rgba(255,255,255,.07);border-radius:5px;padding:5px 11px;color:#e2e5e9;font-family:inherit;font-size:12px;outline:none;width:110px;color:#9aa0a8"></input><span style="color:#62676f">→ slot</span><input value="{{ r.slot }}" onChange="{{ r.updSlot }}" style="background:#1a1c20;border:1px solid rgba(255,255,255,.07);border-radius:5px;padding:5px 11px;color:#e2e5e9;font-family:inherit;font-size:12px;outline:none;width:140px;color:#a08fc9"></input><span onClick="{{ r.rm }}" style="color:#62676f;border:1px solid rgba(255,255,255,.09);border-radius:4px;padding:0 7px;cursor:pointer">✕</span></div>
-      </sc-for>
-      <div style="font-size:11px;color:#62676f;margin-top:5px">a Route stages an event of a kind into a future Producer's named input slot — carrying data into instances the Trigger will create.</div>
-      <div style="font-size:10px;letter-spacing:.12em;color:#62676f;margin:16px 0 6px">TERMINATION POLICY</div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-       <sc-for list="{{ termChips }}" as="tc" hint-placeholder-count="6"><span onClick="{{ tc.pick }}" style="cursor:pointer;padding:3px 10px;border-radius:4px;font-size:11.5px;color:{{ tc.color }};background:{{ tc.bg }}">{{ tc.label }}</span></sc-for>
-      </div>
-      <sc-if value="{{ isThreshold }}" hint-placeholder-val="{{ true }}">
-       <div style="display:flex;gap:8px;align-items:center;margin-top:8px"><span style="color:#62676f">kind</span><input value="{{ termOf }}" onChange="{{ updTermOf }}" style="background:#1a1c20;border:1px solid rgba(255,255,255,.07);border-radius:5px;padding:5px 11px;color:#e2e5e9;font-family:inherit;font-size:12px;outline:none;width:120px"></input><span style="color:#62676f">n</span><input value="{{ termN }}" onChange="{{ updTermN }}" style="background:#1a1c20;border:1px solid rgba(255,255,255,.07);border-radius:5px;padding:5px 11px;color:#e2e5e9;font-family:inherit;font-size:12px;outline:none;width:44px"></input><span style="color:#62676f;font-size:11px">· any_of / all_of compose member policies</span></div>
-      </sc-if>
+   <div style="flex:1;overflow:auto;padding:6px 40px 8px">
+    <div style="max-width:960px;font-size:12px">
+     <div style="font-size:10px;letter-spacing:.12em;color:#62676f;margin:16px 0 6px">PLANS</div>
+     <div style="display:flex;gap:6px;flex-wrap:wrap">
+      <sc-for list="{{ studioPlans }}" as="sp" hint-placeholder-count="6"><span data-studio-plan="{{ sp.name }}" onClick="{{ sp.pick }}" style="cursor:pointer;padding:3px 10px;border-radius:4px;font-size:11.5px;color:{{ sp.color }};background:{{ sp.bg }}">{{ sp.label }}</span></sc-for>
      </div>
+     <div style="font-size:10px;letter-spacing:.12em;color:#62676f;margin:16px 0 6px">PLAN</div>
+     <textarea data-studio-lines="1" value="{{ studioLines }}" onChange="{{ onStudioLines }}" spellcheck="false" style="display:block;width:100%;min-height:150px;box-sizing:border-box;background:#1a1c20;border:1px solid rgba(255,255,255,.07);border-radius:5px;padding:5px 11px;color:#e2e5e9;font-family:inherit;font-size:12px;outline:none;padding:8px 11px;line-height:1.7;resize:vertical"></textarea>
+     <div style="font-size:11px;color:#62676f;margin-top:5px">one step a line: <span style="color:#9aa0a8">id: part on Kind "role"</span>; parts model, agent, command, collect, split; then <span style="color:#9aa0a8">end: first Kind</span>. check fills every default in.</div>
+     <sc-if value="{{ studioChecked }}" hint-placeholder-val="{{ false }}">
+      <div style="font-size:10px;letter-spacing:.12em;color:#62676f;margin:16px 0 6px">FINDINGS</div>
+      <sc-for list="{{ studioFindings }}" as="sf" hint-placeholder-count="1"><div data-studio-finding="1" style="color:{{ sf.color }};line-height:1.7">{{ sf.text }}</div></sc-for>
+      <div style="font-size:10px;letter-spacing:.12em;color:#62676f;margin:16px 0 6px">WIRING</div>
+      <sc-for list="{{ studioWiring }}" as="sw" hint-placeholder-count="3"><div style="color:#9aa0a8;line-height:1.7">{{ sw.text }}</div></sc-for>
+      <div style="font-size:10px;letter-spacing:.12em;color:#62676f;margin:16px 0 6px">DRY RUN · STAND-IN ANSWERS</div>
+      <sc-for list="{{ studioDry }}" as="sd" hint-placeholder-count="4"><div data-studio-dry="1" style="color:{{ sd.color }};line-height:1.7">{{ sd.text }}</div></sc-for>
+     </sc-if>
     </div>
-   </sc-if>
-   <sc-if value="{{ isStudioCanvas }}" hint-placeholder-val="{{ false }}">
-    <div style="flex:1;overflow:auto;padding:14px 40px 8px">
-     <div style="font-size:11px;color:#62676f;margin-bottom:8px">node-graph — drag the Producer cards; solid edges are Triggers; dashed edges feed a Route's named slot</div>
-     <div style="position:relative;height:420px;border:1px solid rgba(255,255,255,.07);border-radius:8px;background:#1a1c20;overflow:hidden;width:960px">
-      <svg viewBox="0 0 960 420" preserveAspectRatio="none" style="position:absolute;inset:0;width:960px;height:420px;pointer-events:none">
-       <sc-for list="{{ canvasEdges }}" as="ed" hint-placeholder-count="2"><path sc-camel-d="{{ ed.d }}" stroke="{{ ed.stroke }}" stroke-width="1.5" fill="none" stroke-dasharray="{{ ed.dash }}"></path></sc-for>
-      </svg>
-      <sc-for list="{{ canvasLabels }}" as="cl" hint-placeholder-count="2"><div style="position:absolute;left:{{ cl.x }}px;top:{{ cl.y }}px;color:{{ cl.fill }};font-size:10px;background:rgba(26,28,32,.88);border-radius:4px;padding:1px 6px;pointer-events:none;white-space:nowrap">{{ cl.text }}</div></sc-for>
-      <sc-for list="{{ canvasCards }}" as="cc" hint-placeholder-count="3">
-       <div onMouseDown="{{ cc.dragStart }}" style="position:absolute;left:{{ cc.x }}px;top:{{ cc.y }}px;background:#26292e;border:1px solid {{ cc.border }};border-radius:8px;padding:8px 12px;cursor:grab;user-select:none;min-width:110px;pointer-events:auto"><div style="color:#e2e5e9;font-weight:600">{{ cc.name }}</div><div style="color:#82a5c8;font-size:11px">emits {{ cc.emits }}</div><sc-if value="{{ cc.initial }}" hint-placeholder-val="{{ false }}"><div style="color:#62676f;font-size:10px">▸ initial</div></sc-if></div>
-      </sc-for>
-      <sc-for list="{{ slotNodes }}" as="sn" hint-placeholder-count="1"><div style="position:absolute;left:{{ sn.x }}px;top:{{ sn.y }}px;background:rgba(160,143,201,.12);border:1px dashed #a08fc9;border-radius:6px;padding:5px 9px;color:#a08fc9;font-size:11px">slot: {{ sn.slot }}</div></sc-for>
-     </div>
-    </div>
-   </sc-if>
+   </div>
    <div style="flex:none;display:flex;gap:10px;align-items:center;padding:10px 40px 16px;flex-wrap:wrap;font-size:12px">
-    <span style="color:#62676f;font-size:11px">responder</span><span style="flex:none;display:flex;border:1px solid rgba(255,255,255,.09);border-radius:4px;overflow:hidden;font-size:11.5px"><span onClick="{{ setRespD }}" style="cursor:pointer;padding:3px 10px;color:{{ respDColor }};background:{{ respDBg }}">deterministic</span><span onClick="{{ setRespO }}" style="cursor:pointer;padding:3px 10px;color:{{ respOColor }};background:{{ respOBg }}">ollama</span></span>
-    <span style="color:#62676f;font-size:11px">seed</span><input value="{{ seed }}" onChange="{{ updSeed }}" style="background:#1a1c20;border:1px solid rgba(255,255,255,.07);border-radius:5px;padding:5px 11px;color:#e2e5e9;font-family:inherit;font-size:12px;outline:none;width:44px"></input>
-    <span style="color:#62676f;font-size:11px">model</span><input value="{{ model }}" onChange="{{ updModel }}" style="background:#1a1c20;border:1px solid rgba(255,255,255,.07);border-radius:5px;padding:5px 11px;color:#e2e5e9;font-family:inherit;font-size:12px;outline:none;width:100px"></input>
-    <span onClick="{{ doValidate }}" style="padding:6px 16px;background:#2e3138;border-radius:5px;color:#d7dade;cursor:pointer">validate</span>
-    <span onClick="{{ doBuild }}" style="padding:6px 16px;background:#1a1c20;border:1px solid #82a5c8;border-radius:5px;color:#82a5c8;cursor:pointer;font-weight:600">build &amp; launch ▸</span>
-    <span style="color:#62676f;font-size:11px">deterministic = pure + seeded (replay-stable) · ollama = a real local LLM, fails loudly if not running</span>
-    <div style="flex-basis:100%;padding:10px 13px;background:#1a1c20;border-radius:6px;color:{{ studioOutColor }};font-size:12px"><span style="color:#62676f;margin-right:8px">output</span>{{ studioOut }}</div>
-   </div>
+    <span style="color:#62676f;font-size:11px">input</span><input data-studio-input="1" value="{{ studioInput }}" onChange="{{ onStudioInput }}" placeholder="what the run starts on" style="background:#1a1c20;border:1px solid rgba(255,255,255,.07);border-radius:5px;padding:5px 11px;color:#e2e5e9;font-family:inherit;font-size:12px;outline:none;width:340px"></input>
+    <span data-studio-check="1" onClick="{{ doCheck }}" style="padding:6px 16px;background:#2e3138;border-radius:5px;color:#d7dade;cursor:pointer">check</span>
+    <sc-if value="{{ studioHasFixed }}" hint-placeholder-val="{{ false }}"><span data-studio-use-fixed="1" onClick="{{ useFixed }}" style="padding:6px 16px;background:#2e3138;border-radius:5px;color:#d7dade;cursor:pointer">use the fixed plan</span></sc-if>
+    <span data-studio-run="1" onClick="{{ doRun }}" style="padding:6px 16px;background:#1a1c20;border:1px solid #82a5c8;border-radius:5px;color:#82a5c8;cursor:pointer;font-weight:600">run ▸</span>
+    <div data-studio-out="1" style="flex-basis:100%;padding:10px 13px;background:#1a1c20;border-radius:6px;color:{{ studioOutColor }};font-size:12px"><span style="color:#62676f;margin-right:8px">output</span>{{ studioOut }}</div>
    </div>
   </div>
  </sc-if>
