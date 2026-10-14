@@ -84,7 +84,11 @@ export interface LensRow {
 export interface LensLane {
   key: string;
   short: string;
-  range: string;
+  unit: string;
+  /** Hover on the unit: what a full-width bar stands for now. */
+  scaleTitle: string;
+  /** The value a full-width bar stands for: the lane's highest value so far, rounded up. */
+  top: number;
   explanation: string;
   color: string;
   left: number;
@@ -98,6 +102,10 @@ export interface Lens {
   rows: LensRow[];
   paths: { d: string; stroke: string }[];
   guides: { left: number; color: string }[];
+  /** Fine lines at each lane's left edge, stronger where a group starts. */
+  dividers: { left: number; color: string }[];
+  /** A line above the rows; the deviation view says when its warm-up ends. */
+  note: string;
   width: number;
   height: number;
   readout: { label: string; cells: { left: number; text: string; color: string }[] };
@@ -131,10 +139,18 @@ export function fmtSigned(v: number | null | undefined): string {
   return `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v).toFixed(1)}`;
 }
 
-function scaled(key: string, v: number): number {
-  const m = LANGUAGE_MEASURES[key];
-  const f = (v - m.low) / Math.max(m.high - m.low, 1e-9);
-  return Math.max(0, Math.min(1, f));
+/** The smallest of 1, 2, 2.5 and 5 times a power of ten at or above `x`; 0 for 0. */
+export function niceCeil(x: number): number {
+  if (!(x > 0)) return 0;
+  const p = 10 ** Math.floor(Math.log10(x));
+  for (const f of [1, 2, 2.5, 5, 10]) if (f * p >= x * (1 - 1e-12)) return f * p;
+  return 10 * p;
+}
+
+/** Each lane runs from zero to its highest value or window so far, rounded up, so it grows as a
+ *  session's replies do and no bar is clipped. Every measure the lens draws is zero or above. */
+function scaled(top: number, v: number): number {
+  return top > 0 ? Math.max(0, Math.min(1, v / top)) : 0;
 }
 
 interface Series {
@@ -196,7 +212,7 @@ export function buildLanguageLens(
 ): Lens {
   const empty: Lens = {
     has: false, empty: "", groups: [], lanes: [], rows: [], paths: [], guides: [], width: 0, height: 0,
-    readout: { label: "", cells: [] }, turns: [],
+    readout: { label: "", cells: [] }, turns: [], dividers: [], note: "",
   };
   if (!view) return { ...empty, empty: "measuring this session's language…" };
   const keys: readonly string[] = opts.stream === LanguageStreamId.Relation ? LANGUAGE_RELATION_LANES : LANGUAGE_WATCHED;
@@ -209,12 +225,23 @@ export function buildLanguageLens(
 
   const lanes: LensLane[] = keys.map((key, i) => {
     const m = LANGUAGE_MEASURES[key];
+    let high = 0;
+    for (const { turn } of s.turns) high = Math.max(high, s.value(key, turn) ?? 0, s.window(key, turn) ?? 0);
+    const top = niceCeil(high);
     return {
-      key, short: m.short, range: `${m.unit === "per 1,000 words" ? "/1k " : ""}${fmt(m.low)}–${fmt(m.high)}`,
+      key, short: m.short, unit: m.unit, top,
+      scaleTitle: top > 0
+        ? `A full bar is ${fmt(top)} ${m.unit}: the highest value so far, rounded up. The scale grows when a value passes it.`
+        : "Every value so far is zero.",
       explanation: m.explanation, color: GROUP_COLOR[m.group] || GROUP_COLOR.other,
       left: TURN_COL + i * LANE_W, focused: i === opts.lane,
     };
   });
+  const dividers: Lens["dividers"] = lanes.map((lane, i) => ({
+    left: lane.left - 3,
+    color: i === 0 || LANGUAGE_MEASURES[lane.key].group !== LANGUAGE_MEASURES[lanes[i - 1].key].group
+      ? "rgba(255,255,255,.10)" : "rgba(255,255,255,.045)",
+  }));
   const groups: Lens["groups"] = [];
   for (const lane of lanes) {
     const group = LANGUAGE_MEASURES[lane.key].group;
@@ -281,8 +308,8 @@ export function buildLanguageLens(
         };
       }
       if (mode === LanguageViewMode.Ribbons) {
-        const ww = win === null ? 0 : Math.round(scaled(lane.key, win) * BAR_MAX);
-        const vw = v === null ? 0 : Math.max(v === 0 ? 0 : 1, Math.round(scaled(lane.key, v) * BAR_MAX));
+        const ww = win === null ? 0 : Math.round(scaled(lane.top, win) * BAR_MAX);
+        const vw = v === null ? 0 : Math.max(v === 0 ? 0 : 1, Math.round(scaled(lane.top, v) * BAR_MAX));
         return {
           ...base, barLeft: cx - ww / 2, barTop: 0, barH: ROW_H, barW: ww, color: `${lane.color}33`,
           hairLeft: cx - vw / 2, hairW: vw,
@@ -290,7 +317,7 @@ export function buildLanguageLens(
       }
       return {
         ...base, barLeft: lane.left + BAR_X, barTop: 5, barH: 8,
-        barW: v === null || v === 0 ? 0 : Math.max(1, Math.round(scaled(lane.key, v) * BAR_MAX)),
+        barW: v === null || v === 0 ? 0 : Math.max(1, Math.round(scaled(lane.top, v) * BAR_MAX)),
         color: sh ? lane.color : v === 0 ? DIM : `${lane.color}88`,
       };
     });
@@ -310,7 +337,7 @@ export function buildLanguageLens(
     const pts = s.turns
       .map(({ turn }) => ({ win: s.window(lane.key, turn), y: (rowTop.get(turn) ?? 0) + ROW_H / 2 }))
       .filter((p): p is { win: number; y: number } => p.win !== null);
-    const d = pts.map((p, i) => `${i ? "L" : "M"}${(lane.left + BAR_X + scaled(lane.key, p.win) * BAR_MAX).toFixed(1)} ${p.y}`).join(" ");
+    const d = pts.map((p, i) => `${i ? "L" : "M"}${(lane.left + BAR_X + scaled(lane.top, p.win) * BAR_MAX).toFixed(1)} ${p.y}`).join(" ");
     return { d, stroke: lane.color };
   }).filter((p) => p.d);
 
@@ -323,8 +350,15 @@ export function buildLanguageLens(
     };
   });
 
+  let note = "";
+  if (mode === LanguageViewMode.Deviation && lanes.every((l) => s.lane(l.key)?.warmup_span == null)) {
+    const n = Math.max(0, ...lanes.map((l) => s.lane(l.key)?.points.length ?? 0));
+    const unit = opts.stream === LanguageStreamId.User ? "messages" : "replies";
+    note = `Deviation starts when a lane's warm-up ends: ${LANGUAGE_WARMUP} ${unit} whose values vary. This session has ${n} so far.`;
+  }
+
   return {
-    has: true, empty: "", groups, lanes, rows, paths, guides,
+    has: true, empty: "", groups, lanes, rows, paths, guides, dividers, note,
     width: TURN_COL + lanes.length * LANE_W, height: top,
     readout: { label: `t${selTurn}`, cells: readoutCells },
     turns: s.turns,

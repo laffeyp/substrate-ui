@@ -2388,7 +2388,7 @@ class Component extends DCLogic {
       events, modeChips, sideLanes, laneDefs, laneW, laneLegend,
       sideAxisA: firstSeq, sideAxisB: lastSeq,
       isStream: state.mode === GraphMode.Stream, isIo: state.mode === GraphMode.IO, isStructure: state.mode === GraphMode.Structure, isScene: state.mode === GraphMode.Scene,
-      isLanguage: state.mode === GraphMode.Language, lang: _lang, langRows, langStreams, langViews, langHas: _lang.has, langEmpty: !_lang.has,
+      isLanguage: state.mode === GraphMode.Language, lang: _lang, langRows, langStreams, langViews, langHas: _lang.has, langEmpty: !_lang.has, langNote: !!_lang.note,
       isDown: state.dir === GraphDirection.Down, isSide: state.dir === GraphDirection.Side,
       setAll: () => this.setState({ level: RevealLevel.All }), setApp: () => this.setState({ level: RevealLevel.App }),
       allColor: state.level === RevealLevel.All ? '#d7dade' : '#62676f', allBg: state.level === RevealLevel.All ? '#2e3138' : 'transparent',
