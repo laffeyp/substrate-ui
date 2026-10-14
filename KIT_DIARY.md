@@ -60,6 +60,19 @@
 
 ## Entries
 
+### 2026-10-14 — A fault called "under load", a surface called broken, and a finding that still ran
+
+**Context.** The create-topology tool (K335–K339, U186–U189).
+
+**What got in the way.**
+- **A gate failure parked as "under load" for three sessions.** `transcript_follow` failed one run in five, always at 806 px. Logging every save and read of the scroll hook found two plain bugs in a few runs: a render between a scroll and its event wrote over the scroll, and own writes were matched by value long after they happened. The earlier note blamed load because the failures came under load; the logging, not the guess, found the cause.
+- **A finding written without looking at the screen.** The research said the Studio's buttons fail. The surface was dimmed and unclickable by design. The code read was right about the endpoints and wrong about what a person meets.
+- **A tool that reported a problem and ran anyway.** The plan tool dropped an `if` it could not read and still issued a runnable plan; a real model ran it and the step it meant to guard ran. Stand-in answers and scripted tests had never written the short form a model writes first.
+
+**What the kit could say.** A failure that comes back is logged until its cause is on the page before any note about conditions. A finding about a surface names what the user sees, from the screen. When a tool drops part of its input, the run it allows must not differ from what was asked; otherwise the tool stops there.
+
+---
+
 ### 2026-10-13 — A locked signal list that cut a handler short, and an empty list that meant "scripted"
 
 **Context.** U176–U177: panes for runs, and the live observation.
