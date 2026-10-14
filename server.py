@@ -688,27 +688,32 @@ def _build_session_topology_from_manifest(
     if mcp_on:
         _write_mcp_config(app, manifest.driver, manifest.session_id, manifest.workspace)
     session_tools = _tools_for_manifest(manifest)
-    # Sprint 228: fold the substrate toolkit (piece F sprints 226-228) into every session's tool
-    # suite alongside full_suite. The daemon binds its own registries here so every session sees
-    # the current session list and record dir.
-    from substrate.topologies.compose.tools import make_topology_tools
+    # Sprint 228: fold the substrate toolkit (piece F sprints 226-228)
+    # into every session's tool suite alongside full_suite. The tools
+    # accept an injected daemon client + registries — substrate._daemon
+    # is the shipped wire client; the daemon binds its own registries
+    # here so every session sees the CURRENT applications catalog,
+    # session list, and record dir.
+    from substrate.app import daemon_client as _substrate_daemon
     from substrate.topologies.tool_loop.substrate_tools import (
         make_inspect_record,
+        make_list_applications,
         make_list_records,
         make_list_sessions,
+        make_list_topologies,
+        make_run_topology,
+        make_run_topology_poll,
     )
 
     session_tools = {
         **session_tools,
+        "run_topology": make_run_topology(_substrate_daemon),
+        "run_topology_poll": make_run_topology_poll(_substrate_daemon),
         "inspect_record": make_inspect_record(),
         "list_records": make_list_records(_sessions_base()),
+        "list_topologies": make_list_topologies(),
+        "list_applications": make_list_applications(app.applications),
         "list_sessions": make_list_sessions(app.registry),
-        # Kernel K338 (session vocabulary § AA.6): make a topology from standard parts, check it,
-        # and run it as a run this session holds. They replace run_topology, run_topology_poll,
-        # list_topologies and list_applications in a session's tools.
-        **make_topology_tools(
-            Path(manifest.workspace), functools.partial(_start_composed, app, manifest)
-        ),
         # Sprint 053: fold `delegate` in, closing the Sprint 228 card-vs-implementation
         # drift the shakeout (sprint 052) surfaced. Sprint 228's card specified eight
         # substrate-toolkit tools including delegate; commit c455b5a shipped seven.
@@ -796,26 +801,23 @@ def _build_session_topology_from_manifest(
     return topo
 
 
-def _run_driver(app: App, manifest: Any, model: str = "") -> tuple[Callable[[Path], Any], int]:
-    """A run's model: the session's unless `model` names another, run in the run's worktree, and
-    its window. Another model gets no driver params: the session's belong to its own model."""
+def _run_driver(app: App, manifest: Any) -> tuple[Callable[[Path], Any], int]:
+    """A run's model: the session's, run in the run's worktree, and its window."""
     from substrate.topologies.session.transcript import resolve_driver_context
 
-    name = model or manifest.driver
-    params = manifest.driver_params if name == manifest.driver else None
-
     def driver_for(worktree: Path) -> Any:
-        return _daemon_driver_resolver(app, name, params, workspace=str(worktree))
+        return _daemon_driver_resolver(
+            app, manifest.driver, manifest.driver_params, workspace=str(worktree)
+        )
 
-    tokens, _ = resolve_driver_context(name, driver_for(Path(manifest.workspace)))
+    tokens, _ = resolve_driver_context(manifest.driver, driver_for(Path(manifest.workspace)))
     return driver_for, tokens
 
 
-def _start_build(app: App, manifest: Any, card: Any, model: str = "") -> tuple[str, str]:
-    """Start a build of `card` on the session's repository, on the session's model (or `model`),
-    guidance bundle and model class. Records go under `<sessions>/runs/`, worktrees under
-    `<sessions>/wt/`."""
-    driver_for, tokens = _run_driver(app, manifest, model)
+def _start_build(app: App, manifest: Any, card: Any) -> tuple[str, str]:
+    """Start a build of `card` on the session's repository, on the session's model, guidance
+    bundle and model class. Records go under `<sessions>/runs/`, worktrees under `<sessions>/wt/`."""
+    driver_for, tokens = _run_driver(app, manifest)
     base = _sessions_base()
     return build.start_build(
         run_hold.TABLE,
@@ -824,22 +826,19 @@ def _start_build(app: App, manifest: Any, card: Any, model: str = "") -> tuple[s
         repo=Path(manifest.workspace),
         card=card,
         driver_for=driver_for,
-        driver_name=model or manifest.driver,
+        driver_name=manifest.driver,
         driver_context_tokens=tokens,
-        model_class=_model_class(model or manifest.driver),
+        model_class=_model_class(manifest.driver),
         bundle=manifest.bundle,
         worktrees=base / "wt",
         records=base / "runs",
     )
 
 
-def _start_review(
-    app: App, manifest: Any, target: str, styles: list[str], focus: str, model: str = ""
-) -> list[str]:
+def _start_review(app: App, manifest: Any, target: str, styles: list[str], focus: str) -> list[str]:
     """Start the session's reviewers on its workspace's repository, each on the session's model
-    (or `model`) run in its own worktree. Records go under `<sessions>/runs/`, worktrees under
-    `<sessions>/wt/`."""
-    driver_for, tokens = _run_driver(app, manifest, model)
+    run in its own worktree. Records go under `<sessions>/runs/`, worktrees under `<sessions>/wt/`."""
+    driver_for, tokens = _run_driver(app, manifest)
     base = _sessions_base()
     return review.start_review(
         run_hold.TABLE,
@@ -850,49 +849,11 @@ def _start_review(
         styles=styles,
         focus=focus,
         driver_for=driver_for,
-        driver_name=model or manifest.driver,
+        driver_name=manifest.driver,
         driver_context_tokens=tokens,
         worktrees=base / "wt",
         records=base / "runs",
     )
-
-
-def _start_composed(app: App, manifest: Any, plan: Any, run_input: str) -> str:
-    """Start a composed run (session vocabulary § AA) for the session: model steps on the
-    session's model or the step's, agent steps as builds and reviews the session holds, commands
-    in its workspace. Records go under `<sessions>/runs/`."""
-    from substrate.topologies.compose.parts import Deps
-    from substrate.topologies.compose.run import agent_starter, start_composed
-
-    workspace = Path(manifest.workspace)
-
-    def responder(step: Any) -> Any:
-        name = step.model or manifest.driver
-        params = manifest.driver_params if name == manifest.driver else None
-        return _daemon_driver_resolver(app, name, params, workspace=str(workspace))
-
-    deps = Deps(
-        responder=responder,
-        start_agent=agent_starter(
-            run_hold.TABLE,
-            manifest.session_id,
-            workspace,
-            functools.partial(_start_build, app, manifest),
-            functools.partial(_start_review, app, manifest),
-        ),
-        workdir=workspace,
-    )
-    run_id = f"r_{uuid.uuid4().hex[:12]}"
-    start_composed(
-        run_hold.TABLE,
-        owner=manifest.session_id,
-        run_id=run_id,
-        plan=plan,
-        run_input=run_input,
-        deps=deps,
-        records=_sessions_base() / "runs",
-    )
-    return run_id
 
 
 # A finished topology run's handle stays this long, so a status poll after it ends still reads
@@ -2447,10 +2408,6 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/session":
                 self._session_create()
                 return
-            m_topo = re.fullmatch(r"/api/session/([^/]+)/topology/(plan|run)", path)
-            if m_topo:  # UI sprint 187 (kernel K338): check or run a plan for the session
-                self._session_topology(m_topo.group(1), m_topo.group(2))
-                return
             m_run_stop = re.fullmatch(r"/api/session/([^/]+)/runs/([^/]+)/stop", path)
             if m_run_stop:  # UI sprint 182
                 self._session_run_stop(m_run_stop.group(1), m_run_stop.group(2))
@@ -3217,42 +3174,6 @@ class Handler(BaseHTTPRequestHandler):
             return
         self._json({"runs": run_hold.TABLE.listing(session_id)})
 
-    def _session_topology(self, session_id: str, action: str) -> None:
-        """UI sprint 187: POST /api/session/<id>/topology/plan and /topology/run. The session's own
-        topology tools (kernel K338) with the body as their arguments: `plan` returns the plan's id,
-        lines, wiring, dry run and findings; `run` starts it as a run the session holds and adds
-        the run's record. A tool's refusal is a 400 with its text."""
-        from substrate.topologies.compose.tools import make_topology_tools
-        from substrate.topologies.tool_loop.tools import (
-            TOOL_NAME_TOPOLOGY_PLAN,
-            TOOL_NAME_TOPOLOGY_RUN,
-        )
-
-        manifest = self.app.registry.get(session_id) if self.app.registry is not None else None
-        if manifest is None:
-            self._error(404, f"unknown session {session_id!r}")
-            return
-        try:
-            body = self._read_json_body()
-        except ValueError as exc:
-            self._error(400, str(exc))
-            return
-        tools = make_topology_tools(
-            Path(manifest.workspace), functools.partial(_start_composed, self.app, manifest)
-        )
-        name = TOOL_NAME_TOPOLOGY_PLAN if action == "plan" else TOOL_NAME_TOPOLOGY_RUN
-        try:
-            out = tools[name].run([body])
-        except ValueError as exc:
-            self._error(400, str(exc))
-            return
-        if action == "run":
-            row = next(
-                (r for r in run_hold.TABLE.listing(session_id) if r["run_id"] == out["run_id"]), None
-            )
-            out["record_root"] = row["record_root"] if row else ""
-        self._json(out)
-
     def _session_run_stop(self, session_id: str, run_id: str) -> None:
         """UI sprint 182: POST /api/session/<id>/runs/<run_id>/stop — the caller stops its run from
         the app; the run's session ends `caller_stop`, and the caller's model is told at its next
@@ -3462,28 +3383,6 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", "0")
         self.end_headers()
 
-    def _allowed_record_path(self, raw_path: str) -> Any:
-        """The record directory `raw_path` names, resolved, when it lies under a known record root;
-        else None, with the error already sent (see `_record_events_by_path`)."""
-        from pathlib import Path as _Path
-
-        try:
-            resolved = _Path(raw_path).resolve()
-        except (OSError, RuntimeError) as exc:
-            self._error(400, f"path could not be resolved: {exc}")
-            return None
-        if not resolved.exists() or not resolved.is_dir():
-            self._error(404, f"no record directory at {raw_path!r}")
-            return None
-        for root in (_runs_dir().resolve(), (api.substrate_home() / "sessions").resolve()):
-            try:
-                resolved.relative_to(root)
-                return resolved
-            except ValueError:
-                continue
-        self._error(403, f"path {raw_path!r} outside allowed record roots")
-        return None
-
     def _record_events_by_path(self, raw_path: str, since_seq: int) -> None:
         """Phase 8 item 4: SSE stream of a record given its filesystem path.
         Descent onto a delegate child record uses this — the delegate
@@ -3492,11 +3391,36 @@ class Handler(BaseHTTPRequestHandler):
         parent's ToolResult carries that path in `payload.child_root`.
         The shell posts the path here and streams the child's envelopes.
 
-        Safety (`_allowed_record_path`): the path must resolve to an existing directory under
-        `_runs_dir()` or `~/.substrate/sessions`, so a client cannot read arbitrary files off disk.
+        Safety: resolve the path, require it exists as a directory, and
+        require it live under one of a known set of roots so a client
+        cannot read arbitrary files off disk. Allowed roots: _runs_dir(),
+        `~/.substrate/sessions`, `/tmp`, `/var/folders` (macOS temp
+        parents that hold delegate-runs in tests).
         """
-        resolved = self._allowed_record_path(raw_path)
-        if resolved is None:
+        from pathlib import Path as _Path
+
+        try:
+            resolved = _Path(raw_path).resolve()
+        except (OSError, RuntimeError) as exc:
+            self._error(400, f"path could not be resolved: {exc}")
+            return
+        if not resolved.exists() or not resolved.is_dir():
+            self._error(404, f"no record directory at {raw_path!r}")
+            return
+        allowed_roots = [
+            _runs_dir().resolve(),
+            (api.substrate_home() / "sessions").resolve(),
+        ]
+        ok = False
+        for root in allowed_roots:
+            try:
+                resolved.relative_to(root)
+                ok = True
+                break
+            except ValueError:
+                continue
+        if not ok:
+            self._error(403, f"path {raw_path!r} outside allowed record roots")
             return
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream")
@@ -4334,16 +4258,6 @@ class Handler(BaseHTTPRequestHandler):
                     "yes",
                 )
                 self._json(_records_index(self.app, exclude_sessions=exclude))
-                return
-            if path == "/api/records/by-path/topology_graph":
-                # UI sprint 187: the structure of a record given by path (a run's own record).
-                raw_path = parse_qs(urlparse(self.path).query).get("path", [""])[0]
-                if not raw_path:
-                    self._error(400, "path query param required")
-                    return
-                resolved = self._allowed_record_path(raw_path)
-                if resolved is not None:
-                    self._json(_topology_graph(list(api.read_record(resolved))))
                 return
             if path == "/api/records/by-path/events":
                 # Phase 8 item 4: SSE stream of an arbitrary record path so

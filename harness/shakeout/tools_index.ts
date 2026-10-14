@@ -26,11 +26,10 @@ export const TOOL_FLOWS: Flow[] = [
   makeToolFlow({ tool: "inspect_record", prompt: "Please demonstrate the `inspect_record` tool by inspecting any substrate record you can find and report a summary of what came back." }),
   makeToolFlow({ tool: "list_records", prompt: "Please demonstrate the `list_records` tool by calling it once and report a summary of what came back." }),
   makeToolFlow({ tool: "list_sessions", prompt: "Please demonstrate the `list_sessions` tool by calling it once and report a summary of what came back." }),
-  // Kernel K338: the topology tools replace list_topologies, list_applications, run_topology and
-  // run_topology_poll in a session.
-  makeToolFlow({ tool: "topology_help", prompt: "Please demonstrate the `topology_help` tool by calling it once and report a summary of what came back." }),
-  makeToolFlow({ tool: "topology_plan", prompt: "Please demonstrate the `topology_plan` tool by checking a two-step plan (a model step that drafts, then one that critiques) and report its findings and dry run." }),
-  makeToolFlow({ tool: "topology_run", prompt: "Please demonstrate the `topology_run` tool: run the shipped plan `best_of_n` by name with a one-line question as its input, and report what came back.", turnTimeoutMs: 600_000 }),
+  makeToolFlow({ tool: "list_topologies", prompt: "Please demonstrate the `list_topologies` tool by calling it once and report a summary of what came back." }),
+  makeToolFlow({ tool: "list_applications", prompt: "Please demonstrate the `list_applications` tool by calling it once and report a summary of what came back." }),
+  makeToolFlow({ tool: "run_topology", prompt: "Please demonstrate the `run_topology` tool by calling it once to launch any short topology and report what came back.", turnTimeoutMs: 600_000 }),
+  makeToolFlow({ tool: "run_topology_poll", prompt: "Please demonstrate the `run_topology_poll` tool by calling it once to poll any active run and report what came back.", turnTimeoutMs: 600_000 }),
   makeToolFlow({ tool: "delegate", prompt: "You must not answer this yourself. Call the `delegate` tool once with a small sub-task for a child agent (for example: ask the child to compute 17 * 23 using its own tools). Wait for the child's ToolResult, then report the child agent's answer verbatim.", turnTimeoutMs: 600_000 }),
   toolDelegateMany,
 ];

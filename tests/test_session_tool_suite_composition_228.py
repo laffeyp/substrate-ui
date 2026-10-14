@@ -1,6 +1,5 @@
-"""Sprint 228 composition contract — every session's tool suite carries the Substrate toolkit
-alongside full_suite (since kernel K338: the record and session tools, delegate, build, review,
-run, and the three topology tools).
+"""Sprint 228 composition contract — every session's tool suite carries the eight substrate
+toolkit tools (seven plus delegate) alongside full_suite.
 
 The test captures the `tools` the daemon's `_build_session_topology_from_manifest` hands to
 `session_topology`, so a rename in substrate_tools that the daemon does not follow, or a tool the
@@ -21,13 +20,13 @@ from substrate.topologies.session_registry import SessionRegistry
 from substrate.topologies.applications.registry import load_manifests
 
 TOOLKIT = {
+    "run_topology",
+    "run_topology_poll",
     "inspect_record",
     "list_records",
+    "list_topologies",
+    "list_applications",
     "list_sessions",
-    # Kernel K338 (session vocabulary § AA.6): make, check and run a topology from standard parts.
-    "topology_help",
-    "topology_plan",
-    "topology_run",
     "delegate",
     # Kernel K330-K332: the runs a session holds, and the build and review it can start.
     "build",
@@ -69,7 +68,5 @@ def test_the_daemon_hands_session_topology_the_full_toolkit(
     server._build_session_topology_from_manifest(app, manifest)
     tools = set(captured["tools"])
     assert TOOLKIT <= tools, f"missing toolkit tools: {TOOLKIT - tools}"
-    # K338: the older run and list tools stay in the kernel for the CLI, not in a session.
-    assert not tools & {"run_topology", "run_topology_poll", "list_topologies", "list_applications"}
     for expected in ("read_file", "grep", "write_file", "bash"):
         assert expected in tools, f"full_suite tool {expected!r} missing"

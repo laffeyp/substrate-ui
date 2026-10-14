@@ -74,11 +74,6 @@ def session_kinds() -> set[str]:
             kinds.update(getattr(v.subscription, "kinds", ()) or ())
     # The run table writes a run's start into its caller's record (K330); nothing registers it.
     kinds.add(TOPOLOGY_RUN_STARTED)
-    # A composed run's stop, injected into its own record (K338, vocabulary § AA.3); a composed
-    # run's step kinds are its plan's, read from the record, not generated.
-    from substrate.topologies.compose.vocabulary import RUN_STOP_REQUESTED
-
-    kinds.add(RUN_STOP_REQUESTED)
     kinds.update(t.__name__ for t in INJECTED_EVENT_KINDS)
     kinds.update(api.LIFECYCLE_KINDS)
     # K260/U119: what a session record can end a turn with, and what older records carry.
@@ -113,10 +108,9 @@ def render(kinds: set[str]) -> str:
 
 
 def render_statuses() -> str:
-    """`SessionStatus` (a session manifest's status), `TaskStatus` (a bash background task's) and
-    `ComposePart` (a composed run's step parts), as `const` objects plus their value types."""
+    """`SessionStatus` (a session manifest's status) and `TaskStatus` (a bash background task's),
+    as `const` objects plus their value types."""
     from substrate.app import SessionStatus
-    from substrate.topologies.compose.vocabulary import Part as ComposePart
     from substrate.topologies.tool_loop.background import TaskStatus
 
     lines = [
@@ -125,8 +119,8 @@ def render_statuses() -> str:
         "// tests/test_envelope_kinds_generated_096.py fails when this file is stale.",
         "",
     ]
-    # UI sprint 187: the parts of a composed run (vocabulary § AA.2), which the pane's rows name.
-    for enum, name in ((SessionStatus, "SessionStatus"), (TaskStatus, "TaskStatus"), (ComposePart, "ComposePart")):
+    for enum in (SessionStatus, TaskStatus):
+        name = enum.__name__
         lines += [
             f"export const {name} = {{",
             *[f'  {m.name}: "{m.value}",' for m in enum],
