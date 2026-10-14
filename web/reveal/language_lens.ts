@@ -7,6 +7,7 @@
 
 import {
   LANGUAGE_INTENTS,
+  LANGUAGE_LSM_MIN_WORDS,
   LANGUAGE_MEASURES,
   LANGUAGE_RELATION_LANES,
   LANGUAGE_WARMUP,
@@ -32,9 +33,25 @@ export const LanguageViewMode = {
   Bars: "bars",
   Deviation: "deviation",
   Ribbons: "ribbons",
+  // UI sprint 174: the turns stream's views.
+  Sides: "side by side",
+  Measures: "measures",
 } as const;
 export type LanguageViewModeValue = (typeof LanguageViewMode)[keyof typeof LanguageViewMode];
-export const LANGUAGE_VIEW_TABS: LanguageViewModeValue[] = [LanguageViewMode.Bars, LanguageViewMode.Deviation, LanguageViewMode.Ribbons];
+
+/** The views a stream offers: replies and messages are one text per row; turns pair a message with
+ *  its reply, so they show both sides, or the measures that compare them. */
+export function languageViewTabs(stream: LanguageStreamIdValue): LanguageViewModeValue[] {
+  return stream === LanguageStreamId.Relation
+    ? [LanguageViewMode.Sides, LanguageViewMode.Measures]
+    : [LanguageViewMode.Bars, LanguageViewMode.Deviation, LanguageViewMode.Ribbons];
+}
+
+/** The view drawn: the one asked for when the stream offers it, else the stream's first. */
+export function languageView(stream: LanguageStreamIdValue, view: LanguageViewModeValue | undefined): LanguageViewModeValue {
+  const tabs = languageViewTabs(stream);
+  return view && tabs.includes(view) ? view : tabs[0];
+}
 
 // Deviation view: ±4 warm-up SDs fill the lane; guides at ±2 SD; a value past them is emphasised.
 const SD_SPAN = 4;
@@ -46,6 +63,19 @@ export const GROUP_COLOR: Record<string, string> = {
   [LanguageGroup.GUIDANCE]: "#c9a0b8",
   [LanguageGroup.OTHER]: "#9aa0a8",
 };
+// The turns stream's pair measures answer to no setting but length ratio; they take the palette's
+// colours by what they compare.
+const RELATION_GROUPS: Record<string, { label: string; color: string }> = {
+  length_ratio: { label: "LENGTH", color: GROUP_COLOR[LanguageGroup.LENGTH] },
+  lexical_echo: { label: "ECHO", color: GROUP_COLOR[LanguageGroup.GUIDANCE] },
+  phrase_copy_share: { label: "ECHO", color: GROUP_COLOR[LanguageGroup.GUIDANCE] },
+  phrase_copy_longest_run: { label: "ECHO", color: GROUP_COLOR[LanguageGroup.GUIDANCE] },
+  ncd: { label: "ECHO", color: GROUP_COLOR[LanguageGroup.GUIDANCE] },
+  window_lsm: { label: "STYLE", color: GROUP_COLOR[LanguageGroup.TONE] },
+};
+export function relationGroup(key: string): { label: string; color: string } {
+  return RELATION_GROUPS[key] || { label: "", color: GROUP_COLOR[LanguageGroup.OTHER] };
+}
 // The settings a group answers to, as the session's controls name them.
 export const GROUP_CONTROL: Record<string, string> = { [LanguageGroup.LENGTH]: "length", [LanguageGroup.TONE]: "tone" };
 
@@ -65,7 +95,11 @@ export interface LensCell {
   barW: number;
   hairLeft: number;
   hairW: number;
+  /** Side by side: the reply's bar, right of the centre line (the message's is `bar*`). */
+  bar2Left: number;
+  bar2W: number;
   color: string;
+  color2: string;
   title: string;
   mark: string;
   markTitle: string;
@@ -84,6 +118,8 @@ export interface LensRow {
 export interface LensLane {
   key: string;
   short: string;
+  /** The group header the lane sits under. */
+  group: string;
   unit: string;
   /** Hover on the unit: what a full-width bar stands for now. */
   scaleTitle: string;
@@ -206,6 +242,25 @@ function settingAt(view: LanguageView, seq: number | null, control: string): str
   return typeof v === "string" ? v : null;
 }
 
+/** Words in a stream's trailing window as of `seq`: the latest line of that stream at or before it. */
+function windowWords(view: LanguageView, stream: string, seq: number): number {
+  let n = 0;
+  for (const l of view.lines) {
+    if (l.seq > seq) break;
+    if (l.stream !== stream) continue;
+    const words = (l.values.window as Record<string, unknown> | undefined)?.words;
+    if (typeof words === "number") n = words;
+  }
+  return n;
+}
+
+// The header's unit, short enough for a lane; the hover keeps the catalog's full unit.
+const UNIT_SHORT: Record<string, string> = { "per 1,000 words": "per 1k words" };
+
+function wordCount(n: number): string {
+  return n.toLocaleString("en-US");
+}
+
 export function buildLanguageLens(
   view: LanguageView | null,
   opts: { stream: LanguageStreamIdValue; selTurn: number | null; lane: number; view?: LanguageViewModeValue },
@@ -215,44 +270,46 @@ export function buildLanguageLens(
     readout: { label: "", cells: [] }, turns: [], dividers: [], note: "",
   };
   if (!view) return { ...empty, empty: "measuring this session's language…" };
-  const keys: readonly string[] = opts.stream === LanguageStreamId.Relation ? LANGUAGE_RELATION_LANES : LANGUAGE_WATCHED;
-  const s = opts.stream === LanguageStreamId.Relation ? relationSeries(view, keys) : laneSeries(view, opts.stream, keys);
+  const mode = languageView(opts.stream, opts.view);
+  const sides = mode === LanguageViewMode.Sides;
+  const relation = opts.stream === LanguageStreamId.Relation;
+  // Side by side reads the replies' and the messages' lanes; the measures view reads the turns'.
+  const keys: readonly string[] = relation && !sides ? LANGUAGE_RELATION_LANES : LANGUAGE_WATCHED;
+  const s = relation && !sides ? relationSeries(view, keys) : laneSeries(view, sides ? LanguageStreamId.Model : opts.stream, keys);
+  const msgs = sides ? laneSeries(view, LanguageStreamId.User, keys) : null;
   if (!s.turns.length) return { ...empty, empty: "no measured turns yet — measurements land as each turn returns." };
-  const mode = opts.view || LanguageViewMode.Bars;
-  if (mode === LanguageViewMode.Deviation && opts.stream === LanguageStreamId.Relation) {
-    return { ...empty, empty: "deviation is measured against the drift detector's warm-up, which runs on replies and messages, not turns." };
-  }
 
   const lanes: LensLane[] = keys.map((key, i) => {
     const m = LANGUAGE_MEASURES[key];
     let high = 0;
-    for (const { turn } of s.turns) high = Math.max(high, s.value(key, turn) ?? 0, s.window(key, turn) ?? 0);
+    for (const { turn } of s.turns) {
+      high = Math.max(high, s.value(key, turn) ?? 0, sides ? 0 : s.window(key, turn) ?? 0, msgs ? msgs.value(key, turn) ?? 0 : 0);
+    }
     const top = niceCeil(high);
+    const rg = relation && !sides ? relationGroup(key) : null;
     return {
-      key, short: m.short, unit: m.unit, top,
+      key, short: m.short, unit: UNIT_SHORT[m.unit] || m.unit, top,
+      group: rg ? rg.label : m.group === LanguageGroup.OTHER ? "" : m.group.toUpperCase(),
       scaleTitle: top > 0
-        ? `A full bar is ${fmt(top)} ${m.unit}: the highest value so far, rounded up. The scale grows when a value passes it.`
+        ? `A full ${sides ? "half " : ""}bar is ${fmt(top)} ${m.unit}: the highest value so far, rounded up. The scale grows when a value passes it.`
         : "Every value so far is zero.",
-      explanation: m.explanation, color: GROUP_COLOR[m.group] || GROUP_COLOR.other,
+      explanation: m.explanation, color: rg ? rg.color : GROUP_COLOR[m.group] || GROUP_COLOR.other,
       left: TURN_COL + i * LANE_W, focused: i === opts.lane,
     };
   });
-  const dividers: Lens["dividers"] = lanes.map((lane, i) => ({
-    left: lane.left - 3,
-    color: i === 0 || LANGUAGE_MEASURES[lane.key].group !== LANGUAGE_MEASURES[lanes[i - 1].key].group
-      ? "rgba(255,255,255,.10)" : "rgba(255,255,255,.045)",
-  }));
   const groups: Lens["groups"] = [];
   for (const lane of lanes) {
-    const group = LANGUAGE_MEASURES[lane.key].group;
-    const label = group === LanguageGroup.OTHER ? "" : group.toUpperCase();
     const last = groups[groups.length - 1];
-    if (last && last.label === label && last.color === GROUP_COLOR[group]) last.width += LANE_W;
-    else groups.push({ label, color: GROUP_COLOR[group], left: lane.left, width: LANE_W });
+    if (last && last.label === lane.group && last.color === lane.color) last.width += LANE_W;
+    else groups.push({ label: lane.group, color: lane.color, left: lane.left, width: LANE_W });
   }
+  const dividers: Lens["dividers"] = lanes.map((lane, i) => ({
+    left: lane.left - 3,
+    color: i === 0 || lane.group !== lanes[i - 1].group ? "rgba(255,255,255,.10)" : "rgba(255,255,255,.045)",
+  }));
 
   const shifts = new Map<string, LanguageView["shifts"][number]>();
-  for (const sh of view.shifts) if (sh.stream === opts.stream) shifts.set(`${sh.turn}|${sh.measure}`, sh);
+  if (!sides) for (const sh of view.shifts) if (sh.stream === opts.stream) shifts.set(`${sh.turn}|${sh.measure}`, sh);
   const changesAt = new Map<number, string[]>();
   for (const c of view.changes) {
     const list = changesAt.get(c.turn) || [];
@@ -281,11 +338,13 @@ export function buildLanguageLens(
       const v = s.value(lane.key, turn);
       const win = s.window(lane.key, turn);
       const sh = shifts.get(`${turn}|${lane.key}`);
-      const where = opts.stream === LanguageStreamId.Relation ? "in this turn" : opts.stream === LanguageStreamId.User ? "in this message" : "in this reply";
-      let title = `${m.short}: ${fmt(v)} ${m.unit} ${where}.`;
-      if (win !== null) title += ` Over the latest window: ${fmt(win)}.`;
+      const where = relation && !sides ? "in this turn" : opts.stream === LanguageStreamId.User ? "in this message" : "in this reply";
+      let title = sides
+        ? `${m.short}: ${fmt(msgs?.value(lane.key, turn) ?? null)} ${m.unit} in the message, ${fmt(v)} in the reply.`
+        : `${m.short}: ${fmt(v)} ${m.unit} ${where}.`;
+      if (win !== null && !sides) title += ` Over the latest window: ${fmt(win)}.`;
       const ln = s.lane(lane.key);
-      if (ln && ln.warmup_span === null && opts.stream !== LanguageStreamId.Relation) {
+      if (ln && ln.warmup_span === null && !relation) {
         const n = ln.points.length;
         title += ` Shift marks start once ${LANGUAGE_WARMUP} values have varied; this lane has ${n}.`;
       }
@@ -294,7 +353,20 @@ export function buildLanguageLens(
         ? shiftNote(lane.key, sh.direction, turn, control ? settingAt(view, s.seqOf(lane.key, turn), control) : null)
         : "";
       const cx = lane.left + BAR_X + BAR_MAX / 2;
-      const base = { left: lane.left + BAR_X, title, mark: sh ? (sh.direction === "up" ? "▲" : "▼") : "", markTitle, hairLeft: 0, hairW: 0 };
+      const base = {
+        left: lane.left + BAR_X, title, mark: sh ? (sh.direction === "up" ? "▲" : "▼") : "", markTitle,
+        hairLeft: 0, hairW: 0, bar2Left: 0, bar2W: 0, color2: "",
+      };
+      if (sides) {
+        const half = BAR_MAX / 2 - 1;
+        const uv = msgs?.value(lane.key, turn) ?? null;
+        const uw = uv === null || uv === 0 ? 0 : Math.max(1, Math.round(scaled(lane.top, uv) * half));
+        const rw = v === null || v === 0 ? 0 : Math.max(1, Math.round(scaled(lane.top, v) * half));
+        return {
+          ...base, barLeft: cx - 1 - uw, barTop: 5, barH: 8, barW: uw, color: `${lane.color}66`,
+          bar2Left: cx + 1, bar2W: rw, color2: `${lane.color}cc`,
+        };
+      }
       if (mode === LanguageViewMode.Deviation) {
         const dev = s.deviation(lane.key, turn);
         if (dev === null) title += ` No deviation until the warm-up ends.`;
@@ -315,6 +387,20 @@ export function buildLanguageLens(
           hairLeft: cx - vw / 2, hairW: vw,
         };
       }
+      if (relation && lane.key === "window_lsm" && v === null) {
+        // Style match before each side's window holds its minimum: the shorter side's progress.
+        const seqAt = s.seqOf(lane.key, turn) ?? seq;
+        const mw = windowWords(view, LanguageStreamId.User, seqAt);
+        const rw = windowWords(view, LanguageStreamId.Model, seqAt);
+        const shorter = Math.min(mw, rw);
+        return {
+          ...base,
+          title: `${m.short}: needs ${wordCount(LANGUAGE_LSM_MIN_WORDS)} words from each side; so far the messages have ${wordCount(mw)}, the replies ${wordCount(rw)}.`,
+          barLeft: lane.left + BAR_X, barTop: 5, barH: 8,
+          barW: shorter === 0 ? 0 : Math.max(1, Math.round(Math.min(1, shorter / LANGUAGE_LSM_MIN_WORDS) * BAR_MAX)),
+          color: `${lane.color}26`,
+        };
+      }
       return {
         ...base, barLeft: lane.left + BAR_X, barTop: 5, barH: 8,
         barW: v === null || v === 0 ? 0 : Math.max(1, Math.round(scaled(lane.top, v) * BAR_MAX)),
@@ -333,7 +419,8 @@ export function buildLanguageLens(
       guides.push({ left: cx, color: "#33373d" }, { left: cx - SD_GUIDE * per, color: "#2a2d33" }, { left: cx + SD_GUIDE * per, color: "#2a2d33" });
     }
   }
-  const paths = mode !== LanguageViewMode.Bars ? [] : lanes.map((lane) => {
+  if (sides) for (const lane of lanes) guides.push({ left: lane.left + BAR_X + BAR_MAX / 2, color: "#33373d" });
+  const paths = mode !== LanguageViewMode.Bars ? [] : lanes.filter((lane) => lane.top > 0).map((lane) => {
     const pts = s.turns
       .map(({ turn }) => ({ win: s.window(lane.key, turn), y: (rowTop.get(turn) ?? 0) + ROW_H / 2 }))
       .filter((p): p is { win: number; y: number } => p.win !== null);
@@ -341,13 +428,21 @@ export function buildLanguageLens(
     return { d, stroke: lane.color };
   }).filter((p) => p.d);
 
+  const selSeq = s.turns.find((t) => t.turn === selTurn)?.seq ?? 0;
   const readoutCells = lanes.map((lane) => {
     const v = mode === LanguageViewMode.Deviation ? s.deviation(lane.key, selTurn) : s.value(lane.key, selTurn);
     const sh = shifts.get(`${selTurn}|${lane.key}`);
-    return {
-      left: lane.left, text: `${mode === LanguageViewMode.Deviation ? fmtSigned(v) : fmt(v)}${sh ? (sh.direction === "up" ? " ▲" : " ▼") : ""}`,
-      color: sh ? lane.color : v === 0 || v === null ? DIM : "#d7dade",
-    };
+    let text = `${mode === LanguageViewMode.Deviation ? fmtSigned(v) : fmt(v)}${sh ? (sh.direction === "up" ? " ▲" : " ▼") : ""}`;
+    let quiet = v === 0 || v === null;
+    if (sides) {
+      const uv = msgs?.value(lane.key, selTurn) ?? null;
+      text = `${fmt(uv)} · ${fmt(v)}`;
+      quiet = !uv && !v;
+    } else if (relation && lane.key === "window_lsm" && v === null) {
+      const at = s.seqOf(lane.key, selTurn) ?? selSeq;
+      text = `${wordCount(Math.min(windowWords(view, LanguageStreamId.User, at), windowWords(view, LanguageStreamId.Model, at)))} of ${wordCount(LANGUAGE_LSM_MIN_WORDS)}`;
+    }
+    return { left: lane.left, text, color: sh ? lane.color : quiet ? DIM : "#d7dade" };
   });
 
   let note = "";
@@ -356,6 +451,7 @@ export function buildLanguageLens(
     const unit = opts.stream === LanguageStreamId.User ? "messages" : "replies";
     note = `Deviation starts when a lane's warm-up ends: ${LANGUAGE_WARMUP} ${unit} whose values vary. This session has ${n} so far.`;
   }
+  if (sides) note = "Each lane: the message left of the centre line, the reply right of it, on one scale. The readout reads message · reply.";
 
   return {
     has: true, empty: "", groups, lanes, rows, paths, guides, dividers, note,

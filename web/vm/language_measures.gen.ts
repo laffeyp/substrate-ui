@@ -106,6 +106,8 @@ export const LANGUAGE_WATCHED = ["words", "sentence_length_mean", "rate_padding_
 export const LANGUAGE_WARMUP = 20;
 // The relation measures the turns stream shows, in order.
 export const LANGUAGE_RELATION_LANES = ["length_ratio", "lexical_echo", "phrase_copy_share", "phrase_copy_longest_run", "ncd", "window_lsm"] as const;
+// The words each side's window needs before style match is measured.
+export const LANGUAGE_LSM_MIN_WORDS = 1600;
 
 // control -> position -> [measure, direction]: what each length and tone text states.
 export const LANGUAGE_INTENTS: Record<string, Record<string, [string, string][]>> = {
