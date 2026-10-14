@@ -688,32 +688,27 @@ def _build_session_topology_from_manifest(
     if mcp_on:
         _write_mcp_config(app, manifest.driver, manifest.session_id, manifest.workspace)
     session_tools = _tools_for_manifest(manifest)
-    # Sprint 228: fold the substrate toolkit (piece F sprints 226-228)
-    # into every session's tool suite alongside full_suite. The tools
-    # accept an injected daemon client + registries — substrate._daemon
-    # is the shipped wire client; the daemon binds its own registries
-    # here so every session sees the CURRENT applications catalog,
-    # session list, and record dir.
-    from substrate.app import daemon_client as _substrate_daemon
+    # Sprint 228: fold the substrate toolkit (piece F sprints 226-228) into every session's tool
+    # suite alongside full_suite. The daemon binds its own registries here so every session sees
+    # the current session list and record dir.
+    from substrate.topologies.compose.tools import make_topology_tools
     from substrate.topologies.tool_loop.substrate_tools import (
         make_inspect_record,
-        make_list_applications,
         make_list_records,
         make_list_sessions,
-        make_list_topologies,
-        make_run_topology,
-        make_run_topology_poll,
     )
 
     session_tools = {
         **session_tools,
-        "run_topology": make_run_topology(_substrate_daemon),
-        "run_topology_poll": make_run_topology_poll(_substrate_daemon),
         "inspect_record": make_inspect_record(),
         "list_records": make_list_records(_sessions_base()),
-        "list_topologies": make_list_topologies(),
-        "list_applications": make_list_applications(app.applications),
         "list_sessions": make_list_sessions(app.registry),
+        # Kernel K338 (session vocabulary § AA.6): make a topology from standard parts, check it,
+        # and run it as a run this session holds. They replace run_topology, run_topology_poll,
+        # list_topologies and list_applications in a session's tools.
+        **make_topology_tools(
+            Path(manifest.workspace), functools.partial(_start_composed, app, manifest)
+        ),
         # Sprint 053: fold `delegate` in, closing the Sprint 228 card-vs-implementation
         # drift the shakeout (sprint 052) surfaced. Sprint 228's card specified eight
         # substrate-toolkit tools including delegate; commit c455b5a shipped seven.
@@ -801,23 +796,26 @@ def _build_session_topology_from_manifest(
     return topo
 
 
-def _run_driver(app: App, manifest: Any) -> tuple[Callable[[Path], Any], int]:
-    """A run's model: the session's, run in the run's worktree, and its window."""
+def _run_driver(app: App, manifest: Any, model: str = "") -> tuple[Callable[[Path], Any], int]:
+    """A run's model: the session's unless `model` names another, run in the run's worktree, and
+    its window. Another model gets no driver params: the session's belong to its own model."""
     from substrate.topologies.session.transcript import resolve_driver_context
 
-    def driver_for(worktree: Path) -> Any:
-        return _daemon_driver_resolver(
-            app, manifest.driver, manifest.driver_params, workspace=str(worktree)
-        )
+    name = model or manifest.driver
+    params = manifest.driver_params if name == manifest.driver else None
 
-    tokens, _ = resolve_driver_context(manifest.driver, driver_for(Path(manifest.workspace)))
+    def driver_for(worktree: Path) -> Any:
+        return _daemon_driver_resolver(app, name, params, workspace=str(worktree))
+
+    tokens, _ = resolve_driver_context(name, driver_for(Path(manifest.workspace)))
     return driver_for, tokens
 
 
-def _start_build(app: App, manifest: Any, card: Any) -> tuple[str, str]:
-    """Start a build of `card` on the session's repository, on the session's model, guidance
-    bundle and model class. Records go under `<sessions>/runs/`, worktrees under `<sessions>/wt/`."""
-    driver_for, tokens = _run_driver(app, manifest)
+def _start_build(app: App, manifest: Any, card: Any, model: str = "") -> tuple[str, str]:
+    """Start a build of `card` on the session's repository, on the session's model (or `model`),
+    guidance bundle and model class. Records go under `<sessions>/runs/`, worktrees under
+    `<sessions>/wt/`."""
+    driver_for, tokens = _run_driver(app, manifest, model)
     base = _sessions_base()
     return build.start_build(
         run_hold.TABLE,
@@ -826,19 +824,22 @@ def _start_build(app: App, manifest: Any, card: Any) -> tuple[str, str]:
         repo=Path(manifest.workspace),
         card=card,
         driver_for=driver_for,
-        driver_name=manifest.driver,
+        driver_name=model or manifest.driver,
         driver_context_tokens=tokens,
-        model_class=_model_class(manifest.driver),
+        model_class=_model_class(model or manifest.driver),
         bundle=manifest.bundle,
         worktrees=base / "wt",
         records=base / "runs",
     )
 
 
-def _start_review(app: App, manifest: Any, target: str, styles: list[str], focus: str) -> list[str]:
+def _start_review(
+    app: App, manifest: Any, target: str, styles: list[str], focus: str, model: str = ""
+) -> list[str]:
     """Start the session's reviewers on its workspace's repository, each on the session's model
-    run in its own worktree. Records go under `<sessions>/runs/`, worktrees under `<sessions>/wt/`."""
-    driver_for, tokens = _run_driver(app, manifest)
+    (or `model`) run in its own worktree. Records go under `<sessions>/runs/`, worktrees under
+    `<sessions>/wt/`."""
+    driver_for, tokens = _run_driver(app, manifest, model)
     base = _sessions_base()
     return review.start_review(
         run_hold.TABLE,
@@ -849,11 +850,49 @@ def _start_review(app: App, manifest: Any, target: str, styles: list[str], focus
         styles=styles,
         focus=focus,
         driver_for=driver_for,
-        driver_name=manifest.driver,
+        driver_name=model or manifest.driver,
         driver_context_tokens=tokens,
         worktrees=base / "wt",
         records=base / "runs",
     )
+
+
+def _start_composed(app: App, manifest: Any, plan: Any, run_input: str) -> str:
+    """Start a composed run (session vocabulary § AA) for the session: model steps on the
+    session's model or the step's, agent steps as builds and reviews the session holds, commands
+    in its workspace. Records go under `<sessions>/runs/`."""
+    from substrate.topologies.compose.parts import Deps
+    from substrate.topologies.compose.run import agent_starter, start_composed
+
+    workspace = Path(manifest.workspace)
+
+    def responder(step: Any) -> Any:
+        name = step.model or manifest.driver
+        params = manifest.driver_params if name == manifest.driver else None
+        return _daemon_driver_resolver(app, name, params, workspace=str(workspace))
+
+    deps = Deps(
+        responder=responder,
+        start_agent=agent_starter(
+            run_hold.TABLE,
+            manifest.session_id,
+            workspace,
+            functools.partial(_start_build, app, manifest),
+            functools.partial(_start_review, app, manifest),
+        ),
+        workdir=workspace,
+    )
+    run_id = f"r_{uuid.uuid4().hex[:12]}"
+    start_composed(
+        run_hold.TABLE,
+        owner=manifest.session_id,
+        run_id=run_id,
+        plan=plan,
+        run_input=run_input,
+        deps=deps,
+        records=_sessions_base() / "runs",
+    )
+    return run_id
 
 
 # A finished topology run's handle stays this long, so a status poll after it ends still reads

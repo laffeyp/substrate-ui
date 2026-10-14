@@ -66,7 +66,7 @@ def test_patch_tools_next_turn_sees_restricted_suite(
     app: server.App, base: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """After PATCH tools, the factory built for the next turn hands `session_topology` only the
-    allow-listed tools: full_suite entries and the substrate toolkit (delegate, run_topology, …)
+    allow-listed tools: full_suite entries and the substrate toolkit (delegate, topology_plan, …)
     alike. Lens audit F456: the old test checked only that a producer kind named "tool"
     existed. Writing this test found N001: the toolkit bypassed the allow-list."""
     import substrate.topologies.session as session_pkg
