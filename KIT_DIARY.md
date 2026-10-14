@@ -60,7 +60,31 @@
 
 ## Entries
 
-### 2026-10-14 — A fault called "under load", a surface called broken, and a finding that still ran
+### 2026-10-14 (late) — The app carried a language Substrate does not have, and the one surface that spoke Substrate was replaced
+
+**Context.** U185–U189 with kernel K335–K339, zeroed the same night. Postmortem `../substrate/process/planning/POSTMORTEM-2026-10-14-create-topology-without-substrate-r2.md`. The kernel's diary carries the root of it; this entry is the app's side.
+
+**What happened in the app.**
+- Each card was built on the plan language: `topology_*` tools in every session; endpoints for the Studio and the shell; a controller that read a composed run's plan from `RunStarted.baseline` and drew one row per step; a pane per composed run; generated `ComposePart`; a Studio that listed shipped plans and edited lines; a live harness.
+- The gates passed. The live run passed after three fixes. The screenshots were looked at.
+- The Architect looked at the Studio and stopped everything.
+
+**What got in the way.**
+- **The Studio was read as broken code, not as a design.** The agent read `validateSpec` posting to deleted endpoints and wrote "every click fails". The template showed the surface dimmed, unclickable and labelled "coming soon…". The form behind the dimming is the most Substrate-shaped thing in the app: each field is a `TopologyBuilder` argument. The agent called it a relic, took a 2026-09-27 note as its direction, and swapped in the plan editor. Two rules in the agent's own memory covered both steps ("old planning docs are history, not the plan"; "design details are not decisions; only real forks go to the Architect"), and neither was applied.
+- **An undecided product question was answered unasked, then asked about after.** Making the Studio live was a product change. The agent asked "keep it, or return it to inert?" only after building, gating, installing and recording it as done.
+- **App gates measured the app's half of a wrong design.** `composed_run_pane` and `studio_plan_run` checked that rows appear, a fixed plan is offered and a pane opens. All of it held, and none of it asked whether the thing drawn was Substrate.
+- **Housekeeping slipped in a visible change.** U186 was housekeeping: dead code, unreachable sample code, a fake count. The footer status line changed in the same card, though nobody asked. It was true, but it was a change the user could see, made on the agent's own judgement; it is undone now.
+- **The records called it done.** At 02:54, BLACKBOARD and this diary recorded the tool as built, verified and installed. The entry below this one was written then. Its three lessons are true, but they were lessons inside a frame that was wrong.
+
+**What the kit could say.**
+1. A surface that is disabled on purpose is a fact about the product. Reading its code does not license a claim about how it behaves; the screen does. Before a dimmed surface is touched, the Architect says it may be.
+2. A card that changes what a person sees names that change in its scope, or does not make it. A housekeeping card makes no visible change.
+3. An app gate for a new kind of thing checks first that the thing is what was asked. "Rows appear" comes after "these rows are Substrate's events, named in Substrate's terms".
+4. BLACKBOARD and the diary record a design as done only after the Architect has seen it run. Until then they record it as built and unseen.
+
+---
+
+### [Superseded 2026-10-14 (late): the work it describes is zeroed; its three lessons stand] 2026-10-14 — A fault called "under load", a surface called broken, and a finding that still ran
 
 **Context.** The create-topology tool (K335–K339, U186–U189).
 

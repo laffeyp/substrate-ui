@@ -2,6 +2,32 @@
 
 *Written at the Architect's request on 2026-10-10, late night, after the harness tool-call work (K282–K286, U129–U131). One list for both repos. An item leaves the list when its card closes.*
 
+## Where the list stands (2026-10-14)
+
+*Checked against each item's card on 2026-10-14. The items below stay in their sections as written; this section says which are closed and what is new.*
+
+**Closed since this list was written** (card in `process/sprints/` unless named):
+- 5 `electron_smoke` on first launch: U133. 7 the model chip as an indicator: U139 (U125's card, still marked open, is superseded by it). 10 the login card: U134.
+- 16 Length and Tone rows: U143. 17 language measurement: kernel K309–K312, app U168–U175. 28 guidance, length and tone in the pane and changed mid-session: U161, the bar line U172.
+- 20 one input bar: U141. 21 fold tool output by key and slash command: U140. 22 naming sessions: U145. 23 a new pane from meta returns to panes: U146. 24 new windows and the menu bar: U147. 26 the records page in the bar's style: U153, U156, U157. 27 "git" for a git workspace: U154.
+
+**Still open:**
+- 6 the `deterministic` stand-in compacts every turn (the display half closed).
+- 11 the parallel test suite: kernel K269, pending.
+- 12 distribution.
+- 18 a terminal opened with ⌘T.
+- 29 excluding turns from what is sent.
+- 30 a window of its own for a run with several sessions.
+- **19 child runs inside Substrate:** half done. A run's sessions open view-only panes (U182) and a delegate child opens an interactive pane (U183). The depth view and breaking out are not built.
+- **25 Substrate makes the topology the user needs: open again.** The create-topology tool built 2026-10-14 (kernel K335–K339, app U185–U189) gave a model a plan language of the agent's own: five fixed parts, `on`, `with`, `if`, `max` and three ends. It hid Substrate's own primitives: producers, views, triggers with their predicates and policies, routes, terminations, instruments and composition. It is zeroed out in both repos (kernel `7380a0c4`, app `dd8f390`); vocabulary v0.16–v0.16.3 is withdrawn; the Studio change (U188) is reverted (`3b2ed96`). Postmortem: `substrate/process/planning/POSTMORTEM-2026-10-14-create-topology-without-substrate-r2.md`. K339's next-move text for `build`, `review`, `run` and `delegate` stays.
+
+**New (2026-10-14):**
+- 31. **Pause and resume for held runs.** Roadmap `ROADMAP-2026-10-14-core-topologies-r3.md` closes K330 on "stop, pause, resume, step and replay"; K330 was built without pause and resume, and `run` refuses `pause`.
+- 32. **The autonomous build and the swarm** (roadmap r3's last line; research r9 § 8.2, § 8.4). K327–K334 and U182–U185 are closed: U185's live run on `glm-5.2:cloud` reviewed a branch and built a card in the installed app.
+- 33. **`finalise_on(K)` misses `K` when a trigger also waits on `K`.** The runtime consults termination with the last event of a cycle, which is then the trigger's `TriggerFired`. The recipe's docstring says it finalises "when the event just appended is of kind". Found 2026-10-14; the kernel is unchanged.
+- 34. **The footer's status reads "● live" in every state.** It comes from `state.ended`, which nothing sets, and from a `simulateRateLimit` prop. U186 made it read the focused session; that change was undone with the rest on 2026-10-14.
+- 35. **The Studio is inert, and its build and validate calls go to endpoints the server no longer has** (`/api/validate`, `/api/build`). Its form speaks Substrate's own terms: producers, views with predicates, triggers, routes into slots, termination policies.
+
 ## Closed tonight
 
 - **The compaction row's "?–?".** See item 6.
