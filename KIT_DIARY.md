@@ -60,6 +60,18 @@
 
 ## Entries
 
+### 2026-10-13 — A locked signal list that cut a handler short, and an empty list that meant "scripted"
+
+**Context.** U176–U177: panes for runs, and the live observation.
+
+**What got in the way.**
+- **The first run opened no panes and raised nothing visible.** The controller's signals are a locked vocabulary; `emit` throws on an unknown tag, and the throw ended the envelope handler after the row was drawn. The rows looked right; the event never left. The parity check (`npm run signals`) names this in one line, and I had not run it before the gate.
+- **A default that changed meaning.** Passing a deterministic session's script through the driver params, I wrote `[]` for "no script". The kernel reads an empty script as scripted, so every deterministic turn finished at once and the delete-during-turn test found nothing in flight. Only the full app suite caught it.
+
+**What the kit could say.** A change that adds an emit runs the vocabulary parity check before any gate. An optional argument passes its "absent" value, never an empty one that the callee may read as present.
+
+---
+
 ### 2026-10-13 — A display range set from the catalog, and a build that failed silently under a gate
 
 **Context.** U173–U175, from the Architect's first use of the language lens on a live session.
