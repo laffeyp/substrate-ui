@@ -234,6 +234,8 @@ export class SessionController {
   /** UI sprint 105: the refresh timer that runs while a background task is running. */
   private tasksTimer: ReturnType<typeof setTimeout> | null = null;
   private languageTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Numbers each language fetch; only the latest one's view is applied. */
+  private languageRequest = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private endedEmittedFor: string | null = null;
   // The last compaction cut shown, so a repeated cut adds no row (session vocabulary § S.4).
@@ -572,9 +574,12 @@ export class SessionController {
   private async loadLanguage(): Promise<void> {
     const sessionId = this.snap.sessionId;
     if (!sessionId) return;
+    const request = ++this.languageRequest;
     const result = await this.client.fetchJson<LanguageView>(
       `/api/session/${encodeURIComponent(sessionId)}/language`,
     );
+    // A slower, earlier fetch must not replace a later one's view.
+    if (request !== this.languageRequest) return;
     if (!result.ok || this.snap.sessionId !== sessionId || !result.data) return;
     this.patch({ language: result.data });
   }
