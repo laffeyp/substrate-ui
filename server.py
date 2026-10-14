@@ -46,7 +46,12 @@ import msgspec
 from substrate import api
 from substrate.topologies import bundled
 from substrate.topologies.session.environment import session_baseline
-from substrate.topologies.session.vocabulary import LENGTH_DEFAULT, TONE_DEFAULT, Control
+from substrate.topologies.session.vocabulary import (
+    HANDOFF_DEFAULT,
+    LENGTH_DEFAULT,
+    TONE_DEFAULT,
+    Control,
+)
 from substrate.adapters.harness_streams import SUBSTRATE_MCP_SERVER
 from substrate.topologies.session.mcp_channel import handle_jsonrpc
 from substrate.topologies.session.model_class import (
@@ -731,6 +736,8 @@ def _build_session_topology_from_manifest(
         # Kernel K296: the Length and Tone positions, at their defaults when the manifest names none.
         length=manifest.length or LENGTH_DEFAULT,
         tone=manifest.tone or TONE_DEFAULT,
+        # Kernel K334 (§ Y): how readily the model hands work to a topology.
+        handoff=manifest.handoff or HANDOFF_DEFAULT,
         seed=manifest.seed,
         tools=session_tools,
         per_turn=manifest.per_turn,
@@ -2686,6 +2693,7 @@ class Handler(BaseHTTPRequestHandler):
                 driver_params=driver_params,
                 length=controls[Control.LENGTH],
                 tone=controls[Control.TONE],
+                handoff=controls[Control.HANDOFF],
             )
             # Validate driver_params at the same boundary as PATCH does. If
             # the client sent bad shape/values, roll back the create so the
@@ -2727,6 +2735,7 @@ class Handler(BaseHTTPRequestHandler):
                 "bundle": manifest.bundle,
                 Control.LENGTH: manifest.length,  # kernel K296
                 Control.TONE: manifest.tone,
+                Control.HANDOFF: manifest.handoff,  # kernel K334
                 "role": manifest.role,
                 "driver_params": dict(current.driver_params)
                 if current.driver_params is not None
@@ -3195,6 +3204,7 @@ class Handler(BaseHTTPRequestHandler):
                 "bundle": manifest.bundle,
                 Control.LENGTH: manifest.length,  # kernel K296
                 Control.TONE: manifest.tone,
+                Control.HANDOFF: manifest.handoff,  # kernel K334
                 "record": manifest.record_root,
                 "created_at": manifest.created_at,
                 "status": manifest.status,
@@ -3952,6 +3962,7 @@ class Handler(BaseHTTPRequestHandler):
             values: dict[str, str | None] = {
                 Control.LENGTH: updated.length,
                 Control.TONE: updated.tone,
+                Control.HANDOFF: updated.handoff,
             }
             for control in Control:
                 if control in body:
@@ -3964,7 +3975,10 @@ class Handler(BaseHTTPRequestHandler):
                     values[control] = raw or None
             try:
                 updated = self.app.registry.set_controls(
-                    session_id, length=values[Control.LENGTH], tone=values[Control.TONE]
+                    session_id,
+                    length=values[Control.LENGTH],
+                    tone=values[Control.TONE],
+                    handoff=values[Control.HANDOFF],
                 )
             except ValueError as exc:
                 self._error(400, str(exc))
@@ -4001,6 +4015,7 @@ class Handler(BaseHTTPRequestHandler):
                 "bundle": updated.bundle,
                 Control.LENGTH: updated.length,  # kernel K296
                 Control.TONE: updated.tone,
+                Control.HANDOFF: updated.handoff,  # kernel K334
                 "driver_params": dict(updated.driver_params)
                 if updated.driver_params is not None
                 else None,
