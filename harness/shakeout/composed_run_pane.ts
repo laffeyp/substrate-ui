@@ -57,7 +57,7 @@ async function main(): Promise<void> {
       rows = (await snap(runPane))!.transcript.map((r) => r.text);
       if (rows.includes("run finished")) break;
     }
-    const steps = rows.filter((t) => /^\*\*(draft|critic|fix)\*\* · /.test(t)).map((t) => t.slice(2, t.indexOf("**", 2)));
+    const steps = rows.filter((t) => /^\*\*(draft|critic|fix)\*\*\n/.test(t)).map((t) => t.slice(2, t.indexOf("**", 2)));
     if (steps[0] !== "draft" || steps[1] !== "critic" || rows[rows.length - 1] !== "run finished") {
       throw new Error(`the run pane reads ${JSON.stringify(rows)}`);
     }

@@ -1826,7 +1826,8 @@ function composedRow(step: { id: string; part: string }, env: RecordEnvelope): T
   const p = env.payload ?? {};
   const first = (v: unknown): string => String(v ?? "").trim().split("\n")[0].slice(0, 160);
   const base = { seq: env.seq, kind: env.kind };
-  if (step.part === ComposePart.MODEL) return { ...base, role: "model", text: `**${step.id}** · ${String(p.text ?? "")}` };
+  // The step's name on a line of its own: a reply that opens with a code fence keeps it at a line start.
+  if (step.part === ComposePart.MODEL) return { ...base, role: "model", text: `**${step.id}**\n\n${String(p.text ?? "")}` };
   if (step.part === ComposePart.AGENT) {
     const files = Array.isArray(p.files) ? p.files.length : 0;
     const branch = p.branch ? ` · ${String(p.branch)}` : "";

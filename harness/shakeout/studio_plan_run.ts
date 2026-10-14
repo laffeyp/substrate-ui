@@ -79,7 +79,7 @@ async function main(): Promise<void> {
     await win.waitForFunction((n) => ((window as unknown as { __vm: Vm }).__vm.get(n)?.snapshot().transcript ?? []).some((r) => r.text === "run finished"), runPane, { timeout: 30_000 })
       .catch(async () => { throw new Error(`the run pane reads ${JSON.stringify(await win.evaluate((n) => (window as unknown as { __vm: Vm }).__vm.get(n)!.snapshot().transcript.map((r) => r.text), runPane))}`); });
     const rows = await win.evaluate((n) => (window as unknown as { __vm: Vm }).__vm.get(n)!.snapshot().transcript.map((r) => r.text), runPane);
-    if (!rows[0]?.startsWith("**draft** · ")) throw new Error(`the run pane starts ${JSON.stringify(rows.slice(0, 2))}`);
+    if (!rows[0]?.startsWith("**draft**\n")) throw new Error(`the run pane starts ${JSON.stringify(rows.slice(0, 2))}`);
     console.log(`studio_plan_run: ok — picked, checked clean, broke the end (never_ends), used the fixed plan (clean), ran it: pane ${runPane} reads ${rows.length} rows ending "run finished"`);
     code = 0;
   } catch (e) {
