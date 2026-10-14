@@ -43,7 +43,7 @@ from typing import Any
 from urllib.parse import parse_qs, unquote, urlparse
 
 import msgspec
-from substrate import api
+from substrate import api, discovery
 from substrate.topologies import bundled
 from substrate.topologies.session.environment import session_baseline
 from substrate.topologies.session.vocabulary import LENGTH_DEFAULT, TONE_DEFAULT, Control
@@ -799,254 +799,10 @@ def _is_live(app: App, name: str) -> bool:
     return handle is not None and handle["thread"].is_alive()
 
 
-# Sprint 084 — the CLI-adapter catalog. Every entry names a CLI Substrate
-# knows how to speak with (argv shape that reads a prompt as the final
-# positional arg and prints the reply on stdout). Detection at roster time
-# is `shutil.which(command[0])`; only present binaries surface. Adding a
-# new CLI adapter is one entry here plus (if the argv shape needs a
-# different flag) the same entry consulted by `_daemon_driver_resolver`.
-# The catalog IS the source of truth — no other file names CLI presets.
-KNOWN_CLI_ADAPTERS: dict[str, Any] = {
-    # Sprint 085 — catalog widened from [cmd, flag] to a dict with the
-    # full auth lifecycle. Every value verified live on peterlaffey@
-    # 2026-09-25 (see process/planning/RESEARCH-2026-09-25-cli-adapter-
-    # login-flow-in-substrate-v2.md). `command` is what CliResponder
-    # runs for a turn (prompt appended as final positional arg).
-    # `login_command` spawns the CLI's own interactive login flow —
-    # Substrate hosts it inside a pty and streams the stdout into a
-    # transcript card. Only URL-based OAuth flows fit the current card;
-    # login_command:None means the CLI is selectable as a driver but
-    # no auth card fires. `logout_command` clears
-    # stored creds. `status_command` reports authed state.
-    #
-    # Sprint 087 (2026-09-27) — `versions` names the curated model
-    # picks the dropdown exposes per CLI. Each entry:
-    #   id     — stable identifier the client sends back as
-    #            driver_version; also feeds cache keys.
-    #   label  — short display string for the dropdown row.
-    #   flag   — argv fragment appended after `command`. Verified via
-    #            each CLI's `--help` on 2026-09-27.
-    # `default_version`: the id picked when the client sends no
-    # driver_version. Passing None as the version sends no flag —
-    # the CLI picks its own default. Adding a version to the picker
-    # is one row in this list; no other file names CLI versions.
-    # Sprint 087c (2026-09-27) — versions are LIVE-PROBED per CLI when
-    # the CLI exposes a listing command (see `list_command` below).
-    # Anthropic's `claude` and OpenAI's `codex` publish no such
-    # command today, so those two carry a curated fallback here and
-    # the `/api/models` payload marks them `"source": "curated"`.
-    # Cursor's `cursor-agent --list-models` is a real listing command;
-    # its result marks `"source": "live"` when the probe succeeds.
-    # `versions` is the FALLBACK for the two curated CLIs. The
-    # runtime pipeline is: `_probe_cli_versions(name)` → live command
-    # (if any) → parsed tree → else this fallback. Editing the
-    # curated fallback stays a hand-maintained step; live-listed
-    # CLIs never touch this block.
-    "claude": {
-        "command": ["claude", "-p"],
-        # The driver profile (UI sprint 120; RESEARCH-2026-10-10-substrate-default-guidance-r7).
-        # `isolation_flags` switch off what Claude Code would load from this machine: its MCP
-        # servers and every settings source (CLAUDE.md, hooks, output style, memory). Its own
-        # tools stay on, and `--dangerously-skip-permissions` lets them write and run without a
-        # prompt; headless `-p` otherwise starts read-only. `system_flag` carries Substrate's
-        # system text (session vocabulary § P.3).
-        # `env` removes Claude Code's git and commit instructions, where its attribution
-        # trailer lives. `slash_commands`: `claude -p "/<command>"` runs the command locally
-        # (UI sprint 123).
-        "isolation_flags": [
-            "--strict-mcp-config",
-            "--setting-sources",
-            "",
-            "--dangerously-skip-permissions",
-        ],
-        "system_flag": ["--system-prompt"],
-        "env": {"CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS": "1"},
-        # UI sprint 129 (kernel K283, K284): its event stream carries every tool call it makes,
-        # and it takes Substrate's tools as an MCP server named in `--mcp-config`.
-        "stream_format": "claude-stream-json",
-        "stream_flags": ["--output-format", "stream-json", "--verbose"],
-        "mcp_style": "claude-mcp-config",
-        "slash_commands": True,
-        "login_command": ["claude", "auth", "login"],
-        "logout_command": ["claude", "auth", "logout"],
-        "status_command": ["claude", "auth", "status"],
-        # No `list_command`: `claude --help` shows no models subcommand
-        # (2026-09-27) and a bogus `--model` returns
-        # `[claude-code:unrecognized_model]` without listing valid
-        # choices. Fallback is curated by hand.
-        "versions": [
-            {
-                "id": "opus",
-                "label": "Opus",
-                "default_pin": "opus-5-5",
-                "pins": [
-                    {"id": "opus-5-5", "label": "5.5", "flag": ["--model", "claude-opus-5-5"]},
-                    {"id": "opus-4-8", "label": "4.8", "flag": ["--model", "claude-opus-4-8"]},
-                    {"id": "opus-4-7", "label": "4.7", "flag": ["--model", "claude-opus-4-7"]},
-                    {"id": "opus-4-6", "label": "4.6", "flag": ["--model", "claude-opus-4-6"]},
-                    {"id": "opus-4-5", "label": "4.5", "flag": ["--model", "claude-opus-4-5"]},
-                    {"id": "opus-4-1", "label": "4.1", "flag": ["--model", "claude-opus-4-1"]},
-                    {"id": "opus-4", "label": "4", "flag": ["--model", "claude-opus-4"]},
-                    {"id": "opus-3", "label": "3", "flag": ["--model", "claude-3-opus"]},
-                ],
-            },
-            {
-                "id": "sonnet",
-                "label": "Sonnet",
-                "default_pin": "sonnet-5-5",
-                "pins": [
-                    {"id": "sonnet-5-5", "label": "5.5", "flag": ["--model", "claude-sonnet-5-5"]},
-                    {"id": "sonnet-4-6", "label": "4.6", "flag": ["--model", "claude-sonnet-4-6"]},
-                    {"id": "sonnet-4-5", "label": "4.5", "flag": ["--model", "claude-sonnet-4-5"]},
-                    {"id": "sonnet-4", "label": "4", "flag": ["--model", "claude-sonnet-4"]},
-                    {"id": "sonnet-3-7", "label": "3.7", "flag": ["--model", "claude-3-7-sonnet"]},
-                    {"id": "sonnet-3-5", "label": "3.5", "flag": ["--model", "claude-3-5-sonnet"]},
-                    {"id": "sonnet-3", "label": "3", "flag": ["--model", "claude-3-sonnet"]},
-                ],
-            },
-            {
-                "id": "haiku",
-                "label": "Haiku",
-                "default_pin": "haiku-4-5",
-                "pins": [
-                    {"id": "haiku-4-5", "label": "4.5", "flag": ["--model", "claude-haiku-4-5"]},
-                    {"id": "haiku-3-5", "label": "3.5", "flag": ["--model", "claude-3-5-haiku"]},
-                    {"id": "haiku-3", "label": "3", "flag": ["--model", "claude-3-haiku"]},
-                ],
-            },
-            {
-                "id": "fable",
-                "label": "Fable",
-                "default_pin": "fable-5-1",
-                "pins": [
-                    {"id": "fable-5-1", "label": "5.1", "flag": ["--model", "claude-fable-5-1"]},
-                    {"id": "fable-5", "label": "5", "flag": ["--model", "claude-fable-5"]},
-                ],
-            },
-        ],
-        "default_family": "opus",
-    },
-    "codex": {
-        # `exec` refuses to run outside a git repo it trusts, and by default runs read-only. A
-        # per-session sandbox is a plain directory, and a session driver has to write: no git
-        # check, no sandbox, no approvals.
-        "command": [
-            "codex",
-            "exec",
-            "--skip-git-repo-check",
-            "--dangerously-bypass-approvals-and-sandbox",
-        ],
-        # UI sprint 129: `exec --json` streams every item; an MCP server is a config override.
-        "stream_format": "codex-json",
-        "stream_flags": ["--json"],
-        "mcp_style": "codex-config",
-        # `--device-auth` prints URL + one-time code to stdout without
-        # spawning a local callback server, so the pty renders cleanly
-        # even when Substrate is sandboxed.
-        "login_command": ["codex", "login", "--device-auth"],
-        "logout_command": ["codex", "logout"],
-        "status_command": ["codex", "login", "status"],
-        # No `list_command`: codex.js has no `list-models` subcommand;
-        # its embedded catalog is only reachable by binary inspection,
-        # which we don't do. Fallback is curated by hand.
-        "versions": [
-            {
-                "id": "gpt-6",
-                "label": "GPT-6",
-                "default_pin": "gpt-6-astra",
-                "pins": [
-                    {"id": "gpt-6-astra", "label": "Astra", "flag": ["-m", "gpt-6-astra"]},
-                    {"id": "gpt-6-sol", "label": "Sol", "flag": ["-m", "gpt-6-sol"]},
-                    {"id": "gpt-6-luna", "label": "Luna", "flag": ["-m", "gpt-6-luna"]},
-                ],
-            },
-            {
-                "id": "gpt-5-6",
-                "label": "GPT-5.6",
-                "default_pin": "gpt-5-6-sol",
-                "pins": [
-                    {"id": "gpt-5-6-sol", "label": "Sol", "flag": ["-m", "gpt-5.6-sol"]},
-                    {"id": "gpt-5-6-terra", "label": "Terra", "flag": ["-m", "gpt-5.6-terra"]},
-                    {"id": "gpt-5-6-luna", "label": "Luna", "flag": ["-m", "gpt-5.6-luna"]},
-                ],
-            },
-            {
-                "id": "gpt-5",
-                "label": "GPT-5",
-                "default_pin": "gpt-5-5",
-                "pins": [
-                    {"id": "gpt-5-5", "label": "5.5", "flag": ["-m", "gpt-5.5"]},
-                    {"id": "gpt-5-4", "label": "5.4", "flag": ["-m", "gpt-5.4"]},
-                ],
-            },
-        ],
-        "default_family": "gpt-6",
-    },
-    "cursor-agent": {
-        # Headless, cursor-agent stops at "Workspace Trust Required" without `--trust`, and only
-        # proposes file changes without `--force`. A session driver has to work and write.
-        "command": ["cursor-agent", "-p", "--trust", "--force", "--sandbox", "disabled"],
-        # UI sprint 129: its stream carries every tool call.
-        "stream_format": "cursor-stream-json",
-        "stream_flags": ["--output-format", "stream-json"],
-        # Its MCP servers come from `.cursor/mcp.json` in the workspace (see `_mcp_flags`).
-        "mcp_style": "cursor-workspace-file",
-        # NO_OPEN_BROWSER=1 keeps the auth URL in stdout instead of also
-        # spawning an OS browser open — the pty renders the URL as a
-        # click for the user.
-        "login_command": ["cursor-agent", "login"],
-        "logout_command": ["cursor-agent", "logout"],
-        # `cursor-agent status` (alias `whoami`) exists as of 2026.09.23 (`cursor-agent --help`:
-        # "status|whoami — View authentication status"); prints "Not logged in" when unauthed.
-        # The old "no status subcommand" left authed=None, so an unauthed cursor-agent was
-        # offered and every turn came back empty (UI sprint 097).
-        "status_command": ["cursor-agent", "status"],
-        # LIVE listing available: `cursor-agent --list-models` prints
-        # the account's supported models when authed. The probe
-        # invokes it with a short timeout; on any failure (unauthed,
-        # network) the fallback below applies with source="curated".
-        "list_command": ["cursor-agent", "--list-models"],
-        "versions": [
-            {
-                "id": "sonnet",
-                "label": "Sonnet",
-                "default_pin": "sonnet-4-thinking",
-                "pins": [
-                    {
-                        "id": "sonnet-4-thinking",
-                        "label": "4 thinking",
-                        "flag": ["--model", "sonnet-4-thinking"],
-                    },
-                    {"id": "sonnet-4", "label": "4", "flag": ["--model", "sonnet-4"]},
-                ],
-            },
-            {
-                "id": "opus",
-                "label": "Opus",
-                "default_pin": "opus-4",
-                "pins": [
-                    {"id": "opus-4", "label": "4", "flag": ["--model", "opus-4"]},
-                ],
-            },
-            {
-                "id": "gpt",
-                "label": "GPT",
-                "default_pin": "gpt-5-5",
-                "pins": [
-                    {"id": "gpt-5-5", "label": "5.5", "flag": ["--model", "gpt-5.5"]},
-                    {"id": "gpt-5", "label": "5", "flag": ["--model", "gpt-5"]},
-                ],
-            },
-        ],
-        "default_family": "sonnet",
-    },
-    # opencode removed 2026-09-25 — Peter's ruling: not our business.
-    # aider removed 2026-09-25 — no login command exists (aider takes
-    # OPENAI_API_KEY / ANTHROPIC_API_KEY / --api-key PROVIDER=KEY per
-    # invocation). Peter's ruling: not supported until the API-key
-    # dropdown section lands.
-    # gemini removed 2026-09-25 — the Gemini CLI is deprecated upstream.
-}
+# Sprint 084 — the CLI-adapter catalog. Since sprint 056 (2026-10-14) it lives in
+# `substrate.discovery.CATALOG`, shared with every other Substrate client; this name is the same dict,
+# so a test's `monkeypatch.setitem` on an entry reaches both. Adding a CLI is one entry there.
+KNOWN_CLI_ADAPTERS: dict[str, Any] = discovery.CATALOG
 
 
 # UI sprint 122: a skill name is one path component the kernel resolves under a skills directory.
@@ -1111,32 +867,8 @@ def _model_supports_thinking(app: App, name: str) -> bool:
 
 
 def _resolve_pin(entry: dict[str, Any], version: str | None) -> dict[str, Any] | None:
-    """Walk the CLI catalog's family tree to find the pin whose flag we
-    append. `version` may be:
-      - None                → default_family → its default_pin.
-      - a family id         → that family's default_pin.
-      - a pin id            → that pin (searched across every family).
-    Returns the pin dict (with `flag`), or None when nothing matches.
-    """
-    families = entry.get("versions") or []
-
-    def _pin_by_id(family: dict[str, Any], pin_id: str) -> dict[str, Any] | None:
-        return next((p for p in (family.get("pins") or []) if p.get("id") == pin_id), None)
-
-    def _family_default(family: dict[str, Any]) -> dict[str, Any] | None:
-        return _pin_by_id(family, family.get("default_pin", ""))
-
-    if version is None:
-        default_family_id = entry.get("default_family")
-        family = next((f for f in families if f.get("id") == default_family_id), None)
-        return _family_default(family) if family else None
-    for family in families:
-        if family.get("id") == version:
-            return _family_default(family)
-        pin = _pin_by_id(family, version)
-        if pin is not None:
-            return pin
-    return None
+    """The pin `version` names in a catalog entry or version tree; see `discovery.resolve_pin`."""
+    return discovery.resolve_pin(entry, version)
 
 
 # Sprint 087c — live-probe cache for per-CLI version lists. The
@@ -1145,118 +877,26 @@ def _resolve_pin(entry: dict[str, Any], version: str | None) -> dict[str, Any] |
 # seconds. Users who log a CLI in/out and want the picker to refresh
 # right away can restart the daemon; a longer-lived cache-bust hook
 # (e.g. clear on POST /api/cli/<name>/logout) is a follow-up.
-_VERSION_CACHE_TTL_S = 300.0
+_VERSION_CACHE_TTL_S = discovery.VERSION_CACHE_TTL_S
 
 
 def _parse_cursor_agent_list_models(text: str) -> dict[str, Any] | None:
-    """Best-effort parser for `cursor-agent --list-models`. Cursor's own
-    docs describe the output as a plain list of ids, one per line, in
-    the shape `<id>[ (default)]`. We collect ids, drop anything that
-    doesn't look like a slug, and group by family prefix (segment
-    before the first dash-number). Returns None on empty or
-    unparseable output — the caller falls back to curated.
-    """
-    if not text:
-        return None
-    ids: list[str] = []
-    default: str | None = None
-    for raw in text.splitlines():
-        line = raw.strip()
-        if not line or line.startswith("#"):
-            continue
-        # A model line is `<id>`, `<id> (default)` or, since 2026.09, `<id> - <Label>`. Any other
-        # line is a heading: "Available models:" once, "Available models" with no colon now, which
-        # was taken as a model id and sent as `--model Available`.
-        parts = line.split()
-        head = parts[0]
-        if not head[0].isalpha() or head.endswith(":"):
-            continue
-        if len(parts) > 1 and parts[1] not in ("-", "(default)"):
-            continue
-        ids.append(head)
-        if "(default)" in line and default is None:
-            default = head
-    if not ids:
-        return None
-    # Group by family: the prefix up to and including the first digit.
-    families: dict[str, list[str]] = {}
-
-    def _family_key(mid: str) -> str:
-        parts = mid.split("-")
-        if not parts:
-            return mid
-        return parts[0]
-
-    for mid in ids:
-        families.setdefault(_family_key(mid), []).append(mid)
-    fam_list = []
-    for key, pins in families.items():
-        fam_list.append(
-            {
-                "id": key,
-                "label": key.capitalize(),
-                "default_pin": pins[0],
-                "pins": [{"id": p, "label": p, "flag": ["--model", p]} for p in pins],
-            }
-        )
-    return {
-        "families": fam_list,
-        "default_family": fam_list[0]["id"] if fam_list else None,
-        "source": "live",
-        "default_pin_id": default,
-    }
+    """A version tree from `cursor-agent --list-models`; see `discovery.parse_cursor_list`."""
+    return discovery.parse_cursor_list(text) if text else None
 
 
 def _probe_cli_versions(app: App, name: str) -> dict[str, Any]:
-    """Return the version tree for one CLI. Live-probes when the
-    catalog entry names a `list_command` and the CLI accepts it;
-    otherwise returns the curated fallback with source="curated".
-    Cached per-process for _VERSION_CACHE_TTL_S seconds."""
+    """The version tree for one CLI, from `discovery.cli_versions` (live from its list command,
+    else the curated tree). Cached on the App for _VERSION_CACHE_TTL_S seconds, not in the
+    module, so two Apps share nothing (F318)."""
     now = time.monotonic()
     cached_at = app.version_cache_at.get(name, 0.0)
     if now - cached_at < _VERSION_CACHE_TTL_S and name in app.version_cache:
         return app.version_cache[name]
-    entry = KNOWN_CLI_ADAPTERS.get(name) or {}
-    curated_families = entry.get("versions") or []
-    curated_default_family = entry.get("default_family")
-    curated = {
-        "families": [
-            {
-                "id": f["id"],
-                "label": f["label"],
-                "default_pin": f.get("default_pin"),
-                "pins": [
-                    # Preserve `flag` so _resolve_pin below can build
-                    # the argv from this tree without going back to
-                    # KNOWN_CLI_ADAPTERS.
-                    {"id": p["id"], "label": p["label"], "flag": p.get("flag") or []}
-                    for p in (f.get("pins") or [])
-                ],
-            }
-            for f in curated_families
-        ],
-        "default_family": curated_default_family,
-        "source": "curated",
-    }
-    list_cmd = entry.get("list_command")
-    if isinstance(list_cmd, list) and list_cmd:
-        try:
-            proc = subprocess.run(  # noqa: S603 — operator-configured CLI probe
-                list_cmd, capture_output=True, text=True, timeout=6.0
-            )
-            if proc.returncode == 0 and proc.stdout.strip():
-                parsed = None
-                if name == "cursor-agent":
-                    parsed = _parse_cursor_agent_list_models(proc.stdout)
-                if parsed and parsed.get("families"):
-                    app.version_cache[name] = parsed
-                    app.version_cache_at[name] = now
-                    return parsed
-        except (OSError, subprocess.SubprocessError):
-            pass  # fall through to curated
-    app.version_cache[name] = curated
+    tree = discovery.cli_versions(name, fresh=True)
+    app.version_cache[name] = tree
     app.version_cache_at[name] = now
-    return curated
+    return tree
 
 
 def _cache_layout_refusal(driver: str, params: dict[str, Any] | None) -> str | None:
@@ -1320,39 +960,9 @@ _CLI_PTY_MAX_BUFFER = 512 * 1024  # 512KB per session — plenty for a login wal
 
 
 def _cli_status(cli_name: str, timeout: float = 5.0) -> dict[str, Any]:
-    """Probe a CLI's authed state. Returns {authed: bool, raw: str, detail?: str}.
-    A CLI with no status_command returns {authed: None} — caller decides."""
-    entry = KNOWN_CLI_ADAPTERS.get(cli_name)
-    if entry is None:
-        return {"authed": None, "raw": "", "detail": "unknown cli"}
-    status_cmd = entry.get("status_command")
-    if not status_cmd:
-        return {"authed": None, "raw": "", "detail": "no status_command"}
-    if not isinstance(status_cmd, list):
-        raise TypeError(f"cli {cli_name!r}: status_command must be an argv list")
-    try:
-        proc = subprocess.run(  # noqa: S603 — operator-chosen CLI in the catalog
-            status_cmd, capture_output=True, text=True, timeout=timeout
-        )
-    except subprocess.TimeoutExpired:
-        return {"authed": False, "raw": "", "detail": "status probe timed out"}
-    except FileNotFoundError:
-        return {"authed": False, "raw": "", "detail": "cli binary not found"}
-    combined = (proc.stdout + proc.stderr).strip()
-    # Per-CLI parse. Small, explicit — the research doc §2 verified each shape.
-    if cli_name == "claude":
-        # Emits JSON; loggedIn:true means authed.
-        try:
-            j = msgspec.json.decode(proc.stdout.encode())
-            return {"authed": bool(j.get("loggedIn")), "raw": combined}
-        except (msgspec.DecodeError, ValueError):
-            return {"authed": False, "raw": combined}
-    if cli_name == "codex":
-        # `codex login status` prints "Not logged in" when unauthed.
-        return {"authed": "Not logged in" not in combined, "raw": combined}
-    if cli_name == "cursor-agent":
-        return {"authed": "Not logged in" not in combined, "raw": combined}
-    return {"authed": None, "raw": combined, "detail": "no parser"}
+    """A CLI's signed-in state, {authed, raw, detail?}; see `discovery.cli_status`. A CLI with
+    no status command answers {authed: None}."""
+    return discovery.cli_status(cli_name, timeout)
 
 
 def _cli_pty_start(app: App, cli_name: str) -> str:
@@ -1534,6 +1144,9 @@ def _agent_models(app: App) -> dict[str, object]:
     # (empty: none), as OLLAMA_BASE_URL moves the Ollama side. The offline gates set both, so the
     # roster they bind from does not depend on what this machine has installed.
     allowed_env = os.environ.get("SUBSTRATE_CLI_ADAPTERS")
+    # The login shell's PATH plus the usual install directories: an app opened from the Finder
+    # gets launchd's bare PATH, where `claude` in ~/.local/bin is not found.
+    login_path = discovery.login_path()
     allowed = (
         None if allowed_env is None else {n.strip() for n in allowed_env.split(",") if n.strip()}
     )
@@ -1543,7 +1156,7 @@ def _agent_models(app: App) -> dict[str, object]:
         if (allowed is None or name in allowed)
         and (cmd := entry.get("command"))
         and isinstance(cmd, list)
-        and shutil.which(cmd[0])
+        and shutil.which(cmd[0], path=login_path)
     )
     # Sprint 085 followup — subset of cli entries with a login_command
     # the AuthPromptCard can host. Opencode is present as a driver but

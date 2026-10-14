@@ -16,7 +16,7 @@ import server  # noqa: E402
 
 @pytest.fixture
 def every_cli_installed(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("shutil.which", lambda cmd: f"/bin/{cmd}")
+    monkeypatch.setattr("shutil.which", lambda cmd, path=None: f"/bin/{cmd}")
     monkeypatch.setattr(server, "_probe_cli_versions", lambda app, name: {})
     monkeypatch.setenv("OLLAMA_BASE_URL", "http://127.0.0.1:9")
 
