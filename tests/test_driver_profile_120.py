@@ -234,15 +234,11 @@ def test_a_commit_through_the_claude_driver_has_no_trailer(
         assert status == 200, body
         record = Path(app.registry.get(sid).record_root)
     started = next(e for e in api.read_record(record) if e["kind"] == "SessionStarted")
-    assert started["payload"]["driver_command"][:7] == [
-        "claude",
-        "-p",
-        "--tools",
-        "",
-        "--strict-mcp-config",
-        "--setting-sources",
-        "",
-    ]
+    # the catalog's command and isolation flags, whatever they are now (its tools stay on: this
+    # turn commits through `bash`)
+    entry = server.KNOWN_CLI_ADAPTERS["claude"]
+    prefix = [*entry["command"], *entry.get("isolation_flags", [])]
+    assert started["payload"]["driver_command"][: len(prefix)] == prefix
     log = subprocess.run(
         ["git", "log", "--format=%B"], cwd=ws, capture_output=True, text=True, check=True
     ).stdout
