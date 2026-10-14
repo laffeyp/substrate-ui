@@ -266,8 +266,10 @@ def test_session_worktree_isolates_a_session_on_a_branch(tmp_path, monkeypatch) 
     subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
     subprocess.run(["git", "-C", str(repo), "commit", "-qm", "init"], check=True)
 
-    wt, branch = server._session_worktree(repo, "sess-abc")
-    assert branch == "substrate/sess-abc"
+    from substrate.app import workspace
+
+    branch = "substrate/sess-abc"
+    wt = workspace.make_worktree(repo, branch, _sb / "wt" / "sess-abc")  # kernel K315
     assert wt.is_dir() and (wt / "a.txt").read_text() == "hello"  # repo content, isolated copy
     head = subprocess.run(
         ["git", "-C", str(wt), "rev-parse", "--abbrev-ref", "HEAD"],
@@ -275,7 +277,7 @@ def test_session_worktree_isolates_a_session_on_a_branch(tmp_path, monkeypatch) 
         text=True,
     ).stdout.strip()
     assert head == "substrate/sess-abc"  # on the session branch, not the repo's working tree
-    assert server._session_worktree(repo, "sess-abc")[0] == wt  # idempotent
+    assert workspace.make_worktree(repo, branch, _sb / "wt" / "sess-abc") == wt  # idempotent
     # the diff surface: what the agent changed in the worktree — an edit AND a new (write_file'd) file.
     (wt / "a.txt").write_text("changed")
     (wt / "new.py").write_text("print('hi')\n")
@@ -286,7 +288,7 @@ def test_session_worktree_isolates_a_session_on_a_branch(tmp_path, monkeypatch) 
     import pytest as _pytest
 
     with _pytest.raises(ValueError, match="not a git repo"):
-        server._session_worktree(tmp_path / "notarepo", "s")
+        workspace.make_worktree(tmp_path / "notarepo", "b", _sb / "wt" / "s")
 
 
 def test_models_endpoint_lists_drivers_with_a_default(
