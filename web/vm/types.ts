@@ -66,23 +66,6 @@ export interface BackgroundTaskRow {
   stopped_because: string | null;
 }
 
-/** UI sprint 176 — one run a session started (kernel K319, GET /api/session/<id>/runs). */
-export interface RunSessionRow {
-  session_id: string;
-  role: string;
-  record_root: string;
-  driven: boolean;  // the topology, not a person, writes the session's next message
-}
-
-export interface RunRow {
-  run_id: string;
-  topology: string;
-  sessions: RunSessionRow[];
-  running: boolean;
-  paused: boolean;
-  outcome: string | null;  // set once the run ended
-}
-
 export interface SessionRow {
   sessionId: string;
   name: string;
@@ -164,8 +147,6 @@ export interface Snapshot {
   /** UI sprint 143 (kernel K296): the Length and Tone positions; null is the default. */
   length: string | null;
   tone: string | null;
-  /** Kernel K324 (vocabulary § Y): how readily the model hands work to a topology; null is the default. */
-  handoff: string | null;
   workspacePath: string | null;
   workspaceShape: string | null;
   turnIndex: number;
@@ -178,11 +159,6 @@ export interface Snapshot {
   turnFailure: { detail: string; atT: number } | null;
   /** UI sprint 105 — the session's bash background tasks (GET /api/session/<id>/tasks). */
   backgroundTasks: BackgroundTaskRow[];
-  /** UI sprint 176 — the runs this session started (kernel K319). */
-  runs: RunRow[];
-  /** UI sprint 176 — set when the pane shows a run's session, whose messages its topology writes:
-   *  the line that says so. Typing is refused while it is set. */
-  viewOnly: string | null;
   /** UI sprint 169 — the kernel's language view of the record (GET /api/session/<id>/language);
    *  null until fetched. Refreshed after each turn returns. */
   language: LanguageView | null;

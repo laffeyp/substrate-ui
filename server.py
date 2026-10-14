@@ -46,12 +46,7 @@ import msgspec
 from substrate import api
 from substrate.topologies import bundled
 from substrate.topologies.session.environment import session_baseline
-from substrate.topologies.session.vocabulary import (
-    HANDOFF_DEFAULT,
-    LENGTH_DEFAULT,
-    TONE_DEFAULT,
-    Control,
-)
+from substrate.topologies.session.vocabulary import LENGTH_DEFAULT, TONE_DEFAULT, Control
 from substrate.adapters.harness_streams import SUBSTRATE_MCP_SERVER
 from substrate.topologies.session.mcp_channel import handle_jsonrpc
 from substrate.topologies.session.model_class import (
@@ -78,14 +73,10 @@ from substrate.app import (
     SessionRegistry,
     SessionStatus,
     TornRecordOnResume,
-    build,
     language_view,
     release_python_home,
-    review,
-    run_hold,
 )
 from substrate.app import daemon_client as _substrate_daemon_client
-from substrate.adapters import DriverParamKey
 from substrate.adapters.models import (
     CliResponder,
     DeterministicResponder,
@@ -209,11 +200,10 @@ def _application_spec_to_wire(spec: Any) -> dict[str, Any]:
 
 def _params_cache_key(params: dict[str, Any] | None) -> tuple[tuple[str, Any], ...]:
     """Turn a driver_params dict into a hashable, order-independent cache key.
-    Empty dict and None hash the same (both mean "responder defaults"). A deterministic session's
-    `script` (UI sprint 176) is the session's tool calls, not the responder's, so it is left out."""
+    Empty dict and None hash the same (both mean "responder defaults")."""
     if not params:
         return ()
-    return tuple(sorted((k, v) for k, v in params.items() if k != DriverParamKey.SCRIPT))
+    return tuple(sorted(params.items()))
 
 
 def _mcp_url(app: App, session_id: str) -> str:
@@ -533,6 +523,30 @@ def _allowed_tool_names(manifest: Any) -> set[str] | None:
 # ── sprint 225a: application dispatch — one-shot topology launcher ──────
 
 
+def _build_code_review_from_inputs(
+    app: App, inputs: dict[str, Any], folder: Path
+) -> Callable[..., Any]:
+    """`fanout_review_topology` — inputs.<role>_model per DEFAULT_ROLES
+    resolve into the `responders` dict; `judge_model` into `judge`. A CLI
+    role runs in the repo under review, not the run folder (sprint 115)."""
+    from substrate.topologies.applications.fanout_review import fanout_review_topology
+    from substrate.topologies.code_review import DEFAULT_ROLES
+
+    repo = str(inputs["repo"])
+    responders = {
+        role: _daemon_driver_resolver(app, str(inputs[f"{role}_model"]), workspace=repo)
+        for role in DEFAULT_ROLES
+    }
+    judge = _daemon_driver_resolver(app, str(inputs["judge_model"]), workspace=repo)
+    return fanout_review_topology(
+        repo=repo,
+        ref=str(inputs.get("ref", "HEAD~1")),
+        responders=responders,
+        judge=judge,
+        quorum=int(inputs.get("quorum", 3)),
+    )
+
+
 def _build_best_of_n_verified_from_inputs(
     app: App, inputs: dict[str, Any], folder: Path
 ) -> Callable[..., Any]:
@@ -581,6 +595,7 @@ def _build_research_sweep_from_inputs(
 # run's own directory, where a CLI role runs (sprint 115); the launcher makes it
 # and removes it when the run ends.
 _APP_BUILDERS: dict[str, Callable[[App, dict[str, Any], Path], Callable[..., Any]]] = {
+    "code_review": _build_code_review_from_inputs,
     "best_of_n_verified": _build_best_of_n_verified_from_inputs,
     "research_sweep": _build_research_sweep_from_inputs,
 }
@@ -692,23 +707,18 @@ def _build_session_topology_from_manifest(
         # Sprint 053: fold `delegate` in, closing the Sprint 228 card-vs-implementation
         # drift the shakeout (sprint 052) surfaced. Sprint 228's card specified eight
         # substrate-toolkit tools including delegate; commit c455b5a shipped seven.
-        # Kernel K323: every child is a session in the registry, on this session's model unless
-        # the call names another, with this session's bundle, controls and tools.
+        # `make_delegate` is daemon-aware — it takes the session's own responder, the
+        # session registry, and the manifest fields so a delegated child can inherit
+        # a standing session or resolve model names against the daemon's roster.
         "delegate": make_delegate(
+            responder=responder,
+            root=Path(manifest.workspace),
+            child_suite_factory=full_suite,
             session_registry=app.registry,
             parent_session_id=manifest.session_id,
             parent_record_root=Path(manifest.record_root),
+            model_resolver=lambda name: _daemon_driver_resolver(app, name),
         ),
-        # Kernel K319-K321: the session holds the runs it starts. `build` works one card on a new
-        # branch, `review` starts one reviewer per style; `run` stops, pauses, resumes, steps
-        # through and replays them.
-        build.BUILD_TOOL_NAME: build.make_build_tool(
-            functools.partial(_start_build, app, manifest), Path(manifest.workspace)
-        ),
-        review.REVIEW_TOOL_NAME: review.make_review_tool(
-            functools.partial(_start_review, app, manifest)
-        ),
-        run_hold.RUN_TOOL_NAME: run_hold.make_run_tool(manifest.session_id),
     }
     # Kernel K277: the `skill` tool loads a named guide (dellm) when the user asks for it.
     model_class = _model_class(manifest.driver)
@@ -726,8 +736,6 @@ def _build_session_topology_from_manifest(
         # Kernel K296: the Length and Tone positions, at their defaults when the manifest names none.
         length=manifest.length or LENGTH_DEFAULT,
         tone=manifest.tone or TONE_DEFAULT,
-        # Kernel K324 (§ Y): how readily the model hands work to a topology.
-        handoff=manifest.handoff or HANDOFF_DEFAULT,
         seed=manifest.seed,
         tools=session_tools,
         per_turn=manifest.per_turn,
@@ -742,11 +750,7 @@ def _build_session_topology_from_manifest(
         # session reads that bundle every turn (no per-turn remap by model class).
         bundle=manifest.bundle,
         parent_session_id=manifest.composite_of,
-        # UI sprint 176: a deterministic session may carry its tool calls in its driver params.
-        # An empty script still means scripted, so no script param passes None.
-        script=[(str(t), list(a)) for t, a in (manifest.driver_params or {})["script"]]
-        if manifest.driver == "deterministic" and (manifest.driver_params or {}).get("script")
-        else None,
+        script=None,
         first_turn_user_message=first_turn_user_message,
         mcp=mcp_on,
         # Kernel K310-K311 (vocabulary v0.11 § W): each turn's language is measured before it
@@ -774,61 +778,6 @@ def _build_session_topology_from_manifest(
         model_class=model_class,
     )
     return topo
-
-
-def _run_driver(app: App, manifest: Any) -> tuple[Callable[[Path], Any], int]:
-    """A run's model: the session's, run in the run's worktree, and its window."""
-    from substrate.topologies.session.transcript import resolve_driver_context
-
-    def driver_for(worktree: Path) -> Any:
-        return _daemon_driver_resolver(
-            app, manifest.driver, manifest.driver_params, workspace=str(worktree)
-        )
-
-    tokens, _ = resolve_driver_context(manifest.driver, driver_for(Path(manifest.workspace)))
-    return driver_for, tokens
-
-
-def _start_build(app: App, manifest: Any, card: Any) -> tuple[str, str]:
-    """Start a build of `card` on the session's repository, on the session's model, guidance
-    bundle and model class. Records go under `<sessions>/runs/`, worktrees under `<sessions>/wt/`."""
-    driver_for, tokens = _run_driver(app, manifest)
-    base = _sessions_base()
-    return build.start_build(
-        run_hold.TABLE,
-        owner=manifest.session_id,
-        run_id=f"r_{uuid.uuid4().hex[:12]}",
-        repo=Path(manifest.workspace),
-        card=card,
-        driver_for=driver_for,
-        driver_name=manifest.driver,
-        driver_context_tokens=tokens,
-        model_class=_model_class(manifest.driver),
-        bundle=manifest.bundle,
-        worktrees=base / "wt",
-        records=base / "runs",
-    )
-
-
-def _start_review(app: App, manifest: Any, target: str, styles: list[str], focus: str) -> list[str]:
-    """Start the session's reviewers on its workspace's repository, each on the session's model
-    run in its own worktree. Records go under `<sessions>/runs/`, worktrees under `<sessions>/wt/`."""
-    driver_for, tokens = _run_driver(app, manifest)
-    base = _sessions_base()
-    return review.start_review(
-        run_hold.TABLE,
-        owner=manifest.session_id,
-        run_id=f"r_{uuid.uuid4().hex[:12]}",
-        repo=Path(manifest.workspace),
-        target=target,
-        styles=styles,
-        focus=focus,
-        driver_for=driver_for,
-        driver_name=manifest.driver,
-        driver_context_tokens=tokens,
-        worktrees=base / "wt",
-        records=base / "runs",
-    )
 
 
 # A finished topology run's handle stays this long, so a status poll after it ends still reads
@@ -1979,17 +1928,63 @@ def _sessions_base() -> Path:
 # `?workspace=<name>` resolves under there; an absolute path is a project the user picked.
 
 
+def _session_worktree(repo: Path, session_id: str) -> tuple[Path, str]:
+    """Git-worktree-per-session isolation (Galley/Sculptor pattern, from the research): a session
+    driven against a REPO operates in its own worktree — a checkout on a fresh branch
+    `substrate/<session>` at `~/.substrate/sessions/wt/<repo>-<session>` — so the agent works ADJACENT
+    to your repo, on a diffable branch, without touching your working tree, and parallel sessions do
+    not collide. Idempotent (reuse the worktree if it exists). Raises if `repo` is not a git repo."""
+    repo = repo.expanduser().resolve()
+    if not (repo / ".git").exists():
+        raise ValueError(f"{repo} is not a git repository")
+    wt = _sessions_base() / "wt" / f"{repo.name}-{session_id}"
+    branch = f"substrate/{session_id}"
+    if wt.exists():
+        return wt, branch
+    wt.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run(  # -B reuses/creates the branch; worktree off HEAD
+        ["git", "-C", str(repo), "worktree", "add", "-B", branch, str(wt), "HEAD"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return wt, branch
+
+
 def _worktree_diff(wt: Path) -> dict[str, object]:
-    """What the agent changed in a session worktree (`substrate.app.workspace.worktree_diff`,
-    read-only). Only worktrees under the sessions' `wt/` folder, where the registry makes them
-    (kernel K315), are served; any other path is refused (lens audit F301)."""
-    from substrate.app import workspace
+    """What the agent CHANGED in a session worktree — the 'show me what it did' half of B. `git diff`
+    including new files, plus the changed-file list. Read-only: new files are marked
+    intent-to-add in a scratch copy of the index (GIT_INDEX_FILE), so the worktree's own index is
+    never written (lens audit F301: a GET changed an arbitrary repository's index). Only the
+    session worktrees this server creates (`_session_worktree`) are served. Raises otherwise."""
+    import shutil
+    import tempfile
 
     wt = Path(wt).expanduser().resolve()
     root = (_sessions_base() / "wt").resolve()
     if not wt.is_relative_to(root) or wt == root:
         raise ValueError(f"{wt} is not a session worktree")
-    return workspace.worktree_diff(wt)
+    if not (wt / ".git").exists():
+        raise ValueError(f"{wt} is not a git worktree")
+    index = subprocess.run(
+        ["git", "-C", str(wt), "rev-parse", "--git-path", "index"], capture_output=True, text=True
+    ).stdout.strip()
+    index_path = (wt / index) if index and not Path(index).is_absolute() else Path(index)
+    with tempfile.TemporaryDirectory(prefix="substrate-wtdiff-") as tmp:
+        scratch = Path(tmp) / "index"
+        if index_path.is_file():
+            shutil.copyfile(index_path, scratch)
+        env = {**os.environ, "GIT_INDEX_FILE": str(scratch)}
+
+        def git(*args: str) -> str:
+            return subprocess.run(
+                ["git", "-C", str(wt), *args], capture_output=True, text=True, env=env, timeout=60
+            ).stdout
+
+        git("add", "-A", "--intent-to-add")
+        diff = git("diff")
+        names = git("diff", "--name-status")
+    return {"diff": diff, "files": names.strip().splitlines()}
 
 
 _SESSION_PREFIXES = (
@@ -2383,10 +2378,6 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/session":
                 self._session_create()
                 return
-            m_run_stop = re.fullmatch(r"/api/session/([^/]+)/runs/([^/]+)/stop", path)
-            if m_run_stop:  # UI sprint 176
-                self._session_run_stop(m_run_stop.group(1), m_run_stop.group(2))
-                return
             m_stop = re.fullmatch(r"/api/session/([^/]+)/tasks/([^/]+)/stop", path)
             if m_stop:  # UI sprint 105
                 self._session_task_stop(m_stop.group(1), m_stop.group(2))
@@ -2746,7 +2737,6 @@ class Handler(BaseHTTPRequestHandler):
                 driver_params=driver_params,
                 length=controls[Control.LENGTH],
                 tone=controls[Control.TONE],
-                handoff=controls[Control.HANDOFF],
             )
             # Validate driver_params at the same boundary as PATCH does. If
             # the client sent bad shape/values, roll back the create so the
@@ -2788,7 +2778,6 @@ class Handler(BaseHTTPRequestHandler):
                 "bundle": manifest.bundle,
                 Control.LENGTH: manifest.length,  # kernel K296
                 Control.TONE: manifest.tone,
-                Control.HANDOFF: manifest.handoff,  # kernel K324
                 "role": manifest.role,
                 "driver_params": dict(current.driver_params)
                 if current.driver_params is not None
@@ -3042,8 +3031,7 @@ class Handler(BaseHTTPRequestHandler):
         # before ending itself. Per-child failure is best-effort — logged
         # and continued — so a single stuck child does not block the parent's
         # SessionEnded from landing on the record.
-        # Kernel K323: delegate children nest; every descendant ends, deepest first.
-        children = self.app.registry.descendants(session_id)
+        children = self.app.registry.list_children(session_id)
         for child_manifest in children:
             try:
                 _interrupt_then_end(
@@ -3120,48 +3108,6 @@ class Handler(BaseHTTPRequestHandler):
             return
         _BG.stop(task, "stopped from the app")
         self._json(task.describe())
-
-    def _session_children(self, session_id: str) -> None:
-        """UI sprint 178: GET /api/session/<id>/children — the sessions whose parent it is (a
-        delegate's children, kernel K323), oldest first."""
-        if self.app.registry is None or self.app.registry.get(session_id) is None:
-            self._error(404, f"unknown session {session_id!r}")
-            return
-        children = sorted(self.app.registry.list_children(session_id), key=lambda m: m.created_at)
-        self._json(
-            {
-                "children": [
-                    {
-                        "session_id": m.session_id,
-                        "name": m.name,
-                        "driver": m.driver,
-                        "created_at": m.created_at,
-                    }
-                    for m in children
-                ]
-            }
-        )
-
-    def _session_runs(self, session_id: str) -> None:
-        """UI sprint 176: GET /api/session/<id>/runs — the runs the session started (kernel K319)."""
-        if self.app.registry is None or self.app.registry.get(session_id) is None:
-            self._error(404, f"unknown session {session_id!r}")
-            return
-        self._json({"runs": run_hold.TABLE.listing(session_id)})
-
-    def _session_run_stop(self, session_id: str, run_id: str) -> None:
-        """UI sprint 176: POST /api/session/<id>/runs/<run_id>/stop — the caller stops its run from
-        the app; the run's session ends `caller_stop`, and the caller's model is told at its next
-        step."""
-        if self.app.registry is None or self.app.registry.get(session_id) is None:
-            self._error(404, f"unknown session {session_id!r}")
-            return
-        try:
-            run_hold.TABLE.stop(session_id, run_id)
-        except KeyError:
-            self._error(404, f"unknown run {run_id!r} in session {session_id!r}")
-            return
-        self._json({"runs": run_hold.TABLE.listing(session_id)})
 
     def _session_interrupt(self, session_id: str) -> None:
         """Sprint 217d: POST /api/session/<id>/interrupt. Cancels the running
@@ -3299,7 +3245,6 @@ class Handler(BaseHTTPRequestHandler):
                 "bundle": manifest.bundle,
                 Control.LENGTH: manifest.length,  # kernel K296
                 Control.TONE: manifest.tone,
-                Control.HANDOFF: manifest.handoff,  # kernel K324
                 "record": manifest.record_root,
                 "created_at": manifest.created_at,
                 "status": manifest.status,
@@ -3340,7 +3285,7 @@ class Handler(BaseHTTPRequestHandler):
         # entries drop. Per-child KeyError is a race (child dropped
         # between list_children and delete); ignore per the best-effort
         # contract.
-        children = self.app.registry.descendants(session_id)  # K323: deepest first
+        children = self.app.registry.list_children(session_id)
         for child_manifest in children:
             try:
                 self.app.registry.delete(child_manifest.session_id)
@@ -4057,7 +4002,6 @@ class Handler(BaseHTTPRequestHandler):
             values: dict[str, str | None] = {
                 Control.LENGTH: updated.length,
                 Control.TONE: updated.tone,
-                Control.HANDOFF: updated.handoff,
             }
             for control in Control:
                 if control in body:
@@ -4070,10 +4014,7 @@ class Handler(BaseHTTPRequestHandler):
                     values[control] = raw or None
             try:
                 updated = self.app.registry.set_controls(
-                    session_id,
-                    length=values[Control.LENGTH],
-                    tone=values[Control.TONE],
-                    handoff=values[Control.HANDOFF],
+                    session_id, length=values[Control.LENGTH], tone=values[Control.TONE]
                 )
             except ValueError as exc:
                 self._error(400, str(exc))
@@ -4110,7 +4051,6 @@ class Handler(BaseHTTPRequestHandler):
                 "bundle": updated.bundle,
                 Control.LENGTH: updated.length,  # kernel K296
                 Control.TONE: updated.tone,
-                Control.HANDOFF: updated.handoff,  # kernel K324
                 "driver_params": dict(updated.driver_params)
                 if updated.driver_params is not None
                 else None,
@@ -4198,14 +4138,6 @@ class Handler(BaseHTTPRequestHandler):
             m_language = re.fullmatch(r"/api/session/([^/]+)/language", path)
             if m_language:  # UI sprint 168
                 self._session_language(m_language.group(1))
-                return
-            m_children = re.fullmatch(r"/api/session/([^/]+)/children", path)
-            if m_children:  # UI sprint 178
-                self._session_children(m_children.group(1))
-                return
-            m_runs = re.fullmatch(r"/api/session/([^/]+)/runs", path)
-            if m_runs:  # UI sprint 176
-                self._session_runs(m_runs.group(1))
                 return
             m_tasks = re.fullmatch(r"/api/session/([^/]+)/tasks", path)
             if m_tasks:  # UI sprint 105
@@ -4451,7 +4383,7 @@ class Handler(BaseHTTPRequestHandler):
 def main() -> None:
     global HOST, PORT
     # UI sprint 177: this interpreter found its home at startup; the processes the server starts (a
-    # session's bash, a run's checks, a CLI driver) get the user's environment, not the bundle's.
+    # session's bash, a CLI driver) get the user's environment, not the bundle's.
     release_python_home()
     # Sprint 079: --port / --host CLI flags. --port 0 binds an
     # ephemeral port; the readback line printed before serve_forever

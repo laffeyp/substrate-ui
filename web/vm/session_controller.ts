@@ -10,7 +10,6 @@
 
 import type {
   BackgroundTaskRow,
-  RunRow,
   BundleRow,
   ConnectionState,
   LanguageView,
@@ -28,7 +27,7 @@ import { emit as sddEmit } from "./instrumentation/sdd";
 import { EnvelopeKind } from "./kinds";
 import { setToolOutputMode, toggleToolOutputMode } from "./tool_output_mode";
 import { SessionStatus, TaskStatus } from "./statuses.gen";
-import { GUIDANCE_LEVEL_BUNDLES, HANDOFF_DEFAULT, HandoffPosition, LENGTH_DEFAULT, LengthPosition, TONE_DEFAULT, TonePosition } from "./controls.gen";
+import { GUIDANCE_LEVEL_BUNDLES, LENGTH_DEFAULT, LengthPosition, TONE_DEFAULT, TonePosition } from "./controls.gen";
 import type { EnvelopeKindValue } from "./kinds";
 
 /** One slash command (UI sprint 162). */
@@ -64,15 +63,6 @@ const LEGACY_SESSION_END_REASONS: Record<string, string> = { timeout: "turn_cap"
 const KIND_DISPOSITION: Record<EnvelopeKindValue, "rendered" | "ignored"> = {
   [EnvelopeKind.SessionStarted]: "rendered",
   [EnvelopeKind.BackgroundTaskEnded]: "rendered",
-  // Kernel K314-K319 (vocabulary v0.12 § X): a run in the caller's record, and a run's own card,
-  // checks, report and pauses in its pane.
-  [EnvelopeKind.TopologyRunStarted]: "rendered",
-  [EnvelopeKind.TopologyRunEnded]: "rendered",
-  [EnvelopeKind.CardAccepted]: "rendered",
-  [EnvelopeKind.ChecksRun]: "rendered",
-  [EnvelopeKind.ReportWritten]: "rendered",
-  [EnvelopeKind.RunPaused]: "rendered",
-  [EnvelopeKind.RunResumed]: "rendered",
   [EnvelopeKind.SessionChanged]: "rendered",
   // Kernel K282, UI sprint 129: a harness driver's tool calls, drawn as tool cards.
   [EnvelopeKind.HarnessToolCall]: "rendered",
@@ -148,7 +138,6 @@ interface OpenSessionAck {
   driver_params?: Record<string, unknown> | null;
   length?: string | null;
   tone?: string | null;
-  handoff?: string | null;
 }
 
 interface ModelsRoster {
@@ -205,7 +194,6 @@ const EMPTY_SNAPSHOT: Snapshot = {
   bundleSlug: null,
   length: null,
   tone: null,
-  handoff: null,
   workspacePath: null,
   workspaceShape: null,
   turnIndex: 0,
@@ -213,8 +201,6 @@ const EMPTY_SNAPSHOT: Snapshot = {
   parkReason: null,
       turnFailure: null,
       backgroundTasks: [],
-      runs: [],
-      viewOnly: null,
   language: null,
   languageOff: false,
   languageClearedSeq: -1,
@@ -247,12 +233,6 @@ export class SessionController {
   private harnessToolNames = new Map<string, string>();
   /** UI sprint 105: the refresh timer that runs while a background task is running. */
   private tasksTimer: ReturnType<typeof setTimeout> | null = null;
-  private runsTimer: ReturnType<typeof setTimeout> | null = null;
-  // UI sprint 178: the delegate children this pane has announced, and the open delegate calls with
-  // their record time (a child created at or after an open call's time is that call's).
-  private childrenSeen = new Set<string>();
-  private delegateCalls = new Map<string, number>();
-  private childrenTimer: ReturnType<typeof setTimeout> | null = null;
   private languageTimer: ReturnType<typeof setTimeout> | null = null;
   /** Numbers each language fetch; only the latest one's view is applied. */
   private languageRequest = 0;
@@ -516,7 +496,6 @@ export class SessionController {
     if (length) body.length = length;
     const tone = request.tone ?? this.snap.tone;
     if (tone) body.tone = tone;
-    if (this.snap.handoff) body.handoff = this.snap.handoff;
     if (request.tools) body.tools = request.tools;
     // UI sprint 145: a name given in the top bar before the session opened goes with the open.
     const name = request.name ?? this.snap.sessionName;
@@ -554,8 +533,6 @@ export class SessionController {
       parkReason: null,
       turnFailure: null,
       backgroundTasks: [],
-      runs: [],
-      viewOnly: null,
       language: null,
       languageOff: false,
       languageClearedSeq: -1,
@@ -582,79 +559,6 @@ export class SessionController {
     if (tasks.some((t) => t.status === TaskStatus.RUNNING)) {
       this.tasksTimer = setTimeout(() => { this.tasksTimer = null; void this.refreshTasks(); }, 3000);
     }
-  }
-
-  /** UI sprint 176: the runs this session started, as the server's run table holds them. While one
-   *  runs, read again every 2 s, so the caller's rows show a run ending before the caller's model
-   *  is told (which waits for the caller's next step). */
-  async refreshRuns(): Promise<void> {
-    const sessionId = this.snap.sessionId;
-    if (!sessionId) return;
-    const result = await this.client.fetchJson<{ runs: RunRow[] }>(
-      `/api/session/${encodeURIComponent(sessionId)}/runs`,
-    );
-    if (!result.ok || this.snap.sessionId !== sessionId) return;
-    const runs = result.data?.runs ?? [];
-    this.patch({ runs });
-    if (this.runsTimer) { clearTimeout(this.runsTimer); this.runsTimer = null; }
-    if (runs.some((r) => r.running)) {
-      this.runsTimer = setTimeout(() => { this.runsTimer = null; void this.refreshRuns(); }, 2000);
-    }
-  }
-
-  /** UI sprint 178: the session's delegate children (kernel K323). A child created at or after
-   *  an open delegate call's record time is announced once, and the shell opens its pane. Read
-   *  every 500 ms while a delegate call is open, and once more after it returns. */
-  async refreshChildren(since?: number): Promise<void> {
-    const sessionId = this.snap.sessionId;
-    if (!sessionId) return;
-    const result = await this.client.fetchJson<{ children: { session_id: string; driver: string; created_at: number }[] }>(
-      `/api/session/${encodeURIComponent(sessionId)}/children`,
-    );
-    if (!result.ok || this.snap.sessionId !== sessionId) return;
-    const from = Math.min(since ?? Infinity, ...this.delegateCalls.values());
-    for (const c of result.data?.children ?? []) {
-      if (this.childrenSeen.has(c.session_id) || c.created_at < from) continue;
-      this.childrenSeen.add(c.session_id);
-      this.emit("DELEGATE_CHILD_STARTED", { session_id: c.session_id, driver: c.driver });
-    }
-    if (this.childrenTimer) { clearTimeout(this.childrenTimer); this.childrenTimer = null; }
-    if (this.delegateCalls.size) {
-      this.childrenTimer = setTimeout(() => { this.childrenTimer = null; void this.refreshChildren(); }, 500);
-    }
-  }
-
-  /** UI sprint 176: stop a run this session started. Its session ends `caller_stop`. */
-  async stopRun(runId: string): Promise<void> {
-    const sessionId = this.snap.sessionId;
-    if (!sessionId) return;
-    const result = await this.client.fetchJson<{ runs: RunRow[] }>(
-      `/api/session/${encodeURIComponent(sessionId)}/runs/${encodeURIComponent(runId)}/stop`,
-      { method: "POST", body: {} },
-    );
-    if (!result.ok) {
-      this.controlRow(`run ${runId}: ${String(result.detail)}`, false);
-      return;
-    }
-    this.patch({ runs: result.data?.runs ?? this.snap.runs });
-    this.emit("RUN_STOP_REQUESTED", { run_id: runId });
-    void this.refreshRuns();
-  }
-
-  /** UI sprint 176: a line in this pane's transcript from the shell (a run pane that could not open). */
-  noteLine(text: string): void { this.controlRow(text, true); }
-
-  /** UI sprint 176: show a run's session in this pane. Its topology writes its messages, so the
-   *  pane refuses typing and says why. */
-  async attachRun(recordRoot: string, topology: string, runId: string): Promise<void> {
-    await this.attachRecordRoot(recordRoot);
-    // The run's own SessionStarted names its worktree; until then the pane names no workspace.
-    this.patch({
-      viewOnly: `view only: the ${topology} writes this session's messages`,
-      sessionName: `${topology} ${runId}`,
-      workspacePath: null,
-      workspaceShape: null,
-    });
   }
 
   /** UI sprint 169: fetch the kernel's language view of this session's record. Calls within
@@ -694,11 +598,6 @@ export class SessionController {
   async sendTurn(text: string, opts: { skill?: string; driverCommand?: boolean } = {}): Promise<void> {
     const trimmed = text.trim();
     if (!trimmed) return;
-    if (this.snap.viewOnly) {
-      this.controlRow(this.snap.viewOnly, true);
-      this.emit("TURN_REFUSED_VIEW_ONLY", {});
-      return;
-    }
     if (!this.snap.sessionId) await this.openSession();
     const sessionId = this.snap.sessionId;
     if (!sessionId) return;
@@ -769,8 +668,6 @@ export class SessionController {
       parkReason: null,
       turnFailure: null,
       backgroundTasks: [],
-      runs: [],
-      viewOnly: null,
       language: null,
       languageOff: false,
       languageClearedSeq: -1,
@@ -806,7 +703,6 @@ export class SessionController {
       status?: string | null;
       length?: string | null;
       tone?: string | null;
-      handoff?: string | null;
     }>(`/api/session/${encodeURIComponent(sessionId)}`);
     if (!result.ok) {
       this.patch({ lastError: `attach: ${result.detail}` });
@@ -825,7 +721,6 @@ export class SessionController {
       bundleSlug: manifest.bundle ?? null,
       length: manifest.length ?? null,
       tone: manifest.tone ?? null,
-      handoff: manifest.handoff ?? null,
       workspacePath: manifest.workspace ?? null,
       workspaceShape: manifest.workspace_shape ?? null,
       turnIndex: 0,
@@ -844,13 +739,8 @@ export class SessionController {
       languageClearedSeq: -1,
       languageOpenTick: 0,
       endedReason: null,
-      runs: [],
-      viewOnly: null,
     });
-    this.childrenSeen.clear();
-    this.delegateCalls.clear();
     this.attachStream(manifest.session_id);
-    void this.refreshRuns();
     this.loadTopologyGraph(manifest.session_id).catch(() => undefined);
     this.refreshLanguage();
   }
@@ -1043,7 +933,7 @@ export class SessionController {
    * (`slashCatalog`), with a description per command and, for a fixed set, its choices. */
   private slashCommands(): SlashCommand[] {
     const control = (
-      field: "guidance" | "length" | "tone" | "handoff", about: string, choices: readonly string[], current: () => string,
+      field: "guidance" | "length" | "tone", about: string, choices: readonly string[], current: () => string,
     ): SlashCommand => ({
       names: [field], usage: `/${field} <${choices.join("|")}>`, about, choices, current,
       run: (rest: string) => rest
@@ -1078,8 +968,6 @@ export class SessionController {
       control("guidance", "how much of the working standard the model gets", ["auto", ...Object.keys(GUIDANCE_LEVEL_BUNDLES)], () => this.guidanceLevel() ?? "auto"),
       control("length", "how long replies run", Object.values(LengthPosition), () => this.snap.length ?? LENGTH_DEFAULT),
       control("tone", "the register of replies", Object.values(TonePosition), () => this.snap.tone ?? TONE_DEFAULT),
-      // UI sprint 179 (kernel K324): how readily the model hands work to delegate, review or build.
-      control("handoff", "how readily the model hands work to delegate, review or build", Object.values(HandoffPosition), () => this.snap.handoff ?? HANDOFF_DEFAULT),
       {
         // UI sprint 122: load the dellm skill for this session and send the text after it as the
         // turn (kernel K277). The skill stays loaded for the rest of the session.
@@ -1117,29 +1005,6 @@ export class SessionController {
             this.patch({ languageOpenTick: this.snap.languageOpenTick + 1 });
           }
           else this.controlRow(`language: unknown option ${JSON.stringify(arg)}. use /language [open|clear|off|on].`, false);
-        },
-      },
-      {
-        // UI sprint 176: the runs this session started (kernel K319). No id picks the latest.
-        names: ["run", "runs"], usage: "/run [stop|focus] [run id]",
-        about: "list this session's runs; stop one, or show its pane",
-        choices: ["stop", "focus"],
-        run: async (rest) => {
-          await this.refreshRuns();
-          const [action, id] = rest.trim().split(/\s+/);
-          const runs = this.snap.runs;
-          if (!action) {
-            this.controlRow(runs.length
-              ? runs.map((r) => `${r.run_id} · ${r.topology} · ${r.running ? "running" : r.paused ? "paused" : `ended ${r.outcome ?? ""}`}`).join("\n")
-              : "this session has started no runs", false);
-            return;
-          }
-          const pool = action === "stop" ? runs.filter((r) => r.running || r.paused) : runs;
-          const run = id ? runs.find((r) => r.run_id === id) : pool[pool.length - 1];
-          if (!run) { this.controlRow(id ? `no run ${id} in this session` : "no run to " + action, true); return; }
-          if (action === "stop") await this.stopRun(run.run_id);
-          else if (action === "focus") this.emit("RUN_FOCUS_REQUESTED", { run_id: run.run_id, topology: run.topology, sessions: run.sessions });
-          else this.controlRow(`run: unknown action ${JSON.stringify(action)}. use /run [stop|focus] [run id].`, true);
         },
       },
       // UI sprint 140: fold or unfold every tool card, as ⌘E does. /fold flips; /unfold unfolds.
@@ -1184,7 +1049,7 @@ export class SessionController {
   /** UI sprint 161 (kernel K296, K298; vocabulary § U): change guidance, length or tone. Before a
    * session opens it is the pick the open carries; after, a PATCH the next turn records as
    * SessionChanged and draws in the history. The snapshot follows the server's reply. */
-  async setControl(field: "guidance" | "length" | "tone" | "handoff", value: string): Promise<void> {
+  async setControl(field: "guidance" | "length" | "tone", value: string): Promise<void> {
     const sessionId = this.snap.sessionId;
     if (!sessionId) {
       if (field === "guidance") {
@@ -1192,22 +1057,17 @@ export class SessionController {
         if (bundle === undefined) { this.controlRow(`unknown guidance level ${value}`, true); return; }
         this.patch({ bundleSlug: bundle });
       } else {
-        this.patch({ [field]: value } as Partial<Snapshot>);
+        this.patch(field === "length" ? { length: value } : { tone: value });
       }
       this.controlRow(`${field} ${value} for the session this pane opens`, false);
       return;
     }
-    const result = await this.client.fetchJson<{ bundle?: string | null; length?: string | null; tone?: string | null; handoff?: string | null }>(
+    const result = await this.client.fetchJson<{ bundle?: string | null; length?: string | null; tone?: string | null }>(
       `/api/session/${encodeURIComponent(sessionId)}`,
       { method: "PATCH", body: { [field]: value } },
     );
     if (!result.ok) { this.controlRow(`${field} not changed: ${result.detail}`, true); return; }
-    this.patch({
-      bundleSlug: result.data.bundle ?? null,
-      length: result.data.length ?? null,
-      tone: result.data.tone ?? null,
-      handoff: result.data.handoff ?? null,
-    });
+    this.patch({ bundleSlug: result.data.bundle ?? null, length: result.data.length ?? null, tone: result.data.tone ?? null });
     this.controlRow(`${field} set to ${value}; it applies from the next message`, false);
   }
 
@@ -1354,10 +1214,6 @@ export class SessionController {
         const driver = payload.driver_model != null ? String(payload.driver_model) : this.snap.driver;
         const bundle = payload.bundle == null ? this.snap.bundleSlug : String(payload.bundle);
         this.patch({ driver, bundleSlug: bundle });
-        // UI sprint 176: a run's pane has no manifest; its record names the worktree it works in.
-        if (this.snap.viewOnly && payload.workspace_path) {
-          this.patch({ workspacePath: String(payload.workspace_path), workspaceShape: String(payload.workspace_shape ?? "") || null });
-        }
         // A fresh session's record exists from its first turn, and this
         // envelope is read off it: fetch the graph here if nothing (an
         // attach) loaded it yet.
@@ -1425,12 +1281,6 @@ export class SessionController {
           text: preview ? `${name} ${preview}` : `call ${name}`,
           toolName, callId, callKey, args, toolStep: step, toolRoute: route,
         });
-        // UI sprint 178: a delegate call made now (not read back from an old record) opens its
-        // children's panes as they start.
-        if (toolName === "delegate" && callId && typeof env.t === "number" && Date.now() / 1000 - env.t < 60) {
-          this.delegateCalls.set(callId, env.t - 1);  // a second's slack for clock rounding
-          void this.refreshChildren();
-        }
         return;
       }
       case EnvelopeKind.HarnessToolCall: {
@@ -1492,13 +1342,6 @@ export class SessionController {
         // matching ToolCall row is looked up by call_id at render.
         const toolName = payload.tool ? String(payload.tool) : "";
         const callId = payload.call_id ? String(payload.call_id) : "";
-        {
-          const since = this.delegateCalls.get(callId);
-          if (since !== undefined) {
-            this.delegateCalls.delete(callId);
-            void this.refreshChildren(since);
-          }
-        }
         const ok = payload.ok !== false;
         const err = payload.error ? String(payload.error) : "";
         const rawOutput = payload.output;
@@ -1555,8 +1398,7 @@ export class SessionController {
         }
         this.appendTranscript({
           seq: env.seq, kind: env.kind, role: "park",
-          // In a run's pane the topology writes the next message, so it is never the person's turn.
-          text: this.snap.viewOnly ? `· returned (${reason})` : `· returned (${reason}) — your turn`,
+          text: `· returned (${reason}) — your turn`,
         });
         this.emit("TURN_PARKED", { park_reason: reason });
         return;
@@ -1585,70 +1427,6 @@ export class SessionController {
           : `stopped (${String(payload.stopped_because ?? "")})`;
         const cmd = String(payload.command ?? "").slice(0, 80);
         this.appendTranscript({ seq: env.seq, kind: env.kind, role: "system", text: `task ${id} ${how} · ${cmd}` });
-        return;
-      }
-      case EnvelopeKind.TopologyRunStarted: {
-        // Kernel K319 (§ X.2): this session started a run; it returns at once. The shell opens a
-        // pane per run session for a run that starts now (`t` within a minute), not for one read
-        // back from an older record.
-        const runId = String(payload.run_id ?? "");
-        const topology = String(payload.topology ?? "");
-        const sessions = Array.isArray(payload.sessions) ? payload.sessions : [];
-        this.appendTranscript({
-          seq: env.seq, kind: env.kind, role: "system",
-          text: `run ${runId} · ${topology} started · /run stop ${runId} stops it, /run focus ${runId} shows it`,
-        });
-        this.emit("RUN_STARTED", { run_id: runId, topology, sessions, t: env.t ?? null });
-        void this.refreshRuns();
-        return;
-      }
-      case EnvelopeKind.TopologyRunEnded: {
-        const report = (payload.report ?? null) as Record<string, unknown> | null;
-        const said = report ? String(report.left || report.done || "").trim() : "";
-        this.appendTranscript({
-          seq: env.seq, kind: env.kind, role: "system",
-          text: `run ${String(payload.run_id ?? "")} · ${String(payload.topology ?? "")} ended ${String(payload.outcome ?? "")}${said ? ` · ${said.split("\n")[0].slice(0, 160)}` : ""}`,
-        });
-        void this.refreshRuns();
-        return;
-      }
-      case EnvelopeKind.CardAccepted: {
-        // A run's own record (vocabulary § X.3): the card it works.
-        const checks = Array.isArray(payload.checks) ? payload.checks : [];
-        this.appendTranscript({
-          seq: env.seq, kind: env.kind, role: "system",
-          text: `card · ${String(payload.what ?? "")} · ${checks.length} check${checks.length === 1 ? "" : "s"}`,
-        });
-        return;
-      }
-      case EnvelopeKind.ChecksRun: {
-        const results = Array.isArray(payload.results) ? (payload.results as Record<string, unknown>[]) : [];
-        const judged = results.filter((r) => r.passed !== null && r.passed !== undefined);
-        const passed = judged.filter((r) => r.passed === true).length;
-        const problems = Array.isArray(payload.record_problems) ? payload.record_problems.length : 0;
-        this.appendTranscript({
-          seq: env.seq, kind: env.kind, role: payload.passed ? "system" : "warning",
-          text: `checks ${payload.passed ? "passed" : "failed"} · ${judged.length ? `${passed} of ${judged.length}` : "none judged"}${problems ? ` · ${problems} record problem${problems === 1 ? "" : "s"}` : ""}`,
-        });
-        return;
-      }
-      case EnvelopeKind.ReportWritten: {
-        const files = Array.isArray(payload.files) ? payload.files.length : 0;
-        const head = `report · ${String(payload.outcome ?? "")}${payload.branch ? ` · branch ${String(payload.branch)}` : ""} · ${files} file${files === 1 ? "" : "s"}`;
-        const left = String(payload.left ?? "").trim();
-        this.appendTranscript({
-          seq: env.seq, kind: env.kind, role: "system",
-          text: left ? `${head} · ${left}` : head,
-        });
-        return;
-      }
-      case EnvelopeKind.RunPaused:
-      case EnvelopeKind.RunResumed: {
-        const what = env.kind === EnvelopeKind.RunPaused ? "paused" : "resumed";
-        this.appendTranscript({
-          seq: env.seq, kind: env.kind, role: "system",
-          text: `run ${what} by ${String(payload.by ?? "")}`,
-        });
         return;
       }
       case EnvelopeKind.SessionChanged: {

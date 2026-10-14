@@ -19,17 +19,8 @@ export const TonePosition = {
 
 export type TonePositionValue = typeof TonePosition[keyof typeof TonePosition];
 
-export const HandoffPosition = {
-  RARE: "rare",
-  NORMAL: "normal",
-  EAGER: "eager",
-} as const;
-
-export type HandoffPositionValue = typeof HandoffPosition[keyof typeof HandoffPosition];
-
 export const LENGTH_DEFAULT = LengthPosition.NORMAL;
 export const TONE_DEFAULT = TonePosition.NEUTRAL;
-export const HANDOFF_DEFAULT = HandoffPosition.NORMAL;
 
 export const GUIDANCE_LEVEL_BUNDLES = {
   "harness": "harness",

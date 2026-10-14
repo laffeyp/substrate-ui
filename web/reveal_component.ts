@@ -37,7 +37,7 @@ import {
 import { isToolCallRow, isToolResultRow } from "./vm/types";
 import { describeEventTime, eventTimes, formatClock, formatElapsed } from "./reveal/timeline";
 import { toggleToolOutputMode } from "./vm/tool_output_mode";
-import { GUIDANCE_LEVEL_BUNDLES, HANDOFF_DEFAULT, LENGTH_DEFAULT, LengthPosition, TONE_DEFAULT, TonePosition } from "./vm/controls.gen";
+import { GUIDANCE_LEVEL_BUNDLES, LENGTH_DEFAULT, LengthPosition, TONE_DEFAULT, TonePosition } from "./vm/controls.gen";
 
 // UI sprint 132 (kernel K288, session vocabulary § R): the guidance levels the bar offers, each
 // with the bundle that carries it. `auto` names none, so the daemon picks the model's default.
@@ -58,8 +58,6 @@ const STRUCTURE_DEFS = {
 
 // UI sprint 161: the levels and their bundles are generated from the kernel (vm/controls.gen.ts);
 // only the one-line notes are the UI's own.
-// The input bar's hint; a run's pane shows why it takes no typing instead (UI sprint 176).
-const INPUT_HINT = 'type to input · / for commands · ↵ to send';
 const GUIDANCE_AUTO_META = 'follows the model';
 const GUIDANCE_META = { harness: 'loop rules only', low: 'one line a rule', medium: 'rules, no examples', high: 'the full standard' };
 const GUIDANCE_OPTIONS = [
@@ -203,7 +201,6 @@ class Component extends DCLogic {
     const level = ctl && typeof ctl.guidanceLevel === 'function' ? ctl.guidanceLevel() : null;
     return settingsTail({
       guidance: level || snap.bundleSlug || 'none', length: snap.length || LENGTH_DEFAULT, tone: snap.tone || TONE_DEFAULT,
-      handoff: snap.handoff || HANDOFF_DEFAULT,
       language: snap.language || null, off: !!snap.languageOff, clearedSeq: snap.languageClearedSeq ?? -1,
     }).map(sg => ({ ...sg, deco: sg.shift ? 'underline dotted' : 'none', cursor: sg.shift ? 'help' : 'inherit', shiftAttr: sg.shift ? sg.text : '' }));
   }
@@ -788,59 +785,11 @@ class Component extends DCLogic {
     const i = picks.findIndex(o => o.current);
     return i < 0 ? 0 : i;
   }
-  // UI sprint 176: a run's pane says why it takes no typing; every other pane shows the hint.
-  _inputHint(state, paneId) {
-    const snap = (state.controllerSnapshots || {})[paneId];
-    return (snap && snap.viewOnly) || INPUT_HINT;
-  }
-  // UI sprint 176 (r8 § 3.6): a run started now opens a pane per session beside its caller's pane,
-  // bound to the session's record. A pane already showing that record is focused instead.
-  _openRunPanes(callerPaneId, run) {
-    const vm = window.__vm;
-    for (const sess of run.sessions || []) {
-      const root = String(sess.record_root || '');
-      if (!root) continue;
-      const shown = (this.state.panes || []).find(p => p.runRoot === root);
-      if (shown) { this.setState({ focused: shown.id }); if (vm && vm.setActive) vm.setActive(shown.id); continue; }
-      if ((this.state.panes || []).length >= 8) {
-        const caller = vm && vm.get ? vm.get(callerPaneId) : null;
-        if (caller && caller.noteLine) caller.noteLine(`run ${run.run_id}: eight panes are open; close one, then /run focus ${run.run_id}`);
-        continue;
-      }
-      this.setState({ focused: callerPaneId }, () => this._split('right', {
-        unbound: false, name: `${run.topology} ${run.run_id}`, runRoot: root, ws: '', shape: 'flat', lines: [],
-      }, (id) => {
-        const c = vm && vm.get ? vm.get(id) : null;
-        if (c && c.attachRun) c.attachRun(root, String(run.topology || 'run'), String(run.run_id || '')).catch(() => undefined);
-      }));
-    }
-  }
-  // UI sprint 178: a delegate child opens an interactive pane beside its caller, attached to the
-  // child's session, as any session a person writes to. A pane already showing it is focused.
-  _openSessionPane(callerPaneId, sessionId) {
-    if (!sessionId) return;
-    const vm = window.__vm;
-    const shown = (this.state.panes || []).find(p => p.childSid === sessionId);
-    if (shown) { this.setState({ focused: shown.id }); if (vm && vm.setActive) vm.setActive(shown.id); return; }
-    if ((this.state.panes || []).length >= 8) {
-      const caller = vm && vm.get ? vm.get(callerPaneId) : null;
-      if (caller && caller.noteLine) caller.noteLine(`delegate child ${sessionId}: eight panes are open; close one to see it`);
-      return;
-    }
-    this.setState({ focused: callerPaneId }, () => this._split('right', {
-      unbound: false, name: 'delegate ' + sessionId.slice(2, 10), childSid: sessionId, ws: '', shape: 'flat', lines: [],
-    }, (id) => {
-      const c = vm && vm.get ? vm.get(id) : null;
-      if (c && c.attachExisting) c.attachExisting(sessionId).catch(() => undefined);
-    }));
-  }
-  _split(dir, patch, then) {
+  _split(dir) {
     // Each split adds exactly one pane, up to a hard cap of eight.
     // The focused pane's cell is halved along the requested axis; the
     // new pane takes the freed half. Grid resolution doubles on demand
-    // when the focused pane's span in the split axis is 1. `patch` sets fields of the new pane;
-    // `then(id)` runs once it is in the layout (UI sprint 176).
-    let madeId = null;
+    // when the focused pane's span in the split axis is 1.
     this.setState(s => {
       if ((s.panes || []).length >= 8) return {};
       let { cols, rows } = s;
@@ -858,10 +807,9 @@ class Component extends DCLogic {
           for (const p of panes) { p.col = p.col * 2 - 1; p.cw = p.cw * 2; }
         }
         const half = target.cw / 2;
-        const newPane = Object.assign(this._newPane(), { col: target.col + half, row: target.row, cw: half, rh: target.rh }, patch || {});
+        const newPane = Object.assign(this._newPane(), { col: target.col + half, row: target.row, cw: half, rh: target.rh });
         target.cw = half;
         panes.push(newPane);
-        madeId = newPane.id;
         // UI sprint 146: a new pane is drawn in the panes view, so making one goes there.
         return { cols, rows, colW, rowW, panes, focused: newPane.id, revealed: false, surface: null };
       }
@@ -872,16 +820,10 @@ class Component extends DCLogic {
         for (const p of panes) { p.row = p.row * 2 - 1; p.rh = p.rh * 2; }
       }
       const half = target.rh / 2;
-      const newPane = Object.assign(this._newPane(), { col: target.col, row: target.row + half, cw: target.cw, rh: half }, patch || {});
+      const newPane = Object.assign(this._newPane(), { col: target.col, row: target.row + half, cw: target.cw, rh: half });
       target.rh = half;
       panes.push(newPane);
-      madeId = newPane.id;
       return { cols, rows, colW, rowW, panes, focused: newPane.id, revealed: false, surface: null };
-    }, () => {
-      if (madeId == null) return;
-      const vm = window.__vm;
-      if (vm && vm.setActive) vm.setActive(madeId);
-      if (then) then(madeId);
     });
   }
   componentDidMount() {
@@ -911,17 +853,6 @@ class Component extends DCLogic {
     // events. A live tool that takes 12s emits no envelopes for 12s;
     // without a tick the counter reads its start value the whole time.
     this._activityTick = window.setInterval(() => this.forceUpdate(), 500);
-    // UI sprint 176: a run a session starts now opens its panes; `/run focus` shows or reopens one.
-    // A start read back from an older record (`t` over a minute old) opens nothing.
-    { const vm = window.__vm;
-      if (vm && typeof vm.onEvent === 'function') this._offRuns = vm.onEvent((ev) => {
-        const run = ev.payload || {};
-        if (ev.tag === 'RUN_STARTED') {
-          if (typeof run.t === 'number' && Date.now() / 1000 - run.t > 60) return;
-          this._openRunPanes(ev.paneId, run);
-        } else if (ev.tag === 'RUN_FOCUS_REQUESTED') this._openRunPanes(ev.paneId, run);
-        else if (ev.tag === 'DELEGATE_CHILD_STARTED') this._openSessionPane(ev.paneId, String(run.session_id || ''));
-      }); }
     // Sprint 085 followup — close driver/workspace dropdowns on
     // outside click. Each dropdown wrapper span in reveal.html carries
     // data-dropdown-region; a mousedown outside any of them clears
@@ -1074,7 +1005,7 @@ class Component extends DCLogic {
     }
     if (changed('view') && pv && (pv === 'revealed') !== state.revealed) this.setState({ revealed: pv === 'revealed', surface: null });
   }
-  componentWillUnmount() { if (this._offRuns) this._offRuns(); window.removeEventListener('keydown', this._kd); window.removeEventListener('mousemove', this._mm); window.removeEventListener('mouseup', this._mu); window.removeEventListener('resize', this._rs); if (this._ddOutside) document.removeEventListener('mousedown', this._ddOutside, true); if (this._activityTick) { window.clearInterval(this._activityTick); this._activityTick = null; } }
+  componentWillUnmount() { window.removeEventListener('keydown', this._kd); window.removeEventListener('mousemove', this._mm); window.removeEventListener('mouseup', this._mu); window.removeEventListener('resize', this._rs); if (this._ddOutside) document.removeEventListener('mousedown', this._ddOutside, true); if (this._activityTick) { window.clearInterval(this._activityTick); this._activityTick = null; } }
   _upd(arrKey, i, field) { return (ev) => this.setState(s => { const arr = s[arrKey].map((x, j) => j === i ? Object.assign({}, x, { [field]: ev.target.value }) : x); return { [arrKey]: arr }; }); }
   _rm(arrKey, i) { return () => this.setState(s => ({ [arrKey]: s[arrKey].filter((x, j) => j !== i) })); }
   _validate() {
@@ -1515,7 +1446,6 @@ class Component extends DCLogic {
       // pick callbacks reference the pane's own state.
       pv: p.pv || '',
       promptVal: p.pv || '',
-      inputHint: this._inputHint(state, p.id),
       onPv: (ev) => this.setState(s => ({ panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, { pv: ev.target.value }) : x) })),
       onPrompt: (ev) => this.setState(s => ({ panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, { pv: ev.target.value, histAt: null, slashSel: null }) : x) })),
       onPvKey: (ev) => {
@@ -2435,7 +2365,6 @@ class Component extends DCLogic {
       // to the focused pane's pv, so the same field the terminal-view
       // pane input mutates is what the reveal-view input shows.
       promptVal: (fp && fp.pv) || '',
-      inputHint: fp ? this._inputHint(state, fp.id) : INPUT_HINT,
       // UI sprint 158: the stream follows the bottom until scrolled up, as the transcript does.
       streamRef: (el) => { this._streamEl = el; if (el) followBottom(el); },
       // Transcript scroll used to live here (Sprint 076 retired
@@ -2624,10 +2553,7 @@ class Component extends DCLogic {
       showBarChips: !surf,
       showDriverChip: !surf && !!this._paneDriver(state, fp),
       // No workspace yet reads ⌥ —; a per-session sandbox has no path of its own and reads ⌥ sandbox.
-      // UI sprint 176: a run's pane names the worktree its record names, home written `~`.
-      fpWsLabel: fp.unbound ? '⌥ —' : fp.runRoot
-        ? '⌥ ' + ((((state.controllerSnapshots || {})[fp.id] || {}).workspacePath || '—').replace(/^\/Users\/[^/]+/, '~'))
-        : '⌥ ' + (fp.shape === 'worktree' ? 'substrate/' + (fp.name || 'main') : (fp.ws || 'sandbox')),
+      fpWsLabel: fp.unbound ? '⌥ —' : '⌥ ' + (fp.shape === 'worktree' ? 'substrate/' + (fp.name || 'main') : (fp.ws || 'sandbox')),
       splitRight: () => this._split('right'),
       driverName: (() => {
         const d = this._paneDriver(state, fp) || '';

@@ -7,8 +7,7 @@
 // what each command does:
 //   1. two turns, the shift on the first turn's reply: "length normal words ↑", its hover the
 //      shift's note;
-//   2. /language off hides it, and the line ends "· guidance <level> · length normal · tone neutral
-//      · handoff normal" (UI sprint 179 added handoff, which has no shifts);
+//   2. /language off hides it, and the line ends "· guidance <level> · length normal · tone neutral";
 //   3. /language on shows it, /language clear hides it;
 //   4. /language opens the meta view on the language lens with turn 0, the shift's turn, selected
 //      (with no selection the lens would show the last turn, t1).
@@ -48,13 +47,13 @@ async function main(): Promise<void> {
     await win.waitForFunction(`/returned/.test(${BAR}) && (window.__vm.get(1).snapshot().language?.lines || []).some((l) => l.stream === "model" && l.turn === 1) && window.__vm.get(1).snapshot().language.shifts.length === 1`, undefined, { timeout: 20_000 });
     await settled(win);
     const shifted = await win.evaluate(BAR) as string;
-    if (!shifted.endsWith("length normal words ↑ · tone neutral · handoff normal")) throw new Error(`the shift is not after length: ${JSON.stringify(shifted)}`);
+    if (!shifted.endsWith("length normal words ↑ · tone neutral")) throw new Error(`the shift is not after length: ${JSON.stringify(shifted)}`);
     const title = await win.evaluate(`document.querySelector('[data-pane="1"] [data-lang-shift="words ↑"]')?.getAttribute("title")`);
     if (title !== "words up, flagged at turn 0. Length is normal.") throw new Error(`the shift's hover reads ${JSON.stringify(title)}`);
 
     await type(win, "/language off");
     const plain = await win.evaluate(BAR) as string;
-    if (!/ · guidance \S+ · length normal · tone neutral · handoff normal$/.test(plain)) throw new Error(`with /language off the line does not end with its named settings: ${JSON.stringify(plain)}`);
+    if (!/ · guidance \S+ · length normal · tone neutral$/.test(plain)) throw new Error(`with /language off the line does not end with its named settings: ${JSON.stringify(plain)}`);
     await type(win, "/language on");
     if (!(await win.evaluate(BAR) as string).includes("words ↑")) throw new Error("/language on did not bring the shift back");
     await type(win, "/language clear");
