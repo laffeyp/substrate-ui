@@ -73,9 +73,14 @@ from substrate.app import (
     SessionRegistry,
     SessionStatus,
     TornRecordOnResume,
+    build,
     language_view,
+    release_python_home,
+    review,
+    run_hold,
 )
 from substrate.app import daemon_client as _substrate_daemon_client
+from substrate.adapters import DriverParamKey
 from substrate.adapters.models import (
     CliResponder,
     DeterministicResponder,
@@ -199,10 +204,11 @@ def _application_spec_to_wire(spec: Any) -> dict[str, Any]:
 
 def _params_cache_key(params: dict[str, Any] | None) -> tuple[tuple[str, Any], ...]:
     """Turn a driver_params dict into a hashable, order-independent cache key.
-    Empty dict and None hash the same (both mean "responder defaults")."""
+    Empty dict and None hash the same (both mean "responder defaults"). A deterministic session's
+    `script` (UI sprint 176) is the session's tool calls, not the responder's, so it is left out."""
     if not params:
         return ()
-    return tuple(sorted(params.items()))
+    return tuple(sorted((k, v) for k, v in params.items() if k != DriverParamKey.SCRIPT))
 
 
 def _mcp_url(app: App, session_id: str) -> str:
@@ -522,30 +528,6 @@ def _allowed_tool_names(manifest: Any) -> set[str] | None:
 # ── sprint 225a: application dispatch — one-shot topology launcher ──────
 
 
-def _build_code_review_from_inputs(
-    app: App, inputs: dict[str, Any], folder: Path
-) -> Callable[..., Any]:
-    """`fanout_review_topology` — inputs.<role>_model per DEFAULT_ROLES
-    resolve into the `responders` dict; `judge_model` into `judge`. A CLI
-    role runs in the repo under review, not the run folder (sprint 115)."""
-    from substrate.topologies.applications.fanout_review import fanout_review_topology
-    from substrate.topologies.code_review import DEFAULT_ROLES
-
-    repo = str(inputs["repo"])
-    responders = {
-        role: _daemon_driver_resolver(app, str(inputs[f"{role}_model"]), workspace=repo)
-        for role in DEFAULT_ROLES
-    }
-    judge = _daemon_driver_resolver(app, str(inputs["judge_model"]), workspace=repo)
-    return fanout_review_topology(
-        repo=repo,
-        ref=str(inputs.get("ref", "HEAD~1")),
-        responders=responders,
-        judge=judge,
-        quorum=int(inputs.get("quorum", 3)),
-    )
-
-
 def _build_best_of_n_verified_from_inputs(
     app: App, inputs: dict[str, Any], folder: Path
 ) -> Callable[..., Any]:
@@ -594,7 +576,6 @@ def _build_research_sweep_from_inputs(
 # run's own directory, where a CLI role runs (sprint 115); the launcher makes it
 # and removes it when the run ends.
 _APP_BUILDERS: dict[str, Callable[[App, dict[str, Any], Path], Callable[..., Any]]] = {
-    "code_review": _build_code_review_from_inputs,
     "best_of_n_verified": _build_best_of_n_verified_from_inputs,
     "research_sweep": _build_research_sweep_from_inputs,
 }
@@ -718,6 +699,16 @@ def _build_session_topology_from_manifest(
             parent_record_root=Path(manifest.record_root),
             model_resolver=lambda name: _daemon_driver_resolver(app, name),
         ),
+        # Kernel K319-K321: the session holds the runs it starts. `build` works one card on a new
+        # branch, `review` starts one reviewer per style; `run` stops, pauses, resumes, steps
+        # through and replays them.
+        build.BUILD_TOOL_NAME: build.make_build_tool(
+            functools.partial(_start_build, app, manifest), Path(manifest.workspace)
+        ),
+        review.REVIEW_TOOL_NAME: review.make_review_tool(
+            functools.partial(_start_review, app, manifest)
+        ),
+        run_hold.RUN_TOOL_NAME: run_hold.make_run_tool(manifest.session_id),
     }
     # Kernel K277: the `skill` tool loads a named guide (dellm) when the user asks for it.
     model_class = _model_class(manifest.driver)
@@ -749,7 +740,11 @@ def _build_session_topology_from_manifest(
         # session reads that bundle every turn (no per-turn remap by model class).
         bundle=manifest.bundle,
         parent_session_id=manifest.composite_of,
-        script=None,
+        # UI sprint 176: a deterministic session may carry its tool calls in its driver params.
+        # An empty script still means scripted, so no script param passes None.
+        script=[(str(t), list(a)) for t, a in (manifest.driver_params or {})["script"]]
+        if manifest.driver == "deterministic" and (manifest.driver_params or {}).get("script")
+        else None,
         first_turn_user_message=first_turn_user_message,
         mcp=mcp_on,
         # Kernel K310-K311 (vocabulary v0.11 § W): each turn's language is measured before it
@@ -777,6 +772,61 @@ def _build_session_topology_from_manifest(
         model_class=model_class,
     )
     return topo
+
+
+def _run_driver(app: App, manifest: Any) -> tuple[Callable[[Path], Any], int]:
+    """A run's model: the session's, run in the run's worktree, and its window."""
+    from substrate.topologies.session.transcript import resolve_driver_context
+
+    def driver_for(worktree: Path) -> Any:
+        return _daemon_driver_resolver(
+            app, manifest.driver, manifest.driver_params, workspace=str(worktree)
+        )
+
+    tokens, _ = resolve_driver_context(manifest.driver, driver_for(Path(manifest.workspace)))
+    return driver_for, tokens
+
+
+def _start_build(app: App, manifest: Any, card: Any) -> tuple[str, str]:
+    """Start a build of `card` on the session's repository, on the session's model, guidance
+    bundle and model class. Records go under `<sessions>/runs/`, worktrees under `<sessions>/wt/`."""
+    driver_for, tokens = _run_driver(app, manifest)
+    base = _sessions_base()
+    return build.start_build(
+        run_hold.TABLE,
+        owner=manifest.session_id,
+        run_id=f"r_{uuid.uuid4().hex[:12]}",
+        repo=Path(manifest.workspace),
+        card=card,
+        driver_for=driver_for,
+        driver_name=manifest.driver,
+        driver_context_tokens=tokens,
+        model_class=_model_class(manifest.driver),
+        bundle=manifest.bundle,
+        worktrees=base / "wt",
+        records=base / "runs",
+    )
+
+
+def _start_review(app: App, manifest: Any, target: str, styles: list[str], focus: str) -> list[str]:
+    """Start the session's reviewers on its workspace's repository, each on the session's model
+    run in its own worktree. Records go under `<sessions>/runs/`, worktrees under `<sessions>/wt/`."""
+    driver_for, tokens = _run_driver(app, manifest)
+    base = _sessions_base()
+    return review.start_review(
+        run_hold.TABLE,
+        owner=manifest.session_id,
+        run_id=f"r_{uuid.uuid4().hex[:12]}",
+        repo=Path(manifest.workspace),
+        target=target,
+        styles=styles,
+        focus=focus,
+        driver_for=driver_for,
+        driver_name=manifest.driver,
+        driver_context_tokens=tokens,
+        worktrees=base / "wt",
+        records=base / "runs",
+    )
 
 
 # A finished topology run's handle stays this long, so a status poll after it ends still reads
@@ -2331,6 +2381,10 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/session":
                 self._session_create()
                 return
+            m_run_stop = re.fullmatch(r"/api/session/([^/]+)/runs/([^/]+)/stop", path)
+            if m_run_stop:  # UI sprint 176
+                self._session_run_stop(m_run_stop.group(1), m_run_stop.group(2))
+                return
             m_stop = re.fullmatch(r"/api/session/([^/]+)/tasks/([^/]+)/stop", path)
             if m_stop:  # UI sprint 105
                 self._session_task_stop(m_stop.group(1), m_stop.group(2))
@@ -3061,6 +3115,27 @@ class Handler(BaseHTTPRequestHandler):
             return
         _BG.stop(task, "stopped from the app")
         self._json(task.describe())
+
+    def _session_runs(self, session_id: str) -> None:
+        """UI sprint 176: GET /api/session/<id>/runs — the runs the session started (kernel K319)."""
+        if self.app.registry is None or self.app.registry.get(session_id) is None:
+            self._error(404, f"unknown session {session_id!r}")
+            return
+        self._json({"runs": run_hold.TABLE.listing(session_id)})
+
+    def _session_run_stop(self, session_id: str, run_id: str) -> None:
+        """UI sprint 176: POST /api/session/<id>/runs/<run_id>/stop — the caller stops its run from
+        the app; the run's session ends `caller_stop`, and the caller's model is told at its next
+        step."""
+        if self.app.registry is None or self.app.registry.get(session_id) is None:
+            self._error(404, f"unknown session {session_id!r}")
+            return
+        try:
+            run_hold.TABLE.stop(session_id, run_id)
+        except KeyError:
+            self._error(404, f"unknown run {run_id!r} in session {session_id!r}")
+            return
+        self._json({"runs": run_hold.TABLE.listing(session_id)})
 
     def _session_interrupt(self, session_id: str) -> None:
         """Sprint 217d: POST /api/session/<id>/interrupt. Cancels the running
@@ -4092,6 +4167,10 @@ class Handler(BaseHTTPRequestHandler):
             if m_language:  # UI sprint 168
                 self._session_language(m_language.group(1))
                 return
+            m_runs = re.fullmatch(r"/api/session/([^/]+)/runs", path)
+            if m_runs:  # UI sprint 176
+                self._session_runs(m_runs.group(1))
+                return
             m_tasks = re.fullmatch(r"/api/session/([^/]+)/tasks", path)
             if m_tasks:  # UI sprint 105
                 self._session_tasks(m_tasks.group(1))
@@ -4335,6 +4414,9 @@ class Handler(BaseHTTPRequestHandler):
 
 def main() -> None:
     global HOST, PORT
+    # UI sprint 177: this interpreter found its home at startup; the processes the server starts (a
+    # session's bash, a run's checks, a CLI driver) get the user's environment, not the bundle's.
+    release_python_home()
     # Sprint 079: --port / --host CLI flags. --port 0 binds an
     # ephemeral port; the readback line printed before serve_forever
     # is what Electron (electron/main.js) matches to learn the bound

@@ -32,6 +32,8 @@ const EMPTY_SNAPSHOT: Snapshot = {
   parkReason: null,
   turnFailure: null,
   backgroundTasks: [],
+  runs: [],
+  viewOnly: null,
   language: null,
   languageOff: false,
   languageClearedSeq: -1,
