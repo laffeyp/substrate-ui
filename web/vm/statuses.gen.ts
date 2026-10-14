@@ -18,3 +18,13 @@ export const TaskStatus = {
 } as const;
 
 export type TaskStatusValue = typeof TaskStatus[keyof typeof TaskStatus];
+
+export const ComposePart = {
+  MODEL: "model",
+  AGENT: "agent",
+  COMMAND: "command",
+  COLLECT: "collect",
+  SPLIT: "split",
+} as const;
+
+export type ComposePartValue = typeof ComposePart[keyof typeof ComposePart];

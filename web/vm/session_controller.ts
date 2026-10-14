@@ -27,7 +27,7 @@ import type { SubstrateClient, Unsubscribe } from "./client";
 import { emit as sddEmit } from "./instrumentation/sdd";
 import { EnvelopeKind } from "./kinds";
 import { setToolOutputMode, toggleToolOutputMode } from "./tool_output_mode";
-import { SessionStatus, TaskStatus } from "./statuses.gen";
+import { ComposePart, SessionStatus, TaskStatus } from "./statuses.gen";
 import { GUIDANCE_LEVEL_BUNDLES, HANDOFF_DEFAULT, HandoffPosition, LENGTH_DEFAULT, LengthPosition, TONE_DEFAULT, TonePosition } from "./controls.gen";
 import type { EnvelopeKindValue } from "./kinds";
 
@@ -69,6 +69,8 @@ const KIND_DISPOSITION: Record<EnvelopeKindValue, "rendered" | "ignored"> = {
   [EnvelopeKind.TopologyRunStarted]: "rendered",
   [EnvelopeKind.TopologyRunEnded]: "rendered",
   [EnvelopeKind.ReportWritten]: "rendered",
+  // UI sprint 187 (kernel K338, vocabulary § AA.3): a composed run's stop, in its own record.
+  [EnvelopeKind.RunStopRequested]: "rendered",
   [EnvelopeKind.SessionChanged]: "rendered",
   // Kernel K282, UI sprint 129: a harness driver's tool calls, drawn as tool cards.
   [EnvelopeKind.HarnessToolCall]: "rendered",
@@ -250,6 +252,9 @@ export class SessionController {
   private delegateCalls = new Map<string, number>();
   private childrenTimer: ReturnType<typeof setTimeout> | null = null;
   private languageTimer: ReturnType<typeof setTimeout> | null = null;
+  /** UI sprint 187: a composed run's steps by the kind each writes, read from its record's
+   *  `RunStarted` plan (vocabulary § AA.3); null for any other record. */
+  private composedSteps: Map<string, { id: string; part: string }> | null = null;
   /** Numbers each language fetch; only the latest one's view is applied. */
   private languageRequest = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -356,9 +361,17 @@ export class SessionController {
    * leaves `topologyGraph` at its previous value. */
   async loadTopologyGraph(recordName: string): Promise<void> {
     if (!recordName) return;
-    const result = await this.client.fetchJson<Record<string, unknown>>(
-      `/api/records/${encodeURIComponent(recordName)}/topology_graph`,
-    );
+    await this.loadGraphFrom(`/api/records/${encodeURIComponent(recordName)}/topology_graph`);
+  }
+
+  /** UI sprint 187: the graph of a record given by path (a run's own record). */
+  async loadTopologyGraphByPath(recordRoot: string): Promise<void> {
+    if (!recordRoot) return;
+    await this.loadGraphFrom(`/api/records/by-path/topology_graph?path=${encodeURIComponent(recordRoot)}`);
+  }
+
+  private async loadGraphFrom(url: string): Promise<void> {
+    const result = await this.client.fetchJson<Record<string, unknown>>(url);
     if (!result.ok) { return; }
     const raw = result.data ?? {};
     const producersRaw = Array.isArray((raw as { producers?: unknown[] }).producers)
@@ -637,16 +650,49 @@ export class SessionController {
     void this.refreshRuns();
   }
 
+  /** UI sprint 187 (kernel K338): check a plan for this session (POST /api/session/<id>/topology/plan).
+   *  `body` is the tool's arguments: `lines`, `plan` or `from`, and `input`. */
+  async planTopology(body: Record<string, unknown>): Promise<{ ok: true; data: Record<string, unknown> } | { ok: false; detail: string }> {
+    const sessionId = this.snap.sessionId;
+    if (!sessionId) return { ok: false, detail: "no session: open one first" };
+    const result = await this.client.fetchJson<Record<string, unknown>>(
+      `/api/session/${encodeURIComponent(sessionId)}/topology/plan`, { method: "POST", body },
+    );
+    return result.ok ? { ok: true, data: result.data ?? {} } : { ok: false, detail: String(result.detail) };
+  }
+
+  /** UI sprint 187: start a checked plan, or a named one, as a run this session holds. The run's
+   *  start reaches the record at the session's next step (v0.16.2), so its pane opens now. */
+  async runTopology(body: Record<string, unknown>): Promise<{ ok: true; data: Record<string, unknown> } | { ok: false; detail: string }> {
+    const sessionId = this.snap.sessionId;
+    if (!sessionId) return { ok: false, detail: "no session: open one first" };
+    const result = await this.client.fetchJson<Record<string, unknown>>(
+      `/api/session/${encodeURIComponent(sessionId)}/topology/run`, { method: "POST", body },
+    );
+    if (!result.ok) return { ok: false, detail: String(result.detail) };
+    const data = result.data ?? {};
+    this.emit("RUN_STARTED", {
+      run_id: String(data.run_id ?? ""), topology: String(data.topology ?? ""), sessions: [],
+      record_root: String(data.record_root ?? ""), t: Date.now() / 1000,
+    });
+    void this.refreshRuns();
+    return { ok: true, data };
+  }
+
   /** UI sprint 182: a line in this pane's transcript from the shell (a run pane that could not open). */
   noteLine(text: string): void { this.controlRow(text, true); }
 
   /** UI sprint 182: show a run's session in this pane. Its topology writes its messages, so the
    *  pane refuses typing and says why. */
-  async attachRun(recordRoot: string, topology: string, runId: string): Promise<void> {
+  async attachRun(recordRoot: string, topology: string, runId: string, composed = false): Promise<void> {
     await this.attachRecordRoot(recordRoot);
+    // UI sprint 187: a composed run's pane shows its steps; its structure view, its plan.
+    if (composed) void this.loadTopologyGraphByPath(recordRoot);
     // The run's own SessionStarted names its worktree; until then the pane names no workspace.
     this.patch({
-      viewOnly: `view only: the ${topology} writes this session's messages`,
+      viewOnly: composed
+        ? `view only: the steps of ${topology} write here`
+        : `view only: the ${topology} writes this session's messages`,
       sessionName: `${topology} ${runId}`,
       workspacePath: null,
       workspaceShape: null,
@@ -774,6 +820,7 @@ export class SessionController {
       endedReason: null,
       connection: "connecting",
     });
+    this.composedSteps = null;
     this.emit("CHILD_RECORD_ATTACH_REQUESTED", { record_root: recordRoot });
     this.unsubscribeStream = this.client.streamRecordByPath(recordRoot, -1, {
       onOpen: () => { this.patch({ connection: "connected" }); this.emit("STREAM_ATTACHED", { record_root: recordRoot }); },
@@ -1346,6 +1393,19 @@ export class SessionController {
     this.patch({ rawEnvelopes: [...existing, env] });
     const payload = env.payload ?? {};
     switch (env.kind) {
+      case EnvelopeKind.RunStarted: {
+        // UI sprint 187: a composed run's record carries its plan (vocabulary § AA.3).
+        const baseline = (payload.baseline ?? {}) as Record<string, unknown>;
+        const plan = baseline.plan as { steps?: { id?: string; part?: string }[] } | undefined;
+        if (plan && Array.isArray(plan.steps)) {
+          this.composedSteps = new Map(plan.steps.map((s) => [kindOfStep(String(s.id ?? "")), { id: String(s.id ?? ""), part: String(s.part ?? "") }]));
+        }
+        return;
+      }
+      case EnvelopeKind.RunStopRequested: {
+        this.appendTranscript({ seq: env.seq, kind: env.kind, role: "ended", text: `stopped (${String(payload.source ?? "")})` });
+        return;
+      }
       case EnvelopeKind.SessionStarted: {
         const driver = payload.driver_model != null ? String(payload.driver_model) : this.snap.driver;
         const bundle = payload.bundle == null ? this.snap.bundleSlug : String(payload.bundle);
@@ -1594,7 +1654,8 @@ export class SessionController {
           seq: env.seq, kind: env.kind, role: "system",
           text: `run ${runId} · ${topology} started · /run stop ${runId} stops it, /run focus ${runId} shows it`,
         });
-        this.emit("RUN_STARTED", { run_id: runId, topology, sessions, t: env.t ?? null });
+        // Vocabulary v0.16.2: the run's own record, which a composed run's pane shows.
+        this.emit("RUN_STARTED", { run_id: runId, topology, sessions, record_root: String(payload.record_root ?? ""), t: env.t ?? null });
         void this.refreshRuns();
         return;
       }
@@ -1664,6 +1725,11 @@ export class SessionController {
         return;
       }
       case EnvelopeKind.RunFinalised: {
+        if (this.composedSteps) {
+          const failed = typeof payload.reason === "string";
+          this.appendTranscript({ seq: env.seq, kind: env.kind, role: failed ? "warning" : "ended", text: failed ? `run failed: ${String(payload.reason)}` : "run finished" });
+          return;
+        }
         const transcript = this.snap.transcript;
         const lastTool = [...transcript].reverse().find((r) => r.kind === EnvelopeKind.ToolCall);
         if (lastTool && lastTool.callId) {
@@ -1700,6 +1766,11 @@ export class SessionController {
         return;
       }
       default: {
+        const step = this.composedSteps?.get(env.kind);
+        if (step) {
+          this.appendTranscript(composedRow(step, env));
+          return;
+        }
         if (!(env.kind in KIND_DISPOSITION_BY_VALUE)) {
           // A kind the generated vocabulary does not know: the kernel emits something
           // scripts/gen_kinds.py did not see. Loud in the console, not silent.
@@ -1779,6 +1850,33 @@ function summariseModelError(raw: string): string {
   return stripped.slice(0, 200) + "…";
 }
 
+
+/** A step's event kind: its id in CamelCase (kernel `compose.vocabulary.kind_of`). */
+function kindOfStep(id: string): string {
+  return id.split("_").filter(Boolean).map((p) => p[0].toUpperCase() + p.slice(1)).join("");
+}
+
+/** UI sprint 187: one row per step event of a composed run (vocabulary § AA.2). A model step's
+ *  text is a reply; every other part is one line. */
+function composedRow(step: { id: string; part: string }, env: RecordEnvelope): TranscriptRow {
+  const p = env.payload ?? {};
+  const first = (v: unknown): string => String(v ?? "").trim().split("\n")[0].slice(0, 160);
+  const base = { seq: env.seq, kind: env.kind };
+  if (step.part === ComposePart.MODEL) return { ...base, role: "model", text: `**${step.id}** · ${String(p.text ?? "")}` };
+  if (step.part === ComposePart.AGENT) {
+    const files = Array.isArray(p.files) ? p.files.length : 0;
+    const branch = p.branch ? ` · ${String(p.branch)}` : "";
+    return { ...base, role: "system", text: `${step.id} · ${String(p.outcome ?? "")}${branch} · ${files} file${files === 1 ? "" : "s"} · ${first(p.reply)}` };
+  }
+  if (step.part === ComposePart.COMMAND) {
+    return { ...base, role: p.ok === false ? "warning" : "system", text: `${step.id} · exit ${String(p.exit ?? "")} · ${first(p.output)}` };
+  }
+  if (step.part === ComposePart.COLLECT) {
+    const n = Array.isArray(p.items) ? p.items.length : 0;
+    return { ...base, role: "system", text: `${step.id} · ${n} item${n === 1 ? "" : "s"} collected` };
+  }
+  return { ...base, role: "system", text: `${step.id} · ${Number(p.index ?? 0) + 1} of ${String(p.of ?? "")} · ${first(p.item)}` };
+}
 
 function rowFrom(s: RawSession, status: SessionRow["status"]): SessionRow {
   const short = (s.session_id ?? "").slice(0, 12);

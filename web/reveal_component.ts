@@ -92,6 +92,19 @@ import { buildLanguageLens, LANGUAGE_STREAM_TABS, languageView, languageViewTabs
 import { settingsTail } from "./reveal/settings_tail";
 
 
+// UI sprint 187: a baseline value as the structure view's run table shows it. A composed run's
+// plan reads as its steps in order; any other object as JSON, cut to one line.
+function baselineText(key, value) {
+  if (key === 'plan' && value && Array.isArray(value.steps)) {
+    return value.steps.map(s => `${s.id} (${s.part})`).join(' → ');
+  }
+  if (value && typeof value === 'object') {
+    const json = JSON.stringify(value);
+    return json.length > 160 ? json.slice(0, 160) + '…' : json;
+  }
+  return String(value);
+}
+
 class Component extends DCLogic {
   state = { revealed: false, mode: GraphMode.Stream, dir: GraphDirection.Down, sel: null, langStream: LanguageStreamId.Model, langLane: 0, langView: LanguageViewMode.Bars, promptVal: '', surface: null, studioView: 'form', studioOut: 'author a topology, then validate or build.', studioOutColor: '#62676f', level: RevealLevel.All, sent: [],
     topoName: 'adversarial_pair_review',
@@ -796,7 +809,10 @@ class Component extends DCLogic {
   // bound to the session's record. A pane already showing that record is focused instead.
   _openRunPanes(callerPaneId, run) {
     const vm = window.__vm;
-    for (const sess of run.sessions || []) {
+    // UI sprint 187: a composed run has no sessions of its own; its pane shows its own record.
+    const composed = !(run.sessions || []).length;
+    const targets = composed ? (run.record_root ? [{ record_root: run.record_root }] : []) : run.sessions;
+    for (const sess of targets) {
       const root = String(sess.record_root || '');
       if (!root) continue;
       const shown = (this.state.panes || []).find(p => p.runRoot === root);
@@ -810,7 +826,7 @@ class Component extends DCLogic {
         unbound: false, name: `${run.topology} ${run.run_id}`, runRoot: root, ws: '', shape: 'flat', lines: [],
       }, (id) => {
         const c = vm && vm.get ? vm.get(id) : null;
-        if (c && c.attachRun) c.attachRun(root, String(run.topology || 'run'), String(run.run_id || '')).catch(() => undefined);
+        if (c && c.attachRun) c.attachRun(root, String(run.topology || 'run'), String(run.run_id || ''), composed).catch(() => undefined);
       }));
     }
   }
@@ -2216,7 +2232,7 @@ class Component extends DCLogic {
           topoRunRows: [
             { k: 'vocab version', v: String(config.vocab_version ?? '—') },
             { k: 'exports', v: g && g.exports && g.exports.length ? g.exports.join(', ') : 'none' },
-            ...Object.keys(baseline).sort().map(k => ({ k: 'baseline · ' + k, v: String(baseline[k]) })),
+            ...Object.keys(baseline).sort().map(k => ({ k: 'baseline · ' + k, v: baselineText(k, baseline[k]) })),
           ],
           topoProducerCount: producers.length,
           topoTriggerCount: triggers.length,

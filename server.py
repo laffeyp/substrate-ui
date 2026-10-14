@@ -2447,6 +2447,10 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/session":
                 self._session_create()
                 return
+            m_topo = re.fullmatch(r"/api/session/([^/]+)/topology/(plan|run)", path)
+            if m_topo:  # UI sprint 187 (kernel K338): check or run a plan for the session
+                self._session_topology(m_topo.group(1), m_topo.group(2))
+                return
             m_run_stop = re.fullmatch(r"/api/session/([^/]+)/runs/([^/]+)/stop", path)
             if m_run_stop:  # UI sprint 182
                 self._session_run_stop(m_run_stop.group(1), m_run_stop.group(2))
@@ -3213,6 +3217,42 @@ class Handler(BaseHTTPRequestHandler):
             return
         self._json({"runs": run_hold.TABLE.listing(session_id)})
 
+    def _session_topology(self, session_id: str, action: str) -> None:
+        """UI sprint 187: POST /api/session/<id>/topology/plan and /topology/run. The session's own
+        topology tools (kernel K338) with the body as their arguments: `plan` returns the plan's id,
+        lines, wiring, dry run and findings; `run` starts it as a run the session holds and adds
+        the run's record. A tool's refusal is a 400 with its text."""
+        from substrate.topologies.compose.tools import make_topology_tools
+        from substrate.topologies.tool_loop.tools import (
+            TOOL_NAME_TOPOLOGY_PLAN,
+            TOOL_NAME_TOPOLOGY_RUN,
+        )
+
+        manifest = self.app.registry.get(session_id) if self.app.registry is not None else None
+        if manifest is None:
+            self._error(404, f"unknown session {session_id!r}")
+            return
+        try:
+            body = self._read_json_body()
+        except ValueError as exc:
+            self._error(400, str(exc))
+            return
+        tools = make_topology_tools(
+            Path(manifest.workspace), functools.partial(_start_composed, self.app, manifest)
+        )
+        name = TOOL_NAME_TOPOLOGY_PLAN if action == "plan" else TOOL_NAME_TOPOLOGY_RUN
+        try:
+            out = tools[name].run([body])
+        except ValueError as exc:
+            self._error(400, str(exc))
+            return
+        if action == "run":
+            row = next(
+                (r for r in run_hold.TABLE.listing(session_id) if r["run_id"] == out["run_id"]), None
+            )
+            out["record_root"] = row["record_root"] if row else ""
+        self._json(out)
+
     def _session_run_stop(self, session_id: str, run_id: str) -> None:
         """UI sprint 182: POST /api/session/<id>/runs/<run_id>/stop — the caller stops its run from
         the app; the run's session ends `caller_stop`, and the caller's model is told at its next
@@ -3422,6 +3462,28 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", "0")
         self.end_headers()
 
+    def _allowed_record_path(self, raw_path: str) -> Any:
+        """The record directory `raw_path` names, resolved, when it lies under a known record root;
+        else None, with the error already sent (see `_record_events_by_path`)."""
+        from pathlib import Path as _Path
+
+        try:
+            resolved = _Path(raw_path).resolve()
+        except (OSError, RuntimeError) as exc:
+            self._error(400, f"path could not be resolved: {exc}")
+            return None
+        if not resolved.exists() or not resolved.is_dir():
+            self._error(404, f"no record directory at {raw_path!r}")
+            return None
+        for root in (_runs_dir().resolve(), (api.substrate_home() / "sessions").resolve()):
+            try:
+                resolved.relative_to(root)
+                return resolved
+            except ValueError:
+                continue
+        self._error(403, f"path {raw_path!r} outside allowed record roots")
+        return None
+
     def _record_events_by_path(self, raw_path: str, since_seq: int) -> None:
         """Phase 8 item 4: SSE stream of a record given its filesystem path.
         Descent onto a delegate child record uses this — the delegate
@@ -3430,36 +3492,11 @@ class Handler(BaseHTTPRequestHandler):
         parent's ToolResult carries that path in `payload.child_root`.
         The shell posts the path here and streams the child's envelopes.
 
-        Safety: resolve the path, require it exists as a directory, and
-        require it live under one of a known set of roots so a client
-        cannot read arbitrary files off disk. Allowed roots: _runs_dir(),
-        `~/.substrate/sessions`, `/tmp`, `/var/folders` (macOS temp
-        parents that hold delegate-runs in tests).
+        Safety (`_allowed_record_path`): the path must resolve to an existing directory under
+        `_runs_dir()` or `~/.substrate/sessions`, so a client cannot read arbitrary files off disk.
         """
-        from pathlib import Path as _Path
-
-        try:
-            resolved = _Path(raw_path).resolve()
-        except (OSError, RuntimeError) as exc:
-            self._error(400, f"path could not be resolved: {exc}")
-            return
-        if not resolved.exists() or not resolved.is_dir():
-            self._error(404, f"no record directory at {raw_path!r}")
-            return
-        allowed_roots = [
-            _runs_dir().resolve(),
-            (api.substrate_home() / "sessions").resolve(),
-        ]
-        ok = False
-        for root in allowed_roots:
-            try:
-                resolved.relative_to(root)
-                ok = True
-                break
-            except ValueError:
-                continue
-        if not ok:
-            self._error(403, f"path {raw_path!r} outside allowed record roots")
+        resolved = self._allowed_record_path(raw_path)
+        if resolved is None:
             return
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream")
@@ -4297,6 +4334,16 @@ class Handler(BaseHTTPRequestHandler):
                     "yes",
                 )
                 self._json(_records_index(self.app, exclude_sessions=exclude))
+                return
+            if path == "/api/records/by-path/topology_graph":
+                # UI sprint 187: the structure of a record given by path (a run's own record).
+                raw_path = parse_qs(urlparse(self.path).query).get("path", [""])[0]
+                if not raw_path:
+                    self._error(400, "path query param required")
+                    return
+                resolved = self._allowed_record_path(raw_path)
+                if resolved is not None:
+                    self._json(_topology_graph(list(api.read_record(resolved))))
                 return
             if path == "/api/records/by-path/events":
                 # Phase 8 item 4: SSE stream of an arbitrary record path so
