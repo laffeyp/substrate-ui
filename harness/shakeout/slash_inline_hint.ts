@@ -3,7 +3,7 @@
 //
 // Steps: bind pane 1; the hint's left edge is the same for "/g", "/guid", "/guidance ",
 // "/guidance hig" and "/tone bl", lies right of the width of "/guidance harness", and reads the
-// command's choices and description; "/l" (two matches) shows none and lists both; "/name " with
+// command's choices and description; "/l" (three matches) shows none and lists all three; "/name " with
 // text past the column shows none.
 
 import { _electron as electron } from "playwright";
@@ -58,10 +58,10 @@ async function main(): Promise<void> {
     if (Math.max(...lefts) - Math.min(...lefts) > 1) throw new Error(`the hint moved: ${lefts.map((x) => x.toFixed(1)).join(", ")}px`);
 
     const many = await fill(win, "/l");
-    if (JSON.stringify(many.rows) !== JSON.stringify(["/length", "/list"]) || many.hint) throw new Error(`"/l" gave ${JSON.stringify(many)}`);
+    if (JSON.stringify(many.rows) !== JSON.stringify(["/length", "/list", "/language"]) || many.hint) throw new Error(`"/l" gave ${JSON.stringify(many)}`);
     const long = await fill(win, "/name a much longer session name than the column");
     if (long.hint) throw new Error(`text past the column still shows the hint: ${JSON.stringify(long.hint)}`);
-    console.log(`slash_inline_hint: ok — the hint holds at ${lefts[0].toFixed(1)}px for ${cases.map((c) => JSON.stringify(c[0])).join(", ")} (right of ${many.longest.toFixed(1)}px); "/l" lists two; long /name text hides it`);
+    console.log(`slash_inline_hint: ok — the hint holds at ${lefts[0].toFixed(1)}px for ${cases.map((c) => JSON.stringify(c[0])).join(", ")} (right of ${many.longest.toFixed(1)}px); "/l" lists three; long /name text hides it`);
     code = 0;
   } catch (e) {
     console.error(`slash_inline_hint: FAIL — ${(e as Error).message}`);

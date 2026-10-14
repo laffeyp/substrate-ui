@@ -60,6 +60,18 @@
 
 ## Entries
 
+### 2026-10-13 — A red test that ran in no card's check, and focus read after the fact
+
+**Context.** The language lens and bar line (U168–U172).
+
+**What got in the way.**
+- **A boundary test failed for four cards.** U168 made the generator import `substrate.language.catalog`, outside the UI's sanctioned surfaces. Each card ran its targeted tests; `test_ui_imports_only_sanctioned_substrate_surfaces` sits in `test_server.py`, which none of them touched, so it stayed red until U172's full `test:py`. The fix belonged in the kernel's facade, not the test's allow-list.
+- **A key handler asked where focus is, not where the key was typed.** The Enter that runs `/language` opens meta, which unmounts the input bar; by the time the lens's handler ran, `document.activeElement` was the body, and the handler took the Enter as its own. `e.target` still names the input.
+
+**What the kit could say.** A change to an import or a generator runs the boundary tests, whatever the card's scope. A keydown handler decides by `e.target`; focus may have moved before it runs.
+
+---
+
 ### 2026-10-12 — A rerun-to-green, and a gate that checked the event instead of the effect
 
 **Context.** U162–U166 (slash commands) and the postmortem on mid-session changes.

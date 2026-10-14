@@ -1,7 +1,7 @@
 // Tab completes slash command names (UI sprint 165; roadmap ROADMAP-2026-10-12-slash-entry.md).
 //
 // Steps: bind pane 1; "/guid" Tab → "/guidance " with its choices open; "/unf" Tab → "/unfold ";
-// "/l" Tab → "/l" (length and list share only "l"), focus still in the bar; "/in" Tab →
+// "/l" Tab → "/l" (length, list and language share only "l"), focus still in the bar; "/in" Tab →
 // "/interrupt ".
 
 import { _electron as electron } from "playwright";

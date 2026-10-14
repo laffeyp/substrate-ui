@@ -2,12 +2,13 @@
 //
 // The deterministic driver's replies never vary, so the drift detector never fires on them in a
 // gate; tests/test_language_shift_route_172.py proves a reply-side shift reaches the route with a
-// scripted driver. Here one shift is injected into the pane's language view (stated in the output)
-// to read how the bar draws it and what each command does:
-//   1. two turns; the line ends "· guidance <level> · length normal · tone neutral";
-//   2. a words shift injected on the first turn's reply: "length normal words ↑", its hover the
+// scripted driver. Here the gate adds one shift to every response of the language route (stated in
+// the output), so each of the app's own refreshes carries it, and reads how the bar draws it and
+// what each command does:
+//   1. two turns, the shift on the first turn's reply: "length normal words ↑", its hover the
 //      shift's note;
-//   3. /language off hides it, /language on shows it, /language clear hides it;
+//   2. /language off hides it, and the line ends "· guidance <level> · length normal · tone neutral";
+//   3. /language on shows it, /language clear hides it;
 //   4. /language opens the meta view on the language lens with turn 0, the shift's turn, selected
 //      (with no selection the lens would show the last turn, t1).
 
@@ -33,19 +34,17 @@ async function main(): Promise<void> {
     const win = await app.firstWindow({ timeout: 30_000 });
     await waitForApp(win);
     await bindPaneAsUser(win);
+    await win.route("**/api/session/*/language", async (route) => {
+      const response = await route.fetch();
+      const v = await response.json();
+      const reply = (v?.lines || []).find((l: { stream: string; turn: number }) => l.stream === "model" && l.turn === 0);
+      if (reply) v.shifts = [{ seq: reply.seq + 1, turn: 0, stream: "model", measure: "words", direction: "up", source_seq: reply.seq }];
+      await route.fulfill({ response, json: v });
+    });
     await type(win, "one");
     await win.waitForFunction(`/returned/.test(${BAR})`, undefined, { timeout: 20_000 });
     await type(win, "two");
-    await win.waitForFunction(`/returned/.test(${BAR}) && (window.__vm.get(1).snapshot().language?.lines || []).some((l) => l.stream === "model" && l.turn === 1)`, undefined, { timeout: 20_000 });
-    const plain = await win.evaluate(BAR) as string;
-    if (!/ · guidance \S+ · length normal · tone neutral$/.test(plain)) throw new Error(`the line does not name its settings: ${JSON.stringify(plain)}`);
-
-    await win.evaluate(`(() => {
-      const ctl = window.__vm.get(1);
-      const v = ctl.snapshot().language;
-      const reply = v.lines.find((l) => l.stream === "model" && l.turn === 0).seq;
-      ctl.patch({ language: { ...v, shifts: [{ seq: reply + 1, turn: 0, stream: "model", measure: "words", direction: "up", source_seq: reply }] } });
-    })()`);
+    await win.waitForFunction(`/returned/.test(${BAR}) && (window.__vm.get(1).snapshot().language?.lines || []).some((l) => l.stream === "model" && l.turn === 1) && window.__vm.get(1).snapshot().language.shifts.length === 1`, undefined, { timeout: 20_000 });
     await settled(win);
     const shifted = await win.evaluate(BAR) as string;
     if (!shifted.endsWith("length normal words ↑ · tone neutral")) throw new Error(`the shift is not after length: ${JSON.stringify(shifted)}`);
@@ -53,7 +52,8 @@ async function main(): Promise<void> {
     if (title !== "words up, flagged at turn 0. Length is normal.") throw new Error(`the shift's hover reads ${JSON.stringify(title)}`);
 
     await type(win, "/language off");
-    if ((await win.evaluate(BAR) as string).includes("words ↑")) throw new Error("/language off left the shift on the line");
+    const plain = await win.evaluate(BAR) as string;
+    if (!/ · guidance \S+ · length normal · tone neutral$/.test(plain)) throw new Error(`with /language off the line does not end with its named settings: ${JSON.stringify(plain)}`);
     await type(win, "/language on");
     if (!(await win.evaluate(BAR) as string).includes("words ↑")) throw new Error("/language on did not bring the shift back");
     await type(win, "/language clear");
@@ -63,8 +63,13 @@ async function main(): Promise<void> {
     await win.waitForFunction(`Array.from(document.querySelectorAll('[data-lang]')).some((e) => e.getClientRects().length)`, undefined, { timeout: 10_000 })
       .catch(() => { throw new Error("/language did not open the language lens"); });
     const label = await win.evaluate(`Array.from(document.querySelectorAll('[data-lang-readout]')).filter((e) => e.getClientRects().length).map((e) => (e.textContent || "").trim().split(/\\s+/)[0])[0]`);
-    if (label !== "t0") throw new Error(`/language opened the lens on ${JSON.stringify(label)}, not the shift's turn t0`);
-    console.log(`language_bar_line: ok — ${JSON.stringify(plain.slice(plain.indexOf("guidance")))}; an injected words shift read "length normal words ↑" with its note; off/on/clear did; /language opened the lens on t0, the shift's turn`);
+    if (label !== "t0") {
+      await new Promise((r) => setTimeout(r, 500));
+      const later = await win.evaluate(`Array.from(document.querySelectorAll('[data-lang-readout]')).filter((e) => e.getClientRects().length).map((e) => (e.textContent || "").trim().split(/\\s+/)[0])[0]`);
+      const snap = await win.evaluate(`JSON.stringify({ tick: window.__vm.get(1).snapshot().languageOpenTick, shifts: window.__vm.get(1).snapshot().language?.shifts })`);
+      throw new Error(`/language opened the lens on ${JSON.stringify(label)} (${JSON.stringify(later)} 500 ms later), not the shift's turn t0; ${snap}`);
+    }
+    console.log(`language_bar_line: ok — ${JSON.stringify(plain.slice(plain.indexOf("guidance")))}; a words shift added to the route read "length normal words ↑" with its note; off/on/clear did; /language opened the lens on t0, the shift's turn`);
     code = 0;
   } catch (e) {
     console.error(`language_bar_line: FAIL — ${(e as Error).message}`);
