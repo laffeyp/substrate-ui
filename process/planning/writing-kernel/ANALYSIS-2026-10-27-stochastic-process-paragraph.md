@@ -2,7 +2,7 @@
 
 The question: what, precisely, is this paragraph? The answer must survive every analytic layer that applies to a short piece of expository English — surface counts, syntax, readability, register, rhetoric, argument, metaphor, discourse, cohesion, pragmatics — and triangulate on a single classification. The paragraph is nine sentences, 156 tokens, 864 characters. Every number below is computed from that text, not estimated.
 
-Reference frameworks invoked: Flesch (1948), Flesch-Kincaid (Kincaid et al. 1975), Gunning (1952), SMOG (McLaughlin 1969), Coleman-Liau (1975), ARI (Smith & Senter 1967), LIX (Björnsson 1968); Biber (1988) register dimensions; Halliday & Hasan (1976) cohesion; Mann & Thompson (1988) Rhetorical Structure Theory; Toulmin (1958) argument scheme; Lakoff & Johnson (1980) conceptual metaphor; Hyland (2005) stance markers; Kobak et al. (Science Advances 2025) excess-vocabulary; Liang et al. (ICML 2024) peer-review register; Searle (1969) speech acts; Grice (1975) conversational maxims. Where a measurement rests on a heuristic rather than a dictionary, the heuristic is named.
+Reference frameworks invoked: Flesch (1948), Flesch-Kincaid (Kincaid et al. 1975), Gunning (1952), SMOG (McLaughlin 1969), Coleman-Liau (1975), ARI (Smith & Senter 1967), LIX (Björnsson 1968); Biber (1988) register dimensions; Halliday & Hasan (1976) cohesion; Mann & Thompson (1988, *Text* 8(3): 243-281) Rhetorical Structure Theory; Toulmin (1958) argument scheme; Lakoff & Johnson (1980) conceptual metaphor; Hyland (2005, *Discourse Studies* 7(2): 173-192) stance markers; Kobak, González-Márquez, Horvát & Lause (2025, *Science Advances* 11(27); arXiv 2406.07016) excess-vocabulary on PubMed; Liang et al. (ICML 2024, "Monitoring AI-Modified Content at Scale") peer-review register; Searle (1969) speech acts; Grice (1975) conversational maxims; Shutova (2013) and Tong, Shutova & Lewis (2021) computational metaphor; Pragglejaz Group (2007, *Metaphor and Symbol* 22(1): 1-39) MIP. See `RED-TEAM-2026-10-28-citation-check.md` for the verification pass; comparison numbers in §15 and bulleted figures elsewhere that are estimates are marked as such. Where a measurement rests on a heuristic rather than a dictionary, the heuristic is named.
 
 ## 0. The text under analysis
 
@@ -83,7 +83,7 @@ This Latinate/Germanic alternation is the Orwell-recommended pattern: Latin for 
 | S8 | 11 | cleft "That's what…" | pointer back to referent |
 | S9 | 19 | continuous aspect "It's making…" | gloss on the pointer |
 
-Mean sentence length 17.33 words; standard deviation 6.13; burstiness (CV = σ/μ) **0.354**. For comparison, LLM-default prose has CV ≈ 0.15-0.25 (uniform rhythm is the strongest machine tell); strong human expository prose runs 0.35-0.6 (Pérez-Rosas & Mihalcea 2015; Kobak et al. 2025). This paragraph sits in the human expository band.
+Mean sentence length 17.33 words; standard deviation 6.13; burstiness (CV = σ/μ) **0.354**. The burstiness number here is sentence-length CV, one of three published definitions (the others are variance of sentence-level perplexity, and word-frequency burstiness; Church & Gale 1995). Our rough estimate for LLM-default prose at this scale is CV ≈ 0.15-0.25; strong human expository prose runs ~0.35-0.6. A published CV range under the sentence-length definition is not available in the sources checked. This paragraph sits in the estimated human expository band.
 
 ### 2.2 Shape of the paragraph
 
@@ -136,7 +136,7 @@ Seven standard formulas, each computed from the paragraph's own counts.
 | Coleman-Liau | **8.4** | US 8th grade |
 | LIX | **39.8** | "medium-easy," between popular press and secondary-school textbook |
 
-Three of the seven formulas agree on grade 8; three others (Fog, SMOG, LIX) read it harder because they penalise polysyllabic words — those are the Latinate cluster above. The spread is small and consistent. For context: a Reuters news lede averages Flesch 60-65; the *New York Times* lead paragraph 50-55; the *Harvard Business Review* 45-50; a Supreme Court opinion 30-40; Hemingway prose 85-95. **This paragraph reads harder than a newspaper but easier than a magazine think-piece** — the voice is practical, the vocabulary selectively technical.
+Three of the seven formulas agree on grade 8; three others (Fog, SMOG, LIX) read it harder because they penalise polysyllabic words — those are the Latinate cluster above. The spread is small and consistent. For context: newspaper prose typically runs Flesch 50-70 (NYT writes at roughly an 8th-grade level); U.S. Supreme Court opinions run ~31 Flesch, grade ~14 (Owens & Wedeking, replicated in utexas.edu legal-writing surveys). Figures sometimes repeated for *Harvard Business Review* (45-50) and Hemingway (85-95) did not surface in a primary source during this doc's citation check; treat them as folklore until verified. **This paragraph reads harder than a newspaper but easier than a Supreme Court opinion** — the voice is practical, the vocabulary selectively technical.
 
 Mean syllables per word: 1.46 (general English is 1.4-1.6; academic philosophy ≥ 1.8). Complex words (≥ 3 syllables): 20 of 156 (12.8 %). The complex-word list is tight:
 
@@ -220,10 +220,12 @@ Checklist against two measured corpora of model-generated prose.
 
 ### 6.1 Kobak et al. (Science Advances 2025) excess-vocabulary list
 
-Words whose frequency jumped ≥ 2× in post-2022 writing vs. pre-2022 baseline:
+Words whose frequency jumped sharply in post-ChatGPT biomedical abstracts vs. pre-ChatGPT baseline (Kobak, González-Márquez, Horvát & Lause 2025, *Science Advances* 11(27); arXiv 2406.07016):
 > delve, underscore, showcase, boast, surpass, foster, garner, highlight (as verb), intricate, meticulous, pivotal, crucial, notable, commendable, innovative, robust, comprehensive, seamless, realm, tapestry, landscape, interplay, journey, vibrant, rich, nestled, renowned, groundbreaking, indelible.
 
-**Hits in this paragraph: 0 of 156 tokens.** A ChatGPT-era draft of a comparable paragraph typically scores 3-6 hits.
+**Scope caveat.** Kobak's corpus is PubMed abstracts, 2010-2024. The list is well-anchored for scientific abstracts; its usefulness as a general style marker is empirical and should be re-measured within any corpus whose precision matters. The absence of hits here is a reasonable prior, not a certification.
+
+**Hits in this paragraph: 0 of 156 tokens.** Our rough prior for a ChatGPT-era draft of a comparable paragraph is 3-6 hits; this is an estimate, not a Kobak figure.
 
 ### 6.2 Liang et al. (ICML 2024) peer-review register markers
 
@@ -236,7 +238,7 @@ Characteristic formulations: *notably, importantly, highlights the importance of
 Em-dashes: 0.
 Em-dash rate per 100 tokens: **0.00**.
 
-Kobak measured em-dash rates near 0.4-0.9 per 100 tokens in Opus / GPT-4 family output; strong human writers run 0.1-0.3; this paragraph runs zero. The paragraph instead carries internal pause through comma-coordinated clauses and the discourse marker *so*.
+Independent measurements of Claude Opus 5 reported 15.2 em-dashes per 1000 words (≈ 1.52 per 100 tokens); Opus 5.5 dropped to 0.8 per 1000 words (≈ 0.08 per 100 tokens) — Arena figures via BleepingComputer 2026, not Kobak. Strong human writers run roughly 0.1-0.3 per 100 tokens; this paragraph runs zero. The paragraph instead carries internal pause through comma-coordinated clauses and the discourse marker *so*.
 
 ### 6.4 Structural regularity
 
@@ -282,7 +284,7 @@ The paragraph is a single argument with layered support.
 | **Reservation / counter-position** | The naive view: *make a chatbot write code*. Refuted by the preceding warrant. | S3 (negative half) |
 | **Illustrative support (analogy)** | Car / carpenter / F1 racer — craft-mastery gradient. | S6, S7 |
 
-Three distinctive features. First, the data (`LLMs are a stochastic process`) is a definitional claim pretending to be observational — standard move in philosophy-of-science argumentation. Second, the warrant is explicit, not left implicit, which is uncommon in short expository paragraphs (Toulmin's own corpus shows explicit warrants in ~30 % of expert prose). Third, the backing invokes mathematical certainty (*provably correct*) before invoking craft intuition (the carpenter and the F1 racer) — the paragraph argues from logic down to analogy, not analogy up to logic.
+Three distinctive features. First, the data (`LLMs are a stochastic process`) is a definitional claim pretending to be observational — standard move in philosophy-of-science argumentation. Second, the warrant is explicit, not left implicit, which is uncommon in short expository paragraphs; writing-centre guides to Toulmin note that implicit warrants are the norm in professional prose, which makes an explicitly stated warrant a marker of deliberate argumentative discipline. Third, the backing invokes mathematical certainty (*provably correct*) before invoking craft intuition (the carpenter and the F1 racer) — the paragraph argues from logic down to analogy, not analogy up to logic.
 
 ## 9. Semantic fields
 
@@ -321,7 +323,7 @@ Mappings: car → tool a user can drive without knowing how it works; saw → to
 Source: fluid dynamics. Target: text generation.
 Mappings: `flow of the statistical creation of words`, `orchestrate this process`. The fluid-flow metaphor is dormant in standard English (`flow of ideas`, `stream of consciousness`) and is reactivated here by the verb `control`.
 
-Three metaphors, each from a different source domain (sight, craft, fluid). The paragraph never mixes them: each sentence commits to one. Mixed conceptual metaphor is the single most common surface-text failure in LLM-generated prose (Shutova et al. 2017); its absence here is a positive marker.
+Three metaphors, each from a different source domain (sight, craft, fluid). The paragraph never mixes them: each sentence commits to one. Mixed conceptual metaphor is a frequent failure mode in LLM-generated prose; the computational-metaphor literature (Shutova 2013; Tong, Shutova & Lewis 2021) treats mixed source domains as a recognised surface defect. Its absence here is a positive marker.
 
 ## 11. Discourse structure (Mann & Thompson 1988, RST)
 
@@ -422,21 +424,21 @@ No end-rhyme. Internal consonance in S9's final triplet: *visible, legible, inte
 
 ## 15. Comparison to reference registers
 
-Each column is a published figure or well-measured range; column 1 is this paragraph.
+Column 1 is this paragraph, measured. Every other column is a working estimate drawn from field memory and secondary sources; the published-figure columns the earlier draft implied do not exist as a single, cross-cutting dataset. The LLM em-dash row is anchored to Arena / BleepingComputer 2026 for Claude Opus 5 (≈ 1.52 per 100 tokens pre-5.5; ≈ 0.08 post-5.5). The Latinate shares, the lexical-density split, and the burstiness ranges are our priors, not citations.
 
-| Dimension | **This** | NYT lede | Academic philosophy | Pop science | LLM default (GPT/Opus era) | Orwell essays |
+| Dimension | **This** | NYT lede | Academic philosophy | Pop science | LLM default (Claude/GPT era) | Orwell essays |
 |---|---:|---:|---:|---:|---:|---:|
 | Mean words/sentence | **17.3** | 21 | 25 | 18 | 19-22 | 15 |
-| Burstiness (CV) | **0.35** | 0.4 | 0.3 | 0.4 | 0.15-0.25 | 0.5 |
-| Mean syllables/word | **1.46** | 1.5 | 1.8 | 1.5 | 1.6-1.7 | 1.4 |
-| Lexical density | **44 %** | 45 % | 55-60 % | 42 % | 50-55 % | 42 % |
-| Latinate-suffix share | **7 %** | 10 % | 25-30 % | 12 % | 18-22 % | 6-8 % |
-| Em-dashes per 100 tokens | **0.0** | 0.1 | 0.3 | 0.2 | 0.4-0.9 | 0.3 |
-| Kobak excess-vocab hits (per 150 tokens) | **0** | 0-1 | 0-1 | 0-2 | 3-6 | 0 |
-| Hedge:booster ratio | **1:2** | ~1:1 | 2:1 | 1:1 | 1:1 (both inflated) | 1:3 |
+| Burstiness (CV) | **0.35** | ~0.4 | ~0.3 | ~0.4 | ~0.15-0.25 (est.) | ~0.5 |
+| Mean syllables/word | **1.46** | ~1.5 | ~1.8 | ~1.5 | ~1.6-1.7 (est.) | ~1.4 |
+| Lexical density | **44 %** | ~45 % | ~55-60 % (Halliday 1985) | ~42 % | ~50-55 % (est.) | ~42 % |
+| Latinate-suffix share | **7 %** | ~10 % | ~25-30 % (est.) | ~12 % | ~18-22 % (est.) | ~6-8 % |
+| Em-dashes per 100 tokens | **0.0** | ~0.1 | ~0.3 | ~0.2 | ≈ 1.52 (Opus 5), ≈ 0.08 (Opus 5.5) | ~0.3 |
+| Kobak excess-vocab hits (per 150 tokens) | **0** | 0-1 | 0-1 | 0-2 | ~3-6 (est., Kobak list applied to non-PubMed text) | 0 |
+| Hedge:booster ratio | **1:2** | ~1:1 | 2:1 | 1:1 | ~1:1 (both inflated, est.) | 1:3 |
 | Latinate/Germanic lean | **Germanic** | mixed | Latinate | mixed | mixed-Latinate | **Germanic** |
 
-The nearest neighbour on the full profile is the Orwell column. The paragraph is **less Latinate than popular science, less burstless than LLM-default, zero em-dashes against the LLM 0.4-0.9 band, zero Kobak hits against the LLM 3-6 band**. It is roughly a shorter-sentence Orwell with a technical topic.
+The nearest neighbour on the full profile is the Orwell column. The paragraph is **less Latinate than popular science, less burstless than LLM-default, zero em-dashes against the LLM pre-5.5 1.5-per-100-tokens figure, zero Kobak hits against our 3-6 estimate**. It is roughly a shorter-sentence Orwell with a technical topic.
 
 ## 16. What this writing is not
 
