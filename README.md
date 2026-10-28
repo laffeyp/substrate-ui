@@ -1,14 +1,16 @@
 # substrate-ui
 
-A desktop cockpit for driving LLMs through structured runs. You open a pane, pick a model and a workspace, and talk to the model while the window shows what it is doing, what it has read, how it is answering, and how the conversation is shifting under its settings.
+A desktop cockpit for driving LLMs through structured runs. The common way to use a large language model today is to open a terminal and type `claude`. This replaces that. Other runners look similar — a window with a model in it — but none of them run on Substrate: a Python runtime that coordinates computations through a typed, append-only log. Every event in a session — tool calls, replies, prompts, setting changes — lands on that log; you replay it, diff it, read any point.
+
+You open a pane, pick a model and a workspace, and talk to the model while the window shows what it is doing, what it has read, how it is answering, and how the conversation is shifting under its settings.
 
 ## What you can do with it
 
 Pick the model. The driver list carries the three CLI agents (`claude`, `codex`, `cursor-agent`), every Ollama Cloud and local model on the box, and a deterministic stand-in for scripted runs. The CLI agents sign in from inside the app's input bar.
 
-Pick the workspace. Each pane runs in a folder — a repo the model will work on, a per-session sandbox, or an isolated worktree. Resuming an existing session reattaches it to the folder it opened in.
+Pick the workspace. Each pane runs in a workspace — a repo the model will work on, a per-session sandbox, or an isolated git worktree. Resuming an existing session reattaches it to the workspace it opened in.
 
-Set the guidance. One of four levels — harness, low, medium, high — plus length (terse, normal, full) and tone (blunt, neutral, formal, dry). Each setting is a sentence or two the model reads at session open; a change mid-session rewrites the next prompt.
+Set the guidance. The four levels — harness, low, medium, high — are four bundles of system-prompt text the model reads at session open. `harness` is Substrate's loop rules alone, for a CLI agent that carries its own instructions; the three `standard` levels add more writing guidance in each step up. Length (terse, normal, full) and tone (blunt, neutral, formal, dry) sit beside the level: each writes one or two sentences, the same on every model. A change mid-session rewrites the next prompt.
 
 The window has five meta tabs:
 
