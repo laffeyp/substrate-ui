@@ -4,7 +4,7 @@
 
 A desktop cockpit for driving LLMs through structured runs. The way most folks today run their LLMs is to open a terminal and type `claude`, or more generally to run a command that starts the LLM that you work with for the remainder of the session. This replaces that, because that is not what a terminal is for!
 
-Other runners look similar — a window with a model in it — but none of them run on Substrate: a Python runtime that coordinates computations through a typed, append-only log. Every event in a session — tool calls, replies, prompts, setting changes — lands on that log; you replay it, diff it, read any point.
+Other runners look similar — a window with a model in it — but none of them run on [Substrate](https://github.com/laffeyp/substrate): a Python runtime that coordinates computations through a typed, append-only log. Every event in a session — tool calls, replies, prompts, setting changes — lands on that log; you replay it, diff it, read any point.
 
 You open a pane, pick a model and a workspace, and talk to the model while the window shows what it is doing, what it has read, how it is answering, and how the conversation is shifting under its settings.
 
