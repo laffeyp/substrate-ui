@@ -6,7 +6,7 @@ A desktop cockpit for driving LLMs through structured runs. The way most folks t
 
 There are other runners like [Orca](https://www.onorca.dev/) and [Paradev](https://paradev.com/), but none of those are built on an abstract computational runtime with some very interesting properties. Here, every event in a session — tool calls, replies, prompts, setting changes — lands on a log; you can replay it, diff it, and read any point. With [Substrate](https://github.com/laffeyp/substrate) under the hood, we can easily do interesting things like analyzing the language of every session over a number of variables — a process that can, for instance, tell you when the LLM is being too agreeable, or when the overall sentence structure of the session has changed. Here, information is treated as primary, and this is made possible by paying extra special attention to the details during the development process.
 
-You open a pane, pick a model and a workspace, and talk to the model while the window shows what it is doing, what it has read, how it is answering, and how the conversation is shifting under its settings.
+You open a pane, pick a model and a workspace, and talk to the model while the window shows what it is doing, what it has read, how it is answering, and how the conversation is shifting.
 
 ## What you can do with it
 
