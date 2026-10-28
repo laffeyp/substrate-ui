@@ -1,5 +1,7 @@
 # substrate-ui
 
+![substrate-ui — a desktop cockpit for driving LLMs through structured runs](.github/assets/substrate-ui-banner.png)
+
 A desktop cockpit for driving LLMs through structured runs. The common way to use a large language model today is to open a terminal and type `claude`. This replaces that. Other runners look similar — a window with a model in it — but none of them run on Substrate: a Python runtime that coordinates computations through a typed, append-only log. Every event in a session — tool calls, replies, prompts, setting changes — lands on that log; you replay it, diff it, read any point.
 
 You open a pane, pick a model and a workspace, and talk to the model while the window shows what it is doing, what it has read, how it is answering, and how the conversation is shifting under its settings.
