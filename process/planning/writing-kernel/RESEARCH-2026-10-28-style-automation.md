@@ -44,7 +44,7 @@ Six features that need part-of-speech tagging or dependency parsing (spaCy, Stan
 
 ### Layer C — deterministic functions over labelled features
 
-The project's own paragraph names the right handling for an LLM: a stochastic process orchestrated as what it is. That orchestration applies here. The checks the field treats as "LLM-as-judge" problems — metaphor consistency, discourse structure, worldview — are mostly not. They are deterministic functions over labelled lexicons and structured features, the same methodology as Layer A operating on different features. The model is reserved for the narrow calls where only meaning answers; it is called by name as a function, not asked to judge.
+The project's own paragraph names the right handling for an LLM: a stochastic process orchestrated as what it is. That orchestration applies here. The checks the field treats as "LLM-as-judge" problems — metaphor consistency, discourse structure, worldview — are mostly not. They are deterministic functions over labelled lexicons and structured features, the same methodology as Layer A operating on different features. **The model is reserved for the places where stochastic text generation is what the loop needs** — a draft, a candidate rewrite of a flagged span, a candidate word for a growing lexicon. The model is not asked to judge, not asked to decide, not asked whether anything is good. The judging is in the functions. The text is in the model.
 
 **The analogy is a tool for a sense the model does not have.** A model does not hear audio; a sound-analysis function hears the audio and injects the labelled result — fundamental frequency, spectral centroid, onset positions — back in a form the model can read. The model does not strain over raw bytes; the model reads a labelled report and acts. Function-call ≠ tool-use. A function has a specific purpose. The purpose here is to let the stochastic generator take a defined action in the real world: land a piece of writing on the project's standard.
 
@@ -75,21 +75,21 @@ Six checks, zero model calls. The lexicons and pattern lists are the project's w
 
 ### What the model is for
 
-Three narrow function-calls where no deterministic function stands in. Each has a signature, a structured input, a structured output.
+Three generation calls. Each produces text; a deterministic function scores what comes back.
 
-| Call | Input | Output | Purpose |
+| Call | Input | Output | What the function does with the output |
 |---|---|---|---|
-| `semantic_bridge(p1, p2, features)` | two paragraphs plus their Layer A/B vectors | `continues \| shifts(reason)` | catches the semantic bridge the lexicons miss |
-| `claim_check(sentence, surrounding)` | one claim sentence plus context | `defensible \| hedge \| contestable` + reason | subject-matter accuracy the project does not itself encode |
-| `vocab_align(word, sentence, commitments)` | a new word, its sentence, the five commitments | per-commitment `align \| neutral \| betray` | feeds the lexicon-maintenance loop — a repeated `betray` hit adds the word to the anti-match list |
+| `draft(mode, prompt, constraints)` | mode name, the prompt, the mode's feature targets | one or more draft candidates | measures each candidate on Layers A and B, keeps the one with the lowest penalty |
+| `rephrase(span, reason)` | a flagged span and the function reason that flagged it | one or more candidate replacements | drops back any candidate that still trips the flagging function; picks the first that passes |
+| `propose(commitment, direction)` | one of the five commitments, direction `match` or `anti` | a list of candidate words | tests each word in a held-out sentence set; adds the word to the lexicon only when it changes the score as expected |
 
-The model is called by name, with a function signature, for a specific question only meaning answers. Not "tell me whether this passage is in the right style" (a judgment call that re-anthropomorphises the model). "Does the word *delve* in this sentence align with the stochastic-process ontology?" (a semantic match the model does well). The three calls above are the full inventory. Everything else is a function.
+The model is called when the loop needs new text. The model is never asked whether a passage is good, whether a claim is defensible, whether a word belongs — those are the functions' questions and the functions answer them. The three signatures above are the full inventory of model calls in the kernel; every other check runs without a model.
 
-**All three layers run on the same text in sequence.** Layer A is a counter. Layer B is a tagger. Layer C is a function suite — six deterministic checks plus three narrow model calls. Each is cheaper and faster than the one above it. A rewriter that hits all three layers is honest; one that stops at Layer A is cosmetic.
+**All three layers run on the same text in sequence.** Layer A is a counter. Layer B is a tagger. Layer C is a function suite — six deterministic checks plus three generation calls whose output the functions score. The model never judges; the functions score; the loop closes. A rewriter that hits all three layers is honest; one that stops at Layer A is cosmetic.
 
 ## 2. Modes and their weights
 
-The style is one; the instantiation is many. A commit message does not carry an analogical cascade; a vision doc does. The twelve surface features and the six structural ones have different weights per mode. Weights below are the first-draft calibration — numeric, not qualitative, so an automated reviewer can enforce them.
+The style is one; the instantiation is many. A commit message does not carry an analogical cascade; a vision doc does. The twelve surface features and the six structural ones have different weights per mode. Weights below are the first-draft calibration — numeric, not qualitative, so the function suite can enforce them.
 
 | Feature | README / vision | Spec / design | Research doc | Commit msg | Code comment | Chat reply | Kit entry |
 |---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
@@ -106,7 +106,7 @@ The style is one; the instantiation is many. A commit message does not carry an 
 | Lexical density 40-50 % | 1.0 | 1.0 | 1.0 | 0.6 | 0.5 | 1.0 | 1.0 |
 | First-person pronoun density | 0.8 | 0.4 | 0.4 | **0** (forbidden — rewrite history rule) | 0 | 0.6 | 0.4 |
 
-Weight 1.0 means the feature is a hard check; the reviewer blocks on it. Weight 0 means the feature is not scored. Fractions mean the feature contributes to a composite score and failure is a soft nudge, not a block. The weights settle inside the automation; they are not raised to the writer each time.
+Weight 1.0 means the feature is a hard check; the function suite blocks on it. Weight 0 means the feature is not scored. Fractions mean the feature contributes to a composite score and failure is a soft nudge, not a block. The weights settle inside the automation; they are not raised to the writer each time.
 
 ## 3. The worldview the paragraph invokes
 
@@ -138,7 +138,7 @@ The rewriter is a measure-and-edit loop. Given a draft and a target mode, it pro
    - Mixed metaphor → consolidate to one source domain.
    - First-person imbalance → add or remove `we` tokens.
 5. **Re-measure.** Loop until every feature is in-range or until `max_edits` is reached.
-6. **Layer C check.** Run the six deterministic functions over the rewritten text; invoke the three narrow model calls only where their signatures apply. Return the function reports and any model answers alongside the rewritten text. No general "is this good?" prompt is sent to a model.
+6. **Layer C check.** Run the six deterministic functions over the rewritten text. If a flagged span needs a replacement the edit catalogue cannot supply, `rephrase` generates candidates and the flagging function picks the one that passes. No general "is this good?" prompt is sent to a model, ever.
 
 ### Why this is not blind
 
@@ -187,7 +187,7 @@ At each sentence boundary the writer is given the running Layer A statistics and
 
 ### 5.3 Topology-mediated writing (deepest, longest lead time)
 
-The project's own primitive is topologies. A writing topology would run a draft producer, a measurement producer (Layer A, deterministic), a tagger producer (Layer B), a reviewer producer (Layer C), and a correction producer that loops. The topology is a literal source copy of `session/`, edited — not a new framework. The user has memory `feedback-session-topology-is-the-template` committing to this shape.
+The project's own primitive is topologies. A writing topology would run a draft producer (the one place the model generates), a counter producer (Layer A), a tagger producer (Layer B), a function-suite producer (Layer C's six deterministic checks), a rephrase producer (the second place the model generates, called only for flagged spans), and a correction producer that loops. The topology is a literal source copy of `session/`, edited — not a new framework. The user has memory `feedback-session-topology-is-the-template` committing to this shape.
 
 This is the eventual home for all three loops. The intermediate shapes (§5.1, §5.2) exist outside Substrate as scripts; the terminal shape is a topology.
 
@@ -216,9 +216,9 @@ All of Layer A. The analyser `scratchpad/analyze.py` computed every Layer A numb
 
 Layer B. spaCy or Stanza. One Python dependency. One-day task to wire into the measurement script. The pre-commit hook can run both on changed `.md` files inside `process/planning/`.
 
-### Reserved for narrow model calls
+### Reserved for text-generation calls
 
-Three function-calls listed in §1's Layer C block: `semantic_bridge`, `claim_check`, `vocab_align`. Each has a typed input and a typed output. Any of the drivers already in the project's own picker will serve. Wiring is one day per call. Everything else in Layer C runs as a Python function over a lexicon.
+Three generation calls listed in §1's Layer C block: `draft`, `rephrase`, `propose`. Each takes a typed input and returns candidate text; a deterministic function scores the candidates. Any of the drivers already in the project's own picker will serve. Wiring is one day per call. Everything else in Layer C runs as a Python function over a lexicon.
 
 ### Open research questions
 
