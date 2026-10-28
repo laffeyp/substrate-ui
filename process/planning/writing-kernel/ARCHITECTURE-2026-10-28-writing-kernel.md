@@ -10,6 +10,8 @@ The payoff is three things at once. First, no draft lands on main without a meas
 
 This document specifies what gets built so that picture becomes real, and the theoretical ground that justifies each choice.
 
+**The writing-kernel is its own context.** The folder `writing-kernel/` is designed to be lifted out of substrate-ui and spun as its own repository, its own Python package, its own SDD project with its own locked vocabulary, its own BLACKBOARD and KIT_DIARY. The current location under `substrate-ui/process/planning/` is a hosting convenience during initial authoring. The dependencies that bind the kernel to substrate-ui (the pre-commit hook, the Substrate session topology) are integration points, not internal couplings. Pulling the folder into a standalone repo requires no code change inside the kernel itself; the integrations become optional add-ons packaged under `integrations/`.
+
 ## 1. Problem framing
 
 Writing in a technical project drifts for the usual reasons. Different authors write at different registers. The same author writes differently on Tuesday and Thursday. Model-generated prose settles into its measured defaults the moment attention lapses. Reviews catch some drift and miss more. The paragraph in `ANALYSIS-2026-10-27-stochastic-process-paragraph.md` is the register the project chose, measured on 18 analytical layers, and that paragraph is the kernel's first calibration point.
@@ -471,17 +473,31 @@ Each scale has its own window, cadence, and runner. The scale ladder is delibera
 | Document | whole file | on commit | pre-commit hook |
 | Project | every `.md` in the repo | weekly | scheduled Substrate topology |
 
-## 9. Discipline inherited from sdd-kit-4
+## 9. SDD discipline: this is a new SDD project
 
-The kernel inherits the project's existing methodology without modification. The architecture document names what is inherited so the reader does not need to re-read the kit to understand the architecture.
+The writing-kernel is its own SDD project. It adopts sdd-kit-4 as its methodology and runs its own instance of every artifact the kit requires. It does not share BLACKBOARD, KIT_DIARY, roadmap, or sprint numbering with substrate-ui; a new sprint 001 opens inside the kernel when the folder is spun into its own repo.
 
-- **Roadmap and sprint cards.** Every build step in §10 lands under a sprint card. The roadmap for the kernel lives at `writing-kernel/ROADMAP-2026-10-28-writing-kernel.md`.
-- **Observation contract.** Every script in §4 has a behaviour test. The test runs the real script against a real text and reads the real output. No mocks.
-- **Vocabulary-as-contract.** If the Substrate topology in §6.3 introduces signal tags, those tags enter the signal vocabulary at the next version bump; the parity gate blocks undeclared tags.
-- **Append-only logs.** `BLACKBOARD.md` records every sprint close. `KIT_DIARY.md` records every finding and hypothesis.
-- **Dated docs, no in-place edits.** Every analysis, research pass, red-team report, and architecture doc lands as a new dated file. Code changes stay in place through commits; git is the audit there.
+The kernel owns the following artifacts, all at the kernel's own root once standalone (and at `writing-kernel/` while still hosted inside substrate-ui):
+
+- **`BLACKBOARD.md`.** The project's running decision log. One entry per sprint close.
+- **`KIT_DIARY.md`.** Findings and hypotheses as the kernel is built.
+- **`AGENTS.md`.** A copy of sdd-kit-4's agents file (or a reference into the kit).
+- **`signals/versions/0.1.json`.** The locked signal vocabulary of the kernel. All signals the kernel's topology emits are declared here. Pre-commit vocabulary parity blocks any emit of an undeclared tag.
+- **`ROADMAP-<date>-writing-kernel.md`.** The build order of §10 expressed as a roadmap.
+- **`process/sprints/sprint-NNN-*.md`.** One card per build step.
+- **`halts/HALT-<date>-<file>.md`.** Halt notes from the rewriter when it hits a local optimum with residual gaps.
+
+The sdd-kit-4 hard rules apply in full:
+
+- **Vocabulary-as-contract.** The signal set is closed, versioned, locked at every release. New signals bump the vocab version; the parity check runs in CI.
+- **Observation contract.** Every script in §4 ships with a behaviour test that runs the real script against real text and reads the real output. No mocks.
+- **Dated docs, no in-place edits.** New analyses, research passes, red-team reports, and architecture docs each land as a new dated file. Code changes stay in place through commits; git is the audit for code.
+- **Append-only logs.** BLACKBOARD and KIT_DIARY are append-only.
+- **Halt-and-articulate.** A rewriter local-optimum exit with residual gaps writes a halt note; no silent workaround.
 - **No forks, no subagents.** The main agent does the work.
-- **Halt-and-articulate.** When a rewriter run hits the iteration cap, the kernel writes a halt note; no silent workaround.
+- **Sprint cards precede code.** Each build step in §10 lands under its own card; the card declares the artifact contract and the done condition.
+
+The kit itself (`sdd-kit-4/`) sits outside the kernel. The kernel references the kit by relative path or by git submodule once standalone. The kernel's `AGENTS.md` points at the kit's `AGENTS.md` and names any kernel-specific overrides.
 
 ## 10. Build order
 
@@ -535,7 +551,65 @@ Steps 1-6 are deterministic Python. Step 7 integrates the model. Steps 8-10 comp
 
 The kernel never claims a correctness it does not have. Where the output depends on a model, the output is a candidate; the deciding function is deterministic. Where the output depends on a lexicon, the lexicon state is a file on disk at a known git SHA.
 
-## 12. What stays open
+## 12. Portability and the standalone package
+
+The kernel is designed to be cut from `substrate-ui/process/planning/writing-kernel/` and dropped into its own repository. The lift is a `git mv` plus a top-level restructure. The target layout, standalone:
+
+```
+writing-kernel/
+├── AGENTS.md                 (points at sdd-kit-4; names kernel overrides)
+├── BLACKBOARD.md
+├── KIT_DIARY.md
+├── README.md                 (what the kernel is; how to install it)
+├── pyproject.toml            (Python package metadata)
+├── signals/versions/0.1.json (locked vocab for the writing topology)
+├── scripts/
+│   ├── style_measure.py      (Layer A)
+│   ├── style_tag.py          (Layer B)
+│   ├── style_check.py        (Layer C)
+│   ├── style_edits.py        (edit catalogue)
+│   ├── style_generate.py     (draft / rephrase / propose)
+│   └── style_rewrite.py      (rewriter loop)
+├── lexicons/
+│   ├── source_domains/*.txt
+│   ├── discourse/rst_connectives.txt
+│   └── worldview/{ontology,epistemology,craft,we,argument}/{match,anti}.txt
+├── BANDS.yaml
+├── BANDS-CHANGELOG.md
+├── WEIGHTS-CHANGELOG.md
+├── LEXICON-CHANGELOG.md
+├── EDITS.md
+├── analyses/
+│   └── ANALYSIS-2026-10-27-stochastic-process-paragraph.md
+├── research/
+│   ├── RESEARCH-2026-10-28-style-automation.md
+│   └── RED-TEAM-2026-10-28-citation-check.md
+├── architecture/
+│   └── ARCHITECTURE-2026-10-28-writing-kernel.md
+├── process/
+│   ├── ROADMAP-2026-10-28-writing-kernel.md
+│   └── sprints/sprint-001-*.md … sprint-NNN-*.md
+├── halts/
+└── integrations/
+    ├── substrate_ui/         (pre-commit hook; Substrate session topology)
+    └── pre_commit_hook/      (generic .githooks drop-in)
+```
+
+The kernel exposes a Python package `writing_kernel` and a CLI `wkernel` with four subcommands: `measure`, `check`, `rewrite`, `generate`. Each subcommand reads a Markdown file and a mode name; each returns the same `StyleReport` shape. The CLI is the integration contract: anything that can shell out to `wkernel` can use the kernel.
+
+The integrations folder holds adapters. `integrations/substrate_ui/` wires the CLI into substrate-ui's pre-commit hook and its Substrate session topology; `integrations/pre_commit_hook/` provides a vendor-neutral `.githooks/pre-commit` drop-in; both are optional and depend on the kernel package, not the other way around.
+
+The cut-out procedure, in order:
+
+1. `git subtree split --prefix=process/planning/writing-kernel -b writing-kernel-split` to carry the folder's history into its own branch.
+2. Create the new repository `writing-kernel`.
+3. Push the split branch as that repo's main.
+4. Add `pyproject.toml`, `AGENTS.md`, and the folder restructure above.
+5. Open the standalone repo's sprint 001 against the new BLACKBOARD.
+
+Nothing in the kernel's internal code depends on substrate-ui. The dependency arrows all point from substrate-ui into the kernel's `integrations/substrate_ui/` folder.
+
+## 13. What stays open
 
 Named five, each with its first calibration pass as the closing condition.
 
@@ -547,7 +621,7 @@ Named five, each with its first calibration pass as the closing condition.
 
 The architecture is complete when every loop has run its first cycle and the kernel's state is reproducible from the dated artifacts in `writing-kernel/` alone.
 
-## 13. References
+## 14. References
 
 Beck, K. 2002. *Test-Driven Development: By Example.* Addison-Wesley.
 Björnsson, C. H. 1968. *Läsbarhet*. Liber (LIX formula).
