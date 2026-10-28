@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // One setting folds or unfolds every tool card: ⌘E, /fold (flips) and /unfold (UI sprint 140).
 // No control on screen: the Architect's call.
 //

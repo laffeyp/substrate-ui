@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // UI sprint 140: one toggle opens or closes every tool card, those drawn and those still to come.
 import { test } from "node:test";
 import assert from "node:assert";

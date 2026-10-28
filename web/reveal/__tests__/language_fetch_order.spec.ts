@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // The language view applies only the latest fetch (UI sprint 172).
 //
 // The refresh queued after one turn can be in flight when the next turn's `Returned` queues

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // The language lens, turns stream (UI sprint 174).
 //
 // Steps, in the Electron app on the deterministic driver: three turns; reveal, pick language, the

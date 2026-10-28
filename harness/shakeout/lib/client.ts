@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // The harness's one NodeSubstrateClient (vm_smoke.ts imports it; UI sprint 107 removed its copy):
 // HTTP fetch + a tiny SSE reader over Node's http module. Lets each flow build a SessionController and drive it
 // without a browser in the loop.

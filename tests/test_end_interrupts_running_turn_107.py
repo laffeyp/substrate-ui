@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """UI sprint 107: ending a session while its turn runs.
 
 Sprint 101 made quit interrupt a running turn before ending its session, because turns have no

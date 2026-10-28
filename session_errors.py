@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Wire-error string constants for `/api/session/*` responses.
 
 TECH-SPEC §7 defines the JSON error envelope carries an `error` field

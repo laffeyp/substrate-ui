@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // The language lens (UI sprints 169-171): the kernel's language view of a session record, laid out
 // as lanes. Rows are turns, time runs down; each watched measure is a lane; a setting change is a
 // full-width rule; a shift is a mark at the reply that raised it; the selected turn's numbers sit

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // Background-tasks gate (UI sprint 105), driven in the Electron app itself.
 //
 // A real model turn starts `sleep 301` with run_in_background. The activity strip must list the

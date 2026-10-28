@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // Attach existing against a real model. First controller opens the
 // session and drives a real turn; second controller attaches by id
 // and reads the replayed history.

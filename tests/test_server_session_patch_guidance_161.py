@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """UI sprint 161 (vocabulary § U): PATCH /api/session/<id> takes `guidance`, a level set as its
 bundle; `auto` is the model's default level, resolved as at open; an unknown level is refused with
 the levels named.

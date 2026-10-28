@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """UI sprint 129: harness drivers stream their tool calls and take Substrate's tools over MCP.
 
 Each harness profile names its stream format and flags (kernel K283) and how its CLI takes an MCP

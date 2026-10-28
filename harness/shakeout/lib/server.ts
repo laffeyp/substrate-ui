@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // Server-lifecycle control for the shakeout harness. Owns the
 // server.py subprocess. Supports start / stop / SIGSTOP / SIGCONT so
 // the refused-open, interrupt, and stream-reconnect flows can drive

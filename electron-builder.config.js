@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // Sprint 089 — Mac packaging config, rebuilt from Apple's docs after
 // Sprint 088's config produced a non-launchable .app.
 //

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // ⌘F counts the pane's own transcript (UI sprint 186). Before, the transcript scope counted lines
 // of a sample session's text, so any word from a real session read "0 matching lines".
 //

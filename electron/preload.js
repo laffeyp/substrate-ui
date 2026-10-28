@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // electron/preload.js
 // Sprint 078 — tiny placeholder for the Electron wrapping's
 // preload. Exposes window.native so the renderer can detect it is

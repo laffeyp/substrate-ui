@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // Vocabulary loader for the reveal shell. Reads the locked lock file
 // at web/vm/signals/versions/current.json and builds a typed dictionary
 // keyed by tag name. Wholly separate from the classic shell's

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // A turn whose workspace folder is gone names the folder (kernel sprint 297, UI sprint 160): the
 // transcript's error row says which folder, and that it is the session's workspace, where it said
 // `FileNotFoundError(2, 'No such file or directory')`.

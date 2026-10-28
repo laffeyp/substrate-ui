@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // Electron helpers for the gates. One copy of the launch options, the pane binding a user does,
 // and the controller signals the app actually emitted (window.__vmSignals, web/vm/instrumentation/sdd.ts).
 

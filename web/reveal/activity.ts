@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // The activity strip above the prompt: what the current turn is doing, or how the last one
 // ended. Moved out of reveal_component.ts (UI sprint 101) so it can be tested without the
 // template runtime; Component._liveActivity delegates here.

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // Transcript scroll gate (UI sprint 102), driven in the Electron app itself.
 //
 //   following — at the bottom, each new turn stays in view;

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """UI sprint 172: a reply-side shift reaches the language route the bar line reads.
 
 The deterministic driver's replies never vary, so the detector never warms up on them; a scripted

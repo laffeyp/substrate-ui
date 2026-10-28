@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // The Flow interface every shakeout file implements. A flow declares
 // which tags it expects, and how to drive one run.
 

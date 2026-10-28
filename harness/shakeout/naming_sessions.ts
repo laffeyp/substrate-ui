@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // Naming sessions from the top bar (UI sprint 145): the name reaches the daemon and holds.
 //
 // Steps: bind pane 1; double-click the bar's name and name it before the session opens; send a

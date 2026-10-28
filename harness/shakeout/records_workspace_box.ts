@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // The records page lists workspaces in the workspace bar's style (UI sprint 153): one box with the
 // picker box's background, radius and border, in a centred column.
 //

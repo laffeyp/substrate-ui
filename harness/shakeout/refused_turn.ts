@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // Refused turn: open a session, stop the server, sendTurn. The
 // controller sees a network failure and fires TURN_REFUSED. Restart
 // the server on exit so downstream flows have a live one.

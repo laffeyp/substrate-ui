@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // Transcript scroll: the one owner (UI sprint 102).
 //
 // Two behaviours, the ones the Architect asked for on 2026-09-15 (`83b20bd`) and that went

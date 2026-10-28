@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 import { defineConfig, type Plugin } from "vite";
 import { resolve } from "path";
 import { buildSync } from "esbuild";

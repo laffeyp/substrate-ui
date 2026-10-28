@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // Signal emitter for the reveal shell. Validates every emit against
 // the reveal shell's own locked vocabulary. Unknown tags throw.
 // Missing required payload fields throw. Buffer exposed as

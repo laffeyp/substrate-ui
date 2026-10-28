@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // CLI discovery flow. Reads /api/models, walks every entry the server
 // reports under `cli` (i.e. every CLI adapter that resolved on this
 // box via shutil.which), opens a session against each, sends one

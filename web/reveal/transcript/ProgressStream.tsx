@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // Sprint 074 — streaming pane inside a tool card. Reads
 // `snapshot.progressByCallId[callId]` from the shared snapshot the
 // Transcript already subscribed to. Rendered as a memoized component

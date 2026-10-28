@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 # Sprint 098 — one release command: build once, test that build, install that build.
 #
 # Humble & Farley, Continuous Delivery (2010), ch. 5: "only build your binaries once" and

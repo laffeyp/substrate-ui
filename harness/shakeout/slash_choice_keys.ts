@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // Arrow keys in the slash choice menu (UI sprint 164; roadmap ROADMAP-2026-10-12-slash-entry.md).
 //
 // Steps: bind pane 1 and send a message (history holds it); "/tone ": ↑ lights /tone dry (the row

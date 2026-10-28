@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """UI sprint 120: the Claude driver profile, and the attribution and e-mail gate.
 
 Substrate never writes model attribution and never handles an e-mail address. A harness driver

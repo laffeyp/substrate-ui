@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // The top bar's model chip is an indicator: a click opens a card naming the model, and picks
 // nothing (UI sprint 139, U125).
 //

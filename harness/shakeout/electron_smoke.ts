@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // Electron smoke flow. Launches the app on an offline roster, binds the first pane as a user
 // does, drives one deterministic turn through the prompt input, and reports the controller
 // signals the renderer actually emitted (window.__vmSignals). A tag the app did not emit is not

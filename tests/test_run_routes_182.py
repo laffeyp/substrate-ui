@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """UI sprint 182: the caller's runs over HTTP. `GET /api/session/<id>/runs` lists them and
 `POST /api/session/<id>/runs/<run_id>/stop` stops one. The run here is a build whose model is a
 stand-in CLI that sleeps, so the run is still working when the stop arrives."""

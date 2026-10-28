@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // A session's opening prompt pieces are written once, even across a quit and reopen of the app
 // (kernel K265).
 //

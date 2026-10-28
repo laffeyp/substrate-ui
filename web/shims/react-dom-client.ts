@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // ReactDOM/client shim. dc-runtime uses `window.ReactDOM.createRoot`
 // (support.js:196). Phase 8's atom-transcript uses the same instance
 // via this shim so nested roots share React internals.

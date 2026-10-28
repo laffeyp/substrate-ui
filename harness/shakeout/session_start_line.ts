@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // The session-start line (UI sprint 144): before the first message the empty transcript says
 // "session started with <model> at <workspace>"; after a message it is still first, the message below.
 //

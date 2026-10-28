@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // The handoff setting on a real model (UI sprint 184; kernel K334, vocabulary § Y.3).
 //
 // Live: it needs a real model (HANDOFF_LIVE_MODEL, default glm-5.2:cloud), so it is not in

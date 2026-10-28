@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // Process lookups scoped to one gate run. A gate counts and stops only processes it started:
 // backends are found by the SUBSTRATE_HOME in their environment, and their children by walking
 // the parent chain from those backends. Nothing here matches by name machine-wide.

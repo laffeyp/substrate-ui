@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // Resuming a session that has ended more than once.
 //
 // Reported 2026-10-08: a session ended twice (two app restarts) and resumed showed the typed

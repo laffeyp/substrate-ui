@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // Shared factory for Axis B tool-coverage flows. Each tool flow opens
 // a real-model session on the full toolset, prompts the model to
 // demonstrate one specific tool, waits for the paired ToolCall +

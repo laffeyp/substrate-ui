@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """UI sprint 122: `/dellm <text>` posts the turn with {"skill": "dellm"}; the daemon records it as
 slash_source "skill:dellm", and the session loads the skill before the model starts (kernel K277)."""
 

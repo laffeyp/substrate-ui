@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // UI sprint 107: one fixture for every temp directory a gate makes. Each gate gives the app a fresh
 // SUBSTRATE_HOME and profile (Meszaros, xUnit Test Patterns: Fresh Fixture) and removes them when the
 // process exits (Fixture Teardown); before this, 16 of 18 call sites left their directory behind and

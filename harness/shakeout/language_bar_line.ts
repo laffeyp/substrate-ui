@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // The bar line names its settings and carries language shifts (UI sprint 172; design sheet 22b).
 //
 // The deterministic driver's replies never vary, so the drift detector never fires on them in a

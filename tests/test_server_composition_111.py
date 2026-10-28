@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """UI sprint 111: server configuration has one source, and what a session is created with reaches it.
 
 Each test is one lens-audit finding:

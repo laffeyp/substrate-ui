@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // UI sprint 129 — a harness driver's tool calls (kernel K282) are tool cards in the transcript.
 //
 // A claude, codex or cursor-agent session records each call to its own tools as a HarnessToolCall /

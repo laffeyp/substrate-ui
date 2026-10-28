@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Generate web/vm/envelope_kinds.gen.ts from the kernel (Sprint 096).
 
 The client used to hand-copy envelope kind strings (`web/vm/kinds.ts`); the copy drifted

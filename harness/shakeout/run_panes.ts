@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // A run a session starts opens its own pane (UI sprint 182; research r9 § 4).
 //
 // Steps, on a deterministic session whose one turn calls `build` twice (driver_params.script):

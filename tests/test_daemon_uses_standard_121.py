@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """UI sprint 121: new sessions open on `standard`; `/model` mid-session reaches the model as an
 environment update; `driver_params.cache_layout` is an opt-in only a system-channel driver takes."""
 

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // The bar line's settings tail (UI sprint 172; design sheet 22b, D76, D79): each setting named,
 // and each language shift since the last setting change written right after the setting its
 // measure answers to, as its short name and ↑/↓ in that group's colour. More than two in one group

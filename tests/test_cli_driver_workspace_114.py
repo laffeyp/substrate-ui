@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Sprint 114: a session on a CLI driver runs the CLI in that session's workspace.
 
 The CLI is a stand-in that prints its working directory, so each turn's ModelReply is the directory

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // Refused open: stop the server, try to open a session, watch for
 // SESSION_OPEN_REFUSED with a non-empty failure_class and detail.
 

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // Stream drop and reconnect against a real model. Opens a session on the
 // daily driver, submits a prompt that asks the model to take its time (a
 // long turn is what makes the flow meaningful — the SSE has to have real

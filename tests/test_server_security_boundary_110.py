@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """UI sprint 110: the local server's security boundary.
 
 The audit probed a private server (2026-10-08): a POST carrying `Host: evil.test` and `Origin:

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // Sprint 073 — markdown parser unit tests. Behaviour-preserving.
 // Every case below mirrors a real transcript the reveal shell has
 // rendered without the extraction.

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """UI sprint 105: the app's view of a session's background tasks.
 
 GET /api/session/<id>/tasks lists them; POST /api/session/<id>/tasks/<task_id>/stop stops one,

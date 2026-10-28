@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Sprint 214a — POST /api/session/<id>/turn runs one turn via turn_sync.
 
 The handler wraps SessionRegistry.turn_sync — the same seam the delegate wire

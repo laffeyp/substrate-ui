@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // UI sprint 140 — one setting opens or closes every tool card. `auto` (before the first flip) keeps
 // each card's own rule: open while its tool runs. A flip to `expanded` or `collapsed` applies to
 // every card, those already drawn and those that arrive later; `generation` counts flips, so a click

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // A real model calls Review and Build in the app (UI sprint 185; research r9 § 8.1, § 8.3).
 //
 // Live: it needs a real model (TOPOLOGIES_LIVE_MODEL, default glm-5.2:cloud through Ollama), so it

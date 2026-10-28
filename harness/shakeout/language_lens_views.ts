@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // The language lens, deviation and ribbons views (UI sprints 170, 171).
 //
 // The deterministic driver's replies never vary, so the drift detector's warm-up never ends on

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Demo topologies for gen_demo_records.py, which runs them to create the `demo_*` fixture records.
 The resumable topology mirrors the runtime's own pause/resume reference: stage1
 runs, the run PAUSES awaiting an external ApprovalGranted, and a resume Trigger fires the

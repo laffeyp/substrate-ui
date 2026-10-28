@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // One Axis B flow per tool in the tool_loop suite. Every prompt is a
 // one-liner that names the tool explicitly. Substrate feeds the
 // model every tool's schema at boot, so the model can just pick.

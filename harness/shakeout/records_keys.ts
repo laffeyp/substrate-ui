@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // The records page takes the workspace picker's keys (UI sprint 156).
 //
 // Steps: five sessions in a repo-local folder over the API (the page leaves out $TMPDIR paths);

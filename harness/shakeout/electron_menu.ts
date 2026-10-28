@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // Electron menu flow. Binds the first pane, then clicks a native menu item through
 // Menu.getMenuItemById(...).click() and checks what it did:
 //   menu-toggle-meta — the meta view's transcript mount appears, and a second click removes it.

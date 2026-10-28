@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Sprint 217d — POST /api/session/<id>/interrupt over the v0.3 cancel primitive.
 
 The endpoint dispatches `Runtime.cancel_producer(instance, cause="external",

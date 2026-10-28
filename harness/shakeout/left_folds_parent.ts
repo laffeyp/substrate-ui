@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // ← inside an open group folds it and lights the group; ← on a folded top-level row goes back to
 // the workspace column (UI sprint 151).
 //

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // Minimal ANSI/CSI parser for the AuthPromptCard terminal view.
 //
 // Handles the subset that opencode's TUI picker + codex/cursor-agent/

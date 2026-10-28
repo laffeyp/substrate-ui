@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // One input bar, in the panes view and the meta view, with the text entry a user expects (UI sprint 141).
 //
 // Before: the panes view drew an <input> and the meta view a separate <textarea>, with two key

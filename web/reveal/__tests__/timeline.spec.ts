@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // Each event's time into its turn, from the record's own clock (web/reveal/timeline.ts).
 //
 // 2026-10-10: the graph's time column showed "t+0.0s" or "t+2s" for every event of a real

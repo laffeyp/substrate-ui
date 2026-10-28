@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // The graph's model lane on a session that has ended and been resumed.
 //
 // Reported 2026-10-09: after reattaching to a session, the model lane stops being drawn in both

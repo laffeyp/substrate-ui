@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // The records page's box is the picker box's width (UI sprint 157): with one pane, the two boxes
 // share their left and right edges.
 //

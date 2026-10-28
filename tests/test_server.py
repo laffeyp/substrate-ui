@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """End-to-end tests for the substrate-ui read-API server — the seam, exercised for REAL.
 
 Starts the actual server on an ephemeral port in a thread, hits it over HTTP with urllib, and

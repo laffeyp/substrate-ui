@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // The meta view's stream and graph lens follows the bottom until scrolled up (UI sprint 158), the
 // transcript's rule (sprint 102).
 //

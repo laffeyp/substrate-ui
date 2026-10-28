@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // One slash-command table (UI sprint 162): the menu lists every command the controller runs, a
 // command's choices appear after it and a space, and /help writes one row per command.
 //

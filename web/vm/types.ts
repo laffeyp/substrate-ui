@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // web/vm/types.ts — the Presentation Model's public shape.
 //
 // Every View (the classic shell today, the prototype's dc-runtime HTML next)

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // harness/startup_timing.ts — Sprint 094: measure app startup, stage by stage.
 //
 // Launches the source-mode Electron app (`electron .`) against a state root

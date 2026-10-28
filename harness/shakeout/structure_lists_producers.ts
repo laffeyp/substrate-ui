@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // The structure view lists the session's producers under their K263 names and its triggers under
 // K264's one rule, `<what it starts>-on-<event>`.
 //

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // The graph's app view keeps the delegate lane on the rows it shows (UI sprint 155): every row app
 // view keeps draws its three lane cells as all view does.
 //

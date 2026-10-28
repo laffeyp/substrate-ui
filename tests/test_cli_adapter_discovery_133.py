@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Sprint 133: SUBSTRATE_CLI_ADAPTERS limits which CLIs `/api/models` discovers.
 
 The offline Electron gates set it empty, with OLLAMA_BASE_URL on a closed port, so the roster

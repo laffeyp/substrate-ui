@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Kernels K278, K288 and UI sprint 132 in the daemon: a session named no bundle gets its model's
 default guidance level, resolved once at creation and kept on the manifest; a bundle the caller
 names is kept as given; a small model also reads `default-small`; SessionStarted records the

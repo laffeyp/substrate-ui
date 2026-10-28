@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // The bar line's settings tail (web/reveal/settings_tail.ts, UI sprint 172).
 //
 // Run: `npm run test:unit`

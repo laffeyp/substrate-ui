@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """UI sprint 103: the daemon's side of background commands.
 
 A session's tools own their background tasks by session id; an allow-list naming `bash` brings

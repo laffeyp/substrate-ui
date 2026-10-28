@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 import { build, context } from "esbuild";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";

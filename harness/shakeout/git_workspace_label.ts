@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // A git workspace's label on the records page reads "git" (UI sprint 154): sessions do not get
 // worktrees, so the page does not say they do.
 //

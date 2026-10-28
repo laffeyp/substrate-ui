@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // Sprint 074 — tool card. Header + expandable body matching
 // reveal.html:112-133. Local `useState({ open })` per card, keyed on
 // callId; auto-open on `toolRunning` alone (streaming does not drive

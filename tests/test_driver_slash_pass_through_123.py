@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """UI sprint 123: `//<command>` passes `/<command>` to a driver that takes slash commands, as written,
 with no prompt around it; the model's history leaves the turn out (session vocabulary § P.11)."""
 

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Sprint 096: web/vm/envelope_kinds.gen.ts matches what the kernel registers.
 
 Fails when the kernel adds, renames or removes an envelope kind and nobody regenerated the

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """UI sprint 101: quitting while a turn runs.
 
 Turns no longer have a time limit, so a running turn can hold its session's lock indefinitely.

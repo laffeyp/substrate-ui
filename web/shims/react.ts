@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // React shim. dc-runtime and reveal.ts + reveal_component.ts must
 // share one React instance. dc-runtime reads `window.React` at
 // runtime (support.js:9-13, loaded from cdnjs at reveal.html:8).

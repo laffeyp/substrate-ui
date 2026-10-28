@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // LENGTH and TONE rows in the workspace bar reach the session (UI sprint 143, kernel K296).
 //
 // Steps: pick a workspace, the model, guidance `auto`, then LENGTH `terse` and TONE `blunt` (the

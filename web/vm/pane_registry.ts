@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // web/vm/pane_registry.ts — the pane→controller map.
 //
 // One SessionController per session. Panes are pure View concerns and

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // New windows and the menu bar (UI sprint 147).
 //
 // Steps: read the application menu and check it against the card's table; bind window 1 and send;

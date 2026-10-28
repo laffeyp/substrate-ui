@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // Real driver picker for the shakeout. Reads /api/models, returns the
 // server's declared default. Deterministic never comes back from this;
 // the shakeout runs against real models by design.

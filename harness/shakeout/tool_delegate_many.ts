@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // Axis B flow: fan-out delegate. Prompts the model to call delegate
 // once with a `children` list of three specs; asserts the parent record
 // carries ONE ToolCall(tool="delegate") whose args contain children,

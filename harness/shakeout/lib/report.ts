@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // Report writer + coverage grader for the shakeout harness.
 //
 // A Flow returns a RunResult per run: which declared tags fired and

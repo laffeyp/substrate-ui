@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // ESLint flat config. Sprint 062 — the reveal shell now lives in
 // TypeScript files (reveal.ts, reveal_component.ts, web/vm/*); ESLint
 // gives us:

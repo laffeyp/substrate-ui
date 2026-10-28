@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // The language lens's setting-change rule stays inside the lens (UI sprint 175).
 //
 // A bundle change writes a long rule ("bundle standard → standard-low · guidance … · turn 1"). It

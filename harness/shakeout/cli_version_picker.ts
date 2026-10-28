@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // Sprint 087c smoke — proves the version picker actually pins the
 // model. For each installed CLI the server reports, this flow picks
 // ONE non-default pin, opens a session with driver_version = that

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // Guidance, length and tone on the session bar, changed mid-session by slash commands (UI sprint
 // 161; kernel K296, K298); the prompt for the message after each change carries the new text (UI
 // sprint 167; kernel K299).

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // Lifecycle gates (UI sprint 097): the three Sprint 089 fixes no gate had ever driven.
 //
 //   F6  close every window, then `activate` (what a Dock click sends): a new window must load

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // Shared enum constants for the reveal shell + the SessionController.
 // Sprint 059 (types) + 062 (lint) — one source of truth for every
 // envelope kind, transcript role, surface, mode, level, and direction

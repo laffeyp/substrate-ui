@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """UI sprint 162: PATCH /api/session/<id> keeps two lists of its fields, the allow-list
 (`_PATCHABLE`) and the `if "<field>" in body` branches that handle them. U161 added a branch for
 `guidance` and not the allow-list entry, so every `/guidance` was refused as an unknown field. This

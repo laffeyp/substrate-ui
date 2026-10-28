@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // Resume-an-ended-session flow, against source or a packaged bundle.
 //
 // The reported failure (2026-09-29): pick an ended session back up, see

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // ← on a session folds its workspace row and lights it (UI sprint 152).
 //
 // Steps: open five sessions in a repo-local folder over the API (the picker leaves out $TMPDIR

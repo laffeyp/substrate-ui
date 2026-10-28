@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // The slash hint sits in one fixed column and stays (UI sprints 163, 166; roadmap
 // ROADMAP-2026-10-12-slash-entry.md).
 //

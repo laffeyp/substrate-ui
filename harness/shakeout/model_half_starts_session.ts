@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // The workspace bar runs left to right: a folder pick ungreys the model half, a model pick starts
 // the session; a session picked under a folder resumes on its own model (UI sprint 124).
 //

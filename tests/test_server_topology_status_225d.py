@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Sprint 225d — GET /api/topology/<name>/status?run_id=<id>.
 
 Closes the async loop 225a's await_completion=false opens.

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // How a session's status reads in a list: its label and its dot (UI sprint 162). The workspace
 // picker's session rows and the records page each kept a copy of this map; this is the one.
 // The statuses are the server's buckets (`SessionRow["status"]`): live, parked, interrupted, ended.

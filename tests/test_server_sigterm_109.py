@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """UI sprint 109: SIGTERM to a real server process ends every session and exits.
 
 The shutdown tests call `_shutdown_all_sessions` directly; nothing sent the signal itself, so the

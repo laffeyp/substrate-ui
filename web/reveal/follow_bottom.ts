@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // The meta view's stream follows the bottom until the user scrolls up (UI sprint 158): the
 // transcript's rule (useScrollAnchor, sprint 102) for a list dc-runtime draws, which has no rows
 // registered with React. At the bottom (within STICK_PX), new rows scroll into view; scrolled up,

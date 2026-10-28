@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // A delegate child opens an interactive pane beside its caller (UI sprint 183; kernel K333).
 //
 // Steps, on a deterministic session whose one turn calls `delegate` (driver_params.script):

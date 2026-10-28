@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // Before the user picks a model, nothing names or picks one (asked 2026-10-11).
 //
 // Reported: with nothing picked, the top bar's model chip read kimi-k2.7-code:cloud, the roster's

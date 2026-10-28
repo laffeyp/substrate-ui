@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // The language lens, bars view (UI sprint 169; roadmap ROADMAP-2026-10-13-language-in-the-app.md).
 //
 // Steps, in the Electron app on the deterministic driver: two turns, `/length full`, two more turns;

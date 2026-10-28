@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // web/vm/client.ts — SubstrateClient port and the browser adapter.
 //
 // The Presentation Model talks to substrate through this interface. A shell

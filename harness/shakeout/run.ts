@@ -1,4 +1,6 @@
 #!/usr/bin/env npx tsx
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // Shakeout runner. Walks every flow, runs each N times, writes a
 // report. Owns the server.
 

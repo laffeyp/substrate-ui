@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // Cold boot flow: build a controller, run the four bootloaders, read
 // the tag trace. No session opened. No turn submitted.
 

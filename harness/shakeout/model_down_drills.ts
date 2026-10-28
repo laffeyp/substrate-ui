@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // ↓ keeps drilling down the model column (UI sprint 149).
 //
 // Steps, on this machine's live roster (three groups: cli agents, ollama · cloud, ollama · local):

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // UI sprint 101 — turn state the activity strip and the tool cards read.
 //
 // 2026-10-02, session s_74df6e70…, turn 28: the turn request failed after 600 s, a red

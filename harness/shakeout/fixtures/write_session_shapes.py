@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Write two finished sessions into $SUBSTRATE_HOME for the both_session_shapes gate (U119).
 
 `old` holds what a session wrote before vocabulary v0.3 (ModelReply, FinalAnswer, Park); `new`

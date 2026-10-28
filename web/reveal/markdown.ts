@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // Sprint 073 — markdown parser and renderer, extracted verbatim from
 // `reveal_component.ts:120-215` (methods `_mdInlines`, `_mdBlocks`,
 // `_mdRenderInline`, `_mdRenderBlock`). Behaviour-preserving. Every

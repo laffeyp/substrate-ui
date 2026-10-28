@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // The driver chip on a resumed session shows the session's own driver.
 //
 // Reported 2026-10-08: resume any session (a glm-5.2:cloud one, a claude one) and the pane's

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // A new pane made from the meta view or a page returns to the panes view (UI sprint 146).
 //
 // Steps: bind pane 1; ⌘M to meta; ⌘D: the panes view shows two panes and the new one is focused.

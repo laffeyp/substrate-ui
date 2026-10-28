@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """One in-process console server per test (UI sprint 107).
 
 32 test files carried the same four lines to serve `server.Handler` on an ephemeral port, and every

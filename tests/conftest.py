@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Test-session isolation: state root, home, and the server's module state.
 
 Every test run gets its own temp state root (SUBSTRATE_HOME) and its own temp HOME, so

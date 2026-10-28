@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // Sprint 085c — AuthPromptCard as a mini terminal.
 //
 // Renders a CLI's login command live: SSE stream from the server's pty

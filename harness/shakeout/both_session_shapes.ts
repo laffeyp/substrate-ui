@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // The window reads a session written before vocabulary v0.3 and one written after it alike (U119).
 //
 // Old records end a turn with ModelReply → FinalAnswer (same text) → Park; v0.3 records write a

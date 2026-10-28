@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 # Deterministic Electron + server restart. Every change goes down and
 # back up as one atomic operation — no half-alive processes, no stale
 # window fooling the developer.

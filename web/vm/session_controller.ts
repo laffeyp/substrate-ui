@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // web/vm/session_controller.ts — the Presentation Model.
 //
 // One class holds the state and behavior every substrate-ui shell needs.

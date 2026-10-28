@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """UI sprint 106: a long SUBSTRATE_HOME no longer kills the daemon.
 
 The Unix socket path is limited to sizeof(sun_path) (104 bytes on macOS). With a longer state

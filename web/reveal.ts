@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // web/reveal.ts — the prototype-v7 shell's boot script.
 //
 // Runs after dc-runtime + support.js render the page from `<x-dc>`.

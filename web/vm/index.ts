@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // web/vm/index.ts — barrel re-exports for the Presentation Model.
 //
 // Views import from `./vm` and never need to know which file holds

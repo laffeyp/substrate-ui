@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // Electron deep-link flow. Two paths:
 //   Warm — after the window is up, emit open-url from main; the renderer receives it through
 //   window.native.onDeepLink.

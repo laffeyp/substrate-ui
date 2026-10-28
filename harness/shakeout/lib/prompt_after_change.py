@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """For each SessionChanged in a session record, whether the prompt built for that message carries
 the text the change wrote (UI sprint 167; kernel K299, vocabulary § V).
 

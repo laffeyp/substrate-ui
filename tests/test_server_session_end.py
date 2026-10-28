@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Sprint 215a — POST /api/session/<id>/end ends the session cleanly.
 
 The handler wraps `SessionRegistry.turn_sync` with a `SessionEndRequested`

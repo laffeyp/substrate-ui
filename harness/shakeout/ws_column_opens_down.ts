@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // The workspace list fills its column and opens downward (UI sprints 148, 150); ← and a click on
 // the list's empty space go back to it from the model column (UI sprint 150).
 //

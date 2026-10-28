@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // The language lens laid out from a hand-built language view (web/reveal/language_lens.ts, UI
 // sprint 169).
 //

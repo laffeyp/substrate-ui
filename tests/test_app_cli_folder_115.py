@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Sprint 115: a one-shot application's CLI roles run in the run's folder, not the server's.
 
 The CLI is a stand-in that prints its working directory. A reviewer (kernel K331) runs in its own

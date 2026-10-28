@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // UI sprint 135: a harness driver's own tool calls count in the session bar's turn line. Before,
 // only Substrate's ToolCall counted, so a claude, codex or cursor-agent turn read "no tools".
 import { test } from "node:test";

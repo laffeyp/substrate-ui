@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // web/reveal/timeline.ts — when each event happened, from the record's own clock.
 //
 // Every envelope carries `t`, the Unix time its write was committed, to the microsecond. Before

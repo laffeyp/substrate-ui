@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // Sprint 072 — Transcript subscribes to a pane's SessionController
 // and renders each transcript row as a <Row>, keyed by callId+seq.
 // ToolResult envelopes fold into their matching ToolCall (mirrors

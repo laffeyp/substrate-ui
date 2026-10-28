@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // The window has one top bar, at its top edge, and the bar shows the focused pane (UI sprint 136).
 //
 // Before sprint 136 the terminal view drew a header on every pane, and the reveal view drew a

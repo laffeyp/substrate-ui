@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Sprint 093c: temp-directory paths never enter the workspace list.
 
 Regression for the 2026-10-01 finding: 61 of 64 rows in the user's

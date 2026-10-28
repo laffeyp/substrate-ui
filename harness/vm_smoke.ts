@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // harness/vm_smoke.ts — drives web/vm/SessionController against a real server.
 //
 // Verifies the Presentation Model does what its public API says without any

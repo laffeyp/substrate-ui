@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // Slash router. Opens one session, then drives every slash command the controller has
 // (session_controller.ts slashCommands: help, model, name, list, interrupt, clear, exit) and checks
 // what each one did, not only that it was routed: SLASH_ROUTED fires before the lookup, so it alone

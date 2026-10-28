@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // Chat one turn against a real model. Opens a session on the server's
 // declared default driver, submits a prompt, waits for Park, ends.
 // Watches for transcript misrender, [object Object] tool cards,

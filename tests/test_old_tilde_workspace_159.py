@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """UI sprint 159: a session opened before workspaces were expanded at open stores
 `~/.substrate/sandbox` in its manifest. Its CLI driver must run in the sandbox that names, not in a
 folder called `~` (which raised `FileNotFoundError(2, 'No such file or directory')` on every turn).

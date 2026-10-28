@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // @ts-nocheck
 //
 // The dc-runtime component that renders the reveal shell. This file

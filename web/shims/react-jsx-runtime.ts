@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
 // JSX-runtime shim for the react-jsx automatic transform.
 // tsc compiles `<div />` into `_jsx("div", { children }, key)`,
 // imported from `react/jsx-runtime`. React 17+ exposes those helpers

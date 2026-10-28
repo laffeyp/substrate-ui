@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Copyright (C) 2026 Peter Laffey
 """Build build/icon.icns from the canonical mascot (UI sprint 097; review 2026-09-28 F10).
 
 The packaged app shipped Electron's default icon. Source: ../substrate-art/MASCOT-canonical-oref.png
