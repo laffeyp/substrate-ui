@@ -28,7 +28,7 @@ New exemplars enter as new dated analyses alongside the first one. Each new anal
 | B | spaCy or Stanza | `scripts/style_tag.py` | 6 structural features: clause count per sentence, nominalisation count, passive share, discourse-connective inventory per sentence, mean dependency depth, pronoun antecedence-chain length | none |
 | C | lexicons + regex + markdown parser | `scripts/style_check.py` | 6 deterministic function reports: source-domain consistency, discourse-structure markers (RST-tagged), analogical cascade, worldview lexicon match / anti-match, register-discipline patterns, fact-density floor | none |
 
-The three generation calls — `draft`, `rephrase`, `propose` — live in `scripts/style_generate.py` and reach the model picker in the usual way. The model is called when the loop needs new text. The model is never asked to judge.
+The three generation calls (`draft`, `rephrase`, `propose`) live in `scripts/style_generate.py` and reach the model picker in the usual way. The model is called when the loop needs new text. The model is never asked to judge.
 
 The thirteenth touch point is the `BANDS.yaml` file in `process/planning/writing-kernel/`. It holds the per-mode target bands for every Layer A and Layer B feature. The script reads it. Humans edit it through the `BANDS-CHANGELOG.md` discipline, not freely.
 
