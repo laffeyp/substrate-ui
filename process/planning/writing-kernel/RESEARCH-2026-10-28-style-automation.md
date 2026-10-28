@@ -42,18 +42,50 @@ Six features that need part-of-speech tagging or dependency parsing (spaCy, Stan
 - Average dependency tree depth per sentence.
 - Pronoun antecedence-chain length — in the paragraph: `the stochastic process` carries through 6 sentences.
 
-### Layer C — judgment features, needing a reader
+### Layer C — deterministic functions over labelled features
 
-Six features that need an LLM-as-judge against a named rubric, not pattern matching.
+The project's own paragraph names the right handling for an LLM: a stochastic process orchestrated as what it is. That orchestration applies here. The checks the field treats as "LLM-as-judge" problems — metaphor consistency, discourse structure, worldview — are mostly not. They are deterministic functions over labelled lexicons and structured features, the same methodology as Layer A operating on different features. The model is reserved for the narrow calls where only meaning answers; it is called by name as a function, not asked to judge.
 
-- Conceptual-metaphor consistency: are source domains mixed within one sentence? (Shutova 2017)
-- Toulmin completeness: claim, data, warrant, backing — all present or named-as-absent?
-- Analogical cascade present when the mode calls for one?
-- Worldview commitments: do the ontological and epistemic commitments of the piece align with the paragraph's (stochastic process, comprehension by inspection, craft frame, inclusive-we, explicit argument)?
-- Register discipline: no bow-tying summary, no "In conclusion," no bolded-lead tri-items, no decorative puffery.
-- Negative markers: zero puffery, zero vacuous caveats, zero slogans written for rhythm.
+**The analogy is a tool for a sense the model does not have.** A model does not hear audio; a sound-analysis function hears the audio and injects the labelled result — fundamental frequency, spectral centroid, onset positions — back in a form the model can read. The model does not strain over raw bytes; the model reads a labelled report and acts. Function-call ≠ tool-use. A function has a specific purpose. The purpose here is to let the stochastic generator take a defined action in the real world: land a piece of writing on the project's standard.
 
-**All three layers run on the same text in sequence.** Layer A is a counter. Layer B is a tagger. Layer C is a reviewer. Each is cheaper and faster than the one above it. A rewriter that hits all three layers is honest; one that stops at Layer A is cosmetic.
+Six checks previously placed in Layer C, each as a deterministic function.
+
+- **Conceptual-metaphor source-domain consistency.** A source-domain lexicon (SIGHT, CRAFT, FLUID-FLOW, CONTAINER, PATH, WAR, MACHINE, …) maps each content word to zero or more source domains. A sentence with content words from two source domains that argue to each other is a mixed metaphor. The function returns the span, the two source domains, and the clashing words. The MetaNet repository and the Master Metaphor List (Lakoff 1994) are the base lexicon; the project's own cluster (SIGHT, CRAFT, FLOW) is extended as writing accumulates.
+
+- **Discourse-structure markers.** The Toulmin shape in the paragraph shows at the surface through discourse connectives: `because` and `for correctness sake` mark warrant; `provably` marks backing; `but` marks rebuttal; `instead of` marks contrast. A function tags every connective by its Rhetorical Structure Theory relation (Mann & Thompson 1988) and returns a per-sentence inventory: `S2 [temporal + consequence], S3 [contrast], S4 [cause], S5 [purpose], S6 [adversative + concession], S7 [additive]`. The writer reads the inventory and sees whether the structure the mode calls for is present. The function never says "the warrant is wrong"; it reports "no cause connective was found in a paragraph the mode marks as needing one."
+
+- **Analogical cascade detection.** A cascade is lexical-field diversity across sentences. The function partitions content words by source domain (same lexicon as the metaphor check) and reports the cross-sentence pattern. "Three source domains, two in the first half, one in the second, bound at S8-S9 by anaphora" is a cascade. "One source domain across every sentence" is not. The function reports; the writer decides.
+
+- **Worldview lexicon checks.** The five commitments in §3 each map to a measurable surface, each a lexicon pair.
+  - *Stochastic-process ontology.* Match list: `stochastic, statistical, probabilistic, sample, sampling, distribution, variance, process, generate, output, token`. Anti-match list: `thinks, wants, knows, decides, understands, feels, agrees` with the model as subject. Fail: anti-match ≥ 1 and match = 0.
+  - *Comprehension-by-inspection epistemology.* Match list: `visible, legible, interpretable, inspect, read, trace, log, record, see, show`. Anti-match list: `impressive, surprising, powerful, remarkable, amazing, cutting-edge, revolutionary`. Fail: anti-match ≥ 2.
+  - *Craft frame aesthetics.* Match list: `tool, saw, build, orchestrate, control, drive, operate, run, assemble, author`. Anti-match list: `just works, magic, intelligent, smart, assistant, helper`. Fail: anti-match ≥ 1.
+  - *Inclusive-we social.* Already Layer A pronoun density.
+  - *Explicit-argument rhetoric.* Already the discourse-connective count above.
+
+- **Register-discipline pattern checks.** Regex and markdown parse, both deterministic.
+  - Closers: `(^|\n)\s*(In conclusion|Overall|In summary|To conclude|Finally,)` → fail.
+  - Bolded-lead bullets: a markdown list where the first inline element of each item is `**…**` across ≥ 3 items → fail.
+  - Decorative tri-items: three parallel noun phrases joined by `and` in a sentence otherwise unargued → the function flags; the writer judges whether the tricolon earns a terminal cadence.
+  - Vacuous caveats: a published pattern list — `results may vary, that said, it depends, your mileage may vary, it is worth noting that, importantly, notably, obviously` → fail on each hit.
+
+- **Fact-density floor.** Every sentence should carry a fact. The function flags sentences whose content-word density falls below 35 %. Heuristic, not a model call, reported as such.
+
+Six checks, zero model calls. The lexicons and pattern lists are the project's working surface alongside the edit catalogue of §4.
+
+### What the model is for
+
+Three narrow function-calls where no deterministic function stands in. Each has a signature, a structured input, a structured output.
+
+| Call | Input | Output | Purpose |
+|---|---|---|---|
+| `semantic_bridge(p1, p2, features)` | two paragraphs plus their Layer A/B vectors | `continues \| shifts(reason)` | catches the semantic bridge the lexicons miss |
+| `claim_check(sentence, surrounding)` | one claim sentence plus context | `defensible \| hedge \| contestable` + reason | subject-matter accuracy the project does not itself encode |
+| `vocab_align(word, sentence, commitments)` | a new word, its sentence, the five commitments | per-commitment `align \| neutral \| betray` | feeds the lexicon-maintenance loop — a repeated `betray` hit adds the word to the anti-match list |
+
+The model is called by name, with a function signature, for a specific question only meaning answers. Not "tell me whether this passage is in the right style" (a judgment call that re-anthropomorphises the model). "Does the word *delve* in this sentence align with the stochastic-process ontology?" (a semantic match the model does well). The three calls above are the full inventory. Everything else is a function.
+
+**All three layers run on the same text in sequence.** Layer A is a counter. Layer B is a tagger. Layer C is a function suite — six deterministic checks plus three narrow model calls. Each is cheaper and faster than the one above it. A rewriter that hits all three layers is honest; one that stops at Layer A is cosmetic.
 
 ## 2. Modes and their weights
 
@@ -106,7 +138,7 @@ The rewriter is a measure-and-edit loop. Given a draft and a target mode, it pro
    - Mixed metaphor → consolidate to one source domain.
    - First-person imbalance → add or remove `we` tokens.
 5. **Re-measure.** Loop until every feature is in-range or until `max_edits` is reached.
-6. **Layer C check.** Hand the result to an LLM reviewer with the Layer C rubric. Return the review alongside the rewritten text.
+6. **Layer C check.** Run the six deterministic functions over the rewritten text; invoke the three narrow model calls only where their signatures apply. Return the function reports and any model answers alongside the rewritten text. No general "is this good?" prompt is sent to a model.
 
 ### Why this is not blind
 
@@ -184,15 +216,15 @@ All of Layer A. The analyser `scratchpad/analyze.py` computed every Layer A numb
 
 Layer B. spaCy or Stanza. One Python dependency. One-day task to wire into the measurement script. The pre-commit hook can run both on changed `.md` files inside `process/planning/`.
 
-### Needs a model
+### Reserved for narrow model calls
 
-Layer C. Any of the drivers already in the project's own picker. One prompt, one rubric, one JSON reply. One-day task to wire.
+Three function-calls listed in §1's Layer C block: `semantic_bridge`, `claim_check`, `vocab_align`. Each has a typed input and a typed output. Any of the drivers already in the project's own picker will serve. Wiring is one day per call. Everything else in Layer C runs as a Python function over a lexicon.
 
 ### Open research questions
 
 - The Germanic-Latinate pair list is partially published (Orwell, Hemingway studies) but incomplete. Needs assembly, probably from the Oxford Historical Thesaurus plus the General Service List.
 - The weights in §2's table are first-draft. They need calibration against a few hand-rewritten pieces per mode: write one commit message, one README section, one chat reply in the style, measure each, read back the gaps, adjust weights, repeat until the measurements agree with the writer's eye.
-- The worldview rubric in §3 is written for a human reviewer. For Layer C to run it as an LLM-judge the rubric needs the standard LLM-as-judge triangulation: a reference positive example, a reference negative example, and a scored rubric per commitment.
+- The worldview lexicons in §1's Layer C block are first-draft. Each match/anti-match list grows as the project's writing accumulates — the `vocab_align` function feeds the maintenance loop by proposing additions, which the writer accepts or rejects.
 - Scale 4 — project-wide drift — needs a pass that reads every active doc, computes its profile, and clusters. The clustering problem is open: how much variance within one project is healthy versus how much is drift?
 
 ## 8. What this makes possible
