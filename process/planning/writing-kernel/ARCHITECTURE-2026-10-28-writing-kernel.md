@@ -36,7 +36,11 @@ The rewriter runs one OODA cycle per iteration. **Observe**: Layer A, B, C count
 
 The per-mode target bands in `BANDS.yaml` are statistical control limits. Default band width is **median ± 2 MAD** across the mode's dated set, which gives a non-parametric three-sigma analogue robust to the small-sample reality of the project's writing. Out-of-band means out of control. A feature that drifts out of band in three consecutive new documents triggers an investigation, not an immediate band move. Band moves themselves are PDCA Act events.
 
-### 2.4 Pipe-and-filter architecture (McIlroy 1964)
+### 2.4 Monotone local search (Appel 1969; Glover 1986; Hoos & Stützle 2004)
+
+The rewriter is a monotone hill-climbing procedure with a composite loss (Lyapunov function), a Pareto hard-constraint subset, a tabu list on rejected spans, and a `rephrase`-based escape at local optima. The algorithmic family is covered in Russell & Norvig's AI textbook (Ch. 4, local search) and in Hoos & Stützle's monograph on stochastic local search. The choice of monotone descent over simulated annealing or genetic search is deliberate: the loss here is cheap to compute and the action space is discrete and small, so the simplest convergent variant is the correct one. §5 specifies the algorithm in full.
+
+### 2.6 Pipe-and-filter architecture (McIlroy 1964)
 
 The rewriter is a chain of filters composed through a common interchange format (a `StyleReport` dataclass carrying text, feature vector, and edit log). Each filter has one input shape and one output shape. The chain is defined in `scripts/style_rewrite.py` and reads top-to-bottom like a Unix pipeline:
 
@@ -46,23 +50,23 @@ measure_a | measure_b | check_c | rank_gaps | pick_edit | apply_edit | measure_a
 
 The pattern buys three things: each filter is independently testable, filters can be replaced without touching their neighbours, and the composition is debugged by inspecting the StyleReport at each hop.
 
-### 2.5 Dataflow / Kahn process networks (Kahn 1974)
+### 2.7 Dataflow / Kahn process networks (Kahn 1974)
 
 The Substrate topology version of the rewriter is a Kahn process network. Each producer reads from one or more input queues and writes to one or more output queues. The topology inherits determinism from Kahn: for the same inputs and the same lexicons, the output is identical. Model calls introduce stochasticity precisely where the design allows it, inside the `draft` and `rephrase` producers.
 
-### 2.6 Information hiding (Parnas 1972)
+### 2.8 Information hiding (Parnas 1972)
 
 Each measurement layer is a module behind a stable interface. The interface is a function signature, not a Python class. Layer A's interface is `measure(text: str) -> dict[str, float]`. Layer B's is `tag(text: str) -> dict[str, Any]` where `Any` is spaCy's `Doc`. Layer C's is `check(text: str, tagged: Any) -> dict[str, FunctionReport]`. The internals (which syllable heuristic Layer A uses, which lexicons Layer C loads, which tagger version Layer B pins) can change without rewriting the rewriter.
 
-### 2.7 Software metrics tradition (McCabe 1976, Halstead 1977)
+### 2.9 Software metrics tradition (McCabe 1976, Halstead 1977)
 
 McCabe's cyclomatic complexity and Halstead's volume are precedents, not borrowings. They established that useful code metrics are language-independent counts over a tokenised text, computed deterministically, interpreted against population bands. The writing-kernel adopts the same methodology on natural-language text. Layer A is the writing-kernel's cyclomatic-complexity analogue: cheap, deterministic, universally applicable, interpreted against bands tuned to the project.
 
-### 2.8 Semantic versioning (Preston-Werner 2013)
+### 2.10 Semantic versioning (Preston-Werner 2013)
 
 Lexicons and bands are versioned by semver. **Major**: a change that reclassifies existing writing (e.g., adding a new commitment to the worldview check). **Minor**: a new lexicon entry or a new mode weight that does not reclassify. **Patch**: a typo fix or a renamed variable. Each release writes a tagged commit on the semver tag naming the changelog entries it bundles. Readers reproduce any past measurement by checking out the tag.
 
-### 2.9 ISO/IEC 25010 software quality model
+### 2.11 ISO/IEC 25010 software quality model
 
 The kernel targets five of the eight sub-characteristics explicitly.
 
@@ -76,11 +80,11 @@ The kernel targets five of the eight sub-characteristics explicitly.
 
 Performance efficiency, usability, security, and modifiability are implicit; none demand a dedicated test gate at v0.
 
-### 2.10 Test-driven development (Beck 2002)
+### 2.12 Test-driven development (Beck 2002)
 
 Every edit function in the catalogue ships with a behaviour test that applies it to a known-bad fixture and asserts the targeted feature moves. The test lives next to the function. No edit function lands without its test. This is the sdd-kit-4 observation contract applied inside Python.
 
-### 2.11 Conway's law (Conway 1968)
+### 2.13 Conway's law (Conway 1968)
 
 The kernel's module structure mirrors the project's vocabulary-as-contract methodology. A measurement layer is a module with a locked interface, exactly as a Substrate signal is a tag with a locked vocabulary. The isomorphism is deliberate; the kernel is architecturally continuous with the surrounding project.
 
@@ -215,86 +219,133 @@ propose(commitment: str, direction: Literal["match", "anti"]) -> list[str]
 
 **Interface.** Python functions wrapping the project's existing model picker. **Determinism.** No (stochastic by design). **Model calls.** One per invocation. **Portability.** Depends on the picker; the picker is already in the project.
 
-## 5. The rewriter: sequence and state machine
+## 5. The rewriter: monotone local search
 
-### 5.1 Pipeline shape
+### 5.1 The problem class
 
-The rewriter is a filter chain operating on a `StyleReport` dataclass:
+A rewrite that measures, picks, edits, re-measures, and re-picks can cycle. Nothing in that shape forbids applying an edit, undoing it on the next iteration, and repeating forever. A stopping condition on iteration count masks the cycle; it does not forbid it. The rewriter needs an **improvement condition** that gates every accepted change on real progress.
+
+The problem is **multi-objective local search over a discrete action space** with twelve features, per-mode weights, and target bands. The relevant algorithm classes are hill climbing (Appel 1969), trust-region methods (Fletcher 1987), tabu search (Glover 1986), and stochastic local search in general (Hoos & Stützle 2004). The variant chosen is **monotone hill climbing with Pareto hard constraint on weight-1.0 features and tabu-based cycle prevention**, with escape via `rephrase` when the catalogue is stuck.
+
+### 5.2 The composite loss function
+
+The rewriter decides whether to accept an edit by comparing a single scalar before and after. The scalar is a weighted sum of per-feature penalties:
 
 ```
-StyleReport = {
-  text: str,
-  features: dict[str, float],
-  tagged: spacy.Doc,
-  reports: dict[str, FunctionReport],
-  gaps: list[Gap],
-  edits_applied: list[EditEntry],
-  iteration: int,
-}
+L(text, mode) = Σ_i  w_i(mode) × max(0, |f_i(text) − c_i|  −  r_i)
 ```
 
-Each filter in the chain reads and writes a `StyleReport`. The chain is explicit in `scripts/style_rewrite.py`.
+where `f_i` is feature *i*, `c_i` is the centre of its target band, `r_i` is half the band width, and `w_i(mode)` is the feature's weight in the mode (0 to 1 per the research doc §2 table). The penalty is **zero inside the band** and grows linearly outside. L is non-negative; L = 0 means every feature is in-band at full weight.
 
-### 5.2 Sequence diagram
+L is a **Lyapunov function** for the loop: an edit is accepted only when applying it strictly decreases L. Because L is bounded below by 0 and strictly decreasing on every accepted step, the sequence of L values is monotone and converges. The loop halts at a fixed point.
 
-```mermaid
-sequenceDiagram
-  participant W as Writer
-  participant R as Rewriter
-  participant A as Layer A
-  participant B as Layer B
-  participant C as Layer C
-  participant E as Edit Catalogue
-  participant M as Model
+### 5.3 Constraints on acceptance
 
-  W->>R: run(file, mode)
-  R->>A: measure(text)
-  A-->>R: 12 counts
-  R->>B: tag(text)
-  B-->>R: 6 features + Doc
-  R->>C: check(Doc, lexicons)
-  C-->>R: 6 reports
-  loop until in-band or iter == cap
-    R->>R: rank weighted gaps
-    R->>E: edit_for(top_gap)
-    alt catalogue has edit
-      E-->>R: edit_fn
-      R->>R: apply(edit_fn, span)
-    else no catalogue edit
-      R->>M: rephrase(span, reason)
-      M-->>R: candidates
-      R->>C: check(candidate)
-      C-->>R: pass or fail
-      R->>R: keep first passing
-    end
-    R->>A: measure(text)
-    A-->>R: new 12 counts
-  end
-  R-->>W: rewritten text, final features, gap report, edit log
+An edit is accepted when **both** conditions hold.
+
+- **Monotone descent.** `L_new < L_old` strictly.
+- **Pareto hard constraint.** No feature with mode weight 1.0 moves from in-band to out-of-band. A hard-weight feature already out of band may improve; one already in-band may not degrade across the band boundary. This is a Pareto improvement over the subset of hard features.
+
+Rejection on either condition sends the span to a **tabu list** (Glover 1986) for the next *N* iterations (default *N* = 3). The tabu prevents re-trying the same failed edit immediately, which would otherwise burn iterations.
+
+### 5.4 Termination
+
+Three exit paths. Only the first is a success.
+
+| Exit | Condition | Interpretation |
+|---|---|---|
+| **Success** | L = 0 after an acceptance | every weight-1.0 feature in band, every soft feature at or inside its band |
+| **Local optimum** | no gap in the ranked list admits an accepted edit this iteration | the catalogue plus `rephrase` cannot improve from here |
+| **Cap (safety net)** | iteration count reaches `CAP` | should not fire in practice; investigated as a defect if it does |
+
+The termination guarantee is formal, not nominal. Monotone descent + bounded-below loss + finite discrete edit space means the loop halts in finite steps independent of CAP. **CAP is not the stopping condition**; the local-optimum exit is. CAP is a smoke alarm.
+
+### 5.5 Escape from a local optimum
+
+A local optimum is not the global optimum. When no catalogue edit improves L, the rewriter calls `rephrase(span, reason)` on the span tied to the largest residual weighted gap. The model returns candidates. Each candidate is scored by L; the lowest-L candidate is tested against the Pareto constraint. If it passes, it is accepted and the loop continues. If it does not, the loop halts and writes a halt note.
+
+Two deliberate choices here. First, `rephrase` is invoked only at local optima, not on every iteration; the model's stochasticity is the escape mechanism, not the primary driver. Second, `rephrase` candidates face the same monotone-descent gate; the loop never accepts a model-generated candidate that fails to improve L.
+
+### 5.6 The algorithm, in pseudocode
+
+```
+function rewrite(text, mode):
+    L = compute_loss(text, mode)
+    tabu = deque(maxlen=N)
+    iter = 0
+    while iter < CAP:
+        gaps = rank_gaps(text, mode)
+        if not gaps:
+            return SUCCESS, text, L, iter
+        accepted = False
+        for gap in gaps:
+            if gap.span in tabu: continue
+            candidate = apply_catalogue_edit(text, gap)
+            if candidate is not None:
+                L_new = compute_loss(candidate, mode)
+                if L_new < L and no_hard_violation(candidate, mode):
+                    text, L = candidate, L_new
+                    accepted = True
+                    break
+                else:
+                    tabu.append(gap.span)
+                    continue
+        if not accepted:
+            # local optimum under the catalogue; try rephrase on the top gap
+            top = gaps[0]
+            candidates = rephrase(top.span, top.reason)
+            best = pick_lowest_loss(candidates, text, mode)
+            if best is not None and L(best) < L and no_hard_violation(best, mode):
+                text, L = best, L(best)
+                accepted = True
+            else:
+                return LOCAL_OPTIMUM, text, L, iter
+        iter += 1
+    return CAP, text, L, iter
 ```
 
-### 5.3 State machine
+### 5.7 State diagram, with the improvement gate
 
 ```mermaid
 stateDiagram-v2
   [*] --> Measuring
-  Measuring --> Checking: features ready
-  Checking --> Ranking: reports ready
-  Ranking --> Editing: top gap chosen
-  Editing --> ReMeasuring: edit applied
-  ReMeasuring --> Checking: new features
-  Checking --> Done: all weight-1.0 in band
-  Checking --> Done: iteration cap hit
-  Done --> [*]
+  Measuring --> Ranking: features computed
+  Ranking --> TryCatalogueEdit: top gap picked
+  TryCatalogueEdit --> ComputeLoss: candidate produced
+  TryCatalogueEdit --> TryNextGap: no catalogue edit for this gap
+  ComputeLoss --> Accept: L_new < L AND no hard violation
+  ComputeLoss --> Tabu: L_new >= L OR hard violation
+  Tabu --> TryNextGap
+  TryNextGap --> TryCatalogueEdit: more gaps
+  TryNextGap --> TryRephrase: all gaps exhausted
+  Accept --> Measuring
+  TryRephrase --> ComputeLoss: candidates produced
+  TryRephrase --> LocalOptimum: no rephrase candidate improves
+  Measuring --> Success: L == 0
+  LocalOptimum --> [*]
+  Success --> [*]
+  Measuring --> Cap: iter >= CAP (safety net)
+  Cap --> [*]
 ```
 
-Six states, seven transitions. The transitions are deterministic. The rewriter never consults a model to decide a state transition.
+Nine states, twelve transitions. Every transition out of `ComputeLoss` depends on the improvement gate, not on an iteration count. CAP is only reachable through `Measuring → Cap` and is a safety transition expected never to fire in a working configuration.
 
-### 5.4 Stopping
+### 5.8 Correctness
 
-Two stop conditions. First: every feature with weight 1.0 in the mode's weights table is inside its band. Second: the iteration cap is reached (default 20, configurable per mode). The first is a success; the second is a halt that produces a report naming the features that stayed out of band.
+- **Lyapunov argument.** L is non-negative. Every accepted edit strictly decreases L. Therefore the L-sequence is monotone decreasing and bounded below, hence convergent (Banach fixed-point theorem for discrete descent).
+- **Finite steps.** The edit catalogue is finite. The `rephrase` candidate set per invocation is finite. The tabu excludes recently rejected spans. The feature vector lies in a bounded region. Finite action space + strict descent + bounded loss ⇒ finite iterations to a fixed point.
+- **Cycle freedom.** Because L strictly decreases on every acceptance, no state visited is re-visited. The tabu prevents a rejected edit from being retried on the next iteration, which would otherwise waste a cycle without violating descent.
+- **Pareto preservation.** The hard-constraint check runs on every candidate. No candidate that would push a weight-1.0 feature out of band is ever accepted.
 
-A halt is treated as sdd-kit halt-and-articulate: the kernel writes a `HALT-<date>-<file>.md` entry under `writing-kernel/halts/` naming the file, the mode, the final feature vector, the gaps, and the edits attempted. A writer reads the halt and does one of three things: hand-rewrite the file, extend the edit catalogue to cover the missing transformation, or move the band because the band was wrong. Each path leaves a logged entry.
+### 5.9 Halt-and-articulate on local optimum with residual gaps
+
+A `LOCAL_OPTIMUM` exit with L > 0 means the kernel's catalogue plus the model's `rephrase` could not close the remaining gaps. The kernel writes a halt note at `writing-kernel/halts/HALT-<date>-<file>.md` naming: the file, the mode, the final feature vector, the residual weighted gaps, the catalogue edits attempted, the spans in the tabu, the `rephrase` candidates that were rejected, and the loss trajectory. The writer reads the halt and does one of three things.
+
+- **Hand-rewrite the span.** The edit the catalogue missed is applied by hand; the writer may propose the edit as a new entry in `style_edits.py` via the PDCA cycle in §7.4.
+- **Extend the catalogue.** The writer writes a new edit function + its test, which closes the gap in future runs.
+- **Move the band.** If the band was wrong for the mode, the writer logs a weight or band change per §7.2 or §7.3.
+
+Each path produces a changelog entry. A halt is never silently absorbed.
 
 ## 6. The writer: three shapes
 
@@ -477,7 +528,7 @@ Steps 1-6 are deterministic Python. Step 7 integrates the model. Steps 8-10 comp
 | Layer B | decidable within a pinned tagger version | spaCy pinned in `pyproject.toml`; same text yields same output |
 | Layer C functions | decidable given the lexicon state | lexicons are files; function output is a function of its text input and lexicon state |
 | Edit catalogue | tested per entry | TDD discipline: no edit lands without a test showing the targeted feature moves |
-| Rewriter loop | terminates by cap | iteration cap enforced in code; halt documented when hit |
+| Rewriter loop | terminates at a local optimum (not by cap) | the composite loss L is a Lyapunov function; every accepted edit strictly decreases L; L is bounded below by 0; the action space is finite; by Banach fixed-point reasoning on a discrete descent, convergence in finite steps is guaranteed independent of CAP. CAP is a safety net; a CAP exit is treated as a defect. |
 | Generation calls | stochastic by design | model output is non-deterministic; the loop's scoring is deterministic |
 | Lexicon growth | audited via held-out set | every lexicon change writes a changelog entry naming the held-out delta |
 | Band moves | audited via dated set | every band change writes a changelog entry naming the set size and MAD |
@@ -504,7 +555,12 @@ Boyd, J. 1976. "Destruction and Creation." Air University (OODA loop).
 Brown, S. 2018. *The C4 Model for Visualising Software Architecture.* leanpub.com.
 Conway, M. E. 1968. "How Do Committees Invent?" *Datamation.*
 Deming, W. E. 1950 (and later). Lectures on statistical quality control in Japan.
+Appel, K. 1969. "The Diameter of a Graph." Early formal statement of hill-climbing in combinatorial optimisation.
+Fletcher, R. 1987. *Practical Methods of Optimization,* 2nd ed. Wiley (trust-region methods).
 Flesch, R. 1948. "A new readability yardstick." *Journal of Applied Psychology* 32(3).
+Glover, F. 1986. "Future paths for integer programming and links to artificial intelligence." *Computers & Operations Research* 13 (tabu search).
+Hoos, H. H., & Stützle, T. 2004. *Stochastic Local Search: Foundations and Applications.* Elsevier.
+Russell, S. J., & Norvig, P. 2020. *Artificial Intelligence: A Modern Approach,* 4th ed., Ch. 4 (local search and optimisation).
 Fries, C. C. 1952. *The Structure of English.* Harcourt.
 Gunning, R. 1952. *The Technique of Clear Writing.* McGraw-Hill.
 Halstead, M. H. 1977. *Elements of Software Science.* Elsevier.
