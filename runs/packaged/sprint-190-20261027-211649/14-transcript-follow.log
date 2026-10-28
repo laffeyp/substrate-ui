@@ -1,0 +1,9 @@
+ok   transcript overflows (1326px content in a 414px view, 9 turns)
+ok   following: the view stayed at the bottom after every turn (worst gap 0px)
+ok   reading: the new turn added content (1326 → 1470px)
+ok   reading: the row being read stayed put (54 → 54)
+ok   resume: following resumed at the bottom (gap -0.5px)
+ok   switch: scrolled-up position survived terminal → reveal → terminal (538 → 538)
+ok   switch: at the bottom before the switch, following after it (gap -0.5px; {"top":1344.5,"height":1758,"client":414,"dist":-0.5})
+transcript_follow: all passed
+EXIT=0

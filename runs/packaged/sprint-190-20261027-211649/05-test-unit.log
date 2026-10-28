@@ -1,0 +1,76 @@
+
+> substrate-ui-e2e@1.1.0 test:unit
+> npm run --silent signals && npx tsx --test web/reveal/__tests__/*.spec.ts
+
+[vm-vocab-parity] OK — vocabulary 0.3 (36 tags: 36 live + 0 retired, locked=true); code emits 36 distinct live tag(s), all locked.
+✔ a live harness turn counts its calls and names the one still running (0.577417ms)
+✔ a finished harness turn's recap counts its calls (0.132542ms)
+✔ a harness's own call and its MCP call to Substrate each make one card, labelled (0.954959ms)
+✔ Substrate's own ToolCall rows still count as tool cards (0.072083ms)
+✔ a compaction row shows the range the kernel wrote (0.070083ms)
+✔ a v0.7 compaction row names the cleared tool output (§ S.4) (0.197333ms)
+✔ a repeated cut adds no row (the codex record repeats 17–146 three times) (0.124958ms)
+✔ an earlier fetch that resolves last does not replace the later view (0.323875ms)
+✔ one lane per watched measure, in groups (1.927625ms)
+✔ turns down, the change rule above the turn it applies to (0.311292ms)
+✔ the shift mark sits at its reply and names the setting's stated intent (0.614625ms)
+✔ bars scale to the lane's highest value so far and zero draws nothing (0.244583ms)
+✔ the readout is the selected turn's values, the last by default (0.327917ms)
+✔ one window curve per lane with window values (0.229ms)
+✔ no view, and a view with no turns, say so (0.088041ms)
+✔ numbers read plainly (0.059792ms)
+✔ deviation: bars from the lane's centre in warm-up SDs, emphasised past ±2, guides drawn (0.2515ms)
+✔ turns offer side by side and measures; a view the stream lacks falls back to its first (0.164334ms)
+✔ ribbons: width is the window, the hairline is the reply's own value, both centred (0.21025ms)
+✔ signed numbers (0.054ms)
+✔ round tops (0.050583ms)
+✔ a lane above its catalog range scales to its own values and never sits at full width (0.286875ms)
+✔ an all-zero lane has no scale and says so; the header names the unit (0.110417ms)
+✔ a divider at each lane's left edge, stronger where a group starts (0.119667ms)
+✔ deviation before the warm-up says when it starts and how far the session is (0.147458ms)
+✔ side by side: the message left of centre, the reply right, one scale for both (0.205375ms)
+✔ measures: the pair measures in the palette's colours, grouped LENGTH, ECHO, STYLE (7.625458ms)
+✔ style match before its threshold: the shorter side's progress, both sides named (0.149958ms)
+✔ mdBlocks: empty string yields no blocks (0.989208ms)
+✔ mdBlocks: single paragraph (0.232875ms)
+✔ mdBlocks: fenced code block with lang (0.13275ms)
+✔ mdBlocks: fenced code block without lang (0.053958ms)
+✔ mdBlocks: unordered list with three items (0.134459ms)
+✔ mdBlocks: ordered list (0.061917ms)
+✔ mdBlocks: heading levels 1-4 (0.078542ms)
+✔ mdBlocks: paragraph then fence then paragraph (0.112334ms)
+✔ mdInlines: plain text yields one segment (0.123417ms)
+✔ mdInlines: inline code, bold, italic (0.095292ms)
+✔ renderInline: code segment applies mono font + dark bg (0.115291ms)
+✔ renderBlock: heading level 1 → 17px (0.089708ms)
+✔ renderBlock: heading level 2 → 15px, level 3+ → 13px (0.08525ms)
+✔ renderBlock: code block carries lang + text + hasLang (0.046583ms)
+✔ each setting is named (0.376458ms)
+✔ a shift follows the setting its measure answers to (0.160666ms)
+✔ only the replies' shifts since the last setting change, and since /language clear (0.085958ms)
+✔ /language off hides them; more than two in a group collapse to a count (0.066166ms)
+✔ the unit fits the span (0.421375ms)
+✔ a ticking clock counts whole seconds, then the two largest units (0.0875ms)
+✔ the column only increases; the detail adds the time into the turn (0.489542ms)
+✔ before the first flip a card opens only while its tool runs (0.28475ms)
+✔ a flip applies to every card, running or finished, and counts a generation (0.131708ms)
+✔ two copies of the module share one setting (0.057875ms)
+✔ a turn with no Park and no known failure is live and pulses (0.478041ms)
+✔ a failed turn stops pulsing and says how it ended (0.136833ms)
+✔ a turn sent after the failure is live again (0.058792ms)
+✔ a parked turn is a recap regardless of an old failure (0.044833ms)
+✔ tool calls that reuse a call id across turns keep their own result and progress (0.742334ms)
+✔ a failed turn request records the failure on the snapshot (0.165125ms)
+✔ a replayed envelope (stream reconnect) does not append its row again (0.075209ms)
+✔ a background task that ended shows as a row (0.458916ms)
+✔ background tasks: refresh fills the snapshot; stop posts and refreshes (0.307291ms)
+✔ a turn that ended with Returned is over: no pulse, no ticking clock (0.111916ms)
+ℹ tests 62
+ℹ suites 0
+ℹ pass 62
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 96.775542
+EXIT=0

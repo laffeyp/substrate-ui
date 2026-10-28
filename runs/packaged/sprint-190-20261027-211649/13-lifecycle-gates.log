@@ -1,0 +1,15 @@
+ok   F6 all windows closed (0 left)
+ok   F6 backend still serving after the last window closed
+ok   F6 activate reopened a window on the same backend (port 55307)
+ok   F6 one backend, unchanged (before 58210, after 58210)
+ok   F5 deep link attached the record and streamed its events (s_topo_2857d2b8f28248ea8c0b.record)
+ok   F6 no backend left after quit
+ok   F7 error dialog shown (Substrate could not start)
+ok   F7 dialog names the log file in packaged mode
+ok   F7 no backend left behind
+ok   F8 one backend before the kill (58997)
+ok   F8 dialog shown when the backend died (Substrate's backend stopped)
+ok   F8 dialog says how it stopped (The backend server was killed (SIGKILL). Sessions and records are on disk; relaunching reopens them.)
+ok   F8 no backend left after Quit
+lifecycle_gates: all passed
+EXIT=0

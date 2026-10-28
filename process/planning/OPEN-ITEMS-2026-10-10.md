@@ -113,3 +113,10 @@ Items 1–3 closed on 2026-10-10 (roadmap `substrate/process/planning/ROADMAP-20
 ## Topologies (2026-10-13)
 
 30. **A run with several sessions opens a window of its own** (research r8 § 3.6). Panes for runs (UI sprint 176) open one pane per run session beside the caller; Swarm is the first run with several sessions, and its card carries this window and its gate. The app has no second-window code yet.
+
+## Future direction (Architect, 2026-10-27)
+
+31. **The session topology carries the five reply failures and the re-read list in its own prompt.** The `session_prompt` producer gains two session-open sources:
+    - the five reply failures, as instructions (`sdd-kit-4/ADDENDUMS.md` E);
+    - the project's core documents (the `## Core corpus` table in its working agreement).
+    After one of Substrate's own compactions (K290–K294), the session puts the list of files the model read before the cut in front of the model, with the instruction to re-read them before writing. The session topology already records what the model read (`ToolCall` on the record), and its prompt's start survives compaction, so both sources stay in every prompt. Every topology copied from the session topology carries them.

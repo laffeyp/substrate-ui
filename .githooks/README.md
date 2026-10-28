@@ -1,23 +1,23 @@
 # .githooks/
 
-Repo-local git hooks. Git does not honor these by default — each clone
-has to point at this directory once:
+Repo-local git hooks. Git ignores this directory by default; a fresh clone points at it once:
 
 ```
 git config core.hooksPath .githooks
 ```
 
-Run that command inside a fresh clone. It's per-clone (git tracks the
-setting in `.git/config`, not in the tree).
+Per-clone (git tracks the setting in `.git/config`, not in the tree).
 
 ## What runs
 
-- `pre-commit` — runs `npm run typecheck` (`tsc --noEmit`). Any tsc
-  error aborts the commit. Ratified 2026-08-29: zero tsc errors is
-  the baseline.
+`pre-commit`, in order:
 
-## Bypassing
+1. `npm run typecheck` (`tsc --noEmit`).
+2. `npm run signals` — every `emit(...)` names a tag in `web/vm/signals/versions/0.1.json`.
+3. `../substrate/scripts/check_status_literals.sh` on `*.py`, `scripts/`, `web/` — fails on a status compared against a bare string literal.
 
-`git commit --no-verify` skips every hook. Reserve this for cases where
-you've already run `npm run typecheck` and know the failure is in code
-you're not committing. Any other use erases the baseline.
+Any step fails, the commit aborts.
+
+## Bypass
+
+`git commit --no-verify` skips every hook. Reserve for when you have already run `npm run typecheck` and `npm run signals` and know the failure sits in code you are not committing.

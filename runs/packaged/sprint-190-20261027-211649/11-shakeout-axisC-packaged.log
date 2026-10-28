@@ -1,0 +1,21 @@
+[shakeout] server up on http://127.0.0.1:54924
+
+[shakeout] flow: electron_smoke × 1
+  · run 0 … ok (2489ms, 49 emits)
+
+[shakeout] flow: electron_menu × 1
+  · run 0 … ok (2211ms, 0 emits)
+
+[shakeout] flow: electron_deeplink × 1
+  · run 0 … ok (3637ms, 0 emits)
+
+shakeout report — 2026-10-28T04:21:28.387Z
+flows: 3, runs: 3
+  electron_smoke — ok 1/1, tags green 5 / warn 0 / blocker 0 / dead 0, bugs 0
+  electron_menu — ok 1/1, tags green 0 / warn 0 / blocker 0 / dead 0, bugs 0
+  electron_deeplink — ok 1/1, tags green 0 / warn 0 / blocker 0 / dead 0, bugs 0
+
+summary — tags 5/5: 5, 4/5: 0, below: 0, dead: 0, bugs: 0
+
+[shakeout] report written to /var/folders/zy/6l9pgpls6fz1wmkf6m_5ct8m0000gn/T/substrate-shakeout-2026-10-28T04-21-17-964Z/report.json
+EXIT=0

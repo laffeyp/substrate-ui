@@ -1,0 +1,19 @@
+
+> substrate-ui-e2e@1.1.0 build
+> tsc --noEmit && tsc -p harness && npm run lint && vite build
+
+
+> substrate-ui-e2e@1.1.0 lint
+> eslint web/
+
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+vite v5.4.21 building for production...
+<script src="./support.js"> in "/reveal.html" can't be bundled without type="module" attribute
+transforming...
+✓ 33 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/reveal.html                280.51 kB │ gzip: 64.06 kB
+dist/assets/reveal-COEa9GEn.js   79.99 kB │ gzip: 24.64 kB
+✓ built in 173ms
+EXIT=0

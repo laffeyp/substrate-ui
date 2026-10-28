@@ -1,0 +1,49 @@
+[shakeout] server up on http://127.0.0.1:55020
+
+[shakeout] flow: cold_boot × 1
+  · run 0 … ok (17ms, 4 emits)
+
+[shakeout] flow: chat_one_turn × 1
+  · run 0 … ok (519ms, 55 emits)
+
+[shakeout] flow: slash_router × 1
+  · run 0 … ok (2114ms, 25 emits; 1 defect(s))
+
+[shakeout] flow: bundle_picked × 1
+  · run 0 … ok (7ms, 2 emits)
+
+[shakeout] flow: attach_existing × 1
+  · run 0 … ok (2857ms, 40 emits)
+
+[shakeout] flow: refused_turn × 1
+  · run 0 … ok (1990ms, 8 emits)
+
+[shakeout] flow: refused_open × 1
+  · run 0 … ok (1893ms, 2 emits)
+
+[shakeout] flow: stream_reconnect × 1
+  · run 0 … ok (2426ms, 57 emits)
+
+[shakeout] flow: cli_discovery × 1
+  · run 0 … ok (25940ms, 165 emits)
+
+[shakeout] flow: cli_version_picker × 1
+  · run 0 … ok (2697ms, 39 emits)
+
+shakeout report — 2026-10-28T04:22:20.139Z
+flows: 10, runs: 10
+  cold_boot — ok 1/1, tags green 4 / warn 0 / blocker 0 / dead 0, bugs 0
+  chat_one_turn — ok 1/1, tags green 12 / warn 0 / blocker 0 / dead 0, bugs 0
+  slash_router — ok 1/1, tags green 2 / warn 0 / blocker 0 / dead 0, bugs 1
+  bundle_picked — ok 1/1, tags green 2 / warn 0 / blocker 0 / dead 0, bugs 0
+  attach_existing — ok 1/1, tags green 3 / warn 0 / blocker 0 / dead 0, bugs 0
+  refused_turn — ok 1/1, tags green 2 / warn 0 / blocker 0 / dead 0, bugs 0
+  refused_open — ok 1/1, tags green 2 / warn 0 / blocker 0 / dead 0, bugs 0
+  stream_reconnect — ok 1/1, tags green 2 / warn 0 / blocker 0 / dead 0, bugs 0
+  cli_discovery — ok 1/1, tags green 0 / warn 0 / blocker 0 / dead 0, bugs 0
+  cli_version_picker — ok 1/1, tags green 0 / warn 0 / blocker 0 / dead 0, bugs 0
+
+summary — tags 5/5: 29, 4/5: 0, below: 0, dead: 0, bugs: 1
+
+[shakeout] report written to /var/folders/zy/6l9pgpls6fz1wmkf6m_5ct8m0000gn/T/substrate-shakeout-2026-10-28T04-21-37-189Z/report.json
+EXIT=1

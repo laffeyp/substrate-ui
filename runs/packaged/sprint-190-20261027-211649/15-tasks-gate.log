@@ -1,0 +1,7 @@
+ok   the strip lists the task (task bg_26244a70 · sleep 301 · 0s · stop)
+ok   one sleep 301 process is running
+ok   the task line left the strip after stop
+ok   the daemon reports bg_26244a70 stopped from the app (stopped, stopped from the app)
+ok   no sleep 301 process is left
+tasks_gate: all passed
+EXIT=0

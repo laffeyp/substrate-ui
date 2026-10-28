@@ -1,0 +1,15 @@
+  · driver roster loads … ok — 20 entries, default kimi-k2.7-code:cloud
+  · session opens on deterministic … ok — s_418f037c220b4ad282056cf0
+  · transcript grows past the local echo … ok — 3 rows
+  · UserMessage, ModelReply, Returned envelopes on the stream … ok — saw substrate.RunStarted, substrate.TriggerFired, substrate.ProducerStarted, SessionStarted, substrate.ProducerCompleted, PromptFragment, UserMessage, PromptComposed, ModelReply, LanguageProfile, Returned, substrate.TerminationMatched
+  · park reason recorded … ok — replied
+  · /help renders a slash-command listing … FAIL — (no help row)
+  · /model sets driver … ok — deterministic
+  · /ls appends a transcript row from loadLiveSessions … ok — 1 session: s_418f037c22… (parked)
+  · unknown slash surfaces a warning row … ok — unknown slash: /unknownslash. /help for the list.
+  · session ends cleanly (client) … ok — smoke_test_done
+  · session ended on the server … ok — ended
+  · controller emits every declared tag … ok — saw 17 distinct
+
+summary: 12 steps, FAILED at /help renders a slash-command listing: (no help row)
+EXIT=1

@@ -60,6 +60,34 @@
 
 ## Entries
 
+### 2026-10-28 — Sprint 190: a runbook comes from doing the thing, not describing it
+
+**Context.** The Architect asked for a documented build process. The first attempt was a runbook that described the pipeline from code reads alone, without running it. The Architect caught it. The sprint rebooted as "run every step, record every exit code, then write."
+
+**What happened.**
+- A card was written at `process/sprints/sprint-190-build-release-runbook.md`.
+- Every step `scripts/release.sh` names ran against the current tree, in order, no-Apple path, logs at `runs/packaged/sprint-190-20261027-211649/NN-<name>.log`.
+- Two findings surfaced that the release path would stop on: `ruff format --check .` wants nine files reformatted; `/help` renders no listing in the window (caught twice, by `vm_smoke.ts` and shakeout Axis A `slash_router`).
+- The unsigned bundle built, installed at `/Applications/Substrate.app`, launched clean (main pid, backend pid, log tail green).
+- The runbook came last, at `process/planning/RUNBOOK-2026-10-28-project-r3.md`, in the shape prior-art converges on (orientation, inventory, prerequisites, triggers, procedure, verification, rollback, troubleshooting, escalation, references, startup prompt).
+
+**What got in the way.**
+- **Editorializing.** The first runbook justified each instruction with a "why" sentence. The Architect called this throat-clearing. A runbook is instructions; a sentence that argues for the instruction is noise.
+- **Cross-repo reach.** The first runbook asked a reader opening `substrate-ui/` to open files in `substrate/`. Each repo owns its own orientation; the dependency is named, not duplicated.
+- **Full read of records.** The first runbook asked a reader to read `BLACKBOARD.md` and `KIT_DIARY.md` in full. Both run over a thousand lines on an active repo. Tail only.
+- **Self-grading.** The first runbook ended its orientation with a "three questions" quiz. The Architect called it theater.
+- **Dated README files.** The first attempt wrote `README-2026-10-28.md` beside `README.md`, applying the no-in-place-edits rule to the one file that cannot carry it. GitHub shows one README. Git carries history for it.
+- **Reading some of the kit, not all of it.** The first orientation listed seven files inside the SDD kit. The kit is small and the whole of it is load-bearing. "Read the kit in full" is the instruction.
+
+**What the kit could say.**
+1. A runbook is written after the pipeline has run end-to-end against the current tree, not from code reads alone. The "verified on <date>" section is the sprint's deliverable; without it the runbook is a plan.
+2. The one-README rule applies to README. The no-in-place-edits rule applies to planning docs, specs, vision notes, runbooks, memory bodies.
+3. Orientation reading lists tail BLACKBOARD and KIT_DIARY. Full reads of append-only logs waste a model's context on ground superseded by its own newer entries.
+4. A runbook names the dependency and points at its own runbook; it does not reach into the dependency's internals.
+5. Prior art for runbook form converges on nine sections: header, triggers, prerequisites, procedure, verification, rollback, troubleshooting, escalation, references. The startup prompt sits on top.
+
+---
+
 ### 2026-10-14 (late) — The app carried a language Substrate does not have, and the one surface that spoke Substrate was replaced
 
 **Context.** U185–U189 with kernel K335–K339, zeroed the same night. Postmortem `../substrate/process/planning/POSTMORTEM-2026-10-14-create-topology-without-substrate-r2.md`. The kernel's diary carries the root of it; this entry is the app's side.

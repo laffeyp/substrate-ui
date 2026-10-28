@@ -1,0 +1,14 @@
+
+> substrate-ui-e2e@1.1.0 test:py
+> uv run --project ../substrate python -m pytest tests/ -q -p no:cacheprovider
+
+...............................ssss.s................................... [ 27%]
+........................................................................ [ 54%]
+........................................................................ [ 82%]
+..............................................                           [100%]
+=========================== short test summary info ============================
+SKIPPED [1] tests/test_driver_profile_120.py:138: a real Codex turn; run on demand with SUBSTRATE_LIVE_DRIVER_TESTS=1
+SKIPPED [3] tests/test_driver_profile_120.py:152: real driver turns; run on demand with SUBSTRATE_LIVE_DRIVER_TESTS=1
+SKIPPED [1] tests/test_driver_profile_120.py:191: a real Claude turn and commit; run on demand with SUBSTRATE_LIVE_DRIVER_TESTS=1
+257 passed, 5 skipped in 130.92s (0:02:10)
+EXIT=0

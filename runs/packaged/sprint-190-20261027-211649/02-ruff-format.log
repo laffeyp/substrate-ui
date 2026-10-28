@@ -1,0 +1,11 @@
+Would reformat: harness/shakeout/fixtures/write_session_shapes.py
+Would reformat: harness/shakeout/lib/prompt_after_change.py
+Would reformat: tests/test_cli_adapter_discovery_133.py
+Would reformat: tests/test_daemon_uses_standard_121.py
+Would reformat: tests/test_dellm_slash_122.py
+Would reformat: tests/test_driver_slash_pass_through_123.py
+Would reformat: tests/test_language_shift_route_172.py
+Would reformat: tests/test_run_routes_182.py
+Would reformat: tests/test_session_patch_fields_parity_162.py
+9 files would be reformatted, 62 files already formatted
+EXIT=1
