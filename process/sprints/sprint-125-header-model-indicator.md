@@ -3,7 +3,8 @@
 ```yaml
 ---
 id: 125
-status: open
+status: superseded
+status_note: superseded by sprint 139 (OPEN-ITEMS-2026-10-10.md)
 phase: 1
 pass_kind: functional
 roadmap: substrate-ui/process/planning/ROADMAP-2026-10-10-model-picker-in-the-workspace-bar.md

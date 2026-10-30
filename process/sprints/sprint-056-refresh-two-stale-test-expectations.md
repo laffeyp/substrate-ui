@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 056
-status: open
+status: pending
 phase: 7
 pass_kind: hygiene
 ---

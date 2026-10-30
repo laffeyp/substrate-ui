@@ -1,5 +1,8 @@
 # Sprint 063a — caret opens the card in place
 
+status: reverted
+status_note: POSTMORTEM-2026-09-23-caret-in-place-toggle.md: everything reverted
+
 Opened 2026-09-23. Anchors on the reveal-shell hardening plan
 at `process/planning/PLAN-2026-09-23-reveal-shell-hardening.md`.
 Supersedes the "Caret pin — separate small win" note there; the

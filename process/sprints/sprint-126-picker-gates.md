@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 126
-status: open
+status: pending
 phase: 1
 pass_kind: functional
 roadmap: substrate-ui/process/planning/ROADMAP-2026-10-10-model-picker-in-the-workspace-bar.md

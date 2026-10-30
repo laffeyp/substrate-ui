@@ -3,7 +3,8 @@
 ```yaml
 ---
 id: 037
-status: split-into-037a-and-037b
+status: superseded
+status_note: split into 037a and 037b
 phase: 5
 pass_kind: implementation
 ---

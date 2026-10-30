@@ -1,6 +1,7 @@
 ---
 id: 095
-status: closed (095a–c); 095d (kernel release) awaits the Architect
+status: closed-partial
+status_note: closed (095a–c); 095d (kernel release) awaits the Architect
 repos: substrate (kernel) + substrate-ui
 class: F (Hohpe & Woolf, Claim Check + Content Enricher; Fowler, Event Sourcing "Complete Rebuild")
 supersedes: 092a, 092b

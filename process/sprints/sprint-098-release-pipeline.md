@@ -1,6 +1,7 @@
 ---
 id: 098
-status: built; first full run waits on a commit and the kernel 1.1.2 release (Architect)
+status: closed-partial
+status_note: built; first full run waits on a commit and the kernel 1.1.2 release (Architect)
 class: C (Humble & Farley, "only build your binaries once"; Apple TN2206, sealed resources)
 ---
 

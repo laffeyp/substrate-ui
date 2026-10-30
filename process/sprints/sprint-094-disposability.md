@@ -1,6 +1,7 @@
 ---
 id: 094
-status: closed (source mode); packaged parity waits on sprint 098
+status: closed-partial
+status_note: closed (source mode); packaged parity waits on sprint 098
 class: D (Twelve-Factor IX; Python signal and socketserver docs; Electron single-instance example)
 ---
 

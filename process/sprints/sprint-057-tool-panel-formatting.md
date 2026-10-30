@@ -1,5 +1,8 @@
 # Sprint 057 — tool-panel formatting (ANSI, line-gutter, wrap, lazy hilighter)
 
+status: reverted
+status_note: POSTMORTEM-2026-09-23-sprint-057-tool-panel-reverted.md
+
 Opened 2026-09-23.
 
 ## Why

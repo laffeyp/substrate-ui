@@ -1,6 +1,7 @@
 ---
 id: 190
-status: pending
+status: closed
+status_note: ran end to end 2026-10-27; found two failures: ruff format check, /help shows no listing
 phase: 10
 pass_kind: observation
 ---

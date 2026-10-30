@@ -1,6 +1,7 @@
 ---
 id: 191
-status: pending
+status: closed
+status_note: commit d4322e1; 206 of 206 tracked source files carry the header
 phase: 10
 pass_kind: functional
 ---

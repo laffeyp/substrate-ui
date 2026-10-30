@@ -1,7 +1,7 @@
 ---
 sprint: 014
 slug: assay-view
-status: done
+status: closed
 pass_kind: web-frontend
 cadence: plan-mode-per-sprint
 context_files:

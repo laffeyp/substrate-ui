@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 090
-status: done
+status: closed
 opened_at: 2026-09-29
 phase: config-externalization
 pass_kind: functional

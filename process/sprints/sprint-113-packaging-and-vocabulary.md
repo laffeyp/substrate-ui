@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 113
-status: open
+status: pending
 opened_at: 2026-10-08
 pass_kind: remediation
 roadmap: substrate-ui/process/planning/ROADMAP-2026-10-08-lens-audit-remediation.md

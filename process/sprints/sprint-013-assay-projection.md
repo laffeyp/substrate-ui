@@ -1,7 +1,7 @@
 ---
 sprint: 013
 slug: assay-projection
-status: done
+status: closed
 pass_kind: backend
 cadence: plan-mode-per-sprint
 context_files:

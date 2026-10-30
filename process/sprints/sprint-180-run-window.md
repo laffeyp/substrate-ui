@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 180
-status: open
+status: pending
 phase: topologies
 pass_kind: functional
 depends_on: [K326, 176]

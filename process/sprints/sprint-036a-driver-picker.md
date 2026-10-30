@@ -3,7 +3,8 @@
 ```yaml
 ---
 id: 036a
-status: closed-2026-08-28
+status: closed
+status_note: closed 2026-08-28
 phase: 5
 pass_kind: functional
 ---

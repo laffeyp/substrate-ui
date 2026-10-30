@@ -1,6 +1,7 @@
 ---
 id: 098a
-status: closed (retroactive card, written 2026-10-01 after the work)
+status: closed
+status_note: retroactive card, written 2026-10-01 after the work
 class: G (Fowler, "Fix Broken Builds Immediately"); C (Humble & Farley, build once; Apple TN2206); II (Twelve-Factor, explicit dependencies)
 ---
 

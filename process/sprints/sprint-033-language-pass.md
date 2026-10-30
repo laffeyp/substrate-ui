@@ -3,7 +3,8 @@
 ```yaml
 ---
 id: 033-language-pass
-status: reverted-2026-08-17
+status: reverted
+status_note: reverted 2026-08-17
 phase: 4
 pass_kind: docs
 ---

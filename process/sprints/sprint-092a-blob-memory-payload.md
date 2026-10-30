@@ -1,6 +1,7 @@
 ---
 id: 092a
-status: superseded by 095 (closed 2026-10-01)
+status: superseded
+status_note: superseded by 095 (closed 2026-10-01)
 repo: substrate (kernel)
 class: F (Claim Check)
 ---

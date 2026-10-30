@@ -1,6 +1,7 @@
 ---
 id: 092b
-status: superseded by 095 (closed 2026-10-01)
+status: superseded
+status_note: superseded by 095 (closed 2026-10-01)
 repo: substrate-ui
 class: F (Claim Check); F-API-6 boundary
 ---

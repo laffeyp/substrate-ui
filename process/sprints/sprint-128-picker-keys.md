@@ -3,7 +3,8 @@
 ```yaml
 ---
 id: 128
-status: open
+status: closed
+status_note: built in commit 35a7e47 (BLACKBOARD, 2026-10-10)
 phase: 1
 pass_kind: functional
 roadmap: substrate-ui/process/planning/ROADMAP-2026-10-10-model-picker-in-the-workspace-bar.md

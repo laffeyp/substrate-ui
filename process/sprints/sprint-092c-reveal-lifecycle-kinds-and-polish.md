@@ -1,6 +1,7 @@
 ---
 id: 092c
-status: placeholder (retroactive) — work exists, uncommitted, not observed in a valid build
+status: pending
+status_note: placeholder (retroactive) — work exists, uncommitted, not observed in a valid build
 repo: substrate-ui
 class: E (single source of truth) for the kinds fix; UI polish otherwise
 ---

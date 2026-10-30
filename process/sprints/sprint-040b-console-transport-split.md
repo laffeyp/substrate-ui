@@ -3,7 +3,8 @@
 ```yaml
 ---
 id: 040b
-status: closed-2026-08-29
+status: closed
+status_note: closed 2026-08-29
 phase: 6
 pass_kind: refactor
 ---
