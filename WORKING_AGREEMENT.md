@@ -2,7 +2,7 @@
 
 *Project-specific overrides and additions on top of `../sdd-kit-3/AGENTS.md` (imported by `CLAUDE.md` at the repo root). The Agent reads AGENTS.md first (the methodology) then this file (the project specifics). This file augments; it never overrides AGENTS.md hard rules. When the two conflict, AGENTS.md wins.*
 
-*Current as of 2026-10-11. The version it replaces (2026-06-17, revised through 2026-09) is kept at `process/archive/WORKING_AGREEMENT-2026-06-17-to-2026-10-11.md`; it described the browser console, its Chrome harnesses and a root `signals/` folder, all retired since.*
+*Current as of 2026-10-29 (`## Documents` added). The version it replaces (2026-06-17, revised through 2026-09) is kept at `process/archive/WORKING_AGREEMENT-2026-06-17-to-2026-10-11.md`; it described the browser console, its Chrome harnesses and a root `signals/` folder, all retired since.*
 
 ---
 
@@ -141,6 +141,17 @@ Kinds, statuses and the Length and Tone positions come from `../substrate/proces
 ## Post-close addenda (rule-12 shape for fold work)
 
 When a fold-pass edit touches surfaces the closed card did not enumerate, it lands as `sprints/sprint-NNN-CLOSEOUT-ADDENDUM.md` — not as an edit to the closed card. Precedent: `sprints/sprint-033-CLOSEOUT-ADDENDUM.md` (2026-08-28).
+
+---
+
+## Documents
+
+- **Records** (`BLACKBOARD.md`, `KIT_DIARY.md`): append at the end, newest last; nothing above the last entry changes.
+- **Ground files** (this file, `README.md`, `CLAUDE.md`, the runbook at the repo root, the signal vocabulary): one copy, edited in place, dated on the first line; a prior version goes to `process/archive/`.
+- **Working documents** (designs, plans, roadmaps, research, status reports, postmortems, reviews): one folder per piece of work, `process/planning/YYYY-MM-DD-subject/`; one round per file, never edited; a new round names the file it supersedes, and the old round moves to the folder's `superseded/`. `process/planning/README.md` lists every piece of work, its status and its sprints.
+- **Sprint cards** (`process/sprints/`): `status:` is one of `pending`, `active`, `closed`, `closed-partial`, `reverted`, `withdrawn`, `superseded`.
+- **Read the current set:** `process/planning/README.md`, the folders it marks open, the ground files, `tail -n 60 BLACKBOARD.md`, and every decision with `grep -nE '^- \*\*[0-9-]{10} (user|agent-resolved)\*\*' BLACKBOARD.md`. Open anything else only when a current document points to it.
+- **Names:** `TYPE-YYYY-MM-DD-subject.md`, later rounds `-r2`, `-r3`; files already on disk keep their names. Nothing is deleted. Another project's files live in that project.
 
 ---
 
