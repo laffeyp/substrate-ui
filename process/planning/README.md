@@ -26,4 +26,4 @@ A new piece of work gets a folder and a row here on the day its first document i
 | `2026-10-12-slash-entry/` | Entering a slash command | closed: roadmap in `completed/` | 163–166 |
 | `2026-10-13-language/` | Language measurements in the app | closed: roadmap in `completed/` | 168–175 |
 | `2026-10-28-spdx-headers/` | SPDX headers on every source file | closed: sprint 191, commit `d4322e1` | 191 |
-| `2026-10-29-document-organization/` | Organizing substrate-ui's documents (this plan) | open: proposed | — |
+| `2026-10-29-document-organization/` | Organizing substrate-ui's documents | closed 2026-10-29: carried out in commits 047effa–1149ec5 | — |
