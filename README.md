@@ -42,7 +42,7 @@ ditto dist-electron/mac-arm64/Substrate.app /Applications/Substrate.app
 open /Applications/Substrate.app
 ```
 
-The signed, notarized path is `scripts/release.sh --notarize --install`. The runbook has every step: `process/planning/RUNBOOK-2026-10-28-project-r3.md`.
+The signed, notarized path is `scripts/release.sh --notarize --install`. The runbook has every step: `RUNBOOK-2026-10-29-project-r5.md` at the repo root.
 
 ## Dev
 
