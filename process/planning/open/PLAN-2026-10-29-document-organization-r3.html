@@ -1,0 +1,1009 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.10.1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>Organizing substrate-ui's documents (round 3)</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    html {
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    svg {
+      height: auto;
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      white-space: pre-wrap;
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      border: none;
+      border-top: 1px solid #1a1a1a;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">Organizing substrate-ui's documents (round 3)</h1>
+</header>
+<h1 id="plan-organizing-substrate-uis-documents-round-3">PLAN:
+organizing substrate-ui’s documents (round 3)</h1>
+<p><em>2026-10-29. Status: proposed; nothing has moved. Supersedes round
+2 (<code>PLAN-2026-10-29-document-organization-r2.md</code>), which
+spent most of its length on the field’s theory and the repo’s history
+and gave a plan too thin to review. This round puts the plan first. The
+reasons for each rule, with their sources, are in the appendix “Why
+these rules” at the end.</em></p>
+<h2 id="what-the-plan-changes">What the plan changes</h2>
+<p>substrate-ui keeps 1,124 Markdown files: 1,117 under
+<code>process/</code> and <code>sprints/</code> (714 of them signal
+reports) and 7 at the repo root. They are read mostly by model sessions,
+and the aim is that a session reads the right one: the current version,
+and nothing a later document overturned. Today a session cannot tell
+which document is current. 72 planning documents lie loose in
+<code>process/planning/</code> with no status. Rounds are marked four
+different ways (<code>-r2</code> at the end, <code>-r2</code> in the
+middle, <code>-v2</code>, <code>v0.1</code>). Sprint cards sit in two
+folders and use 12 different status values. A runbook lists a design
+whose roadmap closed. Four files belong to another project.</p>
+<p>The plan does eight things: it writes the rules into the working
+agreement; files every planning document by status; removes the other
+project’s copies; joins the two sprint folders; puts each sprint card on
+one status word; makes the knowledge diary grow at the bottom as the
+blackboard now does; and points the README and the runbook at the new
+places. Every move is a <code>git mv</code> that keeps the file’s name.
+Nothing is deleted.</p>
+<h2 id="the-rules">The rules</h2>
+<p>This text goes into <code>WORKING_AGREEMENT.md</code> as a new
+section, <code>## Documents</code>, word for word:</p>
+<blockquote>
+<p><strong>Who reads these documents.</strong> Mostly model sessions;
+people too. A session knows only the text in its context, and cannot
+tell which of two documents is current unless a path, a name or a fixed
+line says so. So every rule below lets a command answer “what is
+current”, “what replaced this” and “what was decided”.</p>
+<p><strong>Five kinds of document, each with one rule for
+change.</strong></p>
+<ul>
+<li><strong>Records</strong> — <code>BLACKBOARD.md</code>,
+<code>KIT_DIARY.md</code>. One stream, oldest first, newest at the
+bottom. A new entry goes at the end; nothing above the last entry
+changes; a correction is a new entry.</li>
+<li><strong>Ground files</strong> — <code>WORKING_AGREEMENT.md</code>,
+<code>README.md</code>, <code>CLAUDE.md</code>, the runbook at the repo
+root, and the signal vocabulary under
+<code>web/vm/signals/versions/</code>. One current copy each, edited in
+place. The first lines give the date of the last change; the runbook
+also gives the date its commands last ran against the tree. Before a
+large change, the prior version goes to <code>process/archive/</code>
+under a dated name. The vocabulary changes only by a version bump.</li>
+<li><strong>Working documents</strong> — plans, roadmaps, research,
+designs, reviews, audits, postmortems, spikes, status reports,
+proposals. One round per file, never edited. A later round is a new file
+whose first lines name the file it supersedes.</li>
+<li><strong>Sprint cards</strong> — <code>process/sprints/</code>. Only
+the <code>status:</code> line changes once a card is closed.</li>
+<li><strong>Evidence</strong> — data a document rests on, in a folder
+beside that document; it moves with it.</li>
+</ul>
+<p><strong>Status is the folder.</strong> Working documents live in
+<code>process/planning/open/</code> (the work is open, or a current
+document names it), <code>process/planning/completed/</code> (the work
+finished, or the document was a one-time record) or
+<code>process/planning/superseded/</code> (a later document replaced
+it). Nothing else sits at the top of <code>process/planning/</code>.
+When a new round lands, the old round moves to <code>superseded/</code>.
+When the work closes, the document moves to <code>completed/</code>.</p>
+<p><strong>Sprint-card status is one word</strong> from this list:
+<code>pending</code>, <code>active</code>, <code>closed</code>,
+<code>closed-partial</code>, <code>reverted</code>,
+<code>withdrawn</code>, <code>superseded</code>. Any explanation goes on
+a <code>status_note:</code> line below it.</p>
+<p><strong>A session reads the current set.</strong> The current set is
+<code>process/planning/open/</code>, the ground files, the end of the
+records and the sprint cards whose status is <code>pending</code> or
+<code>active</code>. A session opens a file in <code>completed/</code>,
+<code>superseded/</code>, <code>process/archive/</code>,
+<code>_deprecated/</code>, <code>process/reviews/</code>,
+<code>process/signal_reports/</code> or
+<code>process/sprints_v0.1/</code> only when a current document points
+to it.</p>
+<p><strong>The records are read by command.</strong> The recent record:
+<code>tail -n 60 BLACKBOARD.md</code>. Every decision:
+<code>grep -nE '^- \*\*[0-9-]{10} (user|agent-resolved)\*\*' BLACKBOARD.md</code>.
+Open sprint cards:
+<code>grep -lE '^status: (pending|active)$' process/sprints/*.md</code>.</p>
+<p><strong>Names.</strong> A new working document is named
+<code>TYPE-YYYY-MM-DD-subject.md</code>; a later round adds
+<code>-rN</code> at the end (<code>-r2</code>, <code>-r3</code>),
+keeping round 1’s date. <code>TYPE</code> is one of <code>PLAN</code>,
+<code>ROADMAP</code>, <code>RESEARCH</code>, <code>DESIGN</code>,
+<code>REVIEW</code>, <code>AUDIT</code>, <code>POSTMORTEM</code>,
+<code>SPIKE</code>, <code>STATUS</code>, <code>PROPOSAL</code>,
+<code>RUNBOOK</code>, <code>OPEN-ITEMS</code>. A file already on disk
+keeps its name, because other documents cite it by name.</p>
+<p><strong>One project per repo.</strong> Another project’s documents,
+and copies of them, live in that project.</p>
+<p><strong>Nothing is deleted.</strong> Retired code goes to
+<code>_deprecated/</code>; prior versions of ground files and closed
+records go to <code>process/archive/</code>; working documents go to
+<code>completed/</code> or <code>superseded/</code>.</p>
+</blockquote>
+<h2 id="the-steps">The steps</h2>
+<p>Each step lists what it changes and the command whose output proves
+it done. The steps run in order; each is one commit.</p>
+<h3 id="step-1.-write-the-rules-into-the-working-agreement">Step 1.
+Write the rules into the working agreement</h3>
+<p>Add the section “The rules” above to
+<code>WORKING_AGREEMENT.md</code> as <code>## Documents</code>, and set
+its date line to the day of the change.</p>
+<p>Done when: <code>grep -c '^## Documents' WORKING_AGREEMENT.md</code>
+prints 1.</p>
+<h3 id="step-2.-file-the-72-loose-planning-documents-by-status">Step 2.
+File the 72 loose planning documents by status</h3>
+<p><code>git mv</code> each file at the top of
+<code>process/planning/</code> into <code>open/</code> (2 files),
+<code>superseded/</code> (25) or <code>completed/</code> (45). The table
+“Every move in step 2” at the end lists each file with its reason. Three
+folders move with their documents: <code>design-sheets/</code> with
+<code>DESIGN-2026-10-13-language-in-the-app-r2.md</code> into
+<code>completed/</code>, and
+<code>evidence-2026-10-10-harness-streams/</code> with
+<code>RESEARCH-2026-10-10-harness-tool-calls-on-the-record.md</code>
+into <code>completed/</code>. Five more moves:</p>
+<ul>
+<li><code>open/ROADMAP-2026-10-28-spdx-headers.md</code> to
+<code>completed/</code>: sprint 191 (commit <code>d4322e1</code>) put
+the license header on all 206 tracked source files.</li>
+<li><code>PLAN-2026-10-29-process-folder.md</code>,
+<code>PLAN-2026-10-29-document-organization.md</code> and
+<code>PLAN-2026-10-29-document-organization-r2.md</code> (with its
+<code>.html</code> copy) from <code>open/</code> to
+<code>superseded/</code>: this plan replaces them.</li>
+<li><code>process/ROADMAP.md</code> (last changed 2026-06-23) to
+<code>superseded/</code>: the dated roadmaps from
+<code>ROADMAP-2026-08-16.md</code> on replaced it.</li>
+<li><code>process/SDD-ARC-PLAN.md</code> and
+<code>process/SDD-HARNESS-PORT-PLAN.md</code> (last changed 2026-08-17)
+to <code>completed/</code>: the blackboard records the SDD
+instrumentation arc closed on 2026-08-17.</li>
+<li><code>process/HARNESS-CATALOG.md</code> (last changed 2026-08-29) to
+<code>process/archive/</code>: it was a ground file listing harnesses,
+most of which moved to <code>_deprecated/classic-tree/</code> on
+2026-09-22.</li>
+</ul>
+<p>Done when: <code>ls -p process/planning | grep -v /</code> prints
+nothing, and <code>ls process/planning/open</code> prints the three open
+roadmaps, the lens-audit ledger, <code>OPEN-ITEMS-2026-10-10.md</code>,
+<code>FUTURE-DIRECTIONS-2026-09-27-cockpit-post-ship.md</code> and this
+plan.</p>
+<h3 id="step-3.-remove-the-other-projects-copies">Step 3. Remove the
+other project’s copies</h3>
+<p><code>git mv process/planning/writing-kernel process/archive/writing-kernel-copies-2026-10-28</code>.
+Its four files are identical, byte for byte, to files in
+<code>~/Documents/Claude/Projects/writing-kernel/</code>
+(<code>analyses/</code>, <code>architecture/</code>,
+<code>research/</code>), which is now a separate project.</p>
+<p>Done when: <code>ls process/planning/writing-kernel</code> fails.</p>
+<h3 id="step-4.-join-the-two-sprint-folders">Step 4. Join the two sprint
+folders</h3>
+<p><code>git mv sprints/* process/sprints/</code>. The root
+<code>sprints/</code> holds cards 008–055 (73 files, last changed
+2026-09-21); <code>process/sprints/</code> holds 001–007 and 056 on (138
+files). No file name and no card number appears in both.</p>
+<p>Done when: <code>ls sprints</code> fails and
+<code>ls process/sprints | wc -l</code> prints 211.</p>
+<h3 id="step-5.-one-status-word-on-every-sprint-card">Step 5. One status
+word on every sprint card</h3>
+<p>Change the <code>status:</code> line on the 23 cards listed in the
+table “Every status change in step 5” at the end. Each takes one word
+from the list; any explanation moves to a <code>status_note:</code>
+line. Two cards with no <code>status:</code> line get one.</p>
+<p>Done when:
+<code>grep -h '^status:' process/sprints/*.md | sort -u</code> prints
+only words from the list, and
+<code>grep -L '^status:' process/sprints/*.md</code> prints nothing.</p>
+<h3 id="step-6.-the-knowledge-diary-grows-at-the-bottom">Step 6. The
+knowledge diary grows at the bottom</h3>
+<p><code>KIT_DIARY.md</code> puts its newest entry first (44 entries).
+Reorder it the way <code>BLACKBOARD.md</code> was reordered on
+2026-10-29: the entries in date order, oldest first, every line kept;
+the hypothesis table stays above the entries. A script compares the old
+and new non-blank lines as sorted lists and prints any line missing or
+added.</p>
+<p>Done when: the script reports no line missing and no line added, and
+the last entry in the file is the newest.</p>
+<h3 id="step-7.-point-the-readme-and-the-runbook-at-the-new-places">Step
+7. Point the README and the runbook at the new places</h3>
+<ul>
+<li><code>README.md</code> names the runbook at the repo root,
+<code>RUNBOOK-2026-10-29-project-r4.md</code>, where it now names
+<code>process/planning/RUNBOOK-2026-10-28-project-r3.md</code>.</li>
+<li>A new round of the runbook,
+<code>RUNBOOK-2026-10-29-project-r5.md</code> at the repo root, replaces
+round 4’s reading list with the current set: the rules’ read commands,
+<code>process/planning/open/</code>, and the ground files. It drops
+<code>DESIGN-2026-10-13-language-in-the-app-r2.md</code>, whose roadmap
+closed. Round 4 and the untracked hand copy of round 3 at the root move
+to <code>process/planning/superseded/</code>.</li>
+</ul>
+<p>Done when:
+<code>grep -c 'RUNBOOK-2026-10-29-project-r5' README.md</code> prints 1,
+and every path in the round-5 reading list exists.</p>
+<h3 id="step-8.-record-it">Step 8. Record it</h3>
+<p>Append a <code>built</code> entry to <code>BLACKBOARD.md</code>
+naming the commits from steps 1–7.</p>
+<p>Done when: <code>tail -n 5 BLACKBOARD.md</code> shows it.</p>
+<h2 id="what-the-plan-leaves-alone">What the plan leaves alone</h2>
+<p><code>process/reviews/</code> (32 reviews),
+<code>process/signal_reports/</code> (714 reports),
+<code>process/sprints_v0.1/</code> (49 cards),
+<code>process/refactor-reviews/</code> (1) and
+<code>process/methodology/</code> (one current design and a folder of
+earlier drafts with its own README) stay where they are. Each already
+holds one kind of document. The rule that a session opens them only when
+a current document points to them is enough. The kernel repo
+<code>../substrate/</code> is not touched.</p>
+<h2 id="every-move-in-step-2">Every move in step 2</h2>
+<h3 id="to-processplanningopen-2-files">To
+<code>process/planning/open/</code> (2 files)</h3>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>File</th>
+<th>Why it is current</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>FUTURE-DIRECTIONS-2026-09-27-cockpit-post-ship.md</code></td>
+<td><code>process/BACKLOG.md</code> names it</td>
+</tr>
+<tr>
+<td><code>OPEN-ITEMS-2026-10-10.md</code></td>
+<td><code>WORKING_AGREEMENT.md</code> line 135 and
+<code>open/ROADMAP-2026-10-11-before-distribution.md</code> name it as
+the list work comes from</td>
+</tr>
+</tbody>
+</table>
+<h3 id="to-processplanningsuperseded-25-files">To
+<code>process/planning/superseded/</code> (25 files)</h3>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>File</th>
+<th>Superseded by</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>CLASS-2026-10-02-agent-work-modelled-as-a-short-request.md</code></td>
+<td><code>CLASS-2026-10-02-agent-work-modelled-as-a-short-request-v2.md</code></td>
+</tr>
+<tr>
+<td><code>DESIGN-2026-09-14-r2-session-transparency.md</code></td>
+<td><code>DESIGN-2026-09-14-r3-session-transparency.md</code> (its first
+lines say so)</td>
+</tr>
+<tr>
+<td><code>DESIGN-2026-09-14-r3-session-transparency.md</code></td>
+<td><code>DESIGN-2026-09-14-r4-session-transparency.md</code></td>
+</tr>
+<tr>
+<td><code>DESIGN-2026-09-14-r4-session-transparency.md</code></td>
+<td><code>DESIGN-2026-09-14-r5-session-transparency.md</code> (its first
+lines say so)</td>
+</tr>
+<tr>
+<td><code>DESIGN-2026-09-14-session-transparency.md</code></td>
+<td><code>DESIGN-2026-09-14-r2-session-transparency.md</code> (its first
+lines say so)</td>
+</tr>
+<tr>
+<td><code>DESIGN-2026-10-13-language-in-the-app.md</code></td>
+<td><code>DESIGN-2026-10-13-language-in-the-app-r2.md</code></td>
+</tr>
+<tr>
+<td><code>EPIC-PLAN-v0.1-2026-09-10.md</code></td>
+<td><code>EPIC-PLAN-v0.2-2026-09-12-prototype-port.md</code> (its first
+lines say so)</td>
+</tr>
+<tr>
+<td><code>EPIC-PLAN-v0.2-2026-09-12-prototype-port.md</code></td>
+<td><code>SUBSTRATE-WIRING-2026-09-12.md</code> (“Supersedes
+<code>EPIC-PLAN-v0.2</code> for the actual work”)</td>
+</tr>
+<tr>
+<td><code>PLAN-2026-09-14-phase-7-flat-design-parity.md</code></td>
+<td><code>PLAN-2026-09-14-r2-flat-design-parity.md</code> (its first
+line says so)</td>
+</tr>
+<tr>
+<td><code>PLAN-2026-09-21-r2-vocabulary-shakeout.md</code></td>
+<td><code>PLAN-2026-09-21-r3-vocabulary-shakeout.md</code> (its first
+lines say so)</td>
+</tr>
+<tr>
+<td><code>PLAN-2026-09-21-r3-vocabulary-shakeout.md</code></td>
+<td><code>PLAN-2026-09-21-r4-vocabulary-shakeout.md</code> (its first
+lines say so)</td>
+</tr>
+<tr>
+<td><code>PLAN-2026-09-21-vocabulary-shakeout.md</code></td>
+<td><code>PLAN-2026-09-21-r2-vocabulary-shakeout.md</code> (its first
+lines say so)</td>
+</tr>
+<tr>
+<td><code>PLAN-2026-09-24-phase-9-electron-wrapping.md</code></td>
+<td><code>PLAN-2026-09-24-phase-9-electron-wrapping-v2.md</code></td>
+</tr>
+<tr>
+<td><code>RESEARCH-2026-09-24-electron-integration.md</code></td>
+<td><code>RESEARCH-2026-09-24-electron-integration-v2.md</code> (its
+first lines say so)</td>
+</tr>
+<tr>
+<td><code>RESEARCH-2026-09-25-cli-adapter-auth-lifecycle.md</code></td>
+<td><code>RESEARCH-2026-09-25-cli-adapter-login-flow-in-substrate-v2.md</code>
+(its first lines say so: “That scope was wrong”)</td>
+</tr>
+<tr>
+<td><code>RESEARCH-2026-09-28-mac-packaging-from-apple-primary-sources.md</code></td>
+<td><code>RESEARCH-2026-09-28-mac-packaging-from-apple-primary-sources-v2.md</code>
+(its first lines say so)</td>
+</tr>
+<tr>
+<td><code>RUNBOOK-2026-10-28-build-and-release.md</code></td>
+<td><code>RUNBOOK-2026-10-28-project-r2.md</code> (its first lines say
+so)</td>
+</tr>
+<tr>
+<td><code>RUNBOOK-2026-10-28-project-r2.md</code></td>
+<td><code>RUNBOOK-2026-10-28-project-r3.md</code> (its first lines say
+so)</td>
+</tr>
+<tr>
+<td><code>RUNBOOK-2026-10-28-project-r3.md</code></td>
+<td><code>RUNBOOK-2026-10-29-project-r4.md</code> at the repo root</td>
+</tr>
+<tr>
+<td><code>SPIKE-2026-09-15-read-file-byte-cap.md</code></td>
+<td><code>SPIKE-2026-09-15-r2-read-file-byte-cap.md</code> (its first
+lines say so)</td>
+</tr>
+<tr>
+<td><code>STATUS-2026-09-14-phase-7-progress.md</code></td>
+<td><code>STATUS-2026-09-14-phase-7-closed.md</code> (its first lines
+say so)</td>
+</tr>
+<tr>
+<td><code>delegation-research-r2.md</code></td>
+<td><code>delegation-research-r3.md</code> (its first line says so)</td>
+</tr>
+<tr>
+<td><code>delegation-research-r3.md</code></td>
+<td><code>delegation-research-r4.md</code> (its first line says so)</td>
+</tr>
+<tr>
+<td><code>delegation-research-r4.md</code></td>
+<td><code>delegation-research-r5.md</code> (its first line says so)</td>
+</tr>
+<tr>
+<td><code>delegation-research.md</code></td>
+<td><code>delegation-research-r2.md</code> (its first line says so)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="to-processplanningcompleted-45-files">To
+<code>process/planning/completed/</code> (45 files)</h3>
+<p>No current document names these; each is a finished plan, design,
+study, status report, postmortem, review or audit.</p>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>File</th>
+<th>Note</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>AUDIT-2026-09-23-dc-runtime-local-optimum.md</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>CLASS-2026-10-02-agent-work-modelled-as-a-short-request-v2.md</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>DESIGN-2026-09-14-r5-session-transparency.md</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>DESIGN-2026-09-15-interrupt-injection-path.md</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>DESIGN-2026-10-13-language-in-the-app-r2.md</code></td>
+<td>its roadmap, <code>ROADMAP-2026-10-13-language-in-the-app.md</code>,
+is already in <code>completed/</code></td>
+</tr>
+<tr>
+<td><code>DIRECTION-2026-09-12.md</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>FEATURE-MAP-2026-08-28-agent-terminal-to-daily-driver.md</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>FOLD-2026-08-28-piece-g-mechanical-translation.md</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>GAP-2026-09-14-interrupt-during-tool-call.md</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>PLAN-2026-08-28-piece-g-mechanical-translation.md</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>PLAN-2026-09-12-presentation-model-extract.md</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>PLAN-2026-09-14-phase-8.md</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>PLAN-2026-09-14-r2-flat-design-parity.md</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>PLAN-2026-09-14-split-pane-multi-session.md</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>PLAN-2026-09-21-r4-vocabulary-shakeout.md</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>PLAN-2026-09-23-phase-8-transcript-atom-migration.md</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>PLAN-2026-09-23-reveal-shell-hardening.md</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>PLAN-2026-09-24-phase-9-electron-wrapping-v2.md</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>POSTMORTEM-2026-08-29-piece-g-architectural-miss.md</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>POSTMORTEM-2026-09-23-caret-in-place-toggle.md</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>POSTMORTEM-2026-09-23-sprint-057-tool-panel-reverted.md</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>POSTMORTEM-2026-09-28-sdd-failure-modes-sprint-089-packaging.md</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>POSTMORTEM-2026-10-02-transcript-follow-bottom-regression.md</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>PROPOSAL-2026-09-13-controller-vocabulary.md</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>RESEARCH-2026-09-24-electron-integration-v2.md</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>RESEARCH-2026-09-25-cli-adapter-login-flow-in-substrate-v2.md</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>RESEARCH-2026-09-27-mastering-layer-and-the-metacognitive-baseline.md</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>RESEARCH-2026-09-27-moves-a-typed-vocabulary-of-conversational-redirect.md</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>RESEARCH-2026-09-28-mac-packaging-from-apple-primary-sources-v2.md</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>RESEARCH-2026-09-28-substrate-mobile-talking-first-companion.md</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>RESEARCH-2026-10-02-background-commands.md</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>RESEARCH-2026-10-10-driver-workspace-permission.md</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>RESEARCH-2026-10-10-harness-tool-calls-on-the-record.md</code></td>
+<td>one-time research; the folder
+<code>evidence-2026-10-10-harness-streams/</code> moves with it</td>
+</tr>
+<tr>
+<td><code>REVIEW-2026-10-13-language-designs.md</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>SPIKE-2026-09-15-r2-read-file-byte-cap.md</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>STATUS-2026-09-13-phase-4-progress.md</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>STATUS-2026-09-13-phase-5-6-landed.md</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>STATUS-2026-09-14-phase-4-closed.md</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>STATUS-2026-09-14-phase-7-closed.md</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>STATUS-2026-09-14-phase-8-checkpoint.md</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>STATUS-2026-09-15-phase-8-closed.md</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>STATUS-2026-09-15-phase-8-item-7-closed.md</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>SUBSTRATE-WIRING-2026-09-12.md</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>WIRING-STATUS-2026-09-12.md</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>delegation-research-r5.md</code></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h2 id="every-status-change-in-step-5">Every status change in step
+5</h2>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+</colgroup>
+<thead>
+<tr>
+<th>Card</th>
+<th>Status now</th>
+<th>New <code>status:</code></th>
+<th><code>status_note:</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>sprint-056-refresh-two-stale-test-expectations.md</code></td>
+<td>open</td>
+<td>pending</td>
+<td></td>
+</tr>
+<tr>
+<td><code>sprint-090-route-ui-paths-through-substrate-home.md</code></td>
+<td>done</td>
+<td>closed</td>
+<td></td>
+</tr>
+<tr>
+<td><code>sprint-091-parity-gate.md</code></td>
+<td>done</td>
+<td>closed</td>
+<td></td>
+</tr>
+<tr>
+<td><code>sprint-092a-blob-memory-payload.md</code></td>
+<td>superseded by 095 (closed 2026-10-01)</td>
+<td>superseded</td>
+<td>superseded by sprint 095, closed 2026-10-01</td>
+</tr>
+<tr>
+<td><code>sprint-092b-sse-blob-deref.md</code></td>
+<td>superseded by 095 (closed 2026-10-01)</td>
+<td>superseded</td>
+<td>superseded by sprint 095, closed 2026-10-01</td>
+</tr>
+<tr>
+<td><code>sprint-092c-reveal-lifecycle-kinds-and-polish.md</code></td>
+<td>placeholder (retroactive) — …</td>
+<td>pending</td>
+<td>placeholder (retroactive) — work exists, uncommitted, not observed
+in a valid build</td>
+</tr>
+<tr>
+<td><code>sprint-094-disposability.md</code></td>
+<td>closed (source mode); packaged parity waits on sprint 098</td>
+<td>closed-partial</td>
+<td>closed in source mode; packaged parity waits on sprint 098</td>
+</tr>
+<tr>
+<td><code>sprint-095-claim-check-resolver.md</code></td>
+<td>closed (095a–c); 095d …</td>
+<td>closed-partial</td>
+<td>095a–c closed; 095d (kernel release) waits on the Architect</td>
+</tr>
+<tr>
+<td><code>sprint-098-release-pipeline.md</code></td>
+<td>built; first full run waits …</td>
+<td>closed-partial</td>
+<td>built; first full run waits on a commit and the kernel 1.1.2
+release</td>
+</tr>
+<tr>
+<td><code>sprint-098a-open-items-closed.md</code></td>
+<td>closed (retroactive card …)</td>
+<td>closed</td>
+<td>retroactive card, written 2026-10-01 after the work</td>
+</tr>
+<tr>
+<td><code>sprint-112-retire-dc-runtime.md</code></td>
+<td>open</td>
+<td>pending</td>
+<td></td>
+</tr>
+<tr>
+<td><code>sprint-113-packaging-and-vocabulary.md</code></td>
+<td>open</td>
+<td>pending</td>
+<td></td>
+</tr>
+<tr>
+<td><code>sprint-124-model-half-of-the-workspace-bar.md</code></td>
+<td>open</td>
+<td>pending</td>
+<td></td>
+</tr>
+<tr>
+<td><code>sprint-125-header-model-indicator.md</code></td>
+<td>open</td>
+<td>pending</td>
+<td></td>
+</tr>
+<tr>
+<td><code>sprint-126-picker-gates.md</code></td>
+<td>open</td>
+<td>pending</td>
+<td></td>
+</tr>
+<tr>
+<td><code>sprint-127-amend-specs-picker.md</code></td>
+<td>open</td>
+<td>pending</td>
+<td></td>
+</tr>
+<tr>
+<td><code>sprint-128-picker-keys.md</code></td>
+<td>open</td>
+<td>pending</td>
+<td></td>
+</tr>
+<tr>
+<td><code>sprint-179-topologies-setting.md</code></td>
+<td>open</td>
+<td>pending</td>
+<td></td>
+</tr>
+<tr>
+<td><code>sprint-180-run-window.md</code></td>
+<td>open</td>
+<td>pending</td>
+<td></td>
+</tr>
+<tr>
+<td><code>sprint-181-topologies-real-observation-r2.md</code></td>
+<td>open</td>
+<td>pending</td>
+<td></td>
+</tr>
+<tr>
+<td><code>sprint-190-build-release-runbook.md</code></td>
+<td>pending</td>
+<td>closed</td>
+<td>ran end to end 2026-10-27; two failures found (format check,
+<code>/help</code>)</td>
+</tr>
+<tr>
+<td><code>sprint-191-spdx-headers.md</code></td>
+<td>pending</td>
+<td>closed</td>
+<td>commit <code>d4322e1</code>; 206 of 206 tracked source files carry
+the header</td>
+</tr>
+<tr>
+<td><code>sprint-249-bench-results-resolver.md</code></td>
+<td>done</td>
+<td>closed</td>
+<td></td>
+</tr>
+<tr>
+<td><code>sprint-057-tool-panel-formatting.md</code></td>
+<td>(no status line)</td>
+<td>reverted</td>
+<td><code>POSTMORTEM-2026-09-23-sprint-057-tool-panel-reverted.md</code></td>
+</tr>
+<tr>
+<td><code>sprint-063a-caret-in-place-toggle.md</code></td>
+<td>(no status line)</td>
+<td>reverted</td>
+<td><code>POSTMORTEM-2026-09-23-caret-in-place-toggle.md</code>:
+“everything reverted”</td>
+</tr>
+</tbody>
+</table>
+<p><code>open</code> becomes <code>pending</code> because the kit’s
+sprint-card template uses <code>pending</code> for a card not yet
+closed. The blackboard records sprints 124 and 128 as built on
+2026-10-10 (commit <code>35a7e47</code>); whether their cards should
+read <code>closed</code> is checked against that entry during the step,
+not assumed.</p>
+<h2 id="why-these-rules">Why these rules</h2>
+<p>The rules join what five fields agree on with what a model reader
+needs. Each rule’s source is named here; the sources were fetched and
+read on 2026-10-29.</p>
+<ul>
+<li><strong>One kind, one rule for change.</strong> Software Engineering
+at Google, chapter 10, “Documentation” (Tom Manshreck): “A document
+should have, in general, a singular purpose, and stick to it.” Diátaxis
+sorts documents by the reader’s need: tutorial, how-to guide, reference,
+explanation. Archives keep each series of records under its own
+handling.</li>
+<li><strong>Status explicit, never inferred.</strong> Python’s PEP 1
+gives each proposal a status (Draft, Accepted, Final, Superseded and
+others). Michael Nygard’s architecture decision records (2011) carry a
+status line and keep a reversed decision “but mark it as superseded”.
+For a model reader this matters more than for a person: a model cannot
+tell which of two documents is current unless the text or the path says
+so.</li>
+<li><strong>Never edit a finished document; replace it.</strong> PEP 1:
+“PEPs are no longer substantially modified after they have reached the
+Accepted, Final, Rejected or Superseded state,” and the newer one “must
+have a Replaces header”. IETF RFC 2026: each version is a separate
+publication; corrections are republished “with a new number”; a
+superseded standard moves to Historic. Nygard: “Numbers will not be
+reused.” The project’s own rule (sdd-kit-3 hard rule 12, no deletions)
+already holds this.</li>
+<li><strong>Records grow at the end, in time order.</strong>
+Laboratory-notebook practice in university research-integrity guides:
+dated entries in order, errors struck through with one line and left
+legible, nothing erased. Jay Kreps, “The Log” (LinkedIn Engineering,
+2013): a log of every change is a full representation of the data, and
+tables are views of it. (The original page returned 404; this comes from
+summaries that quote it.)</li>
+<li><strong>A session reads the current set, and reads the records by
+command.</strong> Liu et al., “Lost in the Middle: How Language Models
+Use Long Contexts” (TACL; arXiv 2307.03172): performance “is often
+highest when relevant information occurs at the beginning or end of the
+input context” and “significantly degrades when models must access
+relevant information in the middle of long contexts.” A small current
+set and a <code>tail</code> keep the needed text short and at the
+edges.</li>
+<li><strong>One project per repo.</strong> The Society of American
+Archivists’ principle of provenance: records “of different origins
+(provenance) [are] kept separate to preserve their context.”</li>
+<li><strong>Files keep their names.</strong> SAA’s principle of original
+order: “the organization and sequence of records established by the
+creator of the records”; Boles (1982), quoted there, says it “reveals
+the significance of records and makes them usable.” Here, other
+documents cite files by name, so a rename breaks the citation and a move
+does not.</li>
+<li><strong>Status by folder, subject in the name.</strong> S. R.
+Ranganathan’s faceted classification (Colon Classification, 1933): an
+item is found along several independent facets, not one place in one
+tree. The folder carries status; the name carries type, date, subject
+and round.</li>
+<li><strong>Keep, do not delete.</strong> Archives keep records;
+Google’s chapter says to “remove it or identify it as obsolete”. The
+project chose keep (sdd-kit-3 hard rule 12).</li>
+</ul>
+<p>Sources read: SAA Dictionary of Archives Terminology, “provenance”
+and “original order” (dictionary.archivists.org); Software Engineering
+at Google, chapter 10 (abseil.io/resources/swe-book/html/ch10.html);
+Diátaxis and its compass (diataxis.fr); Write the Docs, “Docs as Code”;
+Nygard, “Documenting Architecture Decisions” (cognitect.com,
+2011-11-15); PEP 1 (peps.python.org); RFC 2026 (rfc-editor.org); Liu et
+al. (arxiv.org/abs/2307.03172). From search results only, not full text:
+Kreps, “The Log”; Ranganathan’s Colon Classification (ISKO
+encyclopedia); the records continuum model (Upward, 1996) and ISO
+15489-1:2016; university laboratory-notebook guides.</p>
+</body>
+</html>

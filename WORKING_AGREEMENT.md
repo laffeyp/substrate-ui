@@ -1,6 +1,6 @@
 # WORKING_AGREEMENT.md — substrate-ui
 
-*Project-specific overrides and additions on top of `../sdd-kit-2/AGENTS.md`. The Agent reads AGENTS.md first (the methodology) then this file (the project specifics). This file augments; it never overrides AGENTS.md hard rules. When the two conflict, AGENTS.md wins.*
+*Project-specific overrides and additions on top of `../sdd-kit-3/AGENTS.md` (imported by `CLAUDE.md` at the repo root). The Agent reads AGENTS.md first (the methodology) then this file (the project specifics). This file augments; it never overrides AGENTS.md hard rules. When the two conflict, AGENTS.md wins.*
 
 *Current as of 2026-10-11. The version it replaces (2026-06-17, revised through 2026-09) is kept at `process/archive/WORKING_AGREEMENT-2026-06-17-to-2026-10-11.md`; it described the browser console, its Chrome harnesses and a root `signals/` folder, all retired since.*
 
@@ -12,13 +12,13 @@
 - **Project type:** a macOS desktop app (Electron) over the Substrate runtime. A Python HTTP daemon, `server.py`, runs sessions and serves records; the window is the reveal shell, TypeScript built by Vite.
 - **Primary languages:** Python 3.12+ (`server.py`, stdlib `http.server`); TypeScript 5 (`web/`); JavaScript (`electron/`).
 - **Relationship to substrate:** a separate repo that depends on the kernel as a library: `substrate.api`, the bundled topologies, and the session topology's public modules (`substrate.topologies.session`, its `vocabulary`). The kernel is bundled into the app by `npm run pack:runtime`.
-- **Adopted SDD kit version:** `sdd-kit-2` (read-only canon at `../sdd-kit-2/`).
+- **Adopted SDD kit version:** `sdd-kit-3` (read-only canon at `../sdd-kit-3/`; earlier work ran under `sdd-kit-2`; `../sdd-kit-4/` is kept for analysis, not in use).
 
 ---
 
 ## Project class
 
-**Desktop app / frontend** + **Backend** (per `../sdd-kit-2/TECHNIQUES.md` Section 2). Behaviour is checked in the running app, not the DOM alone: the Electron gates drive the real window (Playwright's `_electron`), and screenshots are read.
+**Desktop app / frontend** + **Backend** (per `../sdd-kit-3/TECHNIQUES.md` Section 2). Behaviour is checked in the running app, not the DOM alone: the Electron gates drive the real window (Playwright's `_electron`), and screenshots are read.
 
 ---
 

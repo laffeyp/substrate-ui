@@ -1,0 +1,802 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.10.1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>Organizing substrate-ui's documents (round 2)</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    html {
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    svg {
+      height: auto;
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      white-space: pre-wrap;
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      border: none;
+      border-top: 1px solid #1a1a1a;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">Organizing substrate-ui's documents (round 2)</h1>
+</header>
+<h1
+id="plan-organizing-substrate-uis-documents-under-a-stated-theory-of-document-organization-round-2">PLAN:
+organizing substrate-ui’s documents, under a stated theory of document
+organization (round 2)</h1>
+<p><em>2026-10-29. Supersedes round 1
+(<code>PLAN-2026-10-29-document-organization.md</code>, beside this
+file), which grounded rules in how human engineers maintain documents.
+These documents are text read mostly by model sessions, and the aim is
+correctness; § 0 states what that changes. Round 1 superseded
+<code>PLAN-2026-10-29-process-folder.md</code>, which planned one folder
+and cited one source from memory. This round answers three questions in
+order: is there a theory of document organization in the field; what
+theory does this project work by today; and what plan follows for these
+documents. Every outside source in § 1 was fetched and read on
+2026-10-29; § 6 lists each one with what was and was not verified.
+Nothing has been moved yet.</em></p>
+<hr />
+<h2 id="who-reads-these-documents-and-what-that-changes">0. Who reads
+these documents, and what that changes</h2>
+<p>The reader is mostly a model session; people read them too. The aim
+is correctness: a session acts on the right document, the current one,
+and on nothing a later document overturned. Four facts about that reader
+decide the rules:</p>
+<ul>
+<li><strong>A model knows only the text in its context.</strong> It
+cannot see a file it did not open, and it does not carry anything
+between sessions (kit-3 <code>process-not-prompt-research.md</code> §
+2.2).</li>
+<li><strong>A model cannot tell which of two documents is
+current</strong> unless the text or the path says so. A session that
+lists or greps <code>process/planning/</code> gets every round of a
+document side by side, and treats each as equally live.</li>
+<li><strong>Placement in context matters.</strong> Liu et al., “Lost in
+the Middle” (TACL; arXiv 2307.03172): performance “is often highest when
+relevant information occurs at the beginning or end of the input
+context” and “significantly degrades when models must access relevant
+information in the middle of long contexts.”</li>
+<li><strong>A model finds files by path, name and grep.</strong> What a
+name or a fixed line carries, a command can retrieve; what lives only in
+prose must be read whole.</li>
+</ul>
+<p>So the rules that matter are those that let a command answer “what is
+current”, “what replaced this” and “what was decided” without a
+whole-file read. Grounds that concern how people keep documents current
+— the effort of updating, who owns a page, review reminders — are not
+used.</p>
+<hr />
+<h2 id="is-there-a-theory-of-document-organization">1. Is there a theory
+of document organization?</h2>
+<p>Yes, but not one. Five fields each hold a worked-out body of practice
+for keeping documents, and they agree on more than they differ.</p>
+<h3
+id="archival-science-provenance-original-order-lifecycle-continuum">1.1
+Archival science: provenance, original order, lifecycle, continuum</h3>
+<ul>
+<li><strong>Provenance.</strong> The Society of American Archivists
+defines the principle of provenance (<em>respect des fonds</em>) as
+keeping “records of different origins (provenance) … separate to
+preserve their context.”</li>
+<li><strong>Original order.</strong> SAA defines it as “the organization
+and sequence of records established by the creator of the records”;
+Boles (1982), quoted there, holds that it “reveals the significance of
+records and makes them usable.”</li>
+<li><strong>The records lifecycle.</strong> Developed at the U.S.
+National Archives in the 1930s with Emmett Leahy central to it:
+creation, classification, maintenance, disposition, where disposition is
+“the destruction or transfer to an archive.”</li>
+<li><strong>The records continuum.</strong> Frank Upward, Monash
+University, 1996 (“Structuring the Records Continuum – Part One”), with
+Sue McKemmish and Livia Iacovino. Four dimensions — create, capture,
+organise, pluralise — that act at the same time, built “in opposition to
+the linearity of the life cycle model.” A record is evidence from the
+moment it is made, not only once it is old.</li>
+<li><strong>ISO 15489-1:2016</strong> sets out the concepts and
+principles for creating, capturing and managing records in any form.
+Only its scope was read; the standard itself is paywalled.</li>
+</ul>
+<h3 id="classification-facets-not-one-hierarchy">1.2 Classification:
+facets, not one hierarchy</h3>
+<p>S. R. Ranganathan’s Colon Classification (Madras Library Association,
+1933) was the first faceted classification. Each item takes a value on
+several independent facets — in his scheme personality, matter, energy,
+space, time (PMEST, 1952) — not one place in one tree. The consequence
+for files: a folder is one facet, and a file can be found along others
+(type, date, subject) only if its name carries them.</p>
+<h3 id="technical-documentation-types-by-purpose">1.3 Technical
+documentation: types by purpose</h3>
+<ul>
+<li><strong>Diátaxis</strong> names four forms by the reader’s need, on
+two axes — action or cognition, acquisition or application: tutorial
+(action, acquisition), how-to guide (action, application), reference
+(cognition, application), explanation (cognition, acquisition). It
+proposes that documentation “should itself be organised around the
+structures of those needs.”</li>
+<li><strong>Software Engineering at Google</strong>, ch. 10,
+“Documentation” (Tom Manshreck): “A document should have, in general, a
+singular purpose, and stick to it.” “Documents without owners become
+stale.” Google attaches “freshness dates” that “note the last time a
+document was reviewed.” “When a document no longer serves any purpose,
+either remove it or identify it as obsolete.” Documentation lives
+“alongside the source code” under source control.</li>
+<li><strong>Docs as Code</strong> (Write the Docs): “writing
+documentation with the same tools as code” — issue tracking, Git,
+plain-text markup, peer review, automated tests.</li>
+</ul>
+<h3
+id="decision-and-specification-series-never-edited-superseded-by-number">1.4
+Decision and specification series: never edited, superseded by
+number</h3>
+<ul>
+<li><strong>Architecture Decision Records</strong> (Michael Nygard,
+2011-11-15): sections Title, Context, Decision, Status, Consequences;
+status proposed or accepted; “If a decision is reversed, we will keep
+the old one around, but mark it as superseded”; stored in the repository
+as <code>doc/arch/adr-NNN.md</code>; “numbered sequentially and
+monotonically. Numbers will not be reused.”</li>
+<li><strong>Python PEP 1</strong>: statuses Draft, Active, Accepted,
+Provisional, Deferred, Rejected, Withdrawn, Final, Superseded. “PEPs are
+no longer substantially modified after they have reached the Accepted,
+Final, Rejected or Superseded state.” “The newer PEP must have a
+Replaces header containing the number of the PEP that it rendered
+obsolete”; the old one may carry Superseded-By.</li>
+<li><strong>IETF RFC 2026</strong>: “Each distinct version … is
+published as part of the” RFC series (§ 2.1); corrections mean
+republishing “with a new number” (§ 6.2); a superseded specification
+moves to Historic (§ 4.2.4), and “the relationship between the previous
+and the new versions must be explicitly stated” (§ 6.3).</li>
+</ul>
+<h3 id="logs-and-notebooks-append-in-time-order-never-erase">1.5 Logs
+and notebooks: append, in time order, never erase</h3>
+<ul>
+<li><strong>The log</strong> (Jay Kreps, LinkedIn Engineering,
+2013-12-16): a log of every change to a data set from the beginning is a
+valid representation of that data set, and each table is a projection of
+that history. The original page returned 404 on 2026-10-29; this is from
+secondary summaries that quote it.</li>
+<li><strong>Laboratory notebooks</strong> (university research-integrity
+guides; the NIH original was not retrieved): bound, numbered pages;
+entries dated and in order; an error is struck through with one line and
+stays legible, initialled and dated; no erasing.</li>
+</ul>
+<h3
+id="what-studies-of-human-practice-found-read-not-used-as-grounds">1.6
+What studies of human practice found (read, not used as grounds)</h3>
+<p>These three studies measure how human engineers write and maintain
+documentation. They do not bear on a model reader or on correctness, and
+no rule in § 3 rests on them.</p>
+<ul>
+<li><strong>Lethbridge, Singer and Forward</strong>, “How Software
+Engineers Use Documentation: The State of the Practice”, <em>IEEE
+Software</em> 20(6), 2003, from interviews at 13 sites, a 14-week
+shadowing and surveys: “Documentation of all types is frequently out of
+date.” “A considerable fraction of documentation is untrustworthy.”
+“Test cases also stay up-to-date because each one has a simple structure
+and obvious operational value.” “Out-of-date documentation has value,
+particularly if the high-level abstractions remain valid.” Engineers
+find it “worthwhile to update only certain types of documentation.”</li>
+<li><strong>Parnas and Clements</strong>, “A Rational Design Process:
+How and Why to Fake It”, <em>IEEE TSE</em> 12(2), 1986: the process is
+described as a sequence of documents, and “if we take the care to keep
+all of the documents up-to-date, we can create the appearance of a fully
+rational design process”; the documents serve design review, reference
+during coding, and maintenance.</li>
+<li><strong>Aghajani et al.</strong>, “Software Documentation Issues
+Unveiled”, ICSE 2019: a taxonomy of documentation issues from 878
+artifacts across mailing lists, Stack Overflow, issues and pull
+requests. Its categories were not retrieved.</li>
+</ul>
+<h3 id="where-the-fields-agree-and-where-they-do-not">1.7 Where the
+fields agree, and where they do not</h3>
+<p>They agree on eight points:</p>
+<ol type="1">
+<li><strong>Separate by purpose.</strong> One document, one purpose
+(Google; Diátaxis); one kind of record, one handling (archival
+series).</li>
+<li><strong>Keep provenance.</strong> One creator’s records stay
+together and apart from another’s (SAA).</li>
+<li><strong>Respect original order.</strong> The creator’s arrangement
+and names carry meaning; do not rearrange or rename for tidiness
+(SAA).</li>
+<li><strong>Make status explicit.</strong> Accepted, superseded,
+obsolete are stated, not inferred (ADR, PEP, RFC, Google).</li>
+<li><strong>Never edit a resolved record; supersede it.</strong> A
+change is a new document, and the link between old and new is stated
+(ADR, PEP, RFC; lab notebooks).</li>
+<li><strong>Logs grow at the end, in time order</strong> (Kreps; lab
+notebooks).</li>
+<li><strong>The current version is identifiable without
+judgement.</strong> Google’s freshness dates and owners serve this for
+human readers; for a model reader it comes from status in the path and
+dated names (§ 0).</li>
+<li><strong>Documents live with the code, under version control</strong>
+(Google; Docs as Code; ADR).</li>
+</ol>
+<p>They disagree on two:</p>
+<ul>
+<li><strong>Lifecycle or continuum.</strong> The lifecycle moves a
+record through stages to disposal; the continuum treats it as evidence
+at every stage at once. This project’s rule that nothing is deleted is
+the continuum’s side.</li>
+<li><strong>Delete or keep.</strong> Google says “remove it or identify
+it as obsolete”; archives keep. This project chose keep: kit hard rule
+12, and the user’s no-deletion rule.</li>
+</ul>
+<hr />
+<h2 id="what-theory-does-this-project-work-by-today">2. What theory does
+this project work by today?</h2>
+<p>A theory exists in pieces. It is written in four places and practised
+in more, and the pieces do not form one statement.</p>
+<h3 id="written">2.1 Written</h3>
+<ul>
+<li><code>sdd-kit-3/AGENTS.md</code> hard rule 12 and “What you should
+never do”: no deletions; new thinking goes into new files and round-N
+versions. <code>TECHNIQUES.md</code> #36–#37 say the same.</li>
+<li>The user’s standing rules: a document is never edited in place; a
+correction is a new dated version; a variant on other assumptions is a
+section in one document, not a new version.</li>
+<li><code>sdd-kit-3/AGENTS.md</code> § The BLACKBOARD protocol (changed
+2026-10-29): the BLACKBOARD is one append-only stream, newest at the
+bottom.</li>
+<li>Decision 2026-10-01 (agent-resolved, on the BLACKBOARD):
+<code>BLACKBOARD.md</code>, <code>KIT_DIARY.md</code> and
+<code>WORKING_AGREEMENT.md</code> live at the repo root, one copy
+each.</li>
+<li><code>WORKING_AGREEMENT.md</code> line 135: each ask is written into
+the roadmap and <code>process/planning/OPEN-ITEMS-2026-10-10.md</code>
+before work starts.</li>
+<li>The runbook, § 13: no in-place edits to planning files; new round,
+new file.</li>
+</ul>
+<h3 id="practised-measured-2026-10-29">2.2 Practised (measured
+2026-10-29)</h3>
+<ul>
+<li><strong>Names follow <code>TYPE-YYYY-MM-DD-slug.md</code></strong>
+for most planning documents, with 21 type prefixes in use across
+<code>process/planning/</code> (not counting this plan, its first round,
+or the writing-kernel copies): PLAN 14, ROADMAP 12, RESEARCH 12, STATUS
+8, DESIGN 8, POSTMORTEM 5, RUNBOOK 3, SPIKE 2, EPIC-PLAN 2, CLASS 2, and
+one each of AUDIT, DIRECTION, FEATURE-MAP, FOLD, FUTURE-DIRECTIONS, GAP,
+OPEN-ITEMS, PROPOSAL, REVIEW, SUBSTRATE-WIRING, WIRING-STATUS.</li>
+<li><strong>Rounds are marked four ways</strong>: <code>-rN</code> at
+the end (7 files), <code>-rN</code> in the middle (9,
+e.g. <code>DESIGN-2026-09-14-r3-session-transparency.md</code>),
+<code>-vN</code> (9), and <code>v0.1</code> before the date (2). Six
+files carry no date at all (<code>delegation-research.md</code> to
+<code>-r5.md</code>, and
+<code>design-sheets/2026-10-13-language/DECISIONS D74-D80.md</code>).</li>
+<li><strong>Status is shown five ways</strong>: by folder
+(<code>planning/open</code>, <code>completed</code>,
+<code>superseded</code>, roadmaps only, since sprint 190); by filename
+suffix (<code>-superseded.md</code> in <code>process/archive/</code>;
+<code>ROADMAP-2026-09-29-configuration-externalization-CLOSED.md</code>
+beside an unsuffixed twin); by a README
+(<code>process/methodology/_archived-autonomous-build-topology-drafts/</code>);
+by frontmatter in sprint cards; and not at all for the 72 loose files in
+<code>process/planning/</code>.</li>
+<li><strong>Sprint-card status uses 12 different values</strong> in the
+136 of 138 cards that have a <code>status:</code> line:
+<code>closed</code> 106, <code>open</code> 11, <code>pending</code> 6,
+<code>done</code> 3, <code>withdrawn</code> 2,
+<code>superseded by 095 (closed 2026-10-01)</code> 2,
+<code>reverted</code> 1, and five one-off sentences. The kit’s template
+names four: pending, active, closed, closed-partial. Card 190 reads
+<code>status: pending</code>, though it ran end to end on
+2026-10-27.</li>
+<li><strong>History lives in five places</strong>:
+<code>_deprecated/</code> (retired code and the old
+<code>process/</code> records), <code>process/archive/</code>,
+<code>process/planning/superseded/</code>,
+<code>process/planning/completed/</code>, and
+<code>process/methodology/_archived-…/</code>.</li>
+<li><strong>Sprint cards live in two folders</strong>:
+<code>sprints/</code> at the root (73 files, cards 008–055, last changed
+2026-09-21) and <code>process/sprints/</code> (138 files, 001–007 and
+056 on). No number appears in both.</li>
+<li><strong>Records</strong>: <code>BLACKBOARD.md</code> grows at the
+bottom (since 2026-10-29); <code>KIT_DIARY.md</code> puts its newest
+entry first (44 entries).</li>
+<li><strong>Another project’s files</strong>:
+<code>process/planning/writing-kernel/</code> holds four files
+identical, byte for byte, to files in
+<code>~/Documents/Claude/Projects/writing-kernel/</code>.</li>
+<li><strong>Current work is not marked as current</strong>: of the 72
+loose planning files, 4 are named by a current document;
+<code>planning/open/</code> holds a roadmap closed by sprint 191.</li>
+</ul>
+<h3 id="how-the-projects-theory-stands-against-the-field">2.3 How the
+project’s theory stands against the field</h3>
+<p>It already holds four of the field’s eight points: no edits to
+resolved documents (5), logs grow at the end (6, BLACKBOARD only),
+documents in the repo under git (8), and dated rounds as a weaker form
+of numbered supersession (5). It lacks the other four: one purpose per
+kind with its own handling (1), provenance (2, the writing-kernel
+copies), explicit status (4) and a current version a command can find
+(7). For a model reader these four are the costly ones: with 72 unfiled
+planning documents and four round markers, a session that greps for a
+subject reads superseded rounds as live. It breaks original order (3)
+whenever a rename is proposed. Because no single statement exists, each
+session invents its own scheme: four round markers, five ways of showing
+status, 12 status values on sprint cards, five history homes, two sprint
+folders.</p>
+<hr />
+<h2 id="the-theory-for-this-project">3. The theory for this project</h2>
+<p>One statement, each rule tied to § 1. It goes into
+<code>WORKING_AGREEMENT.md</code> as <code>## Documents</code>, because
+every session reads that file.</p>
+<p><strong>Five kinds of document, each with one rule for
+change</strong> (§ 1.7 point 1; Diátaxis for the purpose of each):</p>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+</colgroup>
+<thead>
+<tr>
+<th>Kind</th>
+<th>Purpose (Diátaxis)</th>
+<th>Files</th>
+<th>Rule for change</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Records</td>
+<td>the history (archival record; Kreps’ log)</td>
+<td><code>BLACKBOARD.md</code>, <code>KIT_DIARY.md</code></td>
+<td>Append at the end, in time order. Nothing above the last entry
+changes. A correction is a new entry.</td>
+</tr>
+<tr>
+<td>Ground files</td>
+<td>reference</td>
+<td><code>WORKING_AGREEMENT.md</code>, <code>README.md</code>,
+<code>CLAUDE.md</code>, <code>signals/</code> vocabulary</td>
+<td>Edited in place, so there is one current copy. Each states on its
+first lines the date it last changed, so a session can order it against
+dated documents. Before a large change the prior version goes to
+<code>process/archive/</code> under a dated name. The vocabulary changes
+only by version bump (kit hard rule 2).</td>
+</tr>
+<tr>
+<td>Working documents</td>
+<td>explanation (research, design, plans, reviews, postmortems) and
+how-to (runbooks)</td>
+<td><code>process/planning/**</code></td>
+<td>One round per file, never edited. A new round names what it
+supersedes in its first lines (PEP’s Replaces).</td>
+</tr>
+<tr>
+<td>Sprint cards</td>
+<td>the unit of work</td>
+<td><code>process/sprints/</code></td>
+<td>The card’s <code>status:</code> field changes as the work moves;
+nothing else in a closed card changes.</td>
+</tr>
+<tr>
+<td>Evidence</td>
+<td>data a document rests on</td>
+<td>a folder beside the document</td>
+<td>Moves with its document.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Status is explicit and has one home per kind</strong> (point
+4). Working documents: the folder — <code>planning/open/</code> (the
+work is open, or a current document names it),
+<code>planning/completed/</code> (the work closed, or the document was a
+one-time record: status report, spike, postmortem, review),
+<code>planning/superseded/</code> (a later round or document replaced
+it). Sprint cards: <code>status:</code> from a closed list —
+<code>pending</code>, <code>active</code>, <code>closed</code>,
+<code>closed-partial</code>, <code>reverted</code>,
+<code>withdrawn</code>, <code>superseded</code> — with any note on the
+line after, not in the value.</p>
+<p><strong>A session reads the current set by default</strong> (§ 0).
+The current set is <code>planning/open/</code>, the ground files and the
+tail of the records. <code>completed/</code>, <code>superseded/</code>,
+<code>process/archive/</code> and <code>_deprecated/</code> are history:
+a session opens a file there only when a current document points to
+it.</p>
+<p><strong>The records are read by command, not whole</strong> (§ 0, Liu
+et al.). Recent record: <code>tail -n 60 BLACKBOARD.md</code>. Every
+decision:
+<code>grep -nE '^- \*\*[0-9-]{10} (user|agent-resolved)\*\*' BLACKBOARD.md</code>.
+Open work: <code>ls process/planning/open/</code> and
+<code>grep -l '^status: \(pending\|active\)' process/sprints/*.md</code>.</p>
+<p><strong>Supersession is stated by the newer document</strong> (point
+5). Its header names the file it supersedes. The older file is not
+edited (the project’s no-edit rule outranks PEP’s Superseded-By header);
+moving it to <code>superseded/</code> is its mark.</p>
+<p><strong>Provenance</strong> (point 2). A repo holds its own project’s
+documents. Another project’s documents, and copies of them, live in that
+project.</p>
+<p><strong>Original order</strong> (point 3). Files already on disk keep
+their names. A move keeps the name, so
+<code>find process -name &lt;file&gt;</code> finds it;
+<code>git log --follow</code> traces it. New documents take one name
+form: <code>TYPE-YYYY-MM-DD-slug.md</code> for round 1 and
+<code>TYPE-YYYY-MM-DD-slug-rN.md</code> for later rounds, where the date
+is that of round 1 and <code>TYPE</code> is one of <code>PLAN</code>,
+<code>ROADMAP</code>, <code>RESEARCH</code>, <code>DESIGN</code>,
+<code>REVIEW</code>, <code>AUDIT</code>, <code>POSTMORTEM</code>,
+<code>SPIKE</code>, <code>STATUS</code>, <code>RUNBOOK</code>,
+<code>PROPOSAL</code>, <code>OPEN-ITEMS</code>. A type outside the list
+is added to it first. (Faceted naming, § 1.2: folder = status; name =
+type, date, subject, round.)</p>
+<p><strong>History has one home per kind</strong> (point 1). Retired
+code: <code>_deprecated/</code>. Prior versions of ground files and
+closed records: <code>process/archive/</code>. Working documents:
+<code>planning/completed/</code> and <code>planning/superseded/</code>.
+Nothing is deleted (§ 1.7, the project’s side of the disagreement).</p>
+<p><strong>Dates on living documents</strong> (point 7). Each ground
+file’s first lines state the date it last changed. A runbook names the
+date its commands were last run against the tree, because a model cannot
+otherwise tell whether a command list still holds.</p>
+<hr />
+<h2 id="the-plan-for-these-documents">4. The plan for these
+documents</h2>
+<p>Each step is a <code>git mv</code> or an edit to one ground file.
+Steps 1–3 come first because later steps cite the rule they state.</p>
+<ol type="1">
+<li><strong>State the theory.</strong> Add § 0 and § 3 to
+<code>WORKING_AGREEMENT.md</code> as <code>## Documents</code>, and
+update its date line.</li>
+<li><strong>File the loose planning documents,</strong> so
+<code>planning/open/</code> is the current set. The moves from
+<code>PLAN-2026-10-29-process-folder.md</code> § 4 stand: 4 items to
+<code>open/</code> (<code>OPEN-ITEMS-2026-10-10.md</code>,
+<code>DESIGN-2026-10-13-language-in-the-app-r2.md</code> with
+<code>design-sheets/</code>,
+<code>FUTURE-DIRECTIONS-2026-09-27-cockpit-post-ship.md</code>); 21
+earlier rounds to <code>superseded/</code>; 48 dated files with
+<code>evidence-2026-10-10-harness-streams/</code> to
+<code>completed/</code>;
+<code>open/ROADMAP-2026-10-28-spdx-headers.md</code> to
+<code>completed/</code>; <code>process/ROADMAP.md</code>,
+<code>SDD-ARC-PLAN.md</code>, <code>SDD-HARNESS-PORT-PLAN.md</code>,
+<code>HARNESS-CATALOG.md</code> to <code>completed/</code>. Two pairs
+are read before filing, since their names do not show whether one
+replaces the other:
+<code>PLAN-2026-09-14-phase-7-flat-design-parity.md</code> /
+<code>PLAN-2026-09-14-r2-flat-design-parity.md</code>, and
+<code>RESEARCH-2026-09-25-cli-adapter-auth-lifecycle.md</code> /
+<code>RESEARCH-2026-09-25-cli-adapter-login-flow-in-substrate-v2.md</code>.
+<code>PLAN-2026-10-29-process-folder.md</code> and this plan’s round 1
+go to <code>superseded/</code>.</li>
+<li><strong>Provenance.</strong>
+<code>process/planning/writing-kernel/</code> moves to
+<code>process/archive/writing-kernel-copies-2026-10-28/</code>; the
+originals are in
+<code>~/Documents/Claude/Projects/writing-kernel/</code>.</li>
+<li><strong>One sprint folder.</strong> The 73 files in root
+<code>sprints/</code> move into <code>process/sprints/</code>; no file
+name and no card number collides.</li>
+<li><strong>One history home per kind.</strong>
+<code>process/methodology/_archived-autonomous-build-topology-drafts/</code>
+moves to <code>process/planning/superseded/</code>, README with it.
+<code>process/archive/</code> keeps ground-file versions and records;
+<code>_deprecated/</code> keeps code.</li>
+<li><strong>Sprint-card status.</strong> Each card’s
+<code>status:</code> takes a value from the closed list; the
+sentence-valued statuses keep their text on a <code>status_note:</code>
+line. Card 190 becomes <code>closed</code>, with the two failures it
+found noted.</li>
+<li><strong>KIT_DIARY grows at the bottom.</strong> The same form-only
+change the BLACKBOARD had: entries in date order, oldest first, every
+line kept, checked line by line.</li>
+<li><strong>The runbook and README follow.</strong>
+<code>README.md</code> names the runbook at the repo root. A new round
+of the runbook gives the new paths for § 1.3; the hand copy of round 3
+at the root goes to <code>process/planning/superseded/</code> beside the
+tracked round 3.</li>
+</ol>
+<p><strong>Done when:</strong> <code>ls process/planning</code> shows
+only <code>open/</code>, <code>completed/</code>,
+<code>superseded/</code>; every file in <code>open/</code> is named by
+<code>OPEN-ITEMS-2026-10-10.md</code>, an open roadmap or
+<code>BACKLOG.md</code>; <code>sprints/</code> no longer exists at the
+root; <code>grep -h '^status:' process/sprints/*.md | sort -u</code>
+prints only values from the closed list; <code>KIT_DIARY.md</code> ends
+with its newest entry; <code>WORKING_AGREEMENT.md</code> has
+<code>## Documents</code>.</p>
+<hr />
+<h2 id="what-this-plan-does-not-settle">5. What this plan does not
+settle</h2>
+<p>The kernel repo <code>../substrate/</code> has its own
+<code>process/</code> and is out of scope here. The theory in § 3 is
+written so it can apply there unchanged.</p>
+<hr />
+<h2 id="sources-as-read-on-2026-10-29">6. Sources, as read on
+2026-10-29</h2>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>Source</th>
+<th>Read</th>
+<th>Verified</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Society of American Archivists, Dictionary of Archives Terminology,
+“provenance” —
+https://dictionary.archivists.org/entry/provenance.html</td>
+<td>fetched</td>
+<td>quotes in § 1.1</td>
+</tr>
+<tr>
+<td>SAA, “original order” —
+https://dictionary.archivists.org/entry/original-order.html</td>
+<td>fetched</td>
+<td>quotes in § 1.1</td>
+</tr>
+<tr>
+<td>“Records life-cycle”, Wikipedia —
+https://en.wikipedia.org/wiki/Records_life-cycle</td>
+<td>fetched</td>
+<td>stages and Leahy; secondary source</td>
+</tr>
+<tr>
+<td>“Records continuum model”, Wikipedia and secondary articles —
+https://en.wikipedia.org/wiki/Records_continuum_model</td>
+<td>search results</td>
+<td>Upward 1996, four dimensions; Upward’s paper itself not read</td>
+</tr>
+<tr>
+<td>ISO 15489-1:2016 —
+https://scc-ccn.ca/standardsdb/standards/8159513</td>
+<td>search results</td>
+<td>scope only; standard paywalled</td>
+</tr>
+<tr>
+<td>Colon classification, ISKO and Wikipedia —
+https://isko.org/cyclo/colon_classification</td>
+<td>search results</td>
+<td>dates and PMEST; Ranganathan’s texts not read</td>
+</tr>
+<tr>
+<td>Diátaxis — https://diataxis.fr/ and
+https://diataxis.fr/compass/</td>
+<td>fetched</td>
+<td>four forms and two axes; the pages read name no author</td>
+</tr>
+<tr>
+<td>T. Manshreck, “Documentation”, <em>Software Engineering at
+Google</em>, ch. 10 —
+https://abseil.io/resources/swe-book/html/ch10.html</td>
+<td>fetched</td>
+<td>quotes in § 1.3</td>
+</tr>
+<tr>
+<td>Write the Docs, “Docs as Code” —
+https://www.writethedocs.org/guide/docs-as-code/</td>
+<td>fetched</td>
+<td>definition and five practices</td>
+</tr>
+<tr>
+<td>M. Nygard, “Documenting Architecture Decisions”, 2011-11-15 —
+https://cognitect.com/blog/2011/11/15/documenting-architecture-decisions</td>
+<td>fetched</td>
+<td>quotes in § 1.4</td>
+</tr>
+<tr>
+<td>PEP 1 — https://peps.python.org/pep-0001/</td>
+<td>fetched</td>
+<td>statuses, no-modification rule, Replaces/Superseded-By</td>
+</tr>
+<tr>
+<td>RFC 2026 — https://www.rfc-editor.org/rfc/rfc2026.html</td>
+<td>fetched</td>
+<td>§§ 2.1, 4.2.4, 6.2, 6.3</td>
+</tr>
+<tr>
+<td>J. Kreps, “The Log”, LinkedIn Engineering, 2013-12-16 —
+https://engineering.linkedin.com/distributed-systems/log-what-every-software-engineer-should-know-about-real-time-datas-unifying</td>
+<td>404 on fetch</td>
+<td>secondary summaries only</td>
+</tr>
+<tr>
+<td>Laboratory notebook guides (e.g. UAH, UCD, South Alabama) —
+https://www.uah.edu/otc/for-uah-innovators/laboratory-notebooks-best-practices</td>
+<td>search results</td>
+<td>practices in § 1.5; NIH original not read</td>
+</tr>
+<tr>
+<td>N. F. Liu et al., “Lost in the Middle: How Language Models Use Long
+Contexts”, TACL; arXiv 2307.03172 —
+https://arxiv.org/abs/2307.03172</td>
+<td>abstract fetched</td>
+<td>quotes in § 0</td>
+</tr>
+<tr>
+<td>T. Lethbridge, J. Singer, A. Forward, <em>IEEE Software</em> 20(6),
+2003 —
+https://courses.cs.duke.edu//cps196.1/fall11/classwork/Lethbridge-Singer-Forward-2003.pdf</td>
+<td>full text extracted</td>
+<td>quotes in § 1.6; not used as grounds</td>
+</tr>
+<tr>
+<td>D. Parnas, P. Clements, <em>IEEE TSE</em> 12(2), 1986 —
+https://userweb.cs.txstate.edu/~rp31/papers/Fake_it.pdf</td>
+<td>search results quoting the abstract</td>
+<td>quotes in § 1.6; full text not read; not used as grounds</td>
+</tr>
+<tr>
+<td>E. Aghajani et al., ICSE 2019, DOI 10.1109/ICSE.2019.00122 —
+https://2019.icse-conferences.org/details/icse-2019-Technical-Papers/49/Software-Documentation-Issues-Unveiled</td>
+<td>search results</td>
+<td>method and size; taxonomy categories not read; not used as
+grounds</td>
+</tr>
+</tbody>
+</table>
+</body>
+</html>
