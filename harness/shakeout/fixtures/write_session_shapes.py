@@ -23,7 +23,14 @@ from msgspec import Struct
 
 from substrate import api
 from substrate.topologies.session import (
-    FinalAnswer, ModelReply, Park, Returned, SessionWarning, ToolCall, ToolResult, UserMessage,
+    FinalAnswer,
+    ModelReply,
+    Park,
+    Returned,
+    SessionWarning,
+    ToolCall,
+    ToolResult,
+    UserMessage,
 )
 from substrate.topologies.session_registry import SessionRegistry
 
@@ -38,12 +45,20 @@ class _V2:
         turn_index: int
 
 
-_USAGE = {"model": "fixture", "prompt_tokens": 9, "completion_tokens": 3, "wall_ms": 40, "estimated": False}
+_USAGE = {
+    "model": "fixture",
+    "prompt_tokens": 9,
+    "completion_tokens": 3,
+    "wall_ms": 40,
+    "estimated": False,
+}
 
 
 def _old() -> list[Any]:
     return [
-        UserMessage(text="add 2 and 3", turn_index=0, assembled_prompt="add 2 and 3", slash_source="chat"),
+        UserMessage(
+            text="add 2 and 3", turn_index=0, assembled_prompt="add 2 and 3", slash_source="chat"
+        ),
         ToolCall(call_id="c0", tool="add", args=[2, 3], step=0),
         ToolResult(call_id="c0", tool="add", output=5, step=0),
         _V2.ModelReply(text="It is 5.", model_usage={}, turn_index=0),
@@ -59,10 +74,16 @@ def _old() -> list[Any]:
 def _new() -> list[Any]:
     return [
         SessionWarning(
-            session_id="fixture", kind="fragment_source_failed", seed_tokens=0, driver_context_tokens=0,
-            source_name="role", detail="FileNotFoundError('reviewer.md')",
+            session_id="fixture",
+            kind="fragment_source_failed",
+            seed_tokens=0,
+            driver_context_tokens=0,
+            source_name="role",
+            detail="FileNotFoundError('reviewer.md')",
         ),
-        UserMessage(text="add 2 and 3", turn_index=0, assembled_prompt="add 2 and 3", slash_source="chat"),
+        UserMessage(
+            text="add 2 and 3", turn_index=0, assembled_prompt="add 2 and 3", slash_source="chat"
+        ),
         ModelReply(text="", stop_reason="tool_use", usage=_USAGE, turn_index=0, step=0),
         ToolCall(call_id="c0", tool="add", args=[2, 3], step=0),
         ToolResult(call_id="c0", tool="add", output=5, step=0),
@@ -85,7 +106,9 @@ def _topology(events: list[Any]) -> Callable[[api.TopologyBuilder], None]:
         return body
 
     def topo(b: api.TopologyBuilder) -> None:
-        b.producer_kind("fixture", schemas=schemas, schema_version=1, factory=factory, deterministic=True)
+        b.producer_kind(
+            "fixture", schemas=schemas, schema_version=1, factory=factory, deterministic=True
+        )
         b.initial("fixture", input={})
         b.termination(api.all_completed())
 
@@ -101,10 +124,19 @@ def main() -> None:
         workspace = home / "sessions" / sid / "workspace"
         workspace.mkdir(parents=True, exist_ok=True)
         manifest = registry.create(
-            session_id=sid, name=f"shape-{label}", driver="deterministic", workspace=str(workspace),
-            workspace_shape="flat", bundle=None, seed="",
+            session_id=sid,
+            name=f"shape-{label}",
+            driver="deterministic",
+            workspace=str(workspace),
+            workspace_shape="flat",
+            bundle=None,
+            seed="",
         )
-        asyncio.run(api.Runtime(Path(manifest.record_root), persistent=True).run(_topology(events), name="session"))
+        asyncio.run(
+            api.Runtime(Path(manifest.record_root), persistent=True).run(
+                _topology(events), name="session"
+            )
+        )
         ids[label] = sid
     print(json.dumps(ids))
 

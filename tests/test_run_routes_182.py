@@ -38,8 +38,13 @@ def test_the_caller_lists_and_stops_a_running_build(
     (repo / "a.py").write_text("x = 1\n")
     workspace.ensure_repository(repo)
     caller = app.registry.create(
-        session_id="s_caller_182", name=None, driver="claude", workspace=str(repo),
-        workspace_shape="flat", bundle=None, seed="",
+        session_id="s_caller_182",
+        name=None,
+        driver="claude",
+        workspace=str(repo),
+        workspace_shape="flat",
+        bundle=None,
+        seed="",
     )
     run_id, _branch = server._start_build(app, caller, build.Card(task="look at a.py"))
     with serving(app) as base:

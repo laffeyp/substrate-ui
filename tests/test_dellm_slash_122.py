@@ -25,7 +25,10 @@ def test_a_dellm_turn_loads_the_skill_first(app: server.App, base: str) -> None:
     _s, body = call("POST", base + "/api/session", {"driver": "deterministic", "bundle": "harness"})
     sid = body["session_id"]
     status, body = call(
-        "POST", base + f"/api/session/{sid}/turn", {"text": "fix this", "skill": "dellm"}, timeout=60
+        "POST",
+        base + f"/api/session/{sid}/turn",
+        {"text": "fix this", "skill": "dellm"},
+        timeout=60,
     )
     assert status == 200, body
     events = list(api.read_record(Path(app.registry.get(sid).record_root), resolve_blobs=True))

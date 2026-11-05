@@ -48,9 +48,11 @@ def test_a_model_change_mid_session_is_told(
     monkeypatch.setattr(
         server,
         "_daemon_driver_resolver",
-        lambda app, name, params=None, workspace=None, session_id=None: DeterministicResponder(seed=0)
-        if name == "stand-in"
-        else real(app, name, params, workspace=workspace),
+        lambda app, name, params=None, workspace=None, session_id=None: (
+            DeterministicResponder(seed=0)
+            if name == "stand-in"
+            else real(app, name, params, workspace=workspace)
+        ),
     )
     _s, body = call("POST", base + "/api/session", {"driver": "deterministic", "bundle": "harness"})
     sid = body["session_id"]
@@ -75,7 +77,9 @@ def test_cache_layout_is_refused_without_a_system_channel(base: str) -> None:
     assert status == 400 and "system channel" in str(body), body
     _s, body = call("POST", base + "/api/session", {"driver": "deterministic"})
     status, body = call(
-        "PATCH", base + f"/api/session/{body['session_id']}", {"driver_params": {"cache_layout": True}}
+        "PATCH",
+        base + f"/api/session/{body['session_id']}",
+        {"driver_params": {"cache_layout": True}},
     )
     assert status == 400, body
 

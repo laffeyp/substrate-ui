@@ -25,6 +25,8 @@ def test_every_handled_field_is_patchable_and_every_patchable_field_is_handled()
     allow_block = section[: section.index("}") + 1]
     allowed = set(re.findall(r'^\s+"(\w+)",', allow_block, re.MULTILINE))
     handled = set(re.findall(r'if "(\w+)" in body', section))
-    assert allowed == handled, f"allow-list only: {allowed - handled}; handled only: {handled - allowed}"
+    assert allowed == handled, (
+        f"allow-list only: {allowed - handled}; handled only: {handled - allowed}"
+    )
     # The Length and Tone controls are both allowed and handled through the Control enum.
     assert "*Control," in allow_block and "control in body for control in Control" in section

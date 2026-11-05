@@ -39,15 +39,17 @@ def base(app: server.App, tmp_path: Path) -> Iterator[str]:
         yield url
 
 
-def test_a_reply_shift_reaches_the_route(app: server.App, base: str, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_reply_shift_reaches_the_route(
+    app: server.App, base: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
     scripted = Scripted()
     real = server._daemon_driver_resolver
     monkeypatch.setattr(
         server,
         "_daemon_driver_resolver",
-        lambda app, name, params=None, workspace=None, session_id=None: scripted
-        if name == "scripted"
-        else real(app, name, params, workspace=workspace),
+        lambda app, name, params=None, workspace=None, session_id=None: (
+            scripted if name == "scripted" else real(app, name, params, workspace=workspace)
+        ),
     )
     _s, body = call("POST", base + "/api/session", {"driver": "scripted"})
     sid = body["session_id"]
@@ -55,4 +57,6 @@ def test_a_reply_shift_reaches_the_route(app: server.App, base: str, monkeypatch
         call("POST", base + f"/api/session/{sid}/turn", {"text": f"Question {i}?"}, timeout=60)
     _s, view = call("GET", base + f"/api/session/{sid}/language")
     model = [s for s in view["shifts"] if s["stream"] == "model"]
-    assert any(s["measure"] == "words" and s["direction"] == "up" and s["turn"] == 22 for s in model), model
+    assert any(
+        s["measure"] == "words" and s["direction"] == "up" and s["turn"] == 22 for s in model
+    ), model

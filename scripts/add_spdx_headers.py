@@ -10,6 +10,7 @@ Usage:
   python scripts/add_spdx_headers.py            # apply
   python scripts/add_spdx_headers.py --check    # report missing; exit 1 if any
 """
+
 from __future__ import annotations
 
 import sys
@@ -103,7 +104,9 @@ def iter_files() -> list[Path]:
 def main() -> int:
     check_only = "--check" in sys.argv
     files = iter_files()
-    missing: list[Path] = [p for p in files if not already_has_header(p.read_text(encoding="utf-8"))]
+    missing: list[Path] = [
+        p for p in files if not already_has_header(p.read_text(encoding="utf-8"))
+    ]
     if check_only:
         for p in missing:
             print(p.relative_to(ROOT))

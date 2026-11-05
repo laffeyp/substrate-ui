@@ -26,30 +26,39 @@ def main(root: str) -> None:
             continue
         msg = next(x for x in reversed(events[:i]) if x["kind"] == "UserMessage")
         prompt = next((x for x in events[i:] if x["kind"] == "PromptComposed"), None)
-        whole = ((prompt or {}).get("payload") or {})
+        whole = (prompt or {}).get("payload") or {}
         text = str(whole.get("system") or "") + "\n" + str(whole.get("text") or "")
         # The text this change wrote, however its generation was tagged (the message's seq from
         # K299; the change's own seq before): a generation from this message up to the next one.
         nxt = next((x["seq"] for x in events[i:] if x["kind"] == "UserMessage"), float("inf"))
         written = [
-            x["payload"] for x in events
+            x["payload"]
+            for x in events
             if x["kind"] == "PromptFragment"
             and isinstance((x["payload"].get("provenance") or {}).get("generation"), int)
             and msg["seq"] <= x["payload"]["provenance"]["generation"] < nxt
         ]
         sources = {f["source"] for f in written}
         older = [
-            x["payload"]["text"] for x in events[:i]
-            if x["kind"] == "PromptFragment" and x["payload"]["source"] in sources and x["payload"]["text"]
+            x["payload"]["text"]
+            for x in events[:i]
+            if x["kind"] == "PromptFragment"
+            and x["payload"]["source"] in sources
+            and x["payload"]["text"]
             and x["payload"]["text"] not in {f["text"] for f in written}
         ]
-        out.append({
-            "field": e["payload"]["field"], "old": e["payload"]["old"], "new": e["payload"]["new"],
-            "message": msg["payload"].get("text", ""),
-            "written": len([f for f in written if f["text"]]),
-            "new_text_in_prompt": prompt is not None and all(f["text"] in text for f in written if f["text"]),
-            "old_text_in_prompt": any(t in text for t in older),
-        })
+        out.append(
+            {
+                "field": e["payload"]["field"],
+                "old": e["payload"]["old"],
+                "new": e["payload"]["new"],
+                "message": msg["payload"].get("text", ""),
+                "written": len([f for f in written if f["text"]]),
+                "new_text_in_prompt": prompt is not None
+                and all(f["text"] in text for f in written if f["text"]),
+                "old_text_in_prompt": any(t in text for t in older),
+            }
+        )
     print(json.dumps(out))
 
 

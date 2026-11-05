@@ -53,7 +53,10 @@ def test_the_command_goes_out_as_written_and_stays_out_of_history(
     _s, body = call("POST", base + "/api/session", {"driver": "claude", "bundle": "harness"})
     sid = body["session_id"]
     status, body = call(
-        "POST", base + f"/api/session/{sid}/turn", {"text": "/context", "driver_command": True}, timeout=60
+        "POST",
+        base + f"/api/session/{sid}/turn",
+        {"text": "/context", "driver_command": True},
+        timeout=60,
     )
     assert status == 200, body
     call("POST", base + f"/api/session/{sid}/turn", {"text": "hello"}, timeout=60)
