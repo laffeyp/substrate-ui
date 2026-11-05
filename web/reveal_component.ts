@@ -86,6 +86,8 @@ import { GUIDANCE_AUTO_META, GUIDANCE_META, LENGTH_META, TONE_META } from "./app
 import { setTitleOf } from "./app/state/input_bar";
 import { closeFind, find, findQuery as findQueryOf, setFindScope, toggleFind } from "./app/state/find";
 import { recordsKey, setOpenSession } from "./app/state/records";
+import { lineStep, paneShape, SHARED_SANDBOX, tabFill, workspaceRows } from "./app/derive/picker";
+import { treeKey } from "./app/derive/tree_key";
 import { onCommand, shell } from "./app/state/shell";
 
 
@@ -143,14 +145,14 @@ class Component extends DCLogic {
       // ~/.substrate/sessions/<id>/workspace); 'sandbox' = the shared
       // ~/.substrate/sandbox; 'flat' = any user-picked directory.
       const isDefault = !!(opts && opts.isDefault);
-      const shape = isDefault ? 'isolated' : (ws === '~/.substrate/sandbox' ? 'sandbox' : 'flat');
+      const shape = paneShape(ws, isDefault);
       // Session open elsewhere reads pane.ws. Empty ws leaves the
       // workspace field off the POST so substrate falls back to its
       // per-session isolated default.
       const boundWs = isDefault ? '' : ws;
       const displayWs = isDefault ? 'fresh per-session sandbox' : ws;
       const lines = [
-        { t: 'session ' + pane.name + ' started · driver ' + pane.driver + ' · ' + displayWs + (shape === 'worktree' ? ' · worktree substrate/' + pane.name : ' · ' + shape), c: '#62676f' },
+        { t: 'session ' + pane.name + ' started · driver ' + pane.driver + ' · ' + displayWs + ' · ' + shape, c: '#62676f' },
         { t: '◐ parked — awaiting your first message', c: '#82a5c8' }];
       return { panes: s.panes.map(p => p.id === id ? Object.assign({}, p, { unbound: false, ws: boundWs, shape, lines }) : p),
         allSessions: [...(s.allSessions || []), { id, name: pane.name, driver: pane.driver, ws: boundWs }] };
@@ -206,7 +208,7 @@ class Component extends DCLogic {
       return;
     }
     if (vm && typeof vm.pickWorkspace === 'function') vm.pickWorkspace(armed.ws);
-    if (vm && typeof vm.addWorkspace === 'function' && armed.ws !== '~/.substrate/sandbox') {
+    if (vm && typeof vm.addWorkspace === 'function' && armed.ws !== SHARED_SANDBOX) {
       void vm.addWorkspace(armed.ws);
     }
     this._bindPane(paneId, armed.ws);
@@ -418,116 +420,54 @@ class Component extends DCLogic {
     return items;
   }
 
-  // UI sprint 124/128 — the workspace half's rows, with each open row's sessions.
+  // UI sprint 124/128 — the workspace half's rows, with each open row's sessions
+  // (web/app/derive/picker.ts, sprint 275).
   _wsPickerRows(state, p) {
     if (!p.unbound) return [];
-    // Sprint 086b — picker offers only pickable workspaces:
-    //   default (per-session isolated), inherit-from-parent (when
-    //   applicable), sandbox, any user-added folders, choose folder…
-    // Every server-side row that is a per-session-sandbox
-    // collapse, a temp-fixture path, or an on-disk artifact
-    // stays out of the picker (those live on the Records surface).
-    const skip = (r) => (
-      !r || typeof r.path !== 'string' || !r.path
-      || r.shape === 'per-session-sandboxes'
-      || /\.substrate\/sessions\//.test(r.path)
-      || /^\/var\/folders\//.test(r.path)
-      || /^\/tmp\//.test(r.path)
-      || /substrate-walkthrough-/.test(r.path)
-      || /substrate-harness-/.test(r.path)
-      || r.path === '~/.substrate/sandbox' || r.path.endsWith('/.substrate/sandbox')
-    );
-    const userFolders = ((state.recentWorkspaces || []).filter(r => !skip(r)));
     const inheritFrom = this.state.panes.find(pp => pp.id !== p.id && !pp.unbound && !!pp.ws);
-    const inheritPath = inheritFrom ? inheritFrom.ws : null;
-    const rows = [];
-    // Default row: substrate mints a fresh per-session sandbox at
-    // ~/.substrate/sessions/<id>/workspace. Path stays empty so
-    // openSession sends no workspace field and substrate uses its
-    // own default.
-    // Per-session-sandbox row: expandable via the server's
-    // synthesized `~/.substrate/sessions/` workspace (returned by
-    // /api/workspaces with shape='per-session-sandboxes').
-    // by-workspace with that path collapses every per-session
-    // sandbox session under one paginated result.
-    const perSessionRow = (state.recentWorkspaces || []).find(r => r && r.shape === 'per-session-sandboxes');
-    const perSessionPath = perSessionRow ? perSessionRow.path : '';
-    rows.push({ path: 'per session sandbox', meta: 'substrate manages · isolated', kind: 'default', expandable: !!perSessionPath, expandPath: perSessionPath });
-    if (inheritPath) rows.push({ path: inheritPath, meta: 'inherit · from ' + (inheritFrom.name || 'split'), kind: 'inherit' });
-    rows.push({ path: '~/.substrate/sandbox', meta: 'sandbox · shared across sessions', kind: 'sandbox', expandable: true });
-    for (const r of userFolders.slice(0, 2)) rows.push({ path: r.path, meta: 'recent', kind: 'recent', expandable: true });
-    rows.push({ path: 'choose folder…', meta: '', kind: 'choose', key: '⌘O' });
-    if (p.wsQ) rows.unshift({ path: p.wsQ, meta: 'typed — ↵ picks the folder', kind: 'typed', key: '↵' });
-    const pickerExpanded = state.pickerExpandedWs || {};
-    const pickerPaged = state.pickerPagedByWs || {};
-    // Session-attach handler for the expanded sub-rows. Mirrors
-    // the Records surface's pick: mark pane bound before attach so
-    // the transcript branch renders.
-    const _attachToExisting = (paneId, s) => {
+    const { rows } = workspaceRows({
+      recentWorkspaces: state.recentWorkspaces || [],
+      inherit: inheritFrom ? { path: inheritFrom.ws, name: inheritFrom.name } : null,
+      typed: p.wsQ || '', armed: p.armed || null, pickerHalf: p.pickerHalf || 'ws', sel: p.wsSelIdx || 0,
+      expanded: state.pickerExpandedWs || {}, paged: state.pickerPagedByWs || {},
+    });
+    // A session picked under a row opens in this pane, as the records page's pick does: the pane is
+    // bound before the attach so the transcript draws.
+    const attach = (s) => {
       const vm = window.__vm;
       if (!vm || !s.sessionId) return;
       const wsPath = (typeof s.workspacePath === 'string' && s.workspacePath) ? s.workspacePath : '';
       const wsShape = (typeof s.workspaceShape === 'string' && s.workspaceShape) ? s.workspaceShape : 'flat';
-      this.setState(st => ({
-        panes: st.panes.map(pn => pn.id === paneId
-          ? Object.assign({}, pn, { unbound: false, ws: wsPath, shape: wsShape, name: s.name || pn.name, lines: [] })
-          : pn),
-      }));
+      this.setState(st => ({ panes: st.panes.map(pn => pn.id === p.id ? Object.assign({}, pn, { unbound: false, ws: wsPath, shape: wsShape, name: s.name || pn.name, lines: [] }) : pn) }));
       vm.attachExisting(s.sessionId);
     };
-    // Toggle expand on an expandable row. On expand: fire
-    // loadSessionsByWorkspace(path, 0, 5) if not yet fetched.
-    const _pickerToggle = (path) => {
-      this.setState(st => ({ pickerExpandedWs: Object.assign({}, st.pickerExpandedWs, { [path]: !(st.pickerExpandedWs || {})[path] }) }));
-      if (!pickerExpanded[path]) {
-        const vm = window.__vm;
-        if (vm && typeof vm.loadSessionsByWorkspace === 'function' && !pickerPaged[path]) {
-          vm.loadSessionsByWorkspace(path, 0, 5).then((r) => {
-            this.setState(st => ({ pickerPagedByWs: Object.assign({}, st.pickerPagedByWs, { [path]: { rows: r.rows, total: r.total } }) }));
-          }).catch(() => undefined);
-        }
+    // On open, a row reads its first sessions once (loadSessionsByWorkspace).
+    const toggle = (path) => {
+      const was = !!(this.state.pickerExpandedWs || {})[path];
+      this.setState(st => ({ pickerExpandedWs: Object.assign({}, st.pickerExpandedWs, { [path]: !was }) }));
+      const vm = window.__vm;
+      if (!was && vm && typeof vm.loadSessionsByWorkspace === 'function' && !(this.state.pickerPagedByWs || {})[path]) {
+        vm.loadSessionsByWorkspace(path, 0, 5).then((r) => {
+          this.setState(st => ({ pickerPagedByWs: Object.assign({}, st.pickerPagedByWs, { [path]: { rows: r.rows, total: r.total } }) }));
+        }).catch(() => undefined);
       }
     };
-    // Rows and the sessions of an open row share one key list (UI sprint 128); `nav` is a row's
-    // place in it, and wsSelIdx counts along it.
-    let nav = 0;
-    const sel = p.wsSelIdx || 0;
-    return rows.map((row) => {
-      const rowNav = nav++;
-      const expandKey = row.expandPath || row.path;
-      const expanded = !!(row.expandable && pickerExpanded[expandKey]);
-      const paged = row.expandable ? pickerPaged[expandKey] : null;
-      const sessions = (expanded && paged)
-        ? paged.rows.slice(0, 5).map(s => { const sNav = nav++; return {
-            sessionIdShort: (s.sessionId || '').slice(0, 12),
-            name: s.name || (s.sessionId || '').slice(0, 8),
-            driver: s.driver || '?',
-            statusLabel: sessionStatusLook(s.status).label,
-            dotColor: sessionStatusLook(s.status).dot,
-            pick: () => _attachToExisting(p.id, s),
-            nav: sNav,
-            bg: p.pickerHalf !== 'model' && sNav === sel ? '#2e3138' : 'transparent',
-            litAttr: p.pickerHalf !== 'model' && sNav === sel ? '1' : '0',
-          }; })
-        : [];
-      const isArmed = !!(p.armed && (row.kind === 'default' ? p.armed.isDefault : (!p.armed.isDefault && p.armed.ws === row.path)));
-      const lit = p.pickerHalf === 'model' ? isArmed : rowNav === sel;
-      return Object.assign({}, row, {
-        c: lit ? '#e2e5e9' : '#b9bec5',
-        bg: lit ? '#2e3138' : 'transparent',
-        litAttr: lit ? '1' : '0',
-        key: isArmed ? '→' : (row.key || (lit ? '↵' : '')),
-        expanded, notExpanded: !expanded,
-        chevron: row.expandable ? (expanded ? '▾' : '▸') : ' ',
-        toggleExpand: row.expandable ? ((ev) => { if (ev && typeof ev.stopPropagation === 'function') ev.stopPropagation(); _pickerToggle(expandKey); }) : (() => undefined),
-        sessions,
-        nav: rowNav,
-        pick: () => {
-          if (row.kind === 'choose') { this._pickFolder(p.id); return; }
-          this._armWorkspace(p.id, row.kind === 'default' ? '' : row.path, row.kind === 'default');
-        },
-      });
-    });
+    return rows.map((row) => Object.assign({}, row, {
+      c: row.lit ? '#e2e5e9' : '#b9bec5',
+      bg: row.lit ? '#2e3138' : 'transparent',
+      litAttr: row.lit ? '1' : '0',
+      notExpanded: !row.expanded,
+      chevron: row.expandable ? (row.expanded ? '▾' : '▸') : ' ',
+      toggleExpand: row.expandable ? ((ev) => { if (ev && typeof ev.stopPropagation === 'function') ev.stopPropagation(); toggle(row.expandKey); }) : (() => undefined),
+      sessions: row.sessions.map(s => Object.assign({}, s, {
+        sessionIdShort: s.idShort, pick: () => attach(s.row),
+        bg: s.lit ? '#2e3138' : 'transparent', litAttr: s.lit ? '1' : '0',
+      })),
+      pick: () => {
+        if (row.kind === 'choose') { this._pickFolder(p.id); return; }
+        this._armWorkspace(p.id, row.kind === 'default' ? '' : row.path, row.kind === 'default');
+      },
+    }));
   }
   // UI sprint 124/128 — keys for the workspace bar. ↑↓ move, ↵ picks, ⇧↵ (or ⌥↵) opens or folds a
   // row that has rows under it; a row with nothing to pick opens on ↵ too. → ← also open and
@@ -541,27 +481,20 @@ class Component extends DCLogic {
     const reveal = (half) => setTimeout(() => {
       for (const el of document.querySelectorAll(half)) el.scrollIntoView({ block: 'nearest' });
     }, 0);
-    if (p.pickerHalf === 'guidance' && p.armed) {
-      const n = GUIDANCE_OPTIONS.length;
-      const at = Math.max(0, Math.min(p.guidanceSel ?? 0, n - 1));
-      if (ev.key === 'ArrowRight') { ev.preventDefault(); setPane({ guidanceSel: (at + 1) % n }); return; }
-      if (ev.key === 'ArrowLeft') { ev.preventDefault(); setPane({ guidanceSel: (at - 1 + n) % n }); return; }
-      if (ev.key === 'Enter') { ev.preventDefault(); this._pickGuidance(paneId, GUIDANCE_OPTIONS[at]); return; }
-      if (ev.key === 'Escape' || ev.key === 'ArrowUp') { ev.preventDefault(); setPane({ pickerHalf: 'model' }); return; }
-      return;
-    }
-    // UI sprint 143: LENGTH and TONE take the guidance line's keys; esc or ↑ steps back a line.
-    for (const [half, opts, selKey, pick, back] of [
-      ['length', LENGTH_OPTIONS, 'lengthSel', (o) => this._pickLength(paneId, o), 'guidance'],
-      ['tone', TONE_OPTIONS, 'toneSel', (o) => this._pickTone(paneId, o), 'length'],
+    // UI sprint 143: GUIDANCE, LENGTH and TONE share a line's keys (web/app/derive/picker.ts lineStep);
+    // esc or ↑ steps back a line.
+    for (const [half, opts, selKey, start, pick, back] of [
+      ['guidance', GUIDANCE_OPTIONS, 'guidanceSel', 0, (o) => this._pickGuidance(paneId, o), 'model'],
+      ['length', LENGTH_OPTIONS, 'lengthSel', 1, (o) => this._pickLength(paneId, o), 'guidance'],
+      ['tone', TONE_OPTIONS, 'toneSel', 1, (o) => this._pickTone(paneId, o), 'length'],
     ]) {
       if (p.pickerHalf !== half || !p.armed) continue;
-      const n = opts.length;
-      const at = Math.max(0, Math.min(p[selKey] ?? 1, n - 1));
-      if (ev.key === 'ArrowRight') { ev.preventDefault(); setPane({ [selKey]: (at + 1) % n }); return; }
-      if (ev.key === 'ArrowLeft') { ev.preventDefault(); setPane({ [selKey]: (at - 1 + n) % n }); return; }
-      if (ev.key === 'Enter') { ev.preventDefault(); pick(opts[at]); return; }
-      if (ev.key === 'Escape' || ev.key === 'ArrowUp') { ev.preventDefault(); setPane({ pickerHalf: back }); return; }
+      const step = lineStep(opts.length, p[selKey] ?? start, ev.key);
+      if (!step) return;
+      ev.preventDefault();
+      if ('move' in step) setPane({ [selKey]: step.move });
+      else if ('pick' in step) pick(opts[step.pick]);
+      else setPane({ pickerHalf: back });
       return;
     }
     if (p.pickerHalf === 'model' && p.armed) {
@@ -607,35 +540,24 @@ class Component extends DCLogic {
     const flat = [];
     for (const r of rows) {
       const parent = flat.length;
-      flat.push({ pick: r.pick, toggle: r.toggleExpand, expandable: !!r.expandable, expanded: !!r.expanded, parent: null });
-      for (const s of r.sessions) flat.push({ pick: s.pick, toggle: null, expandable: false, expanded: false, parent });
+      flat.push({ row: r, session: null, expandable: !!r.expandable, expanded: !!r.expanded, parent: null });
+      for (const s of r.sessions) flat.push({ row: r, session: s, expandable: false, expanded: false, parent });
     }
     if (!flat.length) return;
     const cur = Math.max(0, Math.min(p.wsSelIdx || 0, flat.length - 1));
     const move = (i) => { setPane({ wsSelIdx: i }); reveal('[data-ws-lit="1"]'); };
     if (ev.key === 'Tab') {
-      const firstRecent = rows.find(r => r.kind === 'recent' || r.kind === 'inherit' || r.kind === 'sandbox');
-      if (firstRecent) { ev.preventDefault(); setPane({ wsQ: firstRecent.path, wsSelIdx: 0 }); }
+      const fill = tabFill(rows);
+      if (fill !== null) { ev.preventDefault(); setPane({ wsQ: fill, wsSelIdx: 0 }); }
       return;
     }
-    this._treeKey(flat, cur, ev, move);
-  }
-  // The workspace tree's keys, shared by the picker's workspace column and the records page (UI
-  // sprint 156). `flat` lists rows and, under an open row, its sessions ({ pick, toggle,
-  // expandable, expanded, parent }). ↑ ↓ move and wrap; → opens; ← folds an open row, and on a
-  // session lights its row and folds it (152); ⇧↵ or ⌥↵ opens or folds; ↵ picks.
-  _treeKey(flat, cur, ev, move) {
-    if (!flat.length) return false;
-    const item = flat[cur];
-    const opens = ev.key === 'Enter' && (ev.shiftKey || ev.altKey);
-    if (ev.key === 'ArrowDown') { ev.preventDefault(); move((cur + 1) % flat.length); return true; }
-    if (ev.key === 'ArrowUp') { ev.preventDefault(); move((cur - 1 + flat.length) % flat.length); return true; }
-    if (ev.key === 'ArrowRight' && item.expandable && !item.expanded) { ev.preventDefault(); item.toggle(); return true; }
-    if (ev.key === 'ArrowLeft' && item.expandable && item.expanded) { ev.preventDefault(); item.toggle(); return true; }
-    if (ev.key === 'ArrowLeft' && item.parent !== null) { ev.preventDefault(); move(item.parent); flat[item.parent].toggle(); return true; }
-    if (opens) { ev.preventDefault(); if (item.expandable) item.toggle(); return true; }
-    if (ev.key === 'Enter') { ev.preventDefault(); item.pick(); return true; }
-    return false;
+    const step = treeKey(flat, cur, ev);
+    if (!step) return;
+    ev.preventDefault();
+    if ('move' in step) move(step.move);
+    else if ('toggle' in step) flat[step.toggle].row.toggleExpand();
+    else if ('fold' in step) { move(step.fold); flat[step.fold].row.toggleExpand(); }
+    else { const f = flat[step.pick]; if (f.session) f.session.pick(); else f.row.pick(); }
   }
   // UI sprint 124 — the model half of the workspace bar: the header dropdown's rows, in the
   // bar. A pick commits the armed folder; with nothing armed the half is greyed and inert.
@@ -1875,7 +1797,7 @@ class Component extends DCLogic {
       ...(() => {
         const card = workspaceCard({ unbound: !!fp.unbound, ws: fp.ws || '', shape: fp.shape || '', name: fp.name || '',
           workspacePath: (((state.controllerSnapshots || {})[fp.id] || {}).workspacePath) || null });
-        return { focusedWorkspace: card.workspace, focusedShape: card.shape, focusedBranch: card.branch };
+        return { focusedWorkspace: card.workspace, focusedShape: card.shape };
       })(),
 
       // The meta view's machinery lens wraps in this gate; every pane has its own controller, so it
@@ -1899,7 +1821,8 @@ class Component extends DCLogic {
       // UI sprint 182: a run's pane names the worktree its record names, home written `~`.
       fpWsLabel: fp.unbound ? '⌥ —' : fp.runRoot
         ? '⌥ ' + ((((state.controllerSnapshots || {})[fp.id] || {}).workspacePath || '—').replace(/^\/Users\/[^/]+/, '~'))
-        : '⌥ ' + (fp.shape === 'worktree' ? 'substrate/' + (fp.name || 'main') : (fp.ws || 'sandbox')),
+        // F339: a git folder's pane names its folder; no session has a worktree branch of its own.
+        : '⌥ ' + (fp.ws || 'sandbox'),
       splitRight: () => this._split('right'),
       driverName: (() => {
         const d = this._paneDriver(state, fp) || '';
@@ -1922,7 +1845,7 @@ class Component extends DCLogic {
       dotBg: vals.fpDotBg, dot: vals.fpDot, crumb: vals.crumb, editing: !!vals.fpEditing, nameVal: vals.fpNameVal || '',
       showChips: !!vals.showBarChips, showDriverChip: !!vals.showDriverChip, driverName: vals.driverName,
       modelCardOpen: !!vals.fpDdOpen, model: vals.fpModel, modelVersion: vals.fpModelVersion, guidance: vals.fpGuidance, length: vals.fpLength, tone: vals.fpTone,
-      wsLabel: vals.fpWsLabel, wsCardOpen: !!vals.fpWsOpen, workspace: vals.focusedWorkspace, shape: vals.focusedShape, branch: vals.focusedBranch,
+      wsLabel: vals.fpWsLabel, wsCardOpen: !!vals.fpWsOpen, workspace: vals.focusedWorkspace, shape: vals.focusedShape,
       escHint: vals.escHint, recordsColor: vals.recordsColor,
       revealLabel: vals.revealLabel, revealColor: vals.revealBtnColor, revealBg: vals.revealBtnBg,
     };

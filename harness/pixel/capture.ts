@@ -39,9 +39,13 @@ async function setSize(app: ElectronApplication, win: Page, w: number, h: number
 async function shoot(app: ElectronApplication, win: Page, dir: string, screen: Screen, done: Set<Screen>): Promise<void> {
   for (const [w, h] of SIZES) {
     await setSize(app, win, w, h);
-    // The app redraws every 500 ms; a value that ticks between the replacement and the screenshot
-    // (`0s ago` to `1s ago`) is written over its stand-in. After the shot, replace again: anything
-    // replaced means the page changed under the shot, so take it again (sprint 199).
+    // The mouse leaves the page's controls: a step's click leaves it on a control, and after a resize
+    // the row under it took its hover style only when Chromium's delayed mouse move came before the
+    // shot (meta-structure, one run in two, 2026-11-05). No hover is part of a compared picture.
+    await win.mouse.move(0, 0);
+    // A clock on the page can tick between the replacement and the screenshot (`0s ago` to `1s
+    // ago`), writing over its stand-in. After the shot, replace again: anything replaced means the
+    // page changed under the shot, so take it again (sprint 199).
     const stands = VOLATILE_TEXT.map((v) => ({ source: v.source, stand: v.stand }));
     let png: Buffer | null = null;
     for (let attempt = 1; attempt <= 3 && !png; attempt++) {

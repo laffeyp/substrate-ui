@@ -4,33 +4,32 @@
 //
 // The template's card fell back to `~/.substrate/sandbox` and `sandbox` for any pane without a
 // folder: an unbound pane, and a pane on the default per-session sandbox, whose folder the server
-// mints. Its branch line showed the folder's path for every shape but a worktree. The card now names
-// the folder the server reports for the session, else the folder the pane was bound to; a pane with
-// neither says so, and the branch line names a branch only for a worktree.
+// mints. Its branch line showed the folder's path, or for a git folder `substrate/<pane name>`, a
+// branch no session has (F339: sessions get no worktree, UI sprint 154). The card names the folder the
+// server reports for the session, else the folder the pane was bound to; a pane with neither says so;
+// a git folder's shape reads "git"; there is no branch line, since nothing reports a branch.
+
+import { shapeLabel } from "./picker";
 
 export interface WorkspaceCardInput {
   unbound: boolean;
   /** The folder the pane was bound to; empty for the default per-session sandbox. */
   ws: string;
-  /** isolated (per-session sandbox), sandbox (the shared one), flat (a picked folder), worktree. */
+  /** The pane's shape: isolated, sandbox or flat until a session reports one (picker.ts). */
   shape: string;
   name: string;
   /** The session's folder as the server reports it; null before a session opens. */
   workspacePath: string | null;
 }
 
-export interface WorkspaceCardText { workspace: string; shape: string; branch: string; }
+export interface WorkspaceCardText { workspace: string; shape: string; }
 
 const home = (path: string) => path.replace(/^\/Users\/[^/]+/, "~");
 
 export function workspaceCard(input: WorkspaceCardInput): WorkspaceCardText {
-  if (input.unbound) return { workspace: "none yet — pick one in the pane", shape: "—", branch: "—" };
+  if (input.unbound) return { workspace: "none yet — pick one in the pane", shape: "—" };
   const workspace = input.workspacePath ? home(input.workspacePath)
     : input.ws ? input.ws
       : input.shape === "isolated" ? "fresh per-session sandbox" : "—";
-  return {
-    workspace,
-    shape: input.shape || "—",
-    branch: input.shape === "worktree" ? "substrate/" + (input.name || "main") : "—",
-  };
+  return { workspace, shape: input.shape ? shapeLabel(input.shape) : "—" };
 }

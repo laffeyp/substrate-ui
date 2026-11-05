@@ -64,7 +64,7 @@ export function TopBar(): React.ReactElement {
             {bar.wsCardOpen ? (
               <span style={card}>
                 workspace <span style={bright}>{bar.workspace}</span><br />
-                shape <span style={bright}>{bar.shape}</span> · branch <span style={bright}>{bar.branch}</span>
+                shape <span style={bright}>{bar.shape}</span>
               </span>
             ) : null}
           </span>

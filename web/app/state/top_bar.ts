@@ -35,7 +35,6 @@ export interface TopBarState {
   wsCardOpen: boolean;
   workspace: string;
   shape: string;
-  branch: string;
   escHint: string;
   recordsColor: string;
   revealLabel: string;
@@ -57,7 +56,7 @@ const INITIAL: TopBarState = {
   dotBg: "transparent", dot: "#4a4e55", crumb: "", editing: false, nameVal: "",
   showChips: true, showDriverChip: false, driverName: "",
   modelCardOpen: false, model: "—", modelVersion: "default", guidance: "auto", length: "", tone: "",
-  wsLabel: "⌥ —", wsCardOpen: false, workspace: "", shape: "", branch: "",
+  wsLabel: "⌥ —", wsCardOpen: false, workspace: "", shape: "",
   escHint: "", recordsColor: "#9aa0a8", revealLabel: "meta", revealColor: "#9aa0a8", revealBg: "#3d434c",
 };
 
