@@ -66,7 +66,10 @@ function boot(): void {
       'body[data-electron="1"] [data-top-bar] button,',
       'body[data-electron="1"] [data-top-bar] [style*="cursor:pointer"],',
       'body[data-electron="1"] [data-top-bar] [style*="cursor: pointer"],',
-      'body[data-electron="1"] [data-top-bar] [style*="cursor:text"]{-webkit-app-region:no-drag}',
+      // React writes inline styles with a space after the colon ("cursor: text"); the crumb's
+      // double-click rename needs it out of the drag region (sprint 227).
+      'body[data-electron="1"] [data-top-bar] [style*="cursor:text"],',
+      'body[data-electron="1"] [data-top-bar] [style*="cursor: text"]{-webkit-app-region:no-drag}',
     ].join("\n");
     document.head.appendChild(style);
   }

@@ -11,7 +11,7 @@
 //
 // Steps: bind pane 1; split right (cmd+D), then down (cmd+shift+D) → three panes. Assert exactly
 // one visible [data-top-bar] and one "substrate" label, at the top edge with the 78px inset, before
-// and after the split. Click each pane in turn: the bar reads that pane's name, pane-<id>.
+// and after the split; every control in the bar is outside the window's drag region. Click each pane in turn: the bar reads that pane's name, pane-<id>.
 
 import { _electron as electron } from "playwright";
 import { bindPaneAsUser, launchArgs, waitForApp } from "./lib/electron";
@@ -44,6 +44,15 @@ async function main(): Promise<void> {
     const single = await read();
     check("one pane", single);
 
+    // In Electron the bar is the window's drag region; a control in it must be outside the region,
+    // or a click or double-click moves the window instead of reaching the page (sprint 227: the
+    // crumb's rename). Every element with a pointer or text cursor is a control here.
+    const dragging = await win.evaluate(() => Array.from(document.querySelectorAll<HTMLElement>("[data-top-bar] *"))
+      .filter((el) => el.offsetParent !== null && /cursor: ?(pointer|text)/.test(el.getAttribute("style") ?? ""))
+      .filter((el) => getComputedStyle(el).getPropertyValue("-webkit-app-region") !== "no-drag")
+      .map((el) => (el.textContent ?? "").trim()));
+    if (dragging.length) throw new Error(`top-bar controls inside the drag region: ${JSON.stringify(dragging)}`);
+
     await win.keyboard.press("Meta+d");
     await win.keyboard.press("Meta+Shift+d");
     await win.waitForFunction(() => document.querySelectorAll("[data-pane]").length === 3, undefined, { timeout: 10_000 });
@@ -68,7 +77,7 @@ async function main(): Promise<void> {
       // No pane here is renamed, so each is named pane-<id>.
       if (crumb !== `pane-${id}`) throw new Error(`focused pane ${id}; the bar reads "${crumb}" — ${JSON.stringify(crumbs)}`);
     }
-    console.log(`one_top_bar: ok — one pane ${JSON.stringify(single)}; three panes ${JSON.stringify(split)}; names by focus ${JSON.stringify(crumbs)}`);
+    console.log(`one_top_bar: ok — one pane ${JSON.stringify(single)}; three panes ${JSON.stringify(split)}; names by focus ${JSON.stringify(crumbs)}; controls outside the drag region`);
     code = 0;
   } catch (e) {
     console.error(`one_top_bar: FAIL — ${(e as Error).message}`);
