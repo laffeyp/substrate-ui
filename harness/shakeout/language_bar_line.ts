@@ -65,10 +65,10 @@ async function main(): Promise<void> {
     await type(win, "/language");
     await win.waitForFunction(`Array.from(document.querySelectorAll('[data-lang]')).some((e) => e.getClientRects().length)`, undefined, { timeout: 10_000 })
       .catch(() => { throw new Error("/language did not open the language lens"); });
-    const label = await win.evaluate(`Array.from(document.querySelectorAll('[data-lang-readout]')).filter((e) => e.getClientRects().length).map((e) => (e.textContent || "").trim().split(/\\s+/)[0])[0]`);
+    const label = await win.evaluate(`Array.from(document.querySelectorAll('[data-lang-readout-label]')).filter((e) => e.getClientRects().length).map((e) => (e.textContent || "").trim())[0]`);
     if (label !== "t0") {
       await new Promise((r) => setTimeout(r, 500));
-      const later = await win.evaluate(`Array.from(document.querySelectorAll('[data-lang-readout]')).filter((e) => e.getClientRects().length).map((e) => (e.textContent || "").trim().split(/\\s+/)[0])[0]`);
+      const later = await win.evaluate(`Array.from(document.querySelectorAll('[data-lang-readout-label]')).filter((e) => e.getClientRects().length).map((e) => (e.textContent || "").trim())[0]`);
       const snap = await win.evaluate(`JSON.stringify({ tick: window.__vm.get(1).snapshot().languageOpenTick, shifts: window.__vm.get(1).snapshot().language?.shifts })`);
       throw new Error(`/language opened the lens on ${JSON.stringify(label)} (${JSON.stringify(later)} 500 ms later), not the shift's turn t0; ${snap}`);
     }

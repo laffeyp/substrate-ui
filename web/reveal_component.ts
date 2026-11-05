@@ -58,7 +58,7 @@ const TONE_DEFAULT_AT = TONE_OPTIONS.findIndex(o => o.value === TONE_DEFAULT);
 import { mdBlocks, mdInlines, renderBlock, renderInline } from "./reveal/markdown";
 import { followBottom } from "./reveal/follow_bottom";
 import { sessionStatusLook } from "./reveal/session_status";
-import { buildLanguageLens, LANGUAGE_STREAM_TABS, languageView, languageViewTabs, LanguageStreamId, LanguageViewMode } from "./reveal/language_lens";
+import { buildLanguageLens } from "./reveal/language_lens";
 import { fontSize, loadSettings, settings } from "./app/state/settings";
 import { closeDialog, dialogOpen, openEndSession, openSettings } from "./app/state/dialogs";
 import { chrome } from "./app/state/chrome";
@@ -73,13 +73,15 @@ import { lineStep, paneShape, SHARED_SANDBOX, tabFill, workspaceRows } from "./a
 import { treeKey } from "./app/derive/tree_key";
 import { chipLabel, driverLabel, modelRows } from "./app/derive/driver_label";
 import { picker } from "./app/state/picker";
-import { setGraphLink, setPickSeq, stream } from "./app/state/stream";
+import { setGraphLink, setPickSeq, setSelectSeq, stream } from "./app/state/stream";
+import { language, setLanguageLane } from "./app/state/language";
+import { languageKey, selectedTurn } from "./app/derive/language_keys";
 import { findText, streamRows } from "./app/derive/stream";
 import { onCommand, shell } from "./app/state/shell";
 
 
 class Component extends DCLogic {
-  state = { revealed: false, mode: GraphMode.Stream, dir: GraphDirection.Down, sel: null, langStream: LanguageStreamId.Model, langLane: 0, langView: LanguageViewMode.Bars, surface: null, level: RevealLevel.All, sent: [],
+  state = { revealed: false, mode: GraphMode.Stream, dir: GraphDirection.Down, sel: null, surface: null, level: RevealLevel.All, sent: [],
     // `driverName` in the top strip reads the pane's driver at render
     // time; null here means "read from the controller default."
     driverName: null,
@@ -614,6 +616,7 @@ class Component extends DCLogic {
     picker.set({ views: this._pickerViews || {} });
     if (this._streamView) stream.set(this._streamView);
     this._offPickSeq = setPickSeq((seq) => this.setState(s => ({ sel: s.sel === seq ? null : seq })));
+    this._offSelectSeq = setSelectSeq((seq) => this.setState({ sel: seq }));
     // The side graph (web/app/SideGraph.tsx) and the stream's scroller scroll together, in proportion.
     this._offGraphLink = setGraphLink({
       ref: (el) => { this._graphEl = el; },
@@ -712,19 +715,20 @@ class Component extends DCLogic {
         // unmounts the input box before this handler runs.
         const el = e.target;
         const typing = !!(el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable));
-        const turns = this._langTurns || [];
-        if (s.revealed && s.mode === GraphMode.Language && !s.surface && !typing && turns.length
-          && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter'].includes(e.key) && !e.metaKey && !e.ctrlKey) {
-          e.preventDefault();
-          // No selection yet: the lens shows the last turn, so the keys start there.
-          let at = turns.length - 1;
-          if (s.sel !== null) { at = 0; turns.forEach((t, i) => { if (t.seq <= s.sel) at = i; }); }
-          if (e.key === 'ArrowUp') this.setState({ sel: turns[Math.max(0, at - 1)].seq });
-          else if (e.key === 'ArrowDown') this.setState({ sel: turns[Math.min(turns.length - 1, at + 1)].seq });
-          else if (e.key === 'ArrowLeft') this.setState({ langLane: Math.max(0, s.langLane - 1) });
-          else if (e.key === 'ArrowRight') this.setState({ langLane: Math.min((this._langLaneCount || 1) - 1, s.langLane + 1) });
-          else this.setState({ mode: GraphMode.Stream });
-          return;
+        // The keys' steps: web/app/derive/language_keys.ts (sprint 308); the lens's lane is in
+        // web/app/state/language.ts (sprint 309).
+        if (s.revealed && s.mode === GraphMode.Language && !s.surface && !typing && !e.metaKey && !e.ctrlKey) {
+          const view = this._streamView || {};
+          const lg = language.getSnapshot();
+          const lens = buildLanguageLens(view.language || null, { stream: lg.stream, selTurn: selectedTurn(view.envelopes || [], s.sel), lane: lg.lane, view: lg.view });
+          const step = languageKey(lens.turns, lens.lanes.length, s.sel, lg.lane, e.key);
+          if (step) {
+            e.preventDefault();
+            if ('sel' in step) this.setState({ sel: step.sel });
+            else if ('lane' in step) setLanguageLane(step.lane);
+            else this.setState({ mode: GraphMode.Stream });
+            return;
+          }
         }
       }
       // ⌘M toggles meta and panes (the menu's Minimize gives up the key, electron/menu.js).
@@ -815,7 +819,7 @@ class Component extends DCLogic {
     this._publishChrome();
     this._publishTopBar();
   }
-  componentWillUnmount() { if (this._offRuns) this._offRuns(); if (this._offSettings) this._offSettings(); if (this._offFind) this._offFind(); if (this._offShell) this._offShell(); if (this._offCommands) this._offCommands(); if (this._offFirstRun) this._offFirstRun(); if (this._offTopBarActs) this._offTopBarActs(); if (this._offOpenSession) this._offOpenSession(); if (this._offTitleOf) this._offTitleOf(); if (this._offPickSeq) this._offPickSeq(); if (this._offGraphLink) this._offGraphLink(); window.removeEventListener('keydown', this._kd); window.removeEventListener('resize', this._rs); if (this._ddOutside) document.removeEventListener('mousedown', this._ddOutside, true); }
+  componentWillUnmount() { if (this._offRuns) this._offRuns(); if (this._offSettings) this._offSettings(); if (this._offFind) this._offFind(); if (this._offShell) this._offShell(); if (this._offCommands) this._offCommands(); if (this._offFirstRun) this._offFirstRun(); if (this._offTopBarActs) this._offTopBarActs(); if (this._offOpenSession) this._offOpenSession(); if (this._offTitleOf) this._offTitleOf(); if (this._offPickSeq) this._offPickSeq(); if (this._offSelectSeq) this._offSelectSeq(); if (this._offGraphLink) this._offGraphLink(); window.removeEventListener('keydown', this._kd); window.removeEventListener('resize', this._rs); if (this._ddOutside) document.removeEventListener('mousedown', this._ddOutside, true); }
   // UI sprint 140: ⌘E folds or unfolds every tool card (ToolCard reads the setting). No control
   // on screen: the Architect's call; /fold and /unfold do the same from the input bar.
   _toggleTools() {
@@ -1065,28 +1069,8 @@ class Component extends DCLogic {
     // The find bar shows the stream's match count; it is written to the find store after the render.
     this._streamMatches = findQuery ? envelopes.filter(e => findText(e).includes(findQuery)).length : 0;
     // The stream lens's rows and inspector: web/app/StreamLens.tsx (sprint 292), from this view.
-    this._streamView = { envelopes: _liveEnvelopes, sel: state.sel, app: state.level === RevealLevel.App, down: state.dir === GraphDirection.Down, topology: (_vmSnap && _vmSnap.topologyGraph) || null };
-    // UI sprint 169: the language lens. The selected turn is the one the selected seq falls in,
-    // so a pick here moves stream+graph and a pick there moves this.
-    let _langSelTurn = null;
-    for (const env of state.sel === null ? [] : _liveEnvelopes) {
-      if (env.seq > state.sel) break;
-      if (env.kind === EnvelopeKind.UserMessage && env.payload) _langSelTurn = Number(env.payload.turn_index);
-    }
-    const _lang = buildLanguageLens((_vmSnap && _vmSnap.language) || null, { stream: state.langStream, selTurn: _langSelTurn, lane: state.langLane, view: state.langView });
-    this._langTurns = _lang.turns;
-    this._langLaneCount = _lang.lanes.length;
-    const langRows = _lang.rows.map(r => ({ ...r, pick: () => this.setState({ sel: r.seq }), bg: r.selected ? '#2a2d33' : 'transparent' }));
-    // UI sprint 174: each stream offers its own views; one it lacks falls back to its first.
-    const _langViewNow = languageView(state.langStream, state.langView);
-    const langViews = languageViewTabs(state.langStream).map(v => ({
-      label: v, pick: () => this.setState({ langView: v }),
-      color: _langViewNow === v ? '#d7dade' : '#62676f', bg: _langViewNow === v ? '#2e3138' : 'transparent',
-    }));
-    const langStreams = LANGUAGE_STREAM_TABS.map(t => ({
-      label: t.label, pick: () => this.setState({ langStream: t.id, langLane: 0 }),
-      color: state.langStream === t.id ? '#d7dade' : '#62676f',
-    }));
+    this._streamView = { envelopes: _liveEnvelopes, sel: state.sel, app: state.level === RevealLevel.App, down: state.dir === GraphDirection.Down, topology: (_vmSnap && _vmSnap.topologyGraph) || null, language: (_vmSnap && _vmSnap.language) || null };
+    // The language lens: web/app/LanguageLens.tsx (sprint 310), from the stream's view.
     // The side graph: web/app/SideGraph.tsx (sprint 296), from the stream's view.
     const modes = [['stream', 'stream+graph'], ['io', 'i/o'], ['structure', 'structure'], [GraphMode.Language, 'language'], ['scene', 'scene']];
     // Direction (down/side) is a property of the stream lens; the
@@ -1193,7 +1177,7 @@ class Component extends DCLogic {
       },
       modeChips,
       isStream: state.mode === GraphMode.Stream, isIo: state.mode === GraphMode.IO, isStructure: state.mode === GraphMode.Structure, isScene: state.mode === GraphMode.Scene,
-      isLanguage: state.mode === GraphMode.Language, lang: _lang, langRows, langStreams, langViews, langHas: _lang.has, langEmpty: !_lang.has, langNote: !!_lang.note,
+      isLanguage: state.mode === GraphMode.Language,
       isDown: state.dir === GraphDirection.Down, isSide: state.dir === GraphDirection.Side,
       setAll: () => this.setState({ level: RevealLevel.All }), setApp: () => this.setState({ level: RevealLevel.App }),
       allColor: state.level === RevealLevel.All ? '#d7dade' : '#62676f', allBg: state.level === RevealLevel.All ? '#2e3138' : 'transparent',

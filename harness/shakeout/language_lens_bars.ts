@@ -60,7 +60,7 @@ async function main(): Promise<void> {
       rows: ${visible("data-lang-row")}.map((e) => ({ turn: e.getAttribute("data-lang-row"), top: e.getBoundingClientRect().top })),
       rules: ${visible("data-lang-rule")}.map((e) => ({ turn: e.getAttribute("data-lang-rule"), top: e.getBoundingClientRect().top, text: (e.textContent || "").replace(/\\s+/g, " ").trim() })),
       readout: ${visible("data-lang-value")}.map((e) => (e.textContent || "").trim()),
-      label: ${visible("data-lang-readout")}.map((e) => (e.textContent || "").trim().split(/\\s+/)[0])[0],
+      label: ${visible("data-lang-readout-label")}.map((e) => (e.textContent || "").trim())[0],
     })`) as { rows: { turn: string; top: number }[]; rules: { turn: string; top: number; text: string }[]; readout: string[]; label: string };
     if (JSON.stringify(layout.rows.map((r) => r.turn)) !== JSON.stringify(["0", "1", "2", "3"])) throw new Error(`rows ${JSON.stringify(layout.rows)}`);
     const rule = layout.rules.find((r) => r.text.includes("length normal → full · turn 2"));
@@ -74,7 +74,7 @@ async function main(): Promise<void> {
 
     await win.keyboard.press("ArrowUp");
     await settled(win);
-    const label = await win.evaluate(`${visible("data-lang-readout")}.map((e) => (e.textContent || "").trim().split(/\\s+/)[0])[0]`);
+    const label = await win.evaluate(`${visible("data-lang-readout-label")}.map((e) => (e.textContent || "").trim())[0]`);
     if (label !== "t2") throw new Error(`↑ left the readout on ${JSON.stringify(label)}`);
     await win.keyboard.press("Enter");
     await settled(win);

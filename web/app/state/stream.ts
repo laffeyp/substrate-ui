@@ -8,7 +8,7 @@
 
 import { createStore } from "../store";
 import type { RawEnvelope } from "../derive/stream";
-import type { TopologyGraph } from "../../vm/types";
+import type { LanguageView, TopologyGraph } from "../../vm/types";
 
 export interface StreamState {
   /** The focused session's envelopes, the snapshot's own array. */
@@ -20,6 +20,8 @@ export interface StreamState {
   down: boolean;
   /** The focused session's topology, which the structure lens lists (sprint 301). */
   topology: TopologyGraph | null;
+  /** The focused session's language view, which the language lens draws (sprint 310). */
+  language: LanguageView | null;
 }
 
 /** The side graph's scroller and its scroll, which DCLogic ties to the stream's scroller (the two scroll
@@ -27,14 +29,15 @@ export interface StreamState {
 export interface GraphLink { ref(el: HTMLElement | null): void; onScroll(el: HTMLElement): void; }
 const NO_LINK: GraphLink = { ref: () => undefined, onScroll: () => undefined };
 
-interface Shared { store: ReturnType<typeof createStore<StreamState>>; pick: { current: (seq: number) => void }; graph: { current: GraphLink } }
+interface Shared { store: ReturnType<typeof createStore<StreamState>>; pick: { current: (seq: number) => void }; select: { current: (seq: number) => void }; graph: { current: GraphLink } }
 
 // One instance per window, as in shell.ts (sprint 212).
 const KEY = "__substrateStream";
 const scope = globalThis as unknown as Record<string, Shared | undefined>;
 const shared: Shared = scope[KEY] ?? (scope[KEY] = {
-  store: createStore<StreamState>({ envelopes: [], sel: null, app: false, down: true, topology: null }),
+  store: createStore<StreamState>({ envelopes: [], sel: null, app: false, down: true, topology: null, language: null }),
   pick: { current: () => undefined },
+  select: { current: () => undefined },
   graph: { current: NO_LINK },
 });
 
@@ -43,6 +46,16 @@ export const stream = shared.store;
 /** A click on a row lights it, or clears it when it is lit. */
 export function pickSeq(seq: number): void {
   shared.pick.current(seq);
+}
+
+/** A click on a language lens row lights its turn's seq, lit or not. */
+export function selectSeq(seq: number): void {
+  shared.select.current(seq);
+}
+
+export function setSelectSeq(fn: (seq: number) => void): () => void {
+  shared.select.current = fn;
+  return () => { if (shared.select.current === fn) shared.select.current = () => undefined; };
 }
 
 export function setPickSeq(fn: (seq: number) => void): () => void {

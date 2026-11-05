@@ -28,6 +28,7 @@ import { SideGraph } from "./app/SideGraph";
 import { StructureLens } from "./app/StructureLens";
 import { IoLens } from "./app/IoLens";
 import { SceneLens } from "./app/SceneLens";
+import { LanguageLens } from "./app/LanguageLens";
 import { ActivityLine, TaskRows, type PaneView } from "./app/ActivityLine";
 
 function boot(): void {
@@ -194,6 +195,8 @@ function boot(): void {
     render: () => React.createElement(IoLens) });
   mounts.register({ name: "scene", selector: '[data-app-mount="scene"]', key: () => "window", contents: true,
     render: () => React.createElement(SceneLens) });
+  mounts.register({ name: "language", selector: '[data-app-mount="language"]', key: () => "window", contents: true,
+    render: () => React.createElement(LanguageLens) });
   mounts.register({ name: "footer", selector: '[data-app-mount="footer"]', key: () => "window",
     render: () => React.createElement(Footer) });
   mounts.register({ name: "first-run", selector: '[data-app-mount="first-run"]', key: () => "window",
