@@ -3,73 +3,16 @@
 // web/reveal.ts — the prototype-v7 shell's boot script.
 //
 // Runs after dc-runtime + support.js render the page from `<x-dc>`.
-// Builds one SessionController, exposes it as `window.__vm`, and
-// mirrors its snapshot into the mounted Component's `state` so the
-// prototype's template variables read live substrate data. Every
-// binding lands here one feature at a time; the template edits sit
-// next to each corresponding controller field.
+// Builds the pane registry, exposes it as `window.__vm`, and hands each
+// pane controller's snapshot and the menu's commands to the window
+// through web/app/state/shell.ts, which the component subscribes to
+// (sprints 211-212; it reached the component's React fiber before).
 
 import * as React from "react";
 import * as ReactDOMClient from "react-dom/client";
-import type { Snapshot } from "./vm";
 import { BrowserSubstrateClient, PaneRegistry } from "./vm";
 import { Transcript } from "./reveal/transcript";
-import { GraphMode } from "./vm/kinds";
-
-interface DCLogicHandle {
-  state: Record<string, unknown>;
-  setState: (patch: Record<string, unknown>) => void;
-}
-
-interface ReactFiberNode {
-  stateNode?: { logic?: DCLogicHandle } | null;
-  child?: ReactFiberNode | null;
-  sibling?: ReactFiberNode | null;
-}
-
-interface ReactContainerRoot {
-  stateNode: { current: ReactFiberNode };
-}
-
-function findComponent(fiber: ReactFiberNode | null | undefined): DCLogicHandle | null {
-  let cursor: ReactFiberNode | null | undefined = fiber;
-  while (cursor) {
-    const inst = cursor.stateNode;
-    if (inst && (inst as { logic?: DCLogicHandle }).logic
-      && typeof (inst as { logic?: DCLogicHandle }).logic!.setState === "function") {
-      return (inst as { logic: DCLogicHandle }).logic;
-    }
-    const nested = findComponent(cursor.child ?? null);
-    if (nested) return nested;
-    cursor = cursor.sibling ?? null;
-  }
-  return null;
-}
-
-function reachComponent(): DCLogicHandle | null {
-  const root = document.getElementById("dc-root") as (HTMLElement & Record<string, unknown>) | null;
-  if (!root) return null;
-  const key = Object.keys(root).find((k) => k.startsWith("__reactContainer"));
-  if (!key) return null;
-  const container = root[key] as ReactContainerRoot | undefined;
-  if (!container?.stateNode?.current) return null;
-  return findComponent(container.stateNode.current);
-}
-
-function computeStatePatch(snap: Snapshot): Record<string, unknown> {
-  return {
-    controllerSnapshot: snap,
-    driverRoster: snap.driverRoster,
-    driverDefault: snap.driverDefault,
-    driverGroups: snap.driverGroups,
-    cliVersions: snap.cliVersions,
-    driverVersion: snap.driverVersion,
-    recentWorkspaces: snap.recentWorkspaces,
-    liveSessionsFromServer: snap.liveSessions,
-    bundleRoster: snap.bundleRoster,
-    bundleSlug: snap.bundleSlug,
-  };
-}
+import { mirrorSnapshot, sendCommand } from "./app/state/shell";
 
 function boot(): void {
   const registry = new PaneRegistry({ makeClient: () => new BrowserSubstrateClient() });
@@ -124,54 +67,8 @@ function boot(): void {
     document.head.appendChild(style);
   }
 
-  let component: DCLogicHandle | null = null;
-  // Per-pane snapshots. renderVals reads `controllerSnapshots[p.id]`
-  // for a pane-scoped view; `controllerSnapshot` mirrors the FOCUSED
-  // pane's snapshot to keep single-pane bindings working unchanged.
-  const perPane: Record<number, Snapshot> = {};
-  const bind = () => {
-    if (component) return true;
-    component = reachComponent();
-    if (!component) return false;
-    const sessionIds: Record<number, string | null> = {};
-    // UI sprint 172: `/language` bumps the pane's open tick; the meta view opens on the lens, at the
-    // latest shift's reply when there is one (the lens selects the turn that holds `sel`).
-    const languageTicks: Record<number, number> = {};
-    registry.subscribe((paneId, snap) => {
-      if (!component) return;
-      perPane[paneId] = snap;
-      const focusedId = (component.state as { focused?: number }).focused ?? 1;
-      const patch: Record<string, unknown> = { controllerSnapshots: { ...perPane } };
-      if (paneId === focusedId) Object.assign(patch, computeStatePatch(snap));
-      const tick = snap.languageOpenTick ?? 0;
-      if (paneId === focusedId && tick > (languageTicks[paneId] ?? 0)) {
-        Object.assign(patch, { revealed: true, surface: null, mode: GraphMode.Language });
-        const shifts = snap.language?.shifts ?? [];
-        if (shifts.length) patch.sel = shifts[shifts.length - 1].source_seq;
-      }
-      languageTicks[paneId] = tick;
-      component.setState(patch);
-      // Reflect the focused pane's session in the URL. Sticky-bottom
-      // autoscroll used to live here; the atom-transcript React tree
-      // owns scroll position now, so the block is gone.
-      if (paneId === focusedId) {
-        if (snap.sessionId !== (sessionIds[paneId] ?? null)) {
-          sessionIds[paneId] = snap.sessionId;
-          const url = new URL(window.location.href);
-          if (snap.sessionId) url.searchParams.set("session", snap.sessionId);
-          else url.searchParams.delete("session");
-          window.history.replaceState({}, "", url.toString());
-        }
-      }
-    });
-    return true;
-  };
-  if (!bind()) {
-    const tick = window.setInterval(() => {
-      if (bind()) window.clearInterval(tick);
-    }, 50);
-    window.setTimeout(() => window.clearInterval(tick), 5000);
-  }
+  // Every pane controller's snapshot goes to the window's store; the component reads it there.
+  registry.subscribe((paneId, snap) => mirrorSnapshot(paneId, snap));
 
   // Ctrl+C over a prompt input interrupts the in-flight turn, matching
   // the classic shell's behavior. A selection in the input still gets
@@ -252,27 +149,12 @@ function boot(): void {
   const nativeBridge = (window as unknown as { native?: NativeBridge }).native;
   if (nativeBridge?.onMenuCommand) {
     nativeBridge.onMenuCommand((command, payload) => {
-      // Under a slow first boot (fresh Chromium userData) the
-      // closure-captured `component` above may still be null when
-      // a menu event fires. Re-reach the component at dispatch
-      // time so the wire-up doesn't depend on bind() winning
-      // before the OS delivers.
-      const live = component ?? reachComponent();
-      if (!live) return;
-      component = live;
-      if (command === "toggle-meta") {
-        (live as unknown as { _toggleMeta?: () => void })._toggleMeta?.();
-      } else if (command === "settings") {
-        live.setState({ showSettings: true });
+      // Commands sent before the component mounts wait in the channel for it.
+      if (command === "toggle-meta" || command === "settings" || command === "close-pane") {
+        sendCommand(command);
       } else if (command === "open-record") {
         const rec = payload as { path?: string } | null;
         if (rec?.path) controller.attachRecordRoot(rec.path).catch(() => undefined);
-      } else if (command === "close-pane") {
-        const logic = live as unknown as {
-          state: { focused: number; panes: { id: number }[] };
-          _closePane?: (id: number) => void;
-        };
-        if (typeof logic._closePane === "function") logic._closePane(logic.state.focused);
       } else if (command === "close-window") {
         // Handled main-side; nothing renderer needs to do.
       }

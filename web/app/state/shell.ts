@@ -5,6 +5,11 @@
 // web/reveal.ts used to reach the dc-runtime component through React's private fiber fields to set
 // its state and call its methods. It now writes here instead: each pane controller's latest snapshot
 // into the store, and the menu's commands into the channel. DCLogic subscribes to both.
+//
+// The window has two copies of this module: Vite bundles one into reveal-*.js for the boot script, and
+// esbuild bundles another into the page with reveal_component.ts (vite.config.ts, inlineDcScript). The
+// store and the channel therefore live on the window, made by whichever copy loads first, so both
+// copies share them (sprint 212). One bundle after dc-runtime retires (plan E4) makes this one copy.
 
 import type { Snapshot } from "../../vm/types";
 import { createStore } from "../store";
@@ -16,7 +21,17 @@ export interface ShellState {
   changedPane: number | null;
 }
 
-export const shell = createStore<ShellState>({ snapshots: {}, changedPane: null });
+/** The command channel's parts, shared like the store. */
+interface Channel { listeners: Set<(command: ShellCommand) => void>; held: ShellCommand[]; }
+interface Shared { store: ReturnType<typeof createStore<ShellState>>; channel: Channel; }
+const KEY = "__substrateShell";
+const scope = globalThis as unknown as Record<string, Shared | undefined>;
+const shared: Shared = scope[KEY] ?? (scope[KEY] = {
+  store: createStore<ShellState>({ snapshots: {}, changedPane: null }),
+  channel: { listeners: new Set(), held: [] },
+});
+
+export const shell = shared.store;
 
 export function mirrorSnapshot(paneId: number, snap: Snapshot): void {
   shell.set((st) => ({ snapshots: { ...st.snapshots, [paneId]: snap }, changedPane: paneId }));
@@ -25,8 +40,7 @@ export function mirrorSnapshot(paneId: number, snap: Snapshot): void {
 /** The menu commands the window handles itself. */
 export type ShellCommand = "toggle-meta" | "settings" | "close-pane";
 
-const listeners = new Set<(command: ShellCommand) => void>();
-const held: ShellCommand[] = [];
+const { listeners, held } = shared.channel;
 
 /** Delivers the command to every listener, in order; with none yet, holds it for the first. */
 export function sendCommand(command: ShellCommand): void {
