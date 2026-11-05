@@ -92,7 +92,8 @@ import { followBottom } from "./reveal/follow_bottom";
 import { sessionStatusLook } from "./reveal/session_status";
 import { buildLanguageLens, LANGUAGE_STREAM_TABS, languageView, languageViewTabs, LanguageStreamId, LanguageViewMode } from "./reveal/language_lens";
 import { settingsTail } from "./reveal/settings_tail";
-import { clearNote, fontSize, loadSettings, pickTheme, settings, stepFont } from "./app/state/settings";
+import { fontSize, loadSettings, settings } from "./app/state/settings";
+import { closeDialog, dialogOpen, openEndSession, openSettings } from "./app/state/dialogs";
 import { onCommand, shell } from "./app/state/shell";
 
 
@@ -121,7 +122,7 @@ class Component extends DCLogic {
     panes: [{ id: 1, name: 'pane-1', driver: null, editing: false, nameVal: '', unbound: true }],
     focused: 1, cols: 1, rows: 1, colW: [1], rowW: [1], revealL: 1.15, ddFor: null, wsFor: null, driverExpandedCli: null, driverExpandedFamily: null, allSessions: [],
     findOpen: false, findQ: '', findScope: 'transcript',
-    showSettings: false, showExport: false, showEndConfirm: false, ended: false, frDone: false,
+    ended: false, frDone: false,
   // Sprint 086 — Records surface: per-workspace expand state and
   // paginated session buffers. Empty means "not expanded, not fetched
   // yet". On expand, loadSessionsByWorkspace(path, 0, 50) fills
@@ -937,7 +938,7 @@ class Component extends DCLogic {
     applyShell();
     this._offCommands = onCommand((command) => {
       if (command === 'toggle-meta') this._toggleMeta();
-      else if (command === 'settings') this.setState({ showSettings: true });
+      else if (command === 'settings') openSettings();
       else if (command === 'close-pane') this._closePane(this.state.focused);
     });
     // Tick the activity strip's seconds counter between controller
@@ -980,12 +981,12 @@ class Component extends DCLogic {
         const fp = (s.panes || []).find(p => p.id === s.focused);
         const fsnap = (s.controllerSnapshots || {})[s.focused];
         if (barKey && e.key !== 'Escape' && !typing && s.surface === Surface.Records
-          && !s.showSettings && !s.showExport && !s.showEndConfirm && !s.findOpen) {
+          && !dialogOpen() && !s.findOpen) {
           this._recordsKey(e);
           return;
         }
         if (barKey && !typing && fp && fp.unbound && !(fsnap && fsnap.sessionId) && !s.revealed && !s.surface
-          && !s.showSettings && !s.showExport && !s.showEndConfirm && !s.findOpen) {
+          && !dialogOpen() && !s.findOpen) {
           const box = document.querySelector('[data-ws-input="' + fp.id + '"]');
           if (box) box.focus();
           this._wsKey(fp.id, e);
@@ -1021,11 +1022,11 @@ class Component extends DCLogic {
       if (e.metaKey && !e.shiftKey && !e.altKey && !e.ctrlKey && (e.key === 'e' || e.key === 'E')) { e.preventDefault(); this._toggleTools(); }
       if (e.metaKey && (e.key === 'd' || e.key === 'D')) { e.preventDefault(); this._split(e.shiftKey ? 'down' : 'right'); }
       if (e.metaKey && (e.key === 'f' || e.key === 'F')) { e.preventDefault(); this.setState(s => ({ findOpen: !s.findOpen, findQ: '' })); }
-      if (e.metaKey && e.key === ',') { e.preventDefault(); this.setState({ showSettings: true }); }
+      if (e.metaKey && e.key === ',') { e.preventDefault(); openSettings(); }
       if (e.key === 'Escape') {
         const s = this.state;
         if (s.findOpen) this.setState({ findOpen: false, findQ: '' });
-        else if (s.showSettings || s.showExport || s.showEndConfirm) this.setState({ showSettings: false, showExport: false, showEndConfirm: false });
+        else if (dialogOpen()) closeDialog();
         else if (s.ddFor || s.wsFor) this.setState({ ddFor: null, wsFor: null });
         else if (s.surface) this.setState({ surface: null });
         else {
@@ -1259,7 +1260,7 @@ class Component extends DCLogic {
       const vm = window.__vm;
       const ctl = vm && typeof vm.get === 'function' ? vm.get(p.id) : null;
       const catalog = ctl && typeof ctl.slashCatalog === 'function' ? ctl.slashCatalog() : [];
-      const send = (line) => { _clearPv(p.id); if (line === '/exit') { this.setState({ showEndConfirm: true }); return; } _vmSubmitFor(p.id, line); };
+      const send = (line) => { _clearPv(p.id); if (line === '/exit') { openEndSession(this._paneTitle(this.state, p)); return; } _vmSubmitFor(p.id, line); };
       const fill = (line) => this.setState(s => ({ panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, { pv: line }) : x) }));
       const m = raw.match(/^\/(\S+)\s+(\S*)$/);
       if (m) {
@@ -2536,33 +2537,7 @@ class Component extends DCLogic {
       focusTranscript: () => { if (this.state.findScope !== 'transcript') this.setState({ findScope: 'transcript' }); },
       focusStream: () => { if (this.state.findScope !== 'stream') this.setState({ findScope: 'stream' }); },
       closeFind: () => this.setState({ findOpen: false, findQ: '' }),
-      // ── dialogs (19c/19f/19g) ──
-      showSettings: state.showSettings, closeSettings: () => { this.setState({ showSettings: false }); clearNote(); },
-      // A click inside a dialog's panel stops there, so the backdrop's close handler sees only clicks
-      // outside it (sprint 203; removed by mistake in 5a4d97a).
-      swallow: (ev) => ev.stopPropagation(),
-      themeChips: ['dark', 'light', 'system'].map(t => ({ label: t, color: settings.getSnapshot().theme === t ? '#e2e5e9' : '#62676f', bg: settings.getSnapshot().theme === t ? '#2e3138' : 'transparent',
-        pick: () => pickTheme(t) })),
-      settingsNote: settings.getSnapshot().settingsNote,
-      fontLabel: fontSize(this.props.transcriptFontSize ?? 13) + 'px',
-      fontMinus: () => stepFont(-1, this.props.transcriptFontSize ?? 13),
-      fontPlus: () => stepFont(1, this.props.transcriptFontSize ?? 13),
-      showExport: state.showExport, closeExport: () => this.setState({ showExport: false }), doExport: () => this.setState({ showExport: false }),
-      showEndConfirm: state.showEndConfirm, closeEndConfirm: () => this.setState({ showEndConfirm: false }),
-      doEndSession: async () => {
-        // D68: a LIVE session (turn in flight) interrupts the turn
-        // first, then ends. Connection == 'connected' with a park
-        // reason still unset means a turn is running.
-        this.setState({ showEndConfirm: false });
-        const vm = window.__vm;
-        if (!vm) return;
-        const snap = vm.snapshot ? vm.snapshot() : null;
-        const isLive = !!(snap && snap.sessionId && snap.connection === 'connected' && !snap.parkReason && !snap.endedReason);
-        if (isLive && typeof vm.interruptTurn === 'function') {
-          try { await vm.interruptTurn(); } catch (_e) { /* proceed to end regardless */ }
-        }
-        vm.endSession('user_end');
-      },
+      // The dialogs are web/app/Dialogs.tsx (sprint 216).
       // ── first run (19m) ──
       // Gates: this.props.firstRun (for the dc-runtime scenario
       // switcher) OR ?firstrun=1 in the URL. `frDone` closes it once

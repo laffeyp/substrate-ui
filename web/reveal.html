@@ -491,49 +491,8 @@
 
  <div style="display:flex;gap:16px;padding:7px 16px;background:#2a2d33;font-size:11px;color:#62676f;flex:none"><span style="color:{{ footStatusColor }}">{{ footStatus }}</span><span>{{ footRecord }}</span><span style="margin-left:auto">{{ footHint }}</span></div>
 
- <!-- ══ DIALOGS · 19c settings / 19f export / 19g end-session (D40h: confirms are UI) ══ -->
- <sc-if value="{{ showSettings }}" hint-placeholder-val="{{ false }}">
-  <div onClick="{{ closeSettings }}" style="position:fixed;inset:0;z-index:50;background:rgba(13,16,19,.55);display:flex;align-items:center;justify-content:center">
-   <div onClick="{{ swallow }}" style="width:560px;background:#26292e;border:1px solid rgba(255,255,255,.09);border-radius:10px;box-shadow:0 18px 48px rgba(0,0,0,.5);padding:18px 22px 20px;display:flex;flex-direction:column;gap:14px;font-size:12px">
-    <div style="font-size:9.5px;letter-spacing:.14em;color:#62676f">SETTINGS · ⌘,</div>
-    <div style="display:flex;align-items:center;gap:14px"><span style="color:#62676f;width:130px">appearance</span><span style="display:flex;border:1px solid rgba(255,255,255,.09);border-radius:5px;overflow:hidden"><sc-for list="{{ themeChips }}" as="tc" hint-placeholder-count="3"><span onClick="{{ tc.pick }}" style="padding:3px 12px;cursor:pointer;color:{{ tc.color }};background:{{ tc.bg }}">{{ tc.label }}</span></sc-for></span></div>
-    <sc-if value="{{ settingsNote }}" hint-placeholder-val="{{ false }}"><div style="color:#62676f;font-size:11px;margin:-8px 0 0 144px">{{ settingsNote }}</div></sc-if>
-    <div style="display:flex;align-items:center;gap:14px"><span style="color:#62676f;width:130px">type size</span><span onClick="{{ fontMinus }}" style="cursor:pointer;color:#9aa0a8;border:1px solid rgba(255,255,255,.09);border-radius:4px;padding:0 9px">−</span><span style="color:#e2e5e9">{{ fontLabel }}</span><span onClick="{{ fontPlus }}" style="cursor:pointer;color:#9aa0a8;border:1px solid rgba(255,255,255,.09);border-radius:4px;padding:0 9px">+</span></div>
-    <div style="display:flex;align-items:flex-start;gap:14px"><span style="color:#62676f;width:130px;padding-top:2px">bindings</span>
-     <div style="display:flex;flex-direction:column;gap:5px;flex:1;font-size:11.5px">
-      <div style="display:flex"><span style="color:#b9bec5">meta / panes</span><span style="margin-left:auto;color:#9aa0a8;background:#1a1c20;border:1px solid rgba(255,255,255,.08);border-radius:4px;padding:0 7px">⌘M</span></div>
-      <div style="display:flex"><span style="color:#b9bec5">split right / down</span><span style="margin-left:auto;color:#9aa0a8;background:#1a1c20;border:1px solid rgba(255,255,255,.08);border-radius:4px;padding:0 7px">⌘D · ⌘⇧D</span></div>
-      <div style="display:flex"><span style="color:#b9bec5">all tool output, open or closed</span><span style="margin-left:auto;color:#9aa0a8;background:#1a1c20;border:1px solid rgba(255,255,255,.08);border-radius:4px;padding:0 7px">⌘E</span></div>
-      <div style="display:flex"><span style="color:#b9bec5">find in focused lens</span><span style="margin-left:auto;color:#9aa0a8;background:#1a1c20;border:1px solid rgba(255,255,255,.08);border-radius:4px;padding:0 7px">⌘F</span></div>
-      <div style="display:flex"><span style="color:#b9bec5">full-line divider drag</span><span style="margin-left:auto;color:#9aa0a8;background:#1a1c20;border:1px solid rgba(255,255,255,.08);border-radius:4px;padding:0 7px">⌥ drag</span></div>
-     </div>
-    </div>
-    <div style="display:flex;justify-content:flex-end"><span onClick="{{ closeSettings }}" style="color:#9aa0a8;border:1px solid rgba(255,255,255,.09);border-radius:5px;padding:4px 14px;cursor:pointer;font-size:11.5px">close esc</span></div>
-   </div>
-  </div>
- </sc-if>
- <sc-if value="{{ showExport }}" hint-placeholder-val="{{ false }}">
-  <div onClick="{{ closeExport }}" style="position:fixed;inset:0;z-index:50;background:rgba(13,16,19,.55);display:flex;align-items:center;justify-content:center">
-   <div onClick="{{ swallow }}" style="width:560px;background:#26292e;border:1px solid rgba(255,255,255,.09);border-radius:10px;box-shadow:0 18px 48px rgba(0,0,0,.5);padding:18px 22px 20px;display:flex;flex-direction:column;gap:12px;font-size:12px">
-    <div style="font-size:9.5px;letter-spacing:.14em;color:#62676f">EXPORT RECORD · 01M1684 · fix-race-in-metering · 244 ev</div>
-    <div style="display:flex;flex-direction:column;gap:6px;font-size:11.5px">
-     <div style="display:flex;gap:10px;padding:8px 12px;background:#2e3138;border-radius:6px"><span style="color:#e2e5e9">.record directory</span><span style="color:#62676f">segments + manifest + blobs + sidecar — replayable</span><span style="margin-left:auto;color:#62676f">↵</span></div>
-     <div style="display:flex;gap:10px;padding:8px 12px;background:#1a1c20;border-radius:6px"><span style="color:#b9bec5">events.jsonl</span><span style="color:#4a4e55">flat, single file — read-only</span></div>
-    </div>
-    <div style="display:flex;gap:10px;border:1px solid rgba(255,255,255,.13);border-radius:6px;padding:8px 12px;background:#1a1c20;font-size:11.5px"><span style="color:#62676f">to</span><span style="color:#e2e5e9">~/exports/fix-race-in-metering.record</span></div>
-    <div style="display:flex;gap:10px;justify-content:flex-end;font-size:11.5px"><span onClick="{{ closeExport }}" style="color:#9aa0a8;border:1px solid rgba(255,255,255,.09);border-radius:5px;padding:4px 14px;cursor:pointer">cancel esc</span><span onClick="{{ doExport }}" style="color:#0d1013;background:#82a5c8;border-radius:5px;padding:4px 14px;font-weight:600;cursor:pointer">export ↵</span></div>
-   </div>
-  </div>
- </sc-if>
- <sc-if value="{{ showEndConfirm }}" hint-placeholder-val="{{ false }}">
-  <div onClick="{{ closeEndConfirm }}" style="position:fixed;inset:0;z-index:50;background:rgba(13,16,19,.55);display:flex;align-items:center;justify-content:center">
-   <div onClick="{{ swallow }}" style="width:560px;background:#26292e;border:1px solid rgba(255,255,255,.09);border-radius:10px;box-shadow:0 18px 48px rgba(0,0,0,.5);padding:18px 22px 20px;display:flex;flex-direction:column;gap:12px">
-    <div style="color:#e2e5e9;font-size:13px">End session fix-race-in-metering?</div>
-    <div style="color:#62676f;font-size:11.5px;line-height:1.7">Interrupts the running turn, emits SessionEnded and finalises the record. The record stays in records; the session cannot be resumed.</div>
-    <div style="display:flex;gap:10px;justify-content:flex-end;font-size:11.5px"><span onClick="{{ closeEndConfirm }}" style="color:#9aa0a8;border:1px solid rgba(255,255,255,.09);border-radius:5px;padding:4px 14px;cursor:pointer">cancel esc</span><span onClick="{{ doEndSession }}" style="color:#e2e5e9;background:#2e3138;border:1px solid rgba(255,255,255,.12);border-radius:5px;padding:4px 14px;font-weight:600;cursor:pointer">end session</span></div>
-   </div>
-  </div>
- </sc-if>
+ <!-- ══ DIALOGS · 19c settings / 19g end-session: web/app/Dialogs.tsx (sprint 216) ══ -->
+ <div data-app-mount="dialogs"></div>
 
  <!-- ══ FIRST RUN · 19m (tweak: firstRun) ══ -->
  <sc-if value="{{ showFirstRun }}" hint-placeholder-val="{{ false }}">

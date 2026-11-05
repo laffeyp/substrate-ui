@@ -3,9 +3,10 @@
 // The settings and end-session dialogs (sprint 202; plan PLAN-2026-11-04-shell-to-react-r4.md, A8).
 //
 // Settings: ⌘, opens it; + raises the type size by 1px; Escape closes it; after a window reload ⌘,
-// shows the raised size (web/reveal_component.ts keeps it in localStorage). End session: after one
-// turn, /exit opens the dialog; "cancel esc" closes it and ends nothing; /exit again and "end
-// session" close it, and SESSION_END_REQUESTED then SESSION_ENDED_LOCAL fire.
+// shows the raised size (web/app/state/settings.ts keeps it in localStorage). End session: after one
+// turn, /exit opens the dialog, which names the session the footer names (F351); "cancel esc" closes
+// it and ends nothing; /exit again and "end session" close it, and SESSION_END_REQUESTED then
+// SESSION_ENDED_LOCAL fire.
 
 import { _electron as electron, type Page } from "playwright";
 import { bindPaneAsUser, launchArgs, settled, waitForApp } from "./lib/electron";
@@ -36,8 +37,15 @@ async function main(): Promise<void> {
     await win.keyboard.press("Enter");
     await win.waitForFunction(() => !!(window as any).__vm?.get?.(1)?.snapshot().parkReason, undefined, { timeout: 30_000 });
 
-    // End session: cancel ends nothing.
+    // End session: the confirm names the session, as the footer does (F351: it named a fixed example).
     await openEnd(win);
+    const heading = await win.getByText(/^End session/).innerText();
+    const footer = await win.getByText(/^session \S+$/).filter({ visible: true }).first().innerText();
+    const named = heading.match(/^End session (\S+)\?$/)?.[1];
+    if (!named || `session ${named}` !== footer) throw new Error(`the confirm reads "${heading}"; the footer reads "${footer}"`);
+    seen.push(`end confirm names ${named}`);
+
+    // End session: cancel ends nothing.
     await win.getByText("cancel esc", { exact: true }).filter({ visible: true }).first().click();
     await settled(win);
     if (await endOpen(win)) throw new Error("cancel esc left the end-session dialog open");

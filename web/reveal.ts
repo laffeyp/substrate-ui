@@ -13,6 +13,8 @@ import * as ReactDOMClient from "react-dom/client";
 import { BrowserSubstrateClient, PaneRegistry } from "./vm";
 import { Transcript } from "./reveal/transcript";
 import { mirrorSnapshot, sendCommand } from "./app/state/shell";
+import { createMountRegistry } from "./app/mount";
+import { Dialogs } from "./app/Dialogs";
 
 function boot(): void {
   const registry = new PaneRegistry({ makeClient: () => new BrowserSubstrateClient() });
@@ -135,6 +137,14 @@ function boot(): void {
   check();
   const observer = new MutationObserver(check);
   observer.observe(document.body, { childList: true, subtree: true });
+
+  // Areas moved to React mount through the registry (web/app/mount.ts; sprint 215). A host is a
+  // `data-app-mount` div in reveal.html; a kind whose host is not on the page mounts nothing.
+  const mounts = createMountRegistry(document);
+  // 13px is the transcript's default size, the template's `transcriptFontSize` default.
+  mounts.register({ name: "dialogs", selector: '[data-app-mount="dialogs"]', key: () => "window",
+    render: () => React.createElement(Dialogs, { defaultFontSize: 13 }) });
+  mounts.start();
 
   // Sprint 080 — native menu wire-up. Only present when running
   // inside Electron. In a plain Chrome tab window.native is
