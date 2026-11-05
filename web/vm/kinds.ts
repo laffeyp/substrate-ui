@@ -30,7 +30,6 @@ export type TranscriptRoleValue = typeof TranscriptRole[keyof typeof TranscriptR
 export const Surface = {
   Records: "records",
   Assay: "assay",
-  Studio: "studio",
 } as const;
 
 export const GraphMode = {

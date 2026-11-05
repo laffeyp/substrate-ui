@@ -103,15 +103,7 @@ import { onCommand, shell } from "./app/state/shell";
 
 
 class Component extends DCLogic {
-  state = { revealed: false, mode: GraphMode.Stream, dir: GraphDirection.Down, sel: null, langStream: LanguageStreamId.Model, langLane: 0, langView: LanguageViewMode.Bars, promptVal: '', surface: null, studioView: 'form', studioOut: 'author a topology, then validate or build.', studioOutColor: '#62676f', level: RevealLevel.All, sent: [],
-    topoName: 'adversarial_pair_review',
-    prods: [{ name: 'builder', initial: true, emits: 'Draft' }, { name: 'attacker', initial: false, emits: 'Critique' }, { name: 'judge', initial: false, emits: 'Verdict' }],
-    sviews: [{ name: 'draft_count', def: 'KindCount(of Draft)' }, { name: 'critique_buf', def: 'KindBuffer(of Critique)' }],
-    trigs: [{ id: 'attack', view: 'draft_count', op: '≥', n: '1', starts: 'attacker' }, { id: 'adjudicate', view: 'critique_buf', op: '≥', n: '2', starts: 'judge' }],
-    sroutes: [{ id: 'seed-judge', kind: 'Draft', slot: 'judge.draft' }],
-    termKind: 'threshold_count', termOf: 'Verdict', termN: '1',
-    responder: 'deterministic', seed: '0', model: 'llama3.2',
-    cardPos: { builder: { x: 80, y: 80 }, attacker: { x: 390, y: 190 }, judge: { x: 700, y: 86 } },
+  state = { revealed: false, mode: GraphMode.Stream, dir: GraphDirection.Down, sel: null, langStream: LanguageStreamId.Model, langLane: 0, langView: LanguageViewMode.Bars, promptVal: '', surface: null, level: RevealLevel.All, sent: [],
     // `driverName` in the top strip reads the pane's driver at render
     // time; null here means "read from the controller default."
     driverName: null,
@@ -133,60 +125,6 @@ class Component extends DCLogic {
   // beneath so the user can attach to an existing one instead of
   // starting fresh.
   pickerExpandedWs: {}, pickerPagedByWs: {} };
-  _buildStudioSpec() {
-    // Studio state → server spec. Mirrors the shape web/studio.ts posts
-    // to /api/validate + /api/build. Fields are the ones builder.py
-    // reads (kind, emits, initial, model, prompt on producers; name,
-    // kind, of on views; id, on, predicate, starts, policy, reads on
-    // triggers; id, of, slot on routes; termination + responder + seed
-    // + model_name at the top).
-    const studioState = this.state;
-    const producers = studioState.prods.map(p => ({
-      kind: String(p.name || '').trim(),
-      emits: String(p.emits || '').split(',').map(s => s.trim()).filter(Boolean),
-      initial: !!p.initial,
-      model: !!p.model,
-      prompt: String(p.prompt || '').trim(),
-    })).filter(p => p.kind);
-    const views = studioState.sviews.map(v => {
-      const def = String(v.def || '');
-      const m = def.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*\(\s*of\s+([A-Za-z_][A-Za-z0-9_]*)\s*\)\s*$/);
-      const kind = m ? m[1] : def.split('(')[0].trim();
-      const of = m ? m[2] : (def.match(/of\s+([A-Za-z_][A-Za-z0-9_]*)/) || [])[1] || '';
-      return { name: String(v.name || '').trim(), kind, of };
-    }).filter(v => v.name && v.of);
-    const triggers = studioState.trigs.map(t => {
-      const view = String(t.view || '').trim();
-      const rawOp = String(t.op || '≥');
-      const op = rawOp === '≥' ? '>=' : rawOp === '≤' ? '<=' : rawOp === '≠' ? '!=' : rawOp;
-      const predicate = view ? { view, op, n: Number(t.n) || 0 } : null;
-      return {
-        id: String(t.id || '').trim(),
-        on: String(t.on || '').trim(),
-        predicate,
-        starts: String(t.starts || '').trim(),
-        policy: String(t.policy || 'PerEvent'),
-        reads: String(t.reads || '').trim(),
-      };
-    }).filter(t => t.id && t.starts);
-    const routes = studioState.sroutes.map(r => ({
-      id: String(r.id || '').trim(),
-      of: String(r.kind || '').trim(),
-      slot: String(r.slot || '').trim(),
-    })).filter(r => r.id && r.of && r.slot);
-    const termKind = studioState.termKind || 'quiescence_with_watchdog';
-    let termination;
-    if (termKind === 'all_completed' || termKind === 'cancel_all_others') termination = { kind: termKind };
-    else if (termKind === 'threshold_count') termination = { kind: 'threshold_count', of: String(studioState.termOf || ''), n: Number(studioState.termN) || 1 };
-    else termination = { kind: 'quiescence_with_watchdog', seconds: Number(studioState.termSeconds) || 1 };
-    return {
-      name: String(studioState.topoName || 'authored').trim(),
-      producers, views, triggers, routes, termination,
-      responder: studioState.responder || 'deterministic',
-      seed: Number(studioState.seed) || 0,
-      model_name: String(studioState.model || '').trim(),
-    };
-  }
   // Sprint 073 — markdown methods extracted to `web/reveal/markdown.ts`.
   // The wrappers below preserve the dc-runtime call sites
   // (`this._mdBlocks(...)`, `this._mdRenderBlock(...)`) while the
@@ -1082,9 +1020,6 @@ class Component extends DCLogic {
     };
     this._gu = () => { this._gut = null; };
     window.addEventListener('mousemove', this._gm); window.addEventListener('mouseup', this._gu);
-    this._mm = (e) => { if (!this._drag) return; const n = this._drag; this.setState(s => { const p = s.cardPos[n] || { x: 100, y: 100 }; return { cardPos: Object.assign({}, s.cardPos, { [n]: { x: Math.max(0, Math.min(800, p.x + e.movementX)), y: Math.max(0, Math.min(360, p.y + e.movementY)) } }) }; }); };
-    this._mu = () => { this._drag = null; };
-    window.addEventListener('mousemove', this._mm); window.addEventListener('mouseup', this._mu);
     this._rs = () => this.setState({ winW: window.innerWidth });
     window.addEventListener('resize', this._rs);
   }
@@ -1113,26 +1048,7 @@ class Component extends DCLogic {
     this._publishChrome();
     this._publishTopBar();
   }
-  componentWillUnmount() { if (this._offRuns) this._offRuns(); if (this._offSettings) this._offSettings(); if (this._offShell) this._offShell(); if (this._offCommands) this._offCommands(); if (this._offFirstRun) this._offFirstRun(); if (this._offTopBarActs) this._offTopBarActs(); if (this._offOpenSession) this._offOpenSession(); window.removeEventListener('keydown', this._kd); window.removeEventListener('mousemove', this._mm); window.removeEventListener('mouseup', this._mu); window.removeEventListener('resize', this._rs); if (this._ddOutside) document.removeEventListener('mousedown', this._ddOutside, true); if (this._activityTick) { window.clearInterval(this._activityTick); this._activityTick = null; } }
-  _upd(arrKey, i, field) { return (ev) => this.setState(s => { const arr = s[arrKey].map((x, j) => j === i ? Object.assign({}, x, { [field]: ev.target.value }) : x); return { [arrKey]: arr }; }); }
-  _rm(arrKey, i) { return () => this.setState(s => ({ [arrKey]: s[arrKey].filter((x, j) => j !== i) })); }
-  _validate() {
-    const studioState = this.state; const errs = [];
-    if (!/^[a-z0-9_]+$/.test(studioState.topoName)) errs.push('name must be [a-z0-9_]+');
-    if (!studioState.prods.length) errs.push('no producers');
-    const names = studioState.prods.map(p => p.name);
-    if (!studioState.prods.some(p => p.initial)) errs.push('no initial producer — nothing runs on the opening cohort');
-    studioState.trigs.forEach(t => {
-      if (!names.includes(t.starts)) errs.push('trigger ' + t.id + ' starts unknown producer "' + t.starts + '"');
-      if (t.view && !studioState.sviews.find(v => v.name === t.view)) errs.push('trigger ' + t.id + ' reads unknown view "' + t.view + '"');
-    });
-    const emitted = new Set(); studioState.prods.forEach(p => String(p.emits).split(',').map(x => x.trim()).filter(Boolean).forEach(k => emitted.add(k)));
-    const consumed = new Set([studioState.termOf]);
-    studioState.sviews.forEach(v => { const m = String(v.def).match(/of\s+(\w+)/); if (m) consumed.add(m[1]); });
-    studioState.sroutes.forEach(r => consumed.add(r.kind));
-    emitted.forEach(k => { if (!consumed.has(k)) errs.push('emitted kind ' + k + ' is neither consumed nor terminal'); });
-    return errs;
-  }
+  componentWillUnmount() { if (this._offRuns) this._offRuns(); if (this._offSettings) this._offSettings(); if (this._offShell) this._offShell(); if (this._offCommands) this._offCommands(); if (this._offFirstRun) this._offFirstRun(); if (this._offTopBarActs) this._offTopBarActs(); if (this._offOpenSession) this._offOpenSession(); window.removeEventListener('keydown', this._kd); window.removeEventListener('resize', this._rs); if (this._ddOutside) document.removeEventListener('mousedown', this._ddOutside, true); if (this._activityTick) { window.clearInterval(this._activityTick); this._activityTick = null; } }
   // UI sprint 140: ⌘E folds or unfolds every tool card (ToolCard reads the setting). No control
   // on screen: the Architect's call; /fold and /unfold do the same from the input bar.
   _toggleTools() {
@@ -2082,10 +1998,9 @@ class Component extends DCLogic {
       // cards, Markdown blocks, opacity from find, running seconds —
       // reuse it here for the focused pane so both views stay in sync.
       ...this._liveBindingsFor(fp.id, state),
-      crumb: ((title) => surf === Surface.Records ? title + ' › records' : surf === Surface.Assay ? title + ' › assays' : surf === Surface.Studio ? title + ' › studio' : title)(this._paneTitle(state, fp)),
+      crumb: ((title) => surf === Surface.Records ? title + ' › records' : surf === Surface.Assay ? title + ' › assays' : title)(this._paneTitle(state, fp)),
       escHint: surf ? 'esc — back' : '',
       openRecords: () => this._toggleSurface('records'),
-      openStudio: () => this._toggleSurface('studio'),
       openAssay: () => this.setState({ surface: Surface.Assay }),
       backToSession: () => this.setState({ surface: null }),
       // UI sprint 139 (U125): the model chip opens a card, as the workspace chip does; it picks nothing.
@@ -2110,9 +2025,8 @@ class Component extends DCLogic {
       })(),
       fpWsOpen: state.wsFor === fp.id, fpToggleWs: () => this.setState(s => ({ wsFor: s.wsFor === fp.id ? null : fp.id, ddFor: null })),
       recordsColor: surf === Surface.Records ? '#e2e5e9' : '#9aa0a8',
-      studioColor: surf === Surface.Studio ? '#e2e5e9' : '#9aa0a8',
       showTerminal: !surf && !state.revealed, showRevealed: !surf && state.revealed,
-      showRecords: surf === Surface.Records, showAssay: surf === Surface.Assay, showStudio: surf === Surface.Studio,
+      showRecords: surf === Surface.Records, showAssay: surf === Surface.Assay,
       toggleReveal: () => {
         // Reveal → terminal always works. Terminal → reveal blocks only
         // when the focused pane is still on its workspace picker (that
@@ -2200,99 +2114,6 @@ class Component extends DCLogic {
         } catch (_) { return []; }
       })(),
       arms,
-      topoName: state.topoName, updTopoName: (ev) => this.setState({ topoName: ev.target.value }),
-      prodRows: state.prods.map((p, i) => ({
-        name: p.name, emits: p.emits, updName: this._upd('prods', i, 'name'), updEmits: this._upd('prods', i, 'emits'), rm: this._rm('prods', i),
-        initBox: p.initial ? '#82a5c8' : 'transparent', initBorder: p.initial ? '#82a5c8' : '#4a4e55',
-        toggleInit: () => this.setState(s => ({ prods: s.prods.map((x, j) => j === i ? Object.assign({}, x, { initial: !x.initial }) : x) })),
-      })),
-      addProd: () => this.setState(s => ({ prods: [...s.prods, { name: 'producer_' + (s.prods.length + 1), initial: false, emits: '' }] })),
-      viewRows: state.sviews.map((v, i) => ({ name: v.name, def: v.def, updName: this._upd('sviews', i, 'name'), updDef: this._upd('sviews', i, 'def'), rm: this._rm('sviews', i) })),
-      addView: () => this.setState(s => ({ sviews: [...s.sviews, { name: 'view_' + (s.sviews.length + 1), def: 'KindCount(of )' }] })),
-      trigRows: state.trigs.map((t, i) => ({ id: t.id, view: t.view, n: t.n, starts: t.starts, updId: this._upd('trigs', i, 'id'), updView: this._upd('trigs', i, 'view'), updN: this._upd('trigs', i, 'n'), updStarts: this._upd('trigs', i, 'starts'), rm: this._rm('trigs', i) })),
-      addTrig: () => this.setState(s => ({ trigs: [...s.trigs, { id: 'trigger_' + (s.trigs.length + 1), view: '', op: '≥', n: '1', starts: '' }] })),
-      routeRows: state.sroutes.map((r, i) => ({ id: r.id, kind: r.kind, slot: r.slot, updId: this._upd('sroutes', i, 'id'), updKind: this._upd('sroutes', i, 'kind'), updSlot: this._upd('sroutes', i, 'slot'), rm: this._rm('sroutes', i) })),
-      addRoute: () => this.setState(s => ({ sroutes: [...s.sroutes, { id: 'route_' + (s.sroutes.length + 1), kind: '', slot: '' }] })),
-      termChips: ['quiescence_with_watchdog', 'all_completed', 'threshold_count', 'cancel_all_others', 'any_of', 'all_of'].map(k => ({
-        label: k, pick: () => this.setState({ termKind: k }),
-        color: state.termKind === k ? '#a08fc9' : '#62676f', bg: state.termKind === k ? '#2e3138' : 'transparent',
-      })),
-      isThreshold: state.termKind === 'threshold_count',
-      termOf: state.termOf, updTermOf: (ev) => this.setState({ termOf: ev.target.value }),
-      termN: state.termN, updTermN: (ev) => this.setState({ termN: ev.target.value }),
-      respDColor: state.responder === 'deterministic' ? '#d7dade' : '#62676f', respDBg: state.responder === 'deterministic' ? '#2e3138' : 'transparent',
-      respOColor: state.responder === 'ollama' ? '#d7dade' : '#62676f', respOBg: state.responder === 'ollama' ? '#2e3138' : 'transparent',
-      setRespD: () => this.setState({ responder: 'deterministic' }), setRespO: () => this.setState({ responder: 'ollama' }),
-      seed: state.seed, updSeed: (ev) => this.setState({ seed: ev.target.value }),
-      model: state.model, updModel: (ev) => this.setState({ model: ev.target.value }),
-      isStudioForm: state.studioView === 'form', isStudioCanvas: state.studioView === 'canvas',
-      setStudioForm: () => this.setState({ studioView: 'form' }), setStudioCanvas: () => this.setState({ studioView: 'canvas' }),
-      sFormColor: state.studioView === 'form' ? '#d7dade' : '#62676f', sFormBg: state.studioView === 'form' ? '#2e3138' : 'transparent',
-      sCanvasColor: state.studioView === 'canvas' ? '#d7dade' : '#62676f', sCanvasBg: state.studioView === 'canvas' ? '#2e3138' : 'transparent',
-      canvasCards: state.prods.map((p, i) => {
-        const pos = state.cardPos[p.name] || { x: 120 + (i % 3) * 260, y: 300 };
-        return { name: p.name, emits: p.emits || '—', initial: p.initial, x: pos.x, y: pos.y, border: p.initial ? '#82a5c8' : 'rgba(255,255,255,.12)', dragStart: (ev) => { ev.preventDefault(); this._drag = p.name; } };
-      }),
-      canvasEdges: (() => {
-        const posOf = (n) => { const i = state.prods.findIndex(p => p.name === n); return state.cardPos[n] || { x: 120 + (Math.max(i, 0) % 3) * 260, y: 300 }; };
-        const srcOfKind = (k) => { const p = state.prods.find(p => String(p.emits).split(',').map(x => x.trim()).includes(k)); return p ? p.name : null; };
-        const edges = []; const labels = [];
-        state.trigs.forEach(t => {
-          const v = state.sviews.find(v => v.name === t.view); const m = v ? String(v.def).match(/of\s+(\w+)/) : null;
-          const src = m ? srcOfKind(m[1]) : null; if (!src || !state.prods.find(p => p.name === t.starts)) return;
-          const a = posOf(src), b = posOf(t.starts);
-          edges.push({ d: 'M ' + (a.x + 140) + ' ' + (a.y + 26) + ' C ' + (a.x + 210) + ' ' + (a.y + 26) + ' ' + (b.x - 70) + ' ' + (b.y + 26) + ' ' + b.x + ' ' + (b.y + 26), stroke: '#62676f', dash: '' });
-          labels.push({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 + 14, fill: '#c9a0b8', text: t.id + ' · ' + t.view + ' ≥ ' + t.n });
-        });
-        state.sroutes.forEach(r => {
-          const src = srcOfKind(r.kind); const tgt = String(r.slot).split('.')[0]; if (!src || !state.prods.find(p => p.name === tgt)) return;
-          const a = posOf(src), b = posOf(tgt);
-          edges.push({ d: 'M ' + (a.x + 140) + ' ' + (a.y + 10) + ' C ' + (a.x + 240) + ' ' + (a.y - 40) + ' ' + (b.x - 60) + ' ' + (b.y - 30) + ' ' + (b.x + 150) + ' ' + (b.y + 4), stroke: '#a08fc9', dash: '4 3' });
-          labels.push({ x: (a.x + b.x) / 2, y: Math.min(a.y, b.y) - 18, fill: '#a08fc9', text: r.id + ' · ' + r.kind + ' → ' + r.slot });
-        });
-        return { edges, labels };
-      })().edges,
-      canvasLabels: (() => {
-        const posOf = (n) => { const i = state.prods.findIndex(p => p.name === n); return state.cardPos[n] || { x: 120 + (Math.max(i, 0) % 3) * 260, y: 300 }; };
-        const srcOfKind = (k) => { const p = state.prods.find(p => String(p.emits).split(',').map(x => x.trim()).includes(k)); return p ? p.name : null; };
-        const labels = [];
-        state.trigs.forEach(t => {
-          const v = state.sviews.find(v => v.name === t.view); const m = v ? String(v.def).match(/of\s+(\w+)/) : null;
-          const src = m ? srcOfKind(m[1]) : null; if (!src || !state.prods.find(p => p.name === t.starts)) return;
-          const a = posOf(src), b = posOf(t.starts);
-          labels.push({ x: (a.x + b.x) / 2 - 55, y: (a.y + b.y) / 2 + 16, fill: '#c9a0b8', text: t.id + ' · ' + t.view + ' ≥ ' + t.n });
-        });
-        state.sroutes.forEach(r => {
-          const src = srcOfKind(r.kind); const tgt = String(r.slot).split('.')[0]; if (!src || !state.prods.find(p => p.name === tgt)) return;
-          const a = posOf(src), b = posOf(tgt);
-          labels.push({ x: (a.x + b.x) / 2 - 55, y: Math.max(6, Math.min(a.y, b.y) - 42), fill: '#a08fc9', text: r.id + ' · ' + r.kind + ' → ' + r.slot });
-        });
-        return labels;
-      })(),
-      slotNodes: state.sroutes.map(r => { const tgt = String(r.slot).split('.')[0]; const i = state.prods.findIndex(p => p.name === tgt); if (i < 0) return null; const pos = state.cardPos[tgt] || { x: 120 + (i % 3) * 260, y: 300 }; return { slot: String(r.slot).split('.')[1] || r.slot, x: pos.x + 150, y: pos.y - 2 }; }).filter(Boolean),
-      doValidate: async () => {
-        const errs = this._validate();
-        if (errs.length) { this.setState({ studioOut: 'invalid — ' + errs.join(' · '), studioOutColor: '#c26058' }); return; }
-        this.setState({ studioOut: 'validating…', studioOutColor: '#62676f' });
-        const vm = window.__vm;
-        if (!vm || typeof vm.validateSpec !== 'function') { this.setState({ studioOut: 'controller unavailable', studioOutColor: '#c26058' }); return; }
-        const r = await vm.validateSpec(this._buildStudioSpec());
-        if (r.valid) this.setState({ studioOut: 'ok — builds through the real TopologyBuilder', studioOutColor: '#82a5c8' });
-        else this.setState({ studioOut: 'invalid — ' + (r.error || ''), studioOutColor: '#c26058' });
-      },
-      doBuild: async () => {
-        const errs = this._validate();
-        if (errs.length) { this.setState({ studioOut: 'build refused — ' + errs.join(' · '), studioOutColor: '#c26058' }); return; }
-        this.setState({ studioOut: 'building & launching…', studioOutColor: '#62676f' });
-        const vm = window.__vm;
-        if (!vm || typeof vm.buildSpec !== 'function') { this.setState({ studioOut: 'controller unavailable', studioOutColor: '#c26058' }); return; }
-        const r = await vm.buildSpec(this._buildStudioSpec());
-        if (!r.ok) { this.setState({ studioOut: 'build rejected — ' + (r.error || ''), studioOutColor: '#c26058' }); return; }
-        const runName = String((r.run && r.run.name) || '');
-        const status = String((r.run && r.run.status) || 'unknown');
-        this.setState({ studioOut: 'built — ' + runName + ' (' + status + ') ▸', studioOutColor: '#82a5c8' });
-      },
-      studioOut: state.studioOut, studioOutColor: state.studioOutColor,
       panes, paneCols: state.colW.map(w => w.toFixed(3) + 'fr').join(' '), paneRows: state.rowW.map(w => w.toFixed(3) + 'fr').join(' '), focusedName: fp.name, focusedId: fp.id,
       revealFlexL: state.revealL.toFixed(3) + ' 1 0%',
       revealGutterLeft: (state.revealL / (state.revealL + 1) * 100).toFixed(2) + '%',
@@ -2310,7 +2131,7 @@ class Component extends DCLogic {
       // always shows (the old notMainFocused branch, scripted lines, is gone).
       isMainFocused: true,
       // UI sprint 136: the one top bar shows the focused pane — its status dot, its name (double-click
-      // renames it), and its driver and workspace chips in every view but records, assay and studio.
+      // renames it), and its driver and workspace chips in every view but the records and assay pages.
       ...(() => {
         const row = panes.find(x => x.id === fp.id) || panes[0];
         return {
@@ -2352,12 +2173,12 @@ class Component extends DCLogic {
       showChips: !!vals.showBarChips, showDriverChip: !!vals.showDriverChip, driverName: vals.driverName,
       modelCardOpen: !!vals.fpDdOpen, model: vals.fpModel, modelVersion: vals.fpModelVersion, guidance: vals.fpGuidance, length: vals.fpLength, tone: vals.fpTone,
       wsLabel: vals.fpWsLabel, wsCardOpen: !!vals.fpWsOpen, workspace: vals.focusedWorkspace, shape: vals.focusedShape, branch: vals.focusedBranch,
-      escHint: vals.escHint, recordsColor: vals.recordsColor, studioColor: vals.studioColor,
+      escHint: vals.escHint, recordsColor: vals.recordsColor,
       revealLabel: vals.revealLabel, revealColor: vals.revealBtnColor, revealBg: vals.revealBtnBg,
     };
     this._topBarActs = {
       startEdit: vals.fpStartEdit, toggleModelCard: vals.fpToggleDd, toggleWsCard: vals.fpToggleWs,
-      openRecords: vals.openRecords, openStudio: vals.openStudio, toggleReveal: vals.toggleReveal,
+      openRecords: vals.openRecords, toggleReveal: vals.toggleReveal,
     };
     return vals;
   }

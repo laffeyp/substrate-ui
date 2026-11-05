@@ -4,7 +4,7 @@
 // PLAN-2026-11-04-shell-to-react-r5.md, B3).
 //
 // The bar shows the focused pane: its status dot, its name, its driver and workspace chips and their
-// cards, and the page and view buttons. DCLogic owns the panes, the open page and the view until
+// cards, and the records and view buttons. DCLogic owns the panes, the open page and the view until
 // they move (plan group E), so it computes these fields after each render and writes them here, and
 // it registers the actions the bar's controls call. The React bar (web/app/TopBar.tsx) draws them.
 
@@ -38,7 +38,6 @@ export interface TopBarState {
   branch: string;
   escHint: string;
   recordsColor: string;
-  studioColor: string;
   revealLabel: string;
   revealColor: string;
   revealBg: string;
@@ -51,7 +50,6 @@ export interface TopBarActions {
   toggleModelCard(): void;
   toggleWsCard(): void;
   openRecords(): void;
-  openStudio(): void;
   toggleReveal(): void;
 }
 
@@ -60,11 +58,11 @@ const INITIAL: TopBarState = {
   showChips: true, showDriverChip: false, driverName: "",
   modelCardOpen: false, model: "—", modelVersion: "default", guidance: "auto", length: "", tone: "",
   wsLabel: "⌥ —", wsCardOpen: false, workspace: "", shape: "", branch: "",
-  escHint: "", recordsColor: "#9aa0a8", studioColor: "#9aa0a8", revealLabel: "meta", revealColor: "#9aa0a8", revealBg: "#3d434c",
+  escHint: "", recordsColor: "#9aa0a8", revealLabel: "meta", revealColor: "#9aa0a8", revealBg: "#3d434c",
 };
 
 const NO_ACTIONS: TopBarActions = {
-  startEdit() {}, finishEdit() {}, toggleModelCard() {}, toggleWsCard() {}, openRecords() {}, openStudio() {}, toggleReveal() {},
+  startEdit() {}, finishEdit() {}, toggleModelCard() {}, toggleWsCard() {}, openRecords() {}, toggleReveal() {},
 };
 
 // One instance per window, as in shell.ts (sprint 212).

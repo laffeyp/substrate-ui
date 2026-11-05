@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Peter Laffey
 // The one top bar (sprint 228; plan PLAN-2026-11-04-shell-to-react-r5.md, B3): the focused pane's
 // dot and name (double-click renames), its driver chip and model card, its workspace chip and card,
-// and the page and view buttons. Styles are the template's (reveal.html top bar). The data-*
+// the records button and the view button. Studio's button is gone with Studio (sprint 242). Styles are the template's (reveal.html top bar). The data-*
 // attributes are the ones the gates and the Electron rules (reveal.ts) find the bar by.
 
 import * as React from "react";
@@ -73,7 +73,6 @@ export function TopBar(): React.ReactElement {
       <span style={{ fontSize: 10.5, color: "#62676f", flex: "none" }}>{bar.escHint}</span>
       <span style={{ flex: 1, minWidth: 8 }} />
       <span className="hover-top-bar-records" onClick={() => act().openRecords()} style={{ ...page, color: bar.recordsColor }}>records</span>
-      <span className="hover-top-bar-studio" onClick={() => act().openStudio()} style={{ ...page, color: bar.studioColor }}>studio</span>
       <button onClick={() => act().toggleReveal()} style={{ fontFamily: "inherit", cursor: "pointer", flex: "none", fontSize: 11.5, color: bar.revealColor, background: bar.revealBg, border: "none", borderRadius: 5, padding: "3px 10px", fontWeight: 600 }}>{bar.revealLabel}</button>
     </div>
   );

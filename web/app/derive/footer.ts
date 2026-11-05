@@ -14,7 +14,7 @@ export interface FooterInput {
   unbound: boolean;
   /** The focused session's name, as the pane header shows it. */
   title: string | null;
-  /** The records, assays or studio page is open over the panes. */
+  /** The records or assays page is open over the panes. */
   surfaceOpen: boolean;
   /** The focused pane's controller snapshot; null before its first. */
   snapshot: { sessionId: string | null; endedReason: string | null; connection: ConnectionState } | null;
