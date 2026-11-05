@@ -15,6 +15,8 @@ import { Transcript } from "./reveal/transcript";
 import { mirrorSnapshot, sendCommand } from "./app/state/shell";
 import { createMountRegistry } from "./app/mount";
 import { Dialogs } from "./app/Dialogs";
+import { FirstRun } from "./app/FirstRun";
+import { Footer } from "./app/Footer";
 
 function boot(): void {
   const registry = new PaneRegistry({ makeClient: () => new BrowserSubstrateClient() });
@@ -144,6 +146,10 @@ function boot(): void {
   // 13px is the transcript's default size, the template's `transcriptFontSize` default.
   mounts.register({ name: "dialogs", selector: '[data-app-mount="dialogs"]', key: () => "window",
     render: () => React.createElement(Dialogs, { defaultFontSize: 13 }) });
+  mounts.register({ name: "footer", selector: '[data-app-mount="footer"]', key: () => "window",
+    render: () => React.createElement(Footer) });
+  mounts.register({ name: "first-run", selector: '[data-app-mount="first-run"]', key: () => "window",
+    render: () => React.createElement(FirstRun) });
   mounts.start();
 
   // Sprint 080 — native menu wire-up. Only present when running

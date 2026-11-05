@@ -94,6 +94,8 @@ import { buildLanguageLens, LANGUAGE_STREAM_TABS, languageView, languageViewTabs
 import { settingsTail } from "./reveal/settings_tail";
 import { fontSize, loadSettings, settings } from "./app/state/settings";
 import { closeDialog, dialogOpen, openEndSession, openSettings } from "./app/state/dialogs";
+import { chrome } from "./app/state/chrome";
+import { firstRun } from "./app/state/first_run";
 import { onCommand, shell } from "./app/state/shell";
 
 
@@ -122,7 +124,6 @@ class Component extends DCLogic {
     panes: [{ id: 1, name: 'pane-1', driver: null, editing: false, nameVal: '', unbound: true }],
     focused: 1, cols: 1, rows: 1, colW: [1], rowW: [1], revealL: 1.15, ddFor: null, wsFor: null, driverExpandedCli: null, driverExpandedFamily: null, allSessions: [],
     findOpen: false, findQ: '', findScope: 'transcript',
-    ended: false, frDone: false,
   // Sprint 086 — Records surface: per-workspace expand state and
   // paginated session buffers. Empty means "not expanded, not fetched
   // yet". On expand, loadSessionsByWorkspace(path, 0, 50) fills
@@ -936,6 +937,12 @@ class Component extends DCLogic {
     };
     this._offShell = shell.subscribe(applyShell);
     applyShell();
+    this._publishChrome();
+    // First run's pick gives pane 1 its driver, as the template's pick did (sprint 225).
+    this._offFirstRun = firstRun.subscribe(() => {
+      const picked = firstRun.getSnapshot().picked;
+      if (picked) this.setState(st => ({ panes: st.panes.map(p => p.id === 1 ? Object.assign({}, p, { driver: picked }) : p) }));
+    });
     this._offCommands = onCommand((command) => {
       if (command === 'toggle-meta') this._toggleMeta();
       else if (command === 'settings') openSettings();
@@ -1077,24 +1084,16 @@ class Component extends DCLogic {
     this._rs = () => this.setState({ winW: window.innerWidth });
     window.addEventListener('resize', this._rs);
   }
-  componentDidUpdate(prevProps) {
-    // sync ONLY when a tweak actually changed — never fight the UI's own state
-    const pc = this.props.columns, pr = this.props.rows, pv = this.props.view;
-    const changed = (k) => prevProps && this.props[k] !== prevProps[k];
-    if (!changed('columns') && !changed('rows') && !changed('view')) return;
-    const state = this.state;
-    if ((changed('columns') && pc && pc !== state.cols) || (changed('rows') && pr && pr !== state.rows)) {
-      const cols = pc || state.cols, rows = pr || state.rows;
-      const need = cols * rows;
-      const panes = state.panes.slice(0, Math.max(1, need));
-      while (panes.length < need) panes.push(this._newPane());
-      const colW = Array.from({ length: cols }, (_, i) => state.colW[i] || 1);
-      const rowW = Array.from({ length: rows }, (_, i) => state.rowW[i] || 1);
-      this.setState({ cols, rows, colW, rowW, panes });
-    }
-    if (changed('view') && pv && (pv === 'revealed') !== state.revealed) this.setState({ revealed: pv === 'revealed', surface: null });
+  // What the React footer reads about the focused pane (web/app/state/chrome.ts, sprint 224).
+  _publishChrome() {
+    const s = this.state;
+    const fp = (s.panes || []).find(p => p.id === s.focused) || s.panes[0];
+    chrome.set({ focusedPane: s.focused, unbound: !!(fp && fp.unbound), title: (fp && this._paneTitle(s, fp)) || null, surfaceOpen: !!s.surface });
   }
-  componentWillUnmount() { if (this._offRuns) this._offRuns(); if (this._offSettings) this._offSettings(); if (this._offShell) this._offShell(); if (this._offCommands) this._offCommands(); window.removeEventListener('keydown', this._kd); window.removeEventListener('mousemove', this._mm); window.removeEventListener('mouseup', this._mu); window.removeEventListener('resize', this._rs); if (this._ddOutside) document.removeEventListener('mousedown', this._ddOutside, true); if (this._activityTick) { window.clearInterval(this._activityTick); this._activityTick = null; } }
+  componentDidUpdate() {
+    this._publishChrome();
+  }
+  componentWillUnmount() { if (this._offRuns) this._offRuns(); if (this._offSettings) this._offSettings(); if (this._offShell) this._offShell(); if (this._offCommands) this._offCommands(); if (this._offFirstRun) this._offFirstRun(); window.removeEventListener('keydown', this._kd); window.removeEventListener('mousemove', this._mm); window.removeEventListener('mouseup', this._mu); window.removeEventListener('resize', this._rs); if (this._ddOutside) document.removeEventListener('mousedown', this._ddOutside, true); if (this._activityTick) { window.clearInterval(this._activityTick); this._activityTick = null; } }
   _upd(arrKey, i, field) { return (ev) => this.setState(s => { const arr = s[arrKey].map((x, j) => j === i ? Object.assign({}, x, { [field]: ev.target.value }) : x); return { [arrKey]: arr }; }); }
   _rm(arrKey, i) { return () => this.setState(s => ({ [arrKey]: s[arrKey].filter((x, j) => j !== i) })); }
   _validate() {
@@ -2312,7 +2311,7 @@ class Component extends DCLogic {
       },
       revealLabel: state.revealed ? 'panes' : 'meta',
       revealBtnColor: state.revealed && !surf ? '#212327' : '#9aa0a8', revealBtnBg: state.revealed && !surf ? '#82a5c8' : '#3d434c',
-      fontSize: fontSize(this.props.transcriptFontSize ?? 13),
+      fontSize: fontSize(13),
       // Reveal view's single-pane prompt row (reveal.html:345). Bound
       // to the focused pane's pv, so the same field the terminal-view
       // pane input mutates is what the reveal-view input shows.
@@ -2517,71 +2516,14 @@ class Component extends DCLogic {
         return /^auto\b/.test(label.slice(String(d).toLowerCase().length).trim()) ? String(d).toLowerCase() : label;
       })(), driverOpen: state.driverOpen,
       toggleDriverMenu: () => this.setState(s => ({ driverOpen: !s.driverOpen, wsOpen: false })),
-      // Sprint 088c — footRecord + footStatus were both prototype
-      // literals: `record 01M1684 · 244 events` and ` · clean` are
-      // hardcoded, never change with real state. Show only what we
-      // actually derive: descend depth when descending; the pane's
-      // real session name otherwise; nothing when unbound. Status
-      // reads the real live/finalised bit without the "clean" suffix
-      // (which had no not-clean branch).
-      footRecord: fp.unbound
-          ? 'unbound — pick a workspace'
-          : fp.name
-            ? 'session ' + fp.name
-            : '',
-      footHint: surf ? 'esc back to session' : '⌘M toggles meta',
-      footStatus: (this.props.simulateRateLimit ?? false) ? '◌ rate-limited · retry 3/6 in 14s' : state.ended ? '● finalised' : '● live',
-      footStatusColor: (this.props.simulateRateLimit ?? false) ? '#7fb3b8' : state.ended ? '#62676f' : '#82a5c8',
+      // The footer is web/app/Footer.tsx (sprint 224).
       // ── find (19k/19l) ──
       findOpen: state.findOpen, findQ: state.findQ, onFindQ: (ev) => this.setState({ findQ: ev.target.value }), findCount,
       focusTranscript: () => { if (this.state.findScope !== 'transcript') this.setState({ findScope: 'transcript' }); },
       focusStream: () => { if (this.state.findScope !== 'stream') this.setState({ findScope: 'stream' }); },
       closeFind: () => this.setState({ findOpen: false, findQ: '' }),
       // The dialogs are web/app/Dialogs.tsx (sprint 216).
-      // ── first run (19m) ──
-      // Gates: this.props.firstRun (for the dc-runtime scenario
-      // switcher) OR ?firstrun=1 in the URL. `frDone` closes it once
-      // the user picks a driver.
-      showFirstRun: (() => {
-        const propOn = this.props.firstRun ?? false;
-        let urlOn = false;
-        try { urlOn = /[?&]firstrun=1(?:&|$)/.test(window.location.search); } catch(_e) {}
-        return (propOn || urlOn) && !state.frDone;
-      })(),
-      // Group the real driver roster by provider — the 19m frame's
-      // "what the machine actually has" list. Ordering: local ollama
-      // (installed) · cloud ollama (:cloud suffix) · CLIs · APIs (grouped
-      // by absent env keys) · deterministic floor.
-      frRows: (() => {
-        const roster = (state.driverRoster || []);
-        const def = state.driverDefault || null;
-        const cli = (state.controllerSnapshot && Array.isArray(state.controllerSnapshot.cli)) ? state.controllerSnapshot.cli : ['claude', 'gemini'];
-        const isCloud = (m) => /:cloud$/.test(m);
-        const isCli = (m) => cli.includes(m);
-        const local = roster.filter(m => !isCloud(m) && !isCli(m) && m !== 'deterministic');
-        const cloud = roster.filter(m => isCloud(m));
-        const clis = roster.filter(m => isCli(m));
-        const detOn = roster.includes('deterministic') || true;
-        const rows = [];
-        for (const m of local) rows.push({ name: 'ollama · ' + m, meta: 'localhost:11434 · installed' + (m === def ? ' · preselected' : ''), driver: m, on: true });
-        for (const m of cloud) rows.push({ name: 'ollama·cloud · ' + m, meta: (m === def ? 'default · ' : '') + 'cloud model', driver: m, on: true });
-        for (const m of clis) rows.push({ name: m + ' (cli)', meta: 'found on PATH', driver: m, on: true });
-        if (detOn) rows.push({ name: 'deterministic', meta: 'built in · replay-stable · no network', driver: 'deterministic', on: true });
-        return rows.map(r => ({
-          name: r.name, meta: r.meta,
-          c: r.driver === def ? '#e2e5e9' : (r.on ? '#b9bec5' : '#62676f'),
-          bg: r.driver === def ? '#2e3138' : 'transparent',
-          key: r.driver === def ? '↵' : '',
-          pick: () => {
-            this.setState(st => ({
-              frDone: true,
-              panes: st.panes.map(p => p.id === 1 ? Object.assign({}, p, { driver: r.driver }) : p),
-            }));
-            const vm = window.__vm;
-            if (vm && typeof vm.pickDriver === 'function') vm.pickDriver(r.driver);
-          },
-        }));
-      })(),
+      // First run is web/app/FirstRun.tsx (sprint 225).
     };
   }
 }

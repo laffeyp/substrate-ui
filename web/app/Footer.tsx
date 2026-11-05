@@ -1,0 +1,25 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2026 Peter Laffey
+// The window's footer (sprint 220; plan PLAN-2026-11-04-shell-to-react-r5.md, B2): the focused
+// session's status, its name, and the key hint. Styles are the template's (reveal.html footer line).
+// The status span is drawn when empty, as the template drew it, so the gaps stay where they were.
+
+import * as React from "react";
+import { useSyncExternalStore } from "react";
+import { footerText } from "./derive/footer";
+import { chrome } from "./state/chrome";
+import { shell } from "./state/shell";
+
+export function Footer(): React.ReactElement {
+  const ch = useSyncExternalStore(chrome.subscribe, chrome.getSnapshot, chrome.getSnapshot);
+  const snaps = useSyncExternalStore(shell.subscribe, shell.getSnapshot, shell.getSnapshot);
+  const snap = snaps.snapshots[ch.focusedPane] ?? null;
+  const text = footerText({ unbound: ch.unbound, title: ch.title, surfaceOpen: ch.surfaceOpen, snapshot: snap });
+  return (
+    <div data-footer="1" style={{ display: "flex", gap: 16, padding: "7px 16px", background: "#2a2d33", fontSize: 11, color: "#62676f", flex: "none" }}>
+      <span data-footer-status="1" style={{ color: text.statusColor }}>{text.status}</span>
+      <span>{text.record}</span>
+      <span style={{ marginLeft: "auto" }}>{text.hint}</span>
+    </div>
+  );
+}

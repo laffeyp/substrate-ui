@@ -1,0 +1,9 @@
+/* SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0 */
+/* Copyright (C) 2026 Peter Laffey */
+/* Hover rules for the React areas (sprint 222; plan PLAN-2026-11-04-shell-to-react-r5.md, "Styles"). */
+/* One class per element. Each replaces a template `style-hover` attribute, which dc-runtime drew as  */
+/* a generated `:hover` rule with every declaration `!important` (support.js, createPseudoSheet), so  */
+/* the rule beats the element's inline background as it did there.                                   */
+
+/* First run: a driver row (reveal.html first-run block). */
+.hover-first-run-row:hover { background: #2e3138 !important; }

@@ -2,11 +2,11 @@
 // Copyright (C) 2026 Peter Laffey
 // First run and the footer (sprint 207; plan PLAN-2026-11-04-shell-to-react-r5.md, A9).
 //
-// Footer: unbound, then "session <name>" after a turn, and the hint on the records page. After the
-// session ends the footer still reads "● live": nothing sets the `ended` it reads (open item 34,
-// OPEN-ITEMS-2026-10-10.md; U186's fix was undone in dd8f390). The gate records what it reads there
-// and asserts nothing; plan row B2 fixes the footer and adds that check, as E3 does for ⌘C. First run (?firstrun=1): a row per driver in the controller's roster, and
-// a pick that closes it and fires DRIVER_PICKED.
+// Footer: no status and "unbound — pick a workspace" before a session; "● live" and "session <name>"
+// after a turn; the records page's hint; "● finalised" after the session ends (open item 34, fixed
+// in plan row B2, sprint 224). First run (?firstrun=1): a row per driver in the controller's roster,
+// the default workspace as a fresh per-session sandbox, none of the design fixtures (a session name,
+// `~/Documents/substrate`), and a pick that closes it and fires DRIVER_PICKED.
 
 import { _electron as electron, type Page } from "playwright";
 import { bindPaneAsUser, launchArgs, settled, waitForApp } from "./lib/electron";
@@ -17,9 +17,8 @@ const signals = (win: Page) => win.evaluate(() => (window as unknown as { __vmSi
 
 /** The footer's three spans: status, record, hint. */
 const footer = (win: Page) => win.evaluate(() => {
-  const status = Array.from(document.querySelectorAll("span")).find((s) => s.offsetParent !== null && /^[●◌] /.test(s.textContent ?? ""));
-  const spans = status ? Array.from(status.parentElement!.children).map((c) => (c.textContent ?? "").trim()) : [];
-  return spans;
+  const bar = document.querySelector("[data-footer]");
+  return bar ? Array.from(bar.children).map((c) => (c.textContent ?? "").trim()) : [];
 });
 
 async function waitFooter(win: Page, want: (spans: string[]) => boolean, what: string): Promise<string[]> {
@@ -43,7 +42,7 @@ async function main(): Promise<void> {
     await waitForApp(win);
     await visible(win, "input[data-ws-input]").waitFor({ timeout: 15_000 });
 
-    const unbound = await waitFooter(win, (s) => s[0] === "● live" && s[1] === "unbound — pick a workspace" && s[2] === "⌘M toggles meta", "live · unbound · the meta hint");
+    const unbound = await waitFooter(win, (s) => s[0] === "" && s[1] === "unbound — pick a workspace" && s[2] === "⌘M toggles meta", "no status · unbound · the meta hint");
     seen.push(`unbound ${JSON.stringify(unbound)}`);
 
     await bindPaneAsUser(win, "deterministic");
@@ -64,8 +63,11 @@ async function main(): Promise<void> {
     await visible(win, '[data-slash-row="/exit"]').click();
     await win.getByText("end session", { exact: true }).filter({ visible: true }).first().click();
     await win.waitForFunction(() => ((window as unknown as { __vmSignals?: { name: string }[] }).__vmSignals ?? []).some((s) => s.name === "SESSION_ENDED_LOCAL"), undefined, { timeout: 15_000 });
+    // The end is complete when the controller has unbound the session (forceClose); read the footer then.
+    await win.waitForFunction(() => (window as any).__vm?.get?.(1)?.snapshot().sessionId === null, undefined, { timeout: 15_000 });
     await settled(win);
-    seen.push(`after the end (not asserted; open item 34) ${JSON.stringify(await footer(win))}`);
+    const ended = await waitFooter(win, (s) => s[0] === "● finalised" && s[1] === `session ${crumb}`, `finalised · session ${crumb}`);
+    seen.push(`after the end ${JSON.stringify(ended)}`);
 
     // First run, as the pixel capture opens it: the same window with ?firstrun=1.
     const url = new URL(win.url());
@@ -89,6 +91,15 @@ async function main(): Promise<void> {
     const missing = roster.filter((d) => !rows.some((r) => r === d || r.endsWith(` · ${d}`) || r === `${d} (cli)`));
     if (missing.length) throw new Error(`first run lacks a row for ${missing.join(", ")}; rows ${JSON.stringify(rows)}`);
     seen.push(`first run rows ${JSON.stringify(rows)} for roster ${JSON.stringify(roster)}`);
+    const shown = await win.evaluate(() => {
+      const head = Array.from(document.querySelectorAll("div")).find((d) => d.textContent === "DRIVERS ON THIS MACHINE")!;
+      return (head.closest("[style*='position: fixed']") as HTMLElement | null)?.innerText ?? "";
+    });
+    for (const fixture of ["s-1a04", "~/Documents/substrate"]) {
+      if (shown.includes(fixture)) throw new Error(`first run shows the fixture text ${fixture}`);
+    }
+    if (!shown.includes("fresh per-session sandbox")) throw new Error("first run does not name the default workspace");
+    seen.push("first run shows no fixture text");
 
     const before = (await signals(win)).length;
     // The row in the first-run list; the window behind it has its own "deterministic" text.
