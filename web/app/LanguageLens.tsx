@@ -4,15 +4,16 @@
 // 174): lanes per measure, turns down, the window as a curve, a rule per setting change, marks where
 // the drift detector fired, and one readout row for the selected turn. The geometry comes from
 // web/reveal/language_lens.ts; the stream, view and lane from web/app/state/language.ts; the language
-// view and the selection from web/app/state/stream.ts. Styles and hooks are the template's
-// (reveal.html language block).
+// view from web/app/state/stream.ts; the selection from web/app/state/meta.ts. Styles and hooks are
+// the template's (reveal.html language block).
 
 import * as React from "react";
 import { useMemo, useSyncExternalStore } from "react";
 import { buildLanguageLens, LANGUAGE_STREAM_TABS, languageView, languageViewTabs } from "../reveal/language_lens";
 import { selectedTurn } from "./derive/language_keys";
 import { language, setLanguageStream, setLanguageView } from "./state/language";
-import { selectSeq, stream } from "./state/stream";
+import { stream } from "./state/stream";
+import { meta, selectSeq } from "./state/meta";
 
 const ON = "#d7dade";
 const OFF = "#62676f";
@@ -22,7 +23,8 @@ const line = (left: number, color: string): React.CSSProperties => ({ position: 
 export function LanguageLens(): React.ReactElement {
   const st = useSyncExternalStore(stream.subscribe, stream.getSnapshot);
   const lg = useSyncExternalStore(language.subscribe, language.getSnapshot);
-  const selTurn = useMemo(() => selectedTurn(st.envelopes, st.sel), [st.envelopes, st.sel]);
+  const sel = useSyncExternalStore(meta.subscribe, meta.getSnapshot).sel;
+  const selTurn = useMemo(() => selectedTurn(st.envelopes, sel), [st.envelopes, sel]);
   const lens = useMemo(() => buildLanguageLens(st.language, { stream: lg.stream, selTurn, lane: lg.lane, view: lg.view }), [st.language, lg.stream, lg.lane, lg.view, selTurn]);
   const viewNow = languageView(lg.stream, lg.view);
   return (

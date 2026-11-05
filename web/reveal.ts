@@ -23,12 +23,7 @@ import { AssayPage } from "./app/AssayPage";
 import { InputBar } from "./app/InputBar";
 import { FindBar } from "./app/FindBar";
 import { PanePicker } from "./app/PanePicker";
-import { StreamLens } from "./app/StreamLens";
-import { SideGraph } from "./app/SideGraph";
-import { StructureLens } from "./app/StructureLens";
-import { IoLens } from "./app/IoLens";
-import { SceneLens } from "./app/SceneLens";
-import { LanguageLens } from "./app/LanguageLens";
+import { MetaView } from "./app/MetaView";
 import { ActivityLine, TaskRows, type PaneView } from "./app/ActivityLine";
 
 function boot(): void {
@@ -181,22 +176,10 @@ function boot(): void {
   // The pane picker lays itself out in its pane's flex column, so its root takes no box (sprint 286).
   mounts.register({ name: "picker", selector: '[data-app-mount="picker"]', key: (host) => host.getAttribute("data-pane-id") ?? "", contents: true,
     render: (host) => React.createElement(PanePicker, { paneId: Number(host.getAttribute("data-pane-id")) }) });
-  // Meta's stream lens draws its legend and rows in the stream's scroller (sprint 292).
-  mounts.register({ name: "stream", selector: '[data-app-mount="stream"]', key: () => "window", contents: true,
-    render: () => React.createElement(StreamLens) });
-  // Meta's side graph sits above the stream's scroller in meta's column (sprint 297).
-  mounts.register({ name: "side-graph", selector: '[data-app-mount="side-graph"]', key: () => "window", contents: true,
-    render: () => React.createElement(SideGraph) });
-  // Meta's structure lens draws in the stream's scroller in its mode (sprint 302).
-  mounts.register({ name: "structure", selector: '[data-app-mount="structure"]', key: () => "window", contents: true,
-    render: () => React.createElement(StructureLens) });
-  // Meta's i/o and scene lenses, likewise (sprint 306).
-  mounts.register({ name: "io", selector: '[data-app-mount="io"]', key: () => "window", contents: true,
-    render: () => React.createElement(IoLens) });
-  mounts.register({ name: "scene", selector: '[data-app-mount="scene"]', key: () => "window", contents: true,
-    render: () => React.createElement(SceneLens) });
-  mounts.register({ name: "language", selector: '[data-app-mount="language"]', key: () => "window", contents: true,
-    render: () => React.createElement(LanguageLens) });
+  // The meta view's machinery column and its gutter, for the focused pane; its root takes no box, so
+  // the column and the gutter lay out in the meta row as the template's did (sprint 316).
+  mounts.register({ name: "meta", selector: '[data-app-mount="meta"]', key: (host) => host.getAttribute("data-pane-id") ?? "", contents: true,
+    render: (host) => React.createElement(MetaView, { paneId: Number(host.getAttribute("data-pane-id")) }) });
   mounts.register({ name: "footer", selector: '[data-app-mount="footer"]', key: () => "window",
     render: () => React.createElement(Footer) });
   mounts.register({ name: "first-run", selector: '[data-app-mount="first-run"]', key: () => "window",

@@ -33,7 +33,7 @@ declare const ReactDOM: any;
 // (vite.config.ts:inlineDcScript) bundles this import into the
 // injected script so dc-runtime sees one flat class body.
 import {
-  EnvelopeKind, Surface, GraphMode, RevealLevel, GraphDirection,
+  EnvelopeKind, Surface, GraphMode,
 } from "./vm/kinds";
 import { isToolCallRow, isToolResultRow } from "./vm/types";
 import { toggleToolOutputMode } from "./vm/tool_output_mode";
@@ -56,7 +56,6 @@ const TONE_OPTIONS = Object.values(TonePosition).map(v => ({ value: v, label: v,
 const LENGTH_DEFAULT_AT = LENGTH_OPTIONS.findIndex(o => o.value === LENGTH_DEFAULT);
 const TONE_DEFAULT_AT = TONE_OPTIONS.findIndex(o => o.value === TONE_DEFAULT);
 import { mdBlocks, mdInlines, renderBlock, renderInline } from "./reveal/markdown";
-import { followBottom } from "./reveal/follow_bottom";
 import { sessionStatusLook } from "./reveal/session_status";
 import { buildLanguageLens } from "./reveal/language_lens";
 import { fontSize, loadSettings, settings } from "./app/state/settings";
@@ -73,7 +72,8 @@ import { lineStep, paneShape, SHARED_SANDBOX, tabFill, workspaceRows } from "./a
 import { treeKey } from "./app/derive/tree_key";
 import { chipLabel, driverLabel, modelRows } from "./app/derive/driver_label";
 import { picker } from "./app/state/picker";
-import { setGraphLink, setPickSeq, setSelectSeq, stream } from "./app/state/stream";
+import { stream } from "./app/state/stream";
+import { meta, selectSeq, setMode } from "./app/state/meta";
 import { language, setLanguageLane } from "./app/state/language";
 import { languageKey, selectedTurn } from "./app/derive/language_keys";
 import { findText, streamRows } from "./app/derive/stream";
@@ -81,7 +81,7 @@ import { onCommand, shell } from "./app/state/shell";
 
 
 class Component extends DCLogic {
-  state = { revealed: false, mode: GraphMode.Stream, dir: GraphDirection.Down, sel: null, surface: null, level: RevealLevel.All, sent: [],
+  state = { revealed: false, surface: null, sent: [],
     // `driverName` in the top strip reads the pane's driver at render
     // time; null here means "read from the controller default."
     driverName: null,
@@ -95,7 +95,7 @@ class Component extends DCLogic {
     // bookmark or menu action; the picker state itself carries the
     // frame.
     panes: [{ id: 1, name: 'pane-1', driver: null, editing: false, nameVal: '', unbound: true }],
-    focused: 1, cols: 1, rows: 1, colW: [1], rowW: [1], revealL: 1.15, ddFor: null, wsFor: null, driverExpandedCli: null, driverExpandedFamily: null, allSessions: [],
+    focused: 1, cols: 1, rows: 1, colW: [1], rowW: [1], ddFor: null, wsFor: null, driverExpandedCli: null, driverExpandedFamily: null, allSessions: [],
   // Sprint 086 followup — workspace picker's per-row expand state
   // (independent of Records surface). Expanding a row fetches the
   // most recent 5 sessions from that workspace and lists them
@@ -596,9 +596,10 @@ class Component extends DCLogic {
       // latest shift's reply when there is one (the lens selects the turn that holds `sel`).
       const tick = snap.languageOpenTick ?? 0;
       if (changedPane === focusedId && tick > (this._langTicks[changedPane] ?? 0)) {
-        Object.assign(patch, { revealed: true, surface: null, mode: GraphMode.Language });
+        Object.assign(patch, { revealed: true, surface: null });
+        setMode(GraphMode.Language);
         const shifts = (snap.language && snap.language.shifts) || [];
-        if (shifts.length) patch.sel = shifts[shifts.length - 1].source_seq;
+        if (shifts.length) selectSeq(shifts[shifts.length - 1].source_seq);
       }
       this._langTicks[changedPane] = tick;
       this.setState(patch);
@@ -615,19 +616,8 @@ class Component extends DCLogic {
     applyShell();
     picker.set({ views: this._pickerViews || {} });
     if (this._streamView) stream.set(this._streamView);
-    this._offPickSeq = setPickSeq((seq) => this.setState(s => ({ sel: s.sel === seq ? null : seq })));
-    this._offSelectSeq = setSelectSeq((seq) => this.setState({ sel: seq }));
-    // The side graph (web/app/SideGraph.tsx) and the stream's scroller scroll together, in proportion.
-    this._offGraphLink = setGraphLink({
-      ref: (el) => { this._graphEl = el; },
-      onScroll: (el) => {
-        if (this._syncing) return;
-        const s = this._streamEl; if (!s) return;
-        const f = el.scrollLeft / Math.max(1, el.scrollWidth - el.clientWidth);
-        this._syncing = true; s.scrollTop = f * Math.max(0, s.scrollHeight - s.clientHeight);
-        requestAnimationFrame(() => { this._syncing = false; });
-      },
-    });
+    // The left column's width follows the meta view's split (web/app/state/meta.ts, sprint 313).
+    this._offMeta = meta.subscribe(() => this.setState({ metaSplit: meta.getSnapshot().split }));
     this._publishChrome();
     this._publishTopBar();
     // The input bar's /exit names the pane's session (web/app/state/input_bar.ts, sprint 261).
@@ -717,16 +707,17 @@ class Component extends DCLogic {
         const typing = !!(el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable));
         // The keys' steps: web/app/derive/language_keys.ts (sprint 308); the lens's lane is in
         // web/app/state/language.ts (sprint 309).
-        if (s.revealed && s.mode === GraphMode.Language && !s.surface && !typing && !e.metaKey && !e.ctrlKey) {
+        const mt = meta.getSnapshot();
+        if (s.revealed && mt.mode === GraphMode.Language && !s.surface && !typing && !e.metaKey && !e.ctrlKey) {
           const view = this._streamView || {};
           const lg = language.getSnapshot();
-          const lens = buildLanguageLens(view.language || null, { stream: lg.stream, selTurn: selectedTurn(view.envelopes || [], s.sel), lane: lg.lane, view: lg.view });
-          const step = languageKey(lens.turns, lens.lanes.length, s.sel, lg.lane, e.key);
+          const lens = buildLanguageLens(view.language || null, { stream: lg.stream, selTurn: selectedTurn(view.envelopes || [], mt.sel), lane: lg.lane, view: lg.view });
+          const step = languageKey(lens.turns, lens.lanes.length, mt.sel, lg.lane, e.key);
           if (step) {
             e.preventDefault();
-            if ('sel' in step) this.setState({ sel: step.sel });
+            if ('sel' in step) selectSeq(step.sel);
             else if ('lane' in step) setLanguageLane(step.lane);
-            else this.setState({ mode: GraphMode.Stream });
+            else setMode(GraphMode.Stream);
             return;
           }
         }
@@ -769,11 +760,6 @@ class Component extends DCLogic {
     this._gm = (e) => {
       if (!this._gut) return;
       const g = this._gut; const s = this.state;
-      if (g.type === 'reveal') {
-        const d = (e.movementX / Math.max(300, (s.winW || window.innerWidth))) * (s.revealL + 1);
-        this.setState({ revealL: Math.min(3, Math.max(.5, s.revealL + d)) });
-        return;
-      }
       if (g.type === 'col') {
         const total = s.colW.reduce((a, b) => a + b, 0);
         const d = (e.movementX / Math.max(300, (s.winW || window.innerWidth))) * total;
@@ -819,7 +805,7 @@ class Component extends DCLogic {
     this._publishChrome();
     this._publishTopBar();
   }
-  componentWillUnmount() { if (this._offRuns) this._offRuns(); if (this._offSettings) this._offSettings(); if (this._offFind) this._offFind(); if (this._offShell) this._offShell(); if (this._offCommands) this._offCommands(); if (this._offFirstRun) this._offFirstRun(); if (this._offTopBarActs) this._offTopBarActs(); if (this._offOpenSession) this._offOpenSession(); if (this._offTitleOf) this._offTitleOf(); if (this._offPickSeq) this._offPickSeq(); if (this._offSelectSeq) this._offSelectSeq(); if (this._offGraphLink) this._offGraphLink(); window.removeEventListener('keydown', this._kd); window.removeEventListener('resize', this._rs); if (this._ddOutside) document.removeEventListener('mousedown', this._ddOutside, true); }
+  componentWillUnmount() { if (this._offRuns) this._offRuns(); if (this._offSettings) this._offSettings(); if (this._offFind) this._offFind(); if (this._offShell) this._offShell(); if (this._offCommands) this._offCommands(); if (this._offFirstRun) this._offFirstRun(); if (this._offTopBarActs) this._offTopBarActs(); if (this._offOpenSession) this._offOpenSession(); if (this._offTitleOf) this._offTitleOf(); if (this._offMeta) this._offMeta(); window.removeEventListener('keydown', this._kd); window.removeEventListener('resize', this._rs); if (this._ddOutside) document.removeEventListener('mousedown', this._ddOutside, true); }
   // UI sprint 140: ⌘E folds or unfolds every tool card (ToolCard reads the setting). No control
   // on screen: the Architect's call; /fold and /unfold do the same from the input bar.
   _toggleTools() {
@@ -1069,29 +1055,10 @@ class Component extends DCLogic {
     // The find bar shows the stream's match count; it is written to the find store after the render.
     this._streamMatches = findQuery ? envelopes.filter(e => findText(e).includes(findQuery)).length : 0;
     // The stream lens's rows and inspector: web/app/StreamLens.tsx (sprint 292), from this view.
-    this._streamView = { envelopes: _liveEnvelopes, sel: state.sel, app: state.level === RevealLevel.App, down: state.dir === GraphDirection.Down, topology: (_vmSnap && _vmSnap.topologyGraph) || null, language: (_vmSnap && _vmSnap.language) || null };
+    this._streamView = { envelopes: _liveEnvelopes, topology: (_vmSnap && _vmSnap.topologyGraph) || null, language: (_vmSnap && _vmSnap.language) || null };
     // The language lens: web/app/LanguageLens.tsx (sprint 310), from the stream's view.
     // The side graph: web/app/SideGraph.tsx (sprint 296), from the stream's view.
-    const modes = [['stream', 'stream+graph'], ['io', 'i/o'], ['structure', 'structure'], [GraphMode.Language, 'language'], ['scene', 'scene']];
-    // Direction (down/side) is a property of the stream lens; the
-    // io/structure/scene lenses render their own layouts and the
-    // direction toggle is not visible for them. Carrying `dir=Side`
-    // through a mode switch leaves the shell in a state whose
-    // affordance is hidden — the user sees a side-oriented layout
-    // and no chip to change it. Reset `dir` to Down whenever the
-    // user leaves stream.
-    const modeChips = modes.map(([id, label]) => ({
-      label,
-      pick: () => {
-        this.setState(id === GraphMode.Stream ? { mode: id } : { mode: id, dir: GraphDirection.Down });
-        if (id === GraphMode.Language) {
-          const vm = window.__vm;
-          const ctl = vm && typeof vm.get === 'function' ? vm.get(state.focused) : null;
-          if (ctl && typeof ctl.refreshLanguage === 'function') ctl.refreshLanguage();
-        }
-      },
-      color: state.mode === id ? '#d7dade' : '#62676f', bg: state.mode === id ? '#2e3138' : 'transparent',
-    }));
+    // The lens chips, the level and direction toggles and the gutter: web/app/MetaView.tsx (sprint 316).
     // The i/o and scene lenses: web/app/IoLens.tsx and SceneLens.tsx (sprint 305), from the stream's view.
     const surf = state.surface;
     // Presentation-Model bindings — Phase 4. Every field here reads
@@ -1161,34 +1128,8 @@ class Component extends DCLogic {
       revealLabel: state.revealed ? 'panes' : 'meta',
       revealBtnColor: state.revealed && !surf ? '#212327' : '#9aa0a8', revealBtnBg: state.revealed && !surf ? '#82a5c8' : '#3d434c',
       fontSize: fontSize(13),
-      // UI sprint 158: the stream follows the bottom until scrolled up, as the transcript does.
-      streamRef: (el) => { this._streamEl = el; if (el) followBottom(el); },
-      // Transcript scroll used to live here (Sprint 076 retired
-      // the pane's dc-runtime scroll ref / onScroll bindings). The
-      // atom transcript React tree at web/reveal/transcript/ owns
-      // scroll position now; the reveal.html template no longer
-      // emits any ref/onScroll on the transcript scroller.
-      onStreamScroll: (ev) => {
-        if (this._syncing || this.state.dir !== 'side') return;
-        const el = ev.target, g = this._graphEl; if (!g) return;
-        const f = el.scrollTop / Math.max(1, el.scrollHeight - el.clientHeight);
-        this._syncing = true; g.scrollLeft = f * Math.max(0, g.scrollWidth - g.clientWidth);
-        requestAnimationFrame(() => { this._syncing = false; });
-      },
-      modeChips,
-      isStream: state.mode === GraphMode.Stream, isIo: state.mode === GraphMode.IO, isStructure: state.mode === GraphMode.Structure, isScene: state.mode === GraphMode.Scene,
-      isLanguage: state.mode === GraphMode.Language,
-      isDown: state.dir === GraphDirection.Down, isSide: state.dir === GraphDirection.Side,
-      setAll: () => this.setState({ level: RevealLevel.All }), setApp: () => this.setState({ level: RevealLevel.App }),
-      allColor: state.level === RevealLevel.All ? '#d7dade' : '#62676f', allBg: state.level === RevealLevel.All ? '#2e3138' : 'transparent',
-      appColor: state.level === RevealLevel.App ? '#d7dade' : '#62676f', appBg: state.level === RevealLevel.App ? '#2e3138' : 'transparent',
-      setDown: () => this.setState({ dir: GraphDirection.Down }), setSide: () => this.setState({ dir: GraphDirection.Side }),
-      downColor: state.dir === GraphDirection.Down ? '#d7dade' : '#62676f', downBg: state.dir === GraphDirection.Down ? '#2e3138' : 'transparent',
-      sideColor: state.dir === GraphDirection.Side ? '#d7dade' : '#62676f', sideBg: state.dir === GraphDirection.Side ? '#2e3138' : 'transparent',
       panes, paneCols: state.colW.map(w => w.toFixed(3) + 'fr').join(' '), paneRows: state.rowW.map(w => w.toFixed(3) + 'fr').join(' '), focusedName: fp.name, focusedId: fp.id,
-      revealFlexL: state.revealL.toFixed(3) + ' 1 0%',
-      revealGutterLeft: (state.revealL / (state.revealL + 1) * 100).toFixed(2) + '%',
-      revealGrab: (ev) => { ev.preventDefault(); this._gut = { type: 'reveal' }; },
+      revealFlexL: meta.getSnapshot().split.toFixed(3) + ' 1 0%',
       colGutters: state.colW.slice(0, -1).map((_, i) => { const total = state.colW.reduce((a, b) => a + b, 0); const left = state.colW.slice(0, i + 1).reduce((a, b) => a + b, 0) / total * 100; return { left: left.toFixed(2) + '%', grab: (ev) => { ev.preventDefault(); this._gut = { type: 'col', i: i + 1 }; } }; }),
       rowGutters: state.rowW.slice(0, -1).map((_, i) => { const total = state.rowW.reduce((a, b) => a + b, 0); const top = state.rowW.slice(0, i + 1).reduce((a, b) => a + b, 0) / total * 100; return { top: top.toFixed(2) + '%', grab: (ev) => { ev.preventDefault(); this._gut = { type: 'row', i: i + 1 }; } }; }),
       // The top bar's workspace card (web/app/derive/workspace_card.ts, sprint 233; F328).
@@ -1229,7 +1170,6 @@ class Component extends DCLogic {
       // ── find (19k/19l) ──
       // The find bar is web/app/FindBar.tsx (sprint 272); a click on a lens moves its scope.
       focusTranscript: () => setFindScope('transcript'),
-      focusStream: () => setFindScope('stream'),
       // The dialogs are web/app/Dialogs.tsx (sprint 216).
       // First run is web/app/FirstRun.tsx (sprint 225).
     };

@@ -78,38 +78,8 @@
     <div data-app-mount="input-bar" data-pane-id="{{ fpRow.id }}" data-view="meta"></div>
     </div>
    </div>
-   <div style="flex:1;display:flex;flex-direction:column;min-width:0;background:#1a1c20">
-    <div style="display:flex;flex-wrap:wrap;gap:6px 8px;padding:10px 16px 8px;font-size:11.5px;flex:none;align-items:center">
-     <sc-for list="{{ modeChips }}" as="m" hint-placeholder-count="4">
-      <span onClick="{{ m.pick }}" style="cursor:pointer;padding:2px 10px;border-radius:4px;color:{{ m.color }};background:{{ m.bg }}">{{ m.label }}</span>
-     </sc-for>
-     <sc-if value="{{ isStream }}" hint-placeholder-val="{{ true }}">
-      <span style="margin-left:auto;flex:none;display:flex;border:1px solid rgba(255,255,255,.09);border-radius:4px;overflow:hidden;font-size:11px"><span onClick="{{ setAll }}" style="cursor:pointer;padding:2px 9px;white-space:nowrap;color:{{ allColor }};background:{{ allBg }}" title="every event on the record, lifecycle included">all</span><span onClick="{{ setApp }}" style="cursor:pointer;padding:2px 9px;white-space:nowrap;color:{{ appColor }};background:{{ appBg }}" title="hide the low-level machinery: TriggerFired · ProducerStarted · ProducerCompleted">app</span></span>
-      <span style="flex:none;display:flex;border:1px solid rgba(255,255,255,.09);border-radius:4px;overflow:hidden;font-size:11px"><span onClick="{{ setDown }}" style="cursor:pointer;padding:2px 9px;white-space:nowrap;color:{{ downColor }};background:{{ downBg }}">⇅ down</span><span onClick="{{ setSide }}" style="cursor:pointer;padding:2px 9px;white-space:nowrap;color:{{ sideColor }};background:{{ sideBg }}">→ side</span></span>
-     </sc-if>
-    </div>
-    <sc-if value="{{ isSide }}" hint-placeholder-val="{{ false }}">
-     <div data-app-mount="side-graph" style="display:contents"></div>
-    </sc-if>
-    <div ref="{{ streamRef }}" data-stream-scroll="1" onScroll="{{ onStreamScroll }}" onClick="{{ focusStream }}" style="flex:1;overflow:auto;min-height:0">
-     <sc-if value="{{ isStream }}" hint-placeholder-val="{{ true }}">
-      <div data-app-mount="stream" style="display:contents"></div>
-     </sc-if>
-     <sc-if value="{{ isIo }}" hint-placeholder-val="{{ false }}">
-      <div data-app-mount="io" style="display:contents"></div>
-     </sc-if>
-     <sc-if value="{{ isStructure }}" hint-placeholder-val="{{ false }}">
-      <div data-app-mount="structure" style="display:contents"></div>
-     </sc-if>
-     <sc-if value="{{ isLanguage }}" hint-placeholder-val="{{ false }}">
-      <div data-app-mount="language" style="display:contents"></div>
-     </sc-if>
-     <sc-if value="{{ isScene }}" hint-placeholder-val="{{ false }}">
-      <div data-app-mount="scene" style="display:contents"></div>
-     </sc-if>
-    </div>
-   </div>
-  <div onMouseDown="{{ revealGrab }}" title="drag — more transcript or more machinery" style="position:absolute;top:0;bottom:0;left:{{ revealGutterLeft }};width:11px;transform:translateX(-50%);cursor:col-resize;z-index:15"></div>
+   <!-- the machinery column and the gutter: web/app/MetaView.tsx (sprint 316) -->
+   <div data-app-mount="meta" data-pane-id="{{ focusedId }}" style="display:contents"></div>
   </div>
   </div>
  </sc-if>
