@@ -1108,39 +1108,7 @@ class Component extends DCLogic {
       },
       color: state.mode === id ? '#d7dade' : '#62676f', bg: state.mode === id ? '#2e3138' : 'transparent',
     }));
-    // Detect a 2-D numeric grid inside the bound session's envelopes.
-    // game_of_life-style topologies emit `payload.grid` on their
-    // Generation event; session records don't. When none is found the
-    // scene lens shows an empty state.
-    // Scene lens grid detection. Wrapped end-to-end so any malformed
-    // payload — non-array grid, ragged rows, Proxy that throws on
-    // property access, oversized matrix — falls to the empty-state
-    // message instead of taking the renderer down. Cap at
-    // SCENE_MAX_CELLS to keep a 500×500 game_of_life grid from hanging
-    // paint (Peter's 2026-09-25 crash under Electron: attached record
-    // carried a grid larger than Chromium could render as 250k divs
-    // before the OS killed the renderer; the window disappeared).
-    const SCENE_MAX_CELLS = 400; // 20×20 upper bound
-    const _findGrid = () => {
-      try {
-        const envs = (_vmSnap && Array.isArray(_vmSnap.rawEnvelopes)) ? _vmSnap.rawEnvelopes : [];
-        for (let i = envs.length - 1; i >= 0; i--) {
-          const p = envs[i] && envs[i].payload;
-          if (!p) continue;
-          const candidate = p.grid || p.cells || p.matrix;
-          if (!Array.isArray(candidate) || !candidate.length) continue;
-          if (!Array.isArray(candidate[0])) continue;
-          if (typeof candidate[0][0] !== 'number') continue;
-          const rows = candidate.length;
-          const cols = candidate[0].length;
-          if (rows * cols > SCENE_MAX_CELLS) return null;
-          return candidate;
-        }
-      } catch (_) { /* malformed payload — fall to empty state */ }
-      return null;
-    };
-    const _liveGrid = _findGrid();
-    const graphGrid: number[][] = Array.isArray(_liveGrid) ? _liveGrid : [];
+    // The i/o and scene lenses: web/app/IoLens.tsx and SceneLens.tsx (sprint 305), from the stream's view.
     const surf = state.surface;
     // Presentation-Model bindings — Phase 4. Every field here reads
     // from `state.controllerSnapshot` which reveal.ts refreshes on every
@@ -1233,35 +1201,6 @@ class Component extends DCLogic {
       setDown: () => this.setState({ dir: GraphDirection.Down }), setSide: () => this.setState({ dir: GraphDirection.Side }),
       downColor: state.dir === GraphDirection.Down ? '#d7dade' : '#62676f', downBg: state.dir === GraphDirection.Down ? '#2e3138' : 'transparent',
       sideColor: state.dir === GraphDirection.Side ? '#d7dade' : '#62676f', sideBg: state.dir === GraphDirection.Side ? '#2e3138' : 'transparent',
-      // IO lens: the application-visible input/output documents on
-      // the record, in seq order. Always real; empty when no session
-      // has spoken yet.
-      ioDocs: _liveEnvelopes
-        .filter((env) => env && env.payload && (
-          env.kind === EnvelopeKind.UserMessage || env.kind === EnvelopeKind.ModelReply
-          || env.kind === EnvelopeKind.FinalAnswer || env.kind === EnvelopeKind.ToolResult))
-        .map((env) => {
-          const p = env.payload || {};
-          const text = env.kind === EnvelopeKind.ToolResult
-            ? (typeof p.output === 'string' ? p.output
-                : (p.output && (p.output.stdout || p.output.text || JSON.stringify(p.output))) || '')
-            : String(p.text || p.assembled_prompt || '');
-          const label = env.kind === EnvelopeKind.UserMessage ? 'UserMessage · input'
-            : env.kind === EnvelopeKind.ModelReply ? 'ModelReply · output'
-            : env.kind === EnvelopeKind.FinalAnswer ? 'FinalAnswer · output'
-            : `ToolResult · ${(p && p.tool) || 'tool'}`;
-          return { seq: env.seq, title: label, text };
-        }),
-      sceneHas: graphGrid.length > 0,
-      sceneEmpty: graphGrid.length === 0,
-      sceneRows: graphGrid.length,
-      sceneCols: (graphGrid[0] && graphGrid[0].length) || 0,
-      sceneGridCols: `repeat(${(graphGrid[0] && graphGrid[0].length) || 12}, 1fr)`,
-      sceneCells: (() => {
-        try {
-          return graphGrid.flat().map((v) => ({ bg: v ? '#82a5c8' : '#1a1c20' }));
-        } catch (_) { return []; }
-      })(),
       panes, paneCols: state.colW.map(w => w.toFixed(3) + 'fr').join(' '), paneRows: state.rowW.map(w => w.toFixed(3) + 'fr').join(' '), focusedName: fp.name, focusedId: fp.id,
       revealFlexL: state.revealL.toFixed(3) + ' 1 0%',
       revealGutterLeft: (state.revealL / (state.revealL + 1) * 100).toFixed(2) + '%',

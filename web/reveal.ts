@@ -26,6 +26,8 @@ import { PanePicker } from "./app/PanePicker";
 import { StreamLens } from "./app/StreamLens";
 import { SideGraph } from "./app/SideGraph";
 import { StructureLens } from "./app/StructureLens";
+import { IoLens } from "./app/IoLens";
+import { SceneLens } from "./app/SceneLens";
 import { ActivityLine, TaskRows, type PaneView } from "./app/ActivityLine";
 
 function boot(): void {
@@ -187,6 +189,11 @@ function boot(): void {
   // Meta's structure lens draws in the stream's scroller in its mode (sprint 302).
   mounts.register({ name: "structure", selector: '[data-app-mount="structure"]', key: () => "window", contents: true,
     render: () => React.createElement(StructureLens) });
+  // Meta's i/o and scene lenses, likewise (sprint 306).
+  mounts.register({ name: "io", selector: '[data-app-mount="io"]', key: () => "window", contents: true,
+    render: () => React.createElement(IoLens) });
+  mounts.register({ name: "scene", selector: '[data-app-mount="scene"]', key: () => "window", contents: true,
+    render: () => React.createElement(SceneLens) });
   mounts.register({ name: "footer", selector: '[data-app-mount="footer"]', key: () => "window",
     render: () => React.createElement(Footer) });
   mounts.register({ name: "first-run", selector: '[data-app-mount="first-run"]', key: () => "window",

@@ -71,7 +71,7 @@ async function main(): Promise<void> {
       if (!list) return [];
       return Array.from(list.querySelectorAll("pre")).map((pre) => {
         const head = pre.previousElementSibling as HTMLElement;
-        // dc-runtime wraps {{ d.title }} in a span of its own; the seq is the span floated right.
+        // The head's first node is the title; the seq is the span floated right (web/app/IoLens.tsx).
         const seqText = head.querySelector('span[style*="float"]')?.textContent ?? "";
         return { title: (head.firstChild?.textContent ?? "").trim(), seq: Number(seqText.replace(/^seq /, "")), text: pre.textContent ?? "" };
       });

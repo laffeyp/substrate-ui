@@ -96,12 +96,7 @@
       <div data-app-mount="stream" style="display:contents"></div>
      </sc-if>
      <sc-if value="{{ isIo }}" hint-placeholder-val="{{ false }}">
-      <div style="padding:6px 16px 16px">
-       <sc-for list="{{ ioDocs }}" as="d" hint-placeholder-count="2">
-        <div style="margin-top:12px;border:1px solid rgba(255,255,255,.07);border-radius:7px;overflow:hidden"><div style="padding:8px 13px;background:#26292e;font-size:11.5px;color:#9aa0a8">{{ d.title }}<span style="float:right;color:#62676f;font-size:11px">seq {{ d.seq }}</span></div><pre style="margin:0;padding:11px 13px;font-family:inherit;font-size:12px;color:#b9bec5;white-space:pre-wrap;word-break:break-word">{{ d.text }}</pre></div>
-       </sc-for>
-       <div style="margin-top:12px;font-size:11px;color:#62676f">inputs &amp; outputs — the application documents on this record, in seq order</div>
-      </div>
+      <div data-app-mount="io" style="display:contents"></div>
      </sc-if>
      <sc-if value="{{ isStructure }}" hint-placeholder-val="{{ false }}">
       <div data-app-mount="structure" style="display:contents"></div>
@@ -144,17 +139,7 @@
       </div>
      </sc-if>
      <sc-if value="{{ isScene }}" hint-placeholder-val="{{ false }}">
-      <div style="padding:10px 16px 16px">
-       <sc-if value="{{ sceneHas }}" hint-placeholder-val="{{ false }}">
-        <div style="font-size:12px;color:#9aa0a8">scene · <span style="color:#e2e5e9">grid</span> <span style="color:#62676f">{{ sceneRows }}×{{ sceneCols }}</span></div>
-        <div style="display:grid;grid-template-columns:{{ sceneGridCols }};gap:3px;max-width:420px;margin-top:12px">
-         <sc-for list="{{ sceneCells }}" as="c" hint-placeholder-count="24"><div style="aspect-ratio:1;border-radius:3px;background:{{ c.bg }};border:1px solid rgba(255,255,255,.06)"></div></sc-for>
-        </div>
-       </sc-if>
-       <sc-if value="{{ sceneEmpty }}" hint-placeholder-val="{{ true }}">
-        <div style="color:#62676f;font-size:11.5px">no 2-D grid on this record. the scene lens appears only when the record carries a renderable 2-D shape (e.g. game_of_life's Generation.grid).</div>
-       </sc-if>
-      </div>
+      <div data-app-mount="scene" style="display:contents"></div>
      </sc-if>
     </div>
    </div>
