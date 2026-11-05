@@ -88,6 +88,8 @@ import { closeFind, find, findQuery as findQueryOf, setFindScope, toggleFind } f
 import { recordsKey, setOpenSession } from "./app/state/records";
 import { lineStep, paneShape, SHARED_SANDBOX, tabFill, workspaceRows } from "./app/derive/picker";
 import { treeKey } from "./app/derive/tree_key";
+import { chipLabel, driverLabel, modelRows } from "./app/derive/driver_label";
+import { picker } from "./app/state/picker";
 import { onCommand, shell } from "./app/state/shell";
 
 
@@ -277,38 +279,9 @@ class Component extends DCLogic {
     });
   }
 
+  // A driver's label: web/app/derive/driver_label.ts (sprint 281).
   _resolveDriverLabel(state, driver) {
-    // Sprint 087c follow-up — the chip shows the resolved model
-    // spelling, not just the CLI name. Ollama tags already carry the
-    // model in `driver`, so this is a no-op for them. For CLIs we
-    // walk cliVersions to find the family + pin that match the
-    // current pick (either an explicit driverVersion or the CLI's
-    // default_family → default_pin), and return
-    //   "<cli> <family label> <pin label>"
-    // Everything lowercase — matches the section-header case Peter
-    // set for "cli agents" and mirrors the CLI names themselves.
-    const base = String(driver || '').toLowerCase();
-    if (!base) return base;
-    const tree = (state.cliVersions || {})[driver];
-    if (!tree || !Array.isArray(tree.families) || tree.families.length === 0) return base;
-    const pickedId = (state.driverVersion || {})[driver] || tree.default_family;
-    if (!pickedId) return base;
-    for (const fam of tree.families) {
-      if (fam.id === pickedId) {
-        // Family-level pick — use the family's default pin for the
-        // full label so the chip always names the exact pin the
-        // server will run.
-        const defPin = (fam.pins || []).find((p) => p.id === fam.default_pin);
-        const famLabel = String(fam.label || '').toLowerCase();
-        const pinLabel = defPin ? String(defPin.label || '').toLowerCase() : '';
-        return [base, famLabel, pinLabel].filter(Boolean).join(' ');
-      }
-      const pin = (fam.pins || []).find((p) => p.id === pickedId);
-      if (pin) {
-        return [base, String(fam.label || '').toLowerCase(), String(pin.label || '').toLowerCase()].filter(Boolean).join(' ');
-      }
-    }
-    return base;
+    return driverLabel(driver, state.cliVersions || null, state.driverVersion || {});
   }
 
   // The driver a pane's chip shows. A bound session runs the driver on its manifest, which the
@@ -321,21 +294,13 @@ class Component extends DCLogic {
     return pane.driver || null;
   }
 
+  // The model column's rows: web/app/derive/driver_label.ts (sprint 281); their actions run here.
   _buildDriverOpts(state, paneId, currentDriver, onPicked) {
-    // Sprint 087b — three-tier dropdown: CLI row (level 0) expands
-    // into families (level 1), each family expands into pins
-    // (level 2). Every row is its own pick — clicking the CLI label
-    // picks the CLI's default family+pin, clicking a family label
-    // picks that family's default pin, clicking a pin label pins
-    // exactly. Rows carry `indent` (px) so one flat template can
-    // draw all three levels. Caret points inward: ◂ collapsed,
-    // ▾ expanded.
-    const groups = (state.driverGroups && state.driverGroups.length)
-      ? state.driverGroups
-      : [{ label: '', entries: (state.driverRoster && state.driverRoster.length) ? state.driverRoster : ['deterministic'] }];
-    const cliVersions = state.cliVersions || {};
-    const items = [];
-    const noop = () => undefined;
+    const rows = modelRows({
+      groups: state.driverGroups || [], roster: state.driverRoster || [], cliVersions: state.cliVersions || null,
+      currentDriver, expandedGroups: state.driverExpandedGroups || {},
+      expandedCli: state.driverExpandedCli || null, expandedFamily: state.driverExpandedFamily || null,
+    });
     const pickDriverAndVersion = (cli, versionId) => {
       this.setState((s) => ({
         ddFor: null, driverExpandedCli: null, driverExpandedFamily: null,
@@ -348,76 +313,22 @@ class Component extends DCLogic {
       }
       if (onPicked) onPicked(cli);
     };
-    // UI sprint 124 — each group is a row of its own, folded at first, opened like a workspace
-    // row; its drivers sit one level in.
-    const toggleGroup = (label) => (ev) => {
+    const toggle = (what) => (ev) => {
       if (ev && typeof ev.stopPropagation === 'function') ev.stopPropagation();
-      this.setState((s) => ({ driverExpandedGroups: Object.assign({}, s.driverExpandedGroups, { [label]: !(s.driverExpandedGroups || {})[label] }) }));
+      if ('group' in what) this.setState((s) => ({ driverExpandedGroups: Object.assign({}, s.driverExpandedGroups, { [what.group]: !(s.driverExpandedGroups || {})[what.group] }) }));
+      else if ('cli' in what) this.setState((s) => ({ driverExpandedCli: s.driverExpandedCli === what.cli ? null : what.cli, driverExpandedFamily: null }));
+      else this.setState((s) => ({ driverExpandedFamily: s.driverExpandedFamily === what.family ? null : what.family }));
     };
-    for (const grp of groups) {
-      const grouped = !!grp.label;
-      const groupOpen = !grouped || !!(state.driverExpandedGroups || {})[grp.label];
-      const step = grouped ? 16 : 0;
-      if (grouped) items.push({
-        label: grp.label, color: '#b9bec5', indent: 12,
-        isHeader: false, notHeader: true, isGroup: true, expandable: true, current: false, expanded: groupOpen,
-        chevron: groupOpen ? '▾' : '◂', pick: toggleGroup(grp.label), toggleExpand: toggleGroup(grp.label),
-      });
-      if (!groupOpen) continue;
-      for (const cli of grp.entries) {
-        const tree = cliVersions[cli];
-        const families = tree && Array.isArray(tree.families) ? tree.families : [];
-        const cliHasChildren = families.length > 0;
-        const cliExpanded = state.driverExpandedCli === cli;
-        items.push({
-          label: String(cli).toLowerCase(),
-          color: cli === currentDriver ? '#e2e5e9' : '#b9bec5',
-          indent: 12 + step,
-          isHeader: false, notHeader: true,
-          current: cli === currentDriver, expanded: cliExpanded,
-          expandable: cliHasChildren,
-          chevron: cliHasChildren ? (cliExpanded ? '▾' : '◂') : ' ',
-          toggleExpand: cliHasChildren
-            ? (ev) => { if (ev && typeof ev.stopPropagation === 'function') ev.stopPropagation(); this.setState((s) => ({ driverExpandedCli: s.driverExpandedCli === cli ? null : cli, driverExpandedFamily: null })); }
-            : noop,
-          pick: () => pickDriverAndVersion(cli, null),
-        });
-        if (!cliExpanded) continue;
-        for (const fam of families) {
-          const pins = Array.isArray(fam.pins) ? fam.pins : [];
-          const famHasChildren = pins.length > 0;
-          const famExpanded = state.driverExpandedFamily === (cli + ':' + fam.id);
-          items.push({
-            label: String(fam.label || '').toLowerCase(),
-            color: '#b9bec5',
-            indent: 28 + step,
-            isHeader: false, notHeader: true,
-            current: false, expanded: famExpanded,
-            expandable: famHasChildren,
-            chevron: famHasChildren ? (famExpanded ? '▾' : '◂') : ' ',
-            toggleExpand: famHasChildren
-              ? (ev) => { if (ev && typeof ev.stopPropagation === 'function') ev.stopPropagation(); this.setState((s) => ({ driverExpandedFamily: s.driverExpandedFamily === (cli + ':' + fam.id) ? null : (cli + ':' + fam.id) })); }
-              : noop,
-            pick: () => pickDriverAndVersion(cli, fam.id),
-          });
-          if (!famExpanded) continue;
-          for (const pin of pins) {
-            items.push({
-              label: String(pin.label || '').toLowerCase(),
-              color: '#b9bec5',
-              indent: 44 + step,
-              isHeader: false, notHeader: true,
-              current: false, expanded: false,
-              expandable: false,
-              chevron: ' ',
-              toggleExpand: noop,
-              pick: () => pickDriverAndVersion(cli, pin.id),
-            });
-          }
-        }
-      }
-    }
-    return items;
+    const noop = () => undefined;
+    return rows.map((row) => ({
+      label: row.label, indent: row.indent,
+      color: row.current ? '#e2e5e9' : '#b9bec5',
+      isHeader: false, notHeader: true, isGroup: row.isGroup,
+      current: row.current, expanded: row.expanded, expandable: row.expandable,
+      chevron: row.expandable ? (row.expanded ? '▾' : '◂') : ' ',
+      toggleExpand: row.toggle ? toggle(row.toggle) : noop,
+      pick: 'driver' in row.pick ? () => pickDriverAndVersion(row.pick.driver, row.pick.version) : toggle(row.pick),
+    }));
   }
 
   // UI sprint 124/128 — the workspace half's rows, with each open row's sessions
@@ -715,6 +626,7 @@ class Component extends DCLogic {
     };
     this._offShell = shell.subscribe(applyShell);
     applyShell();
+    picker.set({ views: this._pickerViews || {} });
     this._publishChrome();
     this._publishTopBar();
     // The input bar's /exit names the pane's session (web/app/state/input_bar.ts, sprint 261).
@@ -899,6 +811,7 @@ class Component extends DCLogic {
     if (controller && typeof controller.nameSession === 'function') controller.nameSession(name);
   }
   componentDidUpdate() {
+    picker.set({ views: this._pickerViews || {} });
     find.set({ streamMatches: this._streamMatches || 0 });
     this._publishChrome();
     this._publishTopBar();
@@ -1614,6 +1527,20 @@ class Component extends DCLogic {
     // controller change. `scriptedOn` inverts `liveOn` so the demo
     // narrative fades out the moment a real session is bound.
     // (`_vmSnap` is hoisted at the top of renderVals.)
+    // The unbound panes' pickers are web/app/PanePicker.tsx (sprint 286): each one's view, written to
+    // web/app/state/picker.ts after the render.
+    this._pickerViews = Object.fromEntries(panes.filter(r => r.unbound).map(r => [r.id, {
+      pickerDir: r.pickerDir, wsListH: r.wsListH, onWsListClick: r.onWsListClick, wsRows: r.wsRows,
+      modelArmed: r.modelArmed, modelBorderL: r.modelBorderL, modelBorderT: r.modelBorderT, modelInnerPos: r.modelInnerPos,
+      modelScrollBottom: r.modelScrollBottom, modelMaxH: r.modelMaxH, modelHeadColor: r.modelHeadColor, modelRows: r.modelRows,
+      guidancePos: r.guidancePos,
+      lines: [
+        { key: 'guidance', head: 'GUIDANCE', bottom: r.guidanceBottom, headColor: r.guidanceHeadColor, rows: r.guidanceRows, noteClass: r.guidanceNoteClass, noteColor: r.guidanceNoteColor, note: r.guidanceNote },
+        { key: 'length', head: 'LENGTH', bottom: r.lengthBottom, headColor: r.lengthHeadColor, rows: r.lengthRows, noteClass: r.lengthNoteClass, noteColor: r.lengthNoteColor, note: r.lengthNote },
+        { key: 'tone', head: 'TONE', bottom: r.toneBottom, headColor: r.toneHeadColor, rows: r.toneRows, noteClass: r.toneNoteClass, noteColor: r.toneNoteColor, note: r.toneNote },
+      ],
+      wsQ: r.wsQ, wsPlaceholder: r.wsPlaceholder, onWsQ: r.onWsQ, onWsKey: r.onWsKey,
+    }]));
     const vals = {
       // UI sprint 138: every primitive of the record's topology in its own section, each heading
       // defined on hover (STRUCTURE_DEFS). Events lead: what emits each kind, and what it fires.
@@ -1824,12 +1751,8 @@ class Component extends DCLogic {
         // F339: a git folder's pane names its folder; no session has a worktree branch of its own.
         : '⌥ ' + (fp.ws || 'sandbox'),
       splitRight: () => this._split('right'),
-      driverName: (() => {
-        const d = this._paneDriver(state, fp) || '';
-        const label = this._resolveDriverLabel(state, d);
-        // On Auto the chip names the CLI only; the card says why (UI sprint 139).
-        return /^auto\b/.test(label.slice(String(d).toLowerCase().length).trim()) ? String(d).toLowerCase() : label;
-      })(), driverOpen: state.driverOpen,
+      // On Auto the chip names the CLI only; the card says why (UI sprint 139).
+      driverName: (() => { const d = this._paneDriver(state, fp) || ''; return chipLabel(d, this._resolveDriverLabel(state, d)); })(), driverOpen: state.driverOpen,
       toggleDriverMenu: () => this.setState(s => ({ driverOpen: !s.driverOpen, wsOpen: false })),
       // The footer is web/app/Footer.tsx (sprint 224).
       // ── find (19k/19l) ──

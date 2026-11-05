@@ -25,6 +25,9 @@ export interface MountKind {
   key(host: HTMLElement): string;
   /** The element the root renders, read from the host when it first attaches. */
   render(host: HTMLElement): ReactElement;
+  /** The root's own element takes no box (`display: contents`), so the component's elements lay out
+   *  as the host's children: a component that places itself in its pane's flex column needs this. */
+  contents?: boolean;
 }
 
 export interface Mounted { name: string; key: string; host: HTMLElement; }
@@ -62,6 +65,7 @@ export function createMountRegistry(doc: Document = document): MountRegistry {
         const inner = doc.createElement("div");
         inner.setAttribute("data-mount-root", kind.name);
         inner.setAttribute("data-mount-key", key);
+        if (kind.contents) inner.style.display = "contents";
         host.appendChild(inner);
         const root = createRoot(inner);
         // Render now, not on React's next task: a scan runs as a microtask after dc-runtime's commit,

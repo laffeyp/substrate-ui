@@ -24,3 +24,8 @@
 
 /* Input bar (web/partials/input-bar.html): a slash menu row. */
 .hover-slash-row:hover { background: #2e3138 !important; }
+
+/* Pane picker (reveal.html picker block, partials/choice-line.html): a workspace row's pick area, a
+   session row, a live model row; a live choice in GUIDANCE, LENGTH or TONE. */
+.hover-picker-row:hover { background: #2e3138 !important; }
+.hover-choice-row:hover { background: #2e3138 !important; }

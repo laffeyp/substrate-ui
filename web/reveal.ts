@@ -22,6 +22,7 @@ import { RecordsPage } from "./app/RecordsPage";
 import { AssayPage } from "./app/AssayPage";
 import { InputBar } from "./app/InputBar";
 import { FindBar } from "./app/FindBar";
+import { PanePicker } from "./app/PanePicker";
 import { ActivityLine, TaskRows, type PaneView } from "./app/ActivityLine";
 
 function boot(): void {
@@ -171,6 +172,9 @@ function boot(): void {
   mounts.register({ name: "activity", selector: '[data-app-mount="activity"]', key: paneViewKey, render: (host) => React.createElement(ActivityLine, paneView(host)) });
   mounts.register({ name: "tasks", selector: '[data-app-mount="tasks"]', key: paneViewKey, render: (host) => React.createElement(TaskRows, paneView(host)) });
   mounts.register({ name: "find", selector: '[data-app-mount="find"]', key: paneViewKey, render: (host) => React.createElement(FindBar, { view: paneView(host).view }) });
+  // The pane picker lays itself out in its pane's flex column, so its root takes no box (sprint 286).
+  mounts.register({ name: "picker", selector: '[data-app-mount="picker"]', key: (host) => host.getAttribute("data-pane-id") ?? "", contents: true,
+    render: (host) => React.createElement(PanePicker, { paneId: Number(host.getAttribute("data-pane-id")) }) });
   mounts.register({ name: "footer", selector: '[data-app-mount="footer"]', key: () => "window",
     render: () => React.createElement(Footer) });
   mounts.register({ name: "first-run", selector: '[data-app-mount="first-run"]', key: () => "window",
