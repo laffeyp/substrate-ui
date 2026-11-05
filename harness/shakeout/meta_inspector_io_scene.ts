@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2026 Peter Laffey
 // Meta's inspector, i/o lens and scene lens, held to the controller's envelopes (sprint 208; plan
-// PLAN-2026-11-04-shell-to-react-r5.md, A10).
+// PLAN-2026-11-04-shell-to-react-r5.md, A10; the payload check an equality from D2, sprint 294).
 //
 // After one deterministic turn: the UserMessage row's inspector shows that envelope's kind, seq and
-// payload, and closes on a second click; the i/o lens lists the turn's input and output documents in
-// seq order; the scene lens shows its empty line, since the record has no grid.
+// payload, equal to the record's field for field and in order, and closes on a second click; the i/o
+// lens lists the turn's input and output documents in seq order; the scene lens shows its empty line,
+// since the record has no grid.
 
 import { _electron as electron, type Page } from "playwright";
 import { bindPaneAsUser, launchArgs, settled, waitForApp } from "./lib/electron";
@@ -54,17 +55,12 @@ async function main(): Promise<void> {
     if (shown.head[2] !== `seq ${user.seq} · click the row again to close`) throw new Error(`inspector seq line ${JSON.stringify(shown.head[2])}; the envelope's seq is ${user.seq}`);
     let payload: unknown;
     try { payload = JSON.parse(shown.payload); } catch { throw new Error(`inspector payload is not JSON: ${shown.payload.slice(0, 120)}`); }
-    // Today the stream merges the producer's kind and instance into each row's payload
-    // (reveal_component.ts:1566-1569), and the inspector shows that object. The gate holds every field
-    // of the record's payload to its value and names the extra fields; plan row D2 shows the record's
-    // payload alone and makes this an equality.
-    const shownObj = payload as Record<string, unknown>;
-    const wrong = Object.keys(user.payload).filter((k) => JSON.stringify(shownObj[k]) !== JSON.stringify(user.payload[k]));
-    if (wrong.length) throw new Error(`inspector payload differs from the envelope's at ${wrong.join(", ")}: ${shown.payload.slice(0, 200)}`);
-    const extra = Object.keys(shownObj).filter((k) => !(k in user.payload));
+    // The inspector shows the record's payload as it arrived (plan row D2, F328); before, the stream
+    // merged the producer's kind and instance into it.
+    if (JSON.stringify(payload) !== JSON.stringify(user.payload)) throw new Error(`inspector payload ${shown.payload.slice(0, 200)}; the envelope's ${JSON.stringify(user.payload).slice(0, 200)}`);
     await row.click();
     await inspect.waitFor({ state: "hidden", timeout: 5_000 });
-    seen.push(`inspector UserMessage seq ${user.seq}, the record's payload fields equal (added by the stream: ${extra.join(", ") || "none"}), closes`);
+    seen.push(`inspector UserMessage seq ${user.seq}, the record's payload exactly, closes`);
 
     // i/o.
     await chip(win, "i/o");

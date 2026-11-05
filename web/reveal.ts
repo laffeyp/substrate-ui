@@ -23,6 +23,7 @@ import { AssayPage } from "./app/AssayPage";
 import { InputBar } from "./app/InputBar";
 import { FindBar } from "./app/FindBar";
 import { PanePicker } from "./app/PanePicker";
+import { StreamLens } from "./app/StreamLens";
 import { ActivityLine, TaskRows, type PaneView } from "./app/ActivityLine";
 
 function boot(): void {
@@ -175,6 +176,9 @@ function boot(): void {
   // The pane picker lays itself out in its pane's flex column, so its root takes no box (sprint 286).
   mounts.register({ name: "picker", selector: '[data-app-mount="picker"]', key: (host) => host.getAttribute("data-pane-id") ?? "", contents: true,
     render: (host) => React.createElement(PanePicker, { paneId: Number(host.getAttribute("data-pane-id")) }) });
+  // Meta's stream lens draws its legend and rows in the stream's scroller (sprint 292).
+  mounts.register({ name: "stream", selector: '[data-app-mount="stream"]', key: () => "window", contents: true,
+    render: () => React.createElement(StreamLens) });
   mounts.register({ name: "footer", selector: '[data-app-mount="footer"]', key: () => "window",
     render: () => React.createElement(Footer) });
   mounts.register({ name: "first-run", selector: '[data-app-mount="first-run"]', key: () => "window",

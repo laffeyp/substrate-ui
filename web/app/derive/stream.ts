@@ -15,6 +15,7 @@
 // the external (the wait from the trigger that starts the return producer to the next message).
 
 import { EnvelopeKind } from "../../vm/kinds";
+import { describeEventTime, formatElapsed, type EventTime } from "../../reveal/timeline";
 
 export interface RawEnvelope {
   seq: number;
@@ -40,6 +41,8 @@ export interface StreamRow {
   lanes: "mt" | "m" | "";
   /** The record's payload with the producer's kind and instance merged in, which the lanes read. */
   payload: Record<string, unknown>;
+  /** The record's payload as it arrived, which the inspector shows (F328). */
+  record: Record<string, unknown>;
 }
 
 const str = (v: unknown): string => (typeof v === "string" ? v : "");
@@ -136,6 +139,7 @@ export function streamRows(envs: readonly RawEnvelope[]): StreamRow[] {
       lanes: (kind === EnvelopeKind.ToolCall || kind === EnvelopeKind.ToolResult) ? "mt"
         : (isTurnEnd(kind) || (kind === EnvelopeKind.TriggerFired && isReturnProducer(payload.starts))) ? "" : "m",
       payload,
+      record: raw,
     };
   });
 }
@@ -271,4 +275,69 @@ export function sideLanes(rows: readonly StreamRow[], spans: Spans): SideLane[] 
   const ends = rows.filter((row) => isTurnEnd(row.rawKind)).map((row) => row.seq);
   if (ends.length) lanes.push({ label: "returned", color: "#82a5c8", segs: ends.map((seq) => ({ from: Math.max(0, seq - 0.5), to: seq + 0.6, base: "#82a5c8", seq })) });
   return lanes;
+}
+
+/** Find's text for a row: its kind, producer and gist, lowercased. */
+export function findText(row: StreamRow): string {
+  return (row.kind + " " + row.prod + " " + row.gist).toLowerCase();
+}
+
+export interface LensRow {
+  seq: number;
+  /** Time since the session's first event, "t+1.20s"; empty when the record has no `t`. */
+  t: string;
+  kind: string;
+  kindColor: string;
+  /** The producer and the gist, "model · bash ls". */
+  line: string;
+  sel: boolean;
+  bg: string;
+  opacity: number;
+  cells: string[];
+  conn: Connector | null;
+}
+
+export interface LensInput {
+  sel: number | null;
+  /** The `app` level hides the runtime's plumbing rows. */
+  app: boolean;
+  /** Find's query on the stream, lowercased; empty when find is closed or on the transcript. */
+  query: string;
+}
+
+/** The stream lens's rows: the lit row, find's matches lit and the rest dimmed, each row's lane cells
+ *  and arrow. */
+export function lensRows(rows: readonly StreamRow[], spans: Spans, times: ReadonlyMap<number, EventTime>, input: LensInput): LensRow[] {
+  const closesPark = new Set(spans.external.map((sp) => sp.end));
+  const shown = input.app ? rows.filter((r) => !PLUMBING.has(r.rawKind)) : rows;
+  return shown.map((r) => {
+    const time = times.get(r.seq);
+    const hit = !!input.query && findText(r).includes(input.query);
+    const sel = r.seq === input.sel;
+    return {
+      seq: r.seq, t: time ? formatElapsed(time.sinceStart) : "", kind: r.kind, kindColor: KIND_COLOR[r.rawKind] || "#9aa0a8",
+      line: r.prod + " · " + r.gist, sel,
+      bg: sel ? "#2e3138" : hit ? "#26292e" : "transparent",
+      opacity: input.query && !hit ? 0.3 : 1,
+      cells: laneCells(r, spans), conn: connector(r, closesPark),
+    };
+  });
+}
+
+export interface InspectorView {
+  kind: string;
+  seq: number;
+  color: string;
+  schema: string;
+  time: string;
+  producer: string;
+  /** The record's payload as it arrived, as JSON. The producer's fields show on their own line. */
+  payload: string;
+}
+
+export function inspectorView(row: StreamRow, times: ReadonlyMap<number, EventTime>): InspectorView {
+  return {
+    kind: row.kind, seq: row.seq, color: KIND_COLOR[row.rawKind] || "#9aa0a8", schema: row.schema,
+    time: describeEventTime(times.get(row.seq)), producer: row.prod, payload: JSON.stringify(row.record, null, 1),
+  };
 }

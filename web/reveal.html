@@ -120,39 +120,7 @@
 </sc-if>
     <div ref="{{ streamRef }}" data-stream-scroll="1" onScroll="{{ onStreamScroll }}" onClick="{{ focusStream }}" style="flex:1;overflow:auto;min-height:0">
      <sc-if value="{{ isStream }}" hint-placeholder-val="{{ true }}">
-      <sc-if value="{{ isDown }}" hint-placeholder-val="{{ true }}">
-       <div style="display:flex;gap:8px;padding:2px 16px 4px;font-size:10px;color:#62676f;flex-wrap:wrap;align-items:baseline"><span style="color:#4a4e55" title="one lane per producer kind, derived from the record — spans run ToolCall→ToolResult; ⑂ child spans violet on the tool lane; sub-tracks appear only under real concurrency">lanes ·</span><sc-for list="{{ laneLegend }}" as="ld" hint-placeholder-count="4"><span style="color:{{ ld.color }}">{{ ld.label }}</span></sc-for></div>
-      </sc-if>
-      
-      <div style="font-size:12px;line-height:2.05;padding-bottom:8px">
-       <sc-for list="{{ events }}" as="e" hint-placeholder-count="10">
-        <div onClick="{{ e.pick }}" title="click to inspect · click again to close" style="padding:1px 16px;display:flex;gap:10px;align-items:stretch;cursor:pointer;background:{{ e.rowBg }};opacity:{{ e.rowOp }}" style-hover="background:#26292e">
-         <sc-if value="{{ isDown }}" hint-placeholder-val="{{ true }}"><span style="width:{{ laneW }}px;display:flex;gap:4px;flex:none;position:relative"><sc-for list="{{ e.laneCells }}" as="lc" hint-placeholder-count="4"><span style="width:8px;border-radius:2px;background:{{ lc.bg }}"></span></sc-for><sc-if value="{{ e.hasConn }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;left:{{ e.connL }}px;top:50%;width:{{ e.connW }}px;height:2px;background:{{ e.connC }};opacity:.75;transform:translateY(-1px)"></span><span style="position:absolute;left:{{ e.dotL }}px;top:50%;width:5px;height:5px;border-radius:50%;background:{{ e.connC }};transform:translate(-2px,-2.5px)"></span></sc-if></span></sc-if>
-         <span style="color:#4a4e55;width:34px;flex:none;text-align:right">{{ e.seq }}</span>
-         <span style="color:#4a4e55;width:50px;flex:none;font-size:11px">{{ e.t }}</span>
-         <span style="color:{{ e.kindColor }};width:132px;flex:none">{{ e.kind }}</span>
-         <span style="color:#62676f;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ e.pl }}</span>
-        </div>
-        <sc-if value="{{ e.sel }}" hint-placeholder-val="{{ false }}">
-         <div style="display:flex;gap:10px;padding:2px 16px 8px;align-items:stretch">
-          <sc-if value="{{ isDown }}" hint-placeholder-val="{{ true }}"><span style="width:{{ laneW }}px;display:flex;gap:4px;flex:none"><sc-for list="{{ e.laneCells }}" as="lc" hint-placeholder-count="4"><span style="width:8px;border-radius:2px;background:{{ lc.bg }}"></span></sc-for></span></sc-if>
-          <div style="flex:1;padding:11px 14px;background:#212327;border-left:2px solid {{ selColor }};border-radius:0 6px 6px 0;line-height:1.8;font-size:12px">
-           <div style="display:flex;gap:10px;align-items:baseline"><span style="font-size:10px;letter-spacing:.14em;color:#62676f">INSPECT</span><span style="color:{{ selColor }};border:1px solid rgba(255,255,255,.12);border-radius:5px;padding:0 8px;font-size:11px">{{ selKind }}</span><span style="color:#62676f;font-size:11px">seq {{ selSeq }} · click the row again to close</span></div>
-           <div style="display:grid;grid-template-columns:78px 1fr;gap:2px 12px;margin-top:8px;font-size:12px">
-            <span style="color:#62676f;font-size:10px;letter-spacing:.1em;padding-top:2px">SCHEMA</span><span style="color:#9aa0a8">{{ selSchema }}</span>
-            <span style="color:#62676f;font-size:10px;letter-spacing:.1em;padding-top:2px">TIME</span><span style="color:#9aa0a8">{{ selTime }}</span>
-            <span style="color:#62676f;font-size:10px;letter-spacing:.1em;padding-top:2px">PRODUCER</span><span style="color:#9aa0a8">{{ selProducer }}</span>
-           </div>
-           <sc-for list="{{ selContent }}" as="cb" hint-placeholder-count="0">
-            <div style="margin-top:8px"><div style="color:#62676f;font-size:10px;letter-spacing:.1em">{{ cb.k }}</div><pre style="margin:4px 0 0;padding:9px 12px;background:#1a1c20;border-left:2px solid #82a5c8;border-radius:6px;font-family:inherit;font-size:11.5px;color:#d7dade;white-space:pre-wrap;word-break:break-word">{{ cb.v }}</pre></div>
-           </sc-for>
-           <div style="margin-top:8px"><div style="color:#62676f;font-size:10px;letter-spacing:.1em">PAYLOAD</div><pre style="margin:4px 0 0;padding:9px 12px;background:#1a1c20;border-radius:6px;font-family:inherit;font-size:11px;color:#9aa0a8;white-space:pre-wrap;word-break:break-word">{{ selPayload }}</pre></div>
-          </div>
-         </div>
-        </sc-if>
-       </sc-for>
-      </div>
-      
+      <div data-app-mount="stream" style="display:contents"></div>
      </sc-if>
      <sc-if value="{{ isIo }}" hint-placeholder-val="{{ false }}">
       <div style="padding:6px 16px 16px">

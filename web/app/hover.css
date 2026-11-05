@@ -29,3 +29,6 @@
    session row, a live model row; a live choice in GUIDANCE, LENGTH or TONE. */
 .hover-picker-row:hover { background: #2e3138 !important; }
 .hover-choice-row:hover { background: #2e3138 !important; }
+
+/* Meta's stream (reveal.html stream block): a row. */
+.hover-stream-row:hover { background: #26292e !important; }

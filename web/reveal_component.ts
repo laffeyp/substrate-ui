@@ -36,7 +36,6 @@ import {
   EnvelopeKind, Surface, GraphMode, RevealLevel, GraphDirection,
 } from "./vm/kinds";
 import { isToolCallRow, isToolResultRow } from "./vm/types";
-import { describeEventTime, eventTimes, formatElapsed } from "./reveal/timeline";
 import { toggleToolOutputMode } from "./vm/tool_output_mode";
 import { GUIDANCE_LEVEL_BUNDLES, HANDOFF_DEFAULT, LENGTH_DEFAULT, LengthPosition, TONE_DEFAULT, TonePosition } from "./vm/controls.gen";
 
@@ -89,7 +88,8 @@ import { lineStep, paneShape, SHARED_SANDBOX, tabFill, workspaceRows } from "./a
 import { treeKey } from "./app/derive/tree_key";
 import { chipLabel, driverLabel, modelRows } from "./app/derive/driver_label";
 import { picker } from "./app/state/picker";
-import { connector, KIND_COLOR, LANES, laneCells, PLUMBING, sideLanes as streamSideLanes, streamRows, streamSpans } from "./app/derive/stream";
+import { setPickSeq, stream } from "./app/state/stream";
+import { findText, sideLanes as streamSideLanes, streamRows, streamSpans } from "./app/derive/stream";
 import { onCommand, shell } from "./app/state/shell";
 
 
@@ -627,6 +627,8 @@ class Component extends DCLogic {
     this._offShell = shell.subscribe(applyShell);
     applyShell();
     picker.set({ views: this._pickerViews || {} });
+    if (this._streamView) stream.set(this._streamView);
+    this._offPickSeq = setPickSeq((seq) => this.setState(s => ({ sel: s.sel === seq ? null : seq })));
     this._publishChrome();
     this._publishTopBar();
     // The input bar's /exit names the pane's session (web/app/state/input_bar.ts, sprint 261).
@@ -813,10 +815,11 @@ class Component extends DCLogic {
   componentDidUpdate() {
     picker.set({ views: this._pickerViews || {} });
     find.set({ streamMatches: this._streamMatches || 0 });
+    if (this._streamView) stream.set(this._streamView);
     this._publishChrome();
     this._publishTopBar();
   }
-  componentWillUnmount() { if (this._offRuns) this._offRuns(); if (this._offSettings) this._offSettings(); if (this._offFind) this._offFind(); if (this._offShell) this._offShell(); if (this._offCommands) this._offCommands(); if (this._offFirstRun) this._offFirstRun(); if (this._offTopBarActs) this._offTopBarActs(); if (this._offOpenSession) this._offOpenSession(); if (this._offTitleOf) this._offTitleOf(); window.removeEventListener('keydown', this._kd); window.removeEventListener('resize', this._rs); if (this._ddOutside) document.removeEventListener('mousedown', this._ddOutside, true); }
+  componentWillUnmount() { if (this._offRuns) this._offRuns(); if (this._offSettings) this._offSettings(); if (this._offFind) this._offFind(); if (this._offShell) this._offShell(); if (this._offCommands) this._offCommands(); if (this._offFirstRun) this._offFirstRun(); if (this._offTopBarActs) this._offTopBarActs(); if (this._offOpenSession) this._offOpenSession(); if (this._offTitleOf) this._offTitleOf(); if (this._offPickSeq) this._offPickSeq(); window.removeEventListener('keydown', this._kd); window.removeEventListener('resize', this._rs); if (this._ddOutside) document.removeEventListener('mousedown', this._ddOutside, true); }
   // UI sprint 140: ⌘E folds or unfolds every tool card (ToolCard reads the setting). No control
   // on screen: the Architect's call; /fold and /unfold do the same from the input bar.
   _toggleTools() {
@@ -871,9 +874,9 @@ class Component extends DCLogic {
     const _hasVmSession = !!(_vmSnap && _vmSnap.sessionId);
     // ⌘F's query. The transcript scope counts the focused pane's own transcript rows (UI sprint 186;
     // before, it counted lines of a sample session's text).
-    // Find is web/app/state/find.ts (sprint 272); the stream's rows dim by its query here.
+    // Find is web/app/state/find.ts (sprint 272); the stream lens dims its rows by the query
+    // (web/app/StreamLens.tsx), and the match count is counted here.
     const findQuery = findQueryOf();
-    const FSTREAM = find.getSnapshot().open && find.getSnapshot().scope === 'stream';
     const paneW = (state.winW || window.innerWidth) / state.cols;
     const panes = state.panes.map(p => { const wsRows = this._wsPickerRows(state, p); return Object.assign({
       // Grid placement. Single-pane state has no col/row on the pane
@@ -1062,21 +1065,11 @@ class Component extends DCLogic {
     }); });
     // The stream's rows, spans, connectors and side graph: web/app/derive/stream.ts (sprint 289).
     const _liveEnvelopes = (_vmSnap && Array.isArray(_vmSnap.rawEnvelopes)) ? _vmSnap.rawEnvelopes : [];
-    const envelopes = streamRows(_liveEnvelopes).map(r => Object.assign(r, { content: [] }));
-    const _evTexts = envelopes.map(e => (e.kind + ' ' + e.prod + ' ' + e.gist).toLowerCase());
+    const envelopes = streamRows(_liveEnvelopes);
     // The find bar shows the stream's match count; it is written to the find store after the render.
-    this._streamMatches = findQuery ? _evTexts.filter(t => t.includes(findQuery)).length : 0;
-    // When each event happened: time since the session's first event, from the record's own `t`
-    // (reveal/timeline.ts). This replaced a table copied from the prototype's sample record,
-    // which put every real event at "t+0.0s" or "t+2s".
-    const _eventTimes = eventTimes(envelopes);
-    const formatElapsedTimeForSeq = (seq) => {
-      const time = _eventTimes.get(seq);
-      return time ? formatElapsed(time.sinceStart) : '';
-    };
-    // The `app` level hides runtime plumbing rows (PLUMBING), not spans (UI sprint 155).
-    const shownEV = state.level === RevealLevel.App ? envelopes.filter(e => !PLUMBING.has(e.rawKind)) : envelopes;
-    const selE = envelopes.find(e => e.seq === state.sel);
+    this._streamMatches = findQuery ? envelopes.filter(e => findText(e).includes(findQuery)).length : 0;
+    // The stream lens's rows and inspector: web/app/StreamLens.tsx (sprint 292), from this view.
+    this._streamView = { envelopes: _liveEnvelopes, sel: state.sel, app: state.level === RevealLevel.App, down: state.dir === GraphDirection.Down };
     // UI sprint 169: the language lens. The selected turn is the one the selected seq falls in,
     // so a pick here moves stream+graph and a pick there moves this.
     let _langSelTurn = null;
@@ -1099,22 +1092,6 @@ class Component extends DCLogic {
       color: state.langStream === t.id ? '#d7dade' : '#62676f',
     }));
     const spansByKind = streamSpans(envelopes);
-    const laneDefs = LANES.map(ld => ({ ...ld, spans: spansByKind[ld.kind] }));
-    // The message that ends a wait draws the return arrow.
-    const _closesPark = new Set(spansByKind.external.map(sp => sp.end));
-    const events = shownEV.map(e => {
-      const conn = connector(e, _closesPark);
-      return {
-        hasConn: !!conn, connL: conn ? conn.l : 0, connW: conn ? Math.max(conn.w, 2) : 0, connC: conn ? conn.c : 'transparent', dotL: conn ? conn.dot : 0,
-        seq: e.seq, t: formatElapsedTimeForSeq(e.seq), kind: e.kind, pl: e.prod + ' · ' + e.gist, kindColor: KIND_COLOR[e.rawKind] || '#9aa0a8',
-        rowOp: (FSTREAM && findQuery) ? ((e.kind + ' ' + e.prod + ' ' + e.gist).toLowerCase().includes(findQuery) ? 1 : 0.3) : 1,
-        sel: e.seq === state.sel, rowBg: e.seq === state.sel ? '#2e3138' : ((FSTREAM && findQuery && (e.kind + ' ' + e.prod + ' ' + e.gist).toLowerCase().includes(findQuery)) ? '#26292e' : 'transparent'),
-        laneCells: laneCells(e, spansByKind).map(bg => ({ bg })),
-        pick: () => this.setState(s => ({ sel: s.sel === e.seq ? null : e.seq })),
-      };
-    });
-    const laneW = laneDefs.length * 12 - 4;
-    const laneLegend = laneDefs.map(ld => ({ label: ld.label, color: ld.kind === 'tool' ? '#7fb3b8' : '#82a5c8' }));
     // Side (horizontal) graph — each producer kind gets one row and
     // its spans plot along a normalized seq axis (firstSeq = first seq,
     // lastSeq = last seq of the visible envelopes). Real spans only —
@@ -1339,7 +1316,7 @@ class Component extends DCLogic {
         this._syncing = true; s.scrollTop = f * Math.max(0, s.scrollHeight - s.clientHeight);
         requestAnimationFrame(() => { this._syncing = false; });
       },
-      events, modeChips, sideLanes, laneDefs, laneW, laneLegend,
+      modeChips, sideLanes,
       sideAxisA: firstSeq, sideAxisB: lastSeq,
       isStream: state.mode === GraphMode.Stream, isIo: state.mode === GraphMode.IO, isStructure: state.mode === GraphMode.Structure, isScene: state.mode === GraphMode.Scene,
       isLanguage: state.mode === GraphMode.Language, lang: _lang, langRows, langStreams, langViews, langHas: _lang.has, langEmpty: !_lang.has, langNote: !!_lang.note,
@@ -1350,10 +1327,6 @@ class Component extends DCLogic {
       setDown: () => this.setState({ dir: GraphDirection.Down }), setSide: () => this.setState({ dir: GraphDirection.Side }),
       downColor: state.dir === GraphDirection.Down ? '#d7dade' : '#62676f', downBg: state.dir === GraphDirection.Down ? '#2e3138' : 'transparent',
       sideColor: state.dir === GraphDirection.Side ? '#d7dade' : '#62676f', sideBg: state.dir === GraphDirection.Side ? '#2e3138' : 'transparent',
-      selSeq: selE ? selE.seq : 0, selKind: selE ? selE.kind : '', selSchema: selE ? selE.schema : '',
-      selTime: selE ? describeEventTime(_eventTimes.get(selE.seq)) : '', selProducer: selE ? selE.prod : '',
-      selColor: selE ? (KIND_COLOR[selE.rawKind] || '#9aa0a8') : '#9aa0a8',
-      selContent: selE ? selE.content : [], selPayload: selE ? JSON.stringify(selE.payload, null, 1) : '',
       // IO lens: the application-visible input/output documents on
       // the record, in seq order. Always real; empty when no session
       // has spoken yet.

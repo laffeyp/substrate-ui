@@ -7,7 +7,8 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import { EnvelopeKind } from "../../vm/kinds";
-import { bareKind, connector, KIND_COLOR, laneCells, laneOf, PLUMBING, sideLanes, streamRows, streamSpans, type RawEnvelope } from "../derive/stream";
+import { bareKind, connector, inspectorView, KIND_COLOR, laneCells, laneOf, lensRows, PLUMBING, sideLanes, streamRows, streamSpans, type RawEnvelope } from "../derive/stream";
+import { eventTimes } from "../../reveal/timeline";
 
 const ENVS: RawEnvelope[] = [
   { seq: 1, kind: EnvelopeKind.SessionStarted, payload: { driver_model: "deterministic" } },
@@ -70,4 +71,32 @@ test("a resumed session has a model span per open stretch; the side graph lists 
   const spans = streamSpans(streamRows(resumed));
   assert.deepStrictEqual(spans.model.map((s) => [s.start, s.end]), [[1, 11], [12, 12]]);
   assert.deepStrictEqual(sideLanes(streamRows(ENVS), streamSpans(streamRows(ENVS))).map((l) => [l.label, l.segs.length]), [["model", 1], ["bash", 1], ["returned", 1]]);
+});
+
+test("the inspector shows the record's payload as it arrived; the producer has its own line (F328)", () => {
+  const rows = streamRows(ENVS);
+  const view = inspectorView(rows[3], new Map());
+  assert.deepStrictEqual(JSON.parse(view.payload), ENVS[3].payload);
+  assert.strictEqual(view.kind, bareKind(EnvelopeKind.ProducerStarted));
+  assert.strictEqual(view.producer, "runtime");
+  // The lanes still read the merged payload.
+  assert.strictEqual(rows[3].payload.kind, "model");
+  assert.ok(!("kind" in rows[3].record));
+});
+
+test("lens rows: the app level hides plumbing, find dims the rest, the lit row, times from the record", () => {
+  const timed = ENVS.map((e, at) => ({ ...e, t: 1000 + at * 0.5 }));
+  const rows = streamRows(timed);
+  const spans = streamSpans(rows);
+  const times = eventTimes(timed);
+  const all = lensRows(rows, spans, times, { sel: 5, app: false, query: "" });
+  assert.strictEqual(all.length, rows.length);
+  assert.deepStrictEqual([all[4].sel, all[4].bg, all[4].t, all[4].line], [true, "#2e3138", "t+2.00s", "model · bash ls"]);
+  assert.deepStrictEqual(all[4].cells, laneCells(rows[4], spans));
+  const app = lensRows(rows, spans, times, { sel: null, app: true, query: "" });
+  assert.ok(app.every((r) => !PLUMBING.has(rows.find((x) => x.seq === r.seq)!.rawKind)));
+  assert.ok(app.length < all.length);
+  const found = lensRows(rows, spans, times, { sel: null, app: false, query: "bash" });
+  assert.deepStrictEqual(found.filter((r) => r.opacity === 1).map((r) => r.seq), [5, 6]);
+  assert.ok(found.filter((r) => r.opacity === 1).every((r) => r.bg === "#26292e"));
 });
