@@ -20,14 +20,10 @@
 <helmet data-dc-atomics><style>body{margin:0;background:#212327}a{color:#82a5c8}a:hover{color:#9db8d6}*{scrollbar-width:thin;scrollbar-color:#33373d transparent}::-webkit-scrollbar{width:5px;height:5px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#33373d;border-radius:3px}::-webkit-scrollbar-thumb:hover{background:#4a4e55}
 @keyframes actglyph{0%{opacity:.4}50%{opacity:1}100%{opacity:.4}}
 .act-pulse{animation:actglyph 1.4s ease-in-out infinite}
-/* UI sprint 138: the structure lens keeps its tables; only when the panel is too narrow for them does each row stack, with labels. */
 /* UI sprint 142: the lowest text level, for a hint in the workspace bar ("pick a model first"): one step fainter than #4a4e55. */
 :root{--tx-hint:#3c3f45}
 .tx-hint{color:var(--tx-hint)}
-.st{container-type:inline-size;container-name:st}
-.st-lab{display:none;color:#62676f;font-size:10.5px;margin-right:6px}
-.st-tag{white-space:nowrap}
-@container st (max-width:530px){.st-grid{display:block!important}.st-row{display:block!important;margin:0 0 10px}.st-col{display:none}.st-cell{display:block;padding-left:14px;overflow-wrap:break-word}.st-cell.st-first{padding-left:0}.st-lab{display:inline}.st-stack{display:inline!important}.st-stack>span:not(:last-child)::after{content:', '}}</style></helmet>
+</style></helmet>
 <div style="height:100vh;display:flex;flex-direction:column;background:#212327;color:#b9bec5;font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;font-size:13px;overflow:hidden">
  <!-- One top bar (UI sprint 136): web/app/TopBar.tsx (sprint 231). It shows the focused pane. -->
  <div data-app-mount="top-bar" style="flex:none;min-width:0"></div>
@@ -108,56 +104,7 @@
       </div>
      </sc-if>
      <sc-if value="{{ isStructure }}" hint-placeholder-val="{{ false }}">
-      <div style="padding:10px 16px 16px;font-size:12.5px;line-height:1.9">
-       <sc-if value="{{ topoEmpty }}" hint-placeholder-val="{{ true }}">
-        <div style="color:#62676f;font-size:11.5px">no topology loaded — bind a session or open a record to see its producers and triggers.</div>
-       </sc-if>
-       <sc-if value="{{ topoAny }}" hint-placeholder-val="{{ false }}">
-        <!-- UI sprint 137 layout; sprint 138 adds header words, hover definitions, the policy column and
-             tags, and ROUTES, RUN and EVENTS after ENDS. Rows stack only when the panel is too narrow. -->
-        <div class="st">
-        <div class="st-h" title="{{ topoDefs.producers }}" style="color:#62676f;font-size:10px;letter-spacing:.12em;cursor:help;text-decoration:underline dotted rgba(255,255,255,.18);text-underline-offset:3px;display:inline-block;margin:6px 0 6px">PRODUCERS ({{ topoProducerCount }})</div>
-        <div class="st-grid" style="display:grid;grid-template-columns:minmax(0,max-content) minmax(120px,1fr);column-gap:24px;row-gap:2px;align-items:baseline">
-         <span class="st-col" style="color:#62676f;font-size:10px;letter-spacing:.12em">NAME</span><span class="st-col" style="color:#62676f;font-size:10px;letter-spacing:.12em">EMITS EVENTS</span>
-         <sc-for list="{{ topoProducerRows }}" as="p" hint-placeholder-count="4">
-          <div class="st-row" style="display:contents"><span class="st-cell st-first"><span data-topo-producer="{{ p.name }}" style="color:#e2e5e9">{{ p.name }}</span> <span class="st-tag" title="{{ topoDefs.initial }}" style="color:#82a5c8;font-size:10.5px">{{ p.initialTag }}</span> <span class="st-tag" title="{{ topoDefs.instrument }}" style="color:#82a5c8;font-size:10.5px">{{ p.instrumentTag }}</span> <span class="st-tag" title="{{ topoDefs.deterministic }}" style="color:#62676f;font-size:10.5px">{{ p.detTag }}</span></span><span class="st-cell" style="color:#9aa0a8"><span class="st-lab">emits</span>{{ p.emits }}</span></div>
-         </sc-for>
-        </div>
-        <div style="color:#4a4e55;font-size:10.5px;margin-top:4px">initial — starts when the run opens · hover a heading or a tag for what it is</div>
-        <div class="st-h" title="{{ topoDefs.triggers }}" style="color:#62676f;font-size:10px;letter-spacing:.12em;cursor:help;text-decoration:underline dotted rgba(255,255,255,.18);text-underline-offset:3px;display:inline-block;margin:16px 0 6px">TRIGGERS ({{ topoTriggerCount }})</div>
-        <div class="st-grid" style="display:grid;grid-template-columns:minmax(min-content,1fr) minmax(min-content,max-content) max-content max-content;column-gap:24px;row-gap:2px;align-items:baseline">
-         <span class="st-col" style="color:#62676f;font-size:10px;letter-spacing:.12em">NAME</span><span class="st-col" style="color:#62676f;font-size:10px;letter-spacing:.12em">ON EVENT</span><span class="st-col" style="color:#62676f;font-size:10px;letter-spacing:.12em">STARTS PRODUCER</span><span class="st-col" style="color:#62676f;font-size:10px;letter-spacing:.12em">POLICY</span>
-         <sc-for list="{{ topoTriggerRows }}" as="t" hint-placeholder-count="4">
-          <div class="st-row" style="display:contents"><span class="st-cell st-first" data-topo-trigger="{{ t.id }}" style="color:#c9a0b8">{{ t.id }}</span><span class="st-cell" style="color:#9aa0a8"><span class="st-lab">on</span><span class="st-stack" style="display:flex;flex-direction:column"><sc-for list="{{ t.onKinds }}" as="k" hint-placeholder-count="1"><span>{{ k.label }}</span></sc-for></span></span><span class="st-cell" style="color:#e2e5e9"><span class="st-lab">starts</span>{{ t.starts }}</span><span class="st-cell" style="color:#62676f"><span class="st-lab">policy</span>{{ t.policy }}</span></div>
-         </sc-for>
-        </div>
-        <div class="st-h" title="{{ topoDefs.views }}" style="color:#62676f;font-size:10px;letter-spacing:.12em;cursor:help;text-decoration:underline dotted rgba(255,255,255,.18);text-underline-offset:3px;display:inline-block;margin:16px 0 6px">VIEWS ({{ topoViewCount }})</div>
-        <div style="display:flex;flex-wrap:wrap;column-gap:16px;color:#9aa0a8"><sc-for list="{{ topoViewRows }}" as="v" hint-placeholder-count="4"><span data-topo-view="{{ v.name }}">{{ v.name }}</span></sc-for></div>
-        <div class="st-h" title="{{ topoDefs.ends }}" style="color:#62676f;font-size:10px;letter-spacing:.12em;cursor:help;text-decoration:underline dotted rgba(255,255,255,.18);text-underline-offset:3px;display:inline-block;margin:16px 0 6px">ENDS</div>
-        <div data-topo-ends="1" style="color:#9aa0a8;overflow-wrap:anywhere">{{ topoTermination }}</div>
-        <div class="st-h" title="{{ topoDefs.routes }}" style="color:#62676f;font-size:10px;letter-spacing:.12em;cursor:help;text-decoration:underline dotted rgba(255,255,255,.18);text-underline-offset:3px;display:inline-block;margin:16px 0 6px">ROUTES ({{ topoRouteCount }})</div>
-        <sc-if value="{{ topoRoutesNone }}" hint-placeholder-val="{{ true }}"><div data-topo-routes-none="1" style="color:#62676f">none</div></sc-if>
-        <sc-if value="{{ topoRoutesAny }}" hint-placeholder-val="{{ false }}">
-        <div class="st-grid" style="display:grid;grid-template-columns:max-content minmax(0,1fr);column-gap:24px;row-gap:2px;align-items:baseline">
-         <span class="st-col" style="color:#62676f;font-size:10px;letter-spacing:.12em">NAME</span><span class="st-col" style="color:#62676f;font-size:10px;letter-spacing:.12em">SLOT</span>
-         <sc-for list="{{ topoRouteRows }}" as="r" hint-placeholder-count="1"><div class="st-row" style="display:contents"><span class="st-cell st-first" data-topo-route="{{ r.id }}" style="color:#e2e5e9">{{ r.id }}</span><span class="st-cell" style="color:#9aa0a8"><span class="st-lab">slot</span>{{ r.slot }}</span></div></sc-for>
-        </div>
-        </sc-if>
-        <div class="st-h" title="{{ topoDefs.run }}" style="color:#62676f;font-size:10px;letter-spacing:.12em;cursor:help;text-decoration:underline dotted rgba(255,255,255,.18);text-underline-offset:3px;display:inline-block;margin:16px 0 6px">RUN</div>
-        <div class="st-grid" style="display:grid;grid-template-columns:max-content minmax(0,1fr);column-gap:24px;row-gap:2px;align-items:baseline">
-         <sc-for list="{{ topoRunRows }}" as="r" hint-placeholder-count="3"><div class="st-row" style="display:contents"><span class="st-cell st-first" style="color:#62676f">{{ r.k }}</span><span class="st-cell" style="color:#9aa0a8;overflow-wrap:anywhere">{{ r.v }}</span></div></sc-for>
-        </div>
-        <div class="st-h" title="{{ topoDefs.events }}" style="color:#62676f;font-size:10px;letter-spacing:.12em;cursor:help;text-decoration:underline dotted rgba(255,255,255,.18);text-underline-offset:3px;display:inline-block;margin:16px 0 6px">EVENTS ({{ topoEventCount }})</div>
-        <div class="st-grid" style="display:grid;grid-template-columns:minmax(0,max-content) minmax(0,max-content) minmax(120px,1fr);column-gap:24px;row-gap:2px;align-items:baseline">
-         <span class="st-col" style="color:#62676f;font-size:10px;letter-spacing:.12em">EVENT</span><span class="st-col" style="color:#62676f;font-size:10px;letter-spacing:.12em">EMITTED BY</span><span class="st-col" style="color:#62676f;font-size:10px;letter-spacing:.12em">FIRES TRIGGERS</span>
-         <sc-for list="{{ topoEventRows }}" as="e" hint-placeholder-count="4">
-          <div class="st-row" style="display:contents"><span class="st-cell st-first" data-topo-event="{{ e.name }}" style="color:#e2e5e9">{{ e.label }}</span><span class="st-cell" style="color:#9aa0a8"><span class="st-lab">emitted by</span><span class="st-stack" style="display:flex;flex-direction:column"><sc-for list="{{ e.by }}" as="b" hint-placeholder-count="1"><span data-topo-event-by="{{ b.name }}">{{ b.name }}</span></sc-for></span></span><span class="st-cell" style="color:#c9a0b8"><span class="st-lab">fires</span><span class="st-stack" style="display:flex;flex-direction:column"><sc-for list="{{ e.fires }}" as="f" hint-placeholder-count="1"><span>{{ f.name }}</span></sc-for></span></span></div>
-         </sc-for>
-        </div>
-        <div style="color:#4a4e55;font-size:10.5px;margin-top:16px;line-height:1.6">Not in the record: each trigger’s predicate and input builder, and each view’s type, are code.</div>
-        </div>
-       </sc-if>
-      </div>
+      <div data-app-mount="structure" style="display:contents"></div>
      </sc-if>
      <!-- UI sprint 169: the language lens. Lanes per measure, turns down, the window as a curve, a rule
           per setting change, marks where the drift detector fired, one readout row for the selected turn. -->

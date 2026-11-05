@@ -8,6 +8,7 @@
 
 import { createStore } from "../store";
 import type { RawEnvelope } from "../derive/stream";
+import type { TopologyGraph } from "../../vm/types";
 
 export interface StreamState {
   /** The focused session's envelopes, the snapshot's own array. */
@@ -17,6 +18,8 @@ export interface StreamState {
   app: boolean;
   /** The down direction draws the lifelines' legend and cells. */
   down: boolean;
+  /** The focused session's topology, which the structure lens lists (sprint 301). */
+  topology: TopologyGraph | null;
 }
 
 /** The side graph's scroller and its scroll, which DCLogic ties to the stream's scroller (the two scroll
@@ -30,7 +33,7 @@ interface Shared { store: ReturnType<typeof createStore<StreamState>>; pick: { c
 const KEY = "__substrateStream";
 const scope = globalThis as unknown as Record<string, Shared | undefined>;
 const shared: Shared = scope[KEY] ?? (scope[KEY] = {
-  store: createStore<StreamState>({ envelopes: [], sel: null, app: false, down: true }),
+  store: createStore<StreamState>({ envelopes: [], sel: null, app: false, down: true, topology: null }),
   pick: { current: () => undefined },
   graph: { current: NO_LINK },
 });

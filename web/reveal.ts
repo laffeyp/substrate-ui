@@ -25,6 +25,7 @@ import { FindBar } from "./app/FindBar";
 import { PanePicker } from "./app/PanePicker";
 import { StreamLens } from "./app/StreamLens";
 import { SideGraph } from "./app/SideGraph";
+import { StructureLens } from "./app/StructureLens";
 import { ActivityLine, TaskRows, type PaneView } from "./app/ActivityLine";
 
 function boot(): void {
@@ -183,6 +184,9 @@ function boot(): void {
   // Meta's side graph sits above the stream's scroller in meta's column (sprint 297).
   mounts.register({ name: "side-graph", selector: '[data-app-mount="side-graph"]', key: () => "window", contents: true,
     render: () => React.createElement(SideGraph) });
+  // Meta's structure lens draws in the stream's scroller in its mode (sprint 302).
+  mounts.register({ name: "structure", selector: '[data-app-mount="structure"]', key: () => "window", contents: true,
+    render: () => React.createElement(StructureLens) });
   mounts.register({ name: "footer", selector: '[data-app-mount="footer"]', key: () => "window",
     render: () => React.createElement(Footer) });
   mounts.register({ name: "first-run", selector: '[data-app-mount="first-run"]', key: () => "window",

@@ -41,21 +41,6 @@ import { GUIDANCE_LEVEL_BUNDLES, HANDOFF_DEFAULT, LENGTH_DEFAULT, LengthPosition
 
 // UI sprint 132 (kernel K288, session vocabulary § R): the guidance levels the bar offers, each
 // with the bundle that carries it. `auto` names none, so the daemon picks the model's default.
-// UI sprint 138: one or two sentences per structure-lens heading, from Substrate's docs
-// (docs/api.md, docs/tutorial.md, docs/adding-a-topology.md, kernel/topology.py).
-const STRUCTURE_DEFS = {
-  events: 'An event is a typed record a producer emits. The run\u2019s record is its events in order, and every other part reads them. Runtime: lifecycle events the runtime writes. Outside: written into the record by the app, for the user.',
-  producers: 'A producer is a callable that takes typed input and yields typed events. The runtime starts one each time a trigger fires and records its start and its end.',
-  triggers: 'A trigger starts a producer when an event it subscribes to arrives and its predicate holds over the views. PerEvent fires on every match; Once fires a single time.',
-  routes: 'A route stages data from an event into a named slot, and a later trigger reads it. Context reaches a producer\u2019s next instantiation this way.',
-  views: 'A view is a deterministic projection the runtime keeps current over the events. Triggers read views by name to decide whether to fire and what to pass.',
-  ends: 'The termination policy decides when the run stops: it finalises the record, or pauses it to wait for input.',
-  run: 'The baseline is metadata recorded when the run opens (environment, fixtures, seeds), so the record reads from a known state. Exports are what a run composed inside another hands back to its parent.',
-  initial: 'An initial producer starts when the run opens, before any trigger.',
-  instrument: 'An instrument is a producer and its trigger registered together: it starts once for every event of one kind.',
-  deterministic: 'A deterministic producer gives the same events for the same input, so replay can run it again.',
-};
-
 // UI sprint 161: the levels and their bundles are generated from the kernel (vm/controls.gen.ts);
 // only the one-line notes are the UI's own.
 // The choices' notes live in web/app/derive/control_notes.ts (sprint 261), which the slash menu reads too.
@@ -1080,7 +1065,7 @@ class Component extends DCLogic {
     // The find bar shows the stream's match count; it is written to the find store after the render.
     this._streamMatches = findQuery ? envelopes.filter(e => findText(e).includes(findQuery)).length : 0;
     // The stream lens's rows and inspector: web/app/StreamLens.tsx (sprint 292), from this view.
-    this._streamView = { envelopes: _liveEnvelopes, sel: state.sel, app: state.level === RevealLevel.App, down: state.dir === GraphDirection.Down };
+    this._streamView = { envelopes: _liveEnvelopes, sel: state.sel, app: state.level === RevealLevel.App, down: state.dir === GraphDirection.Down, topology: (_vmSnap && _vmSnap.topologyGraph) || null };
     // UI sprint 169: the language lens. The selected turn is the one the selected seq falls in,
     // so a pick here moves stream+graph and a pick there moves this.
     let _langSelTurn = null;
@@ -1177,66 +1162,7 @@ class Component extends DCLogic {
       wsQ: r.wsQ, wsPlaceholder: r.wsPlaceholder, onWsQ: r.onWsQ, onWsKey: r.onWsKey,
     }]));
     const vals = {
-      // UI sprint 138: every primitive of the record's topology in its own section, each heading
-      // defined on hover (STRUCTURE_DEFS). Events lead: what emits each kind, and what it fires.
-      ...(() => {
-        const g = (_vmSnap && _vmSnap.topologyGraph) || null;
-        const producers = g ? g.producers : [];
-        const triggers = g ? g.triggers : [];
-        const outside = new Set(g && g.outside ? g.outside : []);
-        // b.instrument registers a trigger named after the producer it starts (kernel/topology.py).
-        const instruments = new Set(triggers.filter(t => t.id === t.starts).map(t => t.starts));
-        const kinds = new Set();
-        producers.forEach(p => p.emits.forEach(k => kinds.add(k)));
-        triggers.forEach(t => (t.on || []).forEach(k => kinds.add(k)));
-        outside.forEach(k => kinds.add(k));
-        const lifecycle = (k) => String(k).startsWith('substrate.');
-        const order = [...kinds].sort((a, b) => (lifecycle(a) === lifecycle(b) ? (a < b ? -1 : a > b ? 1 : 0) : lifecycle(a) ? 1 : -1));
-        const list = (xs) => xs.map(x => ({ name: x }));
-        // a break point after `substrate.` for display only, so a narrow panel never splits a word.
-        const label = (k) => String(k).replace(/^substrate\./, 'substrate.\u200b');
-        const kindList = (xs) => xs.map(x => ({ name: x, label: label(x) }));
-        const baseline = g && g.baseline ? g.baseline : {};
-        const config = g && g.config ? g.config : {};
-        return {
-          topoDefs: STRUCTURE_DEFS,
-          topoEventRows: order.map(k => {
-            const by = producers.filter(p => p.emits.includes(k)).map(p => p.kind);
-            if (lifecycle(k)) by.push('runtime');
-            if (outside.has(k)) by.push('outside');
-            const fires = triggers.filter(t => (t.on || []).includes(k)).map(t => t.id);
-            return { name: k, label: label(k), by: list(by), fires: list(fires.length ? fires : ['—']) };
-          }),
-          topoEventCount: order.length,
-          topoProducerRows: producers.map(p => ({
-            name: p.kind,
-            emits: (p.emits && p.emits.length ? p.emits.join(', ') : '—'),
-            initialTag: p.initial ? 'initial' : '',
-            instrumentTag: instruments.has(p.kind) ? 'instrument' : '',
-            detTag: p.deterministic ? 'deterministic' : '',
-          })),
-          topoTriggerRows: triggers.map(t => ({
-            id: t.id, onKind: t.onKind, starts: t.starts, policy: t.policy || '—',
-            onKinds: kindList(t.on && t.on.length ? t.on : String(t.onKind || '').split(', ').filter(Boolean)),
-          })),
-          topoRouteRows: (g && g.routes ? g.routes : []).map(r => ({ id: r.id, slot: r.slot })),
-          topoRouteCount: g && g.routes ? g.routes.length : 0,
-          topoRoutesNone: !(g && g.routes && g.routes.length),
-          topoRoutesAny: !!(g && g.routes && g.routes.length),
-          topoViewRows: list(g && g.views ? g.views : []),
-          topoViewCount: g && g.views ? g.views.length : 0,
-          topoTermination: (g && g.termination ? g.termination : []).join(' · ') || '—',
-          topoRunRows: [
-            { k: 'vocab version', v: String(config.vocab_version ?? '—') },
-            { k: 'exports', v: g && g.exports && g.exports.length ? g.exports.join(', ') : 'none' },
-            ...Object.keys(baseline).sort().map(k => ({ k: 'baseline · ' + k, v: String(baseline[k]) })),
-          ],
-          topoProducerCount: producers.length,
-          topoTriggerCount: triggers.length,
-          topoAny: producers.length > 0,
-          topoEmpty: producers.length === 0,
-        };
-      })(),
+      // The structure lens: web/app/StructureLens.tsx (sprint 301), from the stream's view.
       // Reveal view transcript reads the SAME rich rows the per-pane
       // terminal view reads. _liveBindingsFor already computes tool
       // cards, Markdown blocks, opacity from find, running seconds —

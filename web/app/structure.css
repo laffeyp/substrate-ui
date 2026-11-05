@@ -1,0 +1,10 @@
+/* SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0 */
+/* Copyright (C) 2026 Peter Laffey */
+/* Meta's structure lens (web/app/StructureLens.tsx; sprint 301, moved from reveal.html's helmet, UI   */
+/* sprint 138): the lens keeps its tables; only when its container is narrower than 530px does each   */
+/* row stack, with labels. The query reads the lens's own width, so it holds in meta's half and in   */
+/* the editor view's right column alike (design D81).                                                */
+.st{container-type:inline-size;container-name:st}
+.st-lab{display:none;color:#62676f;font-size:10.5px;margin-right:6px}
+.st-tag{white-space:nowrap}
+@container st (max-width:530px){.st-grid{display:block!important}.st-row{display:block!important;margin:0 0 10px}.st-col{display:none}.st-cell{display:block;padding-left:14px;overflow-wrap:break-word}.st-cell.st-first{padding-left:0}.st-lab{display:inline}.st-stack{display:inline!important}.st-stack>span:not(:last-child)::after{content:', '}}
