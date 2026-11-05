@@ -887,6 +887,7 @@ class Component extends DCLogic {
     });
     this._offCommands = onCommand((command) => {
       if (command === 'toggle-meta') this._toggleMeta();
+      else if (command === 'toggle-assays') this._toggleSurface(Surface.Assay);
       else if (command === 'settings') openSettings();
       else if (command === 'close-pane') this._closePane(this.state.focused);
     });
@@ -972,6 +973,8 @@ class Component extends DCLogic {
       if (e.metaKey && (e.key === 'd' || e.key === 'D')) { e.preventDefault(); this._split(e.shiftKey ? 'down' : 'right'); }
       if (e.metaKey && (e.key === 'f' || e.key === 'F')) { e.preventDefault(); this.setState(s => ({ findOpen: !s.findOpen, findQ: '' })); }
       if (e.metaKey && e.key === ',') { e.preventDefault(); openSettings(); }
+      // D86: ⌘3 opens the assays page, and the same key returns to the panes (sprint 251).
+      if (e.metaKey && !e.shiftKey && !e.altKey && !e.ctrlKey && e.key === '3') { e.preventDefault(); this._toggleSurface(Surface.Assay); }
       if (e.key === 'Escape') {
         const s = this.state;
         if (s.findOpen) this.setState({ findOpen: false, findQ: '' });
@@ -1921,10 +1924,6 @@ class Component extends DCLogic {
     const _liveGrid = _findGrid();
     const graphGrid: number[][] = Array.isArray(_liveGrid) ? _liveGrid : [];
     const surf = state.surface;
-    // The assay surface reads the controller's assay listing once
-    // loadAssays lands (deferred until substrate exposes the projection
-    // per plan Phase 4-open). Until then it renders empty.
-    const arms = [];
     // Presentation-Model bindings — Phase 4. Every field here reads
     // from `state.controllerSnapshot` which reveal.ts refreshes on every
     // controller change. `scriptedOn` inverts `liveOn` so the demo
@@ -1991,8 +1990,6 @@ class Component extends DCLogic {
           topoEmpty: producers.length === 0,
         };
       })(),
-      assaysEmpty: arms.length === 0,
-      assaysAny: arms.length > 0,
       // Reveal view transcript reads the SAME rich rows the per-pane
       // terminal view reads. _liveBindingsFor already computes tool
       // cards, Markdown blocks, opacity from find, running seconds —
@@ -2001,8 +1998,6 @@ class Component extends DCLogic {
       crumb: ((title) => surf === Surface.Records ? title + ' › records' : surf === Surface.Assay ? title + ' › assays' : title)(this._paneTitle(state, fp)),
       escHint: surf ? 'esc — back' : '',
       openRecords: () => this._toggleSurface('records'),
-      openAssay: () => this.setState({ surface: Surface.Assay }),
-      backToSession: () => this.setState({ surface: null }),
       // UI sprint 139 (U125): the model chip opens a card, as the workspace chip does; it picks nothing.
       fpDdOpen: state.ddFor === fp.id, fpToggleDd: () => this.setState(s => ({ ddFor: s.ddFor === fp.id ? null : fp.id, wsFor: null })),
       ...(() => {
@@ -2113,7 +2108,6 @@ class Component extends DCLogic {
           return graphGrid.flat().map((v) => ({ bg: v ? '#82a5c8' : '#1a1c20' }));
         } catch (_) { return []; }
       })(),
-      arms,
       panes, paneCols: state.colW.map(w => w.toFixed(3) + 'fr').join(' '), paneRows: state.rowW.map(w => w.toFixed(3) + 'fr').join(' '), focusedName: fp.name, focusedId: fp.id,
       revealFlexL: state.revealL.toFixed(3) + ' 1 0%',
       revealGutterLeft: (state.revealL / (state.revealL + 1) * 100).toFixed(2) + '%',

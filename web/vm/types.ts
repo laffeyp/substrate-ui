@@ -100,6 +100,59 @@ export interface WorkspaceRow {
   shape: string;
 }
 
+/** One assay on the machine: a cells file in the bench results folder and its provenance
+ *  (`/api/assays`, server.py `_assays_index`). Null fields were absent from the file's meta. */
+export interface AssayRow {
+  name: string;
+  fingerprint: string | null;
+  strongModel: string | null;
+  weakModels: string[];
+  margin: number | null;
+  trials: number | null;
+  nCells: number;
+  arms: string[];
+}
+
+/** One arm's line in an assay's report (substrate `assay/report.py` `ArmReport`). The delta, its
+ *  interval and the verdict are null for the control arm and whenever the control did not run. */
+export interface AssayArm {
+  arm: string;
+  role: string;
+  nCases: number;
+  passes: number;
+  /** pass^k: a case counts only if every trial passed. */
+  passRate: number;
+  passAt1: number;
+  complete: boolean;
+  deltaPassK: number | null;
+  ciLow: number | null;
+  ciHigh: number | null;
+  /** superior | equivalent | inferior | inconclusive, against the margin. */
+  equivalence: string | null;
+  fdrSignificant: boolean | null;
+  completionTokens: number;
+  elapsedMs: number;
+  modelCalls: number;
+  verdictCounts: Record<string, number>;
+}
+
+/** One assay's report (`/api/assay/<name>`, substrate `report_from_cells`). */
+export interface AssayReport {
+  name: string;
+  suite: string;
+  primaryMetric: string;
+  nullRule: string;
+  /** pass, fail or no-control-ran; with any but pass, no arm has a delta. */
+  controlCheck: { state: string; detail: string };
+  controlArm: string | null;
+  /** Arms whose graded rate fell below the pre-registered floor. */
+  unpublishable: { arm: string; gradedRate: number; threshold: number; reason: string }[];
+  /** verified, tampered or unverified: whether the recorded config matches the cells. */
+  provenance: string | null;
+  margin: number | null;
+  arms: AssayArm[];
+}
+
 /** One row a View renders in the bundle-picker list. `/api/bundles`
  * returns these; the reveal shell's bundle picker binds to them. */
 export interface BundleRow {

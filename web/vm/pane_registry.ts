@@ -11,7 +11,7 @@
 import { SessionController } from "./session_controller";
 import type { SubstrateClient } from "./client";
 import type { ControllerEvent, OpenSessionRequest } from "./session_controller";
-import type { Snapshot } from "./types";
+import type { AssayReport, AssayRow, Snapshot } from "./types";
 
 export interface PaneRegistryDeps {
   makeClient: () => SubstrateClient;
@@ -109,6 +109,8 @@ export class PaneRegistry {
   loadDriverRoster(): Promise<void> { return this.active().loadDriverRoster(); }
   loadLiveSessions(): Promise<void> { return this.active().loadLiveSessions(); }
   loadRecentWorkspaces(): Promise<void> { return this.active().loadRecentWorkspaces(); }
+  loadAssays(): Promise<AssayRow[]> { return this.active().loadAssays(); }
+  loadAssayReport(name: string): Promise<AssayReport | null> { return this.active().loadAssayReport(name); }
   addWorkspace(path: string): Promise<void> { return this.active().addWorkspace(path); }
   loadSessionsByWorkspace(path: string, offset: number, limit: number) { return this.active().loadSessionsByWorkspace(path, offset, limit); }
   loadBundleRoster(): Promise<void> { return this.active().loadBundleRoster(); }

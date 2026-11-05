@@ -339,26 +339,9 @@
   <div data-app-mount="records" style="flex:1;overflow:auto;background:#212327;padding:22px 22px"></div>
  </sc-if>
 
- <!-- ══ SURFACE · assay ══ -->
+ <!-- ══ SURFACE · assay: web/app/AssayPage.tsx (sprint 255; ⌘3, View ▸ Assays) ══ -->
  <sc-if value="{{ showAssay }}" hint-placeholder-val="{{ false }}">
-  <div style="flex:1;overflow:auto;background:#212327;padding:20px 40px">
-   <sc-if value="{{ assaysEmpty }}" hint-placeholder-val="{{ true }}">
-    <div style="max-width:640px;padding:18px 20px;background:#1a1c20;border-left:2px solid #665f7d;border-radius:0 5px 5px 0;color:#9aa0a8;font-size:12.5px;line-height:1.65">
-     no assays on record. /api/assays returned an empty list. preregister a run with a `.preg.json` on disk to see the arm-by-arm delta report here.
-    </div>
-   </sc-if>
-   <sc-if value="{{ assaysAny }}" hint-placeholder-val="{{ false }}">
-    <div style="display:grid;grid-template-columns:180px 1.3fr .6fr .6fr .6fr .7fr 140px 120px;gap:0 16px;font-size:12px;align-items:center;margin-top:14px;max-width:1060px">
-     <div style="color:#62676f;font-size:10px;letter-spacing:.1em;padding:6px 0">ARM</div><div style="color:#62676f;font-size:10px;letter-spacing:.1em">OVERALL PASS¹</div><div style="color:#62676f;font-size:10px;letter-spacing:.1em">EASY·8</div><div style="color:#62676f;font-size:10px;letter-spacing:.1em">MED·12</div><div style="color:#62676f;font-size:10px;letter-spacing:.1em">HARD·8</div><div style="color:#62676f;font-size:10px;letter-spacing:.1em">ADV·4</div><div style="color:#62676f;font-size:10px;letter-spacing:.1em">Δ VS CONTROL·P</div><div style="color:#62676f;font-size:10px;letter-spacing:.1em">VERDICT</div>
-     <sc-for list="{{ arms }}" as="a" hint-placeholder-count="4">
-      <div style="padding:10px 0;color:{{ a.nameColor }}">{{ a.name }}</div>
-      <div><div style="display:flex;align-items:center;gap:8px"><div style="flex:1;height:9px;border-radius:2px;background:#2e3138"><div style="width:{{ a.barW }};height:9px;border-radius:2px;background:{{ a.barColor }}"></div></div><span style="color:#d7dade;width:28px;text-align:right">{{ a.overall }}</span></div></div>
-      <div style="color:#9aa0a8">{{ a.easy }}</div><div style="color:#9aa0a8">{{ a.med }}</div><div style="color:#9aa0a8">{{ a.hard }}</div><div style="color:{{ a.advColor }}">{{ a.adv }}</div>
-      <div style="color:{{ a.deltaColor }}">{{ a.delta }}</div><div style="color:{{ a.verdictColor }};font-weight:600">{{ a.verdict }}</div>
-     </sc-for>
-    </div>
-   </sc-if>
-  </div>
+  <div data-app-mount="assays" style="flex:1;overflow:auto;background:#212327;padding:20px 40px"></div>
  </sc-if>
 
  <!-- footer: web/app/Footer.tsx (sprint 224) -->

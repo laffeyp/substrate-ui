@@ -1,0 +1,11 @@
+{
+  "config_fp": "a23f6252186e",
+  "margin": 0.1,
+  "n_problems": 4,
+  "run_id": "fixture-r1",
+  "strong_model": "strong-model",
+  "trials": 1,
+  "weak_models": [
+    "weak-model"
+  ]
+}

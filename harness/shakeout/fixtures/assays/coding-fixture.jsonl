@@ -1,0 +1,8 @@
+{"arm": "strong_ref", "role": "baseline", "case_id": "rle", "trial": 0, "passed": true, "elapsed_ms": 1200, "completion_tokens": 300, "model_calls": 2, "config_fp": "a23f6252186e", "run_id": "fixture-r1"}
+{"arm": "strong_ref", "role": "baseline", "case_id": "duration", "trial": 0, "passed": true, "elapsed_ms": 1200, "completion_tokens": 300, "model_calls": 2, "config_fp": "a23f6252186e", "run_id": "fixture-r1"}
+{"arm": "strong_ref", "role": "baseline", "case_id": "reverse_words", "trial": 0, "passed": true, "elapsed_ms": 1200, "completion_tokens": 300, "model_calls": 2, "config_fp": "a23f6252186e", "run_id": "fixture-r1"}
+{"arm": "strong_ref", "role": "baseline", "case_id": "balanced", "trial": 0, "passed": false, "elapsed_ms": 1200, "completion_tokens": 300, "model_calls": 2, "config_fp": "a23f6252186e", "run_id": "fixture-r1"}
+{"arm": "full", "role": "full", "case_id": "rle", "trial": 0, "passed": true, "elapsed_ms": 1200, "completion_tokens": 300, "model_calls": 2, "config_fp": "a23f6252186e", "run_id": "fixture-r1"}
+{"arm": "full", "role": "full", "case_id": "duration", "trial": 0, "passed": false, "elapsed_ms": 1200, "completion_tokens": 300, "model_calls": 2, "config_fp": "a23f6252186e", "run_id": "fixture-r1"}
+{"arm": "full", "role": "full", "case_id": "reverse_words", "trial": 0, "passed": true, "elapsed_ms": 1200, "completion_tokens": 300, "model_calls": 2, "config_fp": "a23f6252186e", "run_id": "fixture-r1"}
+{"arm": "full", "role": "full", "case_id": "balanced", "trial": 0, "passed": false, "elapsed_ms": 1200, "completion_tokens": 300, "model_calls": 2, "config_fp": "a23f6252186e", "run_id": "fixture-r1"}

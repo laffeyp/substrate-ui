@@ -19,6 +19,7 @@ import { FirstRun } from "./app/FirstRun";
 import { Footer } from "./app/Footer";
 import { TopBar } from "./app/TopBar";
 import { RecordsPage } from "./app/RecordsPage";
+import { AssayPage } from "./app/AssayPage";
 
 function boot(): void {
   const registry = new PaneRegistry({ makeClient: () => new BrowserSubstrateClient() });
@@ -155,6 +156,8 @@ function boot(): void {
     render: () => React.createElement(TopBar) });
   mounts.register({ name: "records", selector: '[data-app-mount="records"]', key: () => "window",
     render: () => React.createElement(RecordsPage) });
+  mounts.register({ name: "assays", selector: '[data-app-mount="assays"]', key: () => "window",
+    render: () => React.createElement(AssayPage) });
   mounts.register({ name: "footer", selector: '[data-app-mount="footer"]', key: () => "window",
     render: () => React.createElement(Footer) });
   mounts.register({ name: "first-run", selector: '[data-app-mount="first-run"]', key: () => "window",
@@ -175,7 +178,7 @@ function boot(): void {
   if (nativeBridge?.onMenuCommand) {
     nativeBridge.onMenuCommand((command, payload) => {
       // Commands sent before the component mounts wait in the channel for it.
-      if (command === "toggle-meta" || command === "settings" || command === "close-pane") {
+      if (command === "toggle-meta" || command === "toggle-assays" || command === "settings" || command === "close-pane") {
         sendCommand(command);
       } else if (command === "open-record") {
         const rec = payload as { path?: string } | null;

@@ -18,3 +18,6 @@
 .hover-records-workspace:hover { color: #e2e5e9 !important; }
 .hover-records-session:hover { background: #26292e !important; }
 .hover-records-more:hover { background: #26292e !important; }
+
+/* Assay page: a row in the listing (web/app/AssayPage.tsx; new, no template rule). */
+.hover-assay-row:hover { background: #26292e !important; }

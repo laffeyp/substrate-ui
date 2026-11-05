@@ -11,6 +11,9 @@
 // hexagonal core. The `SubstrateClient` port keeps the transport swappable.
 
 import type {
+  AssayArm,
+  AssayReport,
+  AssayRow,
   BackgroundTaskRow,
   RunRow,
   BundleRow,
@@ -409,6 +412,25 @@ export class SessionController {
     const config = obj((raw as { config?: unknown }).config);
     this.patch({ topologyGraph: { producers, triggers, views, termination, routes, outside, exports, baseline, config } });
     this.emit("TOPOLOGY_LOADED", { producer_count: producers.length, trigger_count: triggers.length });
+  }
+
+  /** The machine's assays, from /api/assays. Returned to the page that asked; the listing is the
+   * machine's, not this pane's, so it is not kept in the snapshot. */
+  async loadAssays(): Promise<AssayRow[]> {
+    const result = await this.client.fetchJson<unknown[]>("/api/assays");
+    if (!result.ok) { this.patch({ lastError: `assays: ${result.detail}` }); return []; }
+    const rows = (Array.isArray(result.data) ? result.data : []).filter(isRecord).map(assayRowFrom);
+    this.emit("ASSAYS_LOADED", { count: rows.length });
+    return rows;
+  }
+
+  /** One assay's report, from /api/assay/<name>; null when the server has none by that name. */
+  async loadAssayReport(name: string): Promise<AssayReport | null> {
+    const result = await this.client.fetchJson<Record<string, unknown>>(`/api/assay/${encodeURIComponent(name)}`);
+    if (!result.ok) { this.patch({ lastError: `assay ${name}: ${result.detail}` }); return null; }
+    const report = assayReportFrom(result.data);
+    this.emit("ASSAY_REPORT_LOADED", { name: report.name, arms: report.arms.length });
+    return report;
   }
 
   async loadRecentWorkspaces(): Promise<void> {
@@ -1745,5 +1767,68 @@ function rowFrom(s: RawSession, status: SessionRow["status"]): SessionRow {
     workspacePath: s.workspace ?? null,
     workspaceShape: s.workspace_shape ?? null,
     createdAt: typeof s.created_at === "number" ? s.created_at : 0,
+  };
+}
+
+// The assay endpoints send substrate's field names (server.py `_assays_index`, `_assay_report`).
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return !!v && typeof v === "object" && !Array.isArray(v);
+}
+const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
+const str = (v: unknown): string | null => (typeof v === "string" ? v : null);
+const strs = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
+
+function assayRowFrom(r: Record<string, unknown>): AssayRow {
+  return {
+    name: str(r.name) ?? "",
+    fingerprint: str(r.fingerprint),
+    strongModel: str(r.strong_model),
+    weakModels: strs(r.weak_models),
+    margin: num(r.margin),
+    trials: num(r.trials),
+    nCells: num(r.n_cells) ?? 0,
+    arms: strs(r.arms),
+  };
+}
+
+function assayArmFrom(a: Record<string, unknown>): AssayArm {
+  const counts: Record<string, number> = {};
+  if (isRecord(a.verdict_counts)) for (const [k, v] of Object.entries(a.verdict_counts)) { const n = num(v); if (n !== null) counts[k] = n; }
+  return {
+    arm: str(a.arm) ?? "",
+    role: str(a.role) ?? "",
+    nCases: num(a.n_cases) ?? 0,
+    passes: num(a.passes) ?? 0,
+    passRate: num(a.pass_rate) ?? 0,
+    passAt1: num(a.pass_at_1) ?? 0,
+    complete: a.complete === true,
+    deltaPassK: num(a.delta_pass_k),
+    ciLow: num(a.ci_low),
+    ciHigh: num(a.ci_high),
+    equivalence: str(a.equivalence),
+    fdrSignificant: typeof a.fdr_significant === "boolean" ? a.fdr_significant : null,
+    completionTokens: num(a.completion_tokens) ?? 0,
+    elapsedMs: num(a.elapsed_ms) ?? 0,
+    modelCalls: num(a.model_calls) ?? 0,
+    verdictCounts: counts,
+  };
+}
+
+function assayReportFrom(d: Record<string, unknown>): AssayReport {
+  const report = isRecord(d.report) ? d.report : {};
+  const meta = isRecord(d.meta) ? d.meta : {};
+  const check = isRecord(report.control_check) ? report.control_check : {};
+  const unpub = Array.isArray(report.unpublishable) ? report.unpublishable.filter(isRecord) : [];
+  return {
+    name: str(d.name) ?? "",
+    suite: str(report.suite) ?? "",
+    primaryMetric: str(report.primary_metric) ?? "",
+    nullRule: str(report.null_rule) ?? "",
+    controlCheck: { state: str(check.state) ?? "", detail: str(check.detail) ?? "" },
+    controlArm: str(report.control_arm),
+    unpublishable: unpub.map((row) => ({ arm: str(row.arm) ?? "", gradedRate: num(row.graded_rate) ?? 0, threshold: num(row.threshold) ?? 0, reason: str(row.reason) ?? "" })),
+    provenance: str(meta._provenance),
+    margin: num(meta.margin),
+    arms: (Array.isArray(report.arms) ? report.arms.filter(isRecord) : []).map(assayArmFrom),
   };
 }

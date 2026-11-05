@@ -12,8 +12,8 @@
 // ("The menu bar", "Keyboards"); the card lists each item and the
 // deviations kept (⌘M toggles meta, not Minimize).
 //
-// One owner per key. The renderer's keydown owns ⌘M, ⌘, ⌘D, ⌘E and ⌘F;
-// the menu owns ⌘N, ⌘O, ⌘W, ⇧⌘W and ⌃⌘F. Meta and Settings… carry no
+// One owner per key. The renderer's keydown owns ⌘M, ⌘, ⌘D, ⌘E, ⌘F and ⌘3;
+// the menu owns ⌘N, ⌘O, ⌘W, ⇧⌘W and ⌃⌘F. Meta, Assays and Settings… carry no
 // accelerator: on macOS Electron cannot show a key without registering
 // it (registerAccelerator is Linux/Windows only), and a registered one
 // would compete with the renderer's handler for the same press.
@@ -100,6 +100,12 @@ function buildTemplate(getWin, newWindow) {
           id: "menu-toggle-meta",
           label: "Meta",
           click: () => send(getWin(), "toggle-meta"),
+        },
+        // The assays page (design D86: ⌘3, which the renderer's keydown owns; sprint 249).
+        {
+          id: "menu-toggle-assays",
+          label: "Assays",
+          click: () => send(getWin(), "toggle-assays"),
         },
         { type: "separator" },
         { role: "togglefullscreen" },

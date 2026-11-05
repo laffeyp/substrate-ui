@@ -6,7 +6,8 @@
 // fixed repo-local folder, drives 14 screens, and writes each at 1440x900 and 900x380 to
 // captures/pixel/<label>/<screen>@<w>x<h>.png. Text that changes between runs is replaced with fixed
 // stand-ins before each screenshot (masks.ts).
-// The assay page is not captured: no control in the window opens it.
+// The assay page is not captured: it had no opener when the baseline was taken, so it has no old
+// picture to hold; harness/shakeout/assay_page.ts gates it by behaviour (sprint 257).
 //
 // Usage: npx tsx harness/pixel/capture.ts <label>
 
