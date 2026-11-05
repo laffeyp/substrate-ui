@@ -21,7 +21,18 @@ What changed from round 5: the document-organization work closed, so its folder 
 
 ### 1.1 The methodology
 
-`CLAUDE.md` at this repo's root imports `../sdd-kit-3/AGENTS.md`, so Claude Code loads it at session start and again after a compaction. Read in the order the section "What you read at session start" of `AGENTS.md` gives. On a first session in this repo, that list adds `../sdd-kit-3/foundations/01-signal-driven-development.md` and `04-sdd-claude-design.md`. Other kit files are read when the work calls for them (the section "Reference order" of `AGENTS.md`).
+`CLAUDE.md` at this repo's root imports `../sdd-kit-3/AGENTS.md`, so Claude Code loads it at session start and again after a compaction. Read the entire kit — every file in `../sdd-kit-3/` (excluding `_prior-2026-10-29/` and `example/`). The reading order:
+
+1. `AGENTS.md` — the working agreement (auto-loaded, but read it in full if compacted).
+2. `foundations/01-signal-driven-development.md`, `02-sdd-practice.md`, `03-sdd-team-model.md`, `04-sdd-claude-design.md` — the four canon documents.
+3. `grammar/README.md`, `grammar/PRINCIPLES.md`, `grammar/BOOTSTRAP.md` — the vocabulary discipline.
+4. `TECHNIQUES.md` — the full catalog of named development techniques.
+5. `ADDENDUMS.md`, `ADDENDUM_PROMPT.md` — addenda.
+6. `templates/` — `SPRINT_CARD.md`, `SIGNAL_REPORT.md`, `BLACKBOARD.md`, `KIT_DIARY.md`, `WORKING_AGREEMENT.md`, `VOCABULARY.json`.
+7. `handoffs/README.md`, `handoffs/TEMPLATE-handoff.md`.
+8. `process-not-prompt-research.md`, `process-not-prompt-summary.md`.
+
+The selective-reading guidance inside `AGENTS.md` ("What you read at session start," "Reference order") was written for sessions that had already internalized the kit. A session that has not read the kit cannot apply it. Read the whole thing first; after that, the selective protocol in `AGENTS.md` is sufficient for subsequent sessions.
 
 ### 1.2 The record for this repo
 
@@ -288,7 +299,7 @@ Ship a new build with a higher `CFBundleVersion`. A notary ticket cannot be with
 Copy-paste this at the start of a session on this repo.
 
 ```
-CLAUDE.md has loaded ../sdd-kit-3/AGENTS.md. Follow its session-start list. Then read, each in full unless a line says otherwise:
+Read the entire sdd-kit-3 first (section 1.1 has the file list and reading order). Then read, each in full unless a line says otherwise:
 
 1.  README.md
 2.  WORKING_AGREEMENT.md
@@ -303,6 +314,4 @@ CLAUDE.md has loaded ../sdd-kit-3/AGENTS.md. Follow its session-start list. Then
 11. web/reveal.html, web/reveal.ts, web/reveal_component.ts, web/vm/, web/reveal/transcript/
 12. harness/shakeout/, tests/
 13. scripts/release.sh, scripts/fetch-python-runtime.sh, electron-builder.config.js, package.json
-
-First session in this repo: also ../sdd-kit-3/foundations/01-signal-driven-development.md and 04-sdd-claude-design.md.
 ```
