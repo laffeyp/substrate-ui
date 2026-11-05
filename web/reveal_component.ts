@@ -21,10 +21,9 @@
 //
 // Globals the class body references: `DCLogic` (base class exposed by
 // support.js), `React` / `ReactDOM` (script tags in reveal.html),
-// `window.__vm` (the PaneRegistry booted by reveal.ts), and a small
-// helper set (`formatProducerLabel`, `formatEnvelopeGist`, `laneForProducerKind`, `stripSubstratePrefix`)
-// referenced across methods. None of them import; dc-runtime evaluates
-// the class as a bare script.
+// and `window.__vm` (the PaneRegistry booted by reveal.ts). The stream's helpers that this comment
+// named are web/app/derive/stream.ts (sprint 289); the page script imports the modules it uses, which
+// esbuild bundles in (vite.config.ts, inlineDcScript).
 
 declare const DCLogic: any;
 declare const React: any;
@@ -90,6 +89,7 @@ import { lineStep, paneShape, SHARED_SANDBOX, tabFill, workspaceRows } from "./a
 import { treeKey } from "./app/derive/tree_key";
 import { chipLabel, driverLabel, modelRows } from "./app/derive/driver_label";
 import { picker } from "./app/state/picker";
+import { connector, KIND_COLOR, LANES, laneCells, PLUMBING, sideLanes as streamSideLanes, streamRows, streamSpans } from "./app/derive/stream";
 import { onCommand, shell } from "./app/state/shell";
 
 
@@ -1060,117 +1060,9 @@ class Component extends DCLogic {
         if (controller && typeof controller.nameSession === 'function') controller.nameSession(name);
       },
     }); });
-    // Color = participant relevance. Bright = participant-to-participant
-    // message (Model, Delegate, External); shown in both `all` and `app`.
-    // Gray = runtime plumbing (scheduling, lifecycle, bookkeeping);
-    // shown only in `all`. The LOW filter below reads this rule.
-    const envelopeKindColor = {
-      // Participant messages — bright.
-      ToolCall: '#a08fc9', ToolResult: '#7fb3b8',
-      UserMessage: '#88b0d0', ModelReply: '#88b0d0', FinalAnswer: '#88b0d0',
-      Park: '#82a5c8', Returned: '#82a5c8', SessionEnded: '#88b0d0',
-      // Runtime plumbing — gray.
-      TriggerFired: '#62676f', ProducerStarted: '#62676f', ProducerCompleted: '#62676f',
-      RunStarted: '#62676f', RunFinalised: '#62676f', TerminationMatched: '#62676f',
-      SessionStarted: '#62676f', PromptFragment: '#62676f', PromptComposed: '#62676f',
-      LanguageProfile: '#62676f', LanguageDrift: '#62676f',
-    };
-    // Stream lens is always fed off the controller's real envelopes.
-    // Framework brackets carry the `substrate.` prefix on the wire;
-    // strip it so the lane derivation below matches on bare kind names.
+    // The stream's rows, spans, connectors and side graph: web/app/derive/stream.ts (sprint 289).
     const _liveEnvelopes = (_vmSnap && Array.isArray(_vmSnap.rawEnvelopes)) ? _vmSnap.rawEnvelopes : [];
-    // A turn ends with `Returned` from the `return` producer (vocabulary v0.3); records written
-    // before it end with `Park` from the `park` producer. The graph reads both alike.
-    const _isTurnEnd = (k) => k === EnvelopeKind.Returned || k === EnvelopeKind.Park;
-    const _isReturnProducer = (k) => k === 'return' || k === 'park';
-    const stripSubstratePrefix = (k) => (typeof k === 'string' && k.indexOf('substrate.') === 0) ? k.slice('substrate.'.length) : k;
-    // Bucket every producer kind onto one of four swim lanes.
-    const laneForProducerKind = (producerKind) => {
-      const k = producerKind || '';
-      if (k === 'model') return 'model';
-      if (k === 'tool') return 'tool';
-      if (_isReturnProducer(k)) return 'park';
-      return 'runtime';
-    };
-    // The `prod` column and the gist per kind, as the prototype v7 drew them, from the fields
-    // real envelopes carry.
-    const formatProducerLabel = (kind, producerKind, payload) => {
-      // Framework brackets always read as `runtime` — matches prototype.
-      if (kind === 'TriggerFired' || kind === 'ProducerStarted' || kind === 'ProducerCompleted'
-          || kind === 'RunStarted' || kind === EnvelopeKind.RunFinalised || kind === 'TerminationMatched') return 'runtime';
-      if (kind === EnvelopeKind.UserMessage) return 'runtime';
-      if (kind === EnvelopeKind.ToolCall) return 'model';
-      if (kind === EnvelopeKind.ToolResult) return payload.tool ? `tool · ${payload.tool}` : 'tool';
-      if (kind === EnvelopeKind.FinalAnswer || kind === EnvelopeKind.ModelReply) return 'model';
-      if (kind === EnvelopeKind.Park || kind === EnvelopeKind.Returned) return 'return';
-      if (kind === EnvelopeKind.PromptFragment || kind === EnvelopeKind.PromptComposed || kind === EnvelopeKind.SessionStarted) return 'runtime';
-      return producerKind || 'runtime';
-    };
-    const formatEnvelopeGist = (kind, payload) => {
-      if (kind === EnvelopeKind.UserMessage) return String(payload.text || payload.assembled_prompt || '').slice(0, 160);
-      if (kind === EnvelopeKind.ModelReply) return String(payload.text || '').slice(0, 160);
-      if (kind === EnvelopeKind.FinalAnswer) return 'turn done';
-      if (kind === EnvelopeKind.ToolCall) {
-        const t = payload.tool || 'tool';
-        const args = Array.isArray(payload.args) ? payload.args.join(' ') : (payload.args ? String(payload.args) : '');
-        return args ? `${t} ${args}`.slice(0, 160) : t;
-      }
-      if (kind === EnvelopeKind.ToolResult) {
-        const ok = payload.ok !== false;
-        const out = payload.output;
-        const tail = ok
-          ? (typeof out === 'string' ? String(out).slice(0, 80) : (out && (out.stdout || out.text) ? String(out.stdout || out.text).slice(0, 80) : 'ok'))
-          : `err · ${payload.error || 'failed'}`;
-        return `${ok ? 'ok' : 'err'} · ${tail}`;
-      }
-      if (kind === 'TriggerFired') {
-        const tid = String(payload.factory || payload.trigger_id || 'trigger');
-        const starts = payload.starts ? ` → ${payload.starts}` : '';
-        return tid + (starts ? ` fired${starts}` : ' fired');
-      }
-      if (kind === 'ProducerStarted') return (payload.kind || (payload.producer && payload.producer.kind) || 'producer');
-      if (kind === 'ProducerCompleted') return (payload.kind || (payload.producer && payload.producer.kind) || 'producer');
-      if (kind === EnvelopeKind.Park) return `await ${payload.awaiting || EnvelopeKind.UserMessage}`;
-      if (kind === EnvelopeKind.Returned) return `returned · ${payload.reason || ''}`;
-      if (kind === EnvelopeKind.SessionStarted) return `seed · driver ${payload.driver_model || '?'}`;
-      if (kind === EnvelopeKind.SessionEnded) return `end · ${payload.reason || 'server_end'}`;
-      return '';
-    };
-    const envelopes = _liveEnvelopes.map((env) => {
-      const kind = stripSubstratePrefix(env.kind);
-      const rawPayload = env.payload || {};
-      // ProducerStarted / ProducerCompleted carry the producer info on
-      // `payload.producer` (real wire) but the lane logic wants it on
-      // `payload.kind` + `payload.instance` (prototype's flat shape).
-      const producerFromPayload = rawPayload && rawPayload.producer;
-      const producerKind = (env.producer && env.producer.kind)
-        || (producerFromPayload && producerFromPayload.kind) || '';
-      const producerInstance = (env.producer && env.producer.instance)
-        || (producerFromPayload && producerFromPayload.instance) || '';
-      // Flatten producer.kind onto payload.kind for the span logic
-      // that reads `e.payload.kind === 'model'`.
-      const payload = Object.assign({}, rawPayload, {
-        kind: producerKind || rawPayload.kind,
-        instance: producerInstance || rawPayload.instance,
-      });
-      const prod = formatProducerLabel(kind, producerKind, rawPayload);
-      const gist = formatEnvelopeGist(kind, rawPayload);
-      return {
-        seq: env.seq,
-        kind,
-        t: typeof env.t === 'number' ? env.t : null,
-        schema: env.schema || '',
-        prod,
-        producerInstance,
-        gist,
-        // Which lanes the row touches: m(odel), t(ool).
-        lanes: (kind === EnvelopeKind.ToolCall || kind === EnvelopeKind.ToolResult) ? 'mt'
-          : (_isTurnEnd(kind) || kind === 'TriggerFired' && _isReturnProducer(payload.starts)) ? ''
-          : 'm',
-        payload,
-        content: [],
-      };
-    });
+    const envelopes = streamRows(_liveEnvelopes).map(r => Object.assign(r, { content: [] }));
     const _evTexts = envelopes.map(e => (e.kind + ' ' + e.prod + ' ' + e.gist).toLowerCase());
     // The find bar shows the stream's match count; it is written to the find store after the render.
     this._streamMatches = findQuery ? _evTexts.filter(t => t.includes(findQuery)).length : 0;
@@ -1182,17 +1074,8 @@ class Component extends DCLogic {
       const time = _eventTimes.get(seq);
       return time ? formatElapsed(time.sinceStart) : '';
     };
-    // LOW = runtime plumbing, hidden in `app`. Derived from envelopeKindColor by the
-    // color rule: any envelope colored #62676f is plumbing. Kept as an
-    // explicit set so a stray color change cannot silently move an
-    // envelope into or out of the app view.
-    const LOW = {
-      TriggerFired: 1, ProducerStarted: 1, ProducerCompleted: 1,
-      RunStarted: 1, RunFinalised: 1, TerminationMatched: 1,
-      SessionStarted: 1, PromptFragment: 1, PromptComposed: 1,
-      LanguageProfile: 1, LanguageDrift: 1,
-    };
-    const shownEV = state.level === RevealLevel.App ? envelopes.filter(e => !LOW[e.kind]) : envelopes;
+    // The `app` level hides runtime plumbing rows (PLUMBING), not spans (UI sprint 155).
+    const shownEV = state.level === RevealLevel.App ? envelopes.filter(e => !PLUMBING.has(e.rawKind)) : envelopes;
     const selE = envelopes.find(e => e.seq === state.sel);
     // UI sprint 169: the language lens. The selected turn is the one the selected seq falls in,
     // so a pick here moves stream+graph and a pick there moves this.
@@ -1215,199 +1098,18 @@ class Component extends DCLogic {
       label: t.label, pick: () => this.setState({ langStream: t.id, langLane: 0 }),
       color: state.langStream === t.id ? '#d7dade' : '#62676f',
     }));
-    // lanes: one per producer KIND (fixed width). A lane's bars are SPANS — a tool span runs
-    // ToolCall → ToolResult; the model span runs its ProducerStarted → FinalAnswer; park spans
-    // TriggerFired → Park. Concurrent spans of one kind pack into sub-tracks that appear ONLY
-    // when real overlap exists, so the graph never widens for a merely long run.
-    // Three lifelines per UML sequence diagram (Booch/Rumbaugh/Jacobson):
-    // model (durable, left), delegate (middle), external (right).
-    // Every envelope is either a message between two lifelines or a
-    // moment on one. See DESIGN-DECISIONS D73.
-    // (right). The model is the session's durable participant — one
-    // continuous span from the first envelope to SessionEnded (or to
-    // the last envelope for a live session). Every OTHER producer is
-    // a delegation from the model: session_started, first_message,
-    // session_prompt, interrupt_fragment, the tool_loop tools, return,
-    // session_end — each renders as
-    // a span in the delegation lane from its ProducerStarted to its
-    // matching ProducerCompleted (paired by producer instance). Park
-    // rides its own lane so the return-to-idle beat reads cleanly.
-    const _lastSeq = envelopes.length ? envelopes[envelopes.length - 1].seq : 0;
-    const _firstSeq = envelopes.length ? envelopes[0].seq : 0;
-    // One model span per stretch the session was open: each SessionEnded closes one, the next
-    // envelope (a resume) opens the next. A single span to the FIRST SessionEnded left a
-    // resumed session's model lane empty from its first end on (2026-10-09).
-    const spansByKind = { model: [], delegation: [], external: [] };
-    let _modelOpen = envelopes.length ? _firstSeq : null;
-    for (const x of envelopes) {
-      if (_modelOpen === null) _modelOpen = x.seq;
-      if (x.kind === EnvelopeKind.SessionEnded) {
-        spansByKind.model.push({ start: _modelOpen, end: x.seq, color: '#3d5166', bright: '#82a5c8' });
-        _modelOpen = null;
-      }
-    }
-    if (_modelOpen !== null) {
-      spansByKind.model.push({ start: _modelOpen, end: _lastSeq, color: '#3d5166', bright: '#82a5c8' });
-    }
-    const _calls = {};
-    const _producerStarts = {}; // instance → {seq, kind} — non-park only
-    // Park is a wait-shape on the External lifeline, not a producer
-    // activation. It opens at TriggerFired(starts=park) and closes at
-    // the next UserMessage — same round trip shape as ToolCall →
-    // ToolResult on the Delegate lifeline.
-    let _parkOpen = null;
-    envelopes.forEach(e => {
-      if (e.kind === 'ProducerStarted' && e.producerInstance && e.payload && e.payload.kind && !_isReturnProducer(e.payload.kind)) {
-        _producerStarts[e.producerInstance] = { seq: e.seq, kind: e.payload.kind };
-      }
-      if (e.kind === 'ProducerCompleted' && e.producerInstance && _producerStarts[e.producerInstance]) {
-        const started = _producerStarts[e.producerInstance];
-        delete _producerStarts[e.producerInstance];
-        if (started.kind === 'model') return; // model owns its own lane
-        // Scaffolding producers (session_started, prompt_composer, …)
-        // are runtime plumbing under the color rule.
-        spansByKind.delegation.push({
-          start: started.seq, end: e.seq,
-          color: '#4d6b6e', bright: '#7fb3b8', kind: started.kind,
-        });
-      }
-      if (e.kind === 'TriggerFired' && e.payload && _isReturnProducer(e.payload.starts) && _parkOpen === null) {
-        _parkOpen = e.seq;
-      }
-      if (e.kind === EnvelopeKind.UserMessage && _parkOpen !== null) {
-        spansByKind.external.push({ start: _parkOpen, end: e.seq, color: '#3d5166', bright: '#82a5c8', kind: 'park' });
-        _parkOpen = null;
-      }
-      if (e.kind === EnvelopeKind.ToolCall) _calls[e.payload.call_id] = { start: e.seq, tool: e.payload.tool };
-      if (e.kind === EnvelopeKind.ToolResult) {
-        const c = _calls[e.payload.call_id];
-        if (c) spansByKind.delegation.push({
-          start: c.start, end: e.seq,
-          color: c.tool === 'delegate' ? '#665f7d' : '#4d6b6e',
-          bright: c.tool === 'delegate' ? '#a08fc9' : '#7fb3b8',
-          kind: c.tool || 'tool',
-        });
-      }
-    });
-    // Live delegation producers still open — leading edge to last seq.
-    // Park deliberately excluded: an unterminated park stays a dot,
-    // not a bar smeared across the rest of the session.
-    for (const inst of Object.keys(_producerStarts)) {
-      const st = _producerStarts[inst];
-      if (st.kind === 'model') continue;
-      spansByKind.delegation.push({ start: st.seq, end: _lastSeq, color: '#4d6b6e', bright: '#7fb3b8', kind: st.kind });
-    }
-    if (_parkOpen !== null) {
-      spansByKind.external.push({ start: _parkOpen, end: _parkOpen, color: '#3d5166', bright: '#82a5c8', kind: 'park' });
-    }
-    // Fixed three-lifeline shape: model / delegate / external. No
-    // sub-track packing — overlapping spans stack in the same lane
-    // cell. Sub-track expansion under real concurrency remains a
-    // design option (D29) but the daily-driver session topology
-    // reads cleaner without it.
-    // UI sprint 155: app view hides plumbing rows, not spans; a row it keeps draws its lanes as
-    // all view does, so a user message inside a producer span keeps its delegate cell.
-    const laneDefs = [
-      { kind: 'model', label: 'model' },
-      { kind: 'delegation', label: 'delegate' },
-      { kind: 'external', label: 'external' },
-    ].map(ld => ({
-      ...ld,
-      spans: (spansByKind[ld.kind] || []).slice().sort((a, b) => a.start - b.start),
-    }));
-    const kindOf = (e) => {
-      // Three lifelines: model / delegate / external. Every envelope
-      // belongs to one. A row's "own kind" decides which lane cell
-      // renders bright.
-      const pkind = (e.payload && e.payload.kind) || '';
-      if (_isReturnProducer(pkind) || _isTurnEnd(e.kind)) return 'external';
-      if (e.kind === EnvelopeKind.UserMessage) return 'external';
-      if (e.kind === EnvelopeKind.ToolCall || e.kind === EnvelopeKind.ToolResult) return 'delegation';
-      if (pkind && pkind !== 'model') return 'delegation';
-      if (e.kind === 'TriggerFired') {
-        const starts = e.payload && e.payload.starts;
-        if (_isReturnProducer(starts)) return 'external';
-        if (starts && starts !== 'model') return 'delegation';
-      }
-      return 'model';
-    };
-    // message connectors (sequence-diagram arrows): ToolCall = model→tool, ToolResult = tool→model,
-    // TriggerFired / UserMessage = runtime stub into the lane it starts.
-    const laneIdx = {}; laneDefs.forEach((ld, i) => { if (laneIdx[ld.kind] === undefined) laneIdx[ld.kind] = i; });
-    const cx = (i) => i * 12 + 4;
-    // Which UserMessage seqs close an open park? Precomputed so the
-    // return arrow can render on that row.
-    const _closesPark = new Set(spansByKind.external.map(sp => sp.end).filter(s => s !== undefined));
-    const connFor = (e) => {
-      // ToolCall = model → delegation. Dot lands on the delegation lane.
-      if (e.kind === EnvelopeKind.ToolCall) {
-        const a = cx(laneIdx.model), b = cx(laneIdx.delegation);
-        return { c: e.payload.tool === 'delegate' ? '#a08fc9' : '#7fb3b8', l: Math.min(a, b), w: Math.abs(b - a), dot: b };
-      }
-      // ToolResult = delegation → model return.
-      if (e.kind === EnvelopeKind.ToolResult) {
-        const a = cx(laneIdx.delegation), b = cx(laneIdx.model);
-        return { c: '#7fb3b8', l: Math.min(a, b), w: Math.abs(b - a), dot: b };
-      }
-      // TriggerFired(starts=park) = model → park (tool_loop shape).
-      // Every other TriggerFired keeps the runtime-stub arrow.
-      if (e.kind === 'TriggerFired') {
-        const starts = e.payload && e.payload.starts;
-        if (_isReturnProducer(starts)) {
-          const a = cx(laneIdx.model), b = cx(laneIdx.external);
-          return { c: '#82a5c8', l: Math.min(a, b), w: Math.abs(b - a), dot: b };
-        }
-        const laneName = (starts && starts !== 'model') ? 'delegation' : 'model';
-        const b = cx(laneIdx[laneName]);
-        return { c: '#c9a0b8', l: 0, w: b, dot: b };
-      }
-      // UserMessage closing a park = park → model return arrow.
-      // A UserMessage with no open park is the user → model stub.
-      if (e.kind === EnvelopeKind.UserMessage) {
-        if (_closesPark.has(e.seq)) {
-          const a = cx(laneIdx.external), b = cx(laneIdx.model);
-          return { c: '#82a5c8', l: Math.min(a, b), w: Math.abs(b - a), dot: b };
-        }
-        const b = cx(laneIdx.model);
-        return { c: '#88b0d0', l: 0, w: b, dot: b };
-      }
-      // ProducerCompleted for a non-model producer = delegation → model
-      // return arrow. Model's own ProducerCompleted stays a lifeline dot.
-      if (e.kind === 'ProducerCompleted') {
-        const pkind = (e.payload && e.payload.kind) || '';
-        if (pkind && pkind !== 'model' && !_isReturnProducer(pkind)) {
-          const a = cx(laneIdx.delegation), b = cx(laneIdx.model);
-          return { c: '#7fb3b8', l: Math.min(a, b), w: Math.abs(b - a), dot: b };
-        }
-        const b = cx(laneIdx.model);
-        return { c: '#82a5c8', l: b, w: 0, dot: b };
-      }
-      // FinalAnswer, SessionEnded = moments on the model lifeline.
-      if (e.kind === EnvelopeKind.FinalAnswer || e.kind === EnvelopeKind.SessionEnded) {
-        const b = cx(laneIdx.model);
-        return { c: '#82a5c8', l: 0, w: b, dot: b };
-      }
-      // Park envelope = the await moment inside the open park span.
-      // Dot only, no line — the arrow lives on TriggerFired and on the
-      // UserMessage that closes it.
-      if (_isTurnEnd(e.kind)) {
-        const b = cx(laneIdx.external);
-        return { c: '#82a5c8', l: b, w: 0, dot: b };
-      }
-      return null;
-    };
+    const spansByKind = streamSpans(envelopes);
+    const laneDefs = LANES.map(ld => ({ ...ld, spans: spansByKind[ld.kind] }));
+    // The message that ends a wait draws the return arrow.
+    const _closesPark = new Set(spansByKind.external.map(sp => sp.end));
     const events = shownEV.map(e => {
-      const ownKind = kindOf(e);
-      const conn = connFor(e);
+      const conn = connector(e, _closesPark);
       return {
         hasConn: !!conn, connL: conn ? conn.l : 0, connW: conn ? Math.max(conn.w, 2) : 0, connC: conn ? conn.c : 'transparent', dotL: conn ? conn.dot : 0,
-        seq: e.seq, t: formatElapsedTimeForSeq(e.seq), kind: e.kind, pl: e.prod + ' · ' + e.gist, kindColor: envelopeKindColor[e.kind] || '#9aa0a8',
+        seq: e.seq, t: formatElapsedTimeForSeq(e.seq), kind: e.kind, pl: e.prod + ' · ' + e.gist, kindColor: KIND_COLOR[e.rawKind] || '#9aa0a8',
         rowOp: (FSTREAM && findQuery) ? ((e.kind + ' ' + e.prod + ' ' + e.gist).toLowerCase().includes(findQuery) ? 1 : 0.3) : 1,
         sel: e.seq === state.sel, rowBg: e.seq === state.sel ? '#2e3138' : ((FSTREAM && findQuery && (e.kind + ' ' + e.prod + ' ' + e.gist).toLowerCase().includes(findQuery)) ? '#26292e' : 'transparent'),
-        laneCells: laneDefs.map(ld => {
-          const sp = ld.spans.find(s => s.start <= e.seq && e.seq <= s.end);
-          return { bg: sp ? (ld.kind === ownKind ? sp.bright : sp.color) : 'transparent' };
-        }),
+        laneCells: laneCells(e, spansByKind).map(bg => ({ bg })),
         pick: () => this.setState(s => ({ sel: s.sel === e.seq ? null : e.seq })),
       };
     });
@@ -1434,40 +1136,7 @@ class Component extends DCLogic {
     // per delegate child (labelled `⑂ <name>`), plus the model span
     // and any park events. Every row is a real segment; no hardcoded
     // demo seqs.
-    const _sideLanes = [];
-    if (spansByKind.model.length) {
-      _sideLanes.push({
-        label: 'model', color: '#82a5c8',
-        segs: spansByKind.model.map(sp => segOf(sp.start, sp.end + 0.6, sp.bright, sp.start)),
-      });
-    }
-    const _toolsByName = new Map();
-    envelopes.forEach(e => {
-      if (e.kind === EnvelopeKind.ToolResult) {
-        const c = _calls[e.payload.call_id];
-        if (!c) return;
-        const name = c.tool || 'tool';
-        const list = _toolsByName.get(name) || [];
-        list.push({ start: c.start, end: e.seq, delegate: c.tool === 'delegate' });
-        _toolsByName.set(name, list);
-      }
-    });
-    for (const [name, spans] of _toolsByName) {
-      const isDelegate = name === 'delegate';
-      _sideLanes.push({
-        label: isDelegate ? '⑂ delegate' : name,
-        color: isDelegate ? '#a08fc9' : '#7fb3b8',
-        segs: spans.map(sp => segOf(sp.start, sp.end + 0.6, isDelegate ? '#665f7d' : '#4d6b6e', sp.start)),
-      });
-    }
-    const _parkSeqs = envelopes.filter(e => _isTurnEnd(e.kind)).map(e => e.seq);
-    if (_parkSeqs.length) {
-      _sideLanes.push({
-        label: 'returned', color: '#82a5c8',
-        segs: _parkSeqs.map(seq => segOf(Math.max(0, seq - 0.5), seq + 0.6, '#82a5c8', seq)),
-      });
-    }
-    const sideLanes = _sideLanes;
+    const sideLanes = streamSideLanes(envelopes, spansByKind).map(l => ({ label: l.label, color: l.color, segs: l.segs.map(sg => segOf(sg.from, sg.to, sg.base, sg.seq)) }));
     const modes = [['stream', 'stream+graph'], ['io', 'i/o'], ['structure', 'structure'], [GraphMode.Language, 'language'], ['scene', 'scene']];
     // Direction (down/side) is a property of the stream lens; the
     // io/structure/scene lenses render their own layouts and the
@@ -1683,7 +1352,7 @@ class Component extends DCLogic {
       sideColor: state.dir === GraphDirection.Side ? '#d7dade' : '#62676f', sideBg: state.dir === GraphDirection.Side ? '#2e3138' : 'transparent',
       selSeq: selE ? selE.seq : 0, selKind: selE ? selE.kind : '', selSchema: selE ? selE.schema : '',
       selTime: selE ? describeEventTime(_eventTimes.get(selE.seq)) : '', selProducer: selE ? selE.prod : '',
-      selColor: selE ? (envelopeKindColor[selE.kind] || '#9aa0a8') : '#9aa0a8',
+      selColor: selE ? (KIND_COLOR[selE.rawKind] || '#9aa0a8') : '#9aa0a8',
       selContent: selE ? selE.content : [], selPayload: selE ? JSON.stringify(selE.payload, null, 1) : '',
       // IO lens: the application-visible input/output documents on
       // the record, in seq order. Always real; empty when no session
