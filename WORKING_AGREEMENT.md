@@ -61,7 +61,7 @@
 *No additions without surfacing per AGENTS.md.*
 
 - **Backend:** Python standard library + `msgspec` + `substrate`. No web framework.
-- **Frontend:** TypeScript built by Vite; React 18 from the CDN as UMD globals (dc-runtime reads `window.React`), imported through `web/shims/`. Dev dependencies are pinned in `package.json`: electron, electron-builder, @electron/notarize, typescript, vite, tsx, eslint with typescript-eslint, playwright, pixelmatch (the pixel gate, sprint 194), @types/node, @types/react, @types/react-dom.
+- **Frontend:** TypeScript built by Vite; React 18.3.1 and ReactDOM 18.3.1 in `dependencies`, loaded as UMD globals from `./vendor/` with `integrity` hashes (dc-runtime reads `window.React`; sprint 199), imported through `web/shims/`. Dev dependencies are pinned in `package.json`: electron, electron-builder, @electron/notarize, typescript, vite, tsx, eslint with typescript-eslint, playwright, pixelmatch (the pixel gate, sprint 194), jsdom (the DOM for unit specs of mounted components, sprint 206), @types/jsdom, @types/node, @types/react, @types/react-dom.
 
 ---
 
