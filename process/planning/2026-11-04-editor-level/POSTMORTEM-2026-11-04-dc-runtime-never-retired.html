@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.10.1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>Post-mortem: the shell still runs on dc-runtime</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+  <link rel="stylesheet" href="data:text/css,body{max-width:960px;margin:2em auto;font:15px/1.6 -apple-system,sans-serif;padding:0 1em}table{border-collapse:collapse}td,th{border:1px solid %23ccc;padding:4px 8px;vertical-align:top}code{font-size:90%25}" />
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">Post-mortem: the shell still runs on dc-runtime</h1>
+</header>
+<h1 id="post-mortem-the-shell-still-runs-on-dc-runtime">Post-mortem: the
+shell still runs on dc-runtime</h1>
+<p><em>2026-11-04. The plan to move the window off the design
+prototype’s runtime was written, approved and never run. This document
+states what the app is, how it ships, what happened to the plan, and
+why.</em></p>
+<h2 id="what-the-app-is">What the app is</h2>
+<p>The main window is the design prototype, not a React codebase.
+<code>web/reveal.html</code> (563 lines) is a dc-runtime template: HTML
+with <code>{{ }}</code> bindings and <code>&lt;sc-if&gt;</code> /
+<code>&lt;sc-for&gt;</code> blocks. <code>web/reveal_component.ts</code>
+(2,576 lines, <code>@ts-nocheck</code>) is one <code>DCLogic</code>
+class whose <code>renderVals()</code> returns every value the template
+reads. <code>web/public/support.js</code> (1,913 lines) is dc-runtime
+itself: it turns the template into <code>React.createElement</code>
+calls and evaluates the class with <code>new Function</code>. Its first
+line reads “GENERATED from dc-runtime/src/*.ts — do not edit”; neither
+repo holds that source (lens audit F343), and its checksum
+(<code>dac4ecfc…</code>) differs from the handoff’s copy
+(<code>951ae391…</code>). Only the transcript,
+<code>web/reveal/transcript/*.tsx</code>, is written as React
+components; <code>web/reveal.ts</code> mounts it into empty divs and
+reaches the dc-runtime component through React’s private fiber fields
+(F334).</p>
+<h2 id="how-it-is-built-and-shipped">How it is built and shipped</h2>
+<ol type="1">
+<li><code>npm run build</code> runs <code>tsc --noEmit</code>, eslint
+and <code>vite build</code>. Vite’s <code>inlineDcScript</code> plugin
+compiles <code>reveal_component.ts</code> with esbuild and pastes it
+into <code>reveal.html</code>; <code>includePartials</code> inlines the
+two partials; <code>reveal.ts</code> and the transcript bundle into
+<code>web/dist/assets/reveal-*.js</code>; <code>support.js</code> copies
+from <code>web/public/</code> to <code>web/dist/</code>.</li>
+<li>electron-builder packs <code>web/dist/**</code> into
+<code>Contents/Resources/app.asar.unpacked/web/dist/</code>
+(<code>electron-builder.config.js:44–58</code>).</li>
+<li>At launch, Electron main starts the bundled Python, which runs
+<code>server.py</code>. <code>server.py</code> serves
+<code>web/dist/</code> when it exists (<code>server.py:1969–1974</code>)
+on <code>127.0.0.1:&lt;port&gt;</code>, and the window loads
+<code>/?atom-transcript=1&amp;electron=1</code>
+(<code>electron/main.js:379</code>).</li>
+<li>The page then fetches React 18.3.1 and ReactDOM from
+<code>cdnjs.cloudflare.com</code>, with no <code>integrity</code> hash,
+before <code>support.js</code> runs. No Content-Security-Policy exists.
+The installed app (<code>/Applications/Substrate.app</code>,
+CFBundleVersion 1793161234) carries the same four script tags and no CSP
+(F320).</li>
+</ol>
+<h2 id="what-happened-to-the-plan">What happened to the plan</h2>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>Date</th>
+<th>Event</th>
+<th>Record</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>2026-08-31</td>
+<td>The design spec says production lifts the one-file prototype “into a
+typed React codebase”</td>
+<td><code>DESIGN-SPEC-2026-08-31-round4.md</code>, line 64</td>
+</tr>
+<tr>
+<td>2026-09-12</td>
+<td>The port mounts prototype v7 with its runtime and wires real data
+into it</td>
+<td>commit <code>43e95fb</code>;
+<code>process/planning/2026-09-10-prototype-port/DIRECTION-2026-09-12.md</code></td>
+</tr>
+<tr>
+<td>2026-09-23</td>
+<td>Five caret fixes fail; the audit names dc-runtime “a local optimum”
+and moving off it “the correct long-term posture”</td>
+<td><code>process/planning/2026-09-23-reveal-shell-hardening/AUDIT-2026-09-23-dc-runtime-local-optimum.md</code></td>
+</tr>
+<tr>
+<td>2026-09-23 to 09-24</td>
+<td>Phase 8 moves the transcript alone to React</td>
+<td>sprints 070–076; commit <code>f2cd28d</code></td>
+</tr>
+<tr>
+<td>2026-10-08</td>
+<td>The lens audit plans the full move as sprint 112, “Retire
+dc-runtime”, 37 findings; the Architect approves it “only if you don’t
+break anything”</td>
+<td><code>process/planning/2026-10-08-lens-audit/ROADMAP-2026-10-08-lens-audit-remediation.md</code>,
+item 13;
+<code>process/sprints/sprint-112-retire-dc-runtime.md</code></td>
+</tr>
+<tr>
+<td>2026-10-08</td>
+<td>Sprints 108–111 of that roadmap close; 112 and 113 stay
+<code>pending</code></td>
+<td>the six cards’ <code>status:</code> lines</td>
+</tr>
+<tr>
+<td>2026-10-09 onward</td>
+<td>Work turns to defects found in the installed app (U114–U119), then
+to new roadmaps: harness drivers and the model picker (10-10), before
+distribution (10-11), slash entry (10-12), language (10-13). Each adds
+UI to the dc-runtime files.</td>
+<td><code>BLACKBOARD.md</code>;
+<code>process/planning/README.md</code></td>
+</tr>
+<tr>
+<td>2026-10-08 to 11-04</td>
+<td>35 commits touch <code>reveal_component.ts</code> or
+<code>reveal.html</code>; the class grows from 2,407 to 2,576 lines</td>
+<td><code>git log --since=2026-10-08</code></td>
+</tr>
+<tr>
+<td>2026-11-04</td>
+<td>Eight rounds of research on new views assume they mount inside
+dc-runtime</td>
+<td><code>RESEARCH-2026-11-04-editor-level-and-modes*.md</code> in this
+folder</td>
+</tr>
+</tbody>
+</table>
+<p>No entry on <code>BLACKBOARD.md</code> defers, drops or reschedules
+sprint 112. The planning index still lists the lens audit as “open: its
+roadmap has not closed”.</p>
+<h2 id="why">Why</h2>
+<ol type="1">
+<li><strong>Sprint 112 sat last in its roadmap, and the roadmap stopped
+before it.</strong> Items 1–12 closed on 2026-10-08. The next morning’s
+work came from defects found in the installed app, and no step put 112
+back in line.</li>
+<li><strong>The switch went unrecorded.</strong> The kit asks that a
+put-off item get a <code>deferred</code> entry with a condition for
+coming back to it (<code>sdd-kit-3/AGENTS.md</code>, “The BLACKBOARD
+protocol”). Sprint 112 got none, so no later session saw it
+waiting.</li>
+<li><strong>Every later UI sprint enlarged what 112 has to
+move.</strong> Its 37 findings were written against 2,407 lines; 169
+lines and 35 commits have landed since. The Architect’s condition, “only
+if you don’t break anything”, is measured by gates, and the Electron
+gate list has grown to 45.</li>
+<li><strong>This session read past it.</strong> The runbook names
+<code>process/planning/2026-10-08-lens-audit/</code> as an open folder
+to read in full (<code>RUNBOOK-2026-10-29-project-r6.md</code>, “The
+current direction”). The research rounds were written before that folder
+was read, so they planned new views on a runtime already scheduled for
+removal.</li>
+</ol>
+<h2 id="the-plan-now-in-force">The plan now in force</h2>
+<p>Sprint 112, under the lens-audit roadmap of 2026-10-08, is the most
+recent plan for the window’s runtime. Its work: the shell becomes typed
+TSX with no <code>@ts-nocheck</code>; React is bundled; a CSP without
+<code>unsafe-eval</code> and without remote origins is added;
+<code>support.js</code> is deleted; no fiber walks remain; fixture text
+is removed, and controls are wired where an endpoint exists and removed
+where none does. Its check: the baseline gates recorded under sprint 108
+pass again, the in-scope flows’ DOM checks pass, and
+<code>npm run smoke:packaged</code> passes on a fresh bundle. Sprint
+113, packaging and vocabulary (7 findings), follows it.</p>
+<p>The new views from sheet turns 16–17 wait for sprint 112. They are
+built as typed React components in the window sprint 112 produces, not
+as islands inside dc-runtime.</p>
+</body>
+</html>

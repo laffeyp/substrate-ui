@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.10.1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>Editor view and planning, round 9</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+  <link rel="stylesheet" href="data:text/css,body{max-width:1000px;margin:2em auto;font:15px/1.6 -apple-system,sans-serif;padding:0 1em}table{border-collapse:collapse}td,th{border:1px solid %23ccc;padding:4px 8px;vertical-align:top}code{font-size:90%25}" />
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">Editor view and planning, round 9</h1>
+</header>
+<h1
+id="new-views-in-substrate-ui-the-editor-view-and-planning-round-9">New
+views in substrate-ui: the editor view and planning (round 9)</h1>
+<p><em>2026-11-05, round 9. Rounds 1–8 are in this folder, unchanged.
+Round 8 researched sheet turns 16 and 17 of checkpoint 6. The design
+side has since sent checkpoint 7
+(<code>design/received/handoff 5/</code>), and turns 24 and 25 replace
+16 and 17 as the target (<code>BLACKBOARD.md</code>, <code>user</code>
+entry of 2026-11-05). Round 9 states what the new turns change in the
+views, in the build order, in the move off dc-runtime, and in the
+research each view finishes before its cards. What round 8 settled and
+turns 24–25 leave alone stands as round 8 wrote it: the terminal, the
+libraries, the record rules, the thirteen questions, the principles
+from</em> A Philosophy of Software Design.</p>
+<p><em>Design input: <code>design/received/handoff 5/README.md</code>;
+<code>docs/DESIGN-SPEC -2026-11-04- r6.md</code> (sections 0, 4, 5, 6.1,
+8, 9); <code>docs/DESIGN-DECISIONS -through 2026-11-04-.md</code>
+(D81–D94);
+<code>docs/EDITOR-INSPECTOR-PLAN-RATIONALE -2026-11-04-.md</code>;
+<code>docs/PLANNING-TOOLS-FEATURE-ANALYSIS -2026-11-04- r2.md</code>;
+each read in full. Of sheet v11, the captions of turns 24 and 25 were
+read; the 2,432 lines of frame text under them were extracted and not
+read line by line.</em></p>
+<h2 id="what-changed">What changed</h2>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>Round 8, from turns 16–17</th>
+<th>Turns 24–25</th>
+<th>What it changes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A code editor whose right panel is meta’s lenses</td>
+<td>The right column is an inspector for the open file’s type; the
+record’s lenses open in that column with
+⌃⇧<code>, widened to 400px (D81) | The code editor gets an inspector, new work. The lenses must draw in a 400px column as well as in meta's right half. | | Seven views, one per kind of file | One editor view with modes: code, documents, images, video, audio, design, and a plain shell tab (spec 5) | The media and design editors become modes of the editor view, opened from its file tree, each with its own inspector. Each still gets its own research, in the same order. | | No common inspector | Every inspector ends in ACTIVITY, HISTORY and INFO; text modes add find and replace (D82, D85) | One spine module, built with the code editor and reused by every mode. | | Left: a file tree | Left: tabs files · search · open · activity; quick open ⌘P; workspace search and replace ⌘⇧F (D82) | Four left tabs and quick open, not one tree. Replace-all writes files, so it is an edit and goes on the record. | | Turn 17: contextual modes | Turn 25: planning, a surface on ⌘4 (D89) | A new surface beside records, studio and assays, with its own research. | | The prompt in the code editor's bottom panel | The prompt in every view, surfaces included (D90) | Records, studio and assays draw over panes and meta today and hide the input bar (</code>reveal_component.ts:2265<code>). Each must show it. | | Edits go on the record | The view moves as each tool runs: ToolCall, ToolProgress, ToolResult (D93); a view action with no tool behind it is a gap (D92) | Two new questions per view: how the view follows the session's tool calls, and which tool backs each action. | | Comment pins in the design canvas | Any view adds a thing to the next message as a chip: a file, a line range, an image region, a time range, a card, a record event by seq (D94) | The attachment field on</code>UserMessage`
+(round 8, shared item 0(e)) serves every view, panes and meta included,
+and moves earlier.</td>
+<td></td>
+</tr>
+<tr>
+<td>AU plugin hosting left out</td>
+<td>The audio inspector’s effects chain lists plugins scanned on the
+machine, naming AUNBandEQ, AUDynamicsProcessor, AUPeakLimiter (spec
+5)</td>
+<td>Back in scope with the audio mode. Its research names the native
+host, since neither Electron nor the bundled Python can run an Audio
+Unit.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Names.</strong> The handoff calls the record view “reveal” on
+⌃<code>. The app's name for it is meta, on ⌘M (Architect, 2026-10-11 and 2026-11-04). The new keys stand as drawn: ⌘⇧E editor; ⌘1–⌘4 records · studio · assays · planning; ⌃⇧</code>
+the editor’s right column; ⌘P quick open; ⌘⇧F workspace search; ⌘B build
+a card; ⌘⇧T plain shell tab. Each view binds its own keys while open, so
+the video mode’s ⌘E export and the window’s ⌘E (all tool output) do not
+meet.</p>
+<h2 id="what-the-record-already-supplies">What the record already
+supplies</h2>
+<p>The inspector’s spine reads the session’s record. Most of what it
+shows is there today.</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>Inspector part</th>
+<th>Source</th>
+<th>Today</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ACTIVITY, session reads and writes</td>
+<td><code>ToolCall</code> rows for <code>read_file</code>,
+<code>edit_file</code>, <code>write_file</code>, each with a
+<code>path</code> argument
+(<code>tool_loop/tools.py:729–738</code>)</td>
+<td>Present. A pure module over the envelopes the stream lens already
+holds lists, per path, each turn and seq.</td>
+</tr>
+<tr>
+<td>ACTIVITY, <code>bash</code></td>
+<td>A <code>bash</code> call’s argument is a command string; its files
+are not named apart from it</td>
+<td>Listed only where the command contains the path as written, and
+labelled as a text match.</td>
+</tr>
+<tr>
+<td>HISTORY, session edits</td>
+<td><code>edit_file</code> arguments carry the old and new text;
+<code>write_file</code> the whole file</td>
+<td>Present.</td>
+</tr>
+<tr>
+<td>HISTORY, edits made in the view</td>
+<td>The edit event that round 8’s kernel addition writes (shared item
+0(d))</td>
+<td>Absent until 0(d).</td>
+</tr>
+<tr>
+<td>HISTORY, step back</td>
+<td>—</td>
+<td>Stepping back writes the earlier text as a new edit. The record is
+append-only, so nothing is undone in it; the step itself is a history
+row with its author.</td>
+</tr>
+<tr>
+<td>CHANGES IN THIS FILE, by hunk with author and seq</td>
+<td><code>/api/worktree_diff</code> for session worktrees only
+(<code>server.py:2009</code>); no session gets a worktree today
+(U154)</td>
+<td>Absent for flat and sandbox workspaces. A hunk’s author is the
+latest edit, session or view, whose new text covers it. The code
+editor’s research settles the base a flat or sandbox workspace is diffed
+against.</td>
+</tr>
+<tr>
+<td>Live follow</td>
+<td><code>ToolProgress</code> comes only from <code>bash</code>
+(<code>tools.py:117–128</code>, <code>:484</code>).
+<code>edit_file</code> and <code>write_file</code> state the change in
+the ToolCall’s arguments.</td>
+<td>The editor opens the file and marks the change at ToolCall and
+confirms it at ToolResult. A media mode redraws at a <code>bash</code>
+ToolResult. Nothing new is needed in the kernel.</td>
+</tr>
+<tr>
+<td>INFO</td>
+<td>The workspace file API (shared item 0(c)): size, modified, encoding,
+line endings; ffprobe for media</td>
+<td>Absent until 0(c).</td>
+</tr>
+</tbody>
+</table>
+<h2 id="planning-turn-25">Planning (turn 25)</h2>
+<p><strong>What it is.</strong> A surface on ⌘4 that shows a plan as six
+files, each drafted by the session from the one before and approved
+before the next: a roadmap, requirements, a breakdown with estimates,
+sprint cards, and a board over the cards’ statuses (D89; the planning
+research, section 1). The board holds nothing of its own. Dragging a
+card writes its frontmatter. ⌘B asks the focused session to call
+<code>build(card_file=)</code>; the run opens in its own pane (U182); a
+card’s status changes only when the Architect closes it.</p>
+<p><strong>What exists.</strong>
+<code>build(task, files?, read_first?, notes?, card?, card_file?)</code>
+(K332;
+<code>substrate/src/substrate/topologies/runs/build.py:118–128</code>)
+reads a card file inside the workspace and refuses one outside it. Run
+panes exist (U182). Cards here carry <code>id</code>,
+<code>status</code>, <code>phase</code>, <code>pass_kind</code> in their
+frontmatter (<code>process/sprints/</code>).</p>
+<p><strong>What it lacks.</strong></p>
+<ul>
+<li><em>Where plans live.</em> D89 puts a plan under
+<code>planning/&lt;plan&gt;/</code> as <code>ROADMAP.md</code>,
+<code>REQUIREMENTS.md</code>, <code>BREAKDOWN.md</code> and its cards.
+This repository keeps plans in
+<code>process/planning/&lt;date&gt;-&lt;topic&gt;/</code> as versioned
+rounds and cards in <code>process/sprints/</code>, one flat folder. The
+planning research decides whether the surface reads both layouts or the
+kit’s layout changes.</li>
+<li><em>Estimates, rank, epic, requirements met, assignee.</em> The
+kit’s card template (<code>sdd-kit-3/templates/SPRINT_CARD.md</code>)
+has none of them. Adding them changes the kit, so it is recorded as a
+kit change, outside this repository.</li>
+<li><em>Requirements and breakdown files.</em> No plan here has either;
+plans hold design, order of work and decisions.</li>
+<li><em>The board’s edits.</em> A drag writes a file, so it goes on the
+record through shared item 0(d).</li>
+<li><em>Jira.</em> A site and a token are an account and a credential, a
+question only the Architect answers. The mirror is out of the first
+cut.</li>
+</ul>
+<h2 id="rules-for-every-view-added">Rules for every view, added</h2>
+<p>Round 8’s rules stand: each view shows the record and the workspace
+and writes only to them; the record check and the import check; every
+edit goes on the record; one <code>view</code> tag per record event
+shown. Turns 24–25 add four.</p>
+<ul>
+<li><strong>The prompt is in every view</strong> (D90). The input bar
+and the focused session’s transcript, or the transcript’s sill, appear
+in each view and each surface.</li>
+<li><strong>Each action has a tool</strong> (D92). An action the session
+cannot take through a tool gets a kernel card for the tool, or is
+labelled as by hand only.</li>
+<li><strong>The view follows the tools</strong> (D93). Each ToolCall,
+ToolProgress and ToolResult moves the view. When the person is reading
+something else, the change is marked where it happened, a dot or an
+Activity row, and the view stays put.</li>
+<li><strong>Anything can go to the next message</strong> (D94). ⌥-click,
+drag or Add to message makes a chip naming the thing; it travels with
+the next <code>UserMessage</code> and lands in the record with it.</li>
+</ul>
+<h2 id="the-research-questions-added">The research questions, added</h2>
+<p>Round 8’s thirteen questions stand. Two are added, and two are
+widened.</p>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+</colgroup>
+<thead>
+<tr>
+<th>#</th>
+<th>Question</th>
+<th>Answer form</th>
+<th>Passes when</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1 (widened)</td>
+<td>What does the view show, and what can it do?</td>
+<td>Round 8’s table, with one row per inspector section and per left
+tab</td>
+<td>No row maps to neither a record event nor a workspace file</td>
+</tr>
+<tr>
+<td>3 (widened)</td>
+<td>How does the session do the same job?</td>
+<td>For each action, the session tool that does it, or “by hand only”
+with the reason</td>
+<td>The view and the tool call one function and write one event kind;
+each “by hand only” names its kernel card or its reason</td>
+</tr>
+<tr>
+<td>14</td>
+<td>How does the view follow the session’s tools?</td>
+<td>For each tool the session uses on this view’s files: which of
+ToolCall, ToolProgress and ToolResult moves the view, and what
+moves</td>
+<td>A gate drives a session tool call and sees the view move; with the
+person reading another file, it sees the mark and no jump</td>
+</tr>
+<tr>
+<td>15</td>
+<td>What can be added to the message?</td>
+<td>Each thing the view can hand to the prompt, its chip text, and the
+attachment it becomes</td>
+<td>A gate adds each, sends, and finds the attachment in the record’s
+<code>UserMessage</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="order-of-work">Order of work</h2>
+<p>Round 8’s order stands with three changes. The add-to-message
+attachment moves into the shared work, since every view needs it. The
+inspector spine is built with the code editor. Planning is added after
+the document editor, which it uses for cards.</p>
+<p><strong>Before any of it: the move off dc-runtime</strong>
+(<code>process/planning/2026-11-04-shell-to-react/</code>). Each new
+view is a React component under <code>web/app/</code>, and none is added
+to <code>reveal_component.ts</code>. Turns 24–25 add two constraints to
+that move, and change neither its order nor its count of sprints:</p>
+<ul>
+<li>The input bar and transcript components take the pane they serve as
+a prop, so a view or a surface can mount them anywhere (D90).</li>
+<li>The lens components take their width from their container, so they
+draw in meta’s right half and in the editor’s 400px column (D81).</li>
+</ul>
+<p>The store’s open-view field takes the values pane, meta, editor and
+the four surfaces, so ⌘1–⌘4 and ⌘⇧E each set one value.</p>
+<p><strong>0. Shared work, done once.</strong></p>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+</colgroup>
+<thead>
+<tr>
+<th>Item</th>
+<th>What</th>
+<th>Where</th>
+<th>Needs</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0(a)</td>
+<td>One field for the open view, replacing <code>revealed</code> and
+<code>surface</code>; the key handler passes keys to the open view
+first</td>
+<td>substrate-ui</td>
+<td>the move’s store</td>
+</tr>
+<tr>
+<td>0(b)</td>
+<td>The widget registry; a test that a CodeMirror editor keeps its undo
+history and cursor through a re-attach</td>
+<td>substrate-ui</td>
+<td>the move’s mount registry</td>
+</tr>
+<tr>
+<td>0(c)</td>
+<td>The workspace file API: list, read, write, watch, each held to its
+workspace</td>
+<td>substrate-ui <code>server.py</code></td>
+<td>—</td>
+</tr>
+<tr>
+<td>0(d)</td>
+<td>One kernel call that appends an edit event to a session’s record
+during a turn or between turns; the edit event kinds</td>
+<td>substrate</td>
+<td>—</td>
+</tr>
+<tr>
+<td>0(e)</td>
+<td>Attachments on <code>UserMessage</code>, one shape for every view’s
+chips (D94); images sent to the model</td>
+<td>substrate</td>
+<td>—</td>
+</tr>
+<tr>
+<td>0(f)</td>
+<td>Two pane kinds, <code>SessionPane</code> and
+<code>ShellPane</code></td>
+<td>substrate-ui</td>
+<td>—</td>
+</tr>
+<tr>
+<td>0(g)</td>
+<td>The input bar in every surface (D90)</td>
+<td>substrate-ui</td>
+<td>the move’s input bar component</td>
+</tr>
+<tr>
+<td>0(h)</td>
+<td>Chips in the input bar; meta’s stream rows and panes’ transcript
+offer “add to message” first, since both exist today</td>
+<td>substrate-ui</td>
+<td>0(e)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>1. The editor view, code mode.</strong> Three columns and the
+bottom panel: left tabs files · search · open · activity; CodeMirror 6
+with vim and nano bindings in the centre; the inspector right (outline,
+changes in this file, find and replace, then the spine); the transcript
+and input bar below; ⌃⇧` swaps the inspector for the lenses. Quick open
+⌘P. Each column collapses to a labelled rail; the terminal docks bottom
+or right. In the order it is built:</p>
+<ol type="1">
+<li>The view shell: ⌘⇧E, View ▸ Editor, the columns and rails, the
+transcript and input bar below.</li>
+<li>The file tree and the open tab, over 0(c), with change dots.</li>
+<li>The editor: CodeMirror 6, vim and nano, save through 0(c) and
+0(d).</li>
+<li>The spine: ACTIVITY from ToolCall arguments, HISTORY from session
+edits and 0(d)’s events, INFO from 0(c).</li>
+<li>Live follow (question 14): the session’s <code>edit_file</code>
+opens the file and marks the change.</li>
+<li>Changes in this file, once the base for flat and sandbox workspaces
+is chosen.</li>
+<li>Find and replace in the file; the search tab; quick open.</li>
+<li>⌃⇧` and the lenses in the right column.</li>
+<li>Chips from the editor: file, folder, line range (question 15).</li>
+</ol>
+<p><strong>2. The collection.</strong> As round 8: SQLite (D66), no save
+command (D68), sprint 044’s empty-pane rule. It now also saves per-mode
+column widths, the dock side and collapsed rails (spec 5.1).</p>
+<p><strong>3. Plain shell.</strong> As round 8, opened as a tab beside
+the transcript with ⌘⇧T.</p>
+<p><strong>4. Document mode.</strong> As round 8, plus its inspector:
+outline, paragraph styles, selection formatting, document facts. The
+byte-diff test still decides between source-backed and tree-backed
+editing; paragraph styles applied in a source-backed editor write
+markdown markup, and the test covers each style.</p>
+<p><strong>5. Planning.</strong> Uses document mode for cards and
+roadmaps, 0(d) for board drags, and <code>build(card_file=)</code> for
+⌘B. Its research starts with where plans live and the kit change for
+estimates.</p>
+<p><strong>6–9.</strong> Image mode, design mode, video mode, audio
+mode, in round 8’s order, each with its inspector from spec 5 and
+questions 14 and 15. Audio’s research includes Audio Unit hosting.</p>
+<h2 id="open">Open</h2>
+<ul>
+<li>Where plans live: the kit’s <code>process/planning/</code> and
+<code>process/sprints/</code>, or D89’s
+<code>planning/&lt;plan&gt;/</code>.</li>
+<li>The diff base for “changes in this file” in flat and sandbox
+workspaces.</li>
+<li>The Jira mirror needs a site and a token from the Architect; it
+waits for that.</li>
+<li>Edits made between turns stay off the record until 0(d) lands, as
+round 8 said.</li>
+</ul>
+<h2 id="sources">Sources</h2>
+<p>Local, beyond round 8’s: <code>design/received/handoff 5/</code> (the
+files named at the top);
+<code>substrate/src/substrate/topologies/runs/build.py:118–128</code>;
+<code>substrate/src/substrate/topologies/tool_loop/tools.py:117–128</code>,
+<code>:342</code>, <code>:484</code>, <code>:729–738</code>;
+<code>substrate/process/BLACKBOARD.md:658</code> (K332);
+<code>web/reveal_component.ts:2238</code>, <code>:2265</code>;
+<code>web/reveal.html:417–422</code>; <code>BLACKBOARD.md</code>
+(2026-11-05 <code>user</code> entry; U154, U182).</p>
+</body>
+</html>

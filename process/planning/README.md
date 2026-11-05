@@ -27,3 +27,5 @@ A new piece of work gets a folder and a row here on the day its first document i
 | `2026-10-13-language/` | Language measurements in the app | closed: its roadmap closed | 168–175 |
 | `2026-10-28-spdx-headers/` | SPDX headers on every source file | closed: sprint 191, commit `d4322e1` | 191 |
 | `2026-10-29-document-organization/` | Organizing substrate-ui's documents | closed 2026-10-29: carried out in commits 047effa–1149ec5 | — |
+| `2026-11-04-editor-level/` | The editor view (sheet turn 24 of checkpoint 7; turns 16–17 through round 8): research before build | open: research stage, round 11 | — |
+| `2026-11-04-shell-to-react/` | Move the shell from dc-runtime to typed React; precondition for the editor view | open: sprinting, plan round 5 | — |

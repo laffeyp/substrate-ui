@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.10.1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>Plan: move the shell from dc-runtime to typed React</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+  <link rel="stylesheet" href="data:text/css,body{max-width:1000px;margin:2em auto;font:15px/1.6 -apple-system,sans-serif;padding:0 1em}table{border-collapse:collapse}td,th{border:1px solid %23ccc;padding:4px 8px;vertical-align:top}code{font-size:90%25}" />
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">Plan: move the shell from dc-runtime to typed
+React</h1>
+</header>
+<h1 id="plan-move-the-shell-from-dc-runtime-to-typed-react">Plan: move
+the shell from dc-runtime to typed React</h1>
+<p><em>2026-11-04. The epic the dc-runtime audit of 2026-09-23 asked for
+and no one wrote (post-mortem:
+<code>process/planning/2026-11-04-editor-level/POSTMORTEM-2026-11-04-dc-runtime-never-retired-r2.md</code>).
+It replaces sprint 112’s checklist card with a design, an order of work,
+and the gates that hold the Architect’s condition of 2026-10-08, “only
+if you don’t break anything”. The new views researched in
+<code>process/planning/2026-11-04-editor-level/</code> start after this
+plan closes.</em></p>
+<h2 id="the-goal">The goal</h2>
+<p>When this plan closes:</p>
+<ul>
+<li>The window is a typed React app. Every file under <code>web/</code>
+type-checks; no <code>@ts-nocheck</code> remains.</li>
+<li>React 18.3.1 and ReactDOM are bundled from
+<code>node_modules</code>. No script loads from another origin, and a
+Content-Security-Policy without <code>unsafe-eval</code> forbids
+it.</li>
+<li><code>web/public/support.js</code>,
+<code>web/reveal_component.ts</code>, the <code>inlineDcScript</code>
+and <code>includePartials</code> plugins, and the files in
+<code>web/shims/</code> are retired to
+<code>_deprecated/dc-runtime/</code>, as the classic tree went to
+<code>_deprecated/classic-tree/</code> on 2026-09-22.</li>
+<li>Nothing reads React’s private fiber fields.</li>
+<li>Every screen looks as it does today, pixel for pixel, except where
+this plan removes fabricated text or dead controls.</li>
+<li>All 45 Electron gates, the unit specs, the Python suite,
+<code>vm_smoke</code> and <code>smoke:packaged</code> pass, as they pass
+on today’s tree.</li>
+<li>The 33 open findings from the lens audit’s sprint 112 rows are
+closed.</li>
+</ul>
+<h2 id="what-stays-fixed">What stays fixed</h2>
+<p><strong>Behaviour and pixels.</strong> Each step moves code without
+changing what the user sees. A pixel gate, rebuilt for this plan,
+compares every screen to a baseline taken before the first step.</p>
+<p><strong>The gates’ hooks.</strong> The Electron gates find elements
+by <code>data-*</code> attributes and read <code>window.__vm</code>,
+<code>window.__vmTape</code> and <code>window.__vmSignals</code>. The
+React components carry the same attributes on the same elements. The
+most used: <code>data-pane</code> (42 uses in the gates),
+<code>data-input-bar</code> (35), <code>data-top-bar</code> (18),
+<code>data-ws-input</code> and <code>data-model-half</code> (12 each),
+<code>data-vm-transcript-mount</code> (11), <code>data-ws-lit</code> and
+<code>data-lit</code> (10 each), and 32 more down to one use each.
+<code>window.__vm</code> appears 206 times.</p>
+<p><strong>The UI vocabulary.</strong> <code>reveal_component.ts</code>
+emits no signals; the controller does. The move adds no tags and retires
+none. The parity gate (<code>npm run signals</code>) learns to scan
+<code>web/app/**</code> and the <code>.tsx</code> files (lens finding
+F359) before the first component moves, so it sees every emit wherever
+it lands.</p>
+<p><strong>The controller.</strong> <code>web/vm/</code> (the
+<code>SessionController</code>, <code>PaneRegistry</code>, client and
+types) stays as it is, apart from the findings placed in its files. The
+React components read it as the transcript does today, through
+<code>useSyncExternalStore</code>
+(<code>web/reveal/transcript/useController.ts</code>).</p>
+<p><strong>React’s version.</strong> 18.3.1, the version that runs today
+and that the transcript was written against. <code>@types/react</code>
+and <code>@types/react-dom</code> move from <code>^19.3.0</code> to 18
+to match. An upgrade to React 19 is separate work after this plan.</p>
+<h2 id="the-design">The design</h2>
+<p><strong>One store for the window’s state.</strong>
+<code>web/app/store.ts</code> holds everything
+<code>reveal_component.ts</code> keeps in <code>this.state</code> today:
+the pane grid and focus, the open view and surface, meta’s lens
+settings, each pane’s picker state, the records page’s expansions, the
+dialogs, the find bar, and the settings. It exposes
+<code>subscribe</code> and <code>getSnapshot</code>, the same shape as
+<code>SessionController</code>, so components read it with
+<code>useSyncExternalStore</code>; it adds no dependency. While
+dc-runtime still draws part of the window, <code>DCLogic</code> reads
+and writes the moved fields through the same store, so both sides see
+one value.</p>
+<p><strong>Pure modules for the logic.</strong> The derivations in
+<code>renderVals()</code> move into typed modules under
+<code>web/app/derive/</code>, with unit specs: the stream graph’s rows,
+lanes, spans and connectors
+(<code>reveal_component.ts:1493–1900</code>); the structure lens’s rows
+(<code>:2169–2228</code>); the records page’s groups
+(<code>:1964–2139</code>); the picker’s rows and key handling
+(<code>:547–791</code>); the slash menu and hint
+(<code>:1220–1274</code>); the driver label (<code>:404–436</code>); the
+pane-grid split and close (<code>:340–402</code>,
+<code>:838–887</code>). The language lens and the time column are
+already pure modules (<code>web/reveal/language_lens.ts</code>,
+<code>web/reveal/timeline.ts</code>).</p>
+<p><strong>Components.</strong> Under <code>web/app/</code>, in
+<code>.tsx</code>, strict mode, one component per area:</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>Area</th>
+<th>Components</th>
+<th>Today’s template</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Window</td>
+<td><code>App</code></td>
+<td><code>reveal.html</code> root</td>
+</tr>
+<tr>
+<td>Top bar</td>
+<td><code>TopBar</code>, <code>ModelCard</code>,
+<code>WorkspaceCard</code></td>
+<td>lines 31–46</td>
+</tr>
+<tr>
+<td>Panes view</td>
+<td><code>PanesView</code>, <code>Pane</code>, <code>PaneSession</code>,
+gutters</td>
+<td>49–128</td>
+</tr>
+<tr>
+<td>Pane picker</td>
+<td><code>PanePicker</code>, <code>WorkspaceColumn</code>,
+<code>ModelColumn</code>, <code>ChoiceLine</code></td>
+<td>77–121, <code>partials/choice-line.html</code></td>
+</tr>
+<tr>
+<td>Input bar</td>
+<td><code>InputBar</code>, <code>SlashMenu</code>,
+<code>SlashHint</code></td>
+<td><code>partials/input-bar.html</code></td>
+</tr>
+<tr>
+<td>Session lines</td>
+<td><code>ActivityLine</code>, <code>TaskRows</code>,
+<code>FindBar</code></td>
+<td>55–72, 136–155</td>
+</tr>
+<tr>
+<td>Meta</td>
+<td><code>MetaView</code>, <code>LensChips</code>, split gutter</td>
+<td>130–347</td>
+</tr>
+<tr>
+<td>Lenses</td>
+<td><code>StreamLens</code>, <code>Inspector</code>,
+<code>SideGraph</code>, <code>IoLens</code>, <code>StructureLens</code>,
+<code>LanguageLens</code>, <code>SceneLens</code></td>
+<td>160–342</td>
+</tr>
+<tr>
+<td>Pages</td>
+<td><code>RecordsPage</code>, <code>AssayPage</code></td>
+<td>349–413</td>
+</tr>
+<tr>
+<td>Dialogs</td>
+<td><code>SettingsDialog</code>, <code>EndSessionDialog</code></td>
+<td>492–534</td>
+</tr>
+<tr>
+<td>First run</td>
+<td><code>FirstRun</code></td>
+<td>536–555</td>
+</tr>
+<tr>
+<td>Footer</td>
+<td><code>Footer</code></td>
+<td>490</td>
+</tr>
+<tr>
+<td>Keys</td>
+<td><code>web/app/keymap.ts</code></td>
+<td><code>reveal_component.ts:939–1016</code>,
+<code>reveal.ts:179–190</code></td>
+</tr>
+</tbody>
+</table>
+<p>Styles move verbatim as inline styles, as Phase 8 moved the
+transcript’s, so the pixel gate holds. A shared palette module comes
+after this plan.</p>
+<p><strong>How each area moves.</strong> Phase 8’s method, applied area
+by area:</p>
+<ol type="1">
+<li>The area’s state moves into the store and its logic into a pure
+module, with specs.</li>
+<li>A React component renders the area into a mount div that replaces
+the area’s block in <code>reveal.html</code>, attached by a typed mount
+registry that generalizes <code>reveal.ts:192–240</code>.</li>
+<li>The pixel gate and the area’s Electron gates pass against the
+baseline.</li>
+<li>The dc-runtime block and the fields it read are removed in the same
+step.</li>
+</ol>
+<p>When every area is a component, <code>App</code> renders the whole
+window, <code>reveal.html</code> becomes a plain page that loads one
+module, and dc-runtime retires.</p>
+<h2 id="gates">Gates</h2>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>Gate</th>
+<th>Today</th>
+<th>For this plan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Pixel</td>
+<td>Phase 8’s <code>harness/pixel_baseline.ts</code> and
+<code>pixel_diff.ts</code> have left the tree</td>
+<td>Rebuilt as <code>harness/pixel/capture.ts</code> and
+<code>harness/pixel/diff.ts</code>: Electron from source, deterministic
+driver, offline roster, <code>deviceScaleFactor: 2</code>, dark scheme,
+each screen below at 1440×900 and 900×380, compared with
+<code>pixelmatch</code> (8.0.0, ISC; a new devDependency, recorded in
+<code>WORKING_AGREEMENT.md</code>) at 0.1% of pixels</td>
+</tr>
+<tr>
+<td>Electron</td>
+<td>45 scripts in <code>npm run gates:electron</code></td>
+<td>Run on today’s tree first; that run is the baseline every step is
+held to</td>
+</tr>
+<tr>
+<td>Unit specs</td>
+<td><code>npm run test:unit</code></td>
+<td>Plus a spec per pure module under <code>web/app/derive/</code></td>
+</tr>
+<tr>
+<td>Python</td>
+<td><code>npm run test:py</code></td>
+<td>Unchanged</td>
+</tr>
+<tr>
+<td>Controller</td>
+<td><code>npx tsx harness/vm_smoke.ts</code></td>
+<td>Unchanged; its open <code>/help</code> failure (runbook, “Known
+failures”) is recorded in the baseline, not fixed here</td>
+</tr>
+<tr>
+<td>Type and lint</td>
+<td><code>npm run build</code></td>
+<td>Gains <code>web/app/**</code>; ends with no
+<code>@ts-nocheck</code></td>
+</tr>
+<tr>
+<td>Packaged</td>
+<td><code>npm run smoke:packaged</code></td>
+<td>Last step only, on a fresh bundle</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Screens in the pixel baseline.</strong> Panes view: an
+unbound pane at its picker; one pane after one deterministic turn; two
+panes side by side. Meta: stream down, stream side, an open inspector,
+i/o, structure, language, scene’s empty state. Records page with one
+workspace open. Assay page. Settings dialog. End-session dialog. First
+run. That is 15 screens, 30 captures.</p>
+<h2 id="order-of-work">Order of work</h2>
+<p>Each sprint touches at most two files and one concept (kit hard rule
+6), carries the pixel gate and the Electron gates for its area, and
+closes before the next opens. A finding listed beside a sprint closes in
+it.</p>
+<p><strong>A. Foundations</strong></p>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+</colgroup>
+<thead>
+<tr>
+<th>#</th>
+<th>Sprint</th>
+<th>Files</th>
+<th>Findings</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A1</td>
+<td>Pixel gate</td>
+<td><code>harness/pixel/capture.ts</code>,
+<code>harness/pixel/diff.ts</code></td>
+<td>—</td>
+</tr>
+<tr>
+<td>A2</td>
+<td>Baseline: run every gate on today’s tree; capture the 30 pixel
+baselines</td>
+<td><code>captures/pixel-baseline-2026-11-xx/</code>, the card</td>
+<td>—</td>
+</tr>
+<tr>
+<td>A3</td>
+<td>React from local files: copy the 18.3.1 UMD files from
+<code>node_modules</code> at build, load them with
+<code>integrity</code> hashes; types to 18</td>
+<td><code>vite.config.ts</code>, <code>reveal.html</code></td>
+<td>F320 (remote load), F345</td>
+</tr>
+<tr>
+<td>A4</td>
+<td>The parity gate scans <code>web/app/**</code> and
+<code>.tsx</code></td>
+<td><code>web/vm/tools/check-vocabulary-parity.ts</code></td>
+<td>F359</td>
+</tr>
+<tr>
+<td>A5</td>
+<td>The store, with the settings fields moved in</td>
+<td><code>web/app/store.ts</code>, <code>reveal_component.ts</code></td>
+<td>—</td>
+</tr>
+<tr>
+<td>A6</td>
+<td>The mount registry; <code>reveal.ts</code> writes through the store
+instead of reaching the component’s fiber</td>
+<td><code>web/app/mount.ts</code>, <code>reveal.ts</code></td>
+<td>F334</td>
+</tr>
+</tbody>
+</table>
+<p><strong>B. Pages, dialogs and chrome</strong></p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>#</th>
+<th>Sprint</th>
+<th>Findings</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>B1</td>
+<td><code>SettingsDialog</code>, <code>EndSessionDialog</code>; the
+export dialog is removed, because no export endpoint exists</td>
+<td>F351</td>
+</tr>
+<tr>
+<td>B2</td>
+<td><code>FirstRun</code>, <code>Footer</code>; the design tool’s tweak
+props and the fake rate-limit line go</td>
+<td>F356, F328 (footer text)</td>
+</tr>
+<tr>
+<td>B3</td>
+<td><code>TopBar</code>, <code>ModelCard</code>,
+<code>WorkspaceCard</code></td>
+<td>F328 (top-bar text)</td>
+</tr>
+<tr>
+<td>B4</td>
+<td><code>RecordsPage</code> with <code>derive/records.ts</code></td>
+<td>—</td>
+</tr>
+<tr>
+<td>B5</td>
+<td><code>AssayPage</code>, read from <code>/api/assays</code> and
+<code>/api/assay/&lt;name&gt;</code>, which exist</td>
+<td>F352</td>
+</tr>
+<tr>
+<td>B6</td>
+<td>Studio removed; its endpoints were deleted by the lens-audit
+roadmap</td>
+<td>F353, F338, F355</td>
+</tr>
+</tbody>
+</table>
+<p><strong>C. The session pane</strong></p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>#</th>
+<th>Sprint</th>
+<th>Findings</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>C1</td>
+<td><code>InputBar</code>, <code>SlashMenu</code>,
+<code>SlashHint</code> with <code>derive/slash.ts</code></td>
+<td>—</td>
+</tr>
+<tr>
+<td>C2</td>
+<td><code>ActivityLine</code>, <code>TaskRows</code>; the activity scan
+computed once per snapshot</td>
+<td>F350</td>
+</tr>
+<tr>
+<td>C3</td>
+<td><code>FindBar</code></td>
+<td>—</td>
+</tr>
+<tr>
+<td>C4</td>
+<td>Picker rows and keys in <code>derive/picker.ts</code></td>
+<td>F337, F339</td>
+</tr>
+<tr>
+<td>C5</td>
+<td><code>PanePicker</code>, <code>WorkspaceColumn</code></td>
+<td>—</td>
+</tr>
+<tr>
+<td>C6</td>
+<td><code>ModelColumn</code>, <code>ChoiceLine</code> with
+<code>derive/driver_label.ts</code></td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<p><strong>D. Meta</strong></p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>#</th>
+<th>Sprint</th>
+<th>Findings</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>D1</td>
+<td><code>derive/stream.ts</code>: rows, lanes, spans, connectors,
+compared to <code>EnvelopeKind</code> values</td>
+<td>F333</td>
+</tr>
+<tr>
+<td>D2</td>
+<td><code>StreamLens</code> rows and <code>Inspector</code></td>
+<td>F328 (inspector)</td>
+</tr>
+<tr>
+<td>D3</td>
+<td><code>SideGraph</code></td>
+<td>—</td>
+</tr>
+<tr>
+<td>D4</td>
+<td><code>StructureLens</code> with
+<code>derive/structure.ts</code></td>
+<td>—</td>
+</tr>
+<tr>
+<td>D5</td>
+<td><code>IoLens</code>, <code>SceneLens</code></td>
+<td>—</td>
+</tr>
+<tr>
+<td>D6</td>
+<td><code>LanguageLens</code> over
+<code>web/reveal/language_lens.ts</code></td>
+<td>—</td>
+</tr>
+<tr>
+<td>D7</td>
+<td><code>MetaView</code>, <code>LensChips</code>, the split gutter</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<p><strong>E. The window</strong></p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>#</th>
+<th>Sprint</th>
+<th>Findings</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>E1</td>
+<td><code>derive/panes.ts</code>: split, close, grid weights</td>
+<td>—</td>
+</tr>
+<tr>
+<td>E2</td>
+<td><code>PanesView</code>, <code>Pane</code>, <code>PaneSession</code>,
+gutters</td>
+<td>F361</td>
+</tr>
+<tr>
+<td>E3</td>
+<td><code>keymap.ts</code>: the window’s keys, with ⌘C left to
+copying</td>
+<td>F336</td>
+</tr>
+<tr>
+<td>E4</td>
+<td><code>App</code> renders the whole window; <code>reveal.html</code>
+loads one module; <code>support.js</code>,
+<code>reveal_component.ts</code>, the two Vite plugins and
+<code>web/shims/</code> move to
+<code>_deprecated/dc-runtime/</code></td>
+<td>F327, F343, F344, F346, F321, F322</td>
+</tr>
+<tr>
+<td>E5</td>
+<td>React imported from <code>node_modules</code> as modules; the UMD
+copies go; a CSP with no <code>unsafe-eval</code> and no remote
+origin</td>
+<td>F320 (CSP)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>F. Findings outside the rendering</strong></p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>#</th>
+<th>Sprint</th>
+<th>Findings</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>F1</td>
+<td>The client and server agree on the error shape; the UI stops
+stripping <code>{"error":</code>; the spec stops pinning the old
+shape</td>
+<td>F331, F349, F360</td>
+</tr>
+<tr>
+<td>F2</td>
+<td><code>endSession</code> sends what the server reads</td>
+<td>F330</td>
+</tr>
+<tr>
+<td>F3</td>
+<td>Envelopes append in constant time per envelope</td>
+<td>F335</td>
+</tr>
+<tr>
+<td>F4</td>
+<td>The timeout message names the configured retry count</td>
+<td>F340</td>
+</tr>
+<tr>
+<td>F5</td>
+<td>The signal buffer is bounded</td>
+<td>F347</td>
+</tr>
+<tr>
+<td>F6</td>
+<td>Comments that name the classic shell are corrected</td>
+<td>F348</td>
+</tr>
+<tr>
+<td>F7</td>
+<td>The login card’s colours: 256-colour and truecolor SGR</td>
+<td>F357</td>
+</tr>
+<tr>
+<td>F8</td>
+<td>Code fences accept <code>c++</code>, <code>objective-c</code>,
+<code>shell-session</code></td>
+<td>F358</td>
+</tr>
+<tr>
+<td>F9</td>
+<td>The delegate result’s “descend” control focuses the child’s pane,
+which UI sprint 183 already opens</td>
+<td>F329</td>
+</tr>
+</tbody>
+</table>
+<p>The F sprints touch <code>web/vm/</code> and
+<code>web/reveal/</code>, not the template, so they can run between any
+two sprints of A to E.</p>
+<p><strong>G. Close</strong></p>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>#</th>
+<th>Sprint</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>G1</td>
+<td>Every gate on a fresh bundle: 45 Electron gates, unit specs, Python,
+<code>vm_smoke</code>, all 30 pixel captures,
+<code>smoke:packaged</code>. The lens-audit rows for sprint 112 are
+marked closed in the ledger; sprints 112 and 113 are marked superseded
+by this plan and by its successor for packaging.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="decisions-this-plan-records">Decisions this plan records</h2>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>Decision</th>
+<th>Grounds</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Move area by area, not in one rewrite</td>
+<td>The Architect’s condition of 2026-10-08; Phase 8 moved the
+transcript this way and closed with the gates green (sprints 070–076);
+kit hard rule 6</td>
+</tr>
+<tr>
+<td>React 18.3.1, not 19, during the move</td>
+<td>It is the version running today and the one the transcript was
+written against; a version change and a structure change in one step
+would hide each other’s faults</td>
+</tr>
+<tr>
+<td>One store module, no state library</td>
+<td><code>SessionController</code> already uses the
+<code>subscribe</code> / <code>getSnapshot</code> shape with
+<code>useSyncExternalStore</code>; a second pattern would be information
+leakage between two state models (<em>A Philosophy of Software
+Design</em>, chapter 5)</td>
+</tr>
+<tr>
+<td>Styles move verbatim</td>
+<td>The pixel gate holds only if they do; Phase 8 did the same</td>
+</tr>
+<tr>
+<td>Retired files move to <code>_deprecated/dc-runtime/</code></td>
+<td>Kit: no deletions; the classic tree’s retirement of 2026-09-22 is
+the precedent</td>
+</tr>
+<tr>
+<td>Controls with no endpoint are removed; controls with one are
+wired</td>
+<td>Sprint 112’s card states the rule; <code>/api/assays</code> exists,
+no export endpoint does</td>
+</tr>
+<tr>
+<td><code>pixelmatch</code> added as a devDependency</td>
+<td>Phase 8’s gate used it; nothing in the tree compares images now</td>
+</tr>
+</tbody>
+</table>
+<h2 id="open">Open</h2>
+<ul>
+<li>Electron 44 and the pixel baseline: Phase 8 captured in Playwright’s
+Chromium; this plan captures in Electron, the shipped renderer. A2
+records the Electron and Chromium versions with the baseline.</li>
+<li><code>vm_smoke</code>’s <code>/help</code> failure is open on
+today’s tree (runbook, “Known failures on the current tree”). The
+baseline records it; this plan neither fixes nor hides it.</li>
+</ul>
+</body>
+</html>

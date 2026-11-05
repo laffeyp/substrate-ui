@@ -1,0 +1,893 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.10.1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>The editor level and its modes (round 2)</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+  <link rel="stylesheet" href="data:text/css,body{max-width:880px;margin:2em auto;font:15px/1.6 -apple-system,sans-serif;padding:0 1em}table{border-collapse:collapse}td,th{border:1px solid %23ccc;padding:4px 8px;vertical-align:top}code{font-size:90%25}" />
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">The editor level and its modes (round 2)</h1>
+</header>
+<h1
+id="the-editor-level-and-its-modes-what-the-shell-has-how-other-tools-do-it-and-how-each-mode-gets-researched-round-2">The
+editor level and its modes: what the shell has, how other tools do it,
+and how each mode gets researched (round 2)</h1>
+<p><em>2026-11-04, round 2. Round 1 is
+<code>RESEARCH-2026-11-04-editor-level-and-modes.md</code> in this
+folder and stays as written. Round 2 adds: what
+<code>design/received/handoff_latest/docs/RESEARCH-2026-11-04-editor-and-media-views.md</code>
+contributes that round 1 lacked (the plain-shell pane against
+<code>PaneRegistry</code>, the code-boundary rule, the video cut-list
+shape and preview strategies, the audio filters, a name for the
+three-stop level); the collection; the keys across levels, modes and
+surfaces; and the tools and model capabilities the session lacks for the
+media and design modes. It corrects one round-1 statement:
+<code>web/reveal/transcript/ansi.ts</code> is a small terminal grid, not
+only a colourer (the plain-shell section).</em></p>
+<p><em>Design input: sheet turns 16 and 17 in
+<code>design/received/handoff_latest/sheets/Substrate Shell Directions v3.dc.html</code>;
+decisions D48–D59, D66, D68 and D71 in
+<code>DESIGN-DECISIONS -through 2026-09-01-.md</code>;
+<code>MENU-BAR -2026-09-01-.md</code>. Prototype v7 carries none of
+turns 16–17.</em></p>
+<h2 id="what-is-being-built">What is being built</h2>
+<p>Turn 16 adds a third level. Today the shell has two, terminal and
+reveal. Turn 16 makes the toggle a cycle, terminal → reveal → full →
+terminal, on one ⌃` button whose label names the next stop (16b). The
+full level (16a) puts four regions around the focused session: an
+explorer rooted at that session’s workspace, with modified-file dots
+from the worktree diff; a central editor with vim and nano bindings; the
+substrate terminal as a bottom panel; and the machinery pane on the
+right with the reveal’s lens chips. Each region collapses: explorer and
+machinery to labelled rails, the terminal to a sill that keeps its input
+(16c, D51). There are no splits inside the full level (D49c).</p>
+<p>Turn 17 lists what the editor’s centre shows. These are modes, not
+levels (D49):</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>Frame</th>
+<th>Mode</th>
+<th>Decision</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>17a</td>
+<td>Documents in write mode: rendered and editable, markdown underneath,
+<code>source</code> one toggle away</td>
+<td>D52</td>
+</tr>
+<tr>
+<td>17b·0</td>
+<td>The user’s own shell as a tab beside the substrate terminal, ⌘⇧T,
+rooted at the workspace</td>
+<td>D49b</td>
+</tr>
+<tr>
+<td>17b·1</td>
+<td>A plain-shell pane at the tiled level: no session, no record</td>
+<td>D59</td>
+</tr>
+<tr>
+<td>17c·0, 17c·1</td>
+<td>Image mode: crop, resize, annotate, convert, analyze, “ask the
+session”; tools as overlays with a docked action bar</td>
+<td>D50, D59</td>
+</tr>
+<tr>
+<td>17d·0, 17d·1</td>
+<td>Video: one timeline edited by the session or by hand; one cut list
+naming each cut’s author</td>
+<td>D50, D54</td>
+</tr>
+<tr>
+<td>17e·0</td>
+<td>Audio, one file: split, trim, fade, gain, normalize, denoise,
+effects from scanned plugins</td>
+<td>D58</td>
+</tr>
+<tr>
+<td>17f</td>
+<td>Real-time translation as <code>translate_in</code> /
+<code>translate_out</code> producers</td>
+<td>D65</td>
+</tr>
+<tr>
+<td>17g</td>
+<td>Design mode: chat left, a pannable canvas of live HTML/CSS sheets
+right, comments pinned to elements</td>
+<td>D71</td>
+</tr>
+</tbody>
+</table>
+<p>The collection (D57, amended by D68) is not in turns 16–17, but every
+mode adds state it has to restore, so it joins this round.</p>
+<p><strong>Scope of “most of 17”, still an assumption.</strong> Covered:
+17a, 17b·0, 17b·1, 17c, 17d, 17g, and 17e without plugin hosting. Left
+out: 17f, a topology whose frame shows only the existing transcript and
+structure lens; and 17e’s AU/VST hosting, which needs a native audio
+host that neither Electron nor the bundled Python provides.</p>
+<p><strong>A word on “view”.</strong> The tone canon in
+<code>WORKING_AGREEMENT.md</code> reserves View for the kernel
+primitive. This document uses the design’s words for screens: level,
+mode, lens, surface.</p>
+<h2 id="how-the-frames-read-under-the-kit">How the frames read under the
+kit</h2>
+<p>Foundation 04
+(<code>sdd-kit-3/foundations/04-sdd-claude-design.md</code>) says every
+visual state is the visible form of a domain event. Turns 16 and 17 say
+so in their captions: “this file’s provenance — the open image came from
+seq 251” (17c·0); “the timeline’s cut list and the record agree by
+construction” (17d·0); “hand edits stage on the timeline; export runs
+ffmpeg and the write lands on the record” (17d·1); converted files “land
+on the record” (D50); comments “travel as UserMessage context”
+(D71).</p>
+<p>Each mode is therefore a projection of two sources the shell already
+treats as truth, the session record and the workspace on disk, plus ways
+to write to them. D1 and D2 say the UI owns no state. Two tests keep a
+mode inside the product:</p>
+<ul>
+<li><strong>The record test.</strong> List every piece of state the mode
+shows and every action it offers, and name the record event or workspace
+file each maps to. A row that maps to neither is UI-owned state, and the
+design changes before the build.</li>
+<li><strong>The code-boundary test</strong> (from the media-views doc).
+No mode module imports from the transcript, the lenses, or
+<code>PaneRegistry</code>. Modes couple to the rest of the shell only
+through the file system, the session’s tool calls, and the dc
+component’s level and mode state. Each mode’s gate checks its
+imports.</li>
+</ul>
+<p>The record test finds one gap shared by every editing mode. A session
+edit reaches the record as a <code>ToolCall</code> /
+<code>ToolResult</code> pair. A hand edit does not reach the record at
+all, yet 17d·1’s cut list reads “2 · trim demo pt 1 −0:02.4 · by hand,
+just now” and 17e·0’s edit list reads “1 · gain +2.5 dB · whole file ·
+by hand”. Three candidates: a new kernel event kind (a vocabulary change
+through <code>grammar/PRINCIPLES.md</code>, in the kernel repo); a
+<code>UserMessage</code> carrying the edit; an edit-list file in the
+workspace the session reads like any file. <code>UserMessage</code>
+today has four fields, <code>text</code>, <code>turn_index</code>,
+<code>assembled_prompt</code>, <code>slash_source</code>
+(<code>substrate/src/substrate/topologies/session/__init__.py:146</code>),
+so the second candidate also needs a payload change. The media-views doc
+treats the cut list as a data shape; it is a kernel question first.</p>
+<p>Under the dual-contract audit (<code>grammar/BOOTSTRAP.md</code>,
+step 9), each record event a mode projects pairs with a view-category
+tag in the UI vocabulary.
+<code>web/vm/signals/versions/current.json</code> (v0.3) has 36 tags in
+11 categories and no <code>view</code> category. Each mode’s research
+produces its share of the v0.4 bump.</p>
+<h2 id="what-the-current-shell-has-and-lacks">What the current shell has
+and lacks</h2>
+<p>Facts from the code on 2026-11-04.</p>
+<p><strong>Levels.</strong> Component state holds
+<code>revealed: false</code> (<code>web/reveal_component.ts:98</code>).
+<code>renderVals</code> derives <code>showTerminal</code> and
+<code>showRevealed</code> from it (<code>:2265</code>). The button reads
+<code>panes</code> / <code>meta</code> (<code>:2279</code>); ⌘M toggles
+it (<code>:986</code>). The design and the product spec say
+⌃<code>. Turn 16 needs a three-valued level.</code>RevealLevel<code>in</code>web/vm/kinds.ts<code>already names the all/app toggle; the media-views doc proposes</code>ViewLevel
+{ Terminal, Reveal, Editor
+}<code>beside it. "View" in that name collides with the tone canon's View, so the name is settled as a vocabulary decision, with</code>Level`
+the plain candidate.</p>
+<p><strong>Layout.</strong> <code>web/reveal.html</code> (563 lines)
+holds every screen as an <code>&lt;sc-if&gt;</code> block. The full
+level becomes another block. The reveal’s right pane is inline in the
+revealed block (lines 160–342) and moves into a partial before 16a can
+reuse it; <code>includePartials</code> in <code>vite.config.ts</code>
+already inlines two partials.</p>
+<p><strong>Stateful widgets.</strong> dc-runtime
+(<code>web/public/support.js</code>) clears a mount div’s children on
+every commit. <code>web/reveal.ts:192–240</code> re-attaches the
+transcript’s React root through a <code>MutationObserver</code>, keyed
+by <code>view:paneId</code>, where <code>view</code> is only
+<code>terminal</code> or <code>reveal</code>. Every mode in turn 17 is a
+stateful widget (an editor’s undo history, a terminal’s scrollback, a
+<code>&lt;video&gt;</code> playhead, a canvas). The island code needs to
+become a registry of widget kinds, and whether a re-attach keeps a
+widget’s internal state is untested. The media-views doc’s statement
+that <code>Transcript.tsx</code> “does not care where in the DOM it
+sits” is wrong for this reason; a bottom-panel transcript needs a third
+<code>view</code> value.</p>
+<p><strong>Organization.</strong> <code>reveal_component.ts</code> is
+2,576 lines, one <code>@ts-nocheck</code> class. Each mode is its own
+typed module mounted as an island; the dc component keeps the level, the
+active mode, and region sizes.</p>
+<p><strong>React.</strong> <code>reveal.html:11–12</code> loads React
+18.3.1 from cdnjs. Mode libraries are bundled by Vite.</p>
+<p><strong>Workspace files.</strong> No endpoint lists, reads or writes
+workspace files. <code>/api/worktree_diff</code>
+(<code>server.py:4352</code>, body at <code>:2009</code>) serves session
+worktrees only and refuses other paths (lens audit F301). Flat and blank
+workspaces get no modified-file dots. <code>watchfiles</code> 1.2.0
+imports in the kernel environment but
+<code>../substrate/pyproject.toml</code> does not declare it.</p>
+<p><strong>PTY.</strong> <code>_cli_pty_start</code>
+(<code>server.py:1437</code>) runs a login command from
+<code>KNOWN_CLI_ADAPTERS</code> in a pseudo-terminal, buffers 512 KB,
+streams over SSE, takes input by POST, and never sets the window size.
+<code>web/reveal/transcript/ansi.ts</code> is a CSI grid written for
+login screens: SGR colour, cursor moves and absolute positioning, erase
+in line and display. Its header lists what it leaves out: alternate
+screen buffer, scroll regions, mouse tracking, character sets. vim,
+<code>less</code> and <code>htop</code> need the first two, so the plain
+shell needs a full emulator. Product spec round 15 lists “Not a real
+PTY” as deferred; 17b ends that deferral.</p>
+<p><strong>Panes.</strong> <code>PaneRegistry.spawn</code>
+(<code>web/vm/pane_registry.ts:39</code>) creates a
+<code>SessionController</code> for every pane id, so every pane today is
+a session pane, bound or unbound. 17b·1’s plain-shell pane is the first
+pane with no session. The media-views doc names the consequence: a pane
+type of <code>SessionPane | ShellPane</code>, touching the pane loop in
+<code>reveal.html</code>, the top bar, focus, and the level cycle, since
+a shell pane has no record to reveal.</p>
+<p><strong>Electron.</strong> The window runs with
+<code>contextIsolation</code>, <code>sandbox</code>, no
+<code>nodeIntegration</code> (<code>electron/main.js:342–345</code>).
+Native modules such as node-pty and <code>child_process</code> calls run
+in Electron main or the Python backend, never the window. The
+media-views doc’s <code>child_process.spawn</code> for ffmpeg and
+<code>sharp</code> / <code>jimp</code> for images assume a Node backend;
+the backend is Python.</p>
+<p><strong>Media binaries.</strong> Electron’s bundled ffmpeg includes
+H.264 by default, so <code>.mp4</code> plays in
+<code>&lt;video&gt;</code> (Electron’s
+<code>build/args/release.gn</code> and its proprietary-codecs test page,
+via mirrors; to confirm on Electron 44). ffmpeg 8 is on this machine
+only as <code>/opt/homebrew/bin/ffmpeg</code>; the app bundle has none.
+ImageMagick is absent, though 17c’s example tool call runs
+<code>magick</code>. <code>sips</code> is at <code>/usr/bin/sips</code>;
+Pillow 12.3.0 imports in the kernel environment, undeclared.</p>
+<p><strong>Gates.</strong> <code>npm run gates:electron</code> chains 45
+gate scripts in <code>harness/shakeout/</code>. Each mode adds at least
+one, under Addendum A1’s three lenses; Addendum A2’s pixel decode fits
+the crop result and the waveform envelope.</p>
+<h2 id="the-collection">The collection</h2>
+<p><strong>What the design says.</strong> D57: the collection is the
+whole UI configuration (windows, pane grids, pane-to-session bindings,
+each pane’s level, lens choices, collapsed states, focus), restored
+exactly on relaunch. D68 (2026-09-03) supersedes D57’s save-and-browse
+surface: a collection is what is open, membership is automatic, there is
+no save verb and no browse place, and persistence across quit is the
+app’s own whole-state restore. D66(a) ratifies SQLite as the app-state
+store. <code>MENU-BAR -2026-09-01-.md</code> rule 3 repeats D68 and bans
+the word “arrangement”.</p>
+<p><strong>Prior work, all unbuilt.</strong> The collection was designed
+and carded, never implemented.</p>
+<ul>
+<li><code>process/sprints_v0.1/sprint-043-collection-persist.md</code>
+and <code>sprint-044-collection-restore.md</code>, status
+<code>pending</code>, target the September prototype-port tree
+(<code>bridge/main.py</code>,
+<code>src/render/CollectionSaveDialog.tsx</code>,
+<code>src/reducer/ShellReducer.ts</code>). That tree now sits at
+<code>../substrate-ui-old-versions/substrate-shell-abandoned-2026-09-08/</code>
+with six sprint cards and no collection code. Both cards keep a save
+verb (“Menu Collection ▸ Save”, ⌘⇧S, files at
+<code>~/.substrate/collections/&lt;name&gt;.sqlite</code>), which D68
+retired. Sprint 044’s restore rule still holds: a session gone between
+save and restore comes back as an unbound pane with a hint row.</li>
+<li>The abandoned tree’s vocabulary rationale
+(<code>signals/0.1-rationale.md</code>) names
+<code>COLLECTION_OPENED</code> and <code>COLLECTION_CLOSED</code> with
+<code>thing_kind</code> in
+<code>session / record / assay / studio / shell</code>, and scopes the
+SQLite writes as “shell app-store internals, not events”. That scoping
+is the useful part: the collection is persistence of UI layout, and it
+does not belong on any session record.</li>
+</ul>
+<p><strong>What the shipped app does today.</strong> On launch,
+<code>electron/main.js:379</code> loads
+<code>/?atom-transcript=1&amp;electron=1</code> with no session id, so a
+relaunch opens one empty pane. <code>reveal.ts:97–101</code> attaches
+<code>?session=&lt;id&gt;</code> when the URL carries it, which covers a
+reload, not a relaunch. Theme, type size and the nested-descent setting
+persist in <code>localStorage['substrate-ui.settings']</code>
+(<code>reveal_component.ts:893–905</code>; phase 7 status: “whole-state
+restore stays SQLite per D68”). Pane grid, bindings, level and lens
+choices are lost on quit. Electron’s <code>userData</code> is set to a
+<code>profile</code> folder under the app root
+(<code>main.js:52</code>).</p>
+<p><strong>What restore has to cover once the editor level
+exists.</strong> Per window: bounds, the pane grid with its
+<code>fr</code> weights, focus. Per pane: kind (session or shell), bound
+session id or shell working directory, level, active lens and
+granularity, for the full level the open file, cursor, scroll, active
+mode and each region’s collapsed state. A shell pane restores its
+working directory and starts a fresh shell; its process and scrollback
+do not survive.</p>
+<p><strong>Prior art, to verify in the collection research.</strong> The
+media-views doc cites iTerm2 restoring window arrangements from a plist
+under <code>~/Library/Application Support/iTerm2/</code>, Ghostty
+restoring layout and starting fresh shells, and VS Code keeping
+workbench state in SQLite. None of the three was checked this round; the
+collection’s research document reads each one’s documentation or source
+before relying on it.</p>
+<p><strong>Hazards.</strong> A binding to a session that ended while the
+app was closed (sprint 044’s unbound-pane rule covers it). A workspace
+folder that moved or was deleted (gate
+<code>missing_workspace_named.ts</code> already covers the session
+side). Two processes writing the store; Substrate runs one app per
+machine, so this means only the dev and installed apps overlapping,
+which is transitional.</p>
+<h2 id="keys-across-levels-modes-and-surfaces">Keys across levels, modes
+and surfaces</h2>
+<p><strong>What is bound today.</strong></p>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+</colgroup>
+<thead>
+<tr>
+<th>Key</th>
+<th>Where</th>
+<th>Action</th>
+<th>Source</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>⌘M</td>
+<td>window</td>
+<td>toggle panes / meta</td>
+<td><code>reveal_component.ts:986</code></td>
+</tr>
+<tr>
+<td>⌘E</td>
+<td>window</td>
+<td>open or close every tool card</td>
+<td><code>:988</code></td>
+</tr>
+<tr>
+<td>⌘D, ⌘⇧D</td>
+<td>window</td>
+<td>split right, split down</td>
+<td><code>:989</code></td>
+</tr>
+<tr>
+<td>⌘F</td>
+<td>window</td>
+<td>open or close find in the transcript</td>
+<td><code>:990</code></td>
+</tr>
+<tr>
+<td>⌘,</td>
+<td>window</td>
+<td>settings</td>
+<td><code>:991</code></td>
+</tr>
+<tr>
+<td>Esc</td>
+<td>window</td>
+<td>close find → dialogs → dropdowns → surface → else interrupt the
+running turn (hard); ⇧Esc soft</td>
+<td><code>:992–1015</code></td>
+</tr>
+<tr>
+<td>⌃C</td>
+<td>any INPUT or TEXTAREA, caret only</td>
+<td>interrupt the turn</td>
+<td><code>reveal.ts:179–190</code></td>
+</tr>
+<tr>
+<td>arrows, ↵</td>
+<td>records surface; unbound pane’s workspace bar; language lens</td>
+<td>list and lens navigation</td>
+<td><code>:946–985</code></td>
+</tr>
+<tr>
+<td>⌘N, ⌘O, ⌘W, ⌘⇧W</td>
+<td>menu</td>
+<td>new window, open record, close pane, close window</td>
+<td><code>electron/menu.js:57–90</code></td>
+</tr>
+<tr>
+<td>⌘Z, ⇧⌘Z, ⌘X, ⌘C, ⌘V, ⌘A</td>
+<td>menu, <code>editMenu</code> role</td>
+<td>standard editing</td>
+<td><code>menu.js:95</code></td>
+</tr>
+<tr>
+<td>⌃⌘F, ⌘0, ⌘+, ⌘−, ⌘R, ⌥⌘I</td>
+<td>menu, View roles</td>
+<td>full screen, zoom, reload, developer tools</td>
+<td><code>menu.js:105–112</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Designed and unbound.</strong> ⌃` level cycle (spec keyboard
+map, MENU-BAR View); ⌘⇧T plain shell; ⌘1 / ⌘2 / ⌘3 Records / Studio /
+Assays; ⌘] / ⌘[ next and previous pane. The built menu also disagrees
+with the menu-bar doc: the doc has New Session ⌘N, New Window ⇧⌘N and
+Open Workspace ⌘O; the app has New Window ⌘N and Open Record ⌘O.
+MENU-BAR rule 2 says the menu’s keys are the canonical bindings and
+tooltips agree with them.</p>
+<p><strong>Collisions the editor level creates.</strong></p>
+<ul>
+<li><strong>Esc.</strong> vim’s normal mode, CodeMirror’s search panel,
+the crop tool (“esc cancels”, 17c·1), and every program in the plain
+shell consume Esc. The window handler checks open find bars, dialogs,
+dropdowns and surfaces, never the focused element, so Esc in any of
+those would also interrupt the session’s running turn.</li>
+<li><strong>⌃C.</strong> <code>reveal.ts</code> treats any focused INPUT
+or TEXTAREA as the prompt. xterm.js is commonly described as taking
+keyboard input through a hidden helper textarea; if it does, ⌃C in the
+plain shell interrupts the session and calls
+<code>preventDefault</code>, so SIGINT never reaches the shell. A test
+settles it.</li>
+<li><strong>⌘F.</strong> Find in the transcript, CodeMirror’s search,
+and xterm’s search addon each want it. It goes to whatever has
+focus.</li>
+<li><strong>⌘D.</strong> Split at the tiled level; the full level has no
+splits (D49c). CodeMirror’s search keymap is commonly bound to Mod-d for
+“select next occurrence”; check the installed
+<code>@codemirror/search</code> keymap.</li>
+<li><strong>⌘W.</strong> Closes a pane today. In an editor, users expect
+it to close the file. The full level has one editor and no tabs (D44),
+so ⌘W there either closes the open file or leaves the level. It is a
+decision, recorded.</li>
+<li><strong>⌘Z.</strong> The <code>editMenu</code> role’s Undo sends the
+window’s native undo; CodeMirror keeps its own history and binds Mod-z.
+A VS Code issue (#64724) reports a key firing twice, once through a
+native menu item and once through a forwarder in a webview; a Qiita note
+reports that <code>preventDefault</code> in keydown suppresses the
+Electron accelerator. Neither is authoritative for Electron 44, so the
+editor’s research tests ⌘Z in the packaged app.</li>
+<li><strong>Space, J, K, L, I, O.</strong> Video and audio transport
+conventions (play and pause, shuttle, in and out marks) are plain
+letters. They act only while the timeline has focus, never while a text
+field does.</li>
+</ul>
+<p><strong>How other tools route keys.</strong> VS Code’s keybinding
+rules carry a <code>when</code> clause (<code>editorTextFocus</code>,
+<code>!editorReadonly</code>); rules are evaluated bottom to top and the
+first rule matching both key and <code>when</code> wins, and user rules
+are appended after the defaults. Its terminal intercepts only commands
+on <code>terminal.integrated.commandsToSkipShell</code>, a hard-coded
+default list the user can edit; <code>sendKeybindingsToShell</code>
+sends most keys to the shell instead, and its docs warn this disables ⌘F
+find in the terminal; chords skip the shell by default (VS Code docs,
+“Keyboard shortcuts” and “Terminal advanced”). xterm.js’s
+<code>attachCustomKeyEventHandler</code> runs before xterm processes a
+key, and returning <code>false</code> stops xterm from handling it
+(xterm.js API docs). Electron’s <code>before-input-event</code> fires
+before the window dispatches keydown (Electron docs, “Keyboard
+Shortcuts”).</p>
+<p><strong>What follows for Substrate.</strong> One keymap table, each
+binding carrying a focus context: tiled terminal, reveal, full-level
+editor text, write mode, plain shell, image tool, timeline, dialog,
+surface. The window handler looks up the focused context before acting,
+which fixes Esc and ⌃C at their source. The plain shell keeps a short
+list of keys it never sends to the shell
+(⌃<code>, ⌘D, ⌘⇧T, ⌘W, ⌘,), in the manner of</code>commandsToSkipShell<code>, through</code>attachCustomKeyEventHandler`.
+Region toggles in the full level need keys the design never named:
+explorer, bottom panel, machinery, write/source. VS Code’s defaults are
+⌘B, ⌘J and ⌥⌘B for side bar, panel and secondary side bar; check them
+against VS Code’s default keybinding list before adopting. The menu
+gains the full-level verbs and the menu-bar doc’s open disagreements get
+one recorded answer each.</p>
+<h2 id="tools-and-model-capabilities-the-session-lacks">Tools and model
+capabilities the session lacks</h2>
+<p><strong>What the session has.</strong> Eleven file and shell tools in
+<code>full_suite</code>
+(<code>substrate/src/substrate/topologies/tool_loop/tools.py:619</code>):
+<code>bash</code>, <code>bash_output</code>, <code>bash_stop</code>,
+<code>bash_tasks</code>, <code>edit_file</code>, <code>glob</code>,
+<code>grep</code>, <code>list_dir</code>, <code>read_file</code>,
+<code>web_fetch</code>, <code>write_file</code>. Substrate’s own tools
+in <code>substrate_tools.py</code>: <code>run_topology</code>,
+<code>run_topology_poll</code>, <code>inspect_record</code>,
+<code>list_records</code>, <code>list_topologies</code>,
+<code>list_applications</code>, <code>list_sessions</code>; plus
+<code>delegate</code>. Every media operation today runs through
+<code>bash</code>.</p>
+<p><strong>The MCP channel goes one way.</strong>
+<code>topologies/session/mcp_channel.py</code> serves the session’s
+tools to a harness driver (<code>claude</code>, <code>codex</code>,
+<code>cursor-agent</code>) and records each call as Substrate’s own
+<code>ToolCall</code> with <code>origin = mcp</code>. The session cannot
+call an outside MCP server; the tech spec’s “Substrate as MCP client”
+module, <code>tool_loop/mcp_tools.py</code>, does not exist. A harness
+driver can use its own configured MCP servers, and those calls show as
+harness tool cards (design spec round 4, R4).</p>
+<p><strong>Gaps, by what each mode needs.</strong></p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>Gap</th>
+<th>Needed by</th>
+<th>Fact</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>The model cannot see an image</td>
+<td>17c “ask the session”; 17g the session looking at its own sheet; 17d
+describing a frame</td>
+<td>No code in <code>tools.py</code> or <code>adapters/models.py</code>
+sends an image. Ollama’s <code>/api/chat</code> takes base64 images in a
+message’s <code>images</code> array (Ollama docs, “Vision”). On this
+machine only three cloud models report <code>vision</code> from
+<code>/api/show</code>: <code>kimi-k2.6:cloud</code>,
+<code>kimi-k2.7-code:cloud</code>, <code>kimi-k3:cloud</code>. No local
+model does.</td>
+</tr>
+<tr>
+<td><code>UserMessage</code> carries text only</td>
+<td>17g comment pins; 17c “ask”; a selection sent from the editor</td>
+<td>Fields are <code>text</code>, <code>turn_index</code>,
+<code>assembled_prompt</code>, <code>slash_source</code>. An attachment
+field is a <code>PAYLOAD_FIELD_PROPOSED</code> on the kernel’s session
+vocabulary.</td>
+</tr>
+<tr>
+<td>Named media tools</td>
+<td>17d, 17e (D54 lists probe · cut · trim · concat · export; 17e·0
+lists probe · cut · fade · gain · loudnorm · export)</td>
+<td>Today these are <code>bash</code> calls to ffmpeg. Named tools in
+<code>tool_loop</code> give typed arguments, the same function the
+timeline calls, and one record event kind for both hands. ffmpeg is not
+in the bundle.</td>
+</tr>
+<tr>
+<td>Finding dead air and scene cuts</td>
+<td>17d·0 “cut the dead air between 0:41 and 1:02”</td>
+<td>The installed ffmpeg has <code>silencedetect</code> (noise default
+0.001, minimum duration default 2 s) and <code>scdet</code> (threshold
+default 10 of 100).</td>
+</tr>
+<tr>
+<td>Word-timed transcripts</td>
+<td>Cutting by what was said, Descript’s model</td>
+<td><code>whisper-cli</code> (whisper.cpp) is at
+<code>/opt/homebrew/bin/whisper-cli</code> and offers <code>-ojf</code>
+(full JSON), <code>-ml</code> (max segment length) and <code>-sow</code>
+(split on word). No <code>ggml-*.bin</code> model file was found within
+six directory levels of home. ffmpeg 8 can be built with a
+<code>whisper</code> filter; the installed build lacks it.</td>
+</tr>
+<tr>
+<td>Audio processing</td>
+<td>17e</td>
+<td>The installed ffmpeg has <code>afade</code>, <code>afftdn</code>,
+<code>arnndn</code> and <code>loudnorm</code>. <code>arnndn</code> needs
+a separate model file.</td>
+</tr>
+<tr>
+<td>Image operations</td>
+<td>17c</td>
+<td>Pillow 12.3.0 (undeclared) and <code>sips</code> are present;
+ImageMagick is not.</td>
+</tr>
+<tr>
+<td>Rendering a sheet to look at it</td>
+<td>17g</td>
+<td>Electron’s <code>webContents.capturePage</code> in main, or
+Playwright, already a devDependency at <code>^1.49.0</code> for the
+gates. Microsoft’s Playwright MCP is snapshot-first: its README calls
+screenshots advisory, and actions go through the accessibility snapshot
+(third-party reviews quoting the README).</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Outside MCP servers for media.</strong> Third-party ffmpeg
+MCP servers exist: <code>mcp-video</code> on PyPI claims 82–87 tools
+across versions; others expose a single <code>execute_ffmpeg</code> that
+takes a command string. These are package listings, not audited code. A
+server whose one tool takes a raw ffmpeg command gives the session
+nothing <code>bash</code> lacks. A large third-party server puts dozens
+of tool names in front of the model that the timeline does not share,
+which breaks D54’s rule that hand and session run the same operation.
+Named tools in <code>tool_loop</code>, matching the timeline’s
+operations one for one, keep both hands on one record event kind.
+Building the MCP client stays the tech spec’s Wave-B item; nothing in
+turns 16–17 needs it.</p>
+<h2 id="how-established-tools-solve-each-mode">How established tools
+solve each mode</h2>
+<p>Each row names the source and its genre: vendor documentation
+describes its own product, an engineering post is the team’s own
+account, a README is a project’s claim about itself, a forum thread is
+one person’s report.</p>
+<p><strong>The full level’s layout.</strong> VS Code’s workbench has the
+same four regions (side bar, editor, panel, secondary side bar), and so
+does Zed. The lesson the media-views doc draws holds: explorer, editor
+and terminal share only a workspace root and couple through the file
+system.</p>
+<p><strong>The text editor.</strong> CodeMirror 6 over Monaco.
+Sourcegraph’s engineering post on leaving Monaco: about 2.4 MB, roughly
+40% of the JavaScript on their search page; a global model that made
+several configured instances hard; theme colours as hex values in
+JavaScript. Replit’s post records the cost: features they had used in
+Monaco did not exist in CodeMirror 6, and they built them. D53’s OUT
+list (debuggers, language plugins, extension marketplaces) is what
+Monaco’s weight buys. Packages, from npm on 2026-11-04:
+<code>@codemirror/view</code> 6.43.15 (MIT),
+<code>@replit/codemirror-vim</code> 6.4.0 (MIT). In-file search is
+<code>@codemirror/search</code>; global search is a backend
+<code>rg</code> call. Nano bindings are a small keymap. D53’s exclusion
+list is the guard against the pull toward language servers and
+autocomplete once an editor exists.</p>
+<p><strong>17a write mode.</strong> Two families differ on the property
+D52 depends on. Source-backed live preview keeps the markdown string as
+the document and hides syntax away from the cursor with CodeMirror 6
+decorations (Obsidian plugin docs; forum posts on Live Preview; Atomic
+Editor and Silkdown READMEs). A save writes back the bytes typed.
+Model-backed WYSIWYG (ProseMirror, Milkdown, Tiptap) parses to a node
+tree and serializes on save; ProseMirror’s forum states the markdown
+conversion is lossy, and <code>prosemirror-markdown</code> issue #82
+reports nested marks of one type cannot be serialized; Tiptap claims
+fidelity (vendor). The session writes these files with
+<code>write_file</code>, so a lossy save rewrites the session’s markdown
+and puts diffs the user never made on the worktree and the record.
+Source-backed is the fit; the cost is syntax showing at the cursor, less
+like Google Docs than D52 asks. The media-views doc’s round-trip test
+diffs the DOM tree after toggling, which passes on exactly the loss that
+matters. The test is: open a file the session wrote, edit one word by
+hand, save, and diff the file’s bytes; only that word changes.</p>
+<p><strong>17b the plain shell.</strong> VS Code, Hyper, Tabby and Wave
+Terminal draw with xterm.js and run the shell behind a PTY in a separate
+process (VS Code’s pty host runs node-pty, per third-party descriptions;
+check <code>src/vs/platform/terminal</code>). node-pty’s README states
+every spawned process runs at the parent’s permission level and that the
+library is not thread-safe. Packages: <code>@xterm/xterm</code> 6.0.0,
+<code>@xterm/addon-fit</code> 0.11.0 (MIT). The Python backend already
+holds a PTY; it needs a shell spawn and a resize. Transport is the open
+question: today’s SSE out and POST in costs a request per keystroke. The
+other known pitfall: a shell not killed when its pane closes leaks a
+process; the gate checks no orphaned shell remains after close.</p>
+<p><strong>17c image mode.</strong> macOS Preview is the benchmark for
+“basic but real”. Crop and annotate overlays are canvas work; a
+histogram is <code>getImageData</code>. Toast UI Image Editor (crop,
+flip, rotate, resize, draw, shapes, text) and Fabric.js (a canvas object
+model, used by projects that keep annotations as overlay objects apart
+from base pixels) are the libraries the media-views doc names; neither
+was checked this round. Conversion runs in the backend through Pillow or
+<code>sips</code>, the same operation the session’s tool calls
+(D50).</p>
+<p><strong>17d video.</strong> LosslessCut, an Electron app that keeps a
+cut list and exports through ffmpeg, states in its README that lossless
+cuts copy streams and land on keyframes, with “keyframe cut” placing
+<code>-ss</code> before <code>-i</code> and “normal cut” after. 17d·0
+shows a cut at 0:41.6, so the research decides between keyframe stream
+copy and re-encoding around each cut. Descript’s help pages describe the
+transcript as the editing surface: deleting text hides media without
+destroying it, a timeline stays available, and the edit exports as an
+XML edit record; that is D54 with a transcript in place of the session.
+From the media-views doc: a cut-list entry shaped
+<code>{type, start, end, author: 'hand' | {seq}}</code>; two preview
+strategies, skipping cut regions during playback for interaction and
+rendering through ffmpeg for export; and the coupling risk that tool
+results must reach the timeline. That routing goes through the record
+the timeline already projects, never through a call from the session
+controller into the timeline module.</p>
+<p><strong>17e audio.</strong> wavesurfer.js 8.0.5 (BSD-3-Clause) draws
+the waveform; its Regions plugin gives draggable segments and its
+Envelope plugin a fade curve; its docs leave trim and export to the
+application. The edits run in ffmpeg (filters listed under the tools
+gap) or the Web Audio API for preview. Plugin hosting needs JUCE
+(<code>JUCE_PLUGINHOST_AU</code>, <code>JUCE_PLUGINHOST_VST3</code>) or
+a host like minihost (PyPI, JUCE-based, Python bindings), scanned out of
+process because plugins can pass a scan and freeze the host (JUCE forum
+report).</p>
+<p><strong>17g design mode.</strong> The handoff’s <code>.dc.html</code>
+sheets are live HTML/CSS frames on a pannable canvas, rendered by the
+<code>support.js</code> runtime the shell already loads; 17g’s sheets
+are the same kind of file. Figma pins a comment to a canvas element; D71
+sends that pin into the next <code>UserMessage</code>, which needs the
+attachment field above. Each sheet renders in a sandboxed
+<code>&lt;iframe srcdoc&gt;</code> so its CSS cannot reach the
+shell’s.</p>
+<h2 id="researching-each-mode-before-building-it">Researching each mode
+before building it</h2>
+<p>Each mode gets one research document in this folder answering the
+same questions, with sources, before any sprint card is written.</p>
+<ol type="1">
+<li><strong>Record contract.</strong> Which record events the mode
+projects; which events each hand action produces; whether a kernel
+vocabulary change is needed and of which proposal type. A row that maps
+to neither record nor workspace fails D1 and D2.</li>
+<li><strong>Session parity and model capability.</strong> Which tool the
+session uses for the same operation; the hand path and the session path
+produce one event kind. Which model capability the mode assumes (vision,
+speech-to-text) and which installed models provide it.</li>
+<li><strong>Prior art.</strong> Two or three tools, read from docs or
+source, labelled by genre; what we copy and what D53 refuses.</li>
+<li><strong>Library and bridge mapping.</strong> Package, API read from
+installed source (TECHNIQUES #46) into
+<code>WORKING_AGREEMENT.md</code>’s bridge mappings, bundled size after
+<code>vite build</code>, licence against PolyForm Noncommercial.</li>
+<li><strong>Shell seam.</strong> Island kind, dc-component state,
+partial, and what the collection restores for it.</li>
+<li><strong>Keys.</strong> Every key the mode binds, its focus context,
+and a check against the keymap table for collisions with existing and
+designed bindings.</li>
+<li><strong>UI vocabulary.</strong> View-category tags proposed for
+v0.4, one dual-contract audit row per projected record event.</li>
+<li><strong>Observation contract.</strong> The Electron gate, with
+structural, decode and adversarial checks (Addendum A1, A2), including
+the code-boundary import check.</li>
+<li><strong>Scope line.</strong> In and refused, against D53’s bar.</li>
+</ol>
+<p><strong>Order.</strong> Shared work first, then modes as their
+dependencies allow.</p>
+<ol start="0" type="1">
+<li><strong>Shared seams, once.</strong>
+<ul>
+<li><ol type="a">
+<li>The level state: three values replacing <code>revealed</code>, the
+name settled, ⌘M and ⌃` settled.</li>
+</ol></li>
+<li>(b) The island registry, with the re-attach test: does a CodeMirror
+instance keep undo history and cursor across a dc-runtime commit?</li>
+<li>(c) The workspace file API: list, read, write, watch, confined per
+workspace shape as <code>_worktree_diff</code> is.</li>
+<li>(d) How a hand edit becomes a record event, researched in the kernel
+repo.</li>
+<li>(e) The keymap table with focus contexts; fixes Esc and ⌃C before
+any widget that consumes them mounts.</li>
+<li>(f) Model input beyond text: images to the responder, attachments on
+<code>UserMessage</code> (kernel).</li>
+<li>(g) The pane type: <code>SessionPane | ShellPane</code> in
+<code>PaneRegistry</code> and the pane loop.</li>
+</ul></li>
+<li><strong>16, the full level, with code mode.</strong> Every other
+mode mounts inside it; reuses the machinery pane as a partial and the
+transcript with a third <code>view</code> value.</li>
+<li><strong>The collection.</strong> Its data shape includes the full
+level’s state, so it follows 16; SQLite per D66, no save verb per D68,
+the unbound-pane rule from sprint 044.</li>
+<li><strong>17b·0 and 17b·1, the plain shell.</strong> Backend PTY plus
+resize and shell spawn; xterm.js; the shell pane type from 0(g); the
+skip-shell key list.</li>
+<li><strong>17a, write mode.</strong> Reuses CodeMirror; settles
+source-backed versus model-backed with the byte-diff test.</li>
+<li><strong>17c, image mode.</strong> First hand edit that writes a
+file; first use of 0(d) and 0(f).</li>
+<li><strong>17g, design mode.</strong> Canvas, sandboxed sheets, comment
+pins through 0(f), sheet capture for a vision model.</li>
+<li><strong>17d, video.</strong> Named media tools,
+<code>silencedetect</code>, the bundling decision for ffmpeg, keyframe
+versus re-encode, optional word-timed transcripts through
+whisper.cpp.</li>
+<li><strong>17e, audio, without plugin hosting.</strong> Reuses 17d’s
+timeline, edit list and named tools; adds wavesurfer.js.</li>
+</ol>
+<h2 id="open">Open</h2>
+<ul>
+<li>The scope of “most of 17”: assumed out are 17f and 17e’s plugin
+hosting.</li>
+<li>How a hand edit reaches the record blocks the editing modes; it does
+not block 16 with read-only code, the collection, or 17b.</li>
+<li>Vision runs only on three cloud models on this machine; whether
+image modes require a cloud model or a local vision model gets pulled is
+part of 17c’s research.</li>
+</ul>
+<h2 id="sources">Sources</h2>
+<p>Local: <code>design/received/handoff_latest/README.md</code>; sheet
+turns 16–17; <code>DESIGN-DECISIONS -through 2026-09-01-.md</code>
+(D48–D59, D66, D68, D71); <code>MENU-BAR -2026-09-01-.md</code>;
+<code>DESIGN-SPEC-2026-08-31-round4.md</code>;
+<code>design/received/handoff_latest/docs/RESEARCH-2026-11-04-editor-and-media-views.md</code>;
+product spec round 15 (“The UI — two views, one toggle”, “What this
+deliberately is not”); tech spec round 9 (“Extension seams”, “Piece G”);
+<code>process/sprints_v0.1/sprint-043-collection-persist.md</code>,
+<code>sprint-044-collection-restore.md</code>;
+<code>../substrate-ui-old-versions/substrate-shell-abandoned-2026-09-08/signals/0.1-rationale.md</code>;
+<code>process/planning/2026-09-14-flat-design-parity/STATUS-2026-09-14-phase-7-closed.md</code>;
+<code>sdd-kit-3/</code> in full; the code paths cited above;
+<code>ffmpeg -h filter=…</code>, <code>whisper-cli -h</code>,
+<code>curl :11434/api/show</code> and <code>npm view</code>, run
+2026-11-04.</p>
+<p>Outside, as read on 2026-11-04:</p>
+<ul>
+<li>VS Code docs, “Terminal advanced” (<code>commandsToSkipShell</code>,
+<code>sendKeybindingsToShell</code>, chords):
+https://code.visualstudio.com/docs/terminal/advanced</li>
+<li>VS Code docs, “Keyboard shortcuts” (<code>when</code> clauses, rule
+order): https://code.visualstudio.com/docs/configure/keybindings</li>
+<li>Electron docs, “Keyboard Shortcuts”
+(<code>before-input-event</code>,
+<code>acceleratorWorksWhenHidden</code>):
+https://electronjs.org/docs/latest/tutorial/keyboard-shortcuts</li>
+<li>VS Code issue #64724 (key firing through menu and webview):
+https://github.com/microsoft/vscode/issues/64724</li>
+<li>Qiita note on <code>preventDefault</code> and Electron accelerators
+(single blog test):
+https://qiita.com/pochman/items/3aa40ad71e5320192820</li>
+<li>xterm.js <code>Terminal</code> API docs
+(<code>attachCustomKeyEventHandler</code>):
+https://xtermjs.org/docs/api/terminal/classes/terminal ; xterm.js PR
+#712: https://github.com/xtermjs/xterm.js/pull/712</li>
+<li>Ollama docs, “Vision”: https://docs.ollama.com/capabilities/vision ;
+OpenAI compatibility: https://docs.ollama.com/openai</li>
+<li><code>mcp-video</code> on PyPI (package listing):
+https://pypi.org/project/mcp-video/1.2.2/ ; Video Editor MCP Server
+listing: https://lobehub.com/ko/mcp/christopher-stevers-video-mcp ;
+video_editor_mcp:
+https://awesome.ecosyste.ms/projects/github.com%2Fkush36agrawal%2Fvideo_editor_mcp</li>
+<li>Playwright MCP (Microsoft) project listing:
+https://awesome.ecosyste.ms/projects/github.com%2Fmicrosoft%2Fplaywright-mcp
+; review quoting the README:
+https://testingbot.com/resources/articles/playwright-mcp</li>
+<li>whisper.cpp CLI README:
+https://huggingface.co/datasets/echodict/whisper.cpp/blob/main/examples/cli/README.md
+; token-level JSON commit:
+https://huggingface.co/spaces/Xenobd/whisper.cpp/commit/d1667419b1de8326d49fd69eff8a0fe3acbf883d</li>
+<li>Sourcegraph, “Migrating from Monaco Editor to CodeMirror”:
+https://sourcegraph.com/blog/migrating-monaco-codemirror</li>
+<li>Replit, “Betting on CodeMirror”:
+https://blog.repl.it/codemirror</li>
+<li>Obsidian docs, “Decorations”:
+https://docs.obsidian.md/Plugins/Editor/Decorations ; forum thread:
+https://forum.obsidian.md/t/simplest-possible-example-of-a-decorating-editor-extension/91652</li>
+<li>Atomic Editor: https://github.com/kenforthewin/atomic-editor ;
+Silkdown: https://sveltethemes.dev/magarcia/silkdown</li>
+<li>ProseMirror forum on lossy markdown:
+https://discuss.prosemirror.net/t/possible-to-collaborate-in-different-docformat-of-the-same-document/63
+; <code>prosemirror-markdown</code> #82:
+https://github.com/ProseMirror/prosemirror-markdown/issues/82</li>
+<li>Tiptap markdown (vendor post):
+https://tiptap.dev/blog/release-notes/introducing-bidirectional-markdown-support-in-tiptap</li>
+<li>Electron <code>release.gn</code> and codec test page (mirrors):
+https://source-hub.etos-pro.ru/Electron/electron/src/branch/main/build/args/release.gn
+;
+https://ayakael.net/mirrors/electron/commit/5b4f715d2e6ffc1427205448825e85857f28240b</li>
+<li>node-pty README:
+https://lively-kernel.org/lively4S2/lively4-server/node_modules/node-pty/README.md</li>
+<li>LosslessCut README (mirror):
+https://git.morozoff.pro/aiden/lossless-cut/src/tag/v3.4.0</li>
+<li>Descript help centre:
+https://help.descript.com/hc/en-us/articles/15726742913933 ; review:
+https://www.tella.com/blog/descript-video-editing-how-does-it-work</li>
+<li>wavesurfer.js Regions plugin:
+https://wavesurfer.xyz/docs/plugins/regions/ ; plugin list:
+https://wavesurfer.xyz/docs/plugins/</li>
+<li>minihost (PyPI): https://pypi.org/project/minihost/ ; JUCE
+<code>juce_audio_processors</code>:
+https://www.ccoderun.ca/juce/api/juce__audio__processors_8h.html ; JUCE
+forum, VST3 scan freeze:
+https://forum.juce.com/t/problems-scanning-vst3-plugins-multiport-midi-perhaps/37190</li>
+</ul>
+</body>
+</html>

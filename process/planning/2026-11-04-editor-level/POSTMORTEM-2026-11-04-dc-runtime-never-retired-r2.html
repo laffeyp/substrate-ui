@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.10.1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>Post-mortem: the shell still runs on dc-runtime (round 2)</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+  <link rel="stylesheet" href="data:text/css,body{max-width:1000px;margin:2em auto;font:15px/1.6 -apple-system,sans-serif;padding:0 1em}table{border-collapse:collapse}td,th{border:1px solid %23ccc;padding:4px 8px;vertical-align:top}code{font-size:90%25}" />
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">Post-mortem: the shell still runs on dc-runtime (round
+2)</h1>
+</header>
+<h1
+id="post-mortem-the-shell-still-runs-on-dc-runtime-round-2">Post-mortem:
+the shell still runs on dc-runtime (round 2)</h1>
+<p><em>2026-11-04, round 2. Round 1 is beside this file, unchanged.
+Round 1 called sprint 112 “the plan now in force”. It is not a plan. It
+is a checklist card in a remediation roadmap, and no document designs
+the port of the shell. This round adds the chain of documents behind the
+card, what the card lacks, and the state of its findings today.</em></p>
+<h2 id="what-the-app-is">What the app is</h2>
+<p>The main window is the design prototype, not a React codebase.
+<code>web/reveal.html</code> (563 lines) is a dc-runtime template: HTML
+with <code>{{ }}</code> bindings and <code>&lt;sc-if&gt;</code> /
+<code>&lt;sc-for&gt;</code> blocks. <code>web/reveal_component.ts</code>
+(2,576 lines, <code>@ts-nocheck</code>) is one <code>DCLogic</code>
+class whose <code>renderVals()</code> returns every value the template
+reads. <code>web/public/support.js</code> (1,913 lines) is dc-runtime
+itself: it turns the template into <code>React.createElement</code>
+calls and evaluates the class with <code>new Function</code>. Its third
+line reads “GENERATED from dc-runtime/src/*.ts — do not edit”; neither
+repo holds that source (lens audit F343), and its checksum
+(<code>dac4ecfc…</code>) differs from the handoff’s copy
+(<code>951ae391…</code>). Only the transcript,
+<code>web/reveal/transcript/*.tsx</code>, is written as React
+components; <code>web/reveal.ts</code> mounts it into empty divs and
+reaches the dc-runtime component through React’s private fiber fields
+(F334).</p>
+<h2 id="how-it-is-built-and-shipped">How it is built and shipped</h2>
+<ol type="1">
+<li><code>npm run build</code> runs <code>tsc --noEmit</code>, eslint
+and <code>vite build</code>. Vite’s <code>inlineDcScript</code> plugin
+compiles <code>reveal_component.ts</code> with esbuild and pastes it
+into <code>reveal.html</code>; <code>includePartials</code> inlines the
+two partials; <code>reveal.ts</code> and the transcript bundle into
+<code>web/dist/assets/reveal-*.js</code>; <code>support.js</code> copies
+from <code>web/public/</code> to <code>web/dist/</code>.</li>
+<li>electron-builder packs <code>web/dist/**</code> into
+<code>Contents/Resources/app.asar.unpacked/web/dist/</code>
+(<code>electron-builder.config.js:44–58</code>).</li>
+<li>At launch, Electron main starts the bundled Python, which runs
+<code>server.py</code>. <code>server.py</code> serves
+<code>web/dist/</code> when it exists (<code>server.py:1969–1974</code>)
+on <code>127.0.0.1:&lt;port&gt;</code>, and the window loads
+<code>/?atom-transcript=1&amp;electron=1</code>
+(<code>electron/main.js:379</code>).</li>
+<li>The page fetches React 18.3.1 and ReactDOM from
+<code>cdnjs.cloudflare.com</code>, with no <code>integrity</code> hash,
+before <code>support.js</code> runs. No Content-Security-Policy exists.
+React is not installed in <code>node_modules</code>;
+<code>package.json</code> carries only
+<code>@types/react ^19.3.0</code>, a major version ahead of the React
+that runs. The installed app (<code>/Applications/Substrate.app</code>,
+CFBundleVersion 1793161234) carries the same four script tags and no CSP
+(F320).</li>
+</ol>
+<h2 id="the-documents-behind-the-move-off-dc-runtime">The documents
+behind the move off dc-runtime</h2>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+</colgroup>
+<thead>
+<tr>
+<th>Date</th>
+<th>Document</th>
+<th>What it holds</th>
+<th>What it lacks</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>2026-08-31</td>
+<td><code>design/received/handoff_latest/docs/DESIGN-SPEC-2026-08-31-round4.md</code>,
+line 64</td>
+<td>“production lifts it into a typed React codebase”</td>
+<td>Any plan for the lift</td>
+</tr>
+<tr>
+<td>2026-09-12</td>
+<td><code>process/planning/2026-09-10-prototype-port/DIRECTION-2026-09-12.md</code>;
+commit <code>43e95fb</code></td>
+<td>The decision to point Electron at the prototype and wire real data
+into it, after a React rewrite (sprints 001–033) and a
+component-by-component port (Q0–Q2) were abandoned</td>
+<td>Any date or condition for leaving dc-runtime</td>
+</tr>
+<tr>
+<td>2026-09-23</td>
+<td><code>process/planning/2026-09-23-reveal-shell-hardening/AUDIT-2026-09-23-dc-runtime-local-optimum.md</code></td>
+<td>The diagnosis: one <code>renderVals()</code> re-runs on every state
+change; <code>sc-for</code> keys rows by index; there are no component
+boundaries. Its Path A, moving off dc-runtime, is “the correct long-term
+posture … a real refactor”, to be “scoped as its own epic”.</td>
+<td>The epic it asks for</td>
+</tr>
+<tr>
+<td>2026-09-23</td>
+<td><code>process/planning/2026-09-23-reveal-shell-hardening/PLAN-2026-09-23-phase-8-transcript-atom-migration.md</code></td>
+<td>The method, for the transcript only: pixel baseline (sprint 070), a
+mount behind a flag (071), the subtree moved piece by piece (072–075),
+the dc-runtime path retired (076). It lists the surfaces dc-runtime
+keeps.</td>
+<td>Everything outside the transcript</td>
+</tr>
+<tr>
+<td>2026-10-08</td>
+<td><code>docs/review/REVIEW-2026-10-08-whole-project-findings.md</code></td>
+<td>The findings: section 5, <code>support.js</code> cannot be rebuilt;
+section 1, fabricated content in the shipped UI</td>
+<td>—</td>
+</tr>
+<tr>
+<td>2026-10-08</td>
+<td><code>process/planning/2026-10-08-lens-audit/ROADMAP-2026-10-08-lens-audit-remediation.md</code>
+and its ledger</td>
+<td>The decision row “dc-runtime retired” (the Architect: “only if you
+don’t break anything”); item 13 gives the port nine lines; the ledger
+gives 37 findings, F320–F361 and F471, each cut off at about 200
+characters</td>
+<td>A design, an order of work, a component layout</td>
+</tr>
+<tr>
+<td>2026-10-08</td>
+<td><code>process/sprints/sprint-112-retire-dc-runtime.md</code></td>
+<td>A checklist: the 37 findings and six end checks (baseline gates
+green, no <code>@ts-nocheck</code>, React bundled with a CSP and no
+<code>unsafe-eval</code>, <code>support.js</code> gone, no fiber walks,
+no fixture text, <code>smoke:packaged</code> passing)</td>
+<td>A plan. It puts the whole shell into one card, against the kit’s
+rule of at most two files and one concept per sprint
+(<code>sdd-kit-3/AGENTS.md</code>, hard rule 6).</td>
+</tr>
+</tbody>
+</table>
+<p>The audit asked for an epic. The roadmap answered with one card. No
+one wrote the epic.</p>
+<h2 id="what-happened">What happened</h2>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>Date</th>
+<th>Event</th>
+<th>Record</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>2026-10-08</td>
+<td>Sprints 108–111 of the lens-audit roadmap close; 112 and 113 stay
+<code>pending</code></td>
+<td>the six cards’ <code>status:</code> lines</td>
+</tr>
+<tr>
+<td>2026-10-09 onward</td>
+<td>Work turns to defects found in the installed app (U114–U119), then
+to new roadmaps: harness drivers and the model picker (10-10), before
+distribution (10-11), slash entry (10-12), language (10-13). Each adds
+UI to the dc-runtime files.</td>
+<td><code>BLACKBOARD.md</code>;
+<code>process/planning/README.md</code></td>
+</tr>
+<tr>
+<td>2026-10-08 to 11-04</td>
+<td>35 commits touch <code>reveal_component.ts</code> or
+<code>reveal.html</code>; the class grows from 2,407 to 2,576 lines</td>
+<td><code>git log --since=2026-10-08</code></td>
+</tr>
+<tr>
+<td>Between 10-08 and 11-04</td>
+<td><code>harness/pixel_baseline.ts</code> and
+<code>harness/pixel_diff.ts</code>, Phase 8’s visual gate, leave the
+tree</td>
+<td><code>ls harness/</code></td>
+</tr>
+<tr>
+<td>2026-11-04</td>
+<td>Eight rounds of research on new views assume they mount inside
+dc-runtime</td>
+<td><code>RESEARCH-2026-11-04-editor-level-and-modes*.md</code> in this
+folder</td>
+</tr>
+</tbody>
+</table>
+<p>No entry on <code>BLACKBOARD.md</code> defers, drops or reschedules
+sprint 112. The planning index still lists the lens audit as “open: its
+roadmap has not closed”.</p>
+<h2 id="why">Why</h2>
+<ol type="1">
+<li><strong>No one wrote the epic.</strong> The audit of 2026-09-23
+named the move off dc-runtime a refactor to scope as its own epic. Phase
+8 did the transcript. The lens-audit roadmap of 2026-10-08 then folded
+the rest of the shell into one card of 37 findings, with no design, no
+order of work, and more than two files.</li>
+<li><strong>The card sat last in its roadmap, and the roadmap stopped
+before it.</strong> Items 1–12 closed on 2026-10-08. The next day’s work
+came from defects found in the installed app, and no step put the card
+back in line.</li>
+<li><strong>The switch went unrecorded.</strong> The kit asks that a
+put-off item get a <code>deferred</code> entry with a condition for
+coming back to it (<code>sdd-kit-3/AGENTS.md</code>, “The BLACKBOARD
+protocol”). The card got none, so no later session saw it waiting.</li>
+<li><strong>Every later UI sprint enlarged what the port has to
+move.</strong> 169 lines and 35 commits have landed since the findings
+were written. The Architect’s condition, “only if you don’t break
+anything”, is measured by gates; the Electron gate list has grown to 45,
+and the pixel gate Phase 8 used is gone.</li>
+<li><strong>This session read past it.</strong> The runbook names
+<code>process/planning/2026-10-08-lens-audit/</code> as an open folder
+to read in full (<code>RUNBOOK-2026-10-29-project-r6.md</code>, “The
+current direction”). The research rounds were written before that folder
+was read, so they planned new views on a runtime already scheduled for
+removal.</li>
+</ol>
+<h2 id="the-cards-findings-today">The card’s findings today</h2>
+<p>Checked against the tree on 2026-11-04:</p>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>State</th>
+<th>Findings</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Fixed by later sprints</td>
+<td>F332 (<code>openSession</code> no longer falls back to
+<code>deterministic</code>), F354 (the “needs a rename endpoint” note is
+gone; naming shipped in U145)</td>
+</tr>
+<tr>
+<td>Partly fixed</td>
+<td>F328 (fixture text: six hits remain in <code>reveal.html</code> and
+<code>reveal_component.ts</code>, among them the export dialog’s
+“01M1684 · fix-race-in-metering · 244 ev”)</td>
+</tr>
+<tr>
+<td>Closes with the finding it resolves</td>
+<td>F471</td>
+</tr>
+<tr>
+<td>Open</td>
+<td>F320, F321, F322, F327, F329, F330, F331, F333, F334, F335, F336,
+F337, F338, F339, F340, F343, F344, F345, F346, F347, F348, F349, F350,
+F351, F352, F353, F355, F356, F357, F358, F359, F360, F361 (33
+findings)</td>
+</tr>
+</tbody>
+</table>
+<h2 id="what-is-missing">What is missing</h2>
+<p>The refactor plan the audit asked for: the design of the shell as
+typed React components, the order of work in sprints of at most two
+files and one concept, the gates that prove nothing breaks (the 45
+Electron gates and a pixel gate to replace Phase 8’s), and the 33 open
+findings placed in that order. The new views from sheet turns 16–17 wait
+for it, and are built as React components in the window it produces.</p>
+</body>
+</html>
