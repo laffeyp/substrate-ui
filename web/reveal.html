@@ -7,9 +7,11 @@
 <link rel="icon" href="data:,"><!-- UI sprint 107: no icon to fetch; the missing /favicon.ico 404ed on every load -->
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>substrate · reveal</title>
-<!-- dc-runtime needs React + ReactDOM in window scope before support.js runs. -->
-<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
-<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<!-- dc-runtime needs React + ReactDOM in window scope before support.js runs. Sprint 199: both load
+     from the app's own server, copied from node_modules at build with an integrity hash (vite.config.ts,
+     vendorReact); before, they came from cdnjs with none (lens finding F320). -->
+<script src="./vendor/react.production.min.js"></script>
+<script src="./vendor/react-dom.production.min.js"></script>
 <script src="./support.js"></script>
 <script type="module" src="./reveal.ts"></script>
 </head>

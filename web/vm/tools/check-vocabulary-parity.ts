@@ -4,14 +4,11 @@
 /**
  * web/vm/tools/check-vocabulary-parity.ts
  *
- * Parity gate for the reveal shell alone. Walks web/vm/ and web/reveal.ts
- * for emit("TAG_NAME", ...) call sites and asserts every emitted tag
- * exists in web/vm/signals/versions/current.json. Fails with a typed
- * report on drift.
- *
- * Wholly separate from the classic shell's tools/check-vocabulary-parity.ts
- * which scans the classic tree against signals/versions/current.json.
- * Neither gate touches the other's scope.
+ * Parity gate for the window's code. Walks web/vm/, web/reveal.ts,
+ * web/reveal_component.ts and the React trees web/reveal/ and web/app/
+ * (.ts and .tsx) for emit("TAG_NAME", ...) call sites and asserts every
+ * emitted tag exists in web/vm/signals/versions/current.json. Fails with
+ * a typed report on drift.
  *
  * Usage:  npx tsx web/vm/tools/check-vocabulary-parity.ts
  * Exit:   0 on parity, 1 on drift, 2 on lock-file structural error.
@@ -54,6 +51,11 @@ const SCAN_PATHS = [
   // signals today, but the parity gate must scan it so a future emit
   // added inside the shell trips a drift check.
   join(REPO_ROOT, "web", "reveal_component.ts"),
+  // Sprint 200 (F359): the React trees. web/reveal/ holds the transcript's
+  // .tsx; web/app/ is where the shell's components land as they leave
+  // dc-runtime (plan PLAN-2026-11-04-shell-to-react-r4.md).
+  join(REPO_ROOT, "web", "reveal"),
+  join(REPO_ROOT, "web", "app"),
 ];
 const SCAN_EXTS = new Set([".ts", ".tsx"]);
 const SELF = "web/vm/tools/check-vocabulary-parity.ts";

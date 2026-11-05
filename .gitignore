@@ -45,3 +45,7 @@ runs/packaged/release-*
 # the shakeout harness's server log, written next to each run's report.json
 captures/shakeout-*/server.log
 harness/shakeout/.scratch/
+
+# Pixel gate (sprint 195): the baseline is kept; check runs are not.
+captures/pixel/*
+!captures/pixel/baseline-*/

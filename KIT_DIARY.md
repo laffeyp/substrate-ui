@@ -886,3 +886,48 @@ The one product defect found (the daemon dying on a long state path) turned up w
 3. Orientation reading lists tail BLACKBOARD and KIT_DIARY. Full reads of append-only logs waste a model's context on ground superseded by its own newer entries.
 4. A runbook names the dependency and points at its own runbook; it does not reach into the dependency's internals.
 5. Prior art for runbook form converges on nine sections: header, triggers, prerequisites, procedure, verification, rollback, troubleshooting, escalation, references. The startup prompt sits on top.
+
+---
+
+### 2026-11-04 — A checklist card in a roadmap is not a plan; research written before the open folders were read
+
+**Context.** The Architect asked for research on new views (sheet turns 16–17: a code editor, media editors, a plain shell, a design canvas). Eight research rounds were written. The Architect then asked whether substrate-ui is all React. It is not: the window runs on dc-runtime, the design prototype's runtime, and only the transcript is React.
+
+**What happened.**
+- The dc-runtime audit of 2026-09-23 asked for the move off dc-runtime "scoped as its own epic". Phase 8 moved the transcript only.
+- The lens-audit roadmap of 2026-10-08 folded the rest of the shell into one card, sprint 112: 37 findings, six end checks, no design, no order of work, more than two files.
+- Sprints 108–111 closed that day. Sprint 112 never ran and was never deferred. 35 commits since then added UI to the dc-runtime files.
+- The research rounds of 2026-11-04 planned new views as islands inside dc-runtime. The lens-audit folder, which the runbook lists as open and to be read in full, had not been read.
+- Post-mortem: `process/planning/2026-11-04-editor-level/POSTMORTEM-2026-11-04-dc-runtime-never-retired-r2.md`. Plan: `process/planning/2026-11-04-shell-to-react/PLAN-2026-11-04-shell-to-react-r3.md`.
+
+**What worked.**
+- The kit's record held the trail. The card, the roadmap's decision row, the audit and the Phase 8 plan were all on disk, so the gap could be traced in one pass.
+- The red-team pass on the plan, checked against the code, caught four faults before any sprint ran: move sprints of four to five files, 16 hover styles inline styles cannot express, screen text that changes on every run, and four fiber reaches where the plan named one.
+
+**What got in the way.**
+- A roadmap item can be a checklist without being a plan, and nothing in the kit tells them apart. A card that lists findings for a whole subsystem reads as scheduled work.
+- A put-off card leaves no trace unless someone writes a `deferred` entry. When the next day's work starts from new defects, the pending card goes quiet.
+- Research written before the runbook's reading list is finished plans against a state the record has already moved past.
+
+**What the kit could say.**
+1. A card that cannot meet hard rule 6 (two files, one concept) is a pointer to an epic, and the epic's plan is written before the card counts as work.
+2. When a session starts work from outside the roadmap in force, the roadmap's next pending card gets a `deferred` entry in the same turn.
+3. Research and plans are written only after the runbook's reading list is read, open folders included.
+
+---
+
+### 2026-11-04 — Pixel anchors are a feedback loop for building, not a check for a refactor
+
+**What happened.** The move off dc-runtime got a pixel gate (sprints 192–198): screenshots of 14 screens compared with a baseline, volatile text masked. The plan called it the decode lens of Addendum A1/A2. The Architect asked whether the kit's pixel-anchor technique was being used correctly against the signal vocabulary. It was not used at all: the gate is a screenshot regression, the window draws no anchors, and the vocabulary has no `view` tags.
+
+**What the technique is for.** Foundation 01 replaces the human's description with a signal the model reads. Addendum A2 decodes known pixels into state, checks it against the record, and emits the decoded state as text "so the agent 'sees' a text state-snapshot, not an image". A8: "correlate the log with the image; do not narrate the pixels". B1: the a11y tree, the anchor strip, the signal trace and the screenshot must agree. B5: a vision model is perception and tiebreak only. The technique links the image to the emitted signals so a model building something can tell, in text, whether the screen shows what the record holds.
+
+**Why it does not apply to the move.** The move has a perfect visual reference: today's window, drawn from the same deterministic session. Success is pixel-identical; a failure points at the exact place; the fix is "match what was there". Nothing in that loop needs the model to judge whether a screen is right, because the reference already decided. Anchors would add nothing the regression lacks.
+
+**Where it does apply.** Building a view step by step with no reference: the editor level's new views. There each step needs feedback that the screen matches the record, and anchors paired with the view tags each view adds give that feedback in text.
+
+**What got in the way.** The plan named the technique for a check that did not use it, and the first correction swung to process: view tags for every area, a vocabulary session for the window, signal-graded swaps. The Architect: use the technique where it helps, and do not fake its use where it does not.
+
+**What the kit could say.**
+1. A pixel regression against a recorded baseline is the right check when a change must leave the screen as it was. It is not the decode lens, and a plan should not name it as one.
+2. Pixel anchors and their view tags belong to work with no visual reference, where the model needs the screen read back as state.

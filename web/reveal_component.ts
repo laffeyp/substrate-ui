@@ -92,6 +92,7 @@ import { followBottom } from "./reveal/follow_bottom";
 import { sessionStatusLook } from "./reveal/session_status";
 import { buildLanguageLens, LANGUAGE_STREAM_TABS, languageView, languageViewTabs, LanguageStreamId, LanguageViewMode } from "./reveal/language_lens";
 import { settingsTail } from "./reveal/settings_tail";
+import { clearNote, fontSize, loadSettings, pickTheme, settings, stepFont } from "./app/state/settings";
 
 
 class Component extends DCLogic {
@@ -119,7 +120,7 @@ class Component extends DCLogic {
     panes: [{ id: 1, name: 'pane-1', driver: null, editing: false, nameVal: '', unbound: true }],
     focused: 1, cols: 1, rows: 1, colW: [1], rowW: [1], revealL: 1.15, ddFor: null, wsFor: null, driverExpandedCli: null, driverExpandedFamily: null, allSessions: [],
     findOpen: false, findQ: '', findScope: 'transcript',
-    showSettings: false, showExport: false, showEndConfirm: false, ended: false, frDone: false, theme: 'dark', fontOverride: null, settingsNote: '',
+    showSettings: false, showExport: false, showEndConfirm: false, ended: false, frDone: false,
   // Sprint 086 — Records surface: per-workspace expand state and
   // paginated session buffers. Empty means "not expanded, not fetched
   // yet". On expand, loadSessionsByWorkspace(path, 0, 50) fills
@@ -886,27 +887,10 @@ class Component extends DCLogic {
     });
   }
   componentDidMount() {
-    // 19c settings persistence — load once at mount, save on change.
-    // Whole-state restore per D68 still lives in SQLite; these are
-    // per-viewer preferences that never round-trip to the server.
-    try {
-      const raw = window.localStorage.getItem('substrate-ui.settings');
-      if (raw) {
-        const s = JSON.parse(raw) || {};
-        const patch = {};
-        if (s.theme === 'dark' || s.theme === 'light' || s.theme === 'system') patch.theme = s.theme;
-        if (typeof s.fontOverride === 'number' && s.fontOverride >= 9 && s.fontOverride <= 19) patch.fontOverride = s.fontOverride;
-        if (Object.keys(patch).length) this.setState(patch);
-      }
-    } catch (_e) { /* localStorage unavailable / disabled — carry defaults */ }
-    this._persistSettings = () => {
-      try {
-        const s = this.state;
-        window.localStorage.setItem('substrate-ui.settings', JSON.stringify({
-          theme: s.theme, fontOverride: s.fontOverride,
-        }));
-      } catch (_e) { /* ignore */ }
-    };
+    // 19c settings: theme and type size, per viewer, in web/app/state/settings.ts (sprint 204).
+    // Loaded once here; each change redraws the window.
+    loadSettings();
+    this._offSettings = settings.subscribe(() => this.forceUpdate());
     // Tick the activity strip's seconds counter between controller
     // events. A live tool that takes 12s emits no envelopes for 12s;
     // without a tick the counter reads its start value the whole time.
@@ -1060,7 +1044,7 @@ class Component extends DCLogic {
     }
     if (changed('view') && pv && (pv === 'revealed') !== state.revealed) this.setState({ revealed: pv === 'revealed', surface: null });
   }
-  componentWillUnmount() { if (this._offRuns) this._offRuns(); window.removeEventListener('keydown', this._kd); window.removeEventListener('mousemove', this._mm); window.removeEventListener('mouseup', this._mu); window.removeEventListener('resize', this._rs); if (this._ddOutside) document.removeEventListener('mousedown', this._ddOutside, true); if (this._activityTick) { window.clearInterval(this._activityTick); this._activityTick = null; } }
+  componentWillUnmount() { if (this._offRuns) this._offRuns(); if (this._offSettings) this._offSettings(); window.removeEventListener('keydown', this._kd); window.removeEventListener('mousemove', this._mm); window.removeEventListener('mouseup', this._mu); window.removeEventListener('resize', this._rs); if (this._ddOutside) document.removeEventListener('mousedown', this._ddOutside, true); if (this._activityTick) { window.clearInterval(this._activityTick); this._activityTick = null; } }
   _upd(arrKey, i, field) { return (ev) => this.setState(s => { const arr = s[arrKey].map((x, j) => j === i ? Object.assign({}, x, { [field]: ev.target.value }) : x); return { [arrKey]: arr }; }); }
   _rm(arrKey, i) { return () => this.setState(s => ({ [arrKey]: s[arrKey].filter((x, j) => j !== i) })); }
   _validate() {
@@ -2278,7 +2262,7 @@ class Component extends DCLogic {
       },
       revealLabel: state.revealed ? 'panes' : 'meta',
       revealBtnColor: state.revealed && !surf ? '#212327' : '#9aa0a8', revealBtnBg: state.revealed && !surf ? '#82a5c8' : '#3d434c',
-      fontSize: state.fontOverride ?? this.props.transcriptFontSize ?? 13,
+      fontSize: fontSize(this.props.transcriptFontSize ?? 13),
       // Reveal view's single-pane prompt row (reveal.html:345). Bound
       // to the focused pane's pv, so the same field the terminal-view
       // pane input mutates is what the reveal-view input shows.
@@ -2504,13 +2488,16 @@ class Component extends DCLogic {
       focusStream: () => { if (this.state.findScope !== 'stream') this.setState({ findScope: 'stream' }); },
       closeFind: () => this.setState({ findOpen: false, findQ: '' }),
       // ── dialogs (19c/19f/19g) ──
-      showSettings: state.showSettings, closeSettings: () => this.setState({ showSettings: false, settingsNote: '' }),
-      themeChips: ['dark', 'light', 'system'].map(t => ({ label: t, color: state.theme === t ? '#e2e5e9' : '#62676f', bg: state.theme === t ? '#2e3138' : 'transparent',
-        pick: () => this.setState({ theme: t, settingsNote: t === 'dark' ? '' : 'noted — the light theme ships with the build; the prototype renders dark' }, this._persistSettings) })),
-      settingsNote: state.settingsNote,
-      fontLabel: (state.fontOverride ?? this.props.transcriptFontSize ?? 13) + 'px',
-      fontMinus: () => this.setState(st => ({ fontOverride: Math.max(9, (st.fontOverride ?? this.props.transcriptFontSize ?? 13) - 1) }), this._persistSettings),
-      fontPlus: () => this.setState(st => ({ fontOverride: Math.min(19, (st.fontOverride ?? this.props.transcriptFontSize ?? 13) + 1) }), this._persistSettings),
+      showSettings: state.showSettings, closeSettings: () => { this.setState({ showSettings: false }); clearNote(); },
+      // A click inside a dialog's panel stops there, so the backdrop's close handler sees only clicks
+      // outside it (sprint 203; removed by mistake in 5a4d97a).
+      swallow: (ev) => ev.stopPropagation(),
+      themeChips: ['dark', 'light', 'system'].map(t => ({ label: t, color: settings.getSnapshot().theme === t ? '#e2e5e9' : '#62676f', bg: settings.getSnapshot().theme === t ? '#2e3138' : 'transparent',
+        pick: () => pickTheme(t) })),
+      settingsNote: settings.getSnapshot().settingsNote,
+      fontLabel: fontSize(this.props.transcriptFontSize ?? 13) + 'px',
+      fontMinus: () => stepFont(-1, this.props.transcriptFontSize ?? 13),
+      fontPlus: () => stepFont(1, this.props.transcriptFontSize ?? 13),
       showExport: state.showExport, closeExport: () => this.setState({ showExport: false }), doExport: () => this.setState({ showExport: false }),
       showEndConfirm: state.showEndConfirm, closeEndConfirm: () => this.setState({ showEndConfirm: false }),
       doEndSession: async () => {
