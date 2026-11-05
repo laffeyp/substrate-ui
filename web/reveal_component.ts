@@ -37,7 +37,7 @@ import {
   EnvelopeKind, Surface, GraphMode, RevealLevel, GraphDirection,
 } from "./vm/kinds";
 import { isToolCallRow, isToolResultRow } from "./vm/types";
-import { describeEventTime, eventTimes, formatClock, formatElapsed } from "./reveal/timeline";
+import { describeEventTime, eventTimes, formatElapsed } from "./reveal/timeline";
 import { toggleToolOutputMode } from "./vm/tool_output_mode";
 import { GUIDANCE_LEVEL_BUNDLES, HANDOFF_DEFAULT, LENGTH_DEFAULT, LengthPosition, TONE_DEFAULT, TonePosition } from "./vm/controls.gen";
 
@@ -73,11 +73,9 @@ const TONE_OPTIONS = Object.values(TonePosition).map(v => ({ value: v, label: v,
 const LENGTH_DEFAULT_AT = LENGTH_OPTIONS.findIndex(o => o.value === LENGTH_DEFAULT);
 const TONE_DEFAULT_AT = TONE_OPTIONS.findIndex(o => o.value === TONE_DEFAULT);
 import { mdBlocks, mdInlines, renderBlock, renderInline } from "./reveal/markdown";
-import { liveActivity } from "./reveal/activity";
 import { followBottom } from "./reveal/follow_bottom";
 import { sessionStatusLook } from "./reveal/session_status";
 import { buildLanguageLens, LANGUAGE_STREAM_TABS, languageView, languageViewTabs, LanguageStreamId, LanguageViewMode } from "./reveal/language_lens";
-import { settingsTail } from "./reveal/settings_tail";
 import { fontSize, loadSettings, settings } from "./app/state/settings";
 import { closeDialog, dialogOpen, openEndSession, openSettings } from "./app/state/dialogs";
 import { chrome } from "./app/state/chrome";
@@ -122,59 +120,7 @@ class Component extends DCLogic {
   _mdRenderBlock(blk) { return renderBlock(blk); }
   _mdInlines(text) { return mdInlines(text); }
   _mdBlocks(text) { return mdBlocks(text); }
-  _liveActivity(snap) { return liveActivity(snap); }
-  // UI sprints 161, 172: the bar line ends with the settings, each named, and each language shift
-  // since the last change written after the setting its measure answers to.
-  _tailSegs(paneId, snap) {
-    if (!snap || !snap.sessionId) return [];
-    const vm = window.__vm;
-    const ctl = vm && typeof vm.get === 'function' ? vm.get(paneId) : null;
-    const level = ctl && typeof ctl.guidanceLevel === 'function' ? ctl.guidanceLevel() : null;
-    return settingsTail({
-      guidance: level || snap.bundleSlug || 'none', length: snap.length || LENGTH_DEFAULT, tone: snap.tone || TONE_DEFAULT,
-      handoff: snap.handoff || HANDOFF_DEFAULT,
-      language: snap.language || null, off: !!snap.languageOff, clearedSeq: snap.languageClearedSeq ?? -1,
-    }).map(sg => ({ ...sg, deco: sg.shift ? 'underline dotted' : 'none', cursor: sg.shift ? 'help' : 'inherit', shiftAttr: sg.shift ? sg.text : '' }));
-  }
-  _liveBindingsFor(paneId, state) {
-    // Sprint 076 retirement: dc-runtime no longer renders transcript
-    // rows. This helper now surfaces the activity strip alone (the
-    // producer/turn recap above the prompt row). Every transcript
-    // row goes through the React atom tree at web/reveal/transcript/.
-    const snap = (state.controllerSnapshots || {})[paneId] || null;
-    const activity = this._liveActivity(snap);
-    return {
-      activityShow: !!activity,
-      activityTurnWord: activity ? activity.turnWord : '',
-      activityTurnColor: activity ? activity.turnColor : '#4a4e55',
-      activityRest: activity ? activity.hasRest : false,
-      // UI sprint 161: the session's guidance, length and tone end the line (§ U).
-      activityRestText: activity ? activity.restText : '',
-      tailSegs: activity ? this._tailSegs(paneId, snap) : [],
-      activityColor: activity ? activity.color : '#62676f',
-      activityPulseClass: activity && activity.pulseOn ? 'act-pulse' : '',
-      // UI sprint 105: one line per running bash background task, with a stop link (Claude
-      // Code's /tasks). The controller keeps the list fresh while any task runs.
-      ...this._taskBindings(paneId, snap),
-    };
-  }
-  _taskBindings(paneId, snap) {
-    const tasks = (snap && Array.isArray(snap.backgroundTasks)) ? snap.backgroundTasks : [];
-    const running = tasks.filter((t) => t.status === 'running');
-    const fmt = (s) => formatClock(s);
-    return {
-      tasksShow: running.length > 0,
-      taskRows: running.map((t) => ({
-        id: t.task_id,
-        label: `${t.task_id} · ${String(t.command).slice(0, 60)} · ${fmt(t.runtime_s)}`,
-        stop: () => {
-          const vm = window.__vm;
-          const c = vm && vm.get(paneId);
-          if (c) c.stopTask(t.task_id);
-        },
-      })),
-    };
-  }
+  // The bar line and the task rows are web/app/ActivityLine.tsx (sprint 268).
   _newPane() {
     const id = (this._nextId = (this._nextId || Math.max(...this.state.panes.map(p => p.id), ...(this.state.allSessions || []).map(s => s.id)) + 1)) && this._nextId++;
     // Split-pane multi-session: each pane owns its own SessionController.
@@ -876,10 +822,6 @@ class Component extends DCLogic {
       else if (command === 'settings') openSettings();
       else if (command === 'close-pane') this._closePane(this.state.focused);
     });
-    // Tick the activity strip's seconds counter between controller
-    // events. A live tool that takes 12s emits no envelopes for 12s;
-    // without a tick the counter reads its start value the whole time.
-    this._activityTick = window.setInterval(() => this.forceUpdate(), 500);
     // UI sprint 182: a run a session starts now opens its panes; `/run focus` shows or reopens one.
     // A start read back from an older record (`t` over a minute old) opens nothing.
     { const vm = window.__vm;
@@ -1036,7 +978,7 @@ class Component extends DCLogic {
     this._publishChrome();
     this._publishTopBar();
   }
-  componentWillUnmount() { if (this._offRuns) this._offRuns(); if (this._offSettings) this._offSettings(); if (this._offShell) this._offShell(); if (this._offCommands) this._offCommands(); if (this._offFirstRun) this._offFirstRun(); if (this._offTopBarActs) this._offTopBarActs(); if (this._offOpenSession) this._offOpenSession(); if (this._offTitleOf) this._offTitleOf(); window.removeEventListener('keydown', this._kd); window.removeEventListener('resize', this._rs); if (this._ddOutside) document.removeEventListener('mousedown', this._ddOutside, true); if (this._activityTick) { window.clearInterval(this._activityTick); this._activityTick = null; } }
+  componentWillUnmount() { if (this._offRuns) this._offRuns(); if (this._offSettings) this._offSettings(); if (this._offShell) this._offShell(); if (this._offCommands) this._offCommands(); if (this._offFirstRun) this._offFirstRun(); if (this._offTopBarActs) this._offTopBarActs(); if (this._offOpenSession) this._offOpenSession(); if (this._offTitleOf) this._offTitleOf(); window.removeEventListener('keydown', this._kd); window.removeEventListener('resize', this._rs); if (this._ddOutside) document.removeEventListener('mousedown', this._ddOutside, true); }
   // UI sprint 140: ⌘E folds or unfolds every tool card (ToolCard reads the setting). No control
   // on screen: the Architect's call; /fold and /unfold do the same from the input bar.
   _toggleTools() {
@@ -1235,7 +1177,6 @@ class Component extends DCLogic {
       // Machinery-lens bindings scoped to THIS pane so splitting the
       // window does not blank an unfocused pane. Each pane reads its
       // own controller's snapshot; focus only controls emphasis.
-      ...this._liveBindingsFor(p.id, state),
       // The input bar is web/app/InputBar.tsx, keyed by the pane (sprint 261).
       sentLines: (p.sent || []).map(t => ({ text: t })),
       editing: p.editing, notEditing: !p.editing, nameVal: p.nameVal,
@@ -1812,7 +1753,6 @@ class Component extends DCLogic {
       // terminal view reads. _liveBindingsFor already computes tool
       // cards, Markdown blocks, opacity from find, running seconds —
       // reuse it here for the focused pane so both views stay in sync.
-      ...this._liveBindingsFor(fp.id, state),
       crumb: ((title) => surf === Surface.Records ? title + ' › records' : surf === Surface.Assay ? title + ' › assays' : title)(this._paneTitle(state, fp)),
       escHint: surf ? 'esc — back' : '',
       openRecords: () => this._toggleSurface('records'),

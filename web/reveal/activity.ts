@@ -26,8 +26,41 @@ export interface Activity {
   pulseOn: boolean;
 }
 
-// The snapshot arrives untyped from the dc-runtime component.
-export function liveActivity(snap: any): Activity | null {
+// F350: the scan over the record's envelopes depends on the snapshot alone, and the clock only
+// moves a live turn's seconds. So the scan runs once per snapshot (snapshots are replaced, never
+// changed, on every controller patch) and the 500 ms tick only formats the seconds again.
+type Scan =
+  | { kind: "done"; activity: Activity }
+  | { kind: "live"; turnWord: string; umT: number | null; tools: number; liveToolName: string };
+const scans = new WeakMap<object, Scan | null>();
+
+/** What the strip shows at `nowSec` (unix seconds). The snapshot arrives untyped from the dc-runtime
+ *  component. */
+export function liveActivity(snap: any, nowSec: number = Date.now() / 1000): Activity | null {
+  if (!snap || typeof snap !== "object") return null;
+  let scan = scans.get(snap);
+  if (scan === undefined) { scan = scanActivity(snap); scans.set(snap, scan); }
+  if (!scan) return null;
+  if (scan.kind === "done") return scan.activity;
+  const secs = scan.umT === null ? 0 : Math.max(0, Math.floor(nowSec - scan.umT));
+  // "turn N" is the head word and pulses. The tail always names the same three fields — seconds,
+  // tool count, running tool (if any) — so the strip never gains or loses columns as a turn
+  // progresses. Zero tools reads "no tools"; the field is always present.
+  const restParts = [formatClock(secs)];
+  restParts.push(scan.tools === 0 ? "no tools" : `${scan.tools} tool${scan.tools === 1 ? "" : "s"}`);
+  if (scan.liveToolName) restParts.push(scan.liveToolName);
+  restParts.push("ctrl+c to stop");
+  const restText = restParts.join(" · ");
+  return {
+    kind: "live", verb: scan.liveToolName, seconds: secs,
+    turnWord: scan.turnWord, turnColor: "#82a5c8",
+    restText, hasRest: restText.length > 0,
+    color: "#9aa0a8",
+    pulseOn: true,
+  };
+}
+
+function scanActivity(snap: any): Scan | null {
   // The activity strip above the prompt has three states.
   // Live: the most recent UserMessage has no Park after it — a turn
   //   is running. The verb names what is happening RIGHT NOW: the
@@ -41,7 +74,6 @@ export function liveActivity(snap: any): Activity | null {
   // Empty: no session or no envelopes.
   if (!snap || !Array.isArray(snap.rawEnvelopes) || !snap.rawEnvelopes.length) return null;
   const envs = snap.rawEnvelopes;
-  const nowSec = Date.now() / 1000;
   // Find the last UserMessage and last Park/SessionEnded by seq.
   let lastUM = null, lastPark = null, lastParkKind = '';
   for (let i = envs.length - 1; i >= 0; i--) {
@@ -63,8 +95,9 @@ export function liveActivity(snap: any): Activity | null {
   // not running, the turn is over: show it ended, in red, without the pulse or a clock that
   // keeps counting. Statecharts: every state needs its exits, failure included.
   const fail = snap.turnFailure;
-  const umTime = typeof lastUM.t === 'number' ? lastUM.t : nowSec;
-  if (turnIsLive && fail && umTime <= fail.atT) {
+  // A message with no time reads as sent now, after any failure, so it is not the failed turn.
+  const umTime: number | null = typeof lastUM.t === 'number' ? lastUM.t : null;
+  if (turnIsLive && fail && umTime !== null && umTime <= fail.atT) {
     let failTools = 0;
     for (const e of envs) {
       if (typeof e.seq === 'number' && e.seq >= umSeq && isCall(e.kind)) failTools++;
@@ -74,13 +107,13 @@ export function liveActivity(snap: any): Activity | null {
     const ranTxt = formatDuration(ran);
     const toolTxt = failTools === 0 ? 'no tools' : `${failTools} tool${failTools === 1 ? '' : 's'}`;
     const detail = String(fail.detail).replace(/^\{"error":"?|"?\}$/g, '').slice(0, 140);
-    return {
+    return { kind: "done", activity: {
       kind: 'failed',
       turnWord: turnIdx !== null ? `turn ${turnIdx}` : 'turn', turnColor: '#c86464',
       restText: `${ranTxt} · ${toolTxt} · ended: ${detail}`, hasRest: true,
       color: '#c86464',
       pulseOn: false,
-    };
+    } };
   }
   if (turnIsLive) {
     // Count tools started in this turn.
@@ -96,27 +129,8 @@ export function liveActivity(snap: any): Activity | null {
         outstanding.delete(p.call_id);
       }
     }
-    const liveToolName = outstanding.size ? Array.from(outstanding.values()).pop() : '';
-    const umT = typeof lastUM.t === 'number' ? lastUM.t : nowSec;
-    const secs = Math.max(0, Math.floor(nowSec - umT));
-    // "turn N" is the head word and pulses. The tail always names
-    // the same three fields — seconds, tool count, running tool
-    // (if any) — so the strip never gains or loses columns as a
-    // turn progresses. Zero tools reads "no tools"; the field is
-    // always present.
-    const turnWord = turnIdx !== null ? `turn ${turnIdx}` : 'turn';
-    const restParts = [formatClock(secs)];
-    restParts.push(tools === 0 ? 'no tools' : `${tools} tool${tools === 1 ? '' : 's'}`);
-    if (liveToolName) restParts.push(liveToolName);
-    restParts.push('ctrl+c to stop');
-    const restText = restParts.join(' · ');
-    return {
-      kind: 'live', verb: liveToolName || '', seconds: secs,
-      turnWord, turnColor: '#82a5c8',
-      restText, hasRest: restText.length > 0,
-      color: '#9aa0a8',
-      pulseOn: true,
-    };
+    const liveToolName = outstanding.size ? Array.from(outstanding.values()).pop() ?? '' : '';
+    return { kind: "live", turnWord: turnIdx !== null ? `turn ${turnIdx}` : 'turn', umT: typeof lastUM.t === 'number' ? lastUM.t : null, tools, liveToolName };
   }
   // Recap for the completed turn between lastUM and lastPark.
   const tools = [];
@@ -141,11 +155,11 @@ export function liveActivity(snap: any): Activity | null {
   // not change between states — only the pulse stops.
   const turnWord = turnIdx !== null ? `turn ${turnIdx}` : 'turn';
   const restText = `${elapsedTxt} · ${toolLabel} · ${parkLabel}`;
-  return {
+  return { kind: "done", activity: {
     kind: 'recap',
     turnWord, turnColor: '#62676f',
     restText, hasRest: true,
     color: '#62676f',
     pulseOn: false,
-  };
+  } };
 }

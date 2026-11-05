@@ -45,18 +45,8 @@
    <div data-vm-transcript-scroller="{{ pn.id }}" style="flex:1;overflow-y:auto;overflow-x:hidden;padding:16px 22px;line-height:2;font-size:{{ fontSize }}px;min-width:0">
     <div data-vm-transcript-mount="terminal" data-pane-id="{{ pn.id }}"></div>
    </div>
-   <sc-if value="{{ pn.activityShow }}" hint-placeholder-val="{{ false }}">
-    <div data-session-bar-line="1" style="flex:none;padding:0 22px 8px;font-size:11px;line-height:1.6;color:{{ pn.activityColor }}">
-     <span class="{{ pn.activityPulseClass }}" style="color:{{ pn.activityTurnColor }}">{{ pn.activityTurnWord }}</span><sc-if value="{{ pn.activityRest }}" hint-placeholder-val="{{ false }}"><span> · {{ pn.activityRestText }}</span></sc-if><span data-settings-tail="1" style="white-space:nowrap;display:inline-block"><sc-for list="{{ pn.tailSegs }}" as="sg" hint-placeholder-count="0"><span data-lang-shift="{{ sg.shiftAttr }}" title="{{ sg.title }}" style="color:{{ sg.color }};text-decoration:{{ sg.deco }};text-underline-offset:3px;cursor:{{ sg.cursor }};white-space:pre">{{ sg.text }}</span></sc-for></span>
-    </div>
-   </sc-if>
-   <sc-if value="{{ pn.tasksShow }}" hint-placeholder-val="{{ false }}">
-    <div data-vm-tasks="terminal" style="flex:none;padding:0 22px 8px;font-size:11px;line-height:1.6;color:#9aa0a8">
-     <sc-for list="{{ pn.taskRows }}" as="tr" hint-placeholder-count="1">
-      <div><span>task {{ tr.label }}</span> · <span data-vm-task-stop="{{ tr.id }}" onClick="{{ tr.stop }}" style="color:#c86464;cursor:pointer">stop</span></div>
-     </sc-for>
-    </div>
-   </sc-if>
+   <div data-app-mount="activity" data-pane-id="{{ pn.id }}" data-view="panes" style="flex:none"></div>
+   <div data-app-mount="tasks" data-pane-id="{{ pn.id }}" data-view="panes" style="flex:none"></div>
    <div style="flex:none;padding:0 22px 16px">
     <!-- the input bar: web/app/InputBar.tsx, for this pane (sprint 261) -->
     <div data-app-mount="input-bar" data-pane-id="{{ pn.id }}" data-view="panes"></div>
@@ -129,18 +119,8 @@
      <div data-vm-transcript-mount="reveal" data-pane-id="{{ focusedId }}"></div>
     </div>
     </sc-if>
-    <sc-if value="{{ activityShow }}" hint-placeholder-val="{{ false }}">
-     <div data-session-bar-line="1" style="flex:none;padding:0 26px 6px;font-size:11px;line-height:1.6;color:{{ activityColor }}">
-      <span class="{{ activityPulseClass }}" style="color:{{ activityTurnColor }}">{{ activityTurnWord }}</span><sc-if value="{{ activityRest }}" hint-placeholder-val="{{ false }}"><span> · {{ activityRestText }}</span></sc-if><span data-settings-tail="1" style="white-space:nowrap;display:inline-block"><sc-for list="{{ tailSegs }}" as="sg" hint-placeholder-count="0"><span data-lang-shift="{{ sg.shiftAttr }}" title="{{ sg.title }}" style="color:{{ sg.color }};text-decoration:{{ sg.deco }};text-underline-offset:3px;cursor:{{ sg.cursor }};white-space:pre">{{ sg.text }}</span></sc-for></span>
-     </div>
-    </sc-if>
-   <sc-if value="{{ tasksShow }}" hint-placeholder-val="{{ false }}">
-    <div data-vm-tasks="reveal" style="flex:none;padding:0 26px 6px;font-size:11px;line-height:1.6;color:#9aa0a8">
-     <sc-for list="{{ taskRows }}" as="tr" hint-placeholder-count="1">
-      <div><span>task {{ tr.label }}</span> · <span data-vm-task-stop="{{ tr.id }}" onClick="{{ tr.stop }}" style="color:#c86464;cursor:pointer">stop</span></div>
-     </sc-for>
-    </div>
-   </sc-if>
+    <div data-app-mount="activity" data-pane-id="{{ fpRow.id }}" data-view="meta" style="flex:none"></div>
+   <div data-app-mount="tasks" data-pane-id="{{ fpRow.id }}" data-view="meta" style="flex:none"></div>
     <div style="flex:none;padding:12px 26px 18px">
     <!-- the input bar: web/app/InputBar.tsx, for this pane (sprint 261) -->
     <div data-app-mount="input-bar" data-pane-id="{{ fpRow.id }}" data-view="meta"></div>

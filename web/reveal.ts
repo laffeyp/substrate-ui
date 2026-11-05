@@ -21,6 +21,7 @@ import { TopBar } from "./app/TopBar";
 import { RecordsPage } from "./app/RecordsPage";
 import { AssayPage } from "./app/AssayPage";
 import { InputBar } from "./app/InputBar";
+import { ActivityLine, TaskRows, type PaneView } from "./app/ActivityLine";
 
 function boot(): void {
   const registry = new PaneRegistry({ makeClient: () => new BrowserSubstrateClient() });
@@ -163,6 +164,11 @@ function boot(): void {
   mounts.register({ name: "input-bar", selector: '[data-app-mount="input-bar"]',
     key: (host) => (host.getAttribute("data-view") ?? "") + ":" + (host.getAttribute("data-pane-id") ?? ""),
     render: (host) => React.createElement(InputBar, { paneId: Number(host.getAttribute("data-pane-id")) }) });
+  // The bar line and the task rows, per pane and view (sprint 268).
+  const paneView = (host: HTMLElement) => ({ paneId: Number(host.getAttribute("data-pane-id")), view: (host.getAttribute("data-view") === "meta" ? "meta" : "panes") as PaneView });
+  const paneViewKey = (host: HTMLElement) => (host.getAttribute("data-view") ?? "") + ":" + (host.getAttribute("data-pane-id") ?? "");
+  mounts.register({ name: "activity", selector: '[data-app-mount="activity"]', key: paneViewKey, render: (host) => React.createElement(ActivityLine, paneView(host)) });
+  mounts.register({ name: "tasks", selector: '[data-app-mount="tasks"]', key: paneViewKey, render: (host) => React.createElement(TaskRows, paneView(host)) });
   mounts.register({ name: "footer", selector: '[data-app-mount="footer"]', key: () => "window",
     render: () => React.createElement(Footer) });
   mounts.register({ name: "first-run", selector: '[data-app-mount="first-run"]', key: () => "window",
