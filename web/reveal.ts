@@ -18,6 +18,7 @@ import { Dialogs } from "./app/Dialogs";
 import { FirstRun } from "./app/FirstRun";
 import { Footer } from "./app/Footer";
 import { TopBar } from "./app/TopBar";
+import { RecordsPage } from "./app/RecordsPage";
 
 function boot(): void {
   const registry = new PaneRegistry({ makeClient: () => new BrowserSubstrateClient() });
@@ -152,6 +153,8 @@ function boot(): void {
     render: () => React.createElement(Dialogs, { defaultFontSize: 13 }) });
   mounts.register({ name: "top-bar", selector: '[data-app-mount="top-bar"]', key: () => "window",
     render: () => React.createElement(TopBar) });
+  mounts.register({ name: "records", selector: '[data-app-mount="records"]', key: () => "window",
+    render: () => React.createElement(RecordsPage) });
   mounts.register({ name: "footer", selector: '[data-app-mount="footer"]', key: () => "window",
     render: () => React.createElement(Footer) });
   mounts.register({ name: "first-run", selector: '[data-app-mount="first-run"]', key: () => "window",

@@ -65,7 +65,8 @@ async function main(): Promise<void> {
       .catch(() => { throw new Error("⇧↵ on the folder's row did not open it"); });
     s = await press(win, "ArrowDown");
     if (!s.litIsSession) throw new Error(`↓ after ⇧↵ lit ${JSON.stringify(s)}`);
-    const name = s.lit.split(" ")[0];
+    // The session's name is the row's second span (after the status dot).
+    const name = await win.evaluate(`(document.querySelector('[data-records-lit="1"][data-records-session] > span:nth-child(2)') || {}).textContent || ""`) as string;
     s = await press(win, "Enter");
     await win.waitForFunction(`!document.querySelector("[data-records-workspaces]") && !!window.__vm.get(1).snapshot().sessionId`, undefined, { timeout: 10_000 })
       .catch(async () => { throw new Error(`↵ on ${name} did not open it: ${JSON.stringify(await win.evaluate(STATE))}`); });

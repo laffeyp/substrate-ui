@@ -98,6 +98,7 @@ import { chrome } from "./app/state/chrome";
 import { firstRun } from "./app/state/first_run";
 import { setTopBarActions, topBar } from "./app/state/top_bar";
 import { workspaceCard } from "./app/derive/workspace_card";
+import { recordsKey, setOpenSession } from "./app/state/records";
 import { onCommand, shell } from "./app/state/shell";
 
 
@@ -126,11 +127,6 @@ class Component extends DCLogic {
     panes: [{ id: 1, name: 'pane-1', driver: null, editing: false, nameVal: '', unbound: true }],
     focused: 1, cols: 1, rows: 1, colW: [1], rowW: [1], revealL: 1.15, ddFor: null, wsFor: null, driverExpandedCli: null, driverExpandedFamily: null, allSessions: [],
     findOpen: false, findQ: '', findScope: 'transcript',
-  // Sprint 086 — Records surface: per-workspace expand state and
-  // paginated session buffers. Empty means "not expanded, not fetched
-  // yet". On expand, loadSessionsByWorkspace(path, 0, 50) fills
-  // pagedByWs[path]. Load-more button fires at offset = current length.
-  expandedWs: {}, pagedByWs: {}, addWsBusy: false,
   // Sprint 086 followup — workspace picker's per-row expand state
   // (independent of Records surface). Expanding a row fetches the
   // most recent 5 sessions from that workspace and lists them
@@ -769,17 +765,6 @@ class Component extends DCLogic {
     if (ev.key === 'Enter') { ev.preventDefault(); item.pick(); return true; }
     return false;
   }
-  // The records page's keys: the workspace tree's, over the rows the last render drew.
-  _recordsKey(ev) {
-    const flat = this._recordsFlat || [];
-    if (!flat.length) return;
-    const cur = Math.max(0, Math.min(this.state.recordsSel || 0, flat.length - 1));
-    const move = (i) => {
-      this.setState({ recordsSel: i });
-      setTimeout(() => { const el = document.querySelector('[data-records-lit="1"]'); if (el) el.scrollIntoView({ block: 'nearest' }); }, 0);
-    };
-    this._treeKey(flat, cur, ev, move);
-  }
   // UI sprint 124 — the model half of the workspace bar: the header dropdown's rows, in the
   // bar. A pick commits the armed folder; with nothing armed the half is greyed and inert.
   _modelHalfRows(state, p) {
@@ -941,6 +926,22 @@ class Component extends DCLogic {
     applyShell();
     this._publishChrome();
     this._publishTopBar();
+    // A session picked on the records page opens in the focused pane (web/app/state/records.ts,
+    // sprint 240). The pane is marked bound before the attach, with the record's own folder and
+    // shape, so the pane draws the transcript and its labels match the session.
+    this._offOpenSession = setOpenSession((r) => {
+      const vm = window.__vm;
+      if (!vm || !r.sessionId) return;
+      const wsPath = (typeof r.workspacePath === 'string' && r.workspacePath) ? r.workspacePath : '';
+      const wsShape = (typeof r.workspaceShape === 'string' && r.workspaceShape) ? r.workspaceShape : 'flat';
+      this.setState(s => ({
+        surface: null,
+        panes: s.panes.map(pn => pn.id === s.focused
+          ? Object.assign({}, pn, { unbound: false, ws: wsPath, shape: wsShape, name: r.name || pn.name, lines: [] })
+          : pn),
+      }));
+      vm.attachExisting(r.sessionId);
+    });
     // First run's pick gives pane 1 its driver, as the template's pick did (sprint 225).
     this._offFirstRun = firstRun.subscribe(() => {
       const picked = firstRun.getSnapshot().picked;
@@ -992,7 +993,7 @@ class Component extends DCLogic {
         const fsnap = (s.controllerSnapshots || {})[s.focused];
         if (barKey && e.key !== 'Escape' && !typing && s.surface === Surface.Records
           && !dialogOpen() && !s.findOpen) {
-          this._recordsKey(e);
+          recordsKey(e);
           return;
         }
         if (barKey && !typing && fp && fp.unbound && !(fsnap && fsnap.sessionId) && !s.revealed && !s.surface
@@ -1112,7 +1113,7 @@ class Component extends DCLogic {
     this._publishChrome();
     this._publishTopBar();
   }
-  componentWillUnmount() { if (this._offRuns) this._offRuns(); if (this._offSettings) this._offSettings(); if (this._offShell) this._offShell(); if (this._offCommands) this._offCommands(); if (this._offFirstRun) this._offFirstRun(); if (this._offTopBarActs) this._offTopBarActs(); window.removeEventListener('keydown', this._kd); window.removeEventListener('mousemove', this._mm); window.removeEventListener('mouseup', this._mu); window.removeEventListener('resize', this._rs); if (this._ddOutside) document.removeEventListener('mousedown', this._ddOutside, true); if (this._activityTick) { window.clearInterval(this._activityTick); this._activityTick = null; } }
+  componentWillUnmount() { if (this._offRuns) this._offRuns(); if (this._offSettings) this._offSettings(); if (this._offShell) this._offShell(); if (this._offCommands) this._offCommands(); if (this._offFirstRun) this._offFirstRun(); if (this._offTopBarActs) this._offTopBarActs(); if (this._offOpenSession) this._offOpenSession(); window.removeEventListener('keydown', this._kd); window.removeEventListener('mousemove', this._mm); window.removeEventListener('mouseup', this._mu); window.removeEventListener('resize', this._rs); if (this._ddOutside) document.removeEventListener('mousedown', this._ddOutside, true); if (this._activityTick) { window.clearInterval(this._activityTick); this._activityTick = null; } }
   _upd(arrKey, i, field) { return (ev) => this.setState(s => { const arr = s[arrKey].map((x, j) => j === i ? Object.assign({}, x, { [field]: ev.target.value }) : x); return { [arrKey]: arr }; }); }
   _rm(arrKey, i) { return () => this.setState(s => ({ [arrKey]: s[arrKey].filter((x, j) => j !== i) })); }
   _validate() {
@@ -2013,211 +2014,7 @@ class Component extends DCLogic {
     // controller change. `scriptedOn` inverts `liveOn` so the demo
     // narrative fades out the moment a real session is bound.
     // (`_vmSnap` is hoisted at the top of renderVals.)
-    // Records surface: group live sessions by workspace path. Every
-    // recentWorkspaces row gets a group; sessions the controller has
-    // seen slot in under their workspace.
-    const _SESSIONS_PER_WORKSPACE = 8;
-    const _liveSessionsForGroups = (state.liveSessionsFromServer || [])
-      .slice()
-      .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-    // The server's fallback recent-workspaces list contains a row per
-    // isolated session sandbox (path matches .substrate/sessions/<id>/workspace).
-    // Those are not user-level workspaces; collapse them under a single
-    // "isolated sessions" bucket instead of showing 200 near-identical
-    // rows.
-    // Sandbox = any workspace path that is not a user-level directory.
-    // Matches: .substrate/sessions/<id>/workspace, pytest temp dirs
-    // under /var/folders or /tmp, and substrate-walkthrough-<hash>
-    // fixtures. Real workspaces (user's git repos, ~/.substrate/sandbox)
-    // stay as top-level rows.
-    const _isSandbox = (path) => {
-      if (typeof path !== 'string') return false;
-      if (/\.substrate\/sessions\/[^/]+\/workspace$/.test(path)) return true;
-      if (/^\/var\/folders\//.test(path)) return true;
-      if (/^\/tmp\//.test(path)) return true;
-      if (/substrate-walkthrough-/.test(path)) return true;
-      if (/substrate-harness-/.test(path)) return true;
-      return false;
-    };
-    const _workspacesRaw = (state.recentWorkspaces || []);
-    const _workspaces = _workspacesRaw.filter(ws => !_isSandbox(ws.path));
-    const _sessionsByWorkspace = new Map();
-    for (const row of _liveSessionsForGroups) {
-      const key = row.workspacePath || row.workspace || '(unknown)';
-      const list = _sessionsByWorkspace.get(key) || [];
-      list.push(row);
-      _sessionsByWorkspace.set(key, list);
-    }
-    const _labelStatus = (row) => sessionStatusLook(row.status).label;
-    const _dotFor = (row) => sessionStatusLook(row.status).dot;
-    const _relTime = (unixSeconds) => {
-      if (!unixSeconds || typeof unixSeconds !== 'number') return '';
-      const seconds = Math.max(0, Math.floor(Date.now() / 1000) - unixSeconds);
-      if (seconds < 60) return `${seconds}s ago`;
-      const minutes = Math.floor(seconds / 60);
-      if (minutes < 60) return `${minutes}m ago`;
-      const hours = Math.floor(minutes / 60);
-      if (hours < 24) return `${hours}h ago`;
-      const days = Math.floor(hours / 24);
-      if (days < 14) return `${days}d ago`;
-      const weeks = Math.floor(days / 7);
-      return `${weeks}w ago`;
-    };
-    const _mapSession = (r) => ({
-      name: r.name || (r.sessionId || '').slice(0, 12),
-      driver: r.driver || '?',
-      statusLabel: _labelStatus(r),
-      dotColor: _dotFor(r),
-      sessionIdShort: (r.sessionId || '').slice(0, 12),
-      when: _relTime(r.createdAt),
-      pick: () => {
-        const vm = window.__vm;
-        if (!vm || !r.sessionId) return;
-        // Mark the focused pane bound before attach so the terminal
-        // template renders the transcript branch instead of the
-        // workspace picker. Uses the record's own workspace path +
-        // shape so the header labels match the loaded session.
-        const wsPath = (typeof r.workspacePath === 'string' && r.workspacePath) ? r.workspacePath : '';
-        const wsShape = (typeof r.workspaceShape === 'string' && r.workspaceShape) ? r.workspaceShape : 'flat';
-        this.setState(s => ({
-          surface: null,
-          panes: s.panes.map(pn => pn.id === s.focused
-            ? Object.assign({}, pn, { unbound: false, ws: wsPath, shape: wsShape, name: r.name || pn.name, lines: [] })
-            : pn),
-        }));
-        vm.attachExisting(r.sessionId);
-      },
-    });
-    // Sprint 086 — collapsible workspaces with paginated session lists.
-    // The initial preview shows session count only; expanding fires a
-    // paginated fetch (loadSessionsByWorkspace) and renders the paged
-    // rows in a scrollable container. Load-more appends the next page.
-    const _pagedByWs = state.pagedByWs || {};
-    const _expandedWs = state.expandedWs || {};
-    const _toggleExpand = (path) => {
-      this.setState(s => ({ expandedWs: Object.assign({}, s.expandedWs, { [path]: !(s.expandedWs || {})[path] }) }));
-      // On expand: fetch first page unless already fetched.
-      if (!_expandedWs[path]) {
-        const vm = window.__vm;
-        if (vm && typeof vm.loadSessionsByWorkspace === 'function' && !_pagedByWs[path]) {
-          vm.loadSessionsByWorkspace(path, 0, 50).then((r) => {
-            this.setState(s => ({ pagedByWs: Object.assign({}, s.pagedByWs, { [path]: { rows: r.rows, total: r.total } }) }));
-          }).catch(() => undefined);
-        }
-      }
-    };
-    const _loadMoreForWs = (path) => {
-      const vm = window.__vm;
-      if (!vm || typeof vm.loadSessionsByWorkspace !== 'function') return;
-      const current = (_pagedByWs[path] && _pagedByWs[path].rows) || [];
-      vm.loadSessionsByWorkspace(path, current.length, 50).then((r) => {
-        this.setState(s => {
-          const prev = (s.pagedByWs || {})[path] || { rows: [], total: r.total };
-          return { pagedByWs: Object.assign({}, s.pagedByWs, { [path]: { rows: [...prev.rows, ...r.rows], total: r.total } }) };
-        });
-      }).catch(() => undefined);
-    };
-    // Sprint 086b — canonicalize on the client side too. The map key
-    // above uses whatever form the server stored on the session; the
-    // recent-workspaces list uses canonical form. Group by canonical
-    // path so tilde/absolute variants collapse.
-    const _perSessionSandboxRe = /\.substrate\/sessions\/[^/]+\/workspace$/;
-    const _countByCanonical = new Map();
-    for (const [rawPath, rows] of _sessionsByWorkspace) {
-      // Per-session sandbox sessions all collect under the synthesized
-      // sessions-root workspace (server _recent_workspaces adds that
-      // row); every other session groups under its canonical directory.
-      const isSessionSandbox = typeof rawPath === 'string' && _perSessionSandboxRe.test(rawPath);
-      const key = isSessionSandbox ? '__PER_SESSION_SANDBOXES__' : rawPath;
-      const prev = _countByCanonical.get(key) || 0;
-      _countByCanonical.set(key, prev + rows.length);
-    }
-    const _perSessionSandboxRoot = (_workspaces.find(w => w.shape === 'per-session-sandboxes') || {}).path;
-    const _workspaceGroups = [];
-    const _recordsFlat = [];
-    const _recordsSel = state.recordsSel || 0;
-    for (const ws of _workspaces) {
-      const isPerSessionRoot = ws.shape === 'per-session-sandboxes';
-      const countKey = isPerSessionRoot ? '__PER_SESSION_SANDBOXES__' : ws.path;
-      const totalInMemory = _countByCanonical.get(countKey) || 0;
-      const paged = _pagedByWs[ws.path];
-      const expanded = !!_expandedWs[ws.path];
-      const shownRows = expanded && paged ? paged.rows : [];
-      const total = paged ? paged.total : totalInMemory;
-      const _rowNav = _recordsFlat.length;
-      _recordsFlat.push({ pick: () => _toggleExpand(ws.path), toggle: () => _toggleExpand(ws.path), expandable: true, expanded, parent: null });
-      const _sessions = shownRows.map((r) => {
-        const m = _mapSession(r);
-        const nav = _recordsFlat.length;
-        _recordsFlat.push({ pick: m.pick, toggle: null, expandable: false, expanded: false, parent: _rowNav });
-        return Object.assign(m, { litAttr: nav === _recordsSel ? '1' : '0', bg: nav === _recordsSel ? '#2e3138' : 'transparent' });
-      });
-      _workspaceGroups.push({
-        path: ws.path,
-        litAttr: _rowNav === _recordsSel ? '1' : '0', bg: _rowNav === _recordsSel ? '#2e3138' : 'transparent',
-        // UI sprint 154: sessions do not get worktrees (no caller of _session_worktree), so a git
-        // folder reads only "git".
-        shapeLabel: ws.shape === 'worktree' ? 'git'
-          : ws.shape === 'sandbox' ? 'sandbox'
-          : ws.shape === 'per-session-sandboxes' ? 'per-session sandboxes · substrate-managed'
-          : ws.shape,
-        sessions: _sessions,
-        countLabel: total === 1 ? '1 session' : `${total} sessions`,
-        expanded, notExpanded: !expanded, chevron: expanded ? '▾' : '▸',
-        toggleExpand: () => _toggleExpand(ws.path),
-        hasMore: !!(expanded && paged && paged.rows.length < paged.total),
-        loadMore: () => _loadMoreForWs(ws.path),
-        loadMoreOnScroll: (ev) => {
-          if (!expanded || !paged || paged.rows.length >= paged.total) return;
-          const el = ev.target;
-          if (!el || typeof el.scrollTop !== 'number') return;
-          const remaining = el.scrollHeight - (el.scrollTop + el.clientHeight);
-          if (remaining < 100) _loadMoreForWs(ws.path);
-        },
-        remainingLabel: paged ? `load next ${Math.min(50, Math.max(0, paged.total - paged.rows.length))}` : '',
-      });
-    }
-    this._recordsFlat = _recordsFlat;
-    void _perSessionSandboxRoot; // available for future use
-    // Everything else lands under "isolated sessions" — most sessions
-    // in a fresh install run in a per-session sandbox and belong here.
-    // Sessions whose workspace path is neither a recent workspace nor
-    // an isolated sandbox share this bucket too.
-    // Sprint 086b — no isolated-sessions bucket. Server's
-    // _recent_workspaces already synthesizes a `~/.substrate/sessions/`
-    // row that collapses every per-session sandbox under one
-    // paginated entry, so per-session sandbox sessions surface via
-    // the by-workspace endpoint with `path=<sessions_root>` — the
-    // same load-more code path every real workspace uses.
     const vals = {
-      workspaceGroups: _workspaceGroups,
-      workspaceGroupsEmpty: _workspaceGroups.length === 0,
-      // Sprint 086 — "Add workspace" button opens the OS folder picker
-      // via Electron's native.pickFolder(); the picked path POSTs to
-      // /api/workspaces and the reload reflects it in the records list.
-      // In a plain browser tab window.native is undefined; the button
-      // hides via addWorkspaceAvailable.
-      addWorkspaceAvailable: !!(window.native && typeof window.native.pickFolder === 'function'),
-      addWorkspaceBusy: !!state.addWsBusy,
-      addWorkspace: async () => {
-        const native = window.native;
-        if (!native || typeof native.pickFolder !== 'function') return;
-        this.setState({ addWsBusy: true });
-        try {
-          const picked = await native.pickFolder();
-          if (picked) {
-            const vm = window.__vm;
-            if (vm && typeof vm.addWorkspace === 'function') {
-              await vm.addWorkspace(picked);
-              // Refresh live sessions so the new workspace's row picks
-              // up any pre-existing sessions in it.
-              if (typeof vm.loadLiveSessions === 'function') vm.loadLiveSessions().catch(() => undefined);
-            }
-          }
-        } finally {
-          this.setState({ addWsBusy: false });
-        }
-      },
       // UI sprint 138: every primitive of the record's topology in its own section, each heading
       // defined on hover (STRUCTURE_DEFS). Events lead: what emits each kind, and what it fires.
       ...(() => {

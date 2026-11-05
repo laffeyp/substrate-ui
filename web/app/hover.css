@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0 */
 /* Copyright (C) 2026 Peter Laffey */
-/* Hover rules for the React areas (sprints 222, 229; plan PLAN-2026-11-04-shell-to-react-r5.md, "Styles"). */
+/* Hover rules for the React areas (sprints 222, 229, 238; plan PLAN-2026-11-04-shell-to-react-r5.md, "Styles"). */
 /* One class per element. Each replaces a template `style-hover` attribute, which dc-runtime drew as  */
 /* a generated `:hover` rule with every declaration `!important` (support.js, createPseudoSheet), so  */
 /* the rule beats the element's inline background as it did there.                                   */
@@ -13,3 +13,9 @@
 .hover-top-bar-ws-chip:hover { color: #9aa0a8 !important; }
 .hover-top-bar-records:hover { color: #d7dade !important; }
 .hover-top-bar-studio:hover { color: #d7dade !important; }
+
+/* Records page (reveal.html records block): add workspace, a workspace row, a session row, load more. */
+.hover-records-add:hover { color: #a0c0e0 !important; }
+.hover-records-workspace:hover { color: #e2e5e9 !important; }
+.hover-records-session:hover { background: #26292e !important; }
+.hover-records-more:hover { background: #26292e !important; }
