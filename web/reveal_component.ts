@@ -93,6 +93,7 @@ import { sessionStatusLook } from "./reveal/session_status";
 import { buildLanguageLens, LANGUAGE_STREAM_TABS, languageView, languageViewTabs, LanguageStreamId, LanguageViewMode } from "./reveal/language_lens";
 import { settingsTail } from "./reveal/settings_tail";
 import { clearNote, fontSize, loadSettings, pickTheme, settings, stepFont } from "./app/state/settings";
+import { onCommand, shell } from "./app/state/shell";
 
 
 class Component extends DCLogic {
@@ -891,6 +892,54 @@ class Component extends DCLogic {
     // Loaded once here; each change redraws the window.
     loadSettings();
     this._offSettings = settings.subscribe(() => this.forceUpdate());
+    // Sprint 211: the boot script's controller snapshots and menu commands arrive through
+    // web/app/state/shell.ts. Moved from web/reveal.ts, which reached this component's fiber.
+    this._langTicks = {};
+    this._urlSessions = {};
+    const applyShell = () => {
+      const { snapshots, changedPane } = shell.getSnapshot();
+      if (changedPane == null) return;
+      const snap = snapshots[changedPane];
+      const focusedId = this.state.focused ?? 1;
+      const patch = { controllerSnapshots: { ...snapshots } };
+      if (changedPane === focusedId) Object.assign(patch, {
+        controllerSnapshot: snap,
+        driverRoster: snap.driverRoster,
+        driverDefault: snap.driverDefault,
+        driverGroups: snap.driverGroups,
+        cliVersions: snap.cliVersions,
+        driverVersion: snap.driverVersion,
+        recentWorkspaces: snap.recentWorkspaces,
+        liveSessionsFromServer: snap.liveSessions,
+        bundleRoster: snap.bundleRoster,
+        bundleSlug: snap.bundleSlug,
+      });
+      // UI sprint 172: `/language` bumps the pane's open tick; meta opens on the lens, at the
+      // latest shift's reply when there is one (the lens selects the turn that holds `sel`).
+      const tick = snap.languageOpenTick ?? 0;
+      if (changedPane === focusedId && tick > (this._langTicks[changedPane] ?? 0)) {
+        Object.assign(patch, { revealed: true, surface: null, mode: GraphMode.Language });
+        const shifts = (snap.language && snap.language.shifts) || [];
+        if (shifts.length) patch.sel = shifts[shifts.length - 1].source_seq;
+      }
+      this._langTicks[changedPane] = tick;
+      this.setState(patch);
+      // The focused pane's session is the URL's `session`, so a reload reopens it.
+      if (changedPane === focusedId && snap.sessionId !== (this._urlSessions[changedPane] ?? null)) {
+        this._urlSessions[changedPane] = snap.sessionId;
+        const url = new URL(window.location.href);
+        if (snap.sessionId) url.searchParams.set('session', snap.sessionId);
+        else url.searchParams.delete('session');
+        window.history.replaceState({}, '', url.toString());
+      }
+    };
+    this._offShell = shell.subscribe(applyShell);
+    applyShell();
+    this._offCommands = onCommand((command) => {
+      if (command === 'toggle-meta') this._toggleMeta();
+      else if (command === 'settings') this.setState({ showSettings: true });
+      else if (command === 'close-pane') this._closePane(this.state.focused);
+    });
     // Tick the activity strip's seconds counter between controller
     // events. A live tool that takes 12s emits no envelopes for 12s;
     // without a tick the counter reads its start value the whole time.
@@ -1044,7 +1093,7 @@ class Component extends DCLogic {
     }
     if (changed('view') && pv && (pv === 'revealed') !== state.revealed) this.setState({ revealed: pv === 'revealed', surface: null });
   }
-  componentWillUnmount() { if (this._offRuns) this._offRuns(); if (this._offSettings) this._offSettings(); window.removeEventListener('keydown', this._kd); window.removeEventListener('mousemove', this._mm); window.removeEventListener('mouseup', this._mu); window.removeEventListener('resize', this._rs); if (this._ddOutside) document.removeEventListener('mousedown', this._ddOutside, true); if (this._activityTick) { window.clearInterval(this._activityTick); this._activityTick = null; } }
+  componentWillUnmount() { if (this._offRuns) this._offRuns(); if (this._offSettings) this._offSettings(); if (this._offShell) this._offShell(); if (this._offCommands) this._offCommands(); window.removeEventListener('keydown', this._kd); window.removeEventListener('mousemove', this._mm); window.removeEventListener('mouseup', this._mu); window.removeEventListener('resize', this._rs); if (this._ddOutside) document.removeEventListener('mousedown', this._ddOutside, true); if (this._activityTick) { window.clearInterval(this._activityTick); this._activityTick = null; } }
   _upd(arrKey, i, field) { return (ev) => this.setState(s => { const arr = s[arrKey].map((x, j) => j === i ? Object.assign({}, x, { [field]: ev.target.value }) : x); return { [arrKey]: arr }; }); }
   _rm(arrKey, i) { return () => this.setState(s => ({ [arrKey]: s[arrKey].filter((x, j) => j !== i) })); }
   _validate() {
