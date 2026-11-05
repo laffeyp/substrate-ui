@@ -3,7 +3,8 @@
 // What meta's stream lens draws (sprint 291; plan PLAN-2026-11-04-shell-to-react-r5.md, D2). DCLogic
 // owns the focused pane, the lit seq, the level and the direction until the meta view moves (plan row
 // D7); after each render it writes them here with the focused session's envelopes, and registers the
-// pick action. web/app/StreamLens.tsx derives the rows and the inspector from them.
+// pick action and the side graph's scroll link. web/app/StreamLens.tsx derives the rows and the
+// inspector from them, web/app/SideGraph.tsx the side graph (sprint 296).
 
 import { createStore } from "../store";
 import type { RawEnvelope } from "../derive/stream";
@@ -18,7 +19,12 @@ export interface StreamState {
   down: boolean;
 }
 
-interface Shared { store: ReturnType<typeof createStore<StreamState>>; pick: { current: (seq: number) => void } }
+/** The side graph's scroller and its scroll, which DCLogic ties to the stream's scroller (the two scroll
+ *  together in the side direction) until the meta view moves (plan row D7). */
+export interface GraphLink { ref(el: HTMLElement | null): void; onScroll(el: HTMLElement): void; }
+const NO_LINK: GraphLink = { ref: () => undefined, onScroll: () => undefined };
+
+interface Shared { store: ReturnType<typeof createStore<StreamState>>; pick: { current: (seq: number) => void }; graph: { current: GraphLink } }
 
 // One instance per window, as in shell.ts (sprint 212).
 const KEY = "__substrateStream";
@@ -26,6 +32,7 @@ const scope = globalThis as unknown as Record<string, Shared | undefined>;
 const shared: Shared = scope[KEY] ?? (scope[KEY] = {
   store: createStore<StreamState>({ envelopes: [], sel: null, app: false, down: true }),
   pick: { current: () => undefined },
+  graph: { current: NO_LINK },
 });
 
 export const stream = shared.store;
@@ -38,4 +45,13 @@ export function pickSeq(seq: number): void {
 export function setPickSeq(fn: (seq: number) => void): () => void {
   shared.pick.current = fn;
   return () => { if (shared.pick.current === fn) shared.pick.current = () => undefined; };
+}
+
+export function graphLink(): GraphLink {
+  return shared.graph.current;
+}
+
+export function setGraphLink(link: GraphLink): () => void {
+  shared.graph.current = link;
+  return () => { if (shared.graph.current === link) shared.graph.current = NO_LINK; };
 }

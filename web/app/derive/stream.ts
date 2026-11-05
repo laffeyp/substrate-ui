@@ -277,6 +277,21 @@ export function sideLanes(rows: readonly StreamRow[], spans: Spans): SideLane[] 
   return lanes;
 }
 
+/** The side graph's seq axis: the first row's seq to the last's, at least one apart. */
+export interface SideAxis { first: number; last: number; }
+
+export function sideAxis(rows: readonly StreamRow[]): SideAxis {
+  if (!rows.length) return { first: 0, last: 1 };
+  const first = rows[0].seq;
+  return { first, last: Math.max(rows[rows.length - 1].seq, first + 1) };
+}
+
+/** A segment's left edge and width along the axis, as percentages to one decimal. */
+export function segBox(seg: SideSeg, axis: SideAxis): { l: string; w: string } {
+  const span = axis.last - axis.first;
+  return { l: (((seg.from - axis.first) / span) * 100).toFixed(1) + "%", w: (((seg.to - seg.from) / span) * 100).toFixed(1) + "%" };
+}
+
 /** Find's text for a row: its kind, producer and gist, lowercased. */
 export function findText(row: StreamRow): string {
   return (row.kind + " " + row.prod + " " + row.gist).toLowerCase();

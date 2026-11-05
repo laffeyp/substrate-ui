@@ -88,8 +88,8 @@ import { lineStep, paneShape, SHARED_SANDBOX, tabFill, workspaceRows } from "./a
 import { treeKey } from "./app/derive/tree_key";
 import { chipLabel, driverLabel, modelRows } from "./app/derive/driver_label";
 import { picker } from "./app/state/picker";
-import { setPickSeq, stream } from "./app/state/stream";
-import { findText, sideLanes as streamSideLanes, streamRows, streamSpans } from "./app/derive/stream";
+import { setGraphLink, setPickSeq, stream } from "./app/state/stream";
+import { findText, streamRows } from "./app/derive/stream";
 import { onCommand, shell } from "./app/state/shell";
 
 
@@ -629,6 +629,17 @@ class Component extends DCLogic {
     picker.set({ views: this._pickerViews || {} });
     if (this._streamView) stream.set(this._streamView);
     this._offPickSeq = setPickSeq((seq) => this.setState(s => ({ sel: s.sel === seq ? null : seq })));
+    // The side graph (web/app/SideGraph.tsx) and the stream's scroller scroll together, in proportion.
+    this._offGraphLink = setGraphLink({
+      ref: (el) => { this._graphEl = el; },
+      onScroll: (el) => {
+        if (this._syncing) return;
+        const s = this._streamEl; if (!s) return;
+        const f = el.scrollLeft / Math.max(1, el.scrollWidth - el.clientWidth);
+        this._syncing = true; s.scrollTop = f * Math.max(0, s.scrollHeight - s.clientHeight);
+        requestAnimationFrame(() => { this._syncing = false; });
+      },
+    });
     this._publishChrome();
     this._publishTopBar();
     // The input bar's /exit names the pane's session (web/app/state/input_bar.ts, sprint 261).
@@ -819,7 +830,7 @@ class Component extends DCLogic {
     this._publishChrome();
     this._publishTopBar();
   }
-  componentWillUnmount() { if (this._offRuns) this._offRuns(); if (this._offSettings) this._offSettings(); if (this._offFind) this._offFind(); if (this._offShell) this._offShell(); if (this._offCommands) this._offCommands(); if (this._offFirstRun) this._offFirstRun(); if (this._offTopBarActs) this._offTopBarActs(); if (this._offOpenSession) this._offOpenSession(); if (this._offTitleOf) this._offTitleOf(); if (this._offPickSeq) this._offPickSeq(); window.removeEventListener('keydown', this._kd); window.removeEventListener('resize', this._rs); if (this._ddOutside) document.removeEventListener('mousedown', this._ddOutside, true); }
+  componentWillUnmount() { if (this._offRuns) this._offRuns(); if (this._offSettings) this._offSettings(); if (this._offFind) this._offFind(); if (this._offShell) this._offShell(); if (this._offCommands) this._offCommands(); if (this._offFirstRun) this._offFirstRun(); if (this._offTopBarActs) this._offTopBarActs(); if (this._offOpenSession) this._offOpenSession(); if (this._offTitleOf) this._offTitleOf(); if (this._offPickSeq) this._offPickSeq(); if (this._offGraphLink) this._offGraphLink(); window.removeEventListener('keydown', this._kd); window.removeEventListener('resize', this._rs); if (this._ddOutside) document.removeEventListener('mousedown', this._ddOutside, true); }
   // UI sprint 140: ⌘E folds or unfolds every tool card (ToolCard reads the setting). No control
   // on screen: the Architect's call; /fold and /unfold do the same from the input bar.
   _toggleTools() {
@@ -1091,29 +1102,7 @@ class Component extends DCLogic {
       label: t.label, pick: () => this.setState({ langStream: t.id, langLane: 0 }),
       color: state.langStream === t.id ? '#d7dade' : '#62676f',
     }));
-    const spansByKind = streamSpans(envelopes);
-    // Side (horizontal) graph — each producer kind gets one row and
-    // its spans plot along a normalized seq axis (firstSeq = first seq,
-    // lastSeq = last seq of the visible envelopes). Real spans only —
-    // pulls straight from `spansByKind` above so the down and side
-    // views show the same data at different orientations.
-    const firstSeq = envelopes.length ? envelopes[0].seq : 0;
-    const lastSeq = envelopes.length ? Math.max(envelopes[envelopes.length - 1].seq, firstSeq + 1) : 1;
-    const pct = (x) => (((x - firstSeq) / (lastSeq - firstSeq)) * 100).toFixed(1) + '%';
-    const segOf = (s0, s1, base, seq) => ({
-      l: pct(s0),
-      w: (((s1 - s0) / (lastSeq - firstSeq)) * 100).toFixed(1) + '%',
-      title: 'seq ' + seq + ' — click to inspect',
-      bg: state.sel === seq ? '#9db8d6' : base,
-      pick: () => this.setState(st => ({ sel: st.sel === seq ? null : seq })),
-    });
-    // Side (horizontal Gantt) graph per D23: "one lane per producer,
-    // spans from ToolCall→ToolResult seqs". Read as: one lane per
-    // unique tool name (labelled `grep`, `read_file`, etc.), one lane
-    // per delegate child (labelled `⑂ <name>`), plus the model span
-    // and any park events. Every row is a real segment; no hardcoded
-    // demo seqs.
-    const sideLanes = streamSideLanes(envelopes, spansByKind).map(l => ({ label: l.label, color: l.color, segs: l.segs.map(sg => segOf(sg.from, sg.to, sg.base, sg.seq)) }));
+    // The side graph: web/app/SideGraph.tsx (sprint 296), from the stream's view.
     const modes = [['stream', 'stream+graph'], ['io', 'i/o'], ['structure', 'structure'], [GraphMode.Language, 'language'], ['scene', 'scene']];
     // Direction (down/side) is a property of the stream lens; the
     // io/structure/scene lenses render their own layouts and the
@@ -1301,7 +1290,6 @@ class Component extends DCLogic {
       // atom transcript React tree at web/reveal/transcript/ owns
       // scroll position now; the reveal.html template no longer
       // emits any ref/onScroll on the transcript scroller.
-      graphRef: (el) => { this._graphEl = el; },
       onStreamScroll: (ev) => {
         if (this._syncing || this.state.dir !== 'side') return;
         const el = ev.target, g = this._graphEl; if (!g) return;
@@ -1309,15 +1297,7 @@ class Component extends DCLogic {
         this._syncing = true; g.scrollLeft = f * Math.max(0, g.scrollWidth - g.clientWidth);
         requestAnimationFrame(() => { this._syncing = false; });
       },
-      onGraphScroll: (ev) => {
-        if (this._syncing) return;
-        const el = ev.target, s = this._streamEl; if (!s) return;
-        const f = el.scrollLeft / Math.max(1, el.scrollWidth - el.clientWidth);
-        this._syncing = true; s.scrollTop = f * Math.max(0, s.scrollHeight - s.clientHeight);
-        requestAnimationFrame(() => { this._syncing = false; });
-      },
-      modeChips, sideLanes,
-      sideAxisA: firstSeq, sideAxisB: lastSeq,
+      modeChips,
       isStream: state.mode === GraphMode.Stream, isIo: state.mode === GraphMode.IO, isStructure: state.mode === GraphMode.Structure, isScene: state.mode === GraphMode.Scene,
       isLanguage: state.mode === GraphMode.Language, lang: _lang, langRows, langStreams, langViews, langHas: _lang.has, langEmpty: !_lang.has, langNote: !!_lang.note,
       isDown: state.dir === GraphDirection.Down, isSide: state.dir === GraphDirection.Side,

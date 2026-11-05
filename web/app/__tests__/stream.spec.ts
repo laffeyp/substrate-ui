@@ -7,7 +7,7 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import { EnvelopeKind } from "../../vm/kinds";
-import { bareKind, connector, inspectorView, KIND_COLOR, laneCells, laneOf, lensRows, PLUMBING, sideLanes, streamRows, streamSpans, type RawEnvelope } from "../derive/stream";
+import { bareKind, connector, inspectorView, KIND_COLOR, laneCells, laneOf, lensRows, PLUMBING, segBox, sideAxis, sideLanes, streamRows, streamSpans, type RawEnvelope } from "../derive/stream";
 import { eventTimes } from "../../reveal/timeline";
 
 const ENVS: RawEnvelope[] = [
@@ -99,4 +99,14 @@ test("lens rows: the app level hides plumbing, find dims the rest, the lit row, 
   const found = lensRows(rows, spans, times, { sel: null, app: false, query: "bash" });
   assert.deepStrictEqual(found.filter((r) => r.opacity === 1).map((r) => r.seq), [5, 6]);
   assert.ok(found.filter((r) => r.opacity === 1).every((r) => r.bg === "#26292e"));
+});
+
+test("the side graph's axis runs first seq to last; a segment's box is its share of it", () => {
+  const rows = streamRows(ENVS);
+  const axis = sideAxis(rows);
+  assert.deepStrictEqual(axis, { first: 1, last: 11 });
+  assert.deepStrictEqual(segBox({ from: 1, to: 11.6, base: "", seq: 1 }, axis), { l: "0.0%", w: "106.0%" });
+  assert.deepStrictEqual(segBox({ from: 5, to: 6.6, base: "", seq: 5 }, axis), { l: "40.0%", w: "16.0%" });
+  assert.deepStrictEqual(sideAxis([]), { first: 0, last: 1 });
+  assert.deepStrictEqual(sideAxis(rows.slice(0, 1)), { first: 1, last: 2 });
 });

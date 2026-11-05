@@ -32,3 +32,6 @@
 
 /* Meta's stream (reveal.html stream block): a row. */
 .hover-stream-row:hover { background: #26292e !important; }
+
+/* Meta's side graph (reveal.html side block): a segment. */
+.hover-side-seg:hover { outline: 1px solid #9db8d6 !important; }
