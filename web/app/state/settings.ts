@@ -24,7 +24,12 @@ export interface SettingsState {
   settingsNote: string;
 }
 
-export const settings = createStore<SettingsState>({ theme: "dark", fontOverride: null, settingsNote: "" });
+// One instance per window, as in shell.ts: the page script (esbuild, with reveal_component.ts) and the
+// Vite bundle each hold a copy of this module, and the settings dialog moves to the Vite side in B1
+// while DCLogic still reads the size (sprint 213).
+const KEY_SHARED = "__substrateSettings";
+const scope = globalThis as unknown as Record<string, ReturnType<typeof createStore<SettingsState>> | undefined>;
+export const settings = scope[KEY_SHARED] ?? (scope[KEY_SHARED] = createStore<SettingsState>({ theme: "dark", fontOverride: null, settingsNote: "" }));
 
 /** The saved fields that pass their checks; anything else is left at its default. */
 export function readSaved(raw: string | null): Partial<SettingsState> {
