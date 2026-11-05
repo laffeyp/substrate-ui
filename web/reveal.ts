@@ -17,6 +17,7 @@ import { createMountRegistry } from "./app/mount";
 import { Dialogs } from "./app/Dialogs";
 import { FirstRun } from "./app/FirstRun";
 import { Footer } from "./app/Footer";
+import { TopBar } from "./app/TopBar";
 
 function boot(): void {
   const registry = new PaneRegistry({ makeClient: () => new BrowserSubstrateClient() });
@@ -149,6 +150,8 @@ function boot(): void {
   // 13px is the transcript's default size, the template's `transcriptFontSize` default.
   mounts.register({ name: "dialogs", selector: '[data-app-mount="dialogs"]', key: () => "window",
     render: () => React.createElement(Dialogs, { defaultFontSize: 13 }) });
+  mounts.register({ name: "top-bar", selector: '[data-app-mount="top-bar"]', key: () => "window",
+    render: () => React.createElement(TopBar) });
   mounts.register({ name: "footer", selector: '[data-app-mount="footer"]', key: () => "window",
     render: () => React.createElement(Footer) });
   mounts.register({ name: "first-run", selector: '[data-app-mount="first-run"]', key: () => "window",

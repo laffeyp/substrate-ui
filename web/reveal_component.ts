@@ -96,6 +96,8 @@ import { fontSize, loadSettings, settings } from "./app/state/settings";
 import { closeDialog, dialogOpen, openEndSession, openSettings } from "./app/state/dialogs";
 import { chrome } from "./app/state/chrome";
 import { firstRun } from "./app/state/first_run";
+import { setTopBarActions, topBar } from "./app/state/top_bar";
+import { workspaceCard } from "./app/derive/workspace_card";
 import { onCommand, shell } from "./app/state/shell";
 
 
@@ -938,6 +940,7 @@ class Component extends DCLogic {
     this._offShell = shell.subscribe(applyShell);
     applyShell();
     this._publishChrome();
+    this._publishTopBar();
     // First run's pick gives pane 1 its driver, as the template's pick did (sprint 225).
     this._offFirstRun = firstRun.subscribe(() => {
       const picked = firstRun.getSnapshot().picked;
@@ -1090,10 +1093,26 @@ class Component extends DCLogic {
     const fp = (s.panes || []).find(p => p.id === s.focused) || s.panes[0];
     chrome.set({ focusedPane: s.focused, unbound: !!(fp && fp.unbound), title: (fp && this._paneTitle(s, fp)) || null, surfaceOpen: !!s.surface });
   }
+  // The React top bar's fields and actions (web/app/state/top_bar.ts, sprint 231).
+  _publishTopBar() {
+    if (!this._topBarVals) return;
+    topBar.set(this._topBarVals);
+    this._offTopBarActs = setTopBarActions(Object.assign({}, this._topBarActs, { finishEdit: (name) => this._finishEdit(name) }));
+  }
+  // UI sprint 145: ↵ names the session (the daemon keeps it); esc cancels; empty changes nothing.
+  _finishEdit(name) {
+    const id = this.state.focused;
+    this.setState(s => ({ panes: s.panes.map(x => x.id === id ? Object.assign({}, x, { editing: false }) : x) }));
+    if (!name) return;
+    const vm = window.__vm;
+    const controller = vm && typeof vm.get === 'function' ? vm.get(id) : null;
+    if (controller && typeof controller.nameSession === 'function') controller.nameSession(name);
+  }
   componentDidUpdate() {
     this._publishChrome();
+    this._publishTopBar();
   }
-  componentWillUnmount() { if (this._offRuns) this._offRuns(); if (this._offSettings) this._offSettings(); if (this._offShell) this._offShell(); if (this._offCommands) this._offCommands(); if (this._offFirstRun) this._offFirstRun(); window.removeEventListener('keydown', this._kd); window.removeEventListener('mousemove', this._mm); window.removeEventListener('mouseup', this._mu); window.removeEventListener('resize', this._rs); if (this._ddOutside) document.removeEventListener('mousedown', this._ddOutside, true); if (this._activityTick) { window.clearInterval(this._activityTick); this._activityTick = null; } }
+  componentWillUnmount() { if (this._offRuns) this._offRuns(); if (this._offSettings) this._offSettings(); if (this._offShell) this._offShell(); if (this._offCommands) this._offCommands(); if (this._offFirstRun) this._offFirstRun(); if (this._offTopBarActs) this._offTopBarActs(); window.removeEventListener('keydown', this._kd); window.removeEventListener('mousemove', this._mm); window.removeEventListener('mouseup', this._mu); window.removeEventListener('resize', this._rs); if (this._ddOutside) document.removeEventListener('mousedown', this._ddOutside, true); if (this._activityTick) { window.clearInterval(this._activityTick); this._activityTick = null; } }
   _upd(arrKey, i, field) { return (ev) => this.setState(s => { const arr = s[arrKey].map((x, j) => j === i ? Object.assign({}, x, { [field]: ev.target.value }) : x); return { [arrKey]: arr }; }); }
   _rm(arrKey, i) { return () => this.setState(s => ({ [arrKey]: s[arrKey].filter((x, j) => j !== i) })); }
   _validate() {
@@ -2170,7 +2189,7 @@ class Component extends DCLogic {
     // paginated entry, so per-session sandbox sessions surface via
     // the by-workspace endpoint with `path=<sessions_root>` — the
     // same load-more code path every real workspace uses.
-    return {
+    const vals = {
       workspaceGroups: _workspaceGroups,
       workspaceGroupsEmpty: _workspaceGroups.length === 0,
       // Sprint 086 — "Add workspace" button opens the OS folder picker
@@ -2482,9 +2501,13 @@ class Component extends DCLogic {
       revealGutterLeft: (state.revealL / (state.revealL + 1) * 100).toFixed(2) + '%',
       revealGrab: (ev) => { ev.preventDefault(); this._gut = { type: 'reveal' }; },
       colGutters: state.colW.slice(0, -1).map((_, i) => { const total = state.colW.reduce((a, b) => a + b, 0); const left = state.colW.slice(0, i + 1).reduce((a, b) => a + b, 0) / total * 100; return { left: left.toFixed(2) + '%', grab: (ev) => { ev.preventDefault(); this._gut = { type: 'col', i: i + 1 }; } }; }),
-      rowGutters: state.rowW.slice(0, -1).map((_, i) => { const total = state.rowW.reduce((a, b) => a + b, 0); const top = state.rowW.slice(0, i + 1).reduce((a, b) => a + b, 0) / total * 100; return { top: top.toFixed(2) + '%', grab: (ev) => { ev.preventDefault(); this._gut = { type: 'row', i: i + 1 }; } }; }), focusedBranch: fp.shape === 'worktree' ? 'substrate/' + (fp.name || 'main') : (fp.ws || ''),
-      focusedWorkspace: fp.ws || '~/.substrate/sandbox',
-      focusedShape: fp.shape || 'sandbox',
+      rowGutters: state.rowW.slice(0, -1).map((_, i) => { const total = state.rowW.reduce((a, b) => a + b, 0); const top = state.rowW.slice(0, i + 1).reduce((a, b) => a + b, 0) / total * 100; return { top: top.toFixed(2) + '%', grab: (ev) => { ev.preventDefault(); this._gut = { type: 'row', i: i + 1 }; } }; }),
+      // The top bar's workspace card (web/app/derive/workspace_card.ts, sprint 233; F328).
+      ...(() => {
+        const card = workspaceCard({ unbound: !!fp.unbound, ws: fp.ws || '', shape: fp.shape || '', name: fp.name || '',
+          workspacePath: (((state.controllerSnapshots || {})[fp.id] || {}).workspacePath) || null });
+        return { focusedWorkspace: card.workspace, focusedShape: card.shape, focusedBranch: card.branch };
+      })(),
 
       // The meta view's machinery lens wraps in this gate; every pane has its own controller, so it
       // always shows (the old notMainFocused branch, scripted lines, is gone).
@@ -2525,5 +2548,20 @@ class Component extends DCLogic {
       // The dialogs are web/app/Dialogs.tsx (sprint 216).
       // First run is web/app/FirstRun.tsx (sprint 225).
     };
+    // The top bar reads these from its store (web/app/state/top_bar.ts); _publishTopBar writes them
+    // after the render, since a store write during a render would update another root mid-render.
+    this._topBarVals = {
+      dotBg: vals.fpDotBg, dot: vals.fpDot, crumb: vals.crumb, editing: !!vals.fpEditing, nameVal: vals.fpNameVal || '',
+      showChips: !!vals.showBarChips, showDriverChip: !!vals.showDriverChip, driverName: vals.driverName,
+      modelCardOpen: !!vals.fpDdOpen, model: vals.fpModel, modelVersion: vals.fpModelVersion, guidance: vals.fpGuidance, length: vals.fpLength, tone: vals.fpTone,
+      wsLabel: vals.fpWsLabel, wsCardOpen: !!vals.fpWsOpen, workspace: vals.focusedWorkspace, shape: vals.focusedShape, branch: vals.focusedBranch,
+      escHint: vals.escHint, recordsColor: vals.recordsColor, studioColor: vals.studioColor,
+      revealLabel: vals.revealLabel, revealColor: vals.revealBtnColor, revealBg: vals.revealBtnBg,
+    };
+    this._topBarActs = {
+      startEdit: vals.fpStartEdit, toggleModelCard: vals.fpToggleDd, toggleWsCard: vals.fpToggleWs,
+      openRecords: vals.openRecords, openStudio: vals.openStudio, toggleReveal: vals.toggleReveal,
+    };
+    return vals;
   }
 }
