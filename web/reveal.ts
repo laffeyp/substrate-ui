@@ -21,6 +21,7 @@ import { TopBar } from "./app/TopBar";
 import { RecordsPage } from "./app/RecordsPage";
 import { AssayPage } from "./app/AssayPage";
 import { InputBar } from "./app/InputBar";
+import { FindBar } from "./app/FindBar";
 import { ActivityLine, TaskRows, type PaneView } from "./app/ActivityLine";
 
 function boot(): void {
@@ -169,6 +170,7 @@ function boot(): void {
   const paneViewKey = (host: HTMLElement) => (host.getAttribute("data-view") ?? "") + ":" + (host.getAttribute("data-pane-id") ?? "");
   mounts.register({ name: "activity", selector: '[data-app-mount="activity"]', key: paneViewKey, render: (host) => React.createElement(ActivityLine, paneView(host)) });
   mounts.register({ name: "tasks", selector: '[data-app-mount="tasks"]', key: paneViewKey, render: (host) => React.createElement(TaskRows, paneView(host)) });
+  mounts.register({ name: "find", selector: '[data-app-mount="find"]', key: paneViewKey, render: (host) => React.createElement(FindBar, { view: paneView(host).view }) });
   mounts.register({ name: "footer", selector: '[data-app-mount="footer"]', key: () => "window",
     render: () => React.createElement(Footer) });
   mounts.register({ name: "first-run", selector: '[data-app-mount="first-run"]', key: () => "window",

@@ -5,6 +5,7 @@
 //
 // Steps: bind pane 1 (deterministic); send a message with a rare word; open the find bar; type
 // the word, then a word in no row; read the count each time against the transcript's own rows.
+// Then in meta, click the stream and find "usermessage": the count equals the stream rows not dimmed.
 
 import { _electron as electron } from "playwright";
 import type { Page } from "playwright";
@@ -49,7 +50,21 @@ async function main(): Promise<void> {
     if (hit !== `${want} matching lines · scope: transcript`) throw new Error(`for ${WORD} the bar reads ${JSON.stringify(hit)}; the transcript has ${want}`);
     const miss = await shown(win, "zzznotthere");
     if (miss !== "0 matching lines · scope: transcript") throw new Error(`for a missing word the bar reads ${JSON.stringify(miss)}`);
-    console.log(`find_counts_transcript: ok — ${JSON.stringify(hit)}; ${JSON.stringify(miss)}`);
+
+    // Meta's stream: a click on it moves the scope; the count is the events left undimmed (sprint 273).
+    await win.keyboard.press("Meta+m");
+    const stream = win.locator("[data-stream-scroll]").first();
+    await stream.waitFor({ state: "visible", timeout: 10_000 });
+    await stream.click({ position: { x: 20, y: 10 } });
+    await win.locator('input[placeholder="find in transcript"]').filter({ visible: true }).first().fill("usermessage");
+    const streamLine = win.locator("text=/matching events · scope: stream/").filter({ visible: true }).first();
+    await streamLine.waitFor({ timeout: 5_000 });
+    const streamText = (await streamLine.textContent())?.trim() ?? "";
+    const lit = await win.evaluate(() => Array.from(document.querySelectorAll<HTMLElement>('[data-stream-scroll] [title^="click to inspect"]'))
+      .filter((row) => getComputedStyle(row).opacity === "1").length);
+    const n = Number(streamText.split(" ")[0]);
+    if (!(n >= 1) || n !== lit) throw new Error(`stream scope reads ${JSON.stringify(streamText)}; ${lit} rows are not dimmed`);
+    console.log(`find_counts_transcript: ok — ${JSON.stringify(hit)}; ${JSON.stringify(miss)}; ${JSON.stringify(streamText)}, ${lit} rows undimmed`);
     code = 0;
   } catch (e) {
     console.error(`find_counts_transcript: FAIL — ${(e as Error).message}`);

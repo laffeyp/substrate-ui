@@ -84,6 +84,7 @@ import { setTopBarActions, topBar } from "./app/state/top_bar";
 import { workspaceCard } from "./app/derive/workspace_card";
 import { GUIDANCE_AUTO_META, GUIDANCE_META, LENGTH_META, TONE_META } from "./app/derive/control_notes";
 import { setTitleOf } from "./app/state/input_bar";
+import { closeFind, find, findQuery as findQueryOf, setFindScope, toggleFind } from "./app/state/find";
 import { recordsKey, setOpenSession } from "./app/state/records";
 import { onCommand, shell } from "./app/state/shell";
 
@@ -104,7 +105,6 @@ class Component extends DCLogic {
     // frame.
     panes: [{ id: 1, name: 'pane-1', driver: null, editing: false, nameVal: '', unbound: true }],
     focused: 1, cols: 1, rows: 1, colW: [1], rowW: [1], revealL: 1.15, ddFor: null, wsFor: null, driverExpandedCli: null, driverExpandedFamily: null, allSessions: [],
-    findOpen: false, findQ: '', findScope: 'transcript',
   // Sprint 086 followup — workspace picker's per-row expand state
   // (independent of Records surface). Expanding a row fetches the
   // most recent 5 sessions from that workspace and lists them
@@ -748,6 +748,8 @@ class Component extends DCLogic {
     // Loaded once here; each change redraws the window.
     loadSettings();
     this._offSettings = settings.subscribe(() => this.forceUpdate());
+    // The stream's rows dim by find's query (sprint 272).
+    this._offFind = find.subscribe(() => this.forceUpdate());
     // Sprint 211: the boot script's controller snapshots and menu commands arrive through
     // web/app/state/shell.ts. Moved from web/reveal.ts, which reached this component's fiber.
     this._langTicks = {};
@@ -858,12 +860,12 @@ class Component extends DCLogic {
         const fp = (s.panes || []).find(p => p.id === s.focused);
         const fsnap = (s.controllerSnapshots || {})[s.focused];
         if (barKey && e.key !== 'Escape' && !typing && s.surface === Surface.Records
-          && !dialogOpen() && !s.findOpen) {
+          && !dialogOpen() && !find.getSnapshot().open) {
           recordsKey(e);
           return;
         }
         if (barKey && !typing && fp && fp.unbound && !(fsnap && fsnap.sessionId) && !s.revealed && !s.surface
-          && !dialogOpen() && !s.findOpen) {
+          && !dialogOpen() && !find.getSnapshot().open) {
           const box = document.querySelector('[data-ws-input="' + fp.id + '"]');
           if (box) box.focus();
           this._wsKey(fp.id, e);
@@ -898,13 +900,13 @@ class Component extends DCLogic {
       // UI sprint 140: ⌘E expands or collapses every tool card.
       if (e.metaKey && !e.shiftKey && !e.altKey && !e.ctrlKey && (e.key === 'e' || e.key === 'E')) { e.preventDefault(); this._toggleTools(); }
       if (e.metaKey && (e.key === 'd' || e.key === 'D')) { e.preventDefault(); this._split(e.shiftKey ? 'down' : 'right'); }
-      if (e.metaKey && (e.key === 'f' || e.key === 'F')) { e.preventDefault(); this.setState(s => ({ findOpen: !s.findOpen, findQ: '' })); }
+      if (e.metaKey && (e.key === 'f' || e.key === 'F')) { e.preventDefault(); toggleFind(); }
       if (e.metaKey && e.key === ',') { e.preventDefault(); openSettings(); }
       // D86: ⌘3 opens the assays page, and the same key returns to the panes (sprint 251).
       if (e.metaKey && !e.shiftKey && !e.altKey && !e.ctrlKey && e.key === '3') { e.preventDefault(); this._toggleSurface(Surface.Assay); }
       if (e.key === 'Escape') {
         const s = this.state;
-        if (s.findOpen) this.setState({ findOpen: false, findQ: '' });
+        if (find.getSnapshot().open) closeFind();
         else if (dialogOpen()) closeDialog();
         else if (s.ddFor || s.wsFor) this.setState({ ddFor: null, wsFor: null });
         else if (s.surface) this.setState({ surface: null });
@@ -975,10 +977,11 @@ class Component extends DCLogic {
     if (controller && typeof controller.nameSession === 'function') controller.nameSession(name);
   }
   componentDidUpdate() {
+    find.set({ streamMatches: this._streamMatches || 0 });
     this._publishChrome();
     this._publishTopBar();
   }
-  componentWillUnmount() { if (this._offRuns) this._offRuns(); if (this._offSettings) this._offSettings(); if (this._offShell) this._offShell(); if (this._offCommands) this._offCommands(); if (this._offFirstRun) this._offFirstRun(); if (this._offTopBarActs) this._offTopBarActs(); if (this._offOpenSession) this._offOpenSession(); if (this._offTitleOf) this._offTitleOf(); window.removeEventListener('keydown', this._kd); window.removeEventListener('resize', this._rs); if (this._ddOutside) document.removeEventListener('mousedown', this._ddOutside, true); }
+  componentWillUnmount() { if (this._offRuns) this._offRuns(); if (this._offSettings) this._offSettings(); if (this._offFind) this._offFind(); if (this._offShell) this._offShell(); if (this._offCommands) this._offCommands(); if (this._offFirstRun) this._offFirstRun(); if (this._offTopBarActs) this._offTopBarActs(); if (this._offOpenSession) this._offOpenSession(); if (this._offTitleOf) this._offTitleOf(); window.removeEventListener('keydown', this._kd); window.removeEventListener('resize', this._rs); if (this._ddOutside) document.removeEventListener('mousedown', this._ddOutside, true); }
   // UI sprint 140: ⌘E folds or unfolds every tool card (ToolCard reads the setting). No control
   // on screen: the Architect's call; /fold and /unfold do the same from the input bar.
   _toggleTools() {
@@ -1033,8 +1036,9 @@ class Component extends DCLogic {
     const _hasVmSession = !!(_vmSnap && _vmSnap.sessionId);
     // ⌘F's query. The transcript scope counts the focused pane's own transcript rows (UI sprint 186;
     // before, it counted lines of a sample session's text).
-    const findQuery = state.findOpen ? state.findQ.trim().toLowerCase() : '';
-    const FSTREAM = state.findOpen && state.findScope === 'stream';
+    // Find is web/app/state/find.ts (sprint 272); the stream's rows dim by its query here.
+    const findQuery = findQueryOf();
+    const FSTREAM = find.getSnapshot().open && find.getSnapshot().scope === 'stream';
     const paneW = (state.winW || window.innerWidth) / state.cols;
     const panes = state.panes.map(p => { const wsRows = this._wsPickerRows(state, p); return Object.assign({
       // Grid placement. Single-pane state has no col/row on the pane
@@ -1333,8 +1337,8 @@ class Component extends DCLogic {
       };
     });
     const _evTexts = envelopes.map(e => (e.kind + ' ' + e.prod + ' ' + e.gist).toLowerCase());
-    const _rowTexts = ((_vmSnap && Array.isArray(_vmSnap.transcript)) ? _vmSnap.transcript : []).map(r => String(r.text || '').toLowerCase());
-    const findCount = !findQuery ? 'scope: ' + state.findScope + ' — click a lens to move it' : (FSTREAM ? _evTexts.filter(t => t.includes(findQuery)).length + ' matching events · scope: stream' : _rowTexts.filter(t => t.includes(findQuery)).length + ' matching lines · scope: transcript');
+    // The find bar shows the stream's match count; it is written to the find store after the render.
+    this._streamMatches = findQuery ? _evTexts.filter(t => t.includes(findQuery)).length : 0;
     // When each event happened: time since the session's first event, from the record's own `t`
     // (reveal/timeline.ts). This replaced a table copied from the prototype's sample record,
     // which put every real event at "t+0.0s" or "t+2s".
@@ -1906,10 +1910,9 @@ class Component extends DCLogic {
       toggleDriverMenu: () => this.setState(s => ({ driverOpen: !s.driverOpen, wsOpen: false })),
       // The footer is web/app/Footer.tsx (sprint 224).
       // ── find (19k/19l) ──
-      findOpen: state.findOpen, findQ: state.findQ, onFindQ: (ev) => this.setState({ findQ: ev.target.value }), findCount,
-      focusTranscript: () => { if (this.state.findScope !== 'transcript') this.setState({ findScope: 'transcript' }); },
-      focusStream: () => { if (this.state.findScope !== 'stream') this.setState({ findScope: 'stream' }); },
-      closeFind: () => this.setState({ findOpen: false, findQ: '' }),
+      // The find bar is web/app/FindBar.tsx (sprint 272); a click on a lens moves its scope.
+      focusTranscript: () => setFindScope('transcript'),
+      focusStream: () => setFindScope('stream'),
       // The dialogs are web/app/Dialogs.tsx (sprint 216).
       // First run is web/app/FirstRun.tsx (sprint 225).
     };
