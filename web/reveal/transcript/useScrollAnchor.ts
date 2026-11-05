@@ -170,16 +170,17 @@ export function useScrollAnchor(key: string): ScrollAnchor {
     if (!scroller) return;
     scrollerRef.current = scroller;
     scroller.style.overflowAnchor = "none";
-    // Restore this pane+view's saved place. The ref fires after the rows are in the DOM.
+    // Restore this pane+view's saved place. The ref fires after the rows are in the DOM. The restore
+    // goes through `write`, so its scroll event is known as this hook's: read as the user's, it
+    // measured the bottom after the layout had moved (an area mounted under the transcript between
+    // the write and its event) and stopped following (2026-11-05, transcript_follow's switch step).
     const saved = savedByKey.get(key);
     if (saved && !saved.following) {
       followingRef.current = false;
-      scroller.scrollTop = saved.scrollTop;
-      seenTopRef.current = scroller.scrollTop;
+      write(scroller, saved.scrollTop);
     } else {
       followingRef.current = true;
-      scroller.scrollTop = scroller.scrollHeight;
-      seenTopRef.current = scroller.scrollTop;
+      write(scroller, scroller.scrollHeight);
     }
     updateAnchor();
     scroller.addEventListener("scroll", onScroll, { passive: true });
@@ -203,7 +204,7 @@ export function useScrollAnchor(key: string): ScrollAnchor {
       lastHeight = scroller.clientHeight;
       if (wasHidden && lastHeight > 0) {
         const back = savedByKey.get(key);
-        if (back && !back.following) { scroller.scrollTop = back.scrollTop; seenTopRef.current = scroller.scrollTop; updateAnchor(); return; }
+        if (back && !back.following) { write(scroller, back.scrollTop); updateAnchor(); return; }
       }
       settle();
     });

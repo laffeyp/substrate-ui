@@ -58,7 +58,8 @@
     </div>
    </sc-if>
    <div style="flex:none;padding:0 22px 16px">
-    <!-- include partials/input-bar.html o=pn -->
+    <!-- the input bar: web/app/InputBar.tsx, for this pane (sprint 261) -->
+    <div data-app-mount="input-bar" data-pane-id="{{ pn.id }}" data-view="panes"></div>
    </div>
      </sc-if>
      <sc-if value="{{ pn.notMain }}" hint-placeholder-val="{{ false }}">
@@ -141,7 +142,8 @@
     </div>
    </sc-if>
     <div style="flex:none;padding:12px 26px 18px">
-    <!-- include partials/input-bar.html o=fpRow -->
+    <!-- the input bar: web/app/InputBar.tsx, for this pane (sprint 261) -->
+    <div data-app-mount="input-bar" data-pane-id="{{ fpRow.id }}" data-view="meta"></div>
     </div>
    </div>
    <div style="flex:1;display:flex;flex-direction:column;min-width:0;background:#1a1c20">

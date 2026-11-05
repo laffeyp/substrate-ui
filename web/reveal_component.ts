@@ -60,10 +60,7 @@ const STRUCTURE_DEFS = {
 
 // UI sprint 161: the levels and their bundles are generated from the kernel (vm/controls.gen.ts);
 // only the one-line notes are the UI's own.
-// The input bar's hint; a run's pane shows why it takes no typing instead (UI sprint 182).
-const INPUT_HINT = 'type to input · / for commands · ↵ to send';
-const GUIDANCE_AUTO_META = 'follows the model';
-const GUIDANCE_META = { harness: 'loop rules only', low: 'one line a rule', medium: 'rules, no examples', high: 'the full standard' };
+// The choices' notes live in web/app/derive/control_notes.ts (sprint 261), which the slash menu reads too.
 const GUIDANCE_OPTIONS = [
   { level: null, bundle: null, label: 'auto', meta: GUIDANCE_AUTO_META },
   ...Object.entries(GUIDANCE_LEVEL_BUNDLES).map(([level, bundle]) => ({ level, bundle, label: level, meta: GUIDANCE_META[level] || '' })),
@@ -71,17 +68,6 @@ const GUIDANCE_OPTIONS = [
 // UI sprint 143 (kernel K296, session vocabulary § T): the Length and Tone lines under GUIDANCE.
 // The positions and defaults are generated from the kernel (vm/controls.gen.ts); only the one-line
 // descriptions are the UI's own. The defaults write no text.
-const LENGTH_META = {
-  [LengthPosition.TERSE]: 'the answer and its facts',
-  [LengthPosition.NORMAL]: 'as the guidance has it',
-  [LengthPosition.FULL]: 'complete, not padded',
-};
-const TONE_META = {
-  [TonePosition.BLUNT]: 'plain judgements, no softening',
-  [TonePosition.NEUTRAL]: 'as the guidance has it',
-  [TonePosition.FORMAL]: 'for readers outside the conversation',
-  [TonePosition.DRY]: 'understated and factual',
-};
 const LENGTH_OPTIONS = Object.values(LengthPosition).map(v => ({ value: v, label: v, meta: LENGTH_META[v] || '' }));
 const TONE_OPTIONS = Object.values(TonePosition).map(v => ({ value: v, label: v, meta: TONE_META[v] || '' }));
 const LENGTH_DEFAULT_AT = LENGTH_OPTIONS.findIndex(o => o.value === LENGTH_DEFAULT);
@@ -98,12 +84,14 @@ import { chrome } from "./app/state/chrome";
 import { firstRun } from "./app/state/first_run";
 import { setTopBarActions, topBar } from "./app/state/top_bar";
 import { workspaceCard } from "./app/derive/workspace_card";
+import { GUIDANCE_AUTO_META, GUIDANCE_META, LENGTH_META, TONE_META } from "./app/derive/control_notes";
+import { setTitleOf } from "./app/state/input_bar";
 import { recordsKey, setOpenSession } from "./app/state/records";
 import { onCommand, shell } from "./app/state/shell";
 
 
 class Component extends DCLogic {
-  state = { revealed: false, mode: GraphMode.Stream, dir: GraphDirection.Down, sel: null, langStream: LanguageStreamId.Model, langLane: 0, langView: LanguageViewMode.Bars, promptVal: '', surface: null, level: RevealLevel.All, sent: [],
+  state = { revealed: false, mode: GraphMode.Stream, dir: GraphDirection.Down, sel: null, langStream: LanguageStreamId.Model, langLane: 0, langView: LanguageViewMode.Bars, surface: null, level: RevealLevel.All, sent: [],
     // `driverName` in the top strip reads the pane's driver at render
     // time; null here means "read from the controller default."
     driverName: null,
@@ -200,7 +188,7 @@ class Component extends DCLogic {
       c.loadRecentWorkspaces && c.loadRecentWorkspaces().catch(() => undefined);
     }
     // No model until the user picks one: a new pane names none and preselects none.
-    return { id, name: 'pane-' + id, driver: null, unbound: true, wsQ: '', editing: false, nameVal: '', pv: '', lines: [] };
+    return { id, name: 'pane-' + id, driver: null, unbound: true, wsQ: '', editing: false, nameVal: '', lines: [] };
   }
   _bindPane(id, ws, opts) {
     this.setState(s => {
@@ -718,11 +706,6 @@ class Component extends DCLogic {
     const i = picks.findIndex(o => o.current);
     return i < 0 ? 0 : i;
   }
-  // UI sprint 182: a run's pane says why it takes no typing; every other pane shows the hint.
-  _inputHint(state, paneId) {
-    const snap = (state.controllerSnapshots || {})[paneId];
-    return (snap && snap.viewOnly) || INPUT_HINT;
-  }
   // UI sprint 182 (r9 § 4): a run started now opens a pane per session beside its caller's pane,
   // bound to the session's record. A pane already showing that record is focused instead.
   _openRunPanes(callerPaneId, run) {
@@ -864,6 +847,8 @@ class Component extends DCLogic {
     applyShell();
     this._publishChrome();
     this._publishTopBar();
+    // The input bar's /exit names the pane's session (web/app/state/input_bar.ts, sprint 261).
+    this._offTitleOf = setTitleOf((paneId) => { const p = (this.state.panes || []).find(x => x.id === paneId); return p ? this._paneTitle(this.state, p) : 'pane-' + paneId; });
     // A session picked on the records page opens in the focused pane (web/app/state/records.ts,
     // sprint 240). The pane is marked bound before the attach, with the record's own folder and
     // shape, so the pane draws the transcript and its labels match the session.
@@ -1051,7 +1036,7 @@ class Component extends DCLogic {
     this._publishChrome();
     this._publishTopBar();
   }
-  componentWillUnmount() { if (this._offRuns) this._offRuns(); if (this._offSettings) this._offSettings(); if (this._offShell) this._offShell(); if (this._offCommands) this._offCommands(); if (this._offFirstRun) this._offFirstRun(); if (this._offTopBarActs) this._offTopBarActs(); if (this._offOpenSession) this._offOpenSession(); window.removeEventListener('keydown', this._kd); window.removeEventListener('resize', this._rs); if (this._ddOutside) document.removeEventListener('mousedown', this._ddOutside, true); if (this._activityTick) { window.clearInterval(this._activityTick); this._activityTick = null; } }
+  componentWillUnmount() { if (this._offRuns) this._offRuns(); if (this._offSettings) this._offSettings(); if (this._offShell) this._offShell(); if (this._offCommands) this._offCommands(); if (this._offFirstRun) this._offFirstRun(); if (this._offTopBarActs) this._offTopBarActs(); if (this._offOpenSession) this._offOpenSession(); if (this._offTitleOf) this._offTitleOf(); window.removeEventListener('keydown', this._kd); window.removeEventListener('resize', this._rs); if (this._ddOutside) document.removeEventListener('mousedown', this._ddOutside, true); if (this._activityTick) { window.clearInterval(this._activityTick); this._activityTick = null; } }
   // UI sprint 140: ⌘E folds or unfolds every tool card (ToolCard reads the setting). No control
   // on screen: the Architect's call; /fold and /unfold do the same from the input bar.
   _toggleTools() {
@@ -1067,73 +1052,6 @@ class Component extends DCLogic {
       if (fp && fp.unbound && !(fs && fs.sessionId)) return;
     }
     this.setState(st => ({ revealed: !st.revealed, surface: null }));
-  }
-  // UI sprint 141: the input bar's keys, the same in the panes view and the meta view. ↵ sends;
-  // ⇧↵ (and ⌥↵) make a new line; ↵ while an input method composes finishes the composition;
-  // ↑ on the first line and ↓ on the last walk this pane's sent messages, back to the draft.
-  _barKey(paneId, ev) {
-    // React's keyboard event leaves isComposing on the browser's own event.
-    if (ev.isComposing || (ev.nativeEvent && ev.nativeEvent.isComposing) || ev.keyCode === 229) return;
-    const pane = (this.state.panes || []).find(x => x.id === paneId);
-    if (!pane) return;
-    const setPane = (patch) => this.setState(s => ({ panes: s.panes.map(x => x.id === paneId ? Object.assign({}, x, patch) : x) }));
-    const el = ev.target;
-    const plain = !ev.shiftKey && !ev.altKey && !ev.metaKey && !ev.ctrlKey;
-    // UI sprint 165: Tab completes a command name: one match becomes "/<name> " (its choices
-    // then open); several complete to their longest common prefix. Focus stays in the bar.
-    if (ev.key === 'Tab' && plain && /^\/\S*$/.test(pane.pv || '')) {
-      ev.preventDefault();
-      const vm = window.__vm;
-      const ctl = vm && typeof vm.get === 'function' ? vm.get(paneId) : null;
-      const typed = (pane.pv || '').slice(1).toLowerCase();
-      const names = (ctl && typeof ctl.slashCatalog === 'function' ? ctl.slashCatalog() : []).map(c => c.name).filter(n => n.startsWith(typed));
-      if (names.length === 1) { setPane({ pv: '/' + names[0] + ' ', slashSel: null }); return; }
-      if (names.length > 1) {
-        let common = names[0];
-        for (const n of names) while (!n.startsWith(common)) common = common.slice(0, -1);
-        if (common.length > typed.length) setPane({ pv: '/' + common, slashSel: null });
-      }
-      return;
-    }
-    // UI sprint 164: with a command's choices open, ↑ enters the menu at the row nearest the bar,
-    // ↑ ↓ move, ↓ off the bottom returns to the bar, ↵ picks, esc returns. History waits.
-    const choices = ((this._slashRows || {})[paneId] || []).filter(r => r.choice);
-    if (choices.length && plain && ['ArrowUp', 'ArrowDown', 'Enter', 'Escape'].includes(ev.key)) {
-      const sel = typeof pane.slashSel === 'number' && pane.slashSel < choices.length ? pane.slashSel : null;
-      if (ev.key === 'ArrowUp') { ev.preventDefault(); setPane({ slashSel: sel === null ? choices.length - 1 : Math.max(0, sel - 1) }); return; }
-      if (ev.key === 'ArrowDown') { ev.preventDefault(); setPane({ slashSel: sel === null || sel + 1 >= choices.length ? null : sel + 1 }); return; }
-      if (ev.key === 'Enter' && sel !== null) { ev.preventDefault(); setPane({ slashSel: null }); choices[sel].pick(); return; }
-      if (ev.key === 'Escape' && sel !== null) { ev.preventDefault(); setPane({ slashSel: null }); return; }
-    }
-    if (ev.key === 'Enter' && plain) {
-      ev.preventDefault();
-      const v = (pane.pv || '').trim();
-      if (!v) return;
-      const hist = [...(pane.hist || []), v].slice(-200);
-      setPane({ pv: '', hist, histAt: null, histDraft: '' });
-      const vm = window.__vm;
-      if (vm && typeof vm.setActive === 'function') vm.setActive(paneId);
-      const controller = vm && typeof vm.get === 'function' ? vm.get(paneId) : null;
-      if (controller && typeof controller.submitLine === 'function') controller.submitLine(v);
-      else if (vm && typeof vm.submitLine === 'function') vm.submitLine(v);
-      return;
-    }
-    if (!plain || !el || typeof el.selectionStart !== 'number' || el.selectionStart !== el.selectionEnd) return;
-    const hist = pane.hist || [];
-    const text = String(el.value || '');
-    if (ev.key === 'ArrowUp' && !text.slice(0, el.selectionStart).includes('\n') && hist.length) {
-      const at = pane.histAt == null ? hist.length : pane.histAt;
-      if (at === 0) return;
-      ev.preventDefault();
-      setPane({ pv: hist[at - 1], histAt: at - 1, histDraft: pane.histAt == null ? (pane.pv || '') : pane.histDraft });
-      return;
-    }
-    if (ev.key === 'ArrowDown' && pane.histAt != null && !text.slice(el.selectionEnd).includes('\n')) {
-      ev.preventDefault();
-      const next = pane.histAt + 1;
-      if (next >= hist.length) setPane({ pv: pane.histDraft || '', histAt: null, histDraft: '' });
-      else setPane({ pv: hist[next], histAt: next });
-    }
   }
   // UI sprint 145: what the top bar calls a pane: its session's name when it has one, else the
   // pane's label.
@@ -1176,74 +1094,6 @@ class Component extends DCLogic {
     const findQuery = state.findOpen ? state.findQ.trim().toLowerCase() : '';
     const FSTREAM = state.findOpen && state.findScope === 'stream';
     const paneW = (state.winW || window.innerWidth) / state.cols;
-    // Slash-router command table. `pick(paneId)` clears that pane's
-    // prompt input and submits the slash line on that pane's own
-    // controller. The pane loop below hands each rendered pane its
-    // own bound routerRows using this table.
-    const _vmSubmitFor = (paneId, line) => {
-      const vm = window.__vm;
-      if (!vm) return;
-      if (typeof vm.setActive === 'function') vm.setActive(paneId);
-      const controller = typeof vm.get === 'function' ? vm.get(paneId) : null;
-      if (controller && typeof controller.submitLine === 'function') controller.submitLine(line);
-      else if (typeof vm.submitLine === 'function') vm.submitLine(line);
-    };
-    const _clearPv = (paneId) => this.setState(s => ({ panes: s.panes.map(x => x.id === paneId ? Object.assign({}, x, { pv: '' }) : x) }));
-    // UI sprint 162: the slash menu reads the pane's controller (`slashCatalog`), the same table
-    // `submitLine` runs and `/help` prints. A pick sends the line; a command that takes free text
-    // fills the bar instead. `/exit` from the menu asks first.
-    const _slashMenu = (p) => {
-      const raw = p.pv || '';
-      if (!raw.startsWith('/') || raw.includes('\n')) return [];
-      const vm = window.__vm;
-      const ctl = vm && typeof vm.get === 'function' ? vm.get(p.id) : null;
-      const catalog = ctl && typeof ctl.slashCatalog === 'function' ? ctl.slashCatalog() : [];
-      const send = (line) => { _clearPv(p.id); if (line === '/exit') { openEndSession(this._paneTitle(this.state, p)); return; } _vmSubmitFor(p.id, line); };
-      const fill = (line) => this.setState(s => ({ panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, { pv: line }) : x) }));
-      const m = raw.match(/^\/(\S+)\s+(\S*)$/);
-      if (m) {
-        const c = catalog.find(e => e.name === m[1].toLowerCase() || e.aliases.includes(m[1].toLowerCase()));
-        if (!c || !c.choices) return [];
-        // The picker's own notes for each choice (one copy each, above).
-        const notes = { guidance: Object.assign({ auto: GUIDANCE_AUTO_META }, GUIDANCE_META), length: LENGTH_META, tone: TONE_META }[c.name] || {};
-        return c.choices.filter(ch => ch.startsWith(m[2].toLowerCase())).map((ch, i) => ({
-          choice: true, lit: p.slashSel === i ? '1' : '0', bg: p.slashSel === i ? '#2e3138' : 'transparent',
-          cmd: '/' + c.name + ' ' + ch, desc: [notes[ch], ch === c.current ? 'current' : ''].filter(Boolean).join(' · '),
-          current: ch === c.current ? '1' : '0', pick: () => send('/' + c.name + ' ' + ch),
-        }));
-      }
-      const q = raw.trim().toLowerCase();
-      const matches = catalog.filter(c => ('/' + c.name).startsWith(q));
-      // UI sprint 163: one match closes the menu; its hint sits in the input row (_slashHint).
-      if (matches.length === 1 && q.length > 1) return [];
-      return matches.map(c => ({
-        choice: false, lit: '0', bg: 'transparent',
-        cmd: '/' + c.name, desc: c.usage === '/' + c.name ? c.about : c.usage.slice(c.name.length + 2) + ' · ' + c.about,
-        current: '0',
-        pick: c.usage === '/' + c.name ? () => send('/' + c.name) : () => fill('/' + c.name + ' '),
-      }));
-    };
-    // UI sprints 163, 166: the hint for the one command the bar's text names (a unique prefix, or a
-    // full name or alias with a space and anything after it): its argument part and description,
-    // never its name. It sits in one column for every command, right of the longest command with
-    // its longest choice, so typing never moves it; free text that reaches the column hides it.
-    const _slashHint = (p) => {
-      const raw = p.pv || '';
-      if (!raw.startsWith('/') || raw.includes('\n')) return null;
-      const vm = window.__vm;
-      const ctl = vm && typeof vm.get === 'function' ? vm.get(p.id) : null;
-      const catalog = ctl && typeof ctl.slashCatalog === 'function' ? ctl.slashCatalog() : [];
-      const col = Math.max(0, ...catalog.map(c => c.name.length + 1 + (c.choices ? 1 + Math.max(...c.choices.map(ch => ch.length)) : 0))) + 3;
-      const named = raw.match(/^\/(\S+)\s/);
-      const word = named ? named[1].toLowerCase() : raw.slice(1).toLowerCase();
-      const matches = named
-        ? catalog.filter(c => c.name === word || c.aliases.includes(word))
-        : catalog.filter(c => c.name.startsWith(word));
-      if (matches.length !== 1 || raw.length >= col) return null;
-      const c = matches[0];
-      const args = c.usage.slice(c.name.length + 2);
-      return { text: args ? args + ' · ' + c.about : c.about, left: col + 'ch' };
-    };
     const panes = state.panes.map(p => { const wsRows = this._wsPickerRows(state, p); return Object.assign({
       // Grid placement. Single-pane state has no col/row on the pane
       // record; treat the missing case as the whole grid so the layout
@@ -1386,39 +1236,7 @@ class Component extends DCLogic {
       // window does not blank an unfocused pane. Each pane reads its
       // own controller's snapshot; focus only controls emphasis.
       ...this._liveBindingsFor(p.id, state),
-      // Prompt row bindings — every rendered pane owns its own. A
-      // global `state.promptVal` field would mirror the same string
-      // into every visible input on every render, so a keystroke in
-      // pane 1 would visibly appear in pane 2's input box even though
-      // the send only routed to pane 1's controller. Each pane's
-      // prompt text lives on `p.pv`; the router row list and its
-      // pick callbacks reference the pane's own state.
-      pv: p.pv || '',
-      promptVal: p.pv || '',
-      inputHint: this._inputHint(state, p.id),
-      onPv: (ev) => this.setState(s => ({ panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, { pv: ev.target.value }) : x) })),
-      onPrompt: (ev) => this.setState(s => ({ panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, { pv: ev.target.value, histAt: null, slashSel: null }) : x) })),
-      onPvKey: (ev) => {
-        if (ev.key !== 'Enter') return;
-        const v = (p.pv || '').trim();
-        if (!v) return;
-        this.setState(s => ({ panes: s.panes.map(x => x.id === p.id ? Object.assign({}, x, { pv: '' }) : x) }));
-        const vm = window.__vm;
-        if (vm && typeof vm.setActive === 'function') vm.setActive(p.id);
-        const controller = vm && typeof vm.get === 'function' ? vm.get(p.id) : null;
-        if (controller && typeof controller.submitLine === 'function') controller.submitLine(v);
-        else if (vm && typeof vm.submitLine === 'function') vm.submitLine(v);
-      },
-      onPromptKey: (ev) => this._barKey(p.id, ev),
-      ...(() => {
-        const rows = _slashMenu(p);
-        this._slashRows = Object.assign(this._slashRows || {}, { [p.id]: rows });
-        const hint = _slashHint(p);
-        return {
-          routerRows: rows, routerOpen: rows.length > 0, promptRadius: rows.length ? '0 0 6px 6px' : '6px',
-          slashHintShow: !!hint, slashHint: hint ? hint.text : '', slashHintLeft: hint ? hint.left : '0',
-        };
-      })(),
+      // The input bar is web/app/InputBar.tsx, keyed by the pane (sprint 261).
       sentLines: (p.sent || []).map(t => ({ text: t })),
       editing: p.editing, notEditing: !p.editing, nameVal: p.nameVal,
       // Status dot per pane. (19i's hollow "rate-limited" dot was removed in Sprint 096:
@@ -2037,11 +1855,6 @@ class Component extends DCLogic {
       revealLabel: state.revealed ? 'panes' : 'meta',
       revealBtnColor: state.revealed && !surf ? '#212327' : '#9aa0a8', revealBtnBg: state.revealed && !surf ? '#82a5c8' : '#3d434c',
       fontSize: fontSize(13),
-      // Reveal view's single-pane prompt row (reveal.html:345). Bound
-      // to the focused pane's pv, so the same field the terminal-view
-      // pane input mutates is what the reveal-view input shows.
-      promptVal: (fp && fp.pv) || '',
-      inputHint: fp ? this._inputHint(state, fp.id) : INPUT_HINT,
       // UI sprint 158: the stream follows the bottom until scrolled up, as the transcript does.
       streamRef: (el) => { this._streamEl = el; if (el) followBottom(el); },
       // Transcript scroll used to live here (Sprint 076 retired

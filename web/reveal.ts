@@ -20,6 +20,7 @@ import { Footer } from "./app/Footer";
 import { TopBar } from "./app/TopBar";
 import { RecordsPage } from "./app/RecordsPage";
 import { AssayPage } from "./app/AssayPage";
+import { InputBar } from "./app/InputBar";
 
 function boot(): void {
   const registry = new PaneRegistry({ makeClient: () => new BrowserSubstrateClient() });
@@ -158,6 +159,10 @@ function boot(): void {
     render: () => React.createElement(RecordsPage) });
   mounts.register({ name: "assays", selector: '[data-app-mount="assays"]', key: () => "window",
     render: () => React.createElement(AssayPage) });
+  // One input bar per pane and view; the bar keeps each pane's draft in its store (sprint 261).
+  mounts.register({ name: "input-bar", selector: '[data-app-mount="input-bar"]',
+    key: (host) => (host.getAttribute("data-view") ?? "") + ":" + (host.getAttribute("data-pane-id") ?? ""),
+    render: (host) => React.createElement(InputBar, { paneId: Number(host.getAttribute("data-pane-id")) }) });
   mounts.register({ name: "footer", selector: '[data-app-mount="footer"]', key: () => "window",
     render: () => React.createElement(Footer) });
   mounts.register({ name: "first-run", selector: '[data-app-mount="first-run"]', key: () => "window",

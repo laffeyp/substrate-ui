@@ -21,3 +21,6 @@
 
 /* Assay page: a row in the listing (web/app/AssayPage.tsx; new, no template rule). */
 .hover-assay-row:hover { background: #26292e !important; }
+
+/* Input bar (web/partials/input-bar.html): a slash menu row. */
+.hover-slash-row:hover { background: #2e3138 !important; }

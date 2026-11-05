@@ -154,6 +154,7 @@ export default defineConfig({
       "react/jsx-dev-runtime": resolve(__dirname, "web/shims/react-jsx-runtime.ts"),
       "react": resolve(__dirname, "web/shims/react.ts"),
       "react-dom/client": resolve(__dirname, "web/shims/react-dom-client.ts"),
+      "react-dom": resolve(__dirname, "web/shims/react-dom.ts"),
     },
   },
   server: {

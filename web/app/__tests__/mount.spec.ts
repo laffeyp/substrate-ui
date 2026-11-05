@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2026 Peter Laffey
-// The mount registry (web/app/mount.ts, sprint 206), in jsdom with React 18.3.1.
+// The mount registry (web/app/mount.ts, sprints 206, 263), in jsdom with React 18.3.1.
 //
 // Run: `npm run test:unit`
 
@@ -69,6 +69,16 @@ test("a host gets its component", () => {
   act(() => r.scan());
   assert.strictEqual(button("a1")?.textContent, "n=0");
   assert.deepStrictEqual(r.mounted().map((m) => m.key), ["a1"]);
+});
+
+test("a root is drawn as it attaches, not on React's next task (sprint 263)", () => {
+  doc().body.innerHTML = "";
+  doc().body.appendChild(host("s1"));
+  const r = registry();
+  // No act(): outside act, React 18 renders a createRoot root on a later task unless flushed.
+  r.scan();
+  assert.strictEqual(button("s1")?.textContent, "n=0");
+  act(() => { doc().body.innerHTML = ""; r.scan(); });
 });
 
 test("a host whose children are cleared gets the same root back, with its state", () => {
