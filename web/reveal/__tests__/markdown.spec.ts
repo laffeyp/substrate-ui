@@ -109,3 +109,14 @@ test("renderBlock: code block carries lang + text + hasLang", () => {
   assert.strictEqual(styled.text, "let x = 1");
   assert.strictEqual(styled.hasLang, true);
 });
+
+test("mdBlocks: a fence's language may hold +, - and the like (sprint 343, F358)", () => {
+  for (const lang of ["c++", "objective-c", "shell-session"]) {
+    const blocks = mdBlocks("```" + lang + "\nx = 1\n```");
+    assert.deepStrictEqual(blocks, [{ kind: "code_block", lang, text: "x = 1" }]);
+  }
+  // A ``` line the fence rule refuses is a paragraph, and the parser goes on past it (it hung here).
+  const odd = mdBlocks("```js title=x\nbody");
+  assert.strictEqual(odd[0].kind, "p");
+  assert.strictEqual(odd.length <= 2, true);
+});

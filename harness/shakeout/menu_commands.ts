@@ -8,7 +8,26 @@
 // on the last pane it does nothing.
 
 import { _electron as electron, type ElectronApplication, type Page } from "playwright";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { bindPaneAsUser, launchArgs, settled, waitForApp } from "./lib/electron";
+
+/** The `source` on the session record's SessionEndRequested, once the record holds one (10 s at most,
+ *  read again each 50 ms; null if none arrives). */
+async function endSource(state: string, sessionId: string): Promise<string | null> {
+  const dir = join(state, "sessions", sessionId, "record");
+  for (let at = Date.now(); Date.now() - at < 10_000; await new Promise((r) => setTimeout(r, 50))) {
+    if (!existsSync(dir)) continue;
+    for (const file of readdirSync(dir).filter((f) => f.endsWith(".jsonl"))) {
+      for (const line of readFileSync(join(dir, file), "utf8").split("\n")) {
+        if (!line.includes('"SessionEndRequested"')) continue;
+        const env = JSON.parse(line) as { kind: string; payload?: { source?: string } };
+        if (env.kind === "SessionEndRequested") return env.payload?.source ?? null;
+      }
+    }
+  }
+  return null;
+}
 
 type Signal = { name: string; payload?: Record<string, unknown> };
 const visible = (win: Page, sel: string) => win.locator(sel).filter({ visible: true }).first();
@@ -68,7 +87,11 @@ async function main(): Promise<void> {
       throw new Error(`expected one SESSION_END_REQUESTED for ${second} with reason user_close; got ${JSON.stringify(ends)}`);
     }
     if ((await sessionOf(win, 1)) !== first) throw new Error("the remaining pane lost its session");
-    seen.push(`accelerator CmdOrCtrl+W; Close Pane ended ${second} (user_close) and left pane 1 on ${first}`);
+    // The record names the end's source as the client sent it (sprint 337, plan row F2, F330): before,
+    // the client sent `reason` and the server, which reads `source`, recorded "user_end" for every end.
+    const recorded = await endSource(launch.state, second);
+    if (recorded !== "user_close") throw new Error(`the record's SessionEndRequested for ${second} has source ${JSON.stringify(recorded)}; want user_close`);
+    seen.push(`accelerator CmdOrCtrl+W; Close Pane ended ${second} (user_close, on the record too) and left pane 1 on ${first}`);
 
     // The last pane stays.
     const beforeLast = (await signals(win)).length;

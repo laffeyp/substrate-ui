@@ -242,6 +242,9 @@ export class SessionController {
   private readonly eventListeners = new Set<EventListener>();
   private unsubscribeStream: Unsubscribe | null = null;
   private lastSeq = -1;
+  /** The seqs in `rawEnvelopes`, so a replayed envelope is found without a scan (sprint 338, plan row
+   *  F3, F335); cleared wherever `rawEnvelopes` is. */
+  private readonly seenSeqs = new Set<number>();
   /** callId → callKey of the ToolCall currently open under that id (UI sprint 101). */
   private openCallKey = new Map<string, string>();
   /** UI sprint 129: a harness call's tool name by call id, for its result row. */
@@ -552,6 +555,7 @@ export class SessionController {
     }
     const ack = result.data;
     this.lastSeq = -1;
+    this.seenSeqs.clear();
     this.openCallKey.clear();
     this.harnessToolNames.clear();
     this.endedEmittedFor = null;
@@ -775,6 +779,7 @@ export class SessionController {
   async attachRecordRoot(recordRoot: string): Promise<void> {
     if (this.unsubscribeStream) { this.unsubscribeStream(); this.unsubscribeStream = null; }
     this.lastSeq = -1;
+    this.seenSeqs.clear();
     this.openCallKey.clear();
     this.harnessToolNames.clear();
     this.endedEmittedFor = null;
@@ -834,6 +839,7 @@ export class SessionController {
     }
     const manifest = result.data;
     this.lastSeq = -1;
+    this.seenSeqs.clear();
     this.openCallKey.clear();
     this.harnessToolNames.clear();
     this.endedEmittedFor = null;
@@ -881,7 +887,9 @@ export class SessionController {
     this.emit("SESSION_END_REQUESTED", { session_id: sessionId, reason });
     const result = await this.client.fetchJson<unknown>(
       `/api/session/${encodeURIComponent(sessionId)}/end`,
-      { method: "POST", body: { reason } },
+      // The server reads `source` (server.py, the /end route) onto the record's SessionEndRequested;
+      // sprint 337 (plan row F2, F330). Before, the body said `reason`, so every end recorded "user_end".
+      { method: "POST", body: { source: reason } },
     );
     if (!result.ok) {
       this.patch({ lastError: `session_end: ${result.detail}` });
@@ -1364,7 +1372,8 @@ export class SessionController {
     // this controller already holds. UI sprint 102: skip them whole. Before, rawEnvelopes was
     // deduped but the switch below still ran, so every reconnect appended the transcript again.
     const existing = this.snap.rawEnvelopes;
-    if (typeof env.seq === "number" && existing.some((e) => e.seq === env.seq)) return;
+    if (typeof env.seq === "number" && this.seenSeqs.has(env.seq)) return;
+    if (typeof env.seq === "number") this.seenSeqs.add(env.seq);
     if (typeof env.seq === "number" && env.seq > this.lastSeq) this.lastSeq = env.seq;
     this.emit("STREAM_ENVELOPE_APPENDED", { seq: env.seq, kind: env.kind });
     this.patch({ rawEnvelopes: [...existing, env] });
@@ -1773,7 +1782,7 @@ export class SessionController {
  * carrying a chain of HTTPStatusError + body JSON + Go dial errors from
  * Ollama. Match the common cases first; fall back to a trimmed original.
  * The full text stays on the record's Park.detail — this is display shaping. */
-function summariseModelError(raw: string): string {
+export function summariseModelError(raw: string): string {
   // `dial tcp: lookup <host>: <reason>` — the DNS / connection kernel.
   const dial = raw.match(/dial tcp: lookup ([^:"'\\]+): ([^"'\\]+)/);
   if (dial) return `network — could not reach ${dial[1]} (${dial[2].trim()})`;
@@ -1786,7 +1795,13 @@ function summariseModelError(raw: string): string {
     return `provider returned ${code} ${reason}`;
   }
   // Timeout signature.
-  if (/(timeout|timed out|deadline exceeded)/i.test(raw)) return `provider timed out — no response after 3 attempts`;
+  // The count is the responder's own (`OllamaResponder(<model>) failed after <max_retries> attempts`,
+  // substrate adapters/models.py); sprint 339 (plan row F4, F340) reads it, where the line always said
+  // 3. A timeout whose text carries no count reads as before.
+  if (/(timeout|timed out|deadline exceeded)/i.test(raw)) {
+    const tries = raw.match(/failed after (\d+) attempts/);
+    return `provider timed out — no response after ${tries ? tries[1] : "3"} attempts`;
+  }
   // Anti-spin bail (loop guarded).
   if (/stopped after \d+ failed tool call/i.test(raw)) return `tool bail: model called the same failing tool repeatedly and was stopped`;
   // Fallback: strip Python-wrapper crust and cap at 200 chars.

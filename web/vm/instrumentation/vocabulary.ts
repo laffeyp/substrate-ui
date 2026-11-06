@@ -2,8 +2,8 @@
 // Copyright (C) 2026 Peter Laffey
 // Vocabulary loader for the reveal shell. Reads the locked lock file
 // at web/vm/signals/versions/current.json and builds a typed dictionary
-// keyed by tag name. Wholly separate from the classic shell's
-// web/instrumentation/vocabulary.ts and its signals/versions/ tree.
+// keyed by tag name. Separate from the classic shell's loader and its signals/versions/ tree, which
+// are in _deprecated/classic-tree/ (sprint 341, plan row F6, F348).
 
 import vocab from "../signals/versions/current.json";
 

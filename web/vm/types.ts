@@ -2,9 +2,9 @@
 // Copyright (C) 2026 Peter Laffey
 // web/vm/types.ts — the Presentation Model's public shape.
 //
-// Every View (the classic shell today, the prototype's dc-runtime HTML next)
-// reads its render input from `Snapshot` and calls the SessionController's
-// actions. No DOM, no framework — just the vocabulary the two Views share.
+// The window (web/app/App.tsx and its areas) reads its render input from `Snapshot` and calls the
+// SessionController's actions. No DOM, no framework. (Sprint 341, plan row F6, F348: this comment named
+// the classic shell, now in _deprecated/classic-tree/, and dc-runtime, now in _deprecated/dc-runtime/.)
 import type { TaskStatusValue } from "./statuses.gen";
 import { EnvelopeKind } from "./envelope_kinds.gen";
 

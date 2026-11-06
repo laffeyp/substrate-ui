@@ -699,6 +699,7 @@ export class App extends React.Component<AppProps, AppState> {
 
   /** The stores the window's other areas read, written after each render. */
   private publish(): void {
+    this.computeViews();
     picker.set({ views: this.pickerViews });
     find.set({ streamMatches: this.streamMatches });
     stream.set(this.streamView);
@@ -855,7 +856,13 @@ export class App extends React.Component<AppProps, AppState> {
     };
   }
 
-  override render(): React.ReactElement {
+  /** The views the window's other areas draw, built from the committed state (sprint 344). They were
+   *  built in `render` and published after the commit; under React 18's concurrent root a render can
+   *  run for an update that commits later or not at all, so a commit could publish another render's
+   *  views: the pane picker's folder read armed, then not, then armed again, with no input between,
+   *  and a model click in the window between did nothing (the missed model pick, BLACKBOARD
+   *  2026-11-05). dc-runtime rendered synchronously, so the old component never met it. */
+  private computeViews(): void {
     const state = this.state;
     const fp = this.pane(state.focused) ?? state.panes[0];
     // The registry's back-compat calls (window.__vm.<action>) go to the focused pane.
@@ -883,7 +890,6 @@ export class App extends React.Component<AppProps, AppState> {
       rowGutters: gutterStops(state.rowW).map((top, i) => ({ top, grab: (ev?: { preventDefault(): void }) => { ev?.preventDefault(); this.gut = { type: "row", i: i + 1 }; } })),
     };
     this.topBarVals = this.topBarView(fp, fsnap);
-    const surf = state.surface;
     this.topBarActs = {
       startEdit: () => this.setPane(fp.id, { editing: true, nameVal: this.paneTitle(fp) }),
       // UI sprint 139 (U125): the model chip opens a card, as the workspace chip does; it picks nothing.
@@ -898,6 +904,13 @@ export class App extends React.Component<AppProps, AppState> {
         this.setState((st) => ({ revealed: !st.revealed, surface: null }));
       },
     };
+  }
+
+  override render(): React.ReactElement {
+    const state = this.state;
+    const fp = this.pane(state.focused) ?? state.panes[0];
+    const transcriptSize = fontSize(this.props.transcriptFontSize ?? 13);
+    const surf = state.surface;
     const showTerminal = !surf && !state.revealed;
     const showRevealed = !surf && state.revealed;
     return (

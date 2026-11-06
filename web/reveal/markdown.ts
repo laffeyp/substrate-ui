@@ -81,7 +81,10 @@ export function mdBlocks(text: string): ParsedBlock[] {
   while (i < lines.length) {
     const line = lines[i];
     const trimmed = line.trim();
-    const fence = trimmed.match(/^```(\w*)\s*$/);
+    // The fence's language is any run of characters but spaces and backticks: `c++`, `objective-c`,
+    // `shell-session` (sprint 343, plan row F8, F358). Before, `\w*` refused them and the block
+    // rendered as a paragraph with its backticks.
+    const fence = trimmed.match(/^```([^\s`]*)\s*$/);
     if (fence) {
       const lang = fence[1] || "";
       const body: string[] = [];
@@ -150,7 +153,14 @@ export function mdBlocks(text: string): ParsedBlock[] {
         /^#{1,4}\s+/.test(rowTrim) ||
         /^[-*+]\s+/.test(rowTrim) ||
         /^\d+\.\s+/.test(rowTrim)
-      ) break;
+      ) {
+        // A line that starts a block but matched no block above (a ``` line the fence rule refuses,
+        // such as "```js title=x") is this paragraph's first line. Before (sprint 343, found with
+        // plan row F8), the loop stopped on it without taking it, pushed an empty paragraph, and ran
+        // again on the same line for ever: the parser hung.
+        if (buf.length === 0 && rowTrim !== "") { buf.push(lines[i]); i++; continue; }
+        break;
+      }
       buf.push(lines[i]);
       i++;
     }

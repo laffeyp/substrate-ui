@@ -55,6 +55,20 @@ const ANSI_16: string[] = [
   "#e2e5e9", // 15 bright white
 ];
 
+const hex2 = (v: number) => v.toString(16).padStart(2, "0");
+const CUBE = [0, 95, 135, 175, 215, 255];
+
+/** A 256-colour SGR index as xterm's palette has it (sprint 342, plan row F7, F357): 0-15 the theme's
+ *  16 colours, 16-231 the 6×6×6 cube, 232-255 the grey ramp from 8 to 238. Before, an index of 16 or
+ *  more kept the previous colour. */
+export function color256(n: number): string | undefined {
+  if (!Number.isInteger(n) || n < 0 || n > 255) return undefined;
+  if (n < 16) return ANSI_16[n];
+  if (n < 232) { const c = n - 16; return "#" + hex2(CUBE[Math.floor(c / 36)]) + hex2(CUBE[Math.floor(c / 6) % 6]) + hex2(CUBE[c % 6]); }
+  const grey = 8 + 10 * (n - 232);
+  return "#" + hex2(grey) + hex2(grey) + hex2(grey);
+}
+
 function sgrColor(n: number, kind: "fg" | "bg"): string | undefined {
   if (n === 39 && kind === "fg") return undefined; // default fg
   if (n === 49 && kind === "bg") return undefined; // default bg
@@ -166,8 +180,19 @@ export class AnsiTerminal {
           if (p === 7) { next.reverse = true; continue; }
           if (p === 22) { next.bold = false; next.dim = false; continue; }
           if (p === 27) { next.reverse = false; continue; }
-          if (p === 38 && params[k + 1] === 5) { const col = params[k + 2]; if (typeof col === "number") next.fg = ANSI_16[col] ?? next.fg; k += 2; continue; }
-          if (p === 48 && params[k + 1] === 5) { const col = params[k + 2]; if (typeof col === "number") next.bg = ANSI_16[col] ?? next.bg; k += 2; continue; }
+          if (p === 38 && params[k + 1] === 5) { const col = params[k + 2]; if (typeof col === "number") next.fg = color256(col) ?? next.fg; k += 2; continue; }
+          if (p === 48 && params[k + 1] === 5) { const col = params[k + 2]; if (typeof col === "number") next.bg = color256(col) ?? next.bg; k += 2; continue; }
+          // Truecolor, `38;2;r;g;b` and `48;2;r;g;b` (sprint 342, F357): before, the loop read the 2 as
+          // "dim" and the three values as colours of their own.
+          if ((p === 38 || p === 48) && params[k + 1] === 2) {
+            const [red, green, blue] = [params[k + 2], params[k + 3], params[k + 4]];
+            if ([red, green, blue].every((v) => Number.isInteger(v) && v >= 0 && v <= 255)) {
+              const rgb = "#" + hex2(red) + hex2(green) + hex2(blue);
+              if (p === 38) next.fg = rgb; else next.bg = rgb;
+            }
+            k += 4;
+            continue;
+          }
           const fg = sgrColor(p, "fg"); if (fg !== undefined || p === 39) { next.fg = fg; continue; }
           const bg = sgrColor(p, "bg"); if (bg !== undefined || p === 49) { next.bg = bg; continue; }
         }

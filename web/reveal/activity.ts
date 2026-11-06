@@ -106,7 +106,9 @@ function scanActivity(snap: any): Scan | null {
     const ran = Math.max(0, Math.min(fail.atT, Math.max(lastT, umTime)) - umTime);
     const ranTxt = formatDuration(ran);
     const toolTxt = failTools === 0 ? 'no tools' : `${failTools} tool${failTools === 1 ? '' : 's'}`;
-    const detail = String(fail.detail).replace(/^\{"error":"?|"?\}$/g, '').slice(0, 140);
+    // The client reads the server's `{"error": …}` message (vm/client.ts, sprint 336, F349): the
+    // detail is the message itself, so nothing is stripped here any more.
+    const detail = String(fail.detail).slice(0, 140);
     return { kind: "done", activity: {
       kind: 'failed',
       turnWord: turnIdx !== null ? `turn ${turnIdx}` : 'turn', turnColor: '#c86464',

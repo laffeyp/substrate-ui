@@ -39,7 +39,7 @@ test("a failed turn stops pulsing and says how it ended", () => {
     um(1, T0, 28),
     { seq: 2, t: T0 + 150, kind: EnvelopeKind.ToolCall, payload: { call_id: "c5", tool: "bash" } },
   ];
-  const a = liveActivity(snap(envs, { detail: '{"error":"TimeoutError: exceeded 600.0s"}', atT: T0 + 600 }));
+  const a = liveActivity(snap(envs, { detail: "TimeoutError: exceeded 600.0s", atT: T0 + 600 }));
   assert.ok(a);
   assert.strictEqual(a.kind, "failed");
   assert.strictEqual(a.pulseOn, false);
@@ -61,7 +61,7 @@ test("a parked turn is a recap regardless of an old failure", () => {
 
 function controller(): SessionController {
   const client = {
-    fetchJson: async () => ({ ok: false, status: 500, failureClass: "http_error", detail: '{"error":"TimeoutError"}' }),
+    fetchJson: async () => ({ ok: false, status: 500, failureClass: "http_error", detail: "TimeoutError" }),
     streamRecord: () => () => undefined,
     streamRecordByPath: () => () => undefined,
   } as unknown as SubstrateClient;

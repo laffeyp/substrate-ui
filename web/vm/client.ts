@@ -63,10 +63,14 @@ export class BrowserSubstrateClient implements SubstrateClient {
     if (!response.ok) {
       let failureClass = "http_error";
       let detail = bodyText;
+      // The server's refusals are `{"error": "<message>"}` (server.py `_error`); sprint 336 (plan row
+      // F1, F331) reads that message. Before, the client looked only for `failure_class` and `detail`,
+      // which the server never sends, so every refusal's detail was the raw JSON text.
       try {
-        const parsed = JSON.parse(bodyText) as { failure_class?: string; detail?: string };
+        const parsed = JSON.parse(bodyText) as { failure_class?: string; detail?: string; error?: string };
         if (parsed && typeof parsed.failure_class === "string") failureClass = parsed.failure_class;
         if (parsed && typeof parsed.detail === "string") detail = parsed.detail;
+        else if (parsed && typeof parsed.error === "string") detail = parsed.error;
       } catch { /* keep raw text */ }
       return { ok: false, status: response.status, failureClass, detail };
     }

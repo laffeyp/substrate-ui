@@ -5,9 +5,9 @@
 // Missing required payload fields throw. Buffer exposed as
 // window.__vmSignals for the parity harness to read.
 //
-// Wholly separate from the classic shell's web/instrumentation/sdd.ts
-// and its window.__signals buffer. The two shells share no runtime
-// state.
+// The classic shell's emitter (window.__signals) is in _deprecated/classic-tree/web/instrumentation/;
+// the two share no runtime state (sprint 341, plan row F6, F348: this comment named a
+// web/instrumentation/ that no longer exists).
 
 import { VOCABULARY, VOCAB_VERSION } from "./vocabulary";
 
@@ -20,6 +20,10 @@ export type SignalRecord = {
 };
 
 const buffer: SignalRecord[] = [];
+/** The buffer keeps the latest SIGNAL_CAP signals (sprint 340, plan row F5, F347): it gained one per
+ *  streamed envelope and was never trimmed, so a long session grew it without end. The gates read it
+ *  by position from a session's start, far under the cap. */
+export const SIGNAL_CAP = 10_000;
 const sessionStart = nowMs();
 
 function nowMs(): number {
@@ -50,6 +54,7 @@ export function emit(name: string, payload: Record<string, unknown> = {}): Signa
     payload,
   };
   buffer.push(record);
+  if (buffer.length > SIGNAL_CAP) buffer.splice(0, buffer.length - SIGNAL_CAP);
   if (typeof window !== "undefined") {
     (window as unknown as { __vmSignals: SignalRecord[] }).__vmSignals = buffer;
   }
