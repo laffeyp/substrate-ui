@@ -90,6 +90,426 @@
       "rationale": "The app reads and shows the kernel's sessions; a second definition would split one thing in two and break the join to the record.",
       "ratified": true,
       "ratified_by": "agent-resolved 2026-11-05, sprint 350 Step 1"
+    },
+    {
+      "id": "P-0.7-TAG-APP_BOOTED",
+      "kind": "NEW_TAG_PROPOSED",
+      "layer": 1,
+      "element": "APP_BOOTED",
+      "source": "electron/main.js app.whenReady",
+      "rationale": "First signal of an app launch: which build and vocabulary is running and which store it uses. Opens the AppBoot session; every other tag of the launch carries its boot_id.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-05, sprint 350 Step 2"
+    },
+    {
+      "id": "P-0.7-TAG-APP_QUIT_REQUESTED",
+      "kind": "NEW_TAG_PROPOSED",
+      "layer": 1,
+      "element": "APP_QUIT_REQUESTED",
+      "source": "electron/main.js before-quit",
+      "rationale": "Quit began. cause: menu, last_window, signal, update.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-05, sprint 350 Step 2"
+    },
+    {
+      "id": "P-0.7-TAG-APP_QUIT_COMPLETED",
+      "kind": "NEW_TAG_PROPOSED",
+      "layer": 1,
+      "element": "APP_QUIT_COMPLETED",
+      "source": "electron/main.js will-quit",
+      "rationale": "The launch ended; the server's exit and the trace's write and loss counts. Closes the AppBoot session.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-05, sprint 350 Step 2"
+    },
+    {
+      "id": "P-0.7-TAG-SERVER_SPAWNED",
+      "kind": "NEW_TAG_PROPOSED",
+      "layer": 1,
+      "element": "SERVER_SPAWNED",
+      "source": "electron/main.js server spawn",
+      "rationale": "Main started the server process.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-05, sprint 350 Step 2"
+    },
+    {
+      "id": "P-0.7-TAG-SERVER_BOUND",
+      "kind": "NEW_TAG_PROPOSED",
+      "layer": 1,
+      "element": "SERVER_BOUND",
+      "source": "electron/main.js server bound",
+      "rationale": "The server reported its port; ms since spawn.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-05, sprint 350 Step 2"
+    },
+    {
+      "id": "P-0.7-TAG-SERVER_EXITED",
+      "kind": "NEW_TAG_PROPOSED",
+      "layer": 1,
+      "element": "SERVER_EXITED",
+      "source": "electron/main.js server exit",
+      "rationale": "The server process ended. An incident when expected is false: the window has no backend.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-05, sprint 350 Step 2"
+    },
+    {
+      "id": "P-0.7-TAG-WINDOW_OPENED",
+      "kind": "NEW_TAG_PROPOSED",
+      "layer": 1,
+      "element": "WINDOW_OPENED",
+      "source": "electron/main.js createWindow",
+      "rationale": "Main created a window. cause: boot, menu, activate, second_instance, deep_link.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-05, sprint 350 Step 2"
+    },
+    {
+      "id": "P-0.7-TAG-WINDOW_CLOSED",
+      "kind": "NEW_TAG_PROPOSED",
+      "layer": 1,
+      "element": "WINDOW_CLOSED",
+      "source": "electron/main.js win closed",
+      "rationale": "A window closed.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-05, sprint 350 Step 2"
+    },
+    {
+      "id": "P-0.7-TAG-NAVIGATION_BLOCKED",
+      "kind": "NEW_TAG_PROPOSED",
+      "layer": 1,
+      "element": "NAVIGATION_BLOCKED",
+      "source": "electron/main.js will-navigate",
+      "rationale": "The window tried to leave the app's page and main refused it.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-05, sprint 350 Step 2"
+    },
+    {
+      "id": "P-0.7-TAG-DEEP_LINK_RECEIVED",
+      "kind": "NEW_TAG_PROPOSED",
+      "layer": 1,
+      "element": "DEEP_LINK_RECEIVED",
+      "source": "electron/main.js open-url",
+      "rationale": "The OS passed a substrate:// link.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-05, sprint 350 Step 2"
+    },
+    {
+      "id": "P-0.7-TAG-MENU_COMMAND_SENT",
+      "kind": "NEW_TAG_PROPOSED",
+      "layer": 1,
+      "element": "MENU_COMMAND_SENT",
+      "source": "electron/menu.js send",
+      "rationale": "A native menu item fired and main sent its command to the window.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-05, sprint 350 Step 2"
+    },
+    {
+      "id": "P-0.7-TAG-NATIVE_DIALOG_CLOSED",
+      "kind": "NEW_TAG_PROPOSED",
+      "layer": 1,
+      "element": "NATIVE_DIALOG_CLOSED",
+      "source": "electron/main.js native:pick-folder, native:open-record",
+      "rationale": "A native file dialog closed. dialog: pick_folder, open_record. outcome: picked, cancelled.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-05, sprint 350 Step 2"
+    },
+    {
+      "id": "P-0.7-TAG-WINDOW_BOOTED",
+      "kind": "NEW_TAG_PROPOSED",
+      "layer": 1,
+      "element": "WINDOW_BOOTED",
+      "source": "web/reveal.ts boot",
+      "rationale": "The window's page ran its boot and mounted App. Opens the Window session in the window's own trace.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-05, sprint 350 Step 2"
+    },
+    {
+      "id": "P-0.7-TAG-VIEW_CHANGED",
+      "kind": "NEW_TAG_PROPOSED",
+      "layer": 1,
+      "element": "VIEW_CHANGED",
+      "source": "web/app/App.tsx (setState of vs)",
+      "rationale": "The window's open view changed: panes, meta or a page. cause: key, button, menu, split, records_open, close.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-05, sprint 350 Step 2"
+    },
+    {
+      "id": "P-0.7-TAG-KEY_ROUTED",
+      "kind": "NEW_TAG_PROPOSED",
+      "layer": 1,
+      "element": "KEY_ROUTED",
+      "source": "web/app/App.tsx onKey",
+      "rationale": "A named key (never a typed character) was routed. action: the keymap action or none; target: picker, records, language, window, box.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-05, sprint 350 Step 2"
+    },
+    {
+      "id": "P-0.7-TAG-DIALOG_OPENED",
+      "kind": "NEW_TAG_PROPOSED",
+      "layer": 1,
+      "element": "DIALOG_OPENED",
+      "source": "web/app/Dialogs.tsx",
+      "rationale": "The window opened one of its dialogs.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-05, sprint 350 Step 2"
+    },
+    {
+      "id": "P-0.7-TAG-DIALOG_CLOSED",
+      "kind": "NEW_TAG_PROPOSED",
+      "layer": 1,
+      "element": "DIALOG_CLOSED",
+      "source": "web/app/Dialogs.tsx",
+      "rationale": "A window dialog closed. outcome: confirmed, cancelled, escape.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-05, sprint 350 Step 2"
+    },
+    {
+      "id": "P-0.7-TAG-PANE_OPENED",
+      "kind": "NEW_TAG_PROPOSED",
+      "layer": 1,
+      "element": "PANE_OPENED",
+      "source": "web/app/App.tsx split, newPane",
+      "rationale": "A pane was created. cause: start, split, run, delegate, restore.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-05, sprint 350 Step 2"
+    },
+    {
+      "id": "P-0.7-TAG-PANE_CLOSED",
+      "kind": "NEW_TAG_PROPOSED",
+      "layer": 1,
+      "element": "PANE_CLOSED",
+      "source": "web/app/App.tsx closePaneNow",
+      "rationale": "A pane was removed.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-05, sprint 350 Step 2"
+    },
+    {
+      "id": "P-0.7-TAG-PANE_FOCUSED",
+      "kind": "NEW_TAG_PROPOSED",
+      "layer": 1,
+      "element": "PANE_FOCUSED",
+      "source": "web/app/App.tsx setState focused",
+      "rationale": "Focus moved to a pane. cause: click, key, split, open.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-05, sprint 350 Step 2"
+    },
+    {
+      "id": "P-0.7-TAG-PANE_BOUND",
+      "kind": "NEW_TAG_PROPOSED",
+      "layer": 1,
+      "element": "PANE_BOUND",
+      "source": "web/app/App.tsx bindPane, attach paths",
+      "rationale": "An unbound pane took a session or record. binding: session or record; how: picker, attach, run, child, restore.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-05, sprint 350 Step 2"
+    },
+    {
+      "id": "P-0.7-TAG-LENS_CHANGED",
+      "kind": "NEW_TAG_PROPOSED",
+      "layer": 1,
+      "element": "LENS_CHANGED",
+      "source": "web/app/MetaView.tsx; state/meta.ts setMode",
+      "rationale": "Meta's lens changed: stream, graph, structure, language, scene, io.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-05, sprint 350 Step 2"
+    },
+    {
+      "id": "P-0.7-TAG-TRANSCRIPT_ROW_DRAWN",
+      "kind": "NEW_TAG_PROPOSED",
+      "layer": 1,
+      "element": "TRANSCRIPT_ROW_DRAWN",
+      "source": "web/reveal/transcript/ (row commit)",
+      "rationale": "A record entry of a session became a row on screen. The view pair of every kernel session kind the window shows (kernel session vocabulary § G).",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-05, sprint 350 Step 2"
+    },
+    {
+      "id": "P-0.7-TAG-TRANSCRIPT_ROW_SKIPPED",
+      "kind": "NEW_TAG_PROPOSED",
+      "layer": 1,
+      "element": "TRANSCRIPT_ROW_SKIPPED",
+      "source": "web/vm/session_controller.ts (envelope to row)",
+      "rationale": "A record entry the pane received and chose not to draw, with why.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-05, sprint 350 Step 2"
+    },
+    {
+      "id": "P-0.7-TAG-WORKSPACE_ADDED",
+      "kind": "NEW_TAG_PROPOSED",
+      "layer": 1,
+      "element": "WORKSPACE_ADDED",
+      "source": "web/vm/session_controller.ts addWorkspace",
+      "rationale": "A folder was sent to the recent-workspace list. outcome: added, refused.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-05, sprint 350 Step 2"
+    },
+    {
+      "id": "P-0.7-TAG-CONTROLS_PICKED",
+      "kind": "NEW_TAG_PROPOSED",
+      "layer": 1,
+      "element": "CONTROLS_PICKED",
+      "source": "web/vm/session_controller.ts pickControls",
+      "rationale": "The length and tone picks were recorded for the next session.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-05, sprint 350 Step 2"
+    },
+    {
+      "id": "P-0.7-TAG-SESSION_RENAMED",
+      "kind": "NEW_TAG_PROPOSED",
+      "layer": 1,
+      "element": "SESSION_RENAMED",
+      "source": "web/vm/session_controller.ts renameSession",
+      "rationale": "A session's name changed. outcome: renamed, refused.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-05, sprint 350 Step 2"
+    },
+    {
+      "id": "P-0.7-TAG-TASK_STOP_REQUESTED",
+      "kind": "NEW_TAG_PROPOSED",
+      "layer": 1,
+      "element": "TASK_STOP_REQUESTED",
+      "source": "web/vm/session_controller.ts stopTask",
+      "rationale": "The person asked a background task to stop.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-05, sprint 350 Step 2"
+    },
+    {
+      "id": "P-0.7-TAG-CLI_STATUS_CHECKED",
+      "kind": "NEW_TAG_PROPOSED",
+      "layer": 1,
+      "element": "CLI_STATUS_CHECKED",
+      "source": "web/vm/session_controller.ts maybeOpenAuthPrompt",
+      "rationale": "The window asked whether a CLI driver is signed in.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-05, sprint 350 Step 2"
+    },
+    {
+      "id": "P-0.7-TAG-CLI_LOGIN_PROMPTED",
+      "kind": "NEW_TAG_PROPOSED",
+      "layer": 1,
+      "element": "CLI_LOGIN_PROMPTED",
+      "source": "web/vm/session_controller.ts openAuthPrompt",
+      "rationale": "The sign-in card was shown for a CLI driver.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-05, sprint 350 Step 2"
+    },
+    {
+      "id": "P-0.7-TAG-CLI_LOGIN_FINISHED",
+      "kind": "NEW_TAG_PROPOSED",
+      "layer": 1,
+      "element": "CLI_LOGIN_FINISHED",
+      "source": "web/reveal/transcript/AuthPromptCard.tsx",
+      "rationale": "The sign-in card's flow ended. outcome: signed_in, failed, dismissed.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-05, sprint 350 Step 2"
+    },
+    {
+      "id": "P-0.7-TAG-SERVER_STARTED",
+      "kind": "NEW_TAG_PROPOSED",
+      "layer": 1,
+      "element": "SERVER_STARTED",
+      "source": "server.py main, boot_scan",
+      "rationale": "The server's boot scan finished and it serves; the store as found.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-05, sprint 350 Step 2"
+    },
+    {
+      "id": "P-0.7-TAG-SESSION_CREATED",
+      "kind": "NEW_TAG_PROPOSED",
+      "layer": 1,
+      "element": "SESSION_CREATED",
+      "source": "server.py POST /api/session",
+      "rationale": "The server created a session for a window's open request.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-05, sprint 350 Step 2"
+    },
+    {
+      "id": "P-0.7-TAG-TURN_ACCEPTED",
+      "kind": "NEW_TAG_PROPOSED",
+      "layer": 1,
+      "element": "TURN_ACCEPTED",
+      "source": "server.py turn route",
+      "rationale": "The server accepted a turn and handed it to the kernel.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-05, sprint 350 Step 2"
+    },
+    {
+      "id": "P-0.7-TAG-API_REFUSED",
+      "kind": "NEW_TAG_PROPOSED",
+      "layer": 1,
+      "element": "API_REFUSED",
+      "source": "server.py every error response",
+      "rationale": "The server answered a request with an error. area: the domain (session, turn, workspace, files, records, cli, runs, tasks, assays, topology); cause: a short code, never the request's content.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-05, sprint 350 Step 2"
+    },
+    {
+      "id": "P-0.7-TAG-SERVER_FAULTED",
+      "kind": "NEW_TAG_PROPOSED",
+      "layer": 1,
+      "element": "SERVER_FAULTED",
+      "source": "server.py handler",
+      "rationale": "An exception escaped a handler; the request failed with 500.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-05, sprint 350 Step 2"
+    },
+    {
+      "id": "P-0.7-TAG-SERVER_STOPPED",
+      "kind": "NEW_TAG_PROPOSED",
+      "layer": 1,
+      "element": "SERVER_STOPPED",
+      "source": "server.py SIGTERM path",
+      "rationale": "The server's shutdown ended its sessions and exited.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-05, sprint 350 Step 2"
+    },
+    {
+      "id": "P-0.7-TAG-TRACE_OPENED",
+      "kind": "NEW_TAG_PROPOSED",
+      "layer": 1,
+      "element": "TRACE_OPENED",
+      "source": "the sink (plan item 2)",
+      "rationale": "A process opened its trace file for this launch.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-05, sprint 350 Step 2"
+    },
+    {
+      "id": "P-0.7-TAG-TRACE_LOST",
+      "kind": "NEW_TAG_PROPOSED",
+      "layer": 1,
+      "element": "TRACE_LOST",
+      "source": "the sink (plan item 2)",
+      "rationale": "Lines that could not be written since the last line that was.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-05, sprint 350 Step 2"
+    },
+    {
+      "id": "P-0.7-TAG-SIGNAL_REJECTED",
+      "kind": "NEW_TAG_PROPOSED",
+      "layer": 1,
+      "element": "SIGNAL_REJECTED",
+      "source": "each process's emitter (plan item 3)",
+      "rationale": "An emit broke the vocabulary (unknown tag, missing field). Raised in source builds; emitted in the packaged app.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-05, sprint 350 Step 2"
+    },
+    {
+      "id": "P-0.7-TAG-INVARIANT_BROKEN",
+      "kind": "NEW_TAG_PROPOSED",
+      "layer": 1,
+      "element": "INVARIANT_BROKEN",
+      "source": "the runtime checker (plan item 5)",
+      "rationale": "A Layer 4–5 rule failed at runtime; context holds the recent trace and the state involved.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-05, sprint 350 Step 2"
+    },
+    {
+      "id": "P-0.7-TAG-RECORD_OPENED",
+      "kind": "NEW_TAG_PROPOSED",
+      "layer": 1,
+      "element": "RECORD_OPENED",
+      "source": "web/vm/session_controller.ts attachRecordRoot",
+      "rationale": "A pane attached a run record read-only. how: records_page, deep_link, open_record. outcome: attached, refused.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-05, sprint 350 Step 2"
     }
   ]
 }

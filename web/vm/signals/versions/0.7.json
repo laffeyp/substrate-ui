@@ -4,7 +4,7 @@
   "locked_at": null,
   "locked_by": "draft: sprint 350, the whole-app Vocabulary Session; locks at Step 12",
   "supersedes": "0.6",
-  "tag_count": 42,
+  "tag_count": 84,
   "categories": [
     "session",
     "driver",
@@ -18,7 +18,14 @@
     "slash",
     "runs",
     "assays",
-    "picker"
+    "picker",
+    "app",
+    "window",
+    "pane",
+    "transcript",
+    "cli",
+    "server",
+    "trace"
   ],
   "strata": [
     "event",
@@ -485,6 +492,560 @@
       ],
       "optional_payload": [],
       "note": "The tone pick bound the pane to its folder; the chat prompt shows and the session opens on the first message."
+    },
+    {
+      "name": "APP_BOOTED",
+      "category": "app",
+      "stratum": "event",
+      "payload": [
+        "boot_id",
+        "app_version",
+        "app_commit",
+        "kernel_commit",
+        "vocab_version",
+        "packaged",
+        "home_kind"
+      ],
+      "optional_payload": [],
+      "note": "First signal of an app launch: which build and vocabulary is running and which store it uses. Opens the AppBoot session; every other tag of the launch carries its boot_id.",
+      "emit_site": "electron/main.js app.whenReady"
+    },
+    {
+      "name": "APP_QUIT_REQUESTED",
+      "category": "app",
+      "stratum": "event",
+      "payload": [
+        "boot_id",
+        "cause"
+      ],
+      "optional_payload": [],
+      "note": "Quit began. cause: menu, last_window, signal, update.",
+      "emit_site": "electron/main.js before-quit"
+    },
+    {
+      "name": "APP_QUIT_COMPLETED",
+      "category": "app",
+      "stratum": "summary",
+      "payload": [
+        "boot_id",
+        "server_exit_code",
+        "windows_opened",
+        "signals_written",
+        "signals_lost"
+      ],
+      "optional_payload": [],
+      "note": "The launch ended; the server's exit and the trace's write and loss counts. Closes the AppBoot session.",
+      "emit_site": "electron/main.js will-quit"
+    },
+    {
+      "name": "SERVER_SPAWNED",
+      "category": "app",
+      "stratum": "event",
+      "payload": [
+        "boot_id",
+        "pid",
+        "packaged"
+      ],
+      "optional_payload": [],
+      "note": "Main started the server process.",
+      "emit_site": "electron/main.js server spawn"
+    },
+    {
+      "name": "SERVER_BOUND",
+      "category": "app",
+      "stratum": "event",
+      "payload": [
+        "boot_id",
+        "port",
+        "ms"
+      ],
+      "optional_payload": [],
+      "note": "The server reported its port; ms since spawn.",
+      "emit_site": "electron/main.js server bound"
+    },
+    {
+      "name": "SERVER_EXITED",
+      "category": "app",
+      "stratum": "incident",
+      "payload": [
+        "boot_id",
+        "code",
+        "signal",
+        "expected"
+      ],
+      "optional_payload": [],
+      "note": "The server process ended. An incident when expected is false: the window has no backend.",
+      "emit_site": "electron/main.js server exit"
+    },
+    {
+      "name": "WINDOW_OPENED",
+      "category": "app",
+      "stratum": "event",
+      "payload": [
+        "boot_id",
+        "window_id",
+        "cause"
+      ],
+      "optional_payload": [],
+      "note": "Main created a window. cause: boot, menu, activate, second_instance, deep_link.",
+      "emit_site": "electron/main.js createWindow"
+    },
+    {
+      "name": "WINDOW_CLOSED",
+      "category": "app",
+      "stratum": "event",
+      "payload": [
+        "boot_id",
+        "window_id"
+      ],
+      "optional_payload": [],
+      "note": "A window closed.",
+      "emit_site": "electron/main.js win closed"
+    },
+    {
+      "name": "NAVIGATION_BLOCKED",
+      "category": "app",
+      "stratum": "incident",
+      "payload": [
+        "window_id",
+        "target_kind"
+      ],
+      "optional_payload": [],
+      "note": "The window tried to leave the app's page and main refused it.",
+      "emit_site": "electron/main.js will-navigate"
+    },
+    {
+      "name": "DEEP_LINK_RECEIVED",
+      "category": "app",
+      "stratum": "event",
+      "payload": [
+        "boot_id",
+        "link_kind"
+      ],
+      "optional_payload": [],
+      "note": "The OS passed a substrate:// link.",
+      "emit_site": "electron/main.js open-url"
+    },
+    {
+      "name": "MENU_COMMAND_SENT",
+      "category": "app",
+      "stratum": "event",
+      "payload": [
+        "window_id",
+        "command"
+      ],
+      "optional_payload": [],
+      "note": "A native menu item fired and main sent its command to the window.",
+      "emit_site": "electron/menu.js send"
+    },
+    {
+      "name": "NATIVE_DIALOG_CLOSED",
+      "category": "app",
+      "stratum": "event",
+      "payload": [
+        "window_id",
+        "dialog",
+        "outcome"
+      ],
+      "optional_payload": [],
+      "note": "A native file dialog closed. dialog: pick_folder, open_record. outcome: picked, cancelled.",
+      "emit_site": "electron/main.js native:pick-folder, native:open-record"
+    },
+    {
+      "name": "WINDOW_BOOTED",
+      "category": "window",
+      "stratum": "event",
+      "payload": [
+        "boot_id",
+        "window_id",
+        "vocab_version"
+      ],
+      "optional_payload": [],
+      "note": "The window's page ran its boot and mounted App. Opens the Window session in the window's own trace.",
+      "emit_site": "web/reveal.ts boot"
+    },
+    {
+      "name": "VIEW_CHANGED",
+      "category": "window",
+      "stratum": "event",
+      "payload": [
+        "window_id",
+        "from",
+        "to",
+        "cause"
+      ],
+      "optional_payload": [],
+      "note": "The window's open view changed: panes, meta or a page. cause: key, button, menu, split, records_open, close.",
+      "emit_site": "web/app/App.tsx (setState of vs)"
+    },
+    {
+      "name": "KEY_ROUTED",
+      "category": "window",
+      "stratum": "event",
+      "payload": [
+        "window_id",
+        "key",
+        "action",
+        "target"
+      ],
+      "optional_payload": [],
+      "note": "A named key (never a typed character) was routed. action: the keymap action or none; target: picker, records, language, window, box.",
+      "emit_site": "web/app/App.tsx onKey"
+    },
+    {
+      "name": "DIALOG_OPENED",
+      "category": "window",
+      "stratum": "event",
+      "payload": [
+        "window_id",
+        "dialog"
+      ],
+      "optional_payload": [],
+      "note": "The window opened one of its dialogs.",
+      "emit_site": "web/app/Dialogs.tsx"
+    },
+    {
+      "name": "DIALOG_CLOSED",
+      "category": "window",
+      "stratum": "event",
+      "payload": [
+        "window_id",
+        "dialog",
+        "outcome"
+      ],
+      "optional_payload": [],
+      "note": "A window dialog closed. outcome: confirmed, cancelled, escape.",
+      "emit_site": "web/app/Dialogs.tsx"
+    },
+    {
+      "name": "PANE_OPENED",
+      "category": "pane",
+      "stratum": "event",
+      "payload": [
+        "window_id",
+        "pane_id",
+        "cause"
+      ],
+      "optional_payload": [],
+      "note": "A pane was created. cause: start, split, run, delegate, restore.",
+      "emit_site": "web/app/App.tsx split, newPane"
+    },
+    {
+      "name": "PANE_CLOSED",
+      "category": "pane",
+      "stratum": "event",
+      "payload": [
+        "window_id",
+        "pane_id",
+        "had_session"
+      ],
+      "optional_payload": [],
+      "note": "A pane was removed.",
+      "emit_site": "web/app/App.tsx closePaneNow"
+    },
+    {
+      "name": "PANE_FOCUSED",
+      "category": "pane",
+      "stratum": "event",
+      "payload": [
+        "window_id",
+        "pane_id",
+        "cause"
+      ],
+      "optional_payload": [],
+      "note": "Focus moved to a pane. cause: click, key, split, open.",
+      "emit_site": "web/app/App.tsx setState focused"
+    },
+    {
+      "name": "PANE_BOUND",
+      "category": "pane",
+      "stratum": "event",
+      "payload": [
+        "window_id",
+        "pane_id",
+        "binding",
+        "how"
+      ],
+      "optional_payload": [
+        "session_id"
+      ],
+      "note": "An unbound pane took a session or record. binding: session or record; how: picker, attach, run, child, restore.",
+      "emit_site": "web/app/App.tsx bindPane, attach paths"
+    },
+    {
+      "name": "LENS_CHANGED",
+      "category": "pane",
+      "stratum": "event",
+      "payload": [
+        "window_id",
+        "lens"
+      ],
+      "optional_payload": [
+        "session_id"
+      ],
+      "note": "Meta's lens changed: stream, graph, structure, language, scene, io.",
+      "emit_site": "web/app/MetaView.tsx; state/meta.ts setMode"
+    },
+    {
+      "name": "TRANSCRIPT_ROW_DRAWN",
+      "category": "transcript",
+      "stratum": "event",
+      "payload": [
+        "pane_id",
+        "session_id",
+        "seq",
+        "kind"
+      ],
+      "optional_payload": [],
+      "note": "A record entry of a session became a row on screen. The view pair of every kernel session kind the window shows (kernel session vocabulary § G).",
+      "emit_site": "web/reveal/transcript/ (row commit)"
+    },
+    {
+      "name": "TRANSCRIPT_ROW_SKIPPED",
+      "category": "transcript",
+      "stratum": "event",
+      "payload": [
+        "pane_id",
+        "session_id",
+        "seq",
+        "kind",
+        "reason"
+      ],
+      "optional_payload": [],
+      "note": "A record entry the pane received and chose not to draw, with why.",
+      "emit_site": "web/vm/session_controller.ts (envelope to row)"
+    },
+    {
+      "name": "WORKSPACE_ADDED",
+      "category": "workspace",
+      "stratum": "event",
+      "payload": [
+        "pane_id",
+        "outcome"
+      ],
+      "optional_payload": [],
+      "note": "A folder was sent to the recent-workspace list. outcome: added, refused.",
+      "emit_site": "web/vm/session_controller.ts addWorkspace"
+    },
+    {
+      "name": "CONTROLS_PICKED",
+      "category": "session",
+      "stratum": "event",
+      "payload": [
+        "pane_id",
+        "length",
+        "tone"
+      ],
+      "optional_payload": [],
+      "note": "The length and tone picks were recorded for the next session.",
+      "emit_site": "web/vm/session_controller.ts pickControls"
+    },
+    {
+      "name": "SESSION_RENAMED",
+      "category": "session",
+      "stratum": "event",
+      "payload": [
+        "pane_id",
+        "session_id",
+        "outcome"
+      ],
+      "optional_payload": [],
+      "note": "A session's name changed. outcome: renamed, refused.",
+      "emit_site": "web/vm/session_controller.ts renameSession"
+    },
+    {
+      "name": "TASK_STOP_REQUESTED",
+      "category": "runs",
+      "stratum": "event",
+      "payload": [
+        "session_id",
+        "task_id"
+      ],
+      "optional_payload": [],
+      "note": "The person asked a background task to stop.",
+      "emit_site": "web/vm/session_controller.ts stopTask"
+    },
+    {
+      "name": "CLI_STATUS_CHECKED",
+      "category": "cli",
+      "stratum": "event",
+      "payload": [
+        "driver",
+        "authed"
+      ],
+      "optional_payload": [],
+      "note": "The window asked whether a CLI driver is signed in.",
+      "emit_site": "web/vm/session_controller.ts maybeOpenAuthPrompt"
+    },
+    {
+      "name": "CLI_LOGIN_PROMPTED",
+      "category": "cli",
+      "stratum": "event",
+      "payload": [
+        "pane_id",
+        "driver"
+      ],
+      "optional_payload": [],
+      "note": "The sign-in card was shown for a CLI driver.",
+      "emit_site": "web/vm/session_controller.ts openAuthPrompt"
+    },
+    {
+      "name": "CLI_LOGIN_FINISHED",
+      "category": "cli",
+      "stratum": "event",
+      "payload": [
+        "pane_id",
+        "driver",
+        "outcome"
+      ],
+      "optional_payload": [],
+      "note": "The sign-in card's flow ended. outcome: signed_in, failed, dismissed.",
+      "emit_site": "web/reveal/transcript/AuthPromptCard.tsx"
+    },
+    {
+      "name": "SERVER_STARTED",
+      "category": "server",
+      "stratum": "summary",
+      "payload": [
+        "boot_id",
+        "port",
+        "sessions",
+        "parked",
+        "interrupted",
+        "ended"
+      ],
+      "optional_payload": [],
+      "note": "The server's boot scan finished and it serves; the store as found.",
+      "emit_site": "server.py main, boot_scan"
+    },
+    {
+      "name": "SESSION_CREATED",
+      "category": "server",
+      "stratum": "event",
+      "payload": [
+        "session_id",
+        "driver",
+        "workspace_shape"
+      ],
+      "optional_payload": [],
+      "note": "The server created a session for a window's open request.",
+      "emit_site": "server.py POST /api/session"
+    },
+    {
+      "name": "TURN_ACCEPTED",
+      "category": "server",
+      "stratum": "event",
+      "payload": [
+        "session_id",
+        "turn_index"
+      ],
+      "optional_payload": [],
+      "note": "The server accepted a turn and handed it to the kernel.",
+      "emit_site": "server.py turn route"
+    },
+    {
+      "name": "API_REFUSED",
+      "category": "server",
+      "stratum": "incident",
+      "payload": [
+        "area",
+        "status",
+        "cause"
+      ],
+      "optional_payload": [],
+      "note": "The server answered a request with an error. area: the domain (session, turn, workspace, files, records, cli, runs, tasks, assays, topology); cause: a short code, never the request's content.",
+      "emit_site": "server.py every error response"
+    },
+    {
+      "name": "SERVER_FAULTED",
+      "category": "server",
+      "stratum": "incident",
+      "payload": [
+        "area",
+        "error_type",
+        "where"
+      ],
+      "optional_payload": [],
+      "note": "An exception escaped a handler; the request failed with 500.",
+      "emit_site": "server.py handler"
+    },
+    {
+      "name": "SERVER_STOPPED",
+      "category": "server",
+      "stratum": "summary",
+      "payload": [
+        "boot_id",
+        "ended",
+        "skipped",
+        "failed"
+      ],
+      "optional_payload": [],
+      "note": "The server's shutdown ended its sessions and exited.",
+      "emit_site": "server.py SIGTERM path"
+    },
+    {
+      "name": "TRACE_OPENED",
+      "category": "trace",
+      "stratum": "event",
+      "payload": [
+        "boot_id",
+        "process"
+      ],
+      "optional_payload": [],
+      "note": "A process opened its trace file for this launch.",
+      "emit_site": "the sink (plan item 2)"
+    },
+    {
+      "name": "TRACE_LOST",
+      "category": "trace",
+      "stratum": "incident",
+      "payload": [
+        "boot_id",
+        "process",
+        "count"
+      ],
+      "optional_payload": [],
+      "note": "Lines that could not be written since the last line that was.",
+      "emit_site": "the sink (plan item 2)"
+    },
+    {
+      "name": "SIGNAL_REJECTED",
+      "category": "trace",
+      "stratum": "incident",
+      "payload": [
+        "process",
+        "tag",
+        "problem",
+        "call_site"
+      ],
+      "optional_payload": [],
+      "note": "An emit broke the vocabulary (unknown tag, missing field). Raised in source builds; emitted in the packaged app.",
+      "emit_site": "each process's emitter (plan item 3)"
+    },
+    {
+      "name": "INVARIANT_BROKEN",
+      "category": "trace",
+      "stratum": "incident",
+      "payload": [
+        "rule",
+        "context"
+      ],
+      "optional_payload": [],
+      "note": "A Layer 4–5 rule failed at runtime; context holds the recent trace and the state involved.",
+      "emit_site": "the runtime checker (plan item 5)"
+    },
+    {
+      "name": "RECORD_OPENED",
+      "category": "records",
+      "stratum": "event",
+      "payload": [
+        "pane_id",
+        "how",
+        "outcome"
+      ],
+      "optional_payload": [],
+      "note": "A pane attached a run record read-only. how: records_page, deep_link, open_record. outcome: attached, refused.",
+      "emit_site": "web/vm/session_controller.ts attachRecordRoot"
     }
   ],
   "ontology": {
