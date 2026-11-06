@@ -49,7 +49,8 @@
         "driver": "string (driver name)",
         "workspace": "string (absolute path) or null",
         "bundle": "string or null"
-      }
+      },
+      "emit_site": "web/vm/session_controller.ts"
     },
     {
       "name": "SESSION_OPEN_ACKED",
@@ -66,7 +67,8 @@
         "session_id": "string (kernel session id)",
         "name": "string or null",
         "driver": "string (driver name)"
-      }
+      },
+      "emit_site": "web/vm/session_controller.ts"
     },
     {
       "name": "SESSION_OPEN_REFUSED",
@@ -81,7 +83,8 @@
       "field_types": {
         "failure_class": "string (client failure class: network, http_error, or the server's failure_class)",
         "detail": "string (server error text; Layer 7 bounds it)"
-      }
+      },
+      "emit_site": "web/vm/session_controller.ts"
     },
     {
       "name": "SESSION_ATTACH_STARTED",
@@ -94,7 +97,8 @@
       "note": "attachExisting(sessionId) began; the controller is opening the SSE stream against a session it did not itself create.",
       "field_types": {
         "session_id": "string (kernel session id)"
-      }
+      },
+      "emit_site": "web/vm/session_controller.ts"
     },
     {
       "name": "SESSION_END_REQUESTED",
@@ -109,7 +113,8 @@
       "field_types": {
         "session_id": "string (kernel session id)",
         "reason": "string"
-      }
+      },
+      "emit_site": "web/vm/session_controller.ts"
     },
     {
       "name": "SESSION_ENDED_LOCAL",
@@ -122,7 +127,8 @@
       "note": "A SessionEnded envelope reached the controller; snapshot flipped to endedReason. Distinct from SESSION_END_REQUESTED because a session can end without the local caller asking.",
       "field_types": {
         "reason": "string"
-      }
+      },
+      "emit_site": "web/vm/session_controller.ts"
     },
     {
       "name": "DRIVER_ROSTER_LOADED",
@@ -137,7 +143,8 @@
       "field_types": {
         "count": "int",
         "default": "string or null"
-      }
+      },
+      "emit_site": "web/vm/session_controller.ts"
     },
     {
       "name": "DRIVER_PICKED",
@@ -150,7 +157,8 @@
       "note": "pickDriver(name) was called. The controller records the choice; no server call fires until session-open.",
       "field_types": {
         "driver": "string (driver name)"
-      }
+      },
+      "emit_site": "web/vm/session_controller.ts"
     },
     {
       "name": "DRIVER_VERSION_PICKED",
@@ -165,7 +173,8 @@
       "field_types": {
         "driver": "string (driver name)",
         "version": "string or null"
-      }
+      },
+      "emit_site": "web/vm/session_controller.ts"
     },
     {
       "name": "BUNDLE_ROSTER_LOADED",
@@ -178,7 +187,8 @@
       "note": "loadBundleRoster() populated snapshot.bundleRoster from /api/bundles.",
       "field_types": {
         "count": "int"
-      }
+      },
+      "emit_site": "web/vm/session_controller.ts"
     },
     {
       "name": "BUNDLE_PICKED",
@@ -191,7 +201,8 @@
       "note": "pickBundle(slug) was called. Records the choice; no server call fires until session-open.",
       "field_types": {
         "bundle": "string or null"
-      }
+      },
+      "emit_site": "web/vm/session_controller.ts"
     },
     {
       "name": "WORKSPACES_LOADED",
@@ -204,7 +215,8 @@
       "note": "loadRecentWorkspaces() populated snapshot.recentWorkspaces from /api/workspaces.",
       "field_types": {
         "count": "int"
-      }
+      },
+      "emit_site": "web/vm/session_controller.ts"
     },
     {
       "name": "TURN_SUBMITTED",
@@ -221,7 +233,8 @@
         "session_id": "string (kernel session id)",
         "turn_index": "int (kernel)",
         "text_length": "int"
-      }
+      },
+      "emit_site": "web/vm/session_controller.ts"
     },
     {
       "name": "TURN_ACK",
@@ -234,7 +247,8 @@
       "note": "POST /api/session/<id>/turn returned 200. The envelope stream carries the model's reply from here on.",
       "field_types": {
         "session_id": "string (kernel session id)"
-      }
+      },
+      "emit_site": "web/vm/session_controller.ts"
     },
     {
       "name": "TURN_REFUSED",
@@ -249,7 +263,8 @@
       "field_types": {
         "failure_class": "string (client failure class: network, http_error, or the server's failure_class)",
         "detail": "string (server error text; Layer 7 bounds it)"
-      }
+      },
+      "emit_site": "web/vm/session_controller.ts"
     },
     {
       "name": "TURN_PARKED",
@@ -262,7 +277,8 @@
       "note": "A Park envelope arrived; the driver is waiting on the human. park_reason names the wait (rate_limit, awaiting_input, etc).",
       "field_types": {
         "park_reason": "string"
-      }
+      },
+      "emit_site": "web/vm/session_controller.ts"
     },
     {
       "name": "TURN_INTERRUPTED",
@@ -283,7 +299,8 @@
         "tier": "enum soft | hard",
         "signal": "string or null",
         "scope": "string"
-      }
+      },
+      "emit_site": "web/vm/session_controller.ts"
     },
     {
       "name": "STREAM_ATTACHED",
@@ -298,7 +315,8 @@
       "field_types": {
         "session_id": "string (kernel session id)",
         "record_root": "string (absolute path)"
-      }
+      },
+      "emit_site": "web/vm/session_controller.ts"
     },
     {
       "name": "STREAM_CLOSED",
@@ -313,7 +331,8 @@
       "field_types": {
         "session_id": "string (kernel session id)",
         "record_root": "string (absolute path)"
-      }
+      },
+      "emit_site": "web/vm/session_controller.ts"
     },
     {
       "name": "STREAM_RECONNECTING",
@@ -328,7 +347,8 @@
       "field_types": {
         "session_id": "string (kernel session id)",
         "record_root": "string (absolute path)"
-      }
+      },
+      "emit_site": "web/vm/session_controller.ts"
     },
     {
       "name": "STREAM_ENVELOPE_APPENDED",
@@ -343,7 +363,8 @@
       "field_types": {
         "seq": "int (kernel record seq)",
         "kind": "string (kernel envelope kind)"
-      }
+      },
+      "emit_site": "web/vm/session_controller.ts"
     },
     {
       "name": "SESSIONS_LOADED",
@@ -356,7 +377,8 @@
       "note": "loadLiveSessions() populated snapshot.liveSessions from /api/session.",
       "field_types": {
         "count": "int"
-      }
+      },
+      "emit_site": "web/vm/session_controller.ts"
     },
     {
       "name": "CHILD_RECORD_ATTACH_REQUESTED",
@@ -369,7 +391,8 @@
       "note": "attachRecordRoot(recordRoot) entry. The controller is subscribing to a child record's stream (a delegate tool call's substrate Run).",
       "field_types": {
         "record_root": "string (absolute path)"
-      }
+      },
+      "emit_site": "web/vm/session_controller.ts"
     },
     {
       "name": "TOPOLOGY_LOADED",
@@ -384,7 +407,8 @@
       "field_types": {
         "producer_count": "int",
         "trigger_count": "int"
-      }
+      },
+      "emit_site": "web/vm/session_controller.ts"
     },
     {
       "name": "SPEC_VALIDATE_REQUESTED",
@@ -397,7 +421,8 @@
       "note": "validateSpec() entry. topology_name is present when the spec names one.",
       "field_types": {
         "topology_name": "string"
-      }
+      },
+      "emit_site": "web/vm/session_controller.ts"
     },
     {
       "name": "SPEC_VALIDATED",
@@ -413,7 +438,8 @@
       "field_types": {
         "valid": "bool",
         "error": "string or null"
-      }
+      },
+      "emit_site": "web/vm/session_controller.ts"
     },
     {
       "name": "SPEC_BUILD_REQUESTED",
@@ -426,7 +452,8 @@
       "note": "buildSpec() entry. topology_name is present when the spec names one.",
       "field_types": {
         "topology_name": "string"
-      }
+      },
+      "emit_site": "web/vm/session_controller.ts"
     },
     {
       "name": "SPEC_BUILD_REJECTED",
@@ -439,7 +466,8 @@
       "note": "The server refused the build, or the validator rejected the spec before POST.",
       "field_types": {
         "reason": "string"
-      }
+      },
+      "emit_site": "web/vm/session_controller.ts"
     },
     {
       "name": "SPEC_BUILT",
@@ -457,7 +485,8 @@
         "run_name": "string",
         "status": "int (HTTP status)",
         "unfired_triggers_count": "int"
-      }
+      },
+      "emit_site": "web/vm/session_controller.ts"
     },
     {
       "name": "SLASH_ROUTED",
@@ -470,7 +499,8 @@
       "note": "submitLine() matched a known slash. cmd is the leading token (exit, model, help, clear, interrupt, name, list, tools, workspace, bundle, isolate).",
       "field_types": {
         "cmd": "string (slash token)"
-      }
+      },
+      "emit_site": "web/vm/session_controller.ts"
     },
     {
       "name": "SLASH_UNKNOWN",
@@ -483,7 +513,8 @@
       "note": "submitLine() matched no known slash. cmd is the leading token.",
       "field_types": {
         "cmd": "string (slash token)"
-      }
+      },
+      "emit_site": "web/vm/session_controller.ts"
     },
     {
       "name": "RUN_STARTED",
@@ -503,7 +534,8 @@
         "topology": "string",
         "sessions": "list of {session_id, role, record_root}",
         "t": "float or null"
-      }
+      },
+      "emit_site": "web/vm/session_controller.ts"
     },
     {
       "name": "RUN_FOCUS_REQUESTED",
@@ -520,7 +552,8 @@
         "run_id": "string (kernel)",
         "topology": "string",
         "sessions": "int or list (RUN_STARTED: list of {session_id, role})"
-      }
+      },
+      "emit_site": "web/vm/session_controller.ts"
     },
     {
       "name": "RUN_STOP_REQUESTED",
@@ -533,7 +566,8 @@
       "note": "The server accepted a stop for one of this session's runs; the run's session ends caller_stop.",
       "field_types": {
         "run_id": "string (kernel)"
-      }
+      },
+      "emit_site": "web/vm/session_controller.ts"
     },
     {
       "name": "TURN_REFUSED_VIEW_ONLY",
@@ -542,7 +576,8 @@
       "payload": [],
       "optional_payload": [],
       "note": "A line was sent in a pane that shows a run's session, whose topology writes its messages; nothing was posted.",
-      "field_types": {}
+      "field_types": {},
+      "emit_site": "web/vm/session_controller.ts"
     },
     {
       "name": "DELEGATE_CHILD_STARTED",
@@ -557,7 +592,8 @@
       "field_types": {
         "session_id": "string (kernel session id)",
         "driver": "string (driver name)"
-      }
+      },
+      "emit_site": "web/vm/session_controller.ts"
     },
     {
       "name": "ASSAYS_LOADED",
@@ -570,7 +606,8 @@
       "note": "loadAssays() read /api/assays: one row per cells file in the bench results folder. count is the number of rows.",
       "field_types": {
         "count": "int"
-      }
+      },
+      "emit_site": "web/vm/session_controller.ts"
     },
     {
       "name": "ASSAY_REPORT_LOADED",
@@ -585,7 +622,8 @@
       "field_types": {
         "name": "string or null",
         "arms": "int"
-      }
+      },
+      "emit_site": "web/vm/session_controller.ts"
     },
     {
       "name": "PICKER_FOLDER_ARMED",
@@ -604,7 +642,8 @@
         "workspace": "string (absolute path) or null",
         "is_default": "bool",
         "source": "enum row | dialog | typed"
-      }
+      },
+      "emit_site": "web/app/App.tsx (armWorkspace, disarmWorkspace, enterGuidance, pickGuidance, pickLength, commitPane, wsKey)"
     },
     {
       "name": "PICKER_FOLDER_DISARMED",
@@ -619,7 +658,8 @@
       "field_types": {
         "pane_id": "int",
         "cause": "enum escape | arrow_left | list_click | typed"
-      }
+      },
+      "emit_site": "web/app/App.tsx (armWorkspace, disarmWorkspace, enterGuidance, pickGuidance, pickLength, commitPane, wsKey)"
     },
     {
       "name": "PICKER_LINE_ENTERED",
@@ -636,7 +676,8 @@
         "pane_id": "int",
         "line": "enum model | guidance | length | tone",
         "cause": "enum picked | back"
-      }
+      },
+      "emit_site": "web/app/App.tsx (armWorkspace, disarmWorkspace, enterGuidance, pickGuidance, pickLength, commitPane, wsKey)"
     },
     {
       "name": "PICKER_COMMITTED",
@@ -653,7 +694,8 @@
         "pane_id": "int",
         "workspace": "string (absolute path) or null",
         "is_default": "bool"
-      }
+      },
+      "emit_site": "web/app/App.tsx (armWorkspace, disarmWorkspace, enterGuidance, pickGuidance, pickLength, commitPane, wsKey)"
     },
     {
       "name": "APP_BOOTED",
@@ -1717,6 +1759,198 @@
         "id": "S9",
         "kind": "pairing_ordering",
         "statement": "Each window *_REFUSED tag caused by a server answer pairs with one API_REFUSED (server) in the same boot."
+      }
+    ]
+  },
+  "operators": {
+    "operators": [
+      {
+        "name": "AppMain",
+        "home": "electron/main.js, electron/menu.js, electron/preload.js",
+        "responsibilities": "Launch, the server process, windows, native dialogs, menus, deep links; writes main's trace.",
+        "emits": [
+          "APP_BOOTED",
+          "APP_QUIT_COMPLETED",
+          "APP_QUIT_REQUESTED",
+          "DEEP_LINK_RECEIVED",
+          "MENU_COMMAND_SENT",
+          "NATIVE_DIALOG_CLOSED",
+          "NAVIGATION_BLOCKED",
+          "SERVER_BOUND",
+          "SERVER_EXITED",
+          "SERVER_SPAWNED",
+          "WINDOW_CLOSED",
+          "WINDOW_OPENED"
+        ],
+        "runtime_notes": []
+      },
+      {
+        "name": "WindowShell",
+        "home": "web/app/App.tsx, web/app/keymap.ts, web/app/Dialogs.tsx, web/reveal.ts",
+        "responsibilities": "The window's open view, panes, focus, keys, dialogs and the picker.",
+        "emits": [
+          "DIALOG_CLOSED",
+          "DIALOG_OPENED",
+          "KEY_ROUTED",
+          "LENS_CHANGED",
+          "PANE_BOUND",
+          "PANE_CLOSED",
+          "PANE_FOCUSED",
+          "PANE_OPENED",
+          "PICKER_COMMITTED",
+          "PICKER_FOLDER_ARMED",
+          "PICKER_FOLDER_DISARMED",
+          "PICKER_LINE_ENTERED",
+          "VIEW_CHANGED",
+          "WINDOW_BOOTED"
+        ],
+        "runtime_notes": []
+      },
+      {
+        "name": "PaneController",
+        "home": "web/vm/session_controller.ts (one per pane, spawned by web/vm/pane_registry.ts)",
+        "responsibilities": "A pane's session: open, attach, turns, slash commands, stream, controls, CLI status.",
+        "emits": [
+          "ASSAYS_LOADED",
+          "ASSAY_REPORT_LOADED",
+          "BUNDLE_PICKED",
+          "BUNDLE_ROSTER_LOADED",
+          "CHILD_RECORD_ATTACH_REQUESTED",
+          "CLI_LOGIN_PROMPTED",
+          "CLI_STATUS_CHECKED",
+          "CONTROLS_PICKED",
+          "DELEGATE_CHILD_STARTED",
+          "DRIVER_PICKED",
+          "DRIVER_ROSTER_LOADED",
+          "DRIVER_VERSION_PICKED",
+          "RECORD_OPENED",
+          "RUN_FOCUS_REQUESTED",
+          "RUN_STARTED",
+          "RUN_STOP_REQUESTED",
+          "SESSIONS_LOADED",
+          "SESSION_ATTACH_STARTED",
+          "SESSION_ENDED_LOCAL",
+          "SESSION_END_REQUESTED",
+          "SESSION_OPEN_ACKED",
+          "SESSION_OPEN_REFUSED",
+          "SESSION_OPEN_REQUESTED",
+          "SESSION_RENAMED",
+          "SLASH_ROUTED",
+          "SLASH_UNKNOWN",
+          "SPEC_BUILD_REJECTED",
+          "SPEC_BUILD_REQUESTED",
+          "SPEC_BUILT",
+          "SPEC_VALIDATED",
+          "SPEC_VALIDATE_REQUESTED",
+          "STREAM_ATTACHED",
+          "STREAM_CLOSED",
+          "STREAM_ENVELOPE_APPENDED",
+          "STREAM_RECONNECTING",
+          "TASK_STOP_REQUESTED",
+          "TOPOLOGY_LOADED",
+          "TRANSCRIPT_ROW_SKIPPED",
+          "TURN_ACK",
+          "TURN_INTERRUPTED",
+          "TURN_PARKED",
+          "TURN_REFUSED",
+          "TURN_REFUSED_VIEW_ONLY",
+          "TURN_SUBMITTED",
+          "WORKSPACES_LOADED",
+          "WORKSPACE_ADDED"
+        ],
+        "runtime_notes": []
+      },
+      {
+        "name": "TranscriptRenderer",
+        "home": "web/reveal/transcript/",
+        "responsibilities": "Draws a pane's record entries as rows.",
+        "emits": [
+          "CLI_LOGIN_FINISHED",
+          "TRANSCRIPT_ROW_DRAWN"
+        ],
+        "runtime_notes": []
+      },
+      {
+        "name": "Server",
+        "home": "server.py Handler (line 2466), _daemon_driver_resolver (line 270)",
+        "responsibilities": "HTTP API over the kernel: creates sessions, takes turns, serves records, files and rosters; resolves the driver a session runs on.",
+        "emits": [
+          "API_REFUSED",
+          "SERVER_FAULTED",
+          "SERVER_STARTED",
+          "SERVER_STOPPED",
+          "SESSION_CREATED",
+          "TURN_ACCEPTED"
+        ],
+        "runtime_notes": [
+          "route: driver resolved to a CLI agent, an Ollama model or deterministic; SESSION_CREATED.driver names it"
+        ]
+      },
+      {
+        "name": "Sink",
+        "home": "the trace writers of main, the window and the server (plan item 2)",
+        "responsibilities": "Writes each process's records; counts what it could not write.",
+        "emits": [
+          "INVARIANT_BROKEN",
+          "SIGNAL_REJECTED",
+          "TRACE_LOST",
+          "TRACE_OPENED"
+        ],
+        "runtime_notes": []
+      }
+    ],
+    "dual_classification": "Pane is an entity (Layer 0) and, through its PaneController, an operator; Server likewise."
+  },
+  "evidence_constraints": {
+    "constraints": [
+      {
+        "id": "E1",
+        "kind": "content",
+        "target": "all tags",
+        "rule": "No message text, model output, file contents, prompt text, environment values or credentials in any payload; such content lives in the kernel record, reached by session_id and seq.",
+        "enforceability": "mechanical (the emitter refuses fields named text, content, prompt, output, token, password, key_value; the linter checks payload field names)"
+      },
+      {
+        "id": "E2",
+        "kind": "length",
+        "target": "string fields named detail, reason, cause, error",
+        "rule": "At most 200 characters; longer is cut and marked.",
+        "enforceability": "mechanical"
+      },
+      {
+        "id": "E3",
+        "kind": "diagnostic_required",
+        "target": "incident tags",
+        "rule": "SERVER_EXITED carries code and signal; NAVIGATION_BLOCKED target_kind; API_REFUSED area, status, cause; SERVER_FAULTED error_type and where; TRACE_LOST count; SIGNAL_REJECTED tag, problem, call_site; INVARIANT_BROKEN rule and context; FILE_SKIPPED-style refusals their reason.",
+        "enforceability": "mechanical (required fields)"
+      },
+      {
+        "id": "E4",
+        "kind": "outcome_required",
+        "target": "summary tags",
+        "rule": "APP_QUIT_COMPLETED, SERVER_STARTED, SERVER_STOPPED, PICKER_COMMITTED carry their outcome counts or binding.",
+        "enforceability": "mechanical"
+      },
+      {
+        "id": "E5",
+        "kind": "range",
+        "target": "ms, count, seq, turn_index, port, pid, proc_seq",
+        "rule": "Integers ≥ 0; port 1–65535.",
+        "enforceability": "mechanical"
+      },
+      {
+        "id": "E6",
+        "kind": "posture",
+        "target": "every emitter",
+        "rule": "An emit that breaks the vocabulary raises in source and test builds; in the packaged app it is written as SIGNAL_REJECTED with the call site, and the caller's request goes on.",
+        "enforceability": "mechanical"
+      },
+      {
+        "id": "E7",
+        "kind": "cross_reference",
+        "target": "session_id, seq",
+        "rule": "A session_id names a session under the boot's store; a seq names an entry of that session's record.",
+        "enforceability": "mechanical (the reader joins and reports what does not resolve)"
       }
     ]
   }
