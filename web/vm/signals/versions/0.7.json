@@ -1,8 +1,8 @@
 {
   "vocabulary_version": "0.7",
-  "locked": false,
-  "locked_at": null,
-  "locked_by": "draft: sprint 350, the whole-app Vocabulary Session; locks at Step 12",
+  "locked": true,
+  "locked_at": "2026-11-05",
+  "locked_by": "agent-resolved 2026-11-05 (BLACKBOARD), sprint 350: the whole-app Vocabulary Session, grammar/BOOTSTRAP.md Steps 0-12",
   "supersedes": "0.6",
   "tag_count": 87,
   "categories": [
@@ -2030,5 +2030,46 @@
         "enforceability": "mechanical (the reader joins and reports what does not resolve)"
       }
     ]
+  },
+  "report_binding": {
+    "observed": "every behaviour tag, merged across main, window and server by boot_id, proc_seq and the causal keys",
+    "rendered": [
+      "PANE_DRAWN",
+      "PAGE_DRAWN",
+      "TRANSCRIPT_ROW_DRAWN",
+      "TRANSCRIPT_ROW_SKIPPED",
+      "TRANSCRIPT_SCROLLED",
+      "VIEW_CHANGED",
+      "LENS_CHANGED",
+      "DIALOG_OPENED",
+      "DIALOG_CLOSED"
+    ],
+    "notes": [
+      "SESSION_OPEN_REFUSED",
+      "TURN_REFUSED",
+      "SPEC_BUILD_REJECTED",
+      "TURN_REFUSED_VIEW_ONLY",
+      "SERVER_EXITED",
+      "NAVIGATION_BLOCKED",
+      "API_REFUSED",
+      "SERVER_FAULTED",
+      "TRACE_LOST",
+      "SIGNAL_REJECTED",
+      "INVARIANT_BROKEN"
+    ],
+    "grammar_drift": "SIGNAL_REJECTED, and the open proposals in ../proposals.json"
+  },
+  "grammar_growth": {
+    "taxonomy_version": "0.1",
+    "project_overrides": [
+      "validator extras strict",
+      "record_context stamped by the emitter on every trace record (P-0.7-CONTEXT)",
+      "kernel entities joined by key, never redeclared"
+    ]
+  },
+  "version_meta": {
+    "version_id": "0.7",
+    "prior_version": "0.6",
+    "migration_proposals": "../proposals.json (P-0.7-*)"
   }
 }

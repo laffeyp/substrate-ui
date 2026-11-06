@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 350
-status: active
+status: closed
 phase: SDD re-centre
 pass_kind: architecture
 ---
@@ -71,3 +71,9 @@ v0.7 is locked with rationale and sign-off; every user action and process decisi
 ## notes
 
 The session works step by step; each step's self-review runs against the file on disk. Steps are recorded on the BLACKBOARD as they close.
+
+## result
+
+- **Built.** `web/vm/signals/versions/0.7.json` (locked 2026-11-05): 87 tags in 20 categories, 25 entities (9 joined to the kernel), six sessions, six timing rules, nine order rules, six operators, seven evidence rules, the record context, the report binding. `0.7-rationale.md` with every layer, the 87-row audit and the sign-off. `web/vm/signals/proposals.json`: 55 ratified, 1 open. `current.json` → `0.7.json`.
+- **Commands.** `json.load(0.7.json)` exit 0; `npx tsc --noEmit` 0; `npm run build` 0; `npm run signals` OK (v0.7, 87 live tags; the code emits 38, since the new tags have no emit sites until plan item 4, and the parity tool misses `emitSignal(...)` until item 3); `npm run test:unit` 143 passed.
+- **Rubber Duck Pass** (content sprint, narrated). The session read the vocabulary in its own terms: AppBoot opens with `APP_BOOTED` and closes with `APP_QUIT_COMPLETED`; a pane's session opens with `SESSION_OPEN_ACKED`; each record entry a pane receives is drawn or skipped with its `seq` within 1 s (T4). Observations: vocabulary gap, meta's lenses draw with no tag (recorded, `P-0.7-OPEN-LENS-DRAWN`); vocabulary gap, the classic shell's view pairs lost since 2026-09-22 (resolved here, Step 9); payload anomaly, no v0.6 window tag names its pane (resolved here, record context); payload anomaly, `sessions` meant two things (resolved here, `sessions_found`); none in order, timing or tone (no runtime trace in a content sprint).
