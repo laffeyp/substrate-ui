@@ -67,8 +67,11 @@ async function smoke(BASE: string) {
   // Slash commands routed through submitLine.
   await controller.submitLine("/help");
   const helpSnap = controller.snapshot();
-  const helpRow = helpSnap.transcript.find(r => r.text.startsWith("slash commands:"));
-  step("/help renders a slash-command listing", !!helpRow, helpRow?.text?.slice(0, 60) ?? "(no help row)");
+  // UI sprint 162 (fcc9ace) made /help one row, "slash commands", with its commands in `helpRows`;
+  // this step still looked for the old "slash commands:" text and failed from then until sprint 345.
+  const helpRow = helpSnap.transcript.find(r => r.kind === "SlashHelp") as (typeof helpSnap.transcript)[number] & { helpRows?: { usage: string }[] } | undefined;
+  const helpCount = helpRow?.helpRows?.length ?? 0;
+  step("/help renders a slash-command listing", !!helpRow && helpCount > 0, helpRow ? `${helpCount} commands, first ${helpRow.helpRows?.[0]?.usage}` : "(no help row)");
 
   await controller.submitLine("/model deterministic");
   const modelSnap = controller.snapshot();
