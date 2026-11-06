@@ -43,6 +43,7 @@ import { languageKey, selectedTurn } from "./derive/language_keys";
 import { windowKey } from "./keymap";
 import { findText, streamRows } from "./derive/stream";
 import { onCommand, shell } from "./state/shell";
+import { emit as emitSignal } from "../vm/instrumentation/sdd";
 import { closePage, metaBase, pageOf, show, START, toggleMeta, togglePage, type Page, type ViewState } from "./derive/open_view";
 import { ActivityLine, TaskRows } from "./ActivityLine";
 import { AssayPage } from "./AssayPage";
@@ -229,7 +230,8 @@ export class App extends React.Component<AppProps, AppState> {
   // UI sprint 124: the workspace bar runs left to right. A folder pick arms the folder and ungreys the
   // model half; the workspace reaches the controller only when the session starts, so a folder armed
   // and disarmed (esc) leaves nothing behind.
-  private armWorkspace(paneId: number, ws: string, isDefault: boolean): void {
+  private armWorkspace(paneId: number, ws: string, isDefault: boolean, source: "row" | "dialog" | "typed" = "row"): void {
+    emitSignal("PICKER_FOLDER_ARMED", { pane_id: paneId, workspace: ws, is_default: isDefault, source });
     this.setPane(paneId, { armed: { ws, isDefault }, pickerHalf: "model", modelSelIdx: null });
   }
   // "choose folder…" (⌘O): Electron's folder dialog gives the folder's absolute path, which is recorded
@@ -244,7 +246,7 @@ export class App extends React.Component<AppProps, AppState> {
     const path = await native.pickFolder().catch(() => null);
     if (!path) return;
     await vmOf()?.addWorkspace(path).catch(() => undefined);
-    this.armWorkspace(paneId, path, false);
+    this.armWorkspace(paneId, path, false, "dialog");
   }
   // F362: ⌘O. The picker's "choose folder…" row names the key; with the focused pane's picker
   // showing (panes in view, no page open, no session bound) it opens the folder chooser. Anywhere
@@ -264,10 +266,12 @@ export class App extends React.Component<AppProps, AppState> {
       if (path) vmOf()?.get(1)?.attachRecordRoot(path).catch(() => undefined);
     }).catch(() => undefined);
   }
-  private disarmWorkspace(paneId: number): void {
+  private disarmWorkspace(paneId: number, cause: "escape" | "arrow_left" | "list_click"): void {
+    emitSignal("PICKER_FOLDER_DISARMED", { pane_id: paneId, cause });
     this.setPane(paneId, { armed: null, pickerHalf: "ws", modelSelIdx: null });
   }
   private enterGuidance(paneId: number): void {
+    emitSignal("PICKER_LINE_ENTERED", { pane_id: paneId, line: "guidance", cause: "picked" });
     this.setState((st) => ({ panes: st.panes.map((x) => {
       if (x.id !== paneId) return x;
       const at = GUIDANCE_OPTIONS.findIndex((gd) => gd.level === (x.guidance ?? null));
@@ -279,12 +283,14 @@ export class App extends React.Component<AppProps, AppState> {
     const pane = this.pane(paneId);
     if (!pane || !pane.armed || pane.pickerHalf !== "guidance") return;
     // UI sprint 143: the guidance level no longer starts the session; LENGTH comes next.
+    emitSignal("PICKER_LINE_ENTERED", { pane_id: paneId, line: "length", cause: "picked" });
     this.setPane(paneId, { guidance: option.level, pickerHalf: "length", lengthSel: LENGTH_DEFAULT_AT });
     vmOf()?.pickBundle(option.bundle);
   }
   private pickLength(paneId: number, option: ValueOption): void {
     const pane = this.pane(paneId);
     if (!pane || !pane.armed || pane.pickerHalf !== "length") return;
+    emitSignal("PICKER_LINE_ENTERED", { pane_id: paneId, line: "tone", cause: "picked" });
     this.setPane(paneId, { length: option.value, pickerHalf: "tone", toneSel: TONE_DEFAULT_AT });
   }
   private pickTone(paneId: number, option: ValueOption): void {
@@ -295,6 +301,7 @@ export class App extends React.Component<AppProps, AppState> {
     this.commitPane(paneId, pane.armed);
   }
   private commitPane(paneId: number, armed: Armed): void {
+    emitSignal("PICKER_COMMITTED", { pane_id: paneId, workspace: armed.ws, is_default: armed.isDefault });
     const vm = vmOf();
     if (armed.isDefault) {
       vm?.pickWorkspace(null);
@@ -446,7 +453,10 @@ export class App extends React.Component<AppProps, AppState> {
       ev.preventDefault();
       if ("move" in step) this.setPane(paneId, { [selKey]: step.move });
       else if ("pick" in step) pick(opts[step.pick]);
-      else this.setPane(paneId, { pickerHalf: back });
+      else {
+        emitSignal("PICKER_LINE_ENTERED", { pane_id: paneId, line: back, cause: "back" });
+        this.setPane(paneId, { pickerHalf: back });
+      }
       return;
     }
     if (p.pickerHalf === "model" && p.armed) {
@@ -480,12 +490,12 @@ export class App extends React.Component<AppProps, AppState> {
         let up = at - 1;
         while (up >= 0 && opts[up].indent >= row.indent) up--;
         if (up >= 0 && opts[up].expanded) { move(up); opts[up].toggleExpand(); return; }
-        this.disarmWorkspace(paneId);
+        this.disarmWorkspace(paneId, "arrow_left");
         return;
       }
       if (opens) { ev.preventDefault(); move(at); if (row.expandable) row.toggleExpand(); return; }
       if (ev.key === "Enter") { ev.preventDefault(); move(at); row.pick(); return; }
-      if (ev.key === "Escape") { ev.preventDefault(); this.disarmWorkspace(paneId); }
+      if (ev.key === "Escape") { ev.preventDefault(); this.disarmWorkspace(paneId, "escape"); }
       return;
     }
     const rows = this.wsPickerRows(p, fsnap?.recentWorkspaces ?? []);
@@ -843,7 +853,7 @@ export class App extends React.Component<AppProps, AppState> {
       // A click on the list's empty space, with a folder armed, goes back to the workspace column.
       onWsListClick: (ev?: unknown) => {
         const t = (ev as { target?: EventTarget | null } | undefined)?.target;
-        if (p.armed && !(t instanceof Element && t.closest("[data-ws-lit]"))) this.disarmWorkspace(p.id);
+        if (p.armed && !(t instanceof Element && t.closest("[data-ws-lit]"))) this.disarmWorkspace(p.id, "list_click");
       },
       wsRows,
       modelArmed: p.armed ? "1" : "0",
@@ -871,7 +881,10 @@ export class App extends React.Component<AppProps, AppState> {
         : armedOn("guidance") ? "← → moves · ↵ picks the guidance · esc back to models"
         : armedOn("model") ? "↑↓ moves · ⇧↵ opens · ↵ picks the model · esc back"
         : "↑↓ moves · ⇧↵ opens · ↵ picks the folder",
-      onWsQ: (ev) => this.setPane(p.id, { wsQ: ev.target.value, wsSelIdx: 0, armed: null, pickerHalf: "ws", modelSelIdx: null }),
+      onWsQ: (ev) => {
+        if (this.pane(p.id)?.armed) emitSignal("PICKER_FOLDER_DISARMED", { pane_id: p.id, cause: "typed" });
+        this.setPane(p.id, { wsQ: ev.target.value, wsSelIdx: 0, armed: null, pickerHalf: "ws", modelSelIdx: null });
+      },
       onWsKey: (ev?: unknown) => this.wsKey(p.id, ev as KeyEv),
     };
   }

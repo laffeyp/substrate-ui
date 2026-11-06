@@ -2,7 +2,7 @@
 
 *Project-specific overrides and additions on top of `../sdd-kit-3/AGENTS.md` (imported by `CLAUDE.md` at the repo root). The Agent reads AGENTS.md first (the methodology) then this file (the project specifics). This file augments; it never overrides AGENTS.md hard rules. When the two conflict, AGENTS.md wins.*
 
-*Current as of 2026-10-29 (`## Documents` added). The version it replaces (2026-06-17, revised through 2026-09) is kept at `process/archive/WORKING_AGREEMENT-2026-06-17-to-2026-10-11.md`; it described the browser console, its Chrome harnesses and a root `signals/` folder, all retired since.*
+*Current as of 2026-11-05 (the vocabulary row and footer name v0.6, 42 tags; they had named v0.1, 31 tags, since v0.2). The version it replaces is at `process/archive/WORKING_AGREEMENT-2026-10-11-to-2026-11-05.md`; the one before, at `process/archive/WORKING_AGREEMENT-2026-06-17-to-2026-10-11.md`, described the browser console, its Chrome harnesses and a root `signals/` folder, all retired since.*
 
 ---
 
@@ -48,7 +48,7 @@
 | Snapshot and row types | `web/vm/types.ts` | |
 | Fold / unfold all tool output | `web/vm/tool_output_mode.ts` | ⌘E, `/fold`, `/unfold` (UI sprint 140). |
 | Kernel names the UI reads, generated | `web/vm/envelope_kinds.gen.ts`, `web/vm/statuses.gen.ts`, `web/vm/controls.gen.ts` | Written by `scripts/gen_kinds.py` from the kernel; `tests/test_envelope_kinds_generated_096.py` fails when one is stale. Never hand-copy a kernel name. |
-| substrate-ui's own signal vocabulary | `web/vm/signals/versions/current.json` → `0.1.json` (31 tags) + `0.1-rationale.md` | Every `emit(...)` validates against it; `npm run signals` checks the call sites. |
+| substrate-ui's own signal vocabulary | `web/vm/signals/versions/current.json` → `0.6.json` (42 tags) + `0.6-rationale.md`; earlier versions beside it | Every `emit(...)` validates against it; `npm run signals` checks the call sites. |
 | Unit specs | `web/reveal/__tests__/*.spec.ts` | `npm run test:unit`. |
 | Python tests (real server over HTTP) | `tests/*.py` | `npm run test:py`. |
 | Electron gates (the observation contract) | `harness/shakeout/*.ts`, shared helpers in `harness/shakeout/lib/` (`electron.ts`: `launchArgs`, `bindPaneAsUser`) | `npm run gates:electron`. |
@@ -155,4 +155,4 @@ When a fold-pass edit touches surfaces the closed card did not enumerate, it lan
 
 ---
 
-*WORKING_AGREEMENT.md for substrate-ui, current 2026-10-11. An Electron app over the Substrate kernel. Own signal vocabulary at `web/vm/signals/versions/current.json` (v0.1, 31 tags); kernel names reach the UI only through generated files. The eight-word tone canon binds user-facing strings.*
+*WORKING_AGREEMENT.md for substrate-ui, current 2026-10-11. An Electron app over the Substrate kernel. Own signal vocabulary at `web/vm/signals/versions/current.json` (v0.6, 42 tags); kernel names reach the UI only through generated files. The eight-word tone canon binds user-facing strings.*
