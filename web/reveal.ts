@@ -86,21 +86,7 @@ function boot(): void {
   // Every pane controller's snapshot goes to the window's store; the component reads it there.
   registry.subscribe((paneId, snap) => mirrorSnapshot(paneId, snap));
 
-  // Ctrl+C over a prompt input interrupts the in-flight turn, matching
-  // the classic shell's behavior. A selection in the input still gets
-  // native copy — only a caret-only Ctrl+C fires the interrupt.
-  window.addEventListener("keydown", (ev) => {
-    if (ev.key !== "c" && ev.key !== "C") return;
-    if (!(ev.ctrlKey || ev.metaKey)) return;
-    const active = document.activeElement;
-    if (!active || (active.tagName !== "INPUT" && active.tagName !== "TEXTAREA")) return;
-    const input = active as HTMLInputElement | HTMLTextAreaElement;
-    if (typeof input.selectionStart === "number"
-      && typeof input.selectionEnd === "number"
-      && input.selectionStart !== input.selectionEnd) return;
-    ev.preventDefault();
-    controller.interruptTurn();
-  });
+  // The window's keys, Ctrl+C's interrupt among them, are web/app/keymap.ts (sprint 327).
 
   // The meta view's transcript mount. dc-runtime draws the meta view's transcript column, with one
   // <div data-vm-transcript-mount="reveal"> for the focused pane; each match gets its own React root

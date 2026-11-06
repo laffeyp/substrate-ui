@@ -78,6 +78,7 @@ import { meta, selectSeq, setMode } from "./app/state/meta";
 import { closePane, dragCols, dragRows, gutterStops, MAX_PANES, splitPane, trackList } from "./app/derive/panes";
 import { language, setLanguageLane } from "./app/state/language";
 import { languageKey, selectedTurn } from "./app/derive/language_keys";
+import { windowKey } from "./app/keymap";
 import { findText, streamRows } from "./app/derive/stream";
 import { onCommand, shell } from "./app/state/shell";
 
@@ -605,86 +606,65 @@ class Component extends DCLogic {
       this.setState({ ddFor: null, wsFor: null });
     };
     document.addEventListener("mousedown", this._ddOutside, true);
+    // The window's keys: web/app/keymap.ts (sprint 327, F336) says which action a key takes; the
+    // actions run here until App owns the window (plan row E4).
     this._kd = (e) => {
-      // UI sprint 128 — on a focused pane with no session, the bar's keys work without a click
-      // in its path box: the box takes the cursor and the key. Any other text box keeps its keys.
-      {
-        const s = this.state;
-        const el = document.activeElement;
-        const typing = !!(el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable));
-        const barKey = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter', 'Escape'].includes(e.key) && !e.metaKey && !e.ctrlKey;
-        const fp = (s.panes || []).find(p => p.id === s.focused);
-        const fsnap = (s.controllerSnapshots || {})[s.focused];
-        if (barKey && e.key !== 'Escape' && !typing && s.surface === Surface.Records
-          && !dialogOpen() && !find.getSnapshot().open) {
-          recordsKey(e);
-          return;
-        }
-        if (barKey && !typing && fp && fp.unbound && !(fsnap && fsnap.sessionId) && !s.revealed && !s.surface
-          && !dialogOpen() && !find.getSnapshot().open) {
-          const box = document.querySelector('[data-ws-input="' + fp.id + '"]');
-          if (box) box.focus();
-          this._wsKey(fp.id, e);
-          return;
-        }
+      const s = this.state;
+      const isBox = (el) => !!(el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable));
+      const el = document.activeElement;
+      const fp = (s.panes || []).find(p => p.id === s.focused);
+      const fsnap = (s.controllerSnapshots || {})[s.focused];
+      const mt = meta.getSnapshot();
+      // The language lens's turns, built only while it shows (web/app/derive/language_keys.ts).
+      let lens = null;
+      if (s.revealed && mt.mode === GraphMode.Language && !s.surface) {
+        const view = this._streamView || {};
+        const lg = language.getSnapshot();
+        lens = buildLanguageLens(view.language || null, { stream: lg.stream, selTurn: selectedTurn(view.envelopes || [], mt.sel), lane: lg.lane, view: lg.view });
       }
-      // UI sprint 169: in the language lens, ↑↓ move between turns, ←→ between lanes, ↵ opens the
-      // turn in the stream (the selection is the seq, shared with stream+graph).
-      {
-        const s = this.state;
-        // Judge the key by where it was typed: the Enter that runs `/language` opens the lens and
-        // unmounts the input box before this handler runs.
-        const el = e.target;
-        const typing = !!(el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable));
-        // The keys' steps: web/app/derive/language_keys.ts (sprint 308); the lens's lane is in
-        // web/app/state/language.ts (sprint 309).
-        const mt = meta.getSnapshot();
-        if (s.revealed && mt.mode === GraphMode.Language && !s.surface && !typing && !e.metaKey && !e.ctrlKey) {
-          const view = this._streamView || {};
-          const lg = language.getSnapshot();
-          const lens = buildLanguageLens(view.language || null, { stream: lg.stream, selTurn: selectedTurn(view.envelopes || [], mt.sel), lane: lg.lane, view: lg.view });
-          const step = languageKey(lens.turns, lens.lanes.length, mt.sel, lg.lane, e.key);
-          if (step) {
-            e.preventDefault();
-            if ('sel' in step) selectSeq(step.sel);
-            else if ('lane' in step) setLanguageLane(step.lane);
-            else setMode(GraphMode.Stream);
-            return;
-          }
-        }
+      const action = windowKey(e, {
+        typing: isBox(el), targetTyping: isBox(e.target),
+        caretOnly: isBox(el) && typeof el.selectionStart === 'number' && el.selectionStart === el.selectionEnd,
+        surface: s.surface || null, revealed: !!s.revealed,
+        pickerFocused: !!(fp && fp.unbound && !(fsnap && fsnap.sessionId)),
+        languageTurns: !!(lens && lens.turns.length),
+        findOpen: find.getSnapshot().open, dialogOpen: dialogOpen(), cardOpen: !!(s.ddFor || s.wsFor),
+        running: !!(fsnap && fsnap.sessionId && fsnap.connection === 'connected' && !fsnap.parkReason && !fsnap.endedReason),
+      });
+      if (!action) return;
+      if (action.kind === 'records') { recordsKey(e); return; }
+      if (action.kind === 'picker') {
+        const box = document.querySelector('[data-ws-input="' + fp.id + '"]');
+        if (box) box.focus();
+        this._wsKey(fp.id, e);
+        return;
       }
-      // ⌘M toggles meta and panes (the menu's Minimize gives up the key, electron/menu.js).
-      if (e.metaKey && !e.shiftKey && !e.altKey && !e.ctrlKey && (e.key === 'm' || e.key === 'M')) { e.preventDefault(); this._toggleMeta(); }
-      // UI sprint 140: ⌘E expands or collapses every tool card.
-      if (e.metaKey && !e.shiftKey && !e.altKey && !e.ctrlKey && (e.key === 'e' || e.key === 'E')) { e.preventDefault(); this._toggleTools(); }
-      if (e.metaKey && (e.key === 'd' || e.key === 'D')) { e.preventDefault(); this._split(e.shiftKey ? 'down' : 'right'); }
-      if (e.metaKey && (e.key === 'f' || e.key === 'F')) { e.preventDefault(); toggleFind(); }
-      if (e.metaKey && e.key === ',') { e.preventDefault(); openSettings(); }
-      // D86: ⌘3 opens the assays page, and the same key returns to the panes (sprint 251).
-      if (e.metaKey && !e.shiftKey && !e.altKey && !e.ctrlKey && e.key === '3') { e.preventDefault(); this._toggleSurface(Surface.Assay); }
-      if (e.key === 'Escape') {
-        const s = this.state;
-        if (find.getSnapshot().open) closeFind();
-        else if (dialogOpen()) closeDialog();
-        else if (s.ddFor || s.wsFor) this.setState({ ddFor: null, wsFor: null });
-        else if (s.surface) this.setState({ surface: null });
-        else {
-          // Phase 8 item 5 · two-tier ESC. First press within the same
-          // running turn sends tier=soft; a second press before the turn
-          // parks sends tier=hard. `_lastEscTier` tracks the last tier for
-          // the current turn's sessionId; a new sessionId resets it.
-          const vm = window.__vm;
-          const snap = (s.controllerSnapshots || {})[s.focused] || (vm && vm.snapshot ? vm.snapshot() : null);
-          const running = !!(snap && snap.sessionId && snap.connection === 'connected' && !snap.parkReason && !snap.endedReason);
-          if (running && vm && typeof vm.interruptTurn === 'function') {
-            // ESC is hard by default — the terminal habit says "stop
-            // now." Shift+ESC is the softer verb: "stop after this
-            // tool." Shift as the delay modifier reads naturally to a
-            // user who has hit ESC once expecting immediate action.
-            const tier = e.shiftKey ? 'soft' : 'hard';
-            vm.interruptTurn(tier);
-          }
-        }
+      if (action.kind === 'language') {
+        const lg = language.getSnapshot();
+        const step = languageKey(lens.turns, lens.lanes.length, mt.sel, lg.lane, e.key);
+        if (!step) return;
+        e.preventDefault();
+        if ('sel' in step) selectSeq(step.sel);
+        else if ('lane' in step) setLanguageLane(step.lane);
+        else setMode(GraphMode.Stream);
+        return;
+      }
+      if (action.kind === 'close-find') { closeFind(); return; }
+      if (action.kind === 'close-dialog') { closeDialog(); return; }
+      if (action.kind === 'close-cards') { this.setState({ ddFor: null, wsFor: null }); return; }
+      if (action.kind === 'close-surface') { this.setState({ surface: null }); return; }
+      e.preventDefault();
+      if (action.kind === 'toggle-meta') this._toggleMeta();
+      else if (action.kind === 'toggle-tools') this._toggleTools();
+      else if (action.kind === 'split') this._split(action.dir);
+      else if (action.kind === 'toggle-find') toggleFind();
+      else if (action.kind === 'settings') openSettings();
+      else if (action.kind === 'toggle-assays') this._toggleSurface(Surface.Assay);
+      else if (action.kind === 'interrupt') {
+        // Escape is hard by default, the terminal habit: stop now. ⇧Esc is softer: stop after this tool.
+        const vm = window.__vm;
+        const ctl = vm && typeof vm.get === 'function' ? vm.get(s.focused) : null;
+        if (ctl && typeof ctl.interruptTurn === 'function') ctl.interruptTurn(action.tier).catch(() => undefined);
       }
     };
     window.addEventListener('keydown', this._kd);

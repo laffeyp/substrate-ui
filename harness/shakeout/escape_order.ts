@@ -3,9 +3,9 @@
 // Escape's order (sprint 209; plan PLAN-2026-11-04-shell-to-react-r5.md, A11).
 //
 // Escape closes find, then a dialog, then a menu, then a surface; with none open it interrupts the
-// focused pane's running turn, hard, or soft with Shift (web/reveal_component.ts:976-998). The
-// deterministic driver answers at once, so for the interrupt branch the gate sets the controller's
-// snapshot to running and records what window.__vm.interruptTurn receives; the controller's own
+// focused pane's running turn, hard, or soft with Shift (web/app/keymap.ts). The deterministic driver
+// answers at once, so for the interrupt branch the gate sets the controller's snapshot to running and
+// records what the focused pane's controller's interruptTurn receives; the controller's own
 // interrupt is not under test. ⌘W is a menu accelerator that synthetic keys do not reach; it is
 // gated through its menu item in menu_commands.ts.
 
@@ -65,7 +65,8 @@ async function main(): Promise<void> {
     await win.evaluate(() => {
       const w = window as any;
       w.__interruptCalls = [] as string[];
-      w.__vm.interruptTurn = (tier: string) => { w.__interruptCalls.push(tier); return Promise.resolve(); };
+      // The focused pane's controller takes the interrupt (web/app/keymap.ts, sprint 327).
+      w.__vm.get(1).interruptTurn = (tier: string) => { w.__interruptCalls.push(tier); return Promise.resolve(); };
       w.__vm.get(1).patch({ parkReason: null, endedReason: null, connection: "connected" });
     });
     await win.waitForFunction(() => !(window as any).__vm.get(1).snapshot().parkReason, undefined, { timeout: 5_000 });
