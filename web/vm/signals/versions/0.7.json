@@ -1538,5 +1538,186 @@
     "window_id": "int or null: the BrowserWindow id (main and window records)",
     "pane_id": "int or null: the pane whose controller emitted it; null for window- or app-level code"
   },
-  "validator_extras": "strict"
+  "validator_extras": "strict",
+  "sessions": {
+    "_comment": "Layer 3. Nesting: app_boot contains server_run and window; window contains pane; pane contains picker_run and pane_session.",
+    "strata": [
+      {
+        "name": "app_boot",
+        "open": "APP_BOOTED",
+        "close": "APP_QUIT_COMPLETED",
+        "persistent": [
+          "boot_id",
+          "app_commit",
+          "kernel_commit",
+          "vocab_version",
+          "packaged",
+          "home_kind"
+        ],
+        "frames": "every record with this boot_id",
+        "parent": null
+      },
+      {
+        "name": "server_run",
+        "open": "SERVER_STARTED",
+        "close": "SERVER_STOPPED",
+        "persistent": [
+          "port"
+        ],
+        "frames": "process=server records",
+        "parent": "app_boot"
+      },
+      {
+        "name": "window",
+        "open": "WINDOW_BOOTED",
+        "close": "WINDOW_CLOSED (main's record; the window's own trace ends without a close tag when the window is destroyed)",
+        "persistent": [
+          "window_id",
+          "vocab_version"
+        ],
+        "frames": "records with this window_id",
+        "parent": "app_boot"
+      },
+      {
+        "name": "pane",
+        "open": "PANE_OPENED",
+        "close": "PANE_CLOSED",
+        "persistent": [
+          "pane_id"
+        ],
+        "frames": "records with this pane_id",
+        "parent": "window"
+      },
+      {
+        "name": "picker_run",
+        "open": "PANE_OPENED (unbound) or PICKER_FOLDER_DISARMED",
+        "close": "PICKER_COMMITTED or PANE_CLOSED",
+        "re_entry": "PICKER_FOLDER_DISARMED returns to the folder column",
+        "persistent": [],
+        "frames": "picker tags of the pane",
+        "parent": "pane"
+      },
+      {
+        "name": "pane_session",
+        "open": "SESSION_OPEN_ACKED or SESSION_ATTACH_STARTED",
+        "close": "SESSION_ENDED_LOCAL or PANE_CLOSED",
+        "persistent": [
+          "session_id"
+        ],
+        "frames": "session, turn, stream and transcript tags of the pane; joins the kernel Session by session_id",
+        "parent": "pane"
+      }
+    ]
+  },
+  "temporal_invariants": {
+    "invariants": [
+      {
+        "id": "T1",
+        "kind": "window",
+        "from": "SERVER_SPAWNED",
+        "to": "SERVER_BOUND",
+        "within_ms": 5000,
+        "source": "electron/main.js READBACK_TIMEOUT_MS"
+      },
+      {
+        "id": "T2",
+        "kind": "window",
+        "from": "SERVER_BOUND",
+        "to": "SERVER_STARTED",
+        "within_ms": 15000,
+        "source": "electron/main.js HEALTH_TIMEOUT_MS"
+      },
+      {
+        "id": "T3",
+        "kind": "window",
+        "from": "APP_QUIT_REQUESTED",
+        "to": "APP_QUIT_COMPLETED",
+        "within_ms": 45000,
+        "source": "electron/main.js KILL_GRACE_MS"
+      },
+      {
+        "id": "T4",
+        "kind": "window",
+        "from": "STREAM_ENVELOPE_APPENDED",
+        "to": "TRANSCRIPT_ROW_DRAWN or TRANSCRIPT_ROW_SKIPPED",
+        "match": [
+          "pane_id",
+          "seq"
+        ],
+        "within_ms": 1000,
+        "source": "Nielsen, Usability Engineering (1993) ch. 5: 1.0 s is the limit for the user's flow of thought; the screen must show what the record holds within it"
+      },
+      {
+        "id": "T5",
+        "kind": "eventually_must",
+        "from": "SESSION_OPEN_REQUESTED",
+        "to": "SESSION_OPEN_ACKED or SESSION_OPEN_REFUSED",
+        "match": [
+          "pane_id"
+        ],
+        "within_ms": 10000,
+        "source": "Nielsen 1993: 10 s is the limit for keeping attention on the dialogue"
+      },
+      {
+        "id": "T6",
+        "kind": "eventually_must",
+        "from": "TURN_SUBMITTED",
+        "to": "TURN_ACK or TURN_REFUSED or TURN_REFUSED_VIEW_ONLY",
+        "match": [
+          "pane_id"
+        ],
+        "within_ms": 10000,
+        "source": "Nielsen 1993, as T5"
+      }
+    ]
+  },
+  "state_transitions": {
+    "rules": [
+      {
+        "id": "S1",
+        "kind": "terminal",
+        "statement": "APP_BOOTED is main's first record of a boot; WINDOW_BOOTED a window's first; SERVER_STARTED the server's first after its process starts."
+      },
+      {
+        "id": "S2",
+        "kind": "terminal",
+        "statement": "APP_QUIT_COMPLETED is main's last record of a boot."
+      },
+      {
+        "id": "S3",
+        "kind": "pairing_ordering",
+        "statement": "PICKER_FOLDER_ARMED precedes any PICKER_LINE_ENTERED of the same pane since its last PANE_OPENED or PICKER_FOLDER_DISARMED."
+      },
+      {
+        "id": "S4",
+        "kind": "pairing_ordering",
+        "statement": "PICKER_COMMITTED follows PICKER_LINE_ENTERED with line tone for the same pane, and is followed by PANE_BOUND with how picker."
+      },
+      {
+        "id": "S5",
+        "kind": "forbidden_after",
+        "statement": "A pane holds one session at a time: after SESSION_OPEN_ACKED or SESSION_ATTACH_STARTED for a pane, no second one for that pane until SESSION_ENDED_LOCAL or PANE_CLOSED."
+      },
+      {
+        "id": "S6",
+        "kind": "pairing_ordering",
+        "statement": "SESSION_OPEN_ACKED follows SESSION_OPEN_REQUESTED for the same pane."
+      },
+      {
+        "id": "S7",
+        "kind": "pairing_ordering",
+        "statement": "Across processes: each SESSION_CREATED (server) pairs with exactly one SESSION_OPEN_ACKED (window) with the same session_id in the same boot."
+      },
+      {
+        "id": "S8",
+        "kind": "pairing_ordering",
+        "statement": "TURN_SUBMITTED for a pane follows that pane's SESSION_OPEN_ACKED or SESSION_ATTACH_STARTED; each TURN_ACCEPTED (server) pairs with one TURN_ACK (window) for the same session_id and turn_index."
+      },
+      {
+        "id": "S9",
+        "kind": "pairing_ordering",
+        "statement": "Each window *_REFUSED tag caused by a server answer pairs with one API_REFUSED (server) in the same boot."
+      }
+    ]
+  }
 }
