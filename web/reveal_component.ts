@@ -74,6 +74,7 @@ import { chipLabel, driverLabel, modelRows } from "./app/derive/driver_label";
 import { picker } from "./app/state/picker";
 import { stream } from "./app/state/stream";
 import { meta, selectSeq, setMode } from "./app/state/meta";
+import { closePane, dragCols, dragRows, gutterStops, MAX_PANES, splitPane, trackList } from "./app/derive/panes";
 import { language, setLanguageLane } from "./app/state/language";
 import { languageKey, selectedTurn } from "./app/derive/language_keys";
 import { findText, streamRows } from "./app/derive/stream";
@@ -215,54 +216,10 @@ class Component extends DCLogic {
       controller.endSession("user_close").catch(() => undefined);
     }
     if (vm && typeof vm.drop === "function") vm.drop(paneId);
+    // The layout after the close: web/app/derive/panes.ts (sprint 319).
     this.setState(s => {
-      const closed = s.panes.find(p => p.id === paneId);
-      const remaining = s.panes.filter(p => p.id !== paneId);
-      // Guard again inside setState in case a race added/removed panes
-      // between the outer check and the state resolve.
-      if (remaining.length === 0) return {};
-      // Single-pane collapse: reset the grid to one cell and hand it
-      // to the remaining pane. Simplest correct outcome for the split-
-      // once-then-close-once case Peter hit.
-      if (remaining.length === 1) {
-        const only = Object.assign({}, remaining[0], { col: 1, row: 1, cw: 1, rh: 1 });
-        return {
-          panes: [only], focused: only.id,
-          cols: 1, rows: 1, colW: [1], rowW: [1],
-        };
-      }
-      // Multi-pane case: find the ONE remaining pane whose rectangle
-      // shares the closed pane's exact edge along one axis, and grow
-      // it to absorb the freed region. Falls to "leave a gap" if no
-      // neighbour aligns exactly (rare with strict binary splits).
-      const cCol = (closed && closed.col) || 1;
-      const cRow = (closed && closed.row) || 1;
-      const cCw  = (closed && closed.cw)  || 1;
-      const cRh  = (closed && closed.rh)  || 1;
-      const grown = remaining.map(p => Object.assign({}, p));
-      const absorb = grown.find(p => {
-        // Right-neighbour of the closed cell absorbs its column span.
-        if (p.row === cRow && p.rh === cRh && p.col + p.cw === cCol) return true;
-        // Left-neighbour absorbs to the left.
-        if (p.row === cRow && p.rh === cRh && cCol + cCw === p.col) return true;
-        // Top-neighbour absorbs downwards.
-        if (p.col === cCol && p.cw === cCw && p.row + p.rh === cRow) return true;
-        // Bottom-neighbour absorbs upwards.
-        if (p.col === cCol && p.cw === cCw && cRow + cRh === p.row) return true;
-        return false;
-      });
-      if (absorb) {
-        if (absorb.row === cRow && absorb.rh === cRh && absorb.col + absorb.cw === cCol) {
-          absorb.cw += cCw;
-        } else if (absorb.row === cRow && absorb.rh === cRh && cCol + cCw === absorb.col) {
-          absorb.col = cCol; absorb.cw += cCw;
-        } else if (absorb.col === cCol && absorb.cw === cCw && absorb.row + absorb.rh === cRow) {
-          absorb.rh += cRh;
-        } else {
-          absorb.row = cRow; absorb.rh += cRh;
-        }
-      }
-      return { panes: grown, focused: grown[0].id };
+      const out = closePane({ cols: s.cols, rows: s.rows, colW: s.colW, rowW: s.rowW }, s.panes, paneId);
+      return out ? { ...out.grid, panes: out.panes, focused: out.focused } : {};
     });
   }
 
@@ -520,42 +477,14 @@ class Component extends DCLogic {
     // when the focused pane's span in the split axis is 1. `patch` sets fields of the new pane;
     // `then(id)` runs once it is in the layout (UI sprint 182).
     let madeId = null;
+    // The layout after the split: web/app/derive/panes.ts (sprint 319).
     this.setState(s => {
-      if ((s.panes || []).length >= 8) return {};
-      let { cols, rows } = s;
-      let colW = s.colW.slice(), rowW = s.rowW.slice();
-      const panes = s.panes.map(p => Object.assign({}, p, {
-        col: p.col || 1, row: p.row || 1,
-        cw: p.cw || cols, rh: p.rh || rows,
-      }));
-      const idx = panes.findIndex(p => p.id === s.focused);
-      const target = idx >= 0 ? panes[idx] : panes[0];
-      if (dir === 'right') {
-        if (target.cw < 2) {
-          cols *= 2;
-          colW = colW.reduce((acc, w) => (acc.push(w, w), acc), []);
-          for (const p of panes) { p.col = p.col * 2 - 1; p.cw = p.cw * 2; }
-        }
-        const half = target.cw / 2;
-        const newPane = Object.assign(this._newPane(), { col: target.col + half, row: target.row, cw: half, rh: target.rh }, patch || {});
-        target.cw = half;
-        panes.push(newPane);
-        madeId = newPane.id;
-        // UI sprint 146: a new pane is drawn in the panes view, so making one goes there.
-        return { cols, rows, colW, rowW, panes, focused: newPane.id, revealed: false, surface: null };
-      }
-      // dir === 'down'
-      if (target.rh < 2) {
-        rows *= 2;
-        rowW = rowW.reduce((acc, h) => (acc.push(h, h), acc), []);
-        for (const p of panes) { p.row = p.row * 2 - 1; p.rh = p.rh * 2; }
-      }
-      const half = target.rh / 2;
-      const newPane = Object.assign(this._newPane(), { col: target.col, row: target.row + half, cw: target.cw, rh: half }, patch || {});
-      target.rh = half;
-      panes.push(newPane);
-      madeId = newPane.id;
-      return { cols, rows, colW, rowW, panes, focused: newPane.id, revealed: false, surface: null };
+      if ((s.panes || []).length >= MAX_PANES) return {};
+      const out = splitPane({ cols: s.cols, rows: s.rows, colW: s.colW, rowW: s.rowW }, s.panes, s.focused, dir, Object.assign(this._newPane(), patch || {}));
+      if (!out) return {};
+      madeId = out.made.id;
+      // UI sprint 146: a new pane is drawn in the panes view, so making one goes there.
+      return { ...out.grid, panes: out.panes, focused: out.made.id, revealed: false, surface: null };
     }, () => {
       if (madeId == null) return;
       const vm = window.__vm;
@@ -760,17 +689,8 @@ class Component extends DCLogic {
     this._gm = (e) => {
       if (!this._gut) return;
       const g = this._gut; const s = this.state;
-      if (g.type === 'col') {
-        const total = s.colW.reduce((a, b) => a + b, 0);
-        const d = (e.movementX / Math.max(300, (s.winW || window.innerWidth))) * total;
-        const w = s.colW.slice(); w[g.i - 1] = Math.max(.25, w[g.i - 1] + d); w[g.i] = Math.max(.25, w[g.i] - d);
-        this.setState({ colW: w });
-      } else {
-        const total = s.rowW.reduce((a, b) => a + b, 0);
-        const d = (e.movementY / 600) * total;
-        const w = s.rowW.slice(); w[g.i - 1] = Math.max(.3, w[g.i - 1] + d); w[g.i] = Math.max(.3, w[g.i] - d);
-        this.setState({ rowW: w });
-      }
+      if (g.type === 'col') this.setState({ colW: dragCols(s.colW, g.i, e.movementX, s.winW || window.innerWidth) });
+      else this.setState({ rowW: dragRows(s.rowW, g.i, e.movementY) });
     };
     this._gu = () => { this._gut = null; };
     window.addEventListener('mousemove', this._gm); window.addEventListener('mouseup', this._gu);
@@ -1128,10 +1048,10 @@ class Component extends DCLogic {
       revealLabel: state.revealed ? 'panes' : 'meta',
       revealBtnColor: state.revealed && !surf ? '#212327' : '#9aa0a8', revealBtnBg: state.revealed && !surf ? '#82a5c8' : '#3d434c',
       fontSize: fontSize(13),
-      panes, paneCols: state.colW.map(w => w.toFixed(3) + 'fr').join(' '), paneRows: state.rowW.map(w => w.toFixed(3) + 'fr').join(' '), focusedName: fp.name, focusedId: fp.id,
+      panes, paneCols: trackList(state.colW), paneRows: trackList(state.rowW), focusedName: fp.name, focusedId: fp.id,
       revealFlexL: meta.getSnapshot().split.toFixed(3) + ' 1 0%',
-      colGutters: state.colW.slice(0, -1).map((_, i) => { const total = state.colW.reduce((a, b) => a + b, 0); const left = state.colW.slice(0, i + 1).reduce((a, b) => a + b, 0) / total * 100; return { left: left.toFixed(2) + '%', grab: (ev) => { ev.preventDefault(); this._gut = { type: 'col', i: i + 1 }; } }; }),
-      rowGutters: state.rowW.slice(0, -1).map((_, i) => { const total = state.rowW.reduce((a, b) => a + b, 0); const top = state.rowW.slice(0, i + 1).reduce((a, b) => a + b, 0) / total * 100; return { top: top.toFixed(2) + '%', grab: (ev) => { ev.preventDefault(); this._gut = { type: 'row', i: i + 1 }; } }; }),
+      colGutters: gutterStops(state.colW).map((left, i) => ({ left, grab: (ev) => { ev.preventDefault(); this._gut = { type: 'col', i: i + 1 }; } })),
+      rowGutters: gutterStops(state.rowW).map((top, i) => ({ top, grab: (ev) => { ev.preventDefault(); this._gut = { type: 'row', i: i + 1 }; } })),
       // The top bar's workspace card (web/app/derive/workspace_card.ts, sprint 233; F328).
       ...(() => {
         const card = workspaceCard({ unbound: !!fp.unbound, ws: fp.ws || '', shape: fp.shape || '', name: fp.name || '',
