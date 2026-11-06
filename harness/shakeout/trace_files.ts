@@ -13,6 +13,7 @@
 
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { execFileSync } from "node:child_process";
 import { _electron as electron } from "playwright";
 import { launchArgs, waitForApp } from "./lib/electron";
 
@@ -67,6 +68,15 @@ async function main(): Promise<void> {
     if (main[0]?.name !== "APP_BOOTED") throw new Error(`main.jsonl does not open with APP_BOOTED: ${main[0]?.name}`);
     for (const f of ["app_version", "app_commit", "kernel_commit", "vocab_version", "packaged", "home_kind"]) {
       if (!(f in (main[0].payload ?? {}))) throw new Error(`APP_BOOTED lacks ${f}`);
+    }
+    // Sprint 354: the commit names the code that ran; "+dirty" when the tree had uncommitted changes.
+    const appCommit = String(main[0].payload?.app_commit);
+    if (!/^[0-9a-f]{12,40}(\+dirty)?$/.test(appCommit)) throw new Error(`APP_BOOTED.app_commit is ${appCommit}`);
+    if (main[0].payload?.packaged === false) {
+      const repo = join(__dirname, "..", "..");
+      const head = execFileSync("git", ["-C", repo, "rev-parse", "--short=12", "HEAD"], { encoding: "utf8" }).trim();
+      const dirty = execFileSync("git", ["-C", repo, "status", "--porcelain", "--", ".", ":!runs/packaged", ":!captures"], { encoding: "utf8" }).trim() !== "";
+      if (appCommit !== head + (dirty ? "+dirty" : "")) throw new Error(`APP_BOOTED.app_commit ${appCommit}; the tree is ${head}${dirty ? "+dirty" : ""}`);
     }
     if (!main.some((r) => r.name === "TRACE_OPENED")) throw new Error("main.jsonl has no TRACE_OPENED");
     const last = main[main.length - 1];

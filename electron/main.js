@@ -82,10 +82,15 @@ function traceEmit(tag, payload) {
   if (!inMainRecord) { inMainRecord = true; reportLoss("main.jsonl", "main", wrote); inMainRecord = false; }
 }
 
-function gitHead(dir) {
+// A commit with uncommitted changes in the paths the build ships is "<sha>+dirty", so a trace never
+// names code it was not built from. The paths are scripts/release.sh's clean-tree check.
+function gitHead(dir, paths) {
   try {
     const r = spawnSync("git", ["-C", dir, "rev-parse", "--short=12", "HEAD"], { encoding: "utf8", timeout: 2000 });
-    return r.status === 0 ? r.stdout.trim() : "unrecorded";
+    if (r.status !== 0) return "unrecorded";
+    const st = spawnSync("git", ["-C", dir, "status", "--porcelain", "--", ...paths], { encoding: "utf8", timeout: 5000 });
+    if (st.status !== 0) return r.stdout.trim() + "+unknown";
+    return r.stdout.trim() + (st.stdout.trim() ? "+dirty" : "");
   } catch { return "unrecorded"; }
 }
 
@@ -94,10 +99,16 @@ function buildCommits() {
     try {
       const plist = fs.readFileSync(path.join(process.resourcesPath, "..", "Info.plist"), "utf8");
       const read = (key) => { const m = plist.match(new RegExp("<key>" + key + "</key>\\s*<string>([^<]*)</string>")); return m ? m[1] : "unrecorded"; };
-      return { app_commit: read("SubstrateUICommit"), kernel_commit: read("SubstrateKernelCommit") };
+      // fetch-python-runtime.sh marks a kernel built from uncommitted changes not releasable.
+      const kernel = read("SubstrateKernelCommit");
+      const kernelDirty = read("SubstrateKernelReleasable") === "false" && kernel !== "unrecorded";
+      return { app_commit: read("SubstrateUICommit"), kernel_commit: kernel + (kernelDirty ? "+dirty" : "") };
     } catch { return { app_commit: "unrecorded", kernel_commit: "unrecorded" }; }
   }
-  return { app_commit: gitHead(path.join(__dirname, "..")), kernel_commit: gitHead(path.join(__dirname, "..", "..", "substrate")) };
+  return {
+    app_commit: gitHead(path.join(__dirname, ".."), [".", ":!runs/packaged", ":!captures"]),
+    kernel_commit: gitHead(path.join(__dirname, "..", "..", "substrate"), ["src/", "pyproject.toml"]),
+  };
 }
 
 function vocabVersion() {

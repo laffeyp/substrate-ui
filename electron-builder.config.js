@@ -20,6 +20,19 @@
 // around the stapled .app. electron-builder handles this whole
 // sequence when `mac.notarize: true` is set.
 
+// The UI commit a build records. scripts/release.sh sets SUBSTRATE_UI_COMMIT from a clean tree; any
+// other build records HEAD, marked "+dirty" when release.sh's clean-tree paths have uncommitted
+// changes, so APP_BOOTED in a local build's trace names the code it was built from (sprint 354).
+const UI_COMMIT = (() => {
+  if (process.env.SUBSTRATE_UI_COMMIT) return process.env.SUBSTRATE_UI_COMMIT;
+  const { spawnSync } = require("node:child_process");
+  const head = spawnSync("git", ["-C", __dirname, "rev-parse", "HEAD"], { encoding: "utf8" });
+  if (head.status !== 0) return "unrecorded";
+  const st = spawnSync("git", ["-C", __dirname, "status", "--porcelain", "--", ".", ":!runs/packaged", ":!captures"], { encoding: "utf8" });
+  if (st.status !== 0) return head.stdout.trim() + "+unknown";
+  return head.stdout.trim() + (st.stdout.trim() ? "+dirty" : "");
+})();
+
 /** @type {import("electron-builder").Configuration} */
 const KERNEL_SOURCE = (() => {
   try {
@@ -128,11 +141,11 @@ module.exports = {
     notarize: true,
     // Sprint 098: the build records the commits it was built from, in Info.plist, BEFORE
     // signing (a change to a signed bundle breaks its seal, Apple TN2206). scripts/release.sh
-    // sets SUBSTRATE_UI_COMMIT; a build made outside it says "unrecorded". Sprint 100: the
+    // sets SUBSTRATE_UI_COMMIT; a build made outside it records HEAD (UI_COMMIT). Sprint 100: the
     // kernel fields come from build/python/KERNEL_SOURCE, which fetch-python-runtime.sh writes
     // for every build, so pack:dev records the kernel commit too.
     extendInfo: {
-      SubstrateUICommit: process.env.SUBSTRATE_UI_COMMIT || "unrecorded",
+      SubstrateUICommit: UI_COMMIT,
       SubstrateKernelCommit: KERNEL_SOURCE.commit,
       SubstrateKernelVersion: KERNEL_SOURCE.version,
       SubstrateKernelReleasable: String(KERNEL_SOURCE.releasable),
