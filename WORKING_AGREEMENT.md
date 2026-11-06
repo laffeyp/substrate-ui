@@ -61,7 +61,7 @@
 *No additions without surfacing per AGENTS.md.*
 
 - **Backend:** Python standard library + `msgspec` + `substrate`. No web framework.
-- **Frontend:** TypeScript built by Vite; React 18.3.1 and ReactDOM 18.3.1 in `dependencies`, loaded as UMD globals from `./vendor/` with `integrity` hashes (dc-runtime reads `window.React`; sprint 199), imported through `web/shims/`. Dev dependencies are pinned in `package.json`: electron, electron-builder, @electron/notarize, typescript, vite, tsx, eslint with typescript-eslint, playwright, pixelmatch (the pixel gate, sprint 194), jsdom (the DOM for unit specs of mounted components, sprint 206), @types/jsdom, @types/node, @types/react, @types/react-dom.
+- **Frontend:** TypeScript built by Vite; React 18.3.1 and ReactDOM 18.3.1 in `dependencies`, bundled from `node_modules` as modules (sprints 329, 331; the UMD copies, `./vendor/` and `web/shims/` are retired with dc-runtime). CodeMirror 6 in `dependencies` for the editor view, pinned: `@codemirror/state` 6.7.6, `@codemirror/view` 6.43.15, `@codemirror/commands` 6.11.1, all MIT (sprint 347; the choice over Monaco is `process/planning/2026-11-04-editor-level/RESEARCH-2026-11-04-editor-level-and-modes-r8.md`). Dev dependencies are pinned in `package.json`: electron, electron-builder, @electron/notarize, typescript, vite, tsx, eslint with typescript-eslint, playwright, pixelmatch (the pixel gate, sprint 194), jsdom (the DOM for unit specs of mounted components, sprint 206), @types/jsdom, @types/node, @types/react, @types/react-dom.
 
 ---
 
