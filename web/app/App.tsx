@@ -43,6 +43,7 @@ import { languageKey, selectedTurn } from "./derive/language_keys";
 import { windowKey } from "./keymap";
 import { findText, streamRows } from "./derive/stream";
 import { onCommand, shell } from "./state/shell";
+import { closePage, metaBase, pageOf, show, START, toggleMeta, togglePage, type Page, type ViewState } from "./derive/open_view";
 import { ActivityLine, TaskRows } from "./ActivityLine";
 import { AssayPage } from "./AssayPage";
 import { Dialogs } from "./Dialogs";
@@ -133,8 +134,8 @@ export interface AppProps {
 }
 
 interface AppState {
-  revealed: boolean;
-  surface: (typeof Surface)[keyof typeof Surface] | null;
+  /** The open view and the view a page returns to (web/app/derive/open_view.ts, sprint 346). */
+  vs: ViewState;
   panes: AppPane[];
   focused: number;
   cols: number;
@@ -170,7 +171,7 @@ const stop = (ev: unknown) => { const e = ev as { stopPropagation?: () => void }
 
 export class App extends React.Component<AppProps, AppState> {
   override state: AppState = {
-    revealed: false, surface: null,
+    vs: START,
     // No model until one is picked: pane 1 names none and preselects none.
     panes: [newPaneFields(1)],
     focused: 1, cols: 1, rows: 1, colW: [1], rowW: [1], ddFor: null, wsFor: null,
@@ -536,7 +537,7 @@ export class App extends React.Component<AppProps, AppState> {
       const out = splitPane({ cols: s.cols, rows: s.rows, colW: s.colW, rowW: s.rowW }, s.panes, s.focused, dir, { ...this.newPane(), ...(patch || {}) });
       if (!out) return null;
       madeId = out.made.id;
-      return { ...out.grid, panes: out.panes, focused: out.made.id, revealed: false, surface: null };
+      return { ...out.grid, panes: out.panes, focused: out.made.id, vs: show("panes") };
     }, () => {
       if (madeId === null) return;
       vmOf()?.setActive(madeId);
@@ -566,7 +567,7 @@ export class App extends React.Component<AppProps, AppState> {
         if (shifts.length) selectSeq(shifts[shifts.length - 1].source_seq);
       }
       this.langTicks[changedPane] = tick;
-      if (revealed) this.setState({ controllerSnapshots: { ...snapshots }, revealed: true, surface: null });
+      if (revealed) this.setState({ controllerSnapshots: { ...snapshots }, vs: show("meta") });
       else this.setState({ controllerSnapshots: { ...snapshots } });
       // The focused pane's session is the URL's `session`, so a reload reopens it.
       if (changedPane === focusedId && snap.sessionId !== (this.urlSessions[changedPane] ?? null)) {
@@ -590,7 +591,7 @@ export class App extends React.Component<AppProps, AppState> {
       const vm = vmOf();
       if (!vm || !r.sessionId) return;
       this.setState((s) => ({
-        surface: null,
+        vs: closePage(s.vs),
         panes: s.panes.map((pn) => (pn.id === s.focused ? { ...pn, unbound: false, ws: r.workspacePath || "", shape: r.workspaceShape || "flat", name: r.name || pn.name } : pn)),
       }));
       void vm.attachExisting(r.sessionId);
@@ -653,14 +654,14 @@ export class App extends React.Component<AppProps, AppState> {
     const mt = meta.getSnapshot();
     // The language lens's turns, built only while it shows (web/app/derive/language_keys.ts).
     let lens: Lens | null = null;
-    if (s.revealed && mt.mode === GraphMode.Language && !s.surface) {
+    if (metaBase(s.vs) && mt.mode === GraphMode.Language && !pageOf(s.vs)) {
       const lg = language.getSnapshot();
       lens = buildLanguageLens(this.streamView.language, { stream: lg.stream, selTurn: selectedTurn(this.streamView.envelopes, mt.sel), lane: lg.lane, view: lg.view });
     }
     const caret = el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement ? el.selectionStart === el.selectionEnd : false;
     const action = windowKey(e, {
       typing: isBox(el), targetTyping: isBox(e.target), caretOnly: isBox(el) && caret,
-      surface: s.surface, revealed: s.revealed,
+      surface: pageOf(s.vs), revealed: metaBase(s.vs),
       pickerFocused: !!(fp && fp.unbound && !(fsnap && fsnap.sessionId)),
       languageTurns: !!(lens && lens.turns.length),
       findOpen: find.getSnapshot().open, dialogOpen: dialogOpen(), cardOpen: !!(s.ddFor || s.wsFor),
@@ -685,7 +686,7 @@ export class App extends React.Component<AppProps, AppState> {
     if (action.kind === "close-find") { closeFind(); return; }
     if (action.kind === "close-dialog") { closeDialog(); return; }
     if (action.kind === "close-cards") { this.setState({ ddFor: null, wsFor: null }); return; }
-    if (action.kind === "close-surface") { this.setState({ surface: null }); return; }
+    if (action.kind === "close-surface") { this.setState((st) => ({ vs: closePage(st.vs) })); return; }
     e.preventDefault();
     if (action.kind === "toggle-meta") this.toggleMeta();
     else if (action.kind === "toggle-tools") toggleToolOutputMode();
@@ -706,7 +707,7 @@ export class App extends React.Component<AppProps, AppState> {
     if (this.panesView) panesStore.set({ view: this.panesView });
     const s = this.state;
     const fp = this.pane(s.focused) ?? s.panes[0];
-    chrome.set({ focusedPane: s.focused, unbound: fp.unbound, title: this.paneTitle(fp), surfaceOpen: !!s.surface, rateLimited: this.props.simulateRateLimit ?? false });
+    chrome.set({ focusedPane: s.focused, unbound: fp.unbound, title: this.paneTitle(fp), surfaceOpen: !!pageOf(s.vs), rateLimited: this.props.simulateRateLimit ?? false });
     firstRun.set({ forced: this.props.firstRun ?? false });
     if (this.topBarVals && this.topBarActs) {
       topBar.set(this.topBarVals);
@@ -736,7 +737,7 @@ export class App extends React.Component<AppProps, AppState> {
       const rowW = Array.from({ length: rows }, (_, i) => state.rowW[i] || 1);
       this.setState({ cols, rows, colW, rowW, panes });
     }
-    if (changed("view") && pv && (pv === "revealed") !== state.revealed) this.setState({ revealed: pv === "revealed", surface: null });
+    if (changed("view") && pv && (pv === "revealed") !== metaBase(state.vs)) this.setState({ vs: show(pv === "revealed" ? "meta" : "panes") });
   }
   override componentWillUnmount(): void {
     for (const off of this.offs.splice(0)) off();
@@ -747,20 +748,20 @@ export class App extends React.Component<AppProps, AppState> {
   // picker with no session; back to the panes always works.
   private toggleMeta(): void {
     const s = this.state;
-    if (!s.revealed) {
+    if (!metaBase(s.vs)) {
       const fp = this.pane(s.focused);
       const fs = this.snap(s.focused);
       if (fp && fp.unbound && !(fs && fs.sessionId)) return;
     }
-    this.setState((st) => ({ revealed: !st.revealed, surface: null }));
+    this.setState((st) => ({ vs: toggleMeta(st.vs) }));
   }
   // UI sprint 145: what the top bar calls a pane: its session's name when it has one, else its label.
   private paneTitle(pane: AppPane): string {
     return this.snap(pane.id)?.sessionName || pane.name;
   }
   // Sprint 085: the records page reads the sessions again on every open; boot's one read can miss.
-  private toggleSurface(name: NonNullable<AppState["surface"]>): void {
-    this.setState((s) => ({ surface: s.surface === name ? null : name }));
+  private toggleSurface(name: Page): void {
+    this.setState((s) => ({ vs: togglePage(s.vs, name) }));
     if (name === Surface.Records) {
       const vm = vmOf();
       vm?.loadLiveSessions().catch(() => undefined);
@@ -900,8 +901,8 @@ export class App extends React.Component<AppProps, AppState> {
       // Meta → panes always works; panes → meta waits until the focused pane leaves its picker.
       toggleReveal: () => {
         const s = this.state;
-        if (!s.revealed) { const p = this.pane(s.focused); if (p && p.unbound) return; }
-        this.setState((st) => ({ revealed: !st.revealed, surface: null }));
+        if (!metaBase(s.vs)) { const p = this.pane(s.focused); if (p && p.unbound) return; }
+        this.setState((st) => ({ vs: toggleMeta(st.vs) }));
       },
     };
   }
@@ -910,9 +911,9 @@ export class App extends React.Component<AppProps, AppState> {
     const state = this.state;
     const fp = this.pane(state.focused) ?? state.panes[0];
     const transcriptSize = fontSize(this.props.transcriptFontSize ?? 13);
-    const surf = state.surface;
-    const showTerminal = !surf && !state.revealed;
-    const showRevealed = !surf && state.revealed;
+    const surf = pageOf(state.vs);
+    const showTerminal = state.vs.view === "panes";
+    const showRevealed = state.vs.view === "meta";
     return (
       <div style={{ height: "100vh", display: "flex", flexDirection: "column", background: "#212327", color: "#b9bec5", fontFamily: "ui-monospace,'SF Mono',Menlo,Consolas,monospace", fontSize: 13, overflow: "hidden" }}>
         {/* One top bar (UI sprint 136): it shows the focused pane. */}
@@ -949,7 +950,7 @@ export class App extends React.Component<AppProps, AppState> {
   /** The top bar's fields for the focused pane (web/app/state/top_bar.ts, sprint 231). */
   private topBarView(fp: AppPane, fsnap: Snapshot | undefined): TopBarState {
     const state = this.state;
-    const surf = state.surface;
+    const surf = pageOf(state.vs);
     const title = this.paneTitle(fp);
     const driver = this.paneDriver(fp) || "";
     const label = this.driverLabelOf(driver, fsnap);
@@ -984,9 +985,9 @@ export class App extends React.Component<AppProps, AppState> {
       escHint: surf ? "esc — back" : "",
       recordsColor: surf === Surface.Records ? "#e2e5e9" : "#9aa0a8",
       studioColor: surf === Surface.Studio ? "#e2e5e9" : "#9aa0a8",
-      revealLabel: state.revealed ? "panes" : "meta",
-      revealColor: state.revealed && !surf ? "#212327" : "#9aa0a8",
-      revealBg: state.revealed && !surf ? "#82a5c8" : "#3d434c",
+      revealLabel: metaBase(state.vs) ? "panes" : "meta",
+      revealColor: metaBase(state.vs) && !surf ? "#212327" : "#9aa0a8",
+      revealBg: metaBase(state.vs) && !surf ? "#82a5c8" : "#3d434c",
     };
   }
 }
