@@ -13,7 +13,7 @@ import { join } from "node:path";
 import { _electron as electron } from "playwright";
 import { launchArgs, waitForApp } from "./lib/electron";
 
-type Rec = { boot_id: string; process: string; proc_seq: number; window_id: number | null; name: string; payload?: Record<string, unknown> };
+type Rec = { boot_id: string; process: string; proc_seq: number; window_id: number | null; pane_id?: number | null; name: string; payload?: Record<string, unknown> };
 
 function readJsonl(path: string): Rec[] {
   return readFileSync(path, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as Rec);
@@ -77,6 +77,13 @@ async function main(): Promise<void> {
     if (recs.some((r, i) => r.proc_seq !== i)) throw new Error("window records out of proc_seq order");
     if (recs.some((r) => r.boot_id !== newest || r.process !== "window" || typeof r.window_id !== "number")) throw new Error("a window record lacks its context");
     if (!recs.some((r) => r.name === "PICKER_FOLDER_ARMED")) throw new Error("the picker's PICKER_FOLDER_ARMED is not in the window file");
+    // Sprint 352: the pane controller stamps its pane; window-level code (the picker) leaves it null and
+    // names the pane in its payload.
+    const fromController = recs.filter((r) => ["SESSIONS_LOADED", "WORKSPACES_LOADED", "BUNDLE_ROSTER_LOADED", "DRIVER_ROSTER_LOADED"].includes(r.name));
+    if (!fromController.length) throw new Error("no controller record in the window file");
+    if (fromController.some((r) => r.pane_id !== 1)) throw new Error(`a controller record lacks pane_id 1: ${JSON.stringify(fromController.map((r) => [r.name, r.pane_id]))}`);
+    const armed = recs.find((r) => r.name === "PICKER_FOLDER_ARMED");
+    if (armed && (armed.pane_id !== null || armed.payload?.pane_id !== 1)) throw new Error("PICKER_FOLDER_ARMED should carry pane_id null in context and 1 in payload");
     if (process.env.TRACE_PRINT) for (const r of [...main, ...recs]) console.log(JSON.stringify(r));
     console.log(`trace_files: ok — ${traceDir}: main ${main.length} lines (APP_BOOTED … APP_QUIT_COMPLETED), ${winFiles[0]} ${recs.length} lines, PICKER_FOLDER_ARMED present`);
     code = 0;

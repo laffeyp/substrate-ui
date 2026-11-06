@@ -13,6 +13,10 @@ import { VOCABULARY, VOCAB_VERSION } from "./vocabulary";
 
 export type SignalRecord = {
   ts: number;
+  /** The window's record number from 0 (vocabulary v0.7 record context): the order key in the trace. */
+  proc_seq: number;
+  /** The pane whose controller emitted it; null for window-level code (v0.7 record context). */
+  pane_id: number | null;
   name: string;
   category: string;
   stratum: string;
@@ -33,7 +37,12 @@ function nowMs(): number {
   return Date.now();
 }
 
-export function emit(name: string, payload: Record<string, unknown> = {}): SignalRecord {
+let procSeq = 0;
+/** Records native.signal refused since the last one it took; reported as TRACE_LOST (v0.7). */
+let sendLost = 0;
+let reportingLoss = false;
+
+export function emit(name: string, payload: Record<string, unknown> = {}, context: { pane_id?: number | null } = {}): SignalRecord {
   const spec = VOCABULARY[name];
   if (!spec) {
     throw new Error(
@@ -48,6 +57,8 @@ export function emit(name: string, payload: Record<string, unknown> = {}): Signa
   }
   const record: SignalRecord = {
     ts: +(nowMs() - sessionStart).toFixed(4),
+    proc_seq: procSeq++,
+    pane_id: context.pane_id ?? null,
     name,
     category: spec.category,
     stratum: spec.stratum,
@@ -57,11 +68,21 @@ export function emit(name: string, payload: Record<string, unknown> = {}): Signa
   if (buffer.length > SIGNAL_CAP) buffer.splice(0, buffer.length - SIGNAL_CAP);
   if (typeof window !== "undefined") {
     (window as unknown as { __vmSignals: SignalRecord[] }).__vmSignals = buffer;
-    // The running app's trace on disk (2026-11-06): inside Electron each signal also goes to the main
-    // process, which appends it to signals.jsonl beside substrate.log. The buffer above dies with the
-    // window; this copy lets a session be read after the fact. A failed send never stops an emit.
+    // The trace on disk (v0.7, plan 2026-11-05-sdd-signals item 2): inside Electron each record also
+    // goes to main, which writes it to this launch's window-<id>.jsonl with the boot and window ids.
+    // A send that throws is counted, and the next send that works is followed by a TRACE_LOST with
+    // the count, so a lost record is never silent. A failed send never stops an emit.
     const native = (window as unknown as { native?: { signal?: (r: SignalRecord) => void } }).native;
-    try { native?.signal?.(record); } catch { /* the sink is advisory */ }
+    if (native?.signal) {
+      let sent = false;
+      try { native.signal(record); sent = true; } catch { sendLost += 1; }
+      if (sent && sendLost > 0 && !reportingLoss) {
+        const count = sendLost;
+        sendLost = 0;
+        reportingLoss = true;
+        try { emit("TRACE_LOST", { process: "window", count }); } finally { reportingLoss = false; }
+      }
+    }
   }
   return record;
 }

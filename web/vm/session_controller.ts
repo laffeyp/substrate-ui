@@ -269,6 +269,10 @@ export class SessionController {
    *  pickDriver only fires the card for names in this list. */
   private cliLoginSupported: string[] = [];
 
+  /** The pane this controller serves, set by PaneRegistry.spawn; stamped on every record it emits
+   *  (vocabulary v0.7 record context). Null for a controller no registry spawned (tests, vm_smoke). */
+  paneId: number | null = null;
+
   constructor(private readonly client: SubstrateClient) {}
 
   // ── read side ────────────────────────────────────────────────────────
@@ -292,7 +296,7 @@ export class SessionController {
     // Validate against the locked vocabulary at the speaker's mouth.
     // Unknown tag or missing required payload field throws — the whole
     // point of the lock.
-    sddEmit(tag, payload);
+    sddEmit(tag, payload, { pane_id: this.paneId });
     const event: ControllerEvent = { tag, payload, at: Date.now() };
     for (const listener of this.eventListeners) listener(event);
   }

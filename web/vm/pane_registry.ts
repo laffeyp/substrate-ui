@@ -40,6 +40,7 @@ export class PaneRegistry {
     const existing = this.byPane.get(paneId);
     if (existing) return existing;
     const controller = new SessionController(this.deps.makeClient());
+    controller.paneId = paneId;
     controller.subscribe((snap) => {
       for (const l of this.paneListeners) l(paneId, snap);
     });
