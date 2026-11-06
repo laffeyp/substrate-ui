@@ -1800,6 +1800,53 @@ def _workspace_read(root: Path, rel: str, max_bytes: int = WORKSPACE_READ_MAX) -
     return out
 
 
+# UI sprint 349, editor shared work 0(c): watching a workspace. A snapshot maps each file's path
+# (relative, "/"-separated) to its modified time and size; two snapshots give the changes. Links are
+# not followed, and `.git` folders are left out. A tree past WATCH_MAX_FILES is cut there, and the
+# snapshot says so.
+WATCH_MAX_FILES = 20_000
+WATCH_POLL_S = 0.5
+
+
+def _workspace_snapshot(
+    root: Path, max_files: int = WATCH_MAX_FILES
+) -> tuple[dict[str, tuple[int, int]], bool]:
+    """Each file under `root` with its (modified ns, size); True when the walk stopped at the cap."""
+    base = root.resolve(strict=True)
+    files: dict[str, tuple[int, int]] = {}
+    for dirpath, dirnames, filenames in os.walk(base, followlinks=False):
+        # `.git` folders are git's own bookkeeping, rewritten on every commit; the session's
+        # workspace is a git repository (VS Code's watcher leaves `**/.git/objects/**` out too).
+        dirnames[:] = sorted(d for d in dirnames if d != ".git")
+        # A link to a folder is listed among the folders and not followed; it counts as a file here.
+        links = [d for d in dirnames if (Path(dirpath) / d).is_symlink()]
+        dirnames[:] = [d for d in dirnames if d not in links]
+        for name in sorted([*filenames, *links]):
+            full = Path(dirpath) / name
+            try:
+                st = full.lstat()
+            except OSError:
+                continue
+            files[full.relative_to(base).as_posix()] = (st.st_mtime_ns, st.st_size)
+            if len(files) >= max_files:
+                return files, True
+    return files, False
+
+
+def _workspace_changes(
+    before: dict[str, tuple[int, int]], after: dict[str, tuple[int, int]]
+) -> list[dict[str, str]]:
+    """The files created, modified (time or size) and deleted between two snapshots, by path."""
+    out = [{"path": p, "change": "created"} for p in after.keys() - before.keys()]
+    out += [{"path": p, "change": "deleted"} for p in before.keys() - after.keys()]
+    out += [
+        {"path": p, "change": "modified"}
+        for p in after.keys() & before.keys()
+        if after[p] != before[p]
+    ]
+    return sorted(out, key=lambda c: (c["path"], c["change"]))
+
+
 def _canonical_workspace(path: str) -> str:
     """Sprint 086b — one string per real directory. Expands `~` and
     strips a trailing slash (it does not resolve symlinks). Two Records rows
@@ -3201,21 +3248,66 @@ class Handler(BaseHTTPRequestHandler):
             }
         )
 
+    def _session_workspace_root(self, session_id: str) -> Path | None:
+        """The session's workspace as a directory, or None after sending the 404 that says why."""
+        manifest = self.app.registry.get(session_id) if self.app.registry is not None else None
+        if manifest is None:
+            self._error(404, f"unknown session {session_id!r}")
+            return None
+        raw = str(manifest.workspace or "")
+        if not raw:
+            self._error(404, f"session {session_id!r} has no workspace")
+            return None
+        root = Path(_resolve_workspace_arg(raw) if raw.startswith("~") else raw)
+        if not root.is_dir():
+            self._error(404, f"the workspace {raw!r} does not exist")
+            return None
+        return root
+
+    def _session_files_watch(self, session_id: str) -> None:
+        """UI sprint 349: GET /api/session/<id>/files/watch, Server-Sent Events. The first event
+        (`event: ready`) carries the file count and whether the walk was cut at WATCH_MAX_FILES; each
+        later `data:` event carries `{"changes": [{path, change}]}`, change `created`, `modified` or
+        `deleted`, found by comparing snapshots every WATCH_POLL_S. A comment every 15 s keeps the
+        stream open; a client hanging up ends it."""
+        root = self._session_workspace_root(session_id)
+        if root is None:
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("X-Accel-Buffering", "no")
+        self.end_headers()
+        try:
+            before, cut = _workspace_snapshot(root)
+            ready = msgspec.json.encode({"files": len(before), "truncated": cut})
+            self.wfile.write(b"event: ready\ndata: " + ready + b"\n\n")
+            self.wfile.flush()
+            last_write = time.monotonic()
+            while True:
+                time.sleep(WATCH_POLL_S)
+                after, _ = _workspace_snapshot(root)
+                changes = _workspace_changes(before, after)
+                before = after
+                if changes:
+                    self.wfile.write(
+                        b"data: " + msgspec.json.encode({"changes": changes}) + b"\n\n"
+                    )
+                    self.wfile.flush()
+                    last_write = time.monotonic()
+                elif time.monotonic() - last_write >= 15.0:
+                    self.wfile.write(b": ping\n\n")
+                    self.wfile.flush()
+                    last_write = time.monotonic()
+        except (BrokenPipeError, ConnectionResetError, OSError):
+            return
+
     def _session_files(self, session_id: str, what: str, q: dict[str, list[str]]) -> None:
         """UI sprint 348: GET /api/session/<id>/files?dir=<rel> lists a directory of the session's
         workspace; GET /api/session/<id>/file?path=<rel> reads one file's facts and text. Each path
         is held to the workspace (`_workspace_target`)."""
-        manifest = self.app.registry.get(session_id) if self.app.registry is not None else None
-        if manifest is None:
-            self._error(404, f"unknown session {session_id!r}")
-            return
-        raw = str(manifest.workspace or "")
-        if not raw:
-            self._error(404, f"session {session_id!r} has no workspace")
-            return
-        root = Path(_resolve_workspace_arg(raw) if raw.startswith("~") else raw)
-        if not root.is_dir():
-            self._error(404, f"the workspace {raw!r} does not exist")
+        root = self._session_workspace_root(session_id)
+        if root is None:
             return
         try:
             if what == "files":
@@ -4338,6 +4430,10 @@ class Handler(BaseHTTPRequestHandler):
             m_runs = re.fullmatch(r"/api/session/([^/]+)/runs", path)
             if m_runs:  # UI sprint 182
                 self._session_runs(m_runs.group(1))
+                return
+            m_watch = re.fullmatch(r"/api/session/([^/]+)/files/watch", path)
+            if m_watch:  # UI sprint 349, editor shared work 0(c)
+                self._session_files_watch(m_watch.group(1))
                 return
             m_files = re.fullmatch(r"/api/session/([^/]+)/(files|file)", path)
             if m_files:  # UI sprint 348, editor shared work 0(c)
