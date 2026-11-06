@@ -2,9 +2,9 @@
 // Copyright (C) 2026 Peter Laffey
 // First run (sprint 221; plan PLAN-2026-11-04-shell-to-react-r5.md, B2): the drivers this machine
 // has, one row each, and the workspace a session gets by default. Styles are the template's
-// (reveal.html first-run block). Two fixture texts are gone: a session name in the top bar, where no
-// session exists yet, and `~/Documents/substrate` as the workspace, where the default is a fresh
-// per-session sandbox (reveal_component.ts, the bind's `isDefault` branch).
+// (reveal.html first-run block), and so is its text: the top bar's "s-1a04" and the workspace line
+// "~/Documents/substrate · default · created on bind". Sprint 221 had replaced those two texts;
+// sprint 334 restored them, since a refactor changes no text (BLACKBOARD, 2026-11-05 failure entry).
 
 import * as React from "react";
 import { useSyncExternalStore } from "react";
@@ -22,7 +22,7 @@ export function FirstRun(): React.ReactElement | null {
   const fr = useSyncExternalStore(firstRun.subscribe, firstRun.getSnapshot, firstRun.getSnapshot);
   const ch = useSyncExternalStore(chrome.subscribe, chrome.getSnapshot, chrome.getSnapshot);
   const snaps = useSyncExternalStore(shell.subscribe, shell.getSnapshot, shell.getSnapshot);
-  if (fr.done || !firstRunAsked(window.location.search)) return null;
+  if (fr.done || !(fr.forced || firstRunAsked(window.location.search))) return null;
   const snap = snaps.snapshots[ch.focusedPane];
   const rows = firstRunRows(snap?.driverRoster ?? [], snap?.driverDefault ?? null, cliAgents(snap?.driverGroups ?? []));
   return (
@@ -33,6 +33,7 @@ export function FirstRun(): React.ReactElement | null {
           <span style={{ color: "#e2e5e9", fontWeight: 600 }}>substrate</span>
           <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#62676f", display: "inline-block", marginLeft: 3 }} />
         </span>
+        <span style={{ color: "#e2e5e9", fontSize: 11 }}>s-1a04</span>
         <span style={chip}>driver —</span>
         <span style={chip}>⌥ —</span>
       </div>
@@ -50,8 +51,8 @@ export function FirstRun(): React.ReactElement | null {
             ))}
             <div style={{ ...heading, marginTop: 6 }}>WORKSPACE</div>
             <div style={{ padding: "0 15px", display: "flex", gap: 12 }}>
-              <span style={{ color: "#b9bec5", width: 230 }}>fresh per-session sandbox</span>
-              <span style={{ color: "#4a4e55" }}>default · or pick a folder in the pane</span>
+              <span style={{ color: "#b9bec5", width: 230 }}>~/Documents/substrate</span>
+              <span style={{ color: "#4a4e55" }}>default · created on bind</span>
             </div>
           </div>
           <div style={{ display: "flex", gap: 10, padding: "9px 14px", borderTop: "1px solid rgba(255,255,255,.08)", fontSize: 11.5 }}>

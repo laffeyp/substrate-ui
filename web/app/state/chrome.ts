@@ -15,11 +15,14 @@ export interface ChromeState {
   unbound: boolean;
   /** The focused session's name, as the pane header shows it. */
   title: string | null;
-  /** The records or assays page is open over the panes. */
+  /** The records, assays or studio page is open over the panes. */
   surfaceOpen: boolean;
+  /** The design tool's simulateRateLimit scenario (restored in sprint 334): the footer shows the
+   *  template's rate-limited status. */
+  rateLimited: boolean;
 }
 
 // One instance per window, as in shell.ts (sprint 212).
 const KEY = "__substrateChrome";
 const scope = globalThis as unknown as Record<string, ReturnType<typeof createStore<ChromeState>> | undefined>;
-export const chrome = scope[KEY] ?? (scope[KEY] = createStore<ChromeState>({ focusedPane: 1, unbound: true, title: null, surfaceOpen: false }));
+export const chrome = scope[KEY] ?? (scope[KEY] = createStore<ChromeState>({ focusedPane: 1, unbound: true, title: null, surfaceOpen: false, rateLimited: false }));

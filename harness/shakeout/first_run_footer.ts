@@ -5,8 +5,8 @@
 // Footer: no status and "unbound — pick a workspace" before a session; "● live" and "session <name>"
 // after a turn; the records page's hint; "● finalised" after the session ends (open item 34, fixed
 // in plan row B2, sprint 224). First run (?firstrun=1): a row per driver in the controller's roster,
-// the default workspace as a fresh per-session sandbox, none of the design fixtures (a session name,
-// `~/Documents/substrate`), and a pick that closes it and fires DRIVER_PICKED.
+// the template's texts ("s-1a04" in its top bar, "~/Documents/substrate · default · created on bind"
+// as the workspace; restored in sprint 334), and a pick that closes it and fires DRIVER_PICKED.
 
 import { _electron as electron, type Page } from "playwright";
 import { bindPaneAsUser, launchArgs, settled, waitForApp } from "./lib/electron";
@@ -95,11 +95,10 @@ async function main(): Promise<void> {
       const head = Array.from(document.querySelectorAll("div")).find((d) => d.textContent === "DRIVERS ON THIS MACHINE")!;
       return (head.closest("[style*='position: fixed']") as HTMLElement | null)?.innerText ?? "";
     });
-    for (const fixture of ["s-1a04", "~/Documents/substrate"]) {
-      if (shown.includes(fixture)) throw new Error(`first run shows the fixture text ${fixture}`);
+    for (const text of ["s-1a04", "~/Documents/substrate", "default · created on bind"]) {
+      if (!shown.includes(text)) throw new Error(`first run lacks the template's text ${text}`);
     }
-    if (!shown.includes("fresh per-session sandbox")) throw new Error("first run does not name the default workspace");
-    seen.push("first run shows no fixture text");
+    seen.push("first run shows the template's texts");
 
     const before = (await signals(win)).length;
     // The row in the first-run list; the window behind it has its own "deterministic" text.

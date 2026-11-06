@@ -11,7 +11,7 @@ import { workspaceCard } from "../derive/workspace_card";
 const bound = { unbound: false, ws: "", shape: "isolated", name: "pane-1", workspacePath: null };
 
 test("an unbound pane has no workspace yet", () => {
-  assert.deepStrictEqual(workspaceCard({ ...bound, unbound: true }), { workspace: "none yet — pick one in the pane", shape: "—" });
+  assert.deepStrictEqual(workspaceCard({ ...bound, unbound: true }), { workspace: "none yet — pick one in the pane", shape: "—", branch: "" });
 });
 
 test("the server's folder wins, home written ~", () => {
@@ -24,6 +24,7 @@ test("before the server reports one: the bound folder, else the default sandbox 
   assert.strictEqual(workspaceCard({ ...bound, shape: "flat" }).workspace, "—");
 });
 
-test("a git folder's shape reads git, with no invented branch (F339)", () => {
-  assert.deepStrictEqual(workspaceCard({ ...bound, ws: "/Users/someone/code/app", shape: "worktree" }), { workspace: "/Users/someone/code/app", shape: "git" });
+test("the shape and branch read as the template drew them (sprint 334)", () => {
+  assert.deepStrictEqual(workspaceCard({ ...bound, ws: "/Users/someone/code/app", shape: "worktree" }), { workspace: "/Users/someone/code/app", shape: "worktree", branch: "substrate/pane-1" });
+  assert.deepStrictEqual(workspaceCard({ ...bound, ws: "~/code/app", shape: "flat" }), { workspace: "~/code/app", shape: "flat", branch: "~/code/app" });
 });

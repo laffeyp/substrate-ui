@@ -12,12 +12,14 @@ export interface FirstRunState {
   done: boolean;
   /** The driver picked; null before the pick. */
   picked: string | null;
+  /** The design tool's firstRun scenario (restored in sprint 334): first run shows as ?firstrun=1 shows it. */
+  forced: boolean;
 }
 
 // One instance per window, as in shell.ts (sprint 212).
 const KEY = "__substrateFirstRun";
 const scope = globalThis as unknown as Record<string, ReturnType<typeof createStore<FirstRunState>> | undefined>;
-export const firstRun = scope[KEY] ?? (scope[KEY] = createStore<FirstRunState>({ done: false, picked: null }));
+export const firstRun = scope[KEY] ?? (scope[KEY] = createStore<FirstRunState>({ done: false, picked: null, forced: false }));
 
 export function firstRunAsked(search: string): boolean {
   return /[?&]firstrun=1(?:&|$)/.test(search);

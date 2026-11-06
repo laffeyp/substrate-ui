@@ -8,7 +8,8 @@
 //
 // Steps: on the unbound pane, click the workspace chip: the card reads "none yet". Bind pane 1 on the
 // default folder (the per-session sandbox) and take one turn: the card names the folder the server
-// reports for the session (home written ~) and shape isolated; it has no branch line (F339).
+// reports for the session (home written ~) and shape isolated; its branch line is the bound folder,
+// empty for the per-session sandbox, as the template drew it (restored in sprint 334).
 
 import { _electron as electron, type Page } from "playwright";
 import { bindPaneAsUser, launchArgs, settled, waitForApp } from "./lib/electron";
@@ -36,7 +37,7 @@ async function main(): Promise<void> {
     await win.locator("input[data-ws-input]").first().waitFor({ state: "visible", timeout: 15_000 });
 
     const unbound = await cardText(win);
-    if (unbound !== "workspace none yet — pick one in the pane shape —") throw new Error(`unbound pane's card reads "${unbound}"`);
+    if (unbound !== "workspace none yet — pick one in the pane shape — · branch") throw new Error(`unbound pane's card reads "${unbound}"`);
     seen.push(`unbound "${unbound}"`);
 
     await bindPaneAsUser(win, "deterministic");
@@ -46,7 +47,7 @@ async function main(): Promise<void> {
     await settled(win);
     const path: string | null = await win.evaluate(() => (window as any).__vm.get(1).snapshot().workspacePath);
     if (!path) throw new Error("the session reports no workspace path");
-    const want = `workspace ${path.replace(/^\/Users\/[^/]+/, "~")} shape isolated`;
+    const want = `workspace ${path.replace(/^\/Users\/[^/]+/, "~")} shape isolated · branch`;
     const bound = await cardText(win);
     if (bound !== want) throw new Error(`bound pane's card reads "${bound}"; expected "${want}"`);
     seen.push(`bound "${bound}"`);

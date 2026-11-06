@@ -53,6 +53,7 @@ import { InputBar } from "./InputBar";
 import { MetaView } from "./MetaView";
 import { PanesView } from "./PanesView";
 import { RecordsPage } from "./RecordsPage";
+import { StudioPage } from "./StudioPage";
 import { TopBar } from "./TopBar";
 import "./window.css";
 
@@ -110,6 +111,27 @@ export interface AppPane extends Cell {
 
 type Snapshots = Record<number, Snapshot>;
 
+/** The design tool's tweak props, as the template declared them on its script tag (`data-props`;
+ *  restored in sprint 334). dc-runtime's tweak editor set them; with no editor, each takes its
+ *  default, which changes nothing. */
+export const TWEAK_PROPS = {
+  transcriptFontSize: { editor: "range", default: 13, min: 6.5, max: 19.5, step: 0.5, tsType: "number", section: "Type — default ±50%" },
+  columns: { editor: "range", default: 1, min: 1, max: 4, step: 1, tsType: "number", section: "Test the splits (⌘D also works once clicked in)" },
+  rows: { editor: "range", default: 1, min: 1, max: 2, step: 1, tsType: "number", section: "Test the splits (⌘D also works once clicked in)" },
+  view: { editor: "enum", default: "revealed", options: ["terminal", "revealed"], tsType: "string", section: "Level" },
+  firstRun: { editor: "boolean", default: false, tsType: "boolean", section: "Scenarios" },
+  simulateRateLimit: { editor: "boolean", default: false, tsType: "boolean", section: "Scenarios" },
+} as const;
+
+export interface AppProps {
+  transcriptFontSize?: number;
+  columns?: number;
+  rows?: number;
+  view?: "terminal" | "revealed";
+  firstRun?: boolean;
+  simulateRateLimit?: boolean;
+}
+
 interface AppState {
   revealed: boolean;
   surface: (typeof Surface)[keyof typeof Surface] | null;
@@ -146,7 +168,7 @@ type Handler = (ev?: unknown) => void;
 interface KeyEv { key: string; shiftKey: boolean; altKey: boolean; metaKey: boolean; ctrlKey: boolean; preventDefault(): void }
 const stop = (ev: unknown) => { const e = ev as { stopPropagation?: () => void } | undefined; e?.stopPropagation?.(); };
 
-export class App extends React.Component<Record<string, never>, AppState> {
+export class App extends React.Component<AppProps, AppState> {
   override state: AppState = {
     revealed: false, surface: null,
     // No model until one is picked: pane 1 names none and preselects none.
@@ -683,7 +705,8 @@ export class App extends React.Component<Record<string, never>, AppState> {
     if (this.panesView) panesStore.set({ view: this.panesView });
     const s = this.state;
     const fp = this.pane(s.focused) ?? s.panes[0];
-    chrome.set({ focusedPane: s.focused, unbound: fp.unbound, title: this.paneTitle(fp), surfaceOpen: !!s.surface });
+    chrome.set({ focusedPane: s.focused, unbound: fp.unbound, title: this.paneTitle(fp), surfaceOpen: !!s.surface, rateLimited: this.props.simulateRateLimit ?? false });
+    firstRun.set({ forced: this.props.firstRun ?? false });
     if (this.topBarVals && this.topBarActs) {
       topBar.set(this.topBarVals);
       this.offTopBarActs?.();
@@ -696,8 +719,23 @@ export class App extends React.Component<Record<string, never>, AppState> {
     this.setPane(id, { editing: false });
     if (name) ctlOf(id)?.nameSession(name);
   }
-  override componentDidUpdate(): void {
+  override componentDidUpdate(prevProps: AppProps): void {
     this.publish();
+    // The template's tweak sync: only when a tweak changed, never against the window's own state.
+    const changed = (k: keyof AppProps) => this.props[k] !== prevProps[k];
+    if (!changed("columns") && !changed("rows") && !changed("view")) return;
+    const state = this.state;
+    const pc = this.props.columns, pr = this.props.rows, pv = this.props.view;
+    if ((changed("columns") && pc && pc !== state.cols) || (changed("rows") && pr && pr !== state.rows)) {
+      const cols = pc || state.cols, rows = pr || state.rows;
+      const need = cols * rows;
+      const panes = state.panes.slice(0, Math.max(1, need));
+      while (panes.length < need) panes.push(this.newPane());
+      const colW = Array.from({ length: cols }, (_, i) => state.colW[i] || 1);
+      const rowW = Array.from({ length: rows }, (_, i) => state.rowW[i] || 1);
+      this.setState({ cols, rows, colW, rowW, panes });
+    }
+    if (changed("view") && pv && (pv === "revealed") !== state.revealed) this.setState({ revealed: pv === "revealed", surface: null });
   }
   override componentWillUnmount(): void {
     for (const off of this.offs.splice(0)) off();
@@ -831,7 +869,7 @@ export class App extends React.Component<Record<string, never>, AppState> {
     const q = findQuery();
     this.streamMatches = q ? streamRows(envelopes).filter((e) => findText(e).includes(q)).length : 0;
     this.streamView = { envelopes, topology: fsnap?.topologyGraph ?? null, language: fsnap?.language ?? null };
-    const transcriptSize = fontSize(13);
+    const transcriptSize = fontSize(this.props.transcriptFontSize ?? 13);
     this.panesView = {
       cols: trackList(state.colW), rows: trackList(state.rowW), fontSize: transcriptSize,
       panes: state.panes.map((p) => ({
@@ -852,6 +890,7 @@ export class App extends React.Component<Record<string, never>, AppState> {
       toggleModelCard: () => this.setState((s) => ({ ddFor: s.ddFor === fp.id ? null : fp.id, wsFor: null })),
       toggleWsCard: () => this.setState((s) => ({ wsFor: s.wsFor === fp.id ? null : fp.id, ddFor: null })),
       openRecords: () => this.toggleSurface(Surface.Records),
+      openStudio: () => this.toggleSurface(Surface.Studio),
       // Meta → panes always works; panes → meta waits until the focused pane leaves its picker.
       toggleReveal: () => {
         const s = this.state;
@@ -886,8 +925,9 @@ export class App extends React.Component<Record<string, never>, AppState> {
         )}
         {surf === Surface.Records && <div data-app-mount="records" style={{ flex: 1, overflow: "auto", background: "#212327", padding: "22px 22px" }}><RecordsPage /></div>}
         {surf === Surface.Assay && <div data-app-mount="assays" style={{ flex: 1, overflow: "auto", background: "#212327", padding: "20px 40px" }}><AssayPage /></div>}
+        {surf === Surface.Studio && <StudioPage />}
         <div style={{ flex: "none" }}><Footer /></div>
-        <Dialogs defaultFontSize={13} />
+        <Dialogs defaultFontSize={this.props.transcriptFontSize ?? 13} />
         <FirstRun />
       </div>
     );
@@ -909,7 +949,7 @@ export class App extends React.Component<Record<string, never>, AppState> {
     const card = workspaceCard({ unbound: fp.unbound, ws: fp.ws || "", shape: fp.shape || "", name: fp.name, workspacePath: fsnap?.workspacePath ?? null });
     return {
       dotBg: dot, dot,
-      crumb: surf === Surface.Records ? title + " › records" : surf === Surface.Assay ? title + " › assays" : title,
+      crumb: surf === Surface.Records ? title + " › records" : surf === Surface.Assay ? title + " › assays" : surf === Surface.Studio ? title + " › studio" : title,
       editing: fp.editing, nameVal: fp.nameVal,
       showChips: !surf, showDriverChip: !surf && !!driver,
       // On Auto the chip names the CLI only; the card says why (UI sprint 139).
@@ -921,13 +961,16 @@ export class App extends React.Component<Record<string, never>, AppState> {
       // UI sprint 143: the Length and Tone positions; null is the default.
       length: fsnap?.length || LENGTH_DEFAULT,
       tone: fsnap?.tone || TONE_DEFAULT,
-      // No workspace yet reads ⌥ —; a per-session sandbox reads ⌥ sandbox. UI sprint 182: a run's pane
-      // names the worktree its record names, home written `~`. F339: a git folder's pane names its folder.
-      wsLabel: fp.unbound ? "⌥ —" : fp.runRoot ? "⌥ " + (fsnap?.workspacePath || "—").replace(/^\/Users\/[^/]+/, "~") : "⌥ " + (fp.ws || "sandbox"),
+      // No workspace yet reads ⌥ —; a per-session sandbox reads ⌥ sandbox; a git folder reads its
+      // branch, `substrate/<pane name>` (restored in sprint 334). UI sprint 182: a run's pane names the
+      // worktree its record names, home written `~`.
+      wsLabel: fp.unbound ? "⌥ —" : fp.runRoot ? "⌥ " + (fsnap?.workspacePath || "—").replace(/^\/Users\/[^/]+/, "~")
+        : "⌥ " + (fp.shape === "worktree" ? "substrate/" + (fp.name || "main") : (fp.ws || "sandbox")),
       wsCardOpen: state.wsFor === fp.id,
-      workspace: card.workspace, shape: card.shape,
+      workspace: card.workspace, shape: card.shape, branch: card.branch,
       escHint: surf ? "esc — back" : "",
       recordsColor: surf === Surface.Records ? "#e2e5e9" : "#9aa0a8",
+      studioColor: surf === Surface.Studio ? "#e2e5e9" : "#9aa0a8",
       revealLabel: state.revealed ? "panes" : "meta",
       revealColor: state.revealed && !surf ? "#212327" : "#9aa0a8",
       revealBg: state.revealed && !surf ? "#82a5c8" : "#3d434c",

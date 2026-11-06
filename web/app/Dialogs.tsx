@@ -71,6 +71,26 @@ function SettingsDialog({ defaultFontSize }: { defaultFontSize: number }): React
   );
 }
 
+// 19f, as the template drew it (sprint 334). Its export button closes it, as the template's did.
+function ExportDialog(): React.ReactElement {
+  return (
+    <div onClick={closeDialog} style={backdrop}>
+      <div onClick={swallow} style={{ ...panel, gap: 12, fontSize: 12 }}>
+        <div style={{ fontSize: 9.5, letterSpacing: ".14em", color: "#62676f" }}>EXPORT RECORD · 01M1684 · fix-race-in-metering · 244 ev</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 11.5 }}>
+          <div style={{ display: "flex", gap: 10, padding: "8px 12px", background: "#2e3138", borderRadius: 6 }}><span style={{ color: "#e2e5e9" }}>.record directory</span><span style={{ color: "#62676f" }}>segments + manifest + blobs + sidecar — replayable</span><span style={{ marginLeft: "auto", color: "#62676f" }}>↵</span></div>
+          <div style={{ display: "flex", gap: 10, padding: "8px 12px", background: "#1a1c20", borderRadius: 6 }}><span style={{ color: "#b9bec5" }}>events.jsonl</span><span style={{ color: "#4a4e55" }}>flat, single file — read-only</span></div>
+        </div>
+        <div style={{ display: "flex", gap: 10, border: "1px solid rgba(255,255,255,.13)", borderRadius: 6, padding: "8px 12px", background: "#1a1c20", fontSize: 11.5 }}><span style={{ color: "#62676f" }}>to</span><span style={{ color: "#e2e5e9" }}>~/exports/fix-race-in-metering.record</span></div>
+        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", fontSize: 11.5 }}>
+          <span onClick={closeDialog} style={{ color: "#9aa0a8", border: "1px solid rgba(255,255,255,.09)", borderRadius: 5, padding: "4px 14px", cursor: "pointer" }}>cancel esc</span>
+          <span onClick={closeDialog} style={{ color: "#0d1013", background: "#82a5c8", borderRadius: 5, padding: "4px 14px", fontWeight: 600, cursor: "pointer" }}>export ↵</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /** D68: a session with a turn in flight has the turn interrupted first, then ends. */
 async function endSession(): Promise<void> {
   closeDialog();
@@ -103,5 +123,6 @@ export function Dialogs({ defaultFontSize }: { defaultFontSize: number }): React
   const d = useSyncExternalStore(dialogs.subscribe, dialogs.getSnapshot, dialogs.getSnapshot);
   if (d.open === "settings") return <SettingsDialog defaultFontSize={defaultFontSize} />;
   if (d.open === "end-session") return <EndSessionDialog title={d.title} />;
+  if (d.open === "export") return <ExportDialog />;
   return null;
 }

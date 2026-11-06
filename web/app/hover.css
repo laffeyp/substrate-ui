@@ -8,10 +8,11 @@
 /* First run: a driver row (reveal.html first-run block). */
 .hover-first-run-row:hover { background: #2e3138 !important; }
 
-/* Top bar (reveal.html top bar): the driver chip, the workspace chip, the records button. */
+/* Top bar (reveal.html top bar): the driver chip, the workspace chip, the records and studio buttons. */
 .hover-top-bar-model-chip:hover { color: #d7dade !important; }
 .hover-top-bar-ws-chip:hover { color: #9aa0a8 !important; }
 .hover-top-bar-records:hover { color: #d7dade !important; }
+.hover-top-bar-studio:hover { color: #d7dade !important; }
 
 /* Records page (reveal.html records block): add workspace, a workspace row, a session row, load more. */
 .hover-records-add:hover { color: #a0c0e0 !important; }

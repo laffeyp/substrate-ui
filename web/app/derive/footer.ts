@@ -14,8 +14,10 @@ export interface FooterInput {
   unbound: boolean;
   /** The focused session's name, as the pane header shows it. */
   title: string | null;
-  /** The records or assays page is open over the panes. */
+  /** The records, assays or studio page is open over the panes. */
   surfaceOpen: boolean;
+  /** The design tool's simulateRateLimit scenario: the template's status line, ahead of every other. */
+  rateLimited?: boolean;
   /** The focused pane's controller snapshot; null before its first. */
   snapshot: { sessionId: string | null; endedReason: string | null; connection: ConnectionState } | null;
 }
@@ -31,7 +33,8 @@ export function footerText(input: FooterInput): FooterText {
   let statusColor = QUIET;
   // An explicit end unbinds the session (session_controller.ts forceClose: sessionId null) and keeps
   // endedReason until the next session opens, so the end is read before the session id.
-  if (snap && snap.endedReason) status = "● finalised";
+  if (input.rateLimited) { status = "◌ rate-limited · retry 3/6 in 14s"; statusColor = "#7fb3b8"; }
+  else if (snap && snap.endedReason) status = "● finalised";
   else if (snap && snap.sessionId) {
     if (snap.connection === "connected") { status = "● live"; statusColor = LIVE; }
     else status = "○ " + snap.connection;

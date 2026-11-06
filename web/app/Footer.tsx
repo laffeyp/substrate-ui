@@ -14,7 +14,7 @@ export function Footer(): React.ReactElement {
   const ch = useSyncExternalStore(chrome.subscribe, chrome.getSnapshot, chrome.getSnapshot);
   const snaps = useSyncExternalStore(shell.subscribe, shell.getSnapshot, shell.getSnapshot);
   const snap = snaps.snapshots[ch.focusedPane] ?? null;
-  const text = footerText({ unbound: ch.unbound, title: ch.title, surfaceOpen: ch.surfaceOpen, snapshot: snap });
+  const text = footerText({ unbound: ch.unbound, title: ch.title, surfaceOpen: ch.surfaceOpen, rateLimited: ch.rateLimited, snapshot: snap });
   return (
     <div data-footer="1" style={{ display: "flex", gap: 16, padding: "7px 16px", background: "#2a2d33", fontSize: 11, color: "#62676f", flex: "none" }}>
       <span data-footer-status="1" style={{ color: text.statusColor }}>{text.status}</span>

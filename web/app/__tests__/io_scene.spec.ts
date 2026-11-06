@@ -27,15 +27,17 @@ test("i/o: the input and output documents in seq order, a tool's output as text"
   ]);
 });
 
-test("scene: the latest grid; ragged or non-numeric rows are no grid; one over the limit says so", () => {
+test("scene: the template's search: the latest grid; an oversized or throwing one ends it with none", () => {
   const gen = (seq: number, grid: unknown) => ({ seq, kind: "Generation", payload: { grid } });
   assert.deepStrictEqual(sceneOf([]), { kind: "none" });
   assert.deepStrictEqual(sceneOf([gen(1, [[1, 0], [0, 1]]), gen(2, [[0, 0], [1, 1]])]), { kind: "grid", rows: 2, cols: 2, cells: [DARK, DARK, LIT, LIT] });
-  assert.deepStrictEqual(sceneOf([gen(1, [[1, 0], [0]])]), { kind: "none" });
+  // Only the first row's first value is checked, and the columns are the first row's length.
+  assert.deepStrictEqual(sceneOf([gen(1, [[1, 0], [0]])]), { kind: "grid", rows: 2, cols: 2, cells: [LIT, DARK, DARK] });
   assert.deepStrictEqual(sceneOf([gen(1, [["a"]])]), { kind: "none" });
+  // Over the limit the search stops: an earlier small grid is not shown.
   const big = Array.from({ length: 21 }, () => Array.from({ length: 20 }, () => 1));
   assert.ok(21 * 20 > SCENE_MAX_CELLS);
-  assert.deepStrictEqual(sceneOf([gen(1, big)]), { kind: "large", rows: 21, cols: 20 });
+  assert.deepStrictEqual(sceneOf([gen(1, [[1]]), gen(2, big)]), { kind: "none" });
   const throwing = { seq: 1, kind: "Generation", get payload(): Record<string, unknown> { throw new Error("proxy"); } };
   assert.deepStrictEqual(sceneOf([throwing]), { kind: "none" });
 });

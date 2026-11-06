@@ -22,8 +22,8 @@ export interface KeyContext {
   targetTyping: boolean;
   /** The focused text box has a caret and no selection. */
   caretOnly: boolean;
-  /** The records or assay page is open. */
-  surface: "records" | "assay" | null;
+  /** The records, assay or studio page is open. */
+  surface: "records" | "assay" | "studio" | null;
   /** The meta view is open. */
   revealed: boolean;
   /** The focused pane has no session: its picker takes the arrows. */

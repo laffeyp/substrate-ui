@@ -6,10 +6,12 @@
 // folder: an unbound pane, and a pane on the default per-session sandbox, whose folder the server
 // mints. Its branch line showed the folder's path, or for a git folder `substrate/<pane name>`, a
 // branch no session has (F339: sessions get no worktree, UI sprint 154). The card names the folder the
-// server reports for the session, else the folder the pane was bound to; a pane with neither says so;
-// a git folder's shape reads "git"; there is no branch line, since nothing reports a branch.
-
-import { shapeLabel } from "./picker";
+// server reports for the session, else the folder the pane was bound to; a pane with neither says so.
+//
+// Sprint 334: the shape reads as the pane's own shape and the branch line is back, as the template drew
+// them (a git folder reads "worktree" and its branch `substrate/<pane name>`; any other pane's branch
+// is its folder). Sprints 232 and 276 had read a git folder's shape as "git" and dropped the branch
+// line, which a refactor may not do (BLACKBOARD, 2026-11-05 failure entry).
 
 export interface WorkspaceCardInput {
   unbound: boolean;
@@ -22,14 +24,15 @@ export interface WorkspaceCardInput {
   workspacePath: string | null;
 }
 
-export interface WorkspaceCardText { workspace: string; shape: string; }
+export interface WorkspaceCardText { workspace: string; shape: string; branch: string; }
 
 const home = (path: string) => path.replace(/^\/Users\/[^/]+/, "~");
 
 export function workspaceCard(input: WorkspaceCardInput): WorkspaceCardText {
-  if (input.unbound) return { workspace: "none yet — pick one in the pane", shape: "—" };
+  const branch = input.shape === "worktree" ? "substrate/" + (input.name || "main") : (input.ws || "");
+  if (input.unbound) return { workspace: "none yet — pick one in the pane", shape: "—", branch };
   const workspace = input.workspacePath ? home(input.workspacePath)
     : input.ws ? input.ws
       : input.shape === "isolated" ? "fresh per-session sandbox" : "—";
-  return { workspace, shape: input.shape ? shapeLabel(input.shape) : "—" };
+  return { workspace, shape: input.shape || "—", branch };
 }

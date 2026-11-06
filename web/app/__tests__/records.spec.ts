@@ -42,13 +42,13 @@ test("an open group lists its page, its total and what is left", () => {
   assert.strictEqual(grp.countLabel, "60 sessions");
   assert.strictEqual(grp.hasMore, true);
   assert.strictEqual(grp.remainingLabel, "load next 50");
-  assert.deepStrictEqual(grp.sessions.map((s) => [s.name, s.idShort, s.statusLabel, s.when, s.lit]), [["s_aaaaaaaaaa", "s_aaaaaaaaaa", "◐ parked", "12s ago", true]]);
+  assert.deepStrictEqual(grp.sessions.map((s) => [s.name, s.idShort, s.statusLabel, s.when, s.lit]), [["s_aaaaaaaaaa", "s_aaaaaaaaaa", "◐ parked", "11.75s ago", true]]);
   assert.deepStrictEqual(out.flat.map((f) => [f.kind, f.parent]), [["workspace", null], ["session", 0], ["workspace", null]]);
   assert.strictEqual(grp.lit, false);
 });
 
-test("relative times are whole units", () => {
-  assert.strictEqual(relTime(100.5, 112.9), "12s ago");
+test("relative times are the template's: the floored clock less the fractional start", () => {
+  assert.strictEqual(relTime(100.5, 112.9), "11.5s ago");
   assert.strictEqual(relTime(0, 50), "");
   assert.strictEqual(relTime(0.5, 3 * 3600 + 1), "3h ago");
   assert.strictEqual(relTime(0.5, 3 * 3600), "2h ago");

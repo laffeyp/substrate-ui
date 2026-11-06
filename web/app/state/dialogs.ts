@@ -5,7 +5,9 @@
 // One dialog at a time: settings, or the end-session confirm for a named session. DCLogic opens them
 // (⌘,, the menu's Settings…, /exit) and reads `dialogOpen()` for the Escape order and the keys it
 // leaves alone while a dialog is up; the React dialogs (web/app/Dialogs.tsx) draw them and close them.
-// The export dialog had no endpoint behind it and is gone (F351).
+// The export dialog (19f) is drawn as the template drew it; nothing in the window opens it, as before.
+// Sprint 216 had dropped it, which a refactor may not do; sprint 334 restored it (BLACKBOARD, 2026-11-05
+// failure entry).
 
 import { createStore } from "../store";
 import { clearNote } from "./settings";
@@ -13,6 +15,7 @@ import { clearNote } from "./settings";
 export type DialogState =
   | { open: null }
   | { open: "settings" }
+  | { open: "export" }
   /** `title` is the session's name as the pane header shows it. */
   | { open: "end-session"; title: string };
 
@@ -23,6 +26,11 @@ export const dialogs = scope[KEY] ?? (scope[KEY] = createStore<DialogState>({ op
 
 export function openSettings(): void {
   dialogs.set({ open: "settings" });
+}
+
+/** The template held the export dialog's flag; no control set it. */
+export function openExport(): void {
+  dialogs.set({ open: "export" });
 }
 
 export function openEndSession(title: string): void {

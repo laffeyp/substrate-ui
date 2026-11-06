@@ -11,11 +11,12 @@ import { addWorkspace, canAddWorkspace, currentRecords, loadMore, openSession, r
 import { shell } from "./state/shell";
 import "./hover.css";
 
-/** The relative times ("12s ago") read the clock; the page redraws once a second while open. */
+/** The relative times ("12s ago") read the clock; the page redraws every 500 ms while open, as the
+ *  template did on the window's 500 ms redraw. */
 function useSecondTick(): number {
   const [now, setNow] = useState(() => Date.now() / 1000);
   useEffect(() => {
-    const id = window.setInterval(() => setNow(Date.now() / 1000), 1000);
+    const id = window.setInterval(() => setNow(Date.now() / 1000), 500);
     return () => window.clearInterval(id);
   }, []);
   return now;
