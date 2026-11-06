@@ -1,0 +1,95 @@
+{
+  "_note": "Typed vocabulary proposals for substrate-ui's window, main and server vocabulary (grammar/PRINCIPLES.md taxonomy). Ratified proposals bump the version; open ones carry their reason.",
+  "proposals": [
+    {
+      "id": "P-0.7-MERGE-Workspace",
+      "kind": "ENTITY_MERGE_PROPOSED",
+      "layer": 0,
+      "element": "Workspace: the app's notion and the kernel's are one entity; the kernel is its home; app tags carry workspace path and do not redeclare its kinds.",
+      "source": "kernel SessionManifest.workspace; server /api/workspaces; WORKING_AGREEMENT.md (substrate-ui never redeclares kernel names)",
+      "rationale": "The app reads and shows the kernel's sessions; a second definition would split one thing in two and break the join to the record.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-05, sprint 350 Step 1"
+    },
+    {
+      "id": "P-0.7-MERGE-Driver",
+      "kind": "ENTITY_MERGE_PROPOSED",
+      "layer": 0,
+      "element": "Driver: the app's notion and the kernel's are one entity; the kernel is its home; app tags carry driver name and do not redeclare its kinds.",
+      "source": "kernel SessionManifest.driver; server /api/models; WORKING_AGREEMENT.md (substrate-ui never redeclares kernel names)",
+      "rationale": "The app reads and shows the kernel's sessions; a second definition would split one thing in two and break the join to the record.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-05, sprint 350 Step 1"
+    },
+    {
+      "id": "P-0.7-MERGE-Session",
+      "kind": "ENTITY_MERGE_PROPOSED",
+      "layer": 0,
+      "element": "Session: the app's notion and the kernel's are one entity; the kernel is its home; app tags carry session_id and do not redeclare its kinds.",
+      "source": "substrate.topologies.session_registry; session vocabulary § B; WORKING_AGREEMENT.md (substrate-ui never redeclares kernel names)",
+      "rationale": "The app reads and shows the kernel's sessions; a second definition would split one thing in two and break the join to the record.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-05, sprint 350 Step 1"
+    },
+    {
+      "id": "P-0.7-MERGE-Turn",
+      "kind": "ENTITY_MERGE_PROPOSED",
+      "layer": 0,
+      "element": "Turn: the app's notion and the kernel's are one entity; the kernel is its home; app tags carry session_id + turn_index and do not redeclare its kinds.",
+      "source": "session vocabulary § C (UserMessage.turn_index); WORKING_AGREEMENT.md (substrate-ui never redeclares kernel names)",
+      "rationale": "The app reads and shows the kernel's sessions; a second definition would split one thing in two and break the join to the record.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-05, sprint 350 Step 1"
+    },
+    {
+      "id": "P-0.7-MERGE-RecordEntry",
+      "kind": "ENTITY_MERGE_PROPOSED",
+      "layer": 0,
+      "element": "RecordEntry: the app's notion and the kernel's are one entity; the kernel is its home; app tags carry session_id + seq and do not redeclare its kinds.",
+      "source": "kernel vocabulary 0.4 Envelope; WORKING_AGREEMENT.md (substrate-ui never redeclares kernel names)",
+      "rationale": "The app reads and shows the kernel's sessions; a second definition would split one thing in two and break the join to the record.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-05, sprint 350 Step 1"
+    },
+    {
+      "id": "P-0.7-MERGE-Run",
+      "kind": "ENTITY_MERGE_PROPOSED",
+      "layer": 0,
+      "element": "Run: the app's notion and the kernel's are one entity; the kernel is its home; app tags carry run_id and do not redeclare its kinds.",
+      "source": "session vocabulary § Z; WORKING_AGREEMENT.md (substrate-ui never redeclares kernel names)",
+      "rationale": "The app reads and shows the kernel's sessions; a second definition would split one thing in two and break the join to the record.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-05, sprint 350 Step 1"
+    },
+    {
+      "id": "P-0.7-MERGE-Task",
+      "kind": "ENTITY_MERGE_PROPOSED",
+      "layer": 0,
+      "element": "Task: the app's notion and the kernel's are one entity; the kernel is its home; app tags carry session_id + task id and do not redeclare its kinds.",
+      "source": "server /api/session/<id>/tasks; BackgroundTaskEnded; WORKING_AGREEMENT.md (substrate-ui never redeclares kernel names)",
+      "rationale": "The app reads and shows the kernel's sessions; a second definition would split one thing in two and break the join to the record.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-05, sprint 350 Step 1"
+    },
+    {
+      "id": "P-0.7-MERGE-Child",
+      "kind": "ENTITY_MERGE_PROPOSED",
+      "layer": 0,
+      "element": "Child: the app's notion and the kernel's are one entity; the kernel is its home; app tags carry child session_id and do not redeclare its kinds.",
+      "source": "server /api/session/<id>/children; DELEGATE_CHILD_STARTED; WORKING_AGREEMENT.md (substrate-ui never redeclares kernel names)",
+      "rationale": "The app reads and shows the kernel's sessions; a second definition would split one thing in two and break the join to the record.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-05, sprint 350 Step 1"
+    },
+    {
+      "id": "P-0.7-MERGE-Record",
+      "kind": "ENTITY_MERGE_PROPOSED",
+      "layer": 0,
+      "element": "Record: the app's notion and the kernel's are one entity; the kernel is its home; app tags carry record path and do not redeclare its kinds.",
+      "source": "server /api/records; attachRecordRoot; WORKING_AGREEMENT.md (substrate-ui never redeclares kernel names)",
+      "rationale": "The app reads and shows the kernel's sessions; a second definition would split one thing in two and break the join to the record.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-05, sprint 350 Step 1"
+    }
+  ]
+}
