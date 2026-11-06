@@ -1721,6 +1721,85 @@ def _resolve_workspace_arg(raw: str) -> str:
     return str(path)
 
 
+# Editor shared work 0(c) (UI sprint 348): the workspace file API, read side. Each path is held to
+# the session's workspace: an absolute path is refused, and so is any path that resolves, symlinks
+# followed, outside it. Writes wait for the kernel's edit event (item 0(d)), since every edit goes on
+# the record.
+WORKSPACE_READ_MAX = 2 * 1024 * 1024
+
+
+class WorkspaceEscapeError(ValueError):
+    """A path names something outside the session's workspace."""
+
+
+def _workspace_target(root: Path, rel: str) -> Path:
+    """`rel` inside `root`, resolved. Raises WorkspaceEscapeError for an absolute path, a NUL, or a
+    path that resolves (symlinks followed) outside `root`."""
+    if rel.startswith("/") or "\x00" in rel:
+        raise WorkspaceEscapeError(f"not a path inside the workspace: {rel!r}")
+    base = root.resolve(strict=True)
+    target = (base / rel).resolve(strict=False)
+    if target != base and base not in target.parents:
+        raise WorkspaceEscapeError(f"{rel!r} resolves outside the workspace")
+    return target
+
+
+def _workspace_list(root: Path, rel: str) -> dict[str, object]:
+    """A directory's entries, directories first, each by name: kind (`dir`, `file`, `link`), size,
+    modified time. A symlink is listed as `link` and not followed."""
+    target = _workspace_target(root, rel or ".")
+    if not target.is_dir():
+        raise NotADirectoryError(f"{rel!r} is not a directory")
+    entries: list[dict[str, object]] = []
+    for child in target.iterdir():
+        st = child.lstat()
+        kind = "link" if child.is_symlink() else "dir" if child.is_dir() else "file"
+        entries.append(
+            {"name": child.name, "kind": kind, "size": st.st_size, "modified": st.st_mtime}
+        )
+    entries.sort(key=lambda e: (e["kind"] != "dir", str(e["name"]).lower(), str(e["name"])))
+    base = root.resolve(strict=True)
+    return {"dir": str(target.relative_to(base)) if target != base else "", "entries": entries}
+
+
+def _line_endings(text: str) -> str | None:
+    """`lf`, `crlf`, `mixed`, or None for a text with no line break."""
+    crlf = text.count("\r\n")
+    lf = text.count("\n") - crlf
+    if not crlf and not lf:
+        return None
+    return "mixed" if crlf and lf else "crlf" if crlf else "lf"
+
+
+def _workspace_read(root: Path, rel: str, max_bytes: int = WORKSPACE_READ_MAX) -> dict[str, object]:
+    """A file's facts and, for UTF-8 text up to `max_bytes`, its text: size, modified time,
+    encoding (`utf-8` or `binary`), line endings. Over the cap the text is null and `too_large` true."""
+    target = _workspace_target(root, rel)
+    if not target.is_file():
+        raise FileNotFoundError(f"{rel!r} is not a file in the workspace")
+    st = target.stat()
+    base = root.resolve(strict=True)
+    out: dict[str, object] = {
+        "path": str(target.relative_to(base)),
+        "size": st.st_size,
+        "modified": st.st_mtime,
+        "too_large": st.st_size > max_bytes,
+        "encoding": None,
+        "line_endings": None,
+        "text": None,
+    }
+    if st.st_size > max_bytes:
+        return out
+    data = target.read_bytes()
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError:
+        out["encoding"] = "binary"
+        return out
+    out.update(encoding="utf-8", line_endings=_line_endings(text), text=text)
+    return out
+
+
 def _canonical_workspace(path: str) -> str:
     """Sprint 086b — one string per real directory. Expands `~` and
     strips a trailing slash (it does not resolve symlinks). Two Records rows
@@ -3122,6 +3201,32 @@ class Handler(BaseHTTPRequestHandler):
             }
         )
 
+    def _session_files(self, session_id: str, what: str, q: dict[str, list[str]]) -> None:
+        """UI sprint 348: GET /api/session/<id>/files?dir=<rel> lists a directory of the session's
+        workspace; GET /api/session/<id>/file?path=<rel> reads one file's facts and text. Each path
+        is held to the workspace (`_workspace_target`)."""
+        manifest = self.app.registry.get(session_id) if self.app.registry is not None else None
+        if manifest is None:
+            self._error(404, f"unknown session {session_id!r}")
+            return
+        raw = str(manifest.workspace or "")
+        if not raw:
+            self._error(404, f"session {session_id!r} has no workspace")
+            return
+        root = Path(_resolve_workspace_arg(raw) if raw.startswith("~") else raw)
+        if not root.is_dir():
+            self._error(404, f"the workspace {raw!r} does not exist")
+            return
+        try:
+            if what == "files":
+                self._json(_workspace_list(root, q.get("dir", [""])[0]))
+            else:
+                self._json(_workspace_read(root, q.get("path", [""])[0]))
+        except WorkspaceEscapeError as exc:
+            self._error(400, str(exc))
+        except (FileNotFoundError, NotADirectoryError) as exc:
+            self._error(404, str(exc))
+
     def _session_tasks(self, session_id: str) -> None:
         """UI sprint 105: GET /api/session/<id>/tasks — the session's bash background tasks."""
         from substrate.topologies.tool_loop.background import TABLE as _BG
@@ -4233,6 +4338,12 @@ class Handler(BaseHTTPRequestHandler):
             m_runs = re.fullmatch(r"/api/session/([^/]+)/runs", path)
             if m_runs:  # UI sprint 182
                 self._session_runs(m_runs.group(1))
+                return
+            m_files = re.fullmatch(r"/api/session/([^/]+)/(files|file)", path)
+            if m_files:  # UI sprint 348, editor shared work 0(c)
+                self._session_files(
+                    m_files.group(1), m_files.group(2), parse_qs(urlparse(self.path).query)
+                )
                 return
             m_tasks = re.fullmatch(r"/api/session/([^/]+)/tasks", path)
             if m_tasks:  # UI sprint 105
