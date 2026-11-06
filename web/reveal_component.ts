@@ -73,6 +73,7 @@ import { treeKey } from "./app/derive/tree_key";
 import { chipLabel, driverLabel, modelRows } from "./app/derive/driver_label";
 import { picker } from "./app/state/picker";
 import { stream } from "./app/state/stream";
+import { panes as panesStore } from "./app/state/panes";
 import { meta, selectSeq, setMode } from "./app/state/meta";
 import { closePane, dragCols, dragRows, gutterStops, MAX_PANES, splitPane, trackList } from "./app/derive/panes";
 import { language, setLanguageLane } from "./app/state/language";
@@ -545,6 +546,7 @@ class Component extends DCLogic {
     applyShell();
     picker.set({ views: this._pickerViews || {} });
     if (this._streamView) stream.set(this._streamView);
+    if (this._panesView) panesStore.set({ view: this._panesView });
     // The left column's width follows the meta view's split (web/app/state/meta.ts, sprint 313).
     this._offMeta = meta.subscribe(() => this.setState({ metaSplit: meta.getSnapshot().split }));
     this._publishChrome();
@@ -722,6 +724,7 @@ class Component extends DCLogic {
     picker.set({ views: this._pickerViews || {} });
     find.set({ streamMatches: this._streamMatches || 0 });
     if (this._streamView) stream.set(this._streamView);
+    if (this._panesView) panesStore.set({ view: this._panesView });
     this._publishChrome();
     this._publishTopBar();
   }
@@ -1092,6 +1095,12 @@ class Component extends DCLogic {
       focusTranscript: () => setFindScope('transcript'),
       // The dialogs are web/app/Dialogs.tsx (sprint 216).
       // First run is web/app/FirstRun.tsx (sprint 225).
+    };
+    // The panes view: web/app/PanesView.tsx (sprint 323); written to its store after the render.
+    this._panesView = {
+      cols: vals.paneCols, rows: vals.paneRows, fontSize: vals.fontSize,
+      panes: panes.map(pn => ({ id: pn.id, gridCol: pn.gridCol, gridRow: pn.gridRow, opacity: pn.dim, session: pn.isMain, focus: pn.focus })),
+      colGutters: vals.colGutters, rowGutters: vals.rowGutters,
     };
     // The top bar reads these from its store (web/app/state/top_bar.ts); _publishTopBar writes them
     // after the render, since a store write during a render would update another root mid-render.

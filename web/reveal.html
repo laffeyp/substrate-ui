@@ -30,34 +30,8 @@
 
  <!-- ══ SESSION · terminal at rest ══ -->
  <sc-if value="{{ showTerminal }}" hint-placeholder-val="{{ true }}">
-  <div style="flex:1;position:relative;min-height:0;display:flex">
-  <div style="flex:1;display:grid;grid-template-columns:{{ paneCols }};grid-template-rows:{{ paneRows }};gap:1px;background:rgba(255,255,255,.055);min-height:0">
-   <sc-for list="{{ panes }}" as="pn" hint-placeholder-count="1">
-    <div data-pane="{{ pn.id }}" onClick="{{ pn.focus }}" style="background:#212327;display:flex;flex-direction:column;min-width:0;min-height:0;opacity:{{ pn.dim }};position:relative;grid-column:{{ pn.gridCol }};grid-row:{{ pn.gridRow }}">
-     <sc-if value="{{ pn.isMain }}" hint-placeholder-val="{{ true }}">
-   <div data-app-mount="find" data-pane-id="{{ pn.id }}" data-view="panes" style="flex:none"></div>
-   <div data-vm-transcript-scroller="{{ pn.id }}" style="flex:1;overflow-y:auto;overflow-x:hidden;padding:16px 22px;line-height:2;font-size:{{ fontSize }}px;min-width:0">
-    <div data-vm-transcript-mount="terminal" data-pane-id="{{ pn.id }}"></div>
-   </div>
-   <div data-app-mount="activity" data-pane-id="{{ pn.id }}" data-view="panes" style="flex:none"></div>
-   <div data-app-mount="tasks" data-pane-id="{{ pn.id }}" data-view="panes" style="flex:none"></div>
-   <div style="flex:none;padding:0 22px 16px">
-    <!-- the input bar: web/app/InputBar.tsx, for this pane (sprint 261) -->
-    <div data-app-mount="input-bar" data-pane-id="{{ pn.id }}" data-view="panes"></div>
-   </div>
-     </sc-if>
-     <sc-if value="{{ pn.notMain }}" hint-placeholder-val="{{ false }}">
-      <sc-if value="{{ pn.unbound }}" hint-placeholder-val="{{ false }}">
-       <!-- the pane picker: web/app/PanePicker.tsx (sprint 286) -->
-       <div data-app-mount="picker" data-pane-id="{{ pn.id }}" style="display:contents"></div>
-      </sc-if>
-     </sc-if>
-    </div>
-   </sc-for>
-  </div>
-  <sc-for list="{{ colGutters }}" as="g" hint-placeholder-count="0"><div onMouseDown="{{ g.grab }}" title="drag to resize" style="position:absolute;top:0;bottom:0;left:{{ g.left }};width:11px;transform:translateX(-50%);cursor:col-resize;z-index:15"></div></sc-for>
-  <sc-for list="{{ rowGutters }}" as="g" hint-placeholder-count="0"><div onMouseDown="{{ g.grab }}" title="drag to resize" style="position:absolute;left:0;right:0;top:{{ g.top }};height:11px;transform:translateY(-50%);cursor:row-resize;z-index:15"></div></sc-for>
-  </div>
+  <!-- the panes view: web/app/PanesView.tsx (sprint 323) -->
+  <div data-app-mount="panes" style="display:contents"></div>
  </sc-if>
 
  <!-- ══ SESSION · revealed ══ -->

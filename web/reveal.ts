@@ -24,6 +24,7 @@ import { InputBar } from "./app/InputBar";
 import { FindBar } from "./app/FindBar";
 import { PanePicker } from "./app/PanePicker";
 import { MetaView } from "./app/MetaView";
+import { PanesView } from "./app/PanesView";
 import { ActivityLine, TaskRows, type PaneView } from "./app/ActivityLine";
 
 function boot(): void {
@@ -101,13 +102,12 @@ function boot(): void {
     controller.interruptTurn();
   });
 
-  // Atom-transcript mount, per pane, per view. dc-runtime iterates
-  // <sc-for panes> to emit one <div data-vm-transcript-mount> per pane;
-  // reveal.ts iterates every match, and every match receives its own
-  // React root bound to that pane's controller. dc-runtime's own
-  // reconciler treats the mount div as an empty leaf and clears its
-  // children on each commit, so a MutationObserver on document.body
-  // watches for those clears and re-attaches the nested atom root.
+  // The meta view's transcript mount. dc-runtime draws the meta view's transcript column, with one
+  // <div data-vm-transcript-mount="reveal"> for the focused pane; each match gets its own React root
+  // bound to that pane's controller. dc-runtime's reconciler treats the mount div as an empty leaf and
+  // clears its children on each commit, so a MutationObserver on document.body watches for those
+  // clears and re-attaches the root. The panes view's transcripts are children of their panes
+  // (web/app/PanesView.tsx, sprint 323; F361) and are not attached here.
   interface Attached { host: HTMLElement; root: ReactDOMClient.Root; inner: HTMLElement; paneId: number; view: "terminal" | "reveal"; }
   const attached = new Map<string, Attached>();
   const keyFor = (view: "terminal" | "reveal", paneId: number) => `${view}:${paneId}`;
@@ -135,8 +135,6 @@ function boot(): void {
   };
   const check = () => {
     const seen = new Set<string>();
-    const terms = document.querySelectorAll<HTMLElement>('[data-vm-transcript-mount="terminal"]');
-    terms.forEach((host) => { seen.add(keyFor("terminal", readPaneId(host))); attachOne(host, "terminal"); });
     const revs = document.querySelectorAll<HTMLElement>('[data-vm-transcript-mount="reveal"]');
     revs.forEach((host) => { seen.add(keyFor("reveal", readPaneId(host))); attachOne(host, "reveal"); });
     // Retire roots for panes that no longer have a mount in the DOM.
@@ -180,6 +178,9 @@ function boot(): void {
   // the column and the gutter lay out in the meta row as the template's did (sprint 316).
   mounts.register({ name: "meta", selector: '[data-app-mount="meta"]', key: (host) => host.getAttribute("data-pane-id") ?? "", contents: true,
     render: (host) => React.createElement(MetaView, { paneId: Number(host.getAttribute("data-pane-id")) }) });
+  // The panes view: the grid, its panes and its gutters; its root takes no box (sprint 323).
+  mounts.register({ name: "panes", selector: '[data-app-mount="panes"]', key: () => "window", contents: true,
+    render: () => React.createElement(PanesView) });
   mounts.register({ name: "footer", selector: '[data-app-mount="footer"]', key: () => "window",
     render: () => React.createElement(Footer) });
   mounts.register({ name: "first-run", selector: '[data-app-mount="first-run"]', key: () => "window",
