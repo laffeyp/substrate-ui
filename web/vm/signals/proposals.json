@@ -510,6 +510,16 @@
       "rationale": "A pane attached a run record read-only. how: records_page, deep_link, open_record. outcome: attached, refused.",
       "ratified": true,
       "ratified_by": "agent-resolved 2026-11-05, sprint 350 Step 2"
+    },
+    {
+      "id": "P-0.7-CONTEXT",
+      "kind": "PAYLOAD_FIELD_PROPOSED",
+      "layer": 2,
+      "element": "record_context: boot_id, process, proc_seq, wall, window_id, pane_id on every trace record, stamped by the emitter outside the payload",
+      "source": "web/vm/signals/versions/0.6.json (no window tag carries a pane or window id); PLAN-2026-11-05-sdd-signals-r3.md item 2 (ordering by boot id and per-process sequence)",
+      "rationale": "With two panes open no v0.6 tag says which pane it belongs to, and records from three processes cannot be ordered; one context block joins and orders every tag without renaming any.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-05, sprint 350 Step 3"
     }
   ]
 }

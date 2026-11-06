@@ -44,7 +44,12 @@
         "bundle"
       ],
       "optional_payload": [],
-      "note": "SessionController.openSession() entry. Driver is the selected model name; workspace and bundle are nullable if the caller left them unset."
+      "note": "SessionController.openSession() entry. Driver is the selected model name; workspace and bundle are nullable if the caller left them unset.",
+      "field_types": {
+        "driver": "string (driver name)",
+        "workspace": "string (absolute path) or null",
+        "bundle": "string or null"
+      }
     },
     {
       "name": "SESSION_OPEN_ACKED",
@@ -56,7 +61,12 @@
         "driver"
       ],
       "optional_payload": [],
-      "note": "The server returned a session_id on POST /api/session. name is nullable when the server has not yet named the record."
+      "note": "The server returned a session_id on POST /api/session. name is nullable when the server has not yet named the record.",
+      "field_types": {
+        "session_id": "string (kernel session id)",
+        "name": "string or null",
+        "driver": "string (driver name)"
+      }
     },
     {
       "name": "SESSION_OPEN_REFUSED",
@@ -67,7 +77,11 @@
         "detail"
       ],
       "optional_payload": [],
-      "note": "POST /api/session failed. failure_class is the typed reason from the SubstrateClient; detail is a human string."
+      "note": "POST /api/session failed. failure_class is the typed reason from the SubstrateClient; detail is a human string.",
+      "field_types": {
+        "failure_class": "string (client failure class: network, http_error, or the server's failure_class)",
+        "detail": "string (server error text; Layer 7 bounds it)"
+      }
     },
     {
       "name": "SESSION_ATTACH_STARTED",
@@ -77,7 +91,10 @@
         "session_id"
       ],
       "optional_payload": [],
-      "note": "attachExisting(sessionId) began; the controller is opening the SSE stream against a session it did not itself create."
+      "note": "attachExisting(sessionId) began; the controller is opening the SSE stream against a session it did not itself create.",
+      "field_types": {
+        "session_id": "string (kernel session id)"
+      }
     },
     {
       "name": "SESSION_END_REQUESTED",
@@ -88,7 +105,11 @@
         "reason"
       ],
       "optional_payload": [],
-      "note": "endSession(reason) entry. reason is the caller's label: user_end (the end-session confirm, /exit) or user_close (Close Pane, ⌘W)."
+      "note": "endSession(reason) entry. reason is the caller's label: user_end (the end-session confirm, /exit) or user_close (Close Pane, ⌘W).",
+      "field_types": {
+        "session_id": "string (kernel session id)",
+        "reason": "string"
+      }
     },
     {
       "name": "SESSION_ENDED_LOCAL",
@@ -98,7 +119,10 @@
         "reason"
       ],
       "optional_payload": [],
-      "note": "A SessionEnded envelope reached the controller; snapshot flipped to endedReason. Distinct from SESSION_END_REQUESTED because a session can end without the local caller asking."
+      "note": "A SessionEnded envelope reached the controller; snapshot flipped to endedReason. Distinct from SESSION_END_REQUESTED because a session can end without the local caller asking.",
+      "field_types": {
+        "reason": "string"
+      }
     },
     {
       "name": "DRIVER_ROSTER_LOADED",
@@ -109,7 +133,11 @@
         "default"
       ],
       "optional_payload": [],
-      "note": "loadDriverRoster() populated snapshot.driverRoster from /api/models. default is nullable when the server names no default."
+      "note": "loadDriverRoster() populated snapshot.driverRoster from /api/models. default is nullable when the server names no default.",
+      "field_types": {
+        "count": "int",
+        "default": "string or null"
+      }
     },
     {
       "name": "DRIVER_PICKED",
@@ -119,7 +147,10 @@
         "driver"
       ],
       "optional_payload": [],
-      "note": "pickDriver(name) was called. The controller records the choice; no server call fires until session-open."
+      "note": "pickDriver(name) was called. The controller records the choice; no server call fires until session-open.",
+      "field_types": {
+        "driver": "string (driver name)"
+      }
     },
     {
       "name": "DRIVER_VERSION_PICKED",
@@ -130,7 +161,11 @@
         "version"
       ],
       "optional_payload": [],
-      "note": "pickDriverVersion(driver, versionId) was called. version is null when the pick is cleared and the server will fall back to the CLI's default_version. Only meaningful for CLI drivers; ollama tags carry their model in the driver name."
+      "note": "pickDriverVersion(driver, versionId) was called. version is null when the pick is cleared and the server will fall back to the CLI's default_version. Only meaningful for CLI drivers; ollama tags carry their model in the driver name.",
+      "field_types": {
+        "driver": "string (driver name)",
+        "version": "string or null"
+      }
     },
     {
       "name": "BUNDLE_ROSTER_LOADED",
@@ -140,7 +175,10 @@
         "count"
       ],
       "optional_payload": [],
-      "note": "loadBundleRoster() populated snapshot.bundleRoster from /api/bundles."
+      "note": "loadBundleRoster() populated snapshot.bundleRoster from /api/bundles.",
+      "field_types": {
+        "count": "int"
+      }
     },
     {
       "name": "BUNDLE_PICKED",
@@ -150,7 +188,10 @@
         "bundle"
       ],
       "optional_payload": [],
-      "note": "pickBundle(slug) was called. Records the choice; no server call fires until session-open."
+      "note": "pickBundle(slug) was called. Records the choice; no server call fires until session-open.",
+      "field_types": {
+        "bundle": "string or null"
+      }
     },
     {
       "name": "WORKSPACES_LOADED",
@@ -160,7 +201,10 @@
         "count"
       ],
       "optional_payload": [],
-      "note": "loadRecentWorkspaces() populated snapshot.recentWorkspaces from /api/workspaces."
+      "note": "loadRecentWorkspaces() populated snapshot.recentWorkspaces from /api/workspaces.",
+      "field_types": {
+        "count": "int"
+      }
     },
     {
       "name": "TURN_SUBMITTED",
@@ -172,7 +216,12 @@
         "text_length"
       ],
       "optional_payload": [],
-      "note": "sendTurn(text) entry. turn_index counts from zero over the session's lifetime; text_length is the trimmed input character count."
+      "note": "sendTurn(text) entry. turn_index counts from zero over the session's lifetime; text_length is the trimmed input character count.",
+      "field_types": {
+        "session_id": "string (kernel session id)",
+        "turn_index": "int (kernel)",
+        "text_length": "int"
+      }
     },
     {
       "name": "TURN_ACK",
@@ -182,7 +231,10 @@
         "session_id"
       ],
       "optional_payload": [],
-      "note": "POST /api/session/<id>/turn returned 200. The envelope stream carries the model's reply from here on."
+      "note": "POST /api/session/<id>/turn returned 200. The envelope stream carries the model's reply from here on.",
+      "field_types": {
+        "session_id": "string (kernel session id)"
+      }
     },
     {
       "name": "TURN_REFUSED",
@@ -193,7 +245,11 @@
         "detail"
       ],
       "optional_payload": [],
-      "note": "Turn POST failed. failure_class is the typed reason; detail is the human string."
+      "note": "Turn POST failed. failure_class is the typed reason; detail is the human string.",
+      "field_types": {
+        "failure_class": "string (client failure class: network, http_error, or the server's failure_class)",
+        "detail": "string (server error text; Layer 7 bounds it)"
+      }
     },
     {
       "name": "TURN_PARKED",
@@ -203,7 +259,10 @@
         "park_reason"
       ],
       "optional_payload": [],
-      "note": "A Park envelope arrived; the driver is waiting on the human. park_reason names the wait (rate_limit, awaiting_input, etc)."
+      "note": "A Park envelope arrived; the driver is waiting on the human. park_reason names the wait (rate_limit, awaiting_input, etc).",
+      "field_types": {
+        "park_reason": "string"
+      }
     },
     {
       "name": "TURN_INTERRUPTED",
@@ -217,7 +276,14 @@
         "scope"
       ],
       "optional_payload": [],
-      "note": "interruptTurn() completed. was_interrupted true when the server killed an in-flight turn; landed is the server's ACK for the interrupt; tier is soft or hard; signal true for Ctrl+C, false for /interrupt; scope names what got interrupted."
+      "note": "interruptTurn() completed. was_interrupted true when the server killed an in-flight turn; landed is the server's ACK for the interrupt; tier is soft or hard; signal true for Ctrl+C, false for /interrupt; scope names what got interrupted.",
+      "field_types": {
+        "was_interrupted": "bool",
+        "landed": "bool",
+        "tier": "enum soft | hard",
+        "signal": "string or null",
+        "scope": "string"
+      }
     },
     {
       "name": "STREAM_ATTACHED",
@@ -228,7 +294,11 @@
         "session_id",
         "record_root"
       ],
-      "note": "SSE onopen; snapshot.connection = 'connected'. Payload carries session_id for a session stream, record_root for a child-record attach. Exactly one of the two is present."
+      "note": "SSE onopen; snapshot.connection = 'connected'. Payload carries session_id for a session stream, record_root for a child-record attach. Exactly one of the two is present.",
+      "field_types": {
+        "session_id": "string (kernel session id)",
+        "record_root": "string (absolute path)"
+      }
     },
     {
       "name": "STREAM_CLOSED",
@@ -239,7 +309,11 @@
         "session_id",
         "record_root"
       ],
-      "note": "SSE closed cleanly (RunFinalised, session-end, or attach to a new session). Same session_id/record_root branching as STREAM_ATTACHED."
+      "note": "SSE closed cleanly (RunFinalised, session-end, or attach to a new session). Same session_id/record_root branching as STREAM_ATTACHED.",
+      "field_types": {
+        "session_id": "string (kernel session id)",
+        "record_root": "string (absolute path)"
+      }
     },
     {
       "name": "STREAM_RECONNECTING",
@@ -250,7 +324,11 @@
         "session_id",
         "record_root"
       ],
-      "note": "SSE error tripped the 1s reconnect timer. Same session_id/record_root branching as STREAM_ATTACHED."
+      "note": "SSE error tripped the 1s reconnect timer. Same session_id/record_root branching as STREAM_ATTACHED.",
+      "field_types": {
+        "session_id": "string (kernel session id)",
+        "record_root": "string (absolute path)"
+      }
     },
     {
       "name": "STREAM_ENVELOPE_APPENDED",
@@ -261,7 +339,11 @@
         "kind"
       ],
       "optional_payload": [],
-      "note": "One envelope folded into the transcript. seq is the substrate Run's monotonic sequence number; kind is the envelope kind string (UserMessage, ModelReply, ToolCall, etc)."
+      "note": "One envelope folded into the transcript. seq is the substrate Run's monotonic sequence number; kind is the envelope kind string (UserMessage, ModelReply, ToolCall, etc).",
+      "field_types": {
+        "seq": "int (kernel record seq)",
+        "kind": "string (kernel envelope kind)"
+      }
     },
     {
       "name": "SESSIONS_LOADED",
@@ -271,7 +353,10 @@
         "count"
       ],
       "optional_payload": [],
-      "note": "loadLiveSessions() populated snapshot.liveSessions from /api/session."
+      "note": "loadLiveSessions() populated snapshot.liveSessions from /api/session.",
+      "field_types": {
+        "count": "int"
+      }
     },
     {
       "name": "CHILD_RECORD_ATTACH_REQUESTED",
@@ -281,7 +366,10 @@
         "record_root"
       ],
       "optional_payload": [],
-      "note": "attachRecordRoot(recordRoot) entry. The controller is subscribing to a child record's stream (a delegate tool call's substrate Run)."
+      "note": "attachRecordRoot(recordRoot) entry. The controller is subscribing to a child record's stream (a delegate tool call's substrate Run).",
+      "field_types": {
+        "record_root": "string (absolute path)"
+      }
     },
     {
       "name": "TOPOLOGY_LOADED",
@@ -292,7 +380,11 @@
         "trigger_count"
       ],
       "optional_payload": [],
-      "note": "loadTopologyGraph(name) returned. Counts describe the structure of the record's authored topology."
+      "note": "loadTopologyGraph(name) returned. Counts describe the structure of the record's authored topology.",
+      "field_types": {
+        "producer_count": "int",
+        "trigger_count": "int"
+      }
     },
     {
       "name": "SPEC_VALIDATE_REQUESTED",
@@ -302,7 +394,10 @@
       "optional_payload": [
         "topology_name"
       ],
-      "note": "validateSpec() entry. topology_name is present when the spec names one."
+      "note": "validateSpec() entry. topology_name is present when the spec names one.",
+      "field_types": {
+        "topology_name": "string"
+      }
     },
     {
       "name": "SPEC_VALIDATED",
@@ -314,7 +409,11 @@
       "optional_payload": [
         "error"
       ],
-      "note": "Server responded to /api/validate. valid is the boolean verdict; error carries the reason on false."
+      "note": "Server responded to /api/validate. valid is the boolean verdict; error carries the reason on false.",
+      "field_types": {
+        "valid": "bool",
+        "error": "string or null"
+      }
     },
     {
       "name": "SPEC_BUILD_REQUESTED",
@@ -324,7 +423,10 @@
       "optional_payload": [
         "topology_name"
       ],
-      "note": "buildSpec() entry. topology_name is present when the spec names one."
+      "note": "buildSpec() entry. topology_name is present when the spec names one.",
+      "field_types": {
+        "topology_name": "string"
+      }
     },
     {
       "name": "SPEC_BUILD_REJECTED",
@@ -334,7 +436,10 @@
         "reason"
       ],
       "optional_payload": [],
-      "note": "The server refused the build, or the validator rejected the spec before POST."
+      "note": "The server refused the build, or the validator rejected the spec before POST.",
+      "field_types": {
+        "reason": "string"
+      }
     },
     {
       "name": "SPEC_BUILT",
@@ -347,7 +452,12 @@
       "optional_payload": [
         "unfired_triggers_count"
       ],
-      "note": "The build succeeded and a substrate Run was started. run_name is the record identifier; status is the Run's terminal or in-flight state; unfired_triggers_count is present when at least one trigger in the authored topology never fired."
+      "note": "The build succeeded and a substrate Run was started. run_name is the record identifier; status is the Run's terminal or in-flight state; unfired_triggers_count is present when at least one trigger in the authored topology never fired.",
+      "field_types": {
+        "run_name": "string",
+        "status": "int (HTTP status)",
+        "unfired_triggers_count": "int"
+      }
     },
     {
       "name": "SLASH_ROUTED",
@@ -357,7 +467,10 @@
         "cmd"
       ],
       "optional_payload": [],
-      "note": "submitLine() matched a known slash. cmd is the leading token (exit, model, help, clear, interrupt, name, list, tools, workspace, bundle, isolate)."
+      "note": "submitLine() matched a known slash. cmd is the leading token (exit, model, help, clear, interrupt, name, list, tools, workspace, bundle, isolate).",
+      "field_types": {
+        "cmd": "string (slash token)"
+      }
     },
     {
       "name": "SLASH_UNKNOWN",
@@ -367,7 +480,10 @@
         "cmd"
       ],
       "optional_payload": [],
-      "note": "submitLine() matched no known slash. cmd is the leading token."
+      "note": "submitLine() matched no known slash. cmd is the leading token.",
+      "field_types": {
+        "cmd": "string (slash token)"
+      }
     },
     {
       "name": "RUN_STARTED",
@@ -381,7 +497,13 @@
       "optional_payload": [
         "t"
       ],
-      "note": "A TopologyRunStarted reached this session's record. sessions lists the run's sessions (session_id, role, record_root, driven); t is the record's write time, which the shell reads to open panes only for a run that starts now."
+      "note": "A TopologyRunStarted reached this session's record. sessions lists the run's sessions (session_id, role, record_root, driven); t is the record's write time, which the shell reads to open panes only for a run that starts now.",
+      "field_types": {
+        "run_id": "string (kernel)",
+        "topology": "string",
+        "sessions": "list of {session_id, role, record_root}",
+        "t": "float or null"
+      }
     },
     {
       "name": "RUN_FOCUS_REQUESTED",
@@ -393,7 +515,12 @@
         "sessions"
       ],
       "optional_payload": [],
-      "note": "`/run focus` named a run; the shell focuses its pane, or opens one."
+      "note": "`/run focus` named a run; the shell focuses its pane, or opens one.",
+      "field_types": {
+        "run_id": "string (kernel)",
+        "topology": "string",
+        "sessions": "int or list (RUN_STARTED: list of {session_id, role})"
+      }
     },
     {
       "name": "RUN_STOP_REQUESTED",
@@ -403,7 +530,10 @@
         "run_id"
       ],
       "optional_payload": [],
-      "note": "The server accepted a stop for one of this session's runs; the run's session ends caller_stop."
+      "note": "The server accepted a stop for one of this session's runs; the run's session ends caller_stop.",
+      "field_types": {
+        "run_id": "string (kernel)"
+      }
     },
     {
       "name": "TURN_REFUSED_VIEW_ONLY",
@@ -411,7 +541,8 @@
       "stratum": "incident",
       "payload": [],
       "optional_payload": [],
-      "note": "A line was sent in a pane that shows a run's session, whose topology writes its messages; nothing was posted."
+      "note": "A line was sent in a pane that shows a run's session, whose topology writes its messages; nothing was posted.",
+      "field_types": {}
     },
     {
       "name": "DELEGATE_CHILD_STARTED",
@@ -422,7 +553,11 @@
         "driver"
       ],
       "optional_payload": [],
-      "note": "A delegate call this session made now started a child session (its parent is this session); the shell opens an interactive pane on it."
+      "note": "A delegate call this session made now started a child session (its parent is this session); the shell opens an interactive pane on it.",
+      "field_types": {
+        "session_id": "string (kernel session id)",
+        "driver": "string (driver name)"
+      }
     },
     {
       "name": "ASSAYS_LOADED",
@@ -432,7 +567,10 @@
         "count"
       ],
       "optional_payload": [],
-      "note": "loadAssays() read /api/assays: one row per cells file in the bench results folder. count is the number of rows."
+      "note": "loadAssays() read /api/assays: one row per cells file in the bench results folder. count is the number of rows.",
+      "field_types": {
+        "count": "int"
+      }
     },
     {
       "name": "ASSAY_REPORT_LOADED",
@@ -443,7 +581,11 @@
         "arms"
       ],
       "optional_payload": [],
-      "note": "loadAssayReport(name) read /api/assay/<name>: one assay's arm matrix. arms is the number of arms in the report."
+      "note": "loadAssayReport(name) read /api/assay/<name>: one assay's arm matrix. arms is the number of arms in the report.",
+      "field_types": {
+        "name": "string or null",
+        "arms": "int"
+      }
     },
     {
       "name": "PICKER_FOLDER_ARMED",
@@ -456,7 +598,13 @@
         "source"
       ],
       "optional_payload": [],
-      "note": "A pane's picker armed a folder and moved to the model column. source: row (a listed folder or the sandbox row), dialog (choose folder), typed (the path box)."
+      "note": "A pane's picker armed a folder and moved to the model column. source: row (a listed folder or the sandbox row), dialog (choose folder), typed (the path box).",
+      "field_types": {
+        "pane_id": "int",
+        "workspace": "string (absolute path) or null",
+        "is_default": "bool",
+        "source": "enum row | dialog | typed"
+      }
     },
     {
       "name": "PICKER_FOLDER_DISARMED",
@@ -467,7 +615,11 @@
         "cause"
       ],
       "optional_payload": [],
-      "note": "A pane's picker dropped its armed folder and went back to the folder column. cause: escape, arrow_left, list_click (a click on the folder list's empty space), typed (the path box changed)."
+      "note": "A pane's picker dropped its armed folder and went back to the folder column. cause: escape, arrow_left, list_click (a click on the folder list's empty space), typed (the path box changed).",
+      "field_types": {
+        "pane_id": "int",
+        "cause": "enum escape | arrow_left | list_click | typed"
+      }
     },
     {
       "name": "PICKER_LINE_ENTERED",
@@ -479,7 +631,12 @@
         "cause"
       ],
       "optional_payload": [],
-      "note": "A pane's picker moved to a line: model, guidance, length or tone. cause: picked (the line before it was picked) or back (escape or arrow up from the line after it)."
+      "note": "A pane's picker moved to a line: model, guidance, length or tone. cause: picked (the line before it was picked) or back (escape or arrow up from the line after it).",
+      "field_types": {
+        "pane_id": "int",
+        "line": "enum model | guidance | length | tone",
+        "cause": "enum picked | back"
+      }
     },
     {
       "name": "PICKER_COMMITTED",
@@ -491,14 +648,18 @@
         "is_default"
       ],
       "optional_payload": [],
-      "note": "The tone pick bound the pane to its folder; the chat prompt shows and the session opens on the first message."
+      "note": "The tone pick bound the pane to its folder; the chat prompt shows and the session opens on the first message.",
+      "field_types": {
+        "pane_id": "int",
+        "workspace": "string (absolute path) or null",
+        "is_default": "bool"
+      }
     },
     {
       "name": "APP_BOOTED",
       "category": "app",
       "stratum": "event",
       "payload": [
-        "boot_id",
         "app_version",
         "app_commit",
         "kernel_commit",
@@ -508,26 +669,35 @@
       ],
       "optional_payload": [],
       "note": "First signal of an app launch: which build and vocabulary is running and which store it uses. Opens the AppBoot session; every other tag of the launch carries its boot_id.",
-      "emit_site": "electron/main.js app.whenReady"
+      "emit_site": "electron/main.js app.whenReady",
+      "field_types": {
+        "app_version": "string",
+        "app_commit": "string",
+        "kernel_commit": "string",
+        "vocab_version": "string",
+        "packaged": "bool",
+        "home_kind": "enum default | env | dev"
+      }
     },
     {
       "name": "APP_QUIT_REQUESTED",
       "category": "app",
       "stratum": "event",
       "payload": [
-        "boot_id",
         "cause"
       ],
       "optional_payload": [],
       "note": "Quit began. cause: menu, last_window, signal, update.",
-      "emit_site": "electron/main.js before-quit"
+      "emit_site": "electron/main.js before-quit",
+      "field_types": {
+        "cause": "enum menu | last_window | signal | update"
+      }
     },
     {
       "name": "APP_QUIT_COMPLETED",
       "category": "app",
       "stratum": "summary",
       "payload": [
-        "boot_id",
         "server_exit_code",
         "windows_opened",
         "signals_written",
@@ -535,233 +705,279 @@
       ],
       "optional_payload": [],
       "note": "The launch ended; the server's exit and the trace's write and loss counts. Closes the AppBoot session.",
-      "emit_site": "electron/main.js will-quit"
+      "emit_site": "electron/main.js will-quit",
+      "field_types": {
+        "server_exit_code": "int or null",
+        "windows_opened": "int",
+        "signals_written": "int",
+        "signals_lost": "int"
+      }
     },
     {
       "name": "SERVER_SPAWNED",
       "category": "app",
       "stratum": "event",
       "payload": [
-        "boot_id",
         "pid",
         "packaged"
       ],
       "optional_payload": [],
       "note": "Main started the server process.",
-      "emit_site": "electron/main.js server spawn"
+      "emit_site": "electron/main.js server spawn",
+      "field_types": {
+        "pid": "int",
+        "packaged": "bool"
+      }
     },
     {
       "name": "SERVER_BOUND",
       "category": "app",
       "stratum": "event",
       "payload": [
-        "boot_id",
         "port",
         "ms"
       ],
       "optional_payload": [],
       "note": "The server reported its port; ms since spawn.",
-      "emit_site": "electron/main.js server bound"
+      "emit_site": "electron/main.js server bound",
+      "field_types": {
+        "port": "int",
+        "ms": "int"
+      }
     },
     {
       "name": "SERVER_EXITED",
       "category": "app",
       "stratum": "incident",
       "payload": [
-        "boot_id",
         "code",
         "signal",
         "expected"
       ],
       "optional_payload": [],
       "note": "The server process ended. An incident when expected is false: the window has no backend.",
-      "emit_site": "electron/main.js server exit"
+      "emit_site": "electron/main.js server exit",
+      "field_types": {
+        "code": "int or null",
+        "signal": "string or null",
+        "expected": "bool"
+      }
     },
     {
       "name": "WINDOW_OPENED",
       "category": "app",
       "stratum": "event",
       "payload": [
-        "boot_id",
-        "window_id",
         "cause"
       ],
       "optional_payload": [],
       "note": "Main created a window. cause: boot, menu, activate, second_instance, deep_link.",
-      "emit_site": "electron/main.js createWindow"
+      "emit_site": "electron/main.js createWindow",
+      "field_types": {
+        "cause": "enum boot | menu | activate | second_instance | deep_link"
+      }
     },
     {
       "name": "WINDOW_CLOSED",
       "category": "app",
       "stratum": "event",
-      "payload": [
-        "boot_id",
-        "window_id"
-      ],
+      "payload": [],
       "optional_payload": [],
       "note": "A window closed.",
-      "emit_site": "electron/main.js win closed"
+      "emit_site": "electron/main.js win closed",
+      "field_types": {}
     },
     {
       "name": "NAVIGATION_BLOCKED",
       "category": "app",
       "stratum": "incident",
       "payload": [
-        "window_id",
         "target_kind"
       ],
       "optional_payload": [],
       "note": "The window tried to leave the app's page and main refused it.",
-      "emit_site": "electron/main.js will-navigate"
+      "emit_site": "electron/main.js will-navigate",
+      "field_types": {
+        "target_kind": "enum external | file | unknown"
+      }
     },
     {
       "name": "DEEP_LINK_RECEIVED",
       "category": "app",
       "stratum": "event",
       "payload": [
-        "boot_id",
         "link_kind"
       ],
       "optional_payload": [],
       "note": "The OS passed a substrate:// link.",
-      "emit_site": "electron/main.js open-url"
+      "emit_site": "electron/main.js open-url",
+      "field_types": {
+        "link_kind": "enum record | session | unknown"
+      }
     },
     {
       "name": "MENU_COMMAND_SENT",
       "category": "app",
       "stratum": "event",
       "payload": [
-        "window_id",
         "command"
       ],
       "optional_payload": [],
       "note": "A native menu item fired and main sent its command to the window.",
-      "emit_site": "electron/menu.js send"
+      "emit_site": "electron/menu.js send",
+      "field_types": {
+        "command": "string (menu command)"
+      }
     },
     {
       "name": "NATIVE_DIALOG_CLOSED",
       "category": "app",
       "stratum": "event",
       "payload": [
-        "window_id",
         "dialog",
         "outcome"
       ],
       "optional_payload": [],
       "note": "A native file dialog closed. dialog: pick_folder, open_record. outcome: picked, cancelled.",
-      "emit_site": "electron/main.js native:pick-folder, native:open-record"
+      "emit_site": "electron/main.js native:pick-folder, native:open-record",
+      "field_types": {
+        "dialog": "enum pick_folder | open_record",
+        "outcome": "enum picked | cancelled"
+      }
     },
     {
       "name": "WINDOW_BOOTED",
       "category": "window",
       "stratum": "event",
       "payload": [
-        "boot_id",
-        "window_id",
         "vocab_version"
       ],
       "optional_payload": [],
       "note": "The window's page ran its boot and mounted App. Opens the Window session in the window's own trace.",
-      "emit_site": "web/reveal.ts boot"
+      "emit_site": "web/reveal.ts boot",
+      "field_types": {
+        "vocab_version": "string"
+      }
     },
     {
       "name": "VIEW_CHANGED",
       "category": "window",
       "stratum": "event",
       "payload": [
-        "window_id",
         "from",
         "to",
         "cause"
       ],
       "optional_payload": [],
       "note": "The window's open view changed: panes, meta or a page. cause: key, button, menu, split, records_open, close.",
-      "emit_site": "web/app/App.tsx (setState of vs)"
+      "emit_site": "web/app/App.tsx (setState of vs)",
+      "field_types": {
+        "from": "string (open view)",
+        "to": "string (open view)",
+        "cause": "enum key | button | menu | split | records_open | close"
+      }
     },
     {
       "name": "KEY_ROUTED",
       "category": "window",
       "stratum": "event",
       "payload": [
-        "window_id",
         "key",
         "action",
         "target"
       ],
       "optional_payload": [],
       "note": "A named key (never a typed character) was routed. action: the keymap action or none; target: picker, records, language, window, box.",
-      "emit_site": "web/app/App.tsx onKey"
+      "emit_site": "web/app/App.tsx onKey",
+      "field_types": {
+        "key": "string (named key with modifiers, e.g. Enter, Escape, Meta+d; never a printable character)",
+        "action": "string (keymap action kind or none)",
+        "target": "enum picker | records | language | window | box | none"
+      }
     },
     {
       "name": "DIALOG_OPENED",
       "category": "window",
       "stratum": "event",
       "payload": [
-        "window_id",
         "dialog"
       ],
       "optional_payload": [],
       "note": "The window opened one of its dialogs.",
-      "emit_site": "web/app/Dialogs.tsx"
+      "emit_site": "web/app/Dialogs.tsx",
+      "field_types": {
+        "dialog": "string (dialog id)"
+      }
     },
     {
       "name": "DIALOG_CLOSED",
       "category": "window",
       "stratum": "event",
       "payload": [
-        "window_id",
         "dialog",
         "outcome"
       ],
       "optional_payload": [],
       "note": "A window dialog closed. outcome: confirmed, cancelled, escape.",
-      "emit_site": "web/app/Dialogs.tsx"
+      "emit_site": "web/app/Dialogs.tsx",
+      "field_types": {
+        "dialog": "string (dialog id)",
+        "outcome": "enum confirmed | cancelled | escape"
+      }
     },
     {
       "name": "PANE_OPENED",
       "category": "pane",
       "stratum": "event",
       "payload": [
-        "window_id",
         "pane_id",
         "cause"
       ],
       "optional_payload": [],
       "note": "A pane was created. cause: start, split, run, delegate, restore.",
-      "emit_site": "web/app/App.tsx split, newPane"
+      "emit_site": "web/app/App.tsx split, newPane",
+      "field_types": {
+        "pane_id": "int",
+        "cause": "enum start | split | run | delegate | restore"
+      }
     },
     {
       "name": "PANE_CLOSED",
       "category": "pane",
       "stratum": "event",
       "payload": [
-        "window_id",
         "pane_id",
         "had_session"
       ],
       "optional_payload": [],
       "note": "A pane was removed.",
-      "emit_site": "web/app/App.tsx closePaneNow"
+      "emit_site": "web/app/App.tsx closePaneNow",
+      "field_types": {
+        "pane_id": "int",
+        "had_session": "bool"
+      }
     },
     {
       "name": "PANE_FOCUSED",
       "category": "pane",
       "stratum": "event",
       "payload": [
-        "window_id",
         "pane_id",
         "cause"
       ],
       "optional_payload": [],
       "note": "Focus moved to a pane. cause: click, key, split, open.",
-      "emit_site": "web/app/App.tsx setState focused"
+      "emit_site": "web/app/App.tsx setState focused",
+      "field_types": {
+        "pane_id": "int",
+        "cause": "enum click | key | split | open"
+      }
     },
     {
       "name": "PANE_BOUND",
       "category": "pane",
       "stratum": "event",
       "payload": [
-        "window_id",
         "pane_id",
         "binding",
         "how"
@@ -770,21 +986,30 @@
         "session_id"
       ],
       "note": "An unbound pane took a session or record. binding: session or record; how: picker, attach, run, child, restore.",
-      "emit_site": "web/app/App.tsx bindPane, attach paths"
+      "emit_site": "web/app/App.tsx bindPane, attach paths",
+      "field_types": {
+        "pane_id": "int",
+        "binding": "enum session | record",
+        "how": "enum picker | attach | run | child | restore",
+        "session_id": "string (kernel session id)"
+      }
     },
     {
       "name": "LENS_CHANGED",
       "category": "pane",
       "stratum": "event",
       "payload": [
-        "window_id",
         "lens"
       ],
       "optional_payload": [
         "session_id"
       ],
       "note": "Meta's lens changed: stream, graph, structure, language, scene, io.",
-      "emit_site": "web/app/MetaView.tsx; state/meta.ts setMode"
+      "emit_site": "web/app/MetaView.tsx; state/meta.ts setMode",
+      "field_types": {
+        "lens": "enum stream | graph | structure | language | scene | io",
+        "session_id": "string (kernel session id)"
+      }
     },
     {
       "name": "TRANSCRIPT_ROW_DRAWN",
@@ -798,7 +1023,13 @@
       ],
       "optional_payload": [],
       "note": "A record entry of a session became a row on screen. The view pair of every kernel session kind the window shows (kernel session vocabulary § G).",
-      "emit_site": "web/reveal/transcript/ (row commit)"
+      "emit_site": "web/reveal/transcript/ (row commit)",
+      "field_types": {
+        "pane_id": "int",
+        "session_id": "string (kernel session id)",
+        "seq": "int (kernel record seq)",
+        "kind": "string (kernel envelope kind)"
+      }
     },
     {
       "name": "TRANSCRIPT_ROW_SKIPPED",
@@ -813,7 +1044,14 @@
       ],
       "optional_payload": [],
       "note": "A record entry the pane received and chose not to draw, with why.",
-      "emit_site": "web/vm/session_controller.ts (envelope to row)"
+      "emit_site": "web/vm/session_controller.ts (envelope to row)",
+      "field_types": {
+        "pane_id": "int",
+        "session_id": "string (kernel session id)",
+        "seq": "int (kernel record seq)",
+        "kind": "string (kernel envelope kind)",
+        "reason": "enum hidden_kind | duplicate_seq | folded | other"
+      }
     },
     {
       "name": "WORKSPACE_ADDED",
@@ -825,7 +1063,11 @@
       ],
       "optional_payload": [],
       "note": "A folder was sent to the recent-workspace list. outcome: added, refused.",
-      "emit_site": "web/vm/session_controller.ts addWorkspace"
+      "emit_site": "web/vm/session_controller.ts addWorkspace",
+      "field_types": {
+        "pane_id": "int",
+        "outcome": "enum added | refused"
+      }
     },
     {
       "name": "CONTROLS_PICKED",
@@ -838,7 +1080,12 @@
       ],
       "optional_payload": [],
       "note": "The length and tone picks were recorded for the next session.",
-      "emit_site": "web/vm/session_controller.ts pickControls"
+      "emit_site": "web/vm/session_controller.ts pickControls",
+      "field_types": {
+        "pane_id": "int",
+        "length": "string or null",
+        "tone": "string or null"
+      }
     },
     {
       "name": "SESSION_RENAMED",
@@ -851,7 +1098,12 @@
       ],
       "optional_payload": [],
       "note": "A session's name changed. outcome: renamed, refused.",
-      "emit_site": "web/vm/session_controller.ts renameSession"
+      "emit_site": "web/vm/session_controller.ts renameSession",
+      "field_types": {
+        "pane_id": "int",
+        "session_id": "string (kernel session id)",
+        "outcome": "enum renamed | refused"
+      }
     },
     {
       "name": "TASK_STOP_REQUESTED",
@@ -863,7 +1115,11 @@
       ],
       "optional_payload": [],
       "note": "The person asked a background task to stop.",
-      "emit_site": "web/vm/session_controller.ts stopTask"
+      "emit_site": "web/vm/session_controller.ts stopTask",
+      "field_types": {
+        "session_id": "string (kernel session id)",
+        "task_id": "string"
+      }
     },
     {
       "name": "CLI_STATUS_CHECKED",
@@ -875,7 +1131,11 @@
       ],
       "optional_payload": [],
       "note": "The window asked whether a CLI driver is signed in.",
-      "emit_site": "web/vm/session_controller.ts maybeOpenAuthPrompt"
+      "emit_site": "web/vm/session_controller.ts maybeOpenAuthPrompt",
+      "field_types": {
+        "driver": "string (driver name)",
+        "authed": "bool or null"
+      }
     },
     {
       "name": "CLI_LOGIN_PROMPTED",
@@ -887,7 +1147,11 @@
       ],
       "optional_payload": [],
       "note": "The sign-in card was shown for a CLI driver.",
-      "emit_site": "web/vm/session_controller.ts openAuthPrompt"
+      "emit_site": "web/vm/session_controller.ts openAuthPrompt",
+      "field_types": {
+        "pane_id": "int",
+        "driver": "string (driver name)"
+      }
     },
     {
       "name": "CLI_LOGIN_FINISHED",
@@ -900,23 +1164,34 @@
       ],
       "optional_payload": [],
       "note": "The sign-in card's flow ended. outcome: signed_in, failed, dismissed.",
-      "emit_site": "web/reveal/transcript/AuthPromptCard.tsx"
+      "emit_site": "web/reveal/transcript/AuthPromptCard.tsx",
+      "field_types": {
+        "pane_id": "int",
+        "driver": "string (driver name)",
+        "outcome": "enum signed_in | failed | dismissed"
+      }
     },
     {
       "name": "SERVER_STARTED",
       "category": "server",
       "stratum": "summary",
       "payload": [
-        "boot_id",
         "port",
-        "sessions",
+        "sessions_found",
         "parked",
         "interrupted",
         "ended"
       ],
       "optional_payload": [],
       "note": "The server's boot scan finished and it serves; the store as found.",
-      "emit_site": "server.py main, boot_scan"
+      "emit_site": "server.py main, boot_scan",
+      "field_types": {
+        "port": "int",
+        "parked": "int",
+        "interrupted": "int",
+        "ended": "int",
+        "sessions_found": "int (session manifests the boot scan read)"
+      }
     },
     {
       "name": "SESSION_CREATED",
@@ -929,7 +1204,12 @@
       ],
       "optional_payload": [],
       "note": "The server created a session for a window's open request.",
-      "emit_site": "server.py POST /api/session"
+      "emit_site": "server.py POST /api/session",
+      "field_types": {
+        "session_id": "string (kernel session id)",
+        "driver": "string (driver name)",
+        "workspace_shape": "enum flat | worktree | sandbox | path"
+      }
     },
     {
       "name": "TURN_ACCEPTED",
@@ -941,7 +1221,11 @@
       ],
       "optional_payload": [],
       "note": "The server accepted a turn and handed it to the kernel.",
-      "emit_site": "server.py turn route"
+      "emit_site": "server.py turn route",
+      "field_types": {
+        "session_id": "string (kernel session id)",
+        "turn_index": "int (kernel)"
+      }
     },
     {
       "name": "API_REFUSED",
@@ -954,7 +1238,12 @@
       ],
       "optional_payload": [],
       "note": "The server answered a request with an error. area: the domain (session, turn, workspace, files, records, cli, runs, tasks, assays, topology); cause: a short code, never the request's content.",
-      "emit_site": "server.py every error response"
+      "emit_site": "server.py every error response",
+      "field_types": {
+        "area": "enum session | turn | workspace | files | records | cli | runs | tasks | assays | topology | models | bundles | language | children | mcp | agent | diff",
+        "status": "int (HTTP status)",
+        "cause": "string"
+      }
     },
     {
       "name": "SERVER_FAULTED",
@@ -967,46 +1256,60 @@
       ],
       "optional_payload": [],
       "note": "An exception escaped a handler; the request failed with 500.",
-      "emit_site": "server.py handler"
+      "emit_site": "server.py handler",
+      "field_types": {
+        "area": "enum session | turn | workspace | files | records | cli | runs | tasks | assays | topology | models | bundles | language | children | mcp | agent | diff",
+        "error_type": "string (exception class name)",
+        "where": "string (handler function name)"
+      }
     },
     {
       "name": "SERVER_STOPPED",
       "category": "server",
       "stratum": "summary",
       "payload": [
-        "boot_id",
         "ended",
         "skipped",
         "failed"
       ],
       "optional_payload": [],
       "note": "The server's shutdown ended its sessions and exited.",
-      "emit_site": "server.py SIGTERM path"
+      "emit_site": "server.py SIGTERM path",
+      "field_types": {
+        "ended": "int",
+        "skipped": "int",
+        "failed": "int"
+      }
     },
     {
       "name": "TRACE_OPENED",
       "category": "trace",
       "stratum": "event",
       "payload": [
-        "boot_id",
         "process"
       ],
       "optional_payload": [],
       "note": "A process opened its trace file for this launch.",
-      "emit_site": "the sink (plan item 2)"
+      "emit_site": "the sink (plan item 2)",
+      "field_types": {
+        "process": "enum main | window | server"
+      }
     },
     {
       "name": "TRACE_LOST",
       "category": "trace",
       "stratum": "incident",
       "payload": [
-        "boot_id",
         "process",
         "count"
       ],
       "optional_payload": [],
       "note": "Lines that could not be written since the last line that was.",
-      "emit_site": "the sink (plan item 2)"
+      "emit_site": "the sink (plan item 2)",
+      "field_types": {
+        "process": "enum main | window | server",
+        "count": "int"
+      }
     },
     {
       "name": "SIGNAL_REJECTED",
@@ -1020,7 +1323,13 @@
       ],
       "optional_payload": [],
       "note": "An emit broke the vocabulary (unknown tag, missing field). Raised in source builds; emitted in the packaged app.",
-      "emit_site": "each process's emitter (plan item 3)"
+      "emit_site": "each process's emitter (plan item 3)",
+      "field_types": {
+        "process": "enum main | window | server",
+        "tag": "string",
+        "problem": "enum unknown_tag | missing_field | extra_field",
+        "call_site": "string (file:function)"
+      }
     },
     {
       "name": "INVARIANT_BROKEN",
@@ -1032,7 +1341,11 @@
       ],
       "optional_payload": [],
       "note": "A Layer 4–5 rule failed at runtime; context holds the recent trace and the state involved.",
-      "emit_site": "the runtime checker (plan item 5)"
+      "emit_site": "the runtime checker (plan item 5)",
+      "field_types": {
+        "rule": "string (rule id in state_transitions or temporal_invariants)",
+        "context": "object (recent records and the state the rule read)"
+      }
     },
     {
       "name": "RECORD_OPENED",
@@ -1045,7 +1358,12 @@
       ],
       "optional_payload": [],
       "note": "A pane attached a run record read-only. how: records_page, deep_link, open_record. outcome: attached, refused.",
-      "emit_site": "web/vm/session_controller.ts attachRecordRoot"
+      "emit_site": "web/vm/session_controller.ts attachRecordRoot",
+      "field_types": {
+        "pane_id": "int",
+        "how": "enum records_page | deep_link | open_record",
+        "outcome": "enum attached | refused"
+      }
     }
   ],
   "ontology": {
@@ -1210,5 +1528,15 @@
         "source": "PLAN-2026-11-05-sdd-signals-r3.md item 2"
       }
     ]
-  }
+  },
+  "record_context": {
+    "_comment": "Layer 2 universal fields the emitter stamps on every trace record, outside the payload (PAYLOAD_FIELD_PROPOSED P-0.7-CONTEXT). They join every tag to its launch, process, order, window and pane.",
+    "boot_id": "string: the AppBoot id main mints and passes to the window and the server",
+    "process": "enum main | window | server",
+    "proc_seq": "int: this process's record number within the boot, from 0; the order key",
+    "wall": "string: ISO-8601 time written; recorded, never used to order",
+    "window_id": "int or null: the BrowserWindow id (main and window records)",
+    "pane_id": "int or null: the pane whose controller emitted it; null for window- or app-level code"
+  },
+  "validator_extras": "strict"
 }
