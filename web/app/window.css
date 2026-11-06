@@ -9,3 +9,18 @@ body{margin:0;background:#212327}a{color:#82a5c8}a:hover{color:#9db8d6}*{scrollb
 :root{--tx-hint:#3c3f45}
 .tx-hint{color:var(--tx-hint)}
 
+
+/* Electron's title bar (sprint 083; written by web/reveal.ts until sprint 332): with body[data-electron]
+   the decorative dot triads hide (Chromium draws the real traffic lights over that inset under
+   titleBarStyle:'hiddenInset'), the top bar pads 78px left to yield the inset and is the window's drag
+   region, and its controls stay out of the region (the name renames on double-click, which a drag
+   region would take as a zoom). React writes inline styles with a space after the colon
+   ("cursor: text"), so both spellings are matched. */
+body[data-electron="1"] [data-fake-lights]{display:none!important}
+body[data-electron="1"] [data-top-bar]{padding-left:78px!important;min-height:38px!important;box-sizing:border-box!important;-webkit-app-region:drag}
+body[data-electron="1"] [data-top-bar] input,
+body[data-electron="1"] [data-top-bar] button,
+body[data-electron="1"] [data-top-bar] [style*="cursor:pointer"],
+body[data-electron="1"] [data-top-bar] [style*="cursor: pointer"],
+body[data-electron="1"] [data-top-bar] [style*="cursor:text"],
+body[data-electron="1"] [data-top-bar] [style*="cursor: text"]{-webkit-app-region:no-drag}

@@ -44,31 +44,15 @@ function boot(): void {
   }
 
   // Sprint 083 — Electron top-bar cooperation. `?electron=1` (set by
-  // electron/main.js loadURL) flips body[data-electron="1"]. A single
-  // scoped stylesheet then hides the decorative dot triads (Chromium
+  // electron/main.js loadURL) flips body[data-electron="1"]. Rules scoped to it then hide the decorative dot triads (Chromium
   // draws the real traffic-lights over that same inset under
   // titleBarStyle:'hiddenInset'), left-pads the top bar
   // by 78px to yield the inset, and marks the bar draggable while
   // keeping interactive descendants no-drag (the name renames on double-click, which a drag
   // region would take as a window zoom).
-  if (params.get("electron") === "1") {
-    document.body.setAttribute("data-electron", "1");
-    const style = document.createElement("style");
-    style.setAttribute("data-electron-shell", "1");
-    style.textContent = [
-      'body[data-electron="1"] [data-fake-lights]{display:none!important}',
-      'body[data-electron="1"] [data-top-bar]{padding-left:78px!important;min-height:38px!important;box-sizing:border-box!important;-webkit-app-region:drag}',
-      'body[data-electron="1"] [data-top-bar] input,',
-      'body[data-electron="1"] [data-top-bar] button,',
-      'body[data-electron="1"] [data-top-bar] [style*="cursor:pointer"],',
-      'body[data-electron="1"] [data-top-bar] [style*="cursor: pointer"],',
-      // React writes inline styles with a space after the colon ("cursor: text"); the crumb's
-      // double-click rename needs it out of the drag region (sprint 227).
-      'body[data-electron="1"] [data-top-bar] [style*="cursor:text"],',
-      'body[data-electron="1"] [data-top-bar] [style*="cursor: text"]{-webkit-app-region:no-drag}',
-    ].join("\n");
-    document.head.appendChild(style);
-  }
+  // The rules it turns on are in web/app/window.css (sprint 332: a <style> element written here would
+  // break the page's Content-Security-Policy, style-src 'self').
+  if (params.get("electron") === "1") document.body.setAttribute("data-electron", "1");
 
   // Every pane controller's snapshot goes to the window's store; the component reads it there.
   registry.subscribe((paneId, snap) => mirrorSnapshot(paneId, snap));

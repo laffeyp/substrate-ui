@@ -12,7 +12,7 @@ import { scratchDir } from "./scratch";
 const REPO_ROOT = join(__dirname, "..", "..", "..");
 
 export interface Launch {
-  options: { args: string[]; env: Record<string, string>; executablePath?: string };
+  options: { args: string[]; env: Record<string, string>; executablePath?: string; bypassCSP: boolean };
   state: string;
   cleanup: () => void;
 }
@@ -23,7 +23,11 @@ export interface Launch {
  * is discovered, so the bar offers its one fallback row, `deterministic`, on every machine and every
  * launch. A gate that needs this machine's real models passes `{ roster: "live" }`.
  * SHAKEOUT_APP=<Substrate.app> runs the packaged bundle. */
-export function launchArgs(opts: { roster?: "offline" | "live" } = {}): Launch {
+/** `csp`: the page's Content-Security-Policy (web/reveal.html, sprint 332) forbids evaluating strings
+ *  as script, which is how Playwright runs a gate's string predicates (`waitForFunction("...")`), so
+ *  gates run with Playwright's bypass by default. `harness/shakeout/csp_holds.ts` asks for "enforce"
+ *  and checks the policy itself. */
+export function launchArgs(opts: { roster?: "offline" | "live"; csp?: "bypass" | "enforce" } = {}): Launch {
   const dir = scratchDir("electron-shakeout-");
   const state = scratchDir("electron-shakeout-state-");
   const env = { ...process.env, SUBSTRATE_HOME: state } as Record<string, string>;
@@ -32,10 +36,11 @@ export function launchArgs(opts: { roster?: "offline" | "live" } = {}): Launch {
     env.SUBSTRATE_CLI_ADAPTERS = "";
   }
   const app = process.env.SHAKEOUT_APP || "";
+  const bypassCSP = (opts.csp ?? "bypass") === "bypass";
   return {
     options: app
-      ? { executablePath: join(app, "Contents", "MacOS", "Substrate"), args: ["--user-data-dir=" + dir], env }
-      : { args: [REPO_ROOT, "--user-data-dir=" + dir], env },
+      ? { executablePath: join(app, "Contents", "MacOS", "Substrate"), args: ["--user-data-dir=" + dir], env, bypassCSP }
+      : { args: [REPO_ROOT, "--user-data-dir=" + dir], env, bypassCSP },
     state,
     cleanup: () => {
       for (const d of [dir, state]) {
@@ -79,10 +84,35 @@ export async function bindPaneAsUser(win: Page, model?: string, opts: { folder?:
     const header = win.locator(`[data-model-row="${group}"] > span`).first();
     if (await header.isVisible()) await header.click();
   }
+  // Diagnosis (sprint 335): mark the page, and record where the click lands and when the folder's
+  // armed flag changes, so a miss says whether the page reloaded or what took the click.
+  // A plain string: tsx wraps named functions in a `__name` helper the page lacks.
+  await win.evaluate(`(() => {
+    window.__bindMark = Date.now(); window.__bindLog = [];
+    var say = function (s) { window.__bindLog.push(Math.round(performance.now()) + " " + s); };
+    var label = function (el) { var out = []; for (var e = el, k = 0; e && k < 4; e = e.parentElement, k++) out.push(e.tagName + (e.getAttribute("data-model-row") ? "[model=" + e.getAttribute("data-model-row") + "]" : "") + (e.hasAttribute("data-ws-scroll") ? "[ws-scroll]" : "") + (e.hasAttribute("data-model-half") ? "[model-half]" : "")); return out.join("<"); };
+    ["mousedown", "mouseup", "click"].forEach(function (t) { document.addEventListener(t, function (ev) { say(t + " " + label(ev.target)); }, true); });
+    var half = document.querySelector("[data-model-half]");
+    if (half) new MutationObserver(function () { say("armed=" + half.getAttribute("data-armed")); }).observe(half, { attributes: true, attributeFilter: ["data-armed"] });
+    say("armed=" + (half && half.getAttribute("data-armed")));
+  })()`);
   await row.click();
   // UI sprint 132: the guidance line under the model column opens next; `auto` leaves the level to
-  // the model, and picking it starts the session.
-  await win.locator('[data-guidance-half] [data-guidance-row="auto"][data-lit="1"]').first().waitFor({ state: "visible", timeout: 15_000 });
+  // the model, and picking it starts the session. On a miss the error names the picker's state.
+  await win.locator('[data-guidance-half] [data-guidance-row="auto"][data-lit="1"]').first().waitFor({ state: "visible", timeout: 15_000 })
+    .catch(async (err: Error) => {
+      const state = await win.evaluate(() => ({
+        placeholder: (document.querySelector("input[data-ws-input]") as HTMLInputElement | null)?.placeholder ?? null,
+        armed: document.querySelector("[data-model-half]")?.getAttribute("data-armed") ?? null,
+        modelRows: Array.from(document.querySelectorAll("[data-model-row]")).map((e) => `${e.getAttribute("data-model-row")}:${e.getAttribute("data-lit")}`),
+        guidance: Array.from(document.querySelectorAll("[data-guidance-row]")).map((e) => `${e.getAttribute("data-guidance-row")}:${e.getAttribute("data-lit")}`),
+        driver: (window as unknown as { __vm?: { snapshot(): { driver: string | null } } }).__vm?.snapshot().driver ?? null,
+        signals: ((window as unknown as { __vmSignals?: { name: string }[] }).__vmSignals ?? []).map((x) => x.name).join(" "),
+        sameLoad: typeof (window as unknown as { __bindMark?: number }).__bindMark === "number",
+        log: (window as unknown as { __bindLog?: string[] }).__bindLog ?? null,
+      })).catch(() => null);
+      throw new Error(`${err.message.split("\n")[0]}; after clicking model row ${target}: ${JSON.stringify(state)}`);
+    });
   await win.locator('[data-guidance-row="auto"]').first().click();
   // UI sprint 143: LENGTH and TONE follow; the defaults (normal, neutral) write no text, and the
   // tone pick starts the session.

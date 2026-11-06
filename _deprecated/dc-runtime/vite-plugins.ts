@@ -3,11 +3,13 @@
 // The two Vite plugins the dc-runtime page needed, as vite.config.ts held them until sprint 329 (plan
 // PLAN-2026-11-04-shell-to-react-r5.md, E4): inlineDcScript bundled reveal_component.ts into the
 // template's script tag for dc-runtime to evaluate; includePartials inlined web/partials/ into the
-// template. Kept for the record; nothing imports this file.
+// template. vendorReact (sprint 199) served React's UMD files for dc-runtime's window.React until
+// sprint 331. Kept for the record; nothing imports this file.
 import { type Plugin } from "vite";
 import { resolve } from "path";
 import { buildSync } from "esbuild";
 import { readFileSync } from "fs";
+import { createHash } from "crypto";
 const __dirname = resolve(".");
 
 export // Sprint 058: dc-runtime consumes the reveal shell's class body via
@@ -83,6 +85,46 @@ export function includePartials(): Plugin {
           return text.replace(/\n$/, "");
         });
       },
+    },
+  };
+}
+
+
+// Sprint 199: React and ReactDOM load from the app's own server, not cdnjs (lens findings F320, F345).
+// The two UMD files are copied from node_modules into the build as vendor/<file>, served from
+// node_modules under the dev server, and every `./vendor/` script tag gets a sha384 integrity hash
+// of the file it names. dc-runtime (support.js) still reads window.React, so these stay classic
+// scripts until the shell no longer runs on dc-runtime.
+const VENDOR: Record<string, string> = {
+  "react.production.min.js": resolve(__dirname, "node_modules/react/umd/react.production.min.js"),
+  "react-dom.production.min.js": resolve(__dirname, "node_modules/react-dom/umd/react-dom.production.min.js"),
+};
+export function vendorReact(): Plugin {
+  const integrity = (file: string) => "sha384-" + createHash("sha384").update(readFileSync(VENDOR[file])).digest("base64");
+  return {
+    name: "substrate-vendor-react",
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        const m = (req.url || "").match(/^\/vendor\/([^?]+)/);
+        if (!m || !VENDOR[m[1]]) return next();
+        res.setHeader("Content-Type", "text/javascript");
+        res.end(readFileSync(VENDOR[m[1]]));
+      });
+    },
+    transformIndexHtml: {
+      order: "pre",
+      handler(html, ctx) {
+        if (!ctx.filename.endsWith("reveal.html")) return html;
+        return html.replace(/<script src="\.\/vendor\/([^"]+)"><\/script>/g, (match, file: string) => {
+          if (!VENDOR[file]) throw new Error(`vendorReact: no vendored file ${file}`);
+          return `<script src="./vendor/${file}" integrity="${integrity(file)}"></script>`;
+        });
+      },
+    },
+    generateBundle() {
+      for (const [file, path] of Object.entries(VENDOR)) {
+        this.emitFile({ type: "asset", fileName: `vendor/${file}`, source: readFileSync(path) });
+      }
     },
   };
 }

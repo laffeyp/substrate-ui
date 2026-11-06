@@ -7,6 +7,10 @@
 <link rel="icon" href="data:,"><!-- UI sprint 107: no icon to fetch; the missing /favicon.ico 404ed on every load -->
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>substrate · reveal</title>
+<!-- Sprint 332 (plan row E6, F320, F344): scripts, styles and requests come from the app's own server
+     only. React's style props set styles through the DOM, which style-src does not govern; every
+     stylesheet is a file the build emits; no inline <style> or <script> is left on the page. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'">
 <!-- One module (sprint 329; plan PLAN-2026-11-04-shell-to-react-r5.md, E4): web/reveal.ts boots the
      pane registry and renders the window (web/app/App.tsx) into #root. The dc-runtime page it
      replaces is _deprecated/dc-runtime/reveal.html. -->
