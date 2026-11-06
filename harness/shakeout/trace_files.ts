@@ -6,9 +6,12 @@
 // APP_QUIT_COMPLETED (signals_lost 0); window-<id>.jsonl holds the window's records in proc_seq order,
 // each with the boot id and window id. TRACE_PLANT=cap launches with SUBSTRATE_TRACE_CAP=1500 (the
 // test seam in electron/main.js), so the window's file caps and drops lines; main.jsonl then holds a
-// TRACE_LOST for the window and APP_QUIT_COMPLETED counts the loss. Run against a bundle with SHAKEOUT_APP=<Substrate.app>.
+// TRACE_LOST for the window and APP_QUIT_COMPLETED counts the loss. TRACE_PLANT=server-cap launches with
+// SUBSTRATE_SERVER_TRACE_CAP=200 (the seam in server.py), which holds SERVER_STARTED only; the server
+// reports the lines it drops on stdout and main.jsonl holds them as TRACE_LOST (process server), summing
+// to 3 (TRACE_OPENED, STORE_SCANNED, SERVER_STOPPED). Run against a bundle with SHAKEOUT_APP=<Substrate.app>.
 
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { _electron as electron } from "playwright";
 import { launchArgs, waitForApp } from "./lib/electron";
@@ -23,7 +26,10 @@ async function main(): Promise<void> {
   const plant = process.env.TRACE_PLANT || "";
   const launch = launchArgs();
   if (plant === "cap") launch.options.env.SUBSTRATE_TRACE_CAP = "1500";
+  if (plant === "server-cap") launch.options.env.SUBSTRATE_SERVER_TRACE_CAP = "200";
   const app = await electron.launch({ ...launch.options, timeout: 60_000 });
+  let mainErr = "";
+  app.process().stderr?.on("data", (c: Buffer) => { mainErr += c.toString("utf8"); });
   let code = 1;
   let traceDir = "";
   try {
@@ -48,6 +54,13 @@ async function main(): Promise<void> {
       }
       await win.locator("[data-input-bar]").first().waitFor({ state: "visible", timeout: 15_000 });
     }
+    // The boot scan runs in the background (STORE_SCANNED); quit only after it has ended. The server's
+    // stdout, which main copies to its stderr, prints the scan's line in every run, capped or not.
+    const scanDeadline = Date.now() + 30_000;
+    while (!/\[server\] boot_scan: /.test(mainErr)) {
+      if (Date.now() > scanDeadline) throw new Error("the server's boot scan did not end within 30 s");
+      await win.waitForTimeout(50);
+    }
     await app.close();
 
     const main = readJsonl(join(traceDir, "main.jsonl"));
@@ -60,10 +73,30 @@ async function main(): Promise<void> {
     if (last.name !== "APP_QUIT_COMPLETED") throw new Error(`main.jsonl does not end with APP_QUIT_COMPLETED: ${last.name}`);
     if (main.some((r, i) => r.proc_seq !== i || r.boot_id !== newest)) throw new Error("main.jsonl proc_seq or boot_id out of order");
 
-    // Sprint 353: the server's file. SERVER_STARTED (after its boot scan) opens it; SERVER_STOPPED,
-    // written at its SIGTERM shutdown, closes it.
-    const server = readJsonl(join(traceDir, "server.jsonl"));
+    // The server's file. v0.8: SERVER_STARTED, written at the port bind before the server serves, opens
+    // it (S1); STORE_SCANNED follows when the boot scan ends; SERVER_STOPPED, at its SIGTERM shutdown,
+    // closes it.
+    const server = existsSync(join(traceDir, "server.jsonl")) ? readJsonl(join(traceDir, "server.jsonl")) : [];
     if (server[0]?.name !== "SERVER_STARTED") throw new Error(`server.jsonl does not open with SERVER_STARTED: ${server[0]?.name}`);
+    if (typeof server[0].payload?.port !== "number" || Object.keys(server[0].payload ?? {}).length !== 1) throw new Error(`SERVER_STARTED payload is not {port}: ${JSON.stringify(server[0].payload)}`);
+    if (plant === "server-cap") {
+      const lost = main.filter((r) => r.name === "TRACE_LOST" && r.payload?.process === "server");
+      const sum = lost.reduce((n, r) => n + Number(r.payload?.count ?? 0), 0);
+      if (server.length !== 1) throw new Error(`the capped server.jsonl holds ${server.length} lines, expected SERVER_STARTED only`);
+      if (sum !== 3) throw new Error(`main.jsonl's TRACE_LOST (server) counts sum to ${sum}, expected 3: ${JSON.stringify(lost.map((r) => r.payload))}`);
+      if (Number(last.payload?.signals_lost) !== sum) throw new Error(`APP_QUIT_COMPLETED.signals_lost ${String(last.payload?.signals_lost)}, expected ${sum}`);
+      console.log(`trace_files: ok (planted server cap) — server.jsonl holds SERVER_STARTED only; main.jsonl has ${lost.length} TRACE_LOST (server) summing to ${sum}; signals_lost ${sum}`);
+      code = 0;
+      return;
+    }
+    const scanned = server.filter((r) => r.name === "STORE_SCANNED");
+    if (scanned.length !== 1) throw new Error(`server.jsonl holds ${scanned.length} STORE_SCANNED, expected 1`);
+    for (const f of ["sessions_found", "parked", "interrupted", "ended", "skipped", "duration_ms"]) {
+      if (typeof scanned[0].payload?.[f] !== "number") throw new Error(`STORE_SCANNED lacks ${f}`);
+    }
+    if (main.some((r) => r.name === "TRACE_LOST") || server.some((r) => r.name === "TRACE_LOST")) {
+      if (plant !== "cap") throw new Error("a TRACE_LOST in a run with no plant");
+    }
     if (!server.some((r) => r.name === "TRACE_OPENED" && r.payload?.process === "server")) throw new Error("server.jsonl has no TRACE_OPENED");
     if (server[server.length - 1].name !== "SERVER_STOPPED") throw new Error(`server.jsonl does not end with SERVER_STOPPED: ${server[server.length - 1].name}`);
     if (server.some((r, i) => r.proc_seq !== i || r.boot_id !== newest || r.process !== "server")) throw new Error("server.jsonl context or order wrong");

@@ -432,29 +432,34 @@ def _interrupt_then_end(
 
 
 class _Trace:
-    """The server's part of the launch trace (vocabulary v0.7; plan
+    """The server's part of the launch trace (vocabulary v0.8; plan
     process/planning/2026-11-05-sdd-signals, item 2). Electron main names the launch's folder and
     boot id in SUBSTRATE_TRACE_DIR and SUBSTRATE_BOOT_ID; this writes server.jsonl there, one JSON
     object per line with the record context (boot_id, process, proc_seq, wall, window_id null).
     Writes are synchronous appends under a lock (the HTTP server is threaded), so lines stay in
-    order and every failure is seen: it is counted, and the next line written is a TRACE_LOST with
-    the count. No size cap (the Architect, 2026-11-05: "no cap on the trace"); SUBSTRATE_TRACE_CAP sets
-    one for the loss gate only. Without the folder (the server run alone, the Python tests) nothing is
-    written."""
+    order and every failure is seen. A line that cannot be written is counted and reported to main
+    on stdout as `substrate-ui trace_lost=<total>`: the first loss at once, later ones on the next
+    line that is written and at shutdown (`flush_loss`). Main writes each report to main.jsonl as
+    TRACE_LOST (process server), so a capped or unopenable server.jsonl still has its losses in the
+    trace. No size cap ("no cap on the trace", 2026-11-05); SUBSTRATE_SERVER_TRACE_CAP (bytes) sets
+    one for the loss gate only. Without the folder (the server run alone, the Python tests) nothing
+    is written and nothing is reported."""
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._boot = os.environ.get("SUBSTRATE_BOOT_ID", "")
         self._seq = 0
         self._bytes = 0
-        self._unreported = 0
+        self._reported = 0
+        self._announced = False
         self.lost = 0
         try:
-            self._cap = int(os.environ.get("SUBSTRATE_TRACE_CAP", "0")) or 0
+            self._cap = int(os.environ.get("SUBSTRATE_SERVER_TRACE_CAP", "0")) or 0
         except ValueError:
             self._cap = 0
         self._fd: int | None = None
         folder = os.environ.get("SUBSTRATE_TRACE_DIR")
+        self._on = bool(folder)
         if folder:
             try:
                 self._fd = os.open(
@@ -464,9 +469,6 @@ class _Trace:
                 )
             except OSError as exc:
                 self._fd = None
-                self.lost += 1
-                self._unreported += 1
-                # No file to put a TRACE_LOST in: say it on stdout, which main copies to substrate.log.
                 print(f"trace: server.jsonl not opened in {folder}: {exc}", flush=True)
 
     def _write(self, name: str, payload: dict[str, Any]) -> bool:
@@ -484,23 +486,37 @@ class _Trace:
         line = (json.dumps(rec, separators=(",", ":")) + "\n").encode()
         if self._fd is None or (self._cap and self._bytes + len(line) > self._cap):
             self.lost += 1
-            self._unreported += 1
             return False
         try:
             os.write(self._fd, line)
         except OSError:
             self.lost += 1
-            self._unreported += 1
             return False
         self._bytes += len(line)
         return True
 
+    def _report(self) -> None:
+        # stdout is main's pipe; main parses this line (electron/main.js, SERVER_LOSS_RE).
+        self._reported = self.lost
+        try:
+            print(f"substrate-ui trace_lost={self.lost}", flush=True)
+        except OSError:
+            pass
+
     def emit(self, name: str, payload: dict[str, Any]) -> None:
+        if not self._on:
+            return
         with self._lock:
             wrote = self._write(name, payload)
-            if wrote and self._unreported:
-                count, self._unreported = self._unreported, 0
-                self._write("TRACE_LOST", {"process": "server", "count": count})
+            if self.lost > self._reported and (wrote or not self._announced):
+                self._announced = not wrote
+                self._report()
+
+    def flush_loss(self) -> None:
+        """At shutdown: report losses not yet reported (a capped file never writes again)."""
+        with self._lock:
+            if self.lost > self._reported:
+                self._report()
 
 
 TRACE = _Trace()
@@ -4836,16 +4852,16 @@ def main() -> None:
                 note += f" ... (+{len(skipped) - 5} more)"
         print(note, flush=True)
         TRACE.emit(
-            "SERVER_STARTED",
+            "STORE_SCANNED",
             {
-                "port": PORT,
                 "sessions_found": len(manifests),
                 "parked": sum(1 for m in manifests if m.status == SessionStatus.PARKED),
                 "interrupted": sum(1 for m in manifests if m.status == SessionStatus.INTERRUPTED),
                 "ended": sum(1 for m in manifests if m.status == SessionStatus.ENDED),
+                "skipped": len(skipped),
+                "duration_ms": int(elapsed * 1000),
             },
         )
-        TRACE.emit("TRACE_OPENED", {"process": "server"})
 
     # Sprint 217e: bind a UDS listener alongside the TCP one. TECH-SPEC §6
     # names `~/.substrate/daemon.sock` as the primary transport, with TCP as
@@ -4884,6 +4900,10 @@ def main() -> None:
     print(f"substrate-ui port={PORT}", flush=True)
     summary = summary.replace(f"http://{HOST}:{args.port}", f"http://{HOST}:{PORT}", 1)
     print(summary)
+    # v0.8 S1: the server's first record, written before either listener serves; the store's
+    # counts follow in STORE_SCANNED when the background scan ends.
+    TRACE.emit("SERVER_STARTED", {"port": PORT})
+    TRACE.emit("TRACE_OPENED", {"process": "server"})
     if uds_srv is not None:
         threading.Thread(target=uds_srv.serve_forever, daemon=True).start()
     threading.Thread(target=_run_boot_scan, daemon=True, name="boot_scan").start()
@@ -4921,6 +4941,7 @@ def main() -> None:
                 "failed": outcome["failed"],
             },
         )
+        TRACE.flush_loss()
         if uds_srv is not None:
             uds_srv.shutdown()
         srv.shutdown()  # returns once serve_forever() on the main thread exits

@@ -27,12 +27,14 @@ const { spawnSync } = require("node:child_process");
 // record context: boot_id, process, proc_seq (the order key), wall (recorded, never used to order),
 // window_id. Writes are synchronous appends to an open descriptor, so lines stay in order and every
 // failure is seen: it is counted, and the next line that can be written is a TRACE_LOST with the
-// count. No file has a size cap and no launch folder is removed (the Architect, 2026-11-05: "no cap
-// on the trace"); SUBSTRATE_TRACE_CAP sets a cap for the loss gate only.
+// count. The server reports its own losses on stdout and main records them (TRACE_LOST, process
+// server). No file has a size cap and no launch folder is removed ("no cap on the trace",
+// 2026-11-05); SUBSTRATE_TRACE_CAP caps main's files and SUBSTRATE_SERVER_TRACE_CAP the server's,
+// for the loss gate only.
 // SUBSTRATE_TRACE_CAP (bytes) is a test seam: harness/shakeout/trace_files.ts sets it low to force losses.
 const TRACE_FILE_CAP = Number(process.env.SUBSTRATE_TRACE_CAP) > 0 ? Number(process.env.SUBSTRATE_TRACE_CAP) : Infinity;
 const BOOT_ID = new Date().toISOString().replace(/[-:.]/g, "").replace("T", "-").slice(0, 15) + "-" + Math.random().toString(16).slice(2, 8);
-const trace = { dir: null, files: new Map(), written: 0, lost: 0, mainSeq: 0, windowSeq: new Map(), windowsOpened: 0 };
+const trace = { dir: null, files: new Map(), written: 0, lost: 0, mainSeq: 0, windowSeq: new Map(), windowsOpened: 0, serverLost: 0 };
 
 function traceFile(name) {
   let f = trace.files.get(name);
@@ -188,6 +190,7 @@ const HEALTH_POLL_MS = 200;
 // shutdown work; still hard-cap so a wedged daemon can't hold the app open.
 const KILL_GRACE_MS = 45_000;
 const PORT_READBACK_RE = /^substrate-ui port=(\d+)$/m;
+const SERVER_LOSS_RE = /^substrate-ui trace_lost=(\d+)$/;
 
 
 // F2. GUI-launched apps on macOS get launchd's default PATH
@@ -298,6 +301,7 @@ function currentWindow() {
 let serverProc = null;
 let serverPort = null;
 let stdoutBuf = "";
+let serverLineBuf = "";
 // Sprint 081 — buffered-pending dispatch for deep-links that fire
 // before the renderer is ready. Reuses the pattern the 2026-09-12
 // electron/main.js:51-72 used (see _deprecated/electron-bridge-
@@ -356,6 +360,9 @@ function spawnServer() {
     cwd = SOURCE_SUBSTRATE_ROOT;
   }
   log("spawning server: " + exe + " " + args.join(" ") + " (cwd=" + cwd + ")");
+  // A new server process counts its trace losses from zero.
+  trace.serverLost = 0;
+  serverLineBuf = "";
   serverProc = spawn(exe, args, {
     cwd,
     stdio: ["ignore", "pipe", "pipe"],
@@ -382,6 +389,21 @@ function spawnServer() {
   serverProc.stdout.on("data", (chunk) => {
     const text = chunk.toString();
     process.stderr.write("[server] " + text);
+    // The server's trace losses (server.py _Trace): each report is its running total; main writes
+    // the difference to main.jsonl as TRACE_LOST (process server) and counts it on APP_QUIT_COMPLETED.
+    serverLineBuf += text;
+    const lines = serverLineBuf.split("\n");
+    serverLineBuf = lines.pop();
+    for (const line of lines) {
+      const m = SERVER_LOSS_RE.exec(line);
+      if (!m) continue;
+      const total = Number(m[1]);
+      if (total <= trace.serverLost) continue;
+      const count = total - trace.serverLost;
+      trace.serverLost = total;
+      trace.lost += count;
+      traceEmit("TRACE_LOST", { process: "server", count });
+    }
     if (serverPort === null) {
       stdoutBuf += text;
       const match = stdoutBuf.match(PORT_READBACK_RE);

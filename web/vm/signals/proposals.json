@@ -569,7 +569,19 @@
       "source": "server.py main (the boot scan runs on a background thread after serving starts; lens audit F319); sprint 353",
       "rationale": "S1 says SERVER_STARTED is the server's first record, but its counts come from a scan that runs while the server already serves; once plan item 4 adds request records, S1 as written can fail on a correct run.",
       "ratified": false,
-      "reason_open": "Holds today (nothing in the server emits before the scan ends); settled in plan item 4 when the first request record lands."
+      "reason_open": "Holds today (nothing in the server emits before the scan ends); settled in plan item 4 when the first request record lands.",
+      "withdrawn": true,
+      "withdrawn_by": "P-0.8-SPLIT-SERVER_STARTED (agent-resolved 2026-11-06, sprint 354): SERVER_STARTED moves to the port bind, before serving, so S1 holds as written and needs no restating"
+    },
+    {
+      "id": "P-0.8-SPLIT-SERVER_STARTED",
+      "kind": "TAG_SPLIT_PROPOSED",
+      "layer": 1,
+      "element": "SERVER_STARTED (port, sessions_found, parked, interrupted, ended) -> SERVER_STARTED (port), written at the port bind, and STORE_SCANNED (sessions_found, parked, interrupted, ended, skipped, duration_ms), written when the boot scan ends",
+      "source": "server.py main: the boot scan runs on a background thread after the listeners start (F319); sprint 353 Rubber Duck",
+      "rationale": "One tag named two events: the server starting and the store scan ending, seconds apart on a large store with requests served between them. As one tag, S1 (SERVER_STARTED first) and server_run (opened by SERVER_STARTED) fail on a correct run once requests emit. Split, each tag names one event and S1 holds unchanged in meaning; T2 (SERVER_BOUND to SERVER_STARTED within HEALTH_TIMEOUT_MS) now measures the bind, as its source does. skipped and duration_ms come from the scan's own print line.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-06, sprint 354"
     }
   ]
 }
