@@ -18,7 +18,7 @@
 // it (registerAccelerator is Linux/Windows only), and a registered one
 // would compete with the renderer's handler for the same press.
 
-const { Menu, dialog } = require("electron");
+const { Menu } = require("electron");
 
 function send(win, command, payload) {
   if (win && !win.isDestroyed()) win.webContents.send("menu:" + command, payload ?? null);
@@ -61,16 +61,10 @@ function buildTemplate(getWin, newWindow) {
           id: "menu-open-record",
           label: "Open Record…",
           accelerator: "CmdOrCtrl+O",
-          click: async () => {
-            const win = getWin();
-            const r = await dialog.showOpenDialog(win, {
-              title: "Open Record",
-              properties: ["openDirectory"],
-              buttonLabel: "Open",
-            });
-            if (r.canceled || r.filePaths.length === 0) return;
-            send(win, "open-record", { path: r.filePaths[0] });
-          },
+          // F362: the pane picker's "choose folder…" row names ⌘O. The window decides: with the
+          // focused pane's picker showing, ⌘O opens the folder chooser; anywhere else it opens
+          // this dialog, as before (native:open-record in main.js).
+          click: () => send(getWin(), "open"),
         },
         { type: "separator" },
         {

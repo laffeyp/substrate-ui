@@ -457,7 +457,9 @@ export class SessionController {
    *  patches into snapshot.recentWorkspaces on success. */
   async addWorkspace(path: string): Promise<void> {
     const result = await this.client.fetchJson<{ ok: boolean; workspaces?: RecentWorkspaceRow[] }>(
-      "/api/workspaces", { method: "POST", body: JSON.stringify({ path }) },
+      // F361: the client encodes the body; encoding it here as well sent a JSON string the server
+      // refused (400), so no folder from "choose folder…" or the records page reached the recents.
+      "/api/workspaces", { method: "POST", body: { path } },
     );
     if (!result.ok || !result.data?.ok) return;
     const rows: WorkspaceRow[] = Array.isArray(result.data.workspaces)

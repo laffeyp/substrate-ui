@@ -246,6 +246,24 @@ export class App extends React.Component<AppProps, AppState> {
     await vmOf()?.addWorkspace(path).catch(() => undefined);
     this.armWorkspace(paneId, path, false);
   }
+  // F362: ⌘O. The picker's "choose folder…" row names the key; with the focused pane's picker
+  // showing (panes in view, no page open, no session bound) it opens the folder chooser. Anywhere
+  // else it is File ▸ Open Record…: the record dialog, and pane 1 attaches the picked record, as the
+  // menu did before.
+  private openKey(): void {
+    const s = this.state;
+    const fp = this.pane(s.focused);
+    const fsnap = this.snap(s.focused);
+    if (fp && fp.unbound && !(fsnap && fsnap.sessionId) && s.vs.view === "panes") {
+      void this.pickFolder(fp.id);
+      return;
+    }
+    const native = (window as unknown as { native?: { openRecordDialog?: () => Promise<string | null> } }).native;
+    if (!native?.openRecordDialog) return;
+    void native.openRecordDialog().then((path) => {
+      if (path) vmOf()?.get(1)?.attachRecordRoot(path).catch(() => undefined);
+    }).catch(() => undefined);
+  }
   private disarmWorkspace(paneId: number): void {
     this.setPane(paneId, { armed: null, pickerHalf: "ws", modelSelIdx: null });
   }
@@ -606,6 +624,7 @@ export class App extends React.Component<AppProps, AppState> {
       else if (command === "toggle-assays") this.toggleSurface(Surface.Assay);
       else if (command === "settings") openSettings();
       else if (command === "close-pane") this.closePaneNow(this.state.focused);
+      else if (command === "open") this.openKey();
     }));
     // UI sprint 182: a run a session starts now opens its panes; `/run focus` shows or reopens one. A
     // start read back from an older record (`t` over a minute old) opens nothing.

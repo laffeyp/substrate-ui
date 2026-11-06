@@ -511,6 +511,19 @@ ipcMain.on("native:close-window", (event) => {
   if (win && !win.isDestroyed()) win.close();
 });
 
+// F362: File ▸ Open Record… (⌘O) when the window has no pane picker showing. The same dialog the
+// menu opened itself until then; the window attaches the picked record.
+ipcMain.handle("native:open-record", async (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  const r = await dialog.showOpenDialog(win, {
+    title: "Open Record",
+    properties: ["openDirectory"],
+    buttonLabel: "Open",
+  });
+  if (r.canceled || r.filePaths.length === 0) return null;
+  return r.filePaths[0];
+});
+
 // Sprint 086 — Records surface "Add workspace" folder picker.
 // Returns the chosen path or null on cancel. Same shape as
 // menu:open-record's dialog, but the picked path is a workspace not

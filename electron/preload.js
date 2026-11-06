@@ -24,6 +24,7 @@ const menuListeners = new Set();
 const deepLinkListeners = new Set();
 
 ipcRenderer.on("menu:open-record", (_e, p) => dispatchMenu("open-record", p));
+ipcRenderer.on("menu:open", (_e, p) => dispatchMenu("open", p));
 ipcRenderer.on("menu:close-pane", (_e, p) => dispatchMenu("close-pane", p));
 ipcRenderer.on("menu:close-window", (_e, p) => dispatchMenu("close-window", p));
 ipcRenderer.on("menu:toggle-meta", (_e, p) => dispatchMenu("toggle-meta", p));
@@ -62,5 +63,6 @@ contextBridge.exposeInMainWorld("native", {
   // Sprint 086 — folder picker for "Add workspace" on the Records
   // surface. Returns the picked path or null on cancel.
   pickFolder: () => ipcRenderer.invoke("native:pick-folder"),
+  openRecordDialog: () => ipcRenderer.invoke("native:open-record"),
 });
 

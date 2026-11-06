@@ -38,7 +38,7 @@ export function mirrorSnapshot(paneId: number, snap: Snapshot): void {
 }
 
 /** The menu commands the window handles itself. */
-export type ShellCommand = "toggle-meta" | "toggle-assays" | "settings" | "close-pane";
+export type ShellCommand = "toggle-meta" | "toggle-assays" | "settings" | "close-pane" | "open";
 
 const { listeners, held } = shared.channel;
 
