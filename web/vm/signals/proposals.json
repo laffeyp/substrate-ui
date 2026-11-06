@@ -520,6 +520,46 @@
       "rationale": "With two panes open no v0.6 tag says which pane it belongs to, and records from three processes cannot be ordered; one context block joins and orders every tag without renaming any.",
       "ratified": true,
       "ratified_by": "agent-resolved 2026-11-05, sprint 350 Step 3"
+    },
+    {
+      "id": "P-0.7-TAG-PANE_DRAWN",
+      "kind": "NEW_TAG_PROPOSED",
+      "layer": 1,
+      "element": "PANE_DRAWN",
+      "source": "web/app/App.tsx componentDidUpdate (publish)",
+      "rationale": "A pane's drawn state changed, emitted when React commits (componentDidUpdate), not when state is set. state: picker, session, record. The view pair of the picker, session-open, stream, turn, driver and workspace tags.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-05, sprint 350 Step 9"
+    },
+    {
+      "id": "P-0.7-TAG-PAGE_DRAWN",
+      "kind": "NEW_TAG_PROPOSED",
+      "layer": 1,
+      "element": "PAGE_DRAWN",
+      "source": "web/app/RecordsPage.tsx, AssayPage, StudioPage (commit)",
+      "rationale": "A page committed its rows: records, assays, studio, settings. inert is true for a page with no endpoint behind it (studio). The view pair of the *_LOADED tags.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-05, sprint 350 Step 9"
+    },
+    {
+      "id": "P-0.7-TAG-TRANSCRIPT_SCROLLED",
+      "kind": "NEW_TAG_PROPOSED",
+      "layer": 1,
+      "element": "TRANSCRIPT_SCROLLED",
+      "source": "web/reveal/transcript/ (scroll owner)",
+      "rationale": "Where a pane's transcript sits after a change. cause: row_arrived, user, view_switch. Answers the follow-bottom question the 2026-10-02 postmortem found no gate could.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-05, sprint 350 Step 9"
+    },
+    {
+      "id": "P-0.7-OPEN-LENS-DRAWN",
+      "kind": "NEW_TAG_PROPOSED",
+      "layer": 1,
+      "element": "LENS_DRAWN (pane_id, lens, rows): what meta's stream, graph, structure, language, scene and i/o lenses drew",
+      "source": "web/app/MetaView.tsx, StreamLens.tsx, SideGraph.tsx, LanguageLens.tsx",
+      "rationale": "The lenses draw record data; v0.7 records only which lens is open (LENS_CHANGED), not what it drew.",
+      "ratified": false,
+      "reason_open": "Each lens's draw unit differs (rows, nodes, bars); typed per lens when plan item 4 reaches meta."
     }
   ]
 }

@@ -4,7 +4,7 @@
   "locked_at": null,
   "locked_by": "draft: sprint 350, the whole-app Vocabulary Session; locks at Step 12",
   "supersedes": "0.6",
-  "tag_count": 84,
+  "tag_count": 87,
   "categories": [
     "session",
     "driver",
@@ -1069,8 +1069,8 @@
       "field_types": {
         "pane_id": "int",
         "session_id": "string (kernel session id)",
-        "seq": "int (kernel record seq)",
-        "kind": "string (kernel envelope kind)"
+        "seq": "int or null (null for a row the window made itself: a note, help, a sign-in card)",
+        "kind": "string (kernel envelope kind, or local:note, local:help, local:auth for rows the window made)"
       }
     },
     {
@@ -1405,6 +1405,80 @@
         "pane_id": "int",
         "how": "enum records_page | deep_link | open_record",
         "outcome": "enum attached | refused"
+      }
+    },
+    {
+      "name": "PANE_DRAWN",
+      "category": "pane",
+      "stratum": "event",
+      "payload": [
+        "pane_id",
+        "state"
+      ],
+      "optional_payload": [
+        "session_id",
+        "picker_line",
+        "armed",
+        "connection",
+        "turn_state",
+        "driver_shown",
+        "folder_rows",
+        "model_rows",
+        "named"
+      ],
+      "note": "A pane's drawn state changed, emitted when React commits (componentDidUpdate), not when state is set. state: picker, session, record. The view pair of the picker, session-open, stream, turn, driver and workspace tags.",
+      "emit_site": "web/app/App.tsx componentDidUpdate (publish)",
+      "field_types": {
+        "pane_id": "int",
+        "state": "enum picker | session | record",
+        "session_id": "string (kernel session id)",
+        "picker_line": "enum ws | model | guidance | length | tone",
+        "armed": "bool",
+        "connection": "enum connecting | connected | reconnecting | closed",
+        "turn_state": "enum idle | running | parked | ended",
+        "driver_shown": "string or null",
+        "folder_rows": "int",
+        "model_rows": "int",
+        "named": "bool"
+      }
+    },
+    {
+      "name": "PAGE_DRAWN",
+      "category": "window",
+      "stratum": "event",
+      "payload": [
+        "page",
+        "rows"
+      ],
+      "optional_payload": [
+        "inert"
+      ],
+      "note": "A page committed its rows: records, assays, studio, settings. inert is true for a page with no endpoint behind it (studio). The view pair of the *_LOADED tags.",
+      "emit_site": "web/app/RecordsPage.tsx, AssayPage, StudioPage (commit)",
+      "field_types": {
+        "page": "enum records | assays | studio | settings",
+        "rows": "int",
+        "inert": "bool"
+      }
+    },
+    {
+      "name": "TRANSCRIPT_SCROLLED",
+      "category": "transcript",
+      "stratum": "event",
+      "payload": [
+        "pane_id",
+        "at_bottom",
+        "following",
+        "cause"
+      ],
+      "optional_payload": [],
+      "note": "Where a pane's transcript sits after a change. cause: row_arrived, user, view_switch. Answers the follow-bottom question the 2026-10-02 postmortem found no gate could.",
+      "emit_site": "web/reveal/transcript/ (scroll owner)",
+      "field_types": {
+        "pane_id": "int",
+        "at_bottom": "bool",
+        "following": "bool",
+        "cause": "enum row_arrived | user | view_switch"
       }
     }
   ],
@@ -1793,8 +1867,10 @@
           "DIALOG_OPENED",
           "KEY_ROUTED",
           "LENS_CHANGED",
+          "PAGE_DRAWN",
           "PANE_BOUND",
           "PANE_CLOSED",
+          "PANE_DRAWN",
           "PANE_FOCUSED",
           "PANE_OPENED",
           "PICKER_COMMITTED",
@@ -1866,7 +1942,8 @@
         "responsibilities": "Draws a pane's record entries as rows.",
         "emits": [
           "CLI_LOGIN_FINISHED",
-          "TRANSCRIPT_ROW_DRAWN"
+          "TRANSCRIPT_ROW_DRAWN",
+          "TRANSCRIPT_SCROLLED"
         ],
         "runtime_notes": []
       },
