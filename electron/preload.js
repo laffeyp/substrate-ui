@@ -64,5 +64,7 @@ contextBridge.exposeInMainWorld("native", {
   // surface. Returns the picked path or null on cancel.
   pickFolder: () => ipcRenderer.invoke("native:pick-folder"),
   openRecordDialog: () => ipcRenderer.invoke("native:open-record"),
+  // The window's vocabulary records; main writes them to this launch's trace folder (window-<id>.jsonl).
+  signal: (record) => ipcRenderer.send("native:signal", record),
 });
 

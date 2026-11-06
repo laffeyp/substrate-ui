@@ -18,6 +18,131 @@ const fs = require("node:fs");
 const http = require("node:http");
 const path = require("node:path");
 const { installMenu } = require("./menu");
+const { spawnSync } = require("node:child_process");
+
+// ── The trace (vocabulary v0.7; plan process/planning/2026-11-05-sdd-signals, item 2) ─────────────
+// Each launch writes <logs>/traces/<boot_id>/: main.jsonl (main's records), window-<id>.jsonl (each
+// window's records, received over native:signal) and server.jsonl (written by server.py, which gets
+// the folder and the boot id in its environment). One JSON object per line. Every line carries the
+// record context: boot_id, process, proc_seq (the order key), wall (recorded, never used to order),
+// window_id. Writes are synchronous appends to an open descriptor, so lines stay in order and every
+// failure is seen: it is counted, and the next line that can be written is a TRACE_LOST with the
+// count. A file stops at TRACE_FILE_CAP bytes and counts what it drops. The last TRACE_KEEP launch
+// folders are kept.
+// SUBSTRATE_TRACE_CAP (bytes) is a test seam: harness/shakeout/trace_files.ts sets it low to force losses.
+const TRACE_FILE_CAP = Number(process.env.SUBSTRATE_TRACE_CAP) > 0 ? Number(process.env.SUBSTRATE_TRACE_CAP) : 50 * 1024 * 1024;
+const TRACE_KEEP = 20;
+const BOOT_ID = new Date().toISOString().replace(/[-:.]/g, "").replace("T", "-").slice(0, 15) + "-" + Math.random().toString(16).slice(2, 8);
+const trace = { dir: null, files: new Map(), written: 0, lost: 0, mainSeq: 0, windowSeq: new Map(), windowsOpened: 0 };
+
+function traceFile(name) {
+  let f = trace.files.get(name);
+  if (f) return f;
+  f = { fd: null, bytes: 0, lost: 0, unreported: 0, announced: false, capped: false };
+  try { f.fd = fs.openSync(path.join(trace.dir, name), "a"); } catch { f.fd = null; }
+  trace.files.set(name, f);
+  return f;
+}
+
+function traceWrite(name, record) {
+  if (!trace.dir) return false;
+  const f = traceFile(name);
+  const line = JSON.stringify(record) + "\n";
+  let ok = false;
+  if (f.fd !== null && !f.capped && f.bytes + line.length <= TRACE_FILE_CAP) {
+    try { fs.writeSync(f.fd, line); f.bytes += line.length; trace.written += 1; ok = true; } catch { ok = false; }
+  } else if (f.fd !== null && !f.capped) {
+    f.capped = true;
+  }
+  if (!ok) { f.lost += 1; f.unreported += 1; trace.lost += 1; }
+  return ok;
+}
+
+// A file's losses reach main.jsonl as TRACE_LOST: the first loss at once, later ones as one count
+// when that file next writes (a capped file never does; its total is on APP_QUIT_COMPLETED).
+function reportLoss(name, processName, wrote) {
+  const f = trace.files.get(name);
+  if (!f || f.unreported === 0) return;
+  if (f.announced && !wrote) return;
+  const count = f.unreported;
+  f.unreported = 0; f.announced = true;
+  mainRecord("TRACE_LOST", { process: processName, count });
+}
+
+let inMainRecord = false;
+function mainRecord(tag, payload) {
+  const rec = { boot_id: BOOT_ID, process: "main", proc_seq: trace.mainSeq++, wall: new Date().toISOString(), window_id: null, name: tag, payload };
+  return traceWrite("main.jsonl", rec);
+}
+
+// main's own records; a loss on main.jsonl is reported by the next main record that is written.
+function traceEmit(tag, payload) {
+  const wrote = mainRecord(tag, payload);
+  if (!inMainRecord) { inMainRecord = true; reportLoss("main.jsonl", "main", wrote); inMainRecord = false; }
+}
+
+function gitHead(dir) {
+  try {
+    const r = spawnSync("git", ["-C", dir, "rev-parse", "--short=12", "HEAD"], { encoding: "utf8", timeout: 2000 });
+    return r.status === 0 ? r.stdout.trim() : "unrecorded";
+  } catch { return "unrecorded"; }
+}
+
+function buildCommits() {
+  if (app.isPackaged) {
+    try {
+      const plist = fs.readFileSync(path.join(process.resourcesPath, "..", "Info.plist"), "utf8");
+      const read = (key) => { const m = plist.match(new RegExp("<key>" + key + "</key>\\s*<string>([^<]*)</string>")); return m ? m[1] : "unrecorded"; };
+      return { app_commit: read("SubstrateUICommit"), kernel_commit: read("SubstrateKernelCommit") };
+    } catch { return { app_commit: "unrecorded", kernel_commit: "unrecorded" }; }
+  }
+  return { app_commit: gitHead(path.join(__dirname, "..")), kernel_commit: gitHead(path.join(__dirname, "..", "..", "substrate")) };
+}
+
+function vocabVersion() {
+  for (const rel of ["../web/vm/signals/versions/current.json", "../web/dist/vocabulary.json"]) {
+    try { return JSON.parse(fs.readFileSync(path.join(__dirname, rel), "utf8")).vocabulary_version || "unknown"; } catch { /* next */ }
+  }
+  return "unknown";
+}
+
+function openTrace() {
+  try {
+    const root = path.join(app.getPath("logs"), "traces");
+    fs.mkdirSync(root, { recursive: true });
+    const old = fs.readdirSync(root).filter((n) => fs.statSync(path.join(root, n)).isDirectory()).sort();
+    for (const n of old.slice(0, Math.max(0, old.length - (TRACE_KEEP - 1)))) {
+      try { fs.rmSync(path.join(root, n), { recursive: true, force: true }); } catch { /* an old folder that will not go stays */ }
+    }
+    trace.dir = path.join(root, BOOT_ID);
+    fs.mkdirSync(trace.dir, { recursive: true });
+  } catch (err) {
+    trace.dir = null;
+    process.stderr.write("[electron] trace folder not created: " + err.message + "\n");
+    return;
+  }
+  const commits = buildCommits();
+  traceEmit("APP_BOOTED", {
+    app_version: app.getVersion(), app_commit: commits.app_commit, kernel_commit: commits.kernel_commit,
+    vocab_version: vocabVersion(), packaged: app.isPackaged, home_kind: process.env.SUBSTRATE_HOME ? "env" : "default",
+  });
+  traceEmit("TRACE_OPENED", { process: "main" });
+  process.stderr.write("[electron] trace: " + trace.dir + "\n");
+}
+
+// A window's records. The window stamps proc_seq and pane_id (sprint 352); main adds the launch and
+// window. Until a window stamps its own proc_seq, main numbers what it receives from that window.
+ipcMain.on("native:signal", (event, record) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  const windowId = win ? win.id : null;
+  const key = "window-" + windowId + ".jsonl";
+  const seq = trace.windowSeq.get(key) ?? 0;
+  trace.windowSeq.set(key, seq + 1);
+  const r = record && typeof record === "object" ? record : {};
+  const rec = { boot_id: BOOT_ID, process: "window", proc_seq: typeof r.proc_seq === "number" ? r.proc_seq : seq, wall: new Date().toISOString(), window_id: windowId, ...r };
+  const wrote = traceWrite(key, rec);
+  reportLoss(key, "window", wrote);
+});
 
 // F7. Electron reads app.getName() from package.json's `productName`,
 // falling back to `name`. This package.json's `name` is
@@ -253,6 +378,9 @@ function spawnServer() {
       PYTHONUNBUFFERED: "1",
       PYTHONDONTWRITEBYTECODE: "1",
       SUBSTRATE_PARENT_PID: String(process.pid),
+      // The trace (item 2): the server writes server.jsonl into this launch's folder.
+      SUBSTRATE_BOOT_ID: BOOT_ID,
+      ...(trace.dir ? { SUBSTRATE_TRACE_DIR: trace.dir } : {}),
       ...(pythonHome ? { PYTHONHOME: pythonHome } : {}),
     },
   });
@@ -268,6 +396,7 @@ function spawnServer() {
   serverProc.stderr.on("data", (chunk) => process.stderr.write("[server-stderr] " + chunk));
   serverProc.on("exit", (code, signal) => {
     serverExited = true;
+    trace.serverExitCode = code;
     log("server exited code=" + code + " signal=" + signal);
     for (const win of BrowserWindow.getAllWindows()) win.webContents.send("server:dead", { code, signal });
     // UI sprint 102: the backend died while the app was in use (not quitting, not starting).
@@ -317,6 +446,7 @@ function forwardDeepLink(url) {
 }
 
 function createWindow() {
+  trace.windowsOpened += 1;
   // Sprint 088 — the reveal shell breaks below a certain floor. Lock
   // the MINIMUM to a third of the primary display's work area; the
   // user can grow the window from there, never shrink past it. Work
@@ -444,6 +574,7 @@ app.whenReady().then(async () => {
   if (!singleInstanceLock) return;
   const logPath = setupLogFile();
   appLogPath = logPath;
+  openTrace();
   await restoreShellPath();
   spawnServer();
   try {
@@ -502,6 +633,17 @@ app.on("before-quit", (event) => {
   log("quit requested; waiting for server shutdown");
   serverProc.once("exit", () => app.quit());
   killServerGroup();
+});
+
+// The launch's closing record: the server's exit and the trace's write and loss counts (S2: the
+// last line of main.jsonl). will-quit runs after before-quit has waited for the server.
+app.on("will-quit", () => {
+  if (!trace.dir) return;
+  traceEmit("APP_QUIT_COMPLETED", {
+    server_exit_code: trace.serverExitCode ?? null, windows_opened: trace.windowsOpened,
+    signals_written: trace.written, signals_lost: trace.lost,
+  });
+  for (const f of trace.files.values()) { if (f.fd !== null) { try { fs.closeSync(f.fd); } catch { /* closing at exit */ } } }
 });
 
 // Sprint 085 followup — renderer asks main to close its window

@@ -57,6 +57,11 @@ export function emit(name: string, payload: Record<string, unknown> = {}): Signa
   if (buffer.length > SIGNAL_CAP) buffer.splice(0, buffer.length - SIGNAL_CAP);
   if (typeof window !== "undefined") {
     (window as unknown as { __vmSignals: SignalRecord[] }).__vmSignals = buffer;
+    // The running app's trace on disk (2026-11-06): inside Electron each signal also goes to the main
+    // process, which appends it to signals.jsonl beside substrate.log. The buffer above dies with the
+    // window; this copy lets a session be read after the fact. A failed send never stops an emit.
+    const native = (window as unknown as { native?: { signal?: (r: SignalRecord) => void } }).native;
+    try { native?.signal?.(record); } catch { /* the sink is advisory */ }
   }
   return record;
 }

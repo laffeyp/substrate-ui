@@ -38,11 +38,18 @@
 |---|---|---|
 | HTTP daemon: sessions, turns, records, applications, models roster, `topology_graph` and other read projections | `server.py` | Sole backend. |
 | Electron main process, native menu, preload bridge | `electron/main.js`, `electron/menu.js`, `electron/preload.js` | The window, the Window and Edit menus, the server child process. |
-| The window's layout (dc-runtime template) | `web/reveal.html` | One top bar; panes; meta view; records, studio, structure lenses. |
-| Repeated layout blocks | `web/partials/*.html` (`input-bar.html`, `choice-line.html`) | Inlined at build time by `vite.config.ts` (`includePartials`) with `%key%` parameters; the template language has no include. |
-| The window's logic and bindings | `web/reveal_component.ts` | Compiled by esbuild as its own bundle and inlined into `reveal.html` (`vite.config.ts`, `inlineDcScript`). State that must be shared with the rest lives on `globalThis` (see `web/vm/tool_output_mode.ts`). |
-| Bootstrap: controller registry, transcript mounts, Electron title-bar CSS | `web/reveal.ts` | |
-| The transcript (React) | `web/reveal/transcript/` (`Transcript.tsx`, `Row.tsx`, `ToolCard.tsx`, `ModelReply.tsx`, `useToolOutputMode.ts`, …) | React from the CDN UMD globals, through `web/shims/`. |
+| The window's page | `web/reveal.html` | The page shell and its Content-Security-Policy; mounts `#root`. |
+| The window (React): open view, panes, focus, keys, picker, dialogs, pages | `web/app/App.tsx` and its components in `web/app/*.tsx` | Typed React, bundled from `node_modules` (shell-to-React move, sprints 199–345). |
+| Pure derivations the window draws from | `web/app/derive/*.ts` | No I/O, no state; each has a spec in `web/app/__tests__/`. |
+| Window stores | `web/app/state/*.ts` | `createStore` + `useSyncExternalStore`. |
+| Window-level key routing | `web/app/keymap.ts` | `windowKey(ev, ctx)` returns the action. |
+| Widgets that keep their own DOM | `web/app/widgets.ts` | Sprint 347. |
+| Bootstrap: controller registry, menu and deep-link wiring, App mount | `web/reveal.ts` | |
+| The transcript (React) | `web/reveal/transcript/` (`Transcript.tsx`, `Row.tsx`, `ToolCard.tsx`, `ModelReply.tsx`, `useToolOutputMode.ts`, …) | |
+| The window's signal emitter | `web/vm/instrumentation/sdd.ts` | Validates against the vocabulary; stamps the window's part of the record context; hands each record to main. |
+| The trace on disk: main's writer and the window's records | `electron/main.js` (the trace writer), `electron/preload.js` (`native.signal`) | One folder per launch under the logs folder; one file per process (plan `2026-11-05-sdd-signals` item 2). |
+| The trace on disk: the server's writer | `server.py` | Writes `server.jsonl` into the folder main names (item 2). |
+| The trace reader | `scripts/` (named when plan item 6 begins) | |
 | Session bar line, markdown, timeline helpers | `web/reveal/activity.ts`, `web/reveal/markdown.ts`, `web/reveal/timeline.ts` | |
 | Per-pane session controller (open, turns, slash commands, stream) | `web/vm/session_controller.ts` | One controller per pane (`web/vm/pane_registry.ts`). |
 | Snapshot and row types | `web/vm/types.ts` | |
