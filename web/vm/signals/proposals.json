@@ -560,6 +560,16 @@
       "rationale": "The lenses draw record data; v0.7 records only which lens is open (LENS_CHANGED), not what it drew.",
       "ratified": false,
       "reason_open": "Each lens's draw unit differs (rows, nodes, bars); typed per lens when plan item 4 reaches meta."
+    },
+    {
+      "id": "P-0.7-OPEN-S1-SERVER",
+      "kind": "SEQUENCE_RULE_PROPOSED",
+      "layer": 5,
+      "element": "Restate S1's server clause: SERVER_STARTED is the server's first record after its boot scan; records of requests served while the scan runs may precede it.",
+      "source": "server.py main (the boot scan runs on a background thread after serving starts; lens audit F319); sprint 353",
+      "rationale": "S1 says SERVER_STARTED is the server's first record, but its counts come from a scan that runs while the server already serves; once plan item 4 adds request records, S1 as written can fail on a correct run.",
+      "ratified": false,
+      "reason_open": "Holds today (nothing in the server emits before the scan ends); settled in plan item 4 when the first request record lands."
     }
   ]
 }

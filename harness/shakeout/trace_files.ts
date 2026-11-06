@@ -60,6 +60,13 @@ async function main(): Promise<void> {
     if (last.name !== "APP_QUIT_COMPLETED") throw new Error(`main.jsonl does not end with APP_QUIT_COMPLETED: ${last.name}`);
     if (main.some((r, i) => r.proc_seq !== i || r.boot_id !== newest)) throw new Error("main.jsonl proc_seq or boot_id out of order");
 
+    // Sprint 353: the server's file. SERVER_STARTED (after its boot scan) opens it; SERVER_STOPPED,
+    // written at its SIGTERM shutdown, closes it.
+    const server = readJsonl(join(traceDir, "server.jsonl"));
+    if (server[0]?.name !== "SERVER_STARTED") throw new Error(`server.jsonl does not open with SERVER_STARTED: ${server[0]?.name}`);
+    if (!server.some((r) => r.name === "TRACE_OPENED" && r.payload?.process === "server")) throw new Error("server.jsonl has no TRACE_OPENED");
+    if (server[server.length - 1].name !== "SERVER_STOPPED") throw new Error(`server.jsonl does not end with SERVER_STOPPED: ${server[server.length - 1].name}`);
+    if (server.some((r, i) => r.proc_seq !== i || r.boot_id !== newest || r.process !== "server")) throw new Error("server.jsonl context or order wrong");
     const winFiles = readdirSync(traceDir).filter((n) => n.startsWith("window-"));
     if (plant === "cap") {
       const lost = main.filter((r) => r.name === "TRACE_LOST" && r.payload?.process === "window");
@@ -84,8 +91,8 @@ async function main(): Promise<void> {
     if (fromController.some((r) => r.pane_id !== 1)) throw new Error(`a controller record lacks pane_id 1: ${JSON.stringify(fromController.map((r) => [r.name, r.pane_id]))}`);
     const armed = recs.find((r) => r.name === "PICKER_FOLDER_ARMED");
     if (armed && (armed.pane_id !== null || armed.payload?.pane_id !== 1)) throw new Error("PICKER_FOLDER_ARMED should carry pane_id null in context and 1 in payload");
-    if (process.env.TRACE_PRINT) for (const r of [...main, ...recs]) console.log(JSON.stringify(r));
-    console.log(`trace_files: ok — ${traceDir}: main ${main.length} lines (APP_BOOTED … APP_QUIT_COMPLETED), ${winFiles[0]} ${recs.length} lines, PICKER_FOLDER_ARMED present`);
+    if (process.env.TRACE_PRINT) for (const r of [...main, ...server, ...recs]) console.log(JSON.stringify(r));
+    console.log(`trace_files: ok — ${traceDir}: main ${main.length} lines (APP_BOOTED … APP_QUIT_COMPLETED), server ${server.length} (SERVER_STARTED … SERVER_STOPPED), ${winFiles[0]} ${recs.length} lines, PICKER_FOLDER_ARMED present`);
     code = 0;
   } catch (e) {
     console.error(`trace_files: FAIL — ${(e as Error).message}${traceDir ? ` (${traceDir})` : ""}`);

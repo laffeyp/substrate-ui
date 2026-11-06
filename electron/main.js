@@ -27,11 +27,10 @@ const { spawnSync } = require("node:child_process");
 // record context: boot_id, process, proc_seq (the order key), wall (recorded, never used to order),
 // window_id. Writes are synchronous appends to an open descriptor, so lines stay in order and every
 // failure is seen: it is counted, and the next line that can be written is a TRACE_LOST with the
-// count. A file stops at TRACE_FILE_CAP bytes and counts what it drops. The last TRACE_KEEP launch
-// folders are kept.
+// count. No file has a size cap and no launch folder is removed (the Architect, 2026-11-05: "no cap
+// on the trace"); SUBSTRATE_TRACE_CAP sets a cap for the loss gate only.
 // SUBSTRATE_TRACE_CAP (bytes) is a test seam: harness/shakeout/trace_files.ts sets it low to force losses.
-const TRACE_FILE_CAP = Number(process.env.SUBSTRATE_TRACE_CAP) > 0 ? Number(process.env.SUBSTRATE_TRACE_CAP) : 50 * 1024 * 1024;
-const TRACE_KEEP = 20;
+const TRACE_FILE_CAP = Number(process.env.SUBSTRATE_TRACE_CAP) > 0 ? Number(process.env.SUBSTRATE_TRACE_CAP) : Infinity;
 const BOOT_ID = new Date().toISOString().replace(/[-:.]/g, "").replace("T", "-").slice(0, 15) + "-" + Math.random().toString(16).slice(2, 8);
 const trace = { dir: null, files: new Map(), written: 0, lost: 0, mainSeq: 0, windowSeq: new Map(), windowsOpened: 0 };
 
@@ -110,10 +109,6 @@ function openTrace() {
   try {
     const root = path.join(app.getPath("logs"), "traces");
     fs.mkdirSync(root, { recursive: true });
-    const old = fs.readdirSync(root).filter((n) => fs.statSync(path.join(root, n)).isDirectory()).sort();
-    for (const n of old.slice(0, Math.max(0, old.length - (TRACE_KEEP - 1)))) {
-      try { fs.rmSync(path.join(root, n), { recursive: true, force: true }); } catch { /* an old folder that will not go stays */ }
-    }
     trace.dir = path.join(root, BOOT_ID);
     fs.mkdirSync(trace.dir, { recursive: true });
   } catch (err) {

@@ -431,6 +431,81 @@ def _interrupt_then_end(
     )
 
 
+class _Trace:
+    """The server's part of the launch trace (vocabulary v0.7; plan
+    process/planning/2026-11-05-sdd-signals, item 2). Electron main names the launch's folder and
+    boot id in SUBSTRATE_TRACE_DIR and SUBSTRATE_BOOT_ID; this writes server.jsonl there, one JSON
+    object per line with the record context (boot_id, process, proc_seq, wall, window_id null).
+    Writes are synchronous appends under a lock (the HTTP server is threaded), so lines stay in
+    order and every failure is seen: it is counted, and the next line written is a TRACE_LOST with
+    the count. No size cap (the Architect, 2026-11-05: "no cap on the trace"); SUBSTRATE_TRACE_CAP sets
+    one for the loss gate only. Without the folder (the server run alone, the Python tests) nothing is
+    written."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._boot = os.environ.get("SUBSTRATE_BOOT_ID", "")
+        self._seq = 0
+        self._bytes = 0
+        self._unreported = 0
+        self.lost = 0
+        try:
+            self._cap = int(os.environ.get("SUBSTRATE_TRACE_CAP", "0")) or 0
+        except ValueError:
+            self._cap = 0
+        self._fd: int | None = None
+        folder = os.environ.get("SUBSTRATE_TRACE_DIR")
+        if folder:
+            try:
+                self._fd = os.open(
+                    os.path.join(folder, "server.jsonl"),
+                    os.O_WRONLY | os.O_CREAT | os.O_APPEND,
+                    0o644,
+                )
+            except OSError as exc:
+                self._fd = None
+                self.lost += 1
+                self._unreported += 1
+                # No file to put a TRACE_LOST in: say it on stdout, which main copies to substrate.log.
+                print(f"trace: server.jsonl not opened in {folder}: {exc}", flush=True)
+
+    def _write(self, name: str, payload: dict[str, Any]) -> bool:
+        rec = {
+            "boot_id": self._boot,
+            "process": "server",
+            "proc_seq": self._seq,
+            "wall": time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime())
+            + f".{int(time.time() * 1000) % 1000:03d}Z",
+            "window_id": None,
+            "name": name,
+            "payload": payload,
+        }
+        self._seq += 1
+        line = (json.dumps(rec, separators=(",", ":")) + "\n").encode()
+        if self._fd is None or (self._cap and self._bytes + len(line) > self._cap):
+            self.lost += 1
+            self._unreported += 1
+            return False
+        try:
+            os.write(self._fd, line)
+        except OSError:
+            self.lost += 1
+            self._unreported += 1
+            return False
+        self._bytes += len(line)
+        return True
+
+    def emit(self, name: str, payload: dict[str, Any]) -> None:
+        with self._lock:
+            wrote = self._write(name, payload)
+            if wrote and self._unreported:
+                count, self._unreported = self._unreported, 0
+                self._write("TRACE_LOST", {"process": "server", "count": count})
+
+
+TRACE = _Trace()
+
+
 def _shutdown_all_sessions(app: App, *, per_session_timeout: float = 10.0) -> dict[str, int]:
     """Sprint 215d + 217a: end every running/parked session cleanly on daemon
     shutdown. For each manifest whose status is not `ended` or `interrupted`,
@@ -4760,6 +4835,17 @@ def main() -> None:
             if len(skipped) > 5:
                 note += f" ... (+{len(skipped) - 5} more)"
         print(note, flush=True)
+        TRACE.emit(
+            "SERVER_STARTED",
+            {
+                "port": PORT,
+                "sessions_found": len(manifests),
+                "parked": sum(1 for m in manifests if m.status == SessionStatus.PARKED),
+                "interrupted": sum(1 for m in manifests if m.status == SessionStatus.INTERRUPTED),
+                "ended": sum(1 for m in manifests if m.status == SessionStatus.ENDED),
+            },
+        )
+        TRACE.emit("TRACE_OPENED", {"process": "server"})
 
     # Sprint 217e: bind a UDS listener alongside the TCP one. TECH-SPEC §6
     # names `~/.substrate/daemon.sock` as the primary transport, with TCP as
@@ -4826,6 +4912,14 @@ def main() -> None:
             f"skipped_fresh={outcome['skipped_fresh']} "
             f"skipped_ended={outcome['skipped_ended']} "
             f"failed={outcome['failed']}"
+        )
+        TRACE.emit(
+            "SERVER_STOPPED",
+            {
+                "ended": outcome["ended"],
+                "skipped": outcome["skipped_fresh"] + outcome["skipped_ended"],
+                "failed": outcome["failed"],
+            },
         )
         if uds_srv is not None:
             uds_srv.shutdown()
