@@ -2,7 +2,6 @@
 // Copyright (C) 2026 Peter Laffey
 import { defineConfig, type Plugin } from "vite";
 import { resolve } from "path";
-import { buildSync } from "esbuild";
 import { readFileSync } from "fs";
 import { createHash } from "crypto";
 
@@ -12,83 +11,6 @@ import { createHash } from "crypto";
 // intact and re-instatable, but not built. The Python server serves the
 // built output from web/dist/ under the same origin so /api/* calls
 // resolve without proxying.
-
-// Sprint 058: dc-runtime consumes the reveal shell's class body via
-// `<script type="text/x-dc" data-dc-script>` in reveal.html; it reads
-// scriptEl.textContent and evaluates the string. To keep the class body
-// on disk as reveal_component.ts (typechecked, greppable, refactorable)
-// we compile that file with esbuild and inline the resulting JS into
-// the script tag at HTML transform time. dev + build both go through
-// transformIndexHtml.
-function inlineDcScript(): Plugin {
-  const componentPath = resolve(__dirname, "web/reveal_component.ts");
-  const marker = /<script\s+type="text\/x-dc"\s+data-dc-script[^>]*>[\s\S]*?<\/script>/;
-  return {
-    name: "substrate-inline-dc-script",
-    transformIndexHtml: {
-      order: "pre",
-      handler(html, ctx) {
-        if (!ctx.filename.endsWith("reveal.html")) return html;
-        // esbuild bundles reveal_component.ts's ES imports (kinds.ts,
-        // future demo-data extraction, etc.) into one script body.
-        // `format: "iife"` wraps in an outer function — strip it so
-        // `class Component extends DCLogic` lands at top level for
-        // dc-runtime's evaluator.
-        const result = buildSync({
-          entryPoints: [componentPath],
-          bundle: true,
-          write: false,
-          format: "iife",
-          target: "es2020",
-          logLevel: "silent",
-        });
-        const code = result.outputFiles[0].text;
-        // Peel esbuild's IIFE wrapper. Two shapes seen:
-        //   `"use strict";\n(() => { ... })();`
-        //   `(function () { "use strict"; ... })();`
-        // In both, `class Component extends DCLogic { ... }` sits at
-        // depth 1 inside the wrapper; dc-runtime needs it at top
-        // level.
-        const bare = code
-          .replace(/^\s*"use strict";\s*/, "")
-          .replace(/^\(\s*\(\)\s*=>\s*\{\s*/, "")
-          .replace(/^\(\s*function\s*\(\s*\)\s*\{\s*(?:"use strict";\s*)?/, "")
-          .replace(/\}\s*\)\s*\(\s*\)\s*;?\s*$/, "");
-        return html.replace(marker, (match) => {
-          const openMatch = match.match(/^<script[^>]*>/)![0];
-          return openMatch + "\n" + bare + "\n</script>";
-        });
-      },
-    },
-  };
-}
-
-// The 2026-10-11 audit: reveal.html's template language has no include, so blocks the app
-// shows more than once (the input bar in two views; the GUIDANCE / LENGTH / TONE lines) were
-// copies. `<!-- include partials/<file>.html key=value ... -->` inlines web/partials/<file>.html,
-// replacing each `%key%` with its value. A missing file or an unfilled `%key%` fails the build.
-function includePartials(): Plugin {
-  const marker = /<!-- include (\S+)((?: [A-Za-z]+=\S+)*) -->/g;
-  return {
-    name: "substrate-include-partials",
-    transformIndexHtml: {
-      order: "pre",
-      handler(html, ctx) {
-        if (!ctx.filename.endsWith("reveal.html")) return html;
-        return html.replace(marker, (_match, file: string, rawParams: string) => {
-          let text = readFileSync(resolve(__dirname, "web", file), "utf8").replace(/^<!--[\s\S]*?-->\n/, "");
-          for (const pair of rawParams.trim().split(/\s+/).filter(Boolean)) {
-            const [key, value] = pair.split("=");
-            text = text.split(`%${key}%`).join(value);
-          }
-          const unfilled = text.match(/%[A-Za-z]+%/);
-          if (unfilled) throw new Error(`includePartials: ${file} has an unfilled ${unfilled[0]}`);
-          return text.replace(/\n$/, "");
-        });
-      },
-    },
-  };
-}
 
 // Sprint 199: React and ReactDOM load from the app's own server, not cdnjs (lens findings F320, F345).
 // The two UMD files are copied from node_modules into the build as vendor/<file>, served from
@@ -131,7 +53,7 @@ function vendorReact(): Plugin {
 
 export default defineConfig({
   root: "web",
-  plugins: [includePartials(), inlineDcScript(), vendorReact()],
+  plugins: [vendorReact()],
   build: {
     target: "es2020",
     outDir: "dist",
@@ -140,21 +62,6 @@ export default defineConfig({
       input: {
         reveal: resolve(__dirname, "web/reveal.html"),
       },
-    },
-  },
-  resolve: {
-    // React ships as UMD globals from CDN so dc-runtime (support.js)
-    // can read `window.React` at parse time. Vite-bundled code
-    // (reveal.ts, reveal_component.ts, and Phase 8's transcript
-    // subtree) imports `react` and `react-dom/client` through these
-    // shims, which re-export the same globals. One React instance,
-    // one ReactDOM instance, shared across all three module systems.
-    alias: {
-      "react/jsx-runtime": resolve(__dirname, "web/shims/react-jsx-runtime.ts"),
-      "react/jsx-dev-runtime": resolve(__dirname, "web/shims/react-jsx-runtime.ts"),
-      "react": resolve(__dirname, "web/shims/react.ts"),
-      "react-dom/client": resolve(__dirname, "web/shims/react-dom-client.ts"),
-      "react-dom": resolve(__dirname, "web/shims/react-dom.ts"),
     },
   },
   server: {

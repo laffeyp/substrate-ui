@@ -28,8 +28,8 @@ function Report({ name }: { name: string }): React.ReactElement {
   return (
     <div data-assay-report={name} style={{ marginTop: 22, maxWidth: 1060 }}>
       <div style={{ color: "#62676f", fontSize: 11 }}>{report.suite} · {report.primaryMetric} · config {report.provenance ?? "unverified"}{report.margin !== null ? ` · margin ${report.margin}` : ""}</div>
-      {warnings(report).map((w) => (
-        <div key={w} data-assay-warning="1" style={{ ...note, maxWidth: 1060, borderLeft: `2px solid ${ALARM}`, color: ALARM, marginTop: 10, padding: "10px 14px", fontSize: 12 }}>{w}</div>
+      {warnings(report).map((line) => (
+        <div key={line} data-assay-warning="1" style={{ ...note, maxWidth: 1060, borderLeft: `2px solid ${ALARM}`, color: ALARM, marginTop: 10, padding: "10px 14px", fontSize: 12 }}>{line}</div>
       ))}
       <div style={{ display: "grid", gridTemplateColumns: COLUMNS, gap: "0 16px", fontSize: 12, alignItems: "center", marginTop: 14 }}>
         <div style={heading}>ARM</div><div style={heading}>ROLE</div><div style={heading}>PASS^K</div><div style={heading}>PASS@1</div>

@@ -1,0 +1,11 @@
+/* SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0 */
+/* Copyright (C) 2026 Peter Laffey */
+/* The window's page rules (sprint 328), moved from reveal.html's dc-runtime helmet: the page, links,   */
+/* thin scrollbars, the activity line's pulse (.act-pulse), and the lowest text level (.tx-hint, UI    */
+/* sprint 142: a hint in the workspace bar, one step fainter than #4a4e55).                             */
+body{margin:0;background:#212327}a{color:#82a5c8}a:hover{color:#9db8d6}*{scrollbar-width:thin;scrollbar-color:#33373d transparent}::-webkit-scrollbar{width:5px;height:5px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#33373d;border-radius:3px}::-webkit-scrollbar-thumb:hover{background:#4a4e55}
+@keyframes actglyph{0%{opacity:.4}50%{opacity:1}100%{opacity:.4}}
+.act-pulse{animation:actglyph 1.4s ease-in-out infinite}
+:root{--tx-hint:#3c3f45}
+.tx-hint{color:var(--tx-hint)}
+

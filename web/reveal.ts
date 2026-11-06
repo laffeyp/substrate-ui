@@ -1,31 +1,18 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2026 Peter Laffey
-// web/reveal.ts — the prototype-v7 shell's boot script.
+// web/reveal.ts — the window's one module (sprint 329; plan PLAN-2026-11-04-shell-to-react-r5.md, E4).
 //
-// Runs after dc-runtime + support.js render the page from `<x-dc>`.
-// Builds the pane registry, exposes it as `window.__vm`, and hands each
-// pane controller's snapshot and the menu's commands to the window
-// through web/app/state/shell.ts, which the component subscribes to
-// (sprints 211-212; it reached the component's React fiber before).
+// Builds the pane registry, exposes it as `window.__vm`, hands each pane controller's snapshot and
+// the menu's commands to the window through web/app/state/shell.ts, and renders the window
+// (web/app/App.tsx) into #root. Before sprint 329 dc-runtime (support.js) drew the page from a
+// template, evaluated the shell's class from a string, and this script attached React roots to the
+// template's divs.
 
 import * as React from "react";
 import * as ReactDOMClient from "react-dom/client";
 import { BrowserSubstrateClient, PaneRegistry } from "./vm";
-import { Transcript } from "./reveal/transcript";
 import { mirrorSnapshot, sendCommand } from "./app/state/shell";
-import { createMountRegistry } from "./app/mount";
-import { Dialogs } from "./app/Dialogs";
-import { FirstRun } from "./app/FirstRun";
-import { Footer } from "./app/Footer";
-import { TopBar } from "./app/TopBar";
-import { RecordsPage } from "./app/RecordsPage";
-import { AssayPage } from "./app/AssayPage";
-import { InputBar } from "./app/InputBar";
-import { FindBar } from "./app/FindBar";
-import { PanePicker } from "./app/PanePicker";
-import { MetaView } from "./app/MetaView";
-import { PanesView } from "./app/PanesView";
-import { ActivityLine, TaskRows, type PaneView } from "./app/ActivityLine";
+import { App } from "./app/App";
 
 function boot(): void {
   const registry = new PaneRegistry({ makeClient: () => new BrowserSubstrateClient() });
@@ -88,90 +75,9 @@ function boot(): void {
 
   // The window's keys, Ctrl+C's interrupt among them, are web/app/keymap.ts (sprint 327).
 
-  // The meta view's transcript mount. dc-runtime draws the meta view's transcript column, with one
-  // <div data-vm-transcript-mount="reveal"> for the focused pane; each match gets its own React root
-  // bound to that pane's controller. dc-runtime's reconciler treats the mount div as an empty leaf and
-  // clears its children on each commit, so a MutationObserver on document.body watches for those
-  // clears and re-attaches the root. The panes view's transcripts are children of their panes
-  // (web/app/PanesView.tsx, sprint 323; F361) and are not attached here.
-  interface Attached { host: HTMLElement; root: ReactDOMClient.Root; inner: HTMLElement; paneId: number; view: "terminal" | "reveal"; }
-  const attached = new Map<string, Attached>();
-  const keyFor = (view: "terminal" | "reveal", paneId: number) => `${view}:${paneId}`;
-  const readPaneId = (host: HTMLElement): number => {
-    const raw = host.getAttribute("data-pane-id");
-    const n = raw ? Number(raw) : NaN;
-    return Number.isFinite(n) ? n : 1;
-  };
-  const attachOne = (host: HTMLElement, view: "terminal" | "reveal") => {
-    const paneId = readPaneId(host);
-    const key = keyFor(view, paneId);
-    const existing = attached.get(key);
-    if (existing && existing.host === host && host.contains(existing.inner)) return;
-    if (existing) {
-      try { existing.root.unmount(); } catch (_) { /* already gone */ }
-    }
-    const inner = document.createElement("div");
-    inner.setAttribute("data-vm-atom-root", view);
-    inner.setAttribute("data-pane-id", String(paneId));
-    host.appendChild(inner);
-    const root = ReactDOMClient.createRoot(inner);
-    root.render(React.createElement(Transcript, { paneId, view }));
-    attached.set(key, { host, root, inner, paneId, view });
-    console.info(`[reveal] transcript root mounted (${view}, pane ${paneId})`);
-  };
-  const check = () => {
-    const seen = new Set<string>();
-    const revs = document.querySelectorAll<HTMLElement>('[data-vm-transcript-mount="reveal"]');
-    revs.forEach((host) => { seen.add(keyFor("reveal", readPaneId(host))); attachOne(host, "reveal"); });
-    // Retire roots for panes that no longer have a mount in the DOM.
-    for (const [key, rec] of attached) {
-      if (!seen.has(key)) {
-        try { rec.root.unmount(); } catch (_) { /* already gone */ }
-        attached.delete(key);
-      }
-    }
-  };
-  check();
-  const observer = new MutationObserver(check);
-  observer.observe(document.body, { childList: true, subtree: true });
-
-  // Areas moved to React mount through the registry (web/app/mount.ts; sprint 215). A host is a
-  // `data-app-mount` div in reveal.html; a kind whose host is not on the page mounts nothing.
-  const mounts = createMountRegistry(document);
-  // 13px is the transcript's default size, the template's `transcriptFontSize` default.
-  mounts.register({ name: "dialogs", selector: '[data-app-mount="dialogs"]', key: () => "window",
-    render: () => React.createElement(Dialogs, { defaultFontSize: 13 }) });
-  mounts.register({ name: "top-bar", selector: '[data-app-mount="top-bar"]', key: () => "window",
-    render: () => React.createElement(TopBar) });
-  mounts.register({ name: "records", selector: '[data-app-mount="records"]', key: () => "window",
-    render: () => React.createElement(RecordsPage) });
-  mounts.register({ name: "assays", selector: '[data-app-mount="assays"]', key: () => "window",
-    render: () => React.createElement(AssayPage) });
-  // One input bar per pane and view; the bar keeps each pane's draft in its store (sprint 261).
-  mounts.register({ name: "input-bar", selector: '[data-app-mount="input-bar"]',
-    key: (host) => (host.getAttribute("data-view") ?? "") + ":" + (host.getAttribute("data-pane-id") ?? ""),
-    render: (host) => React.createElement(InputBar, { paneId: Number(host.getAttribute("data-pane-id")) }) });
-  // The bar line and the task rows, per pane and view (sprint 268).
-  const paneView = (host: HTMLElement) => ({ paneId: Number(host.getAttribute("data-pane-id")), view: (host.getAttribute("data-view") === "meta" ? "meta" : "panes") as PaneView });
-  const paneViewKey = (host: HTMLElement) => (host.getAttribute("data-view") ?? "") + ":" + (host.getAttribute("data-pane-id") ?? "");
-  mounts.register({ name: "activity", selector: '[data-app-mount="activity"]', key: paneViewKey, render: (host) => React.createElement(ActivityLine, paneView(host)) });
-  mounts.register({ name: "tasks", selector: '[data-app-mount="tasks"]', key: paneViewKey, render: (host) => React.createElement(TaskRows, paneView(host)) });
-  mounts.register({ name: "find", selector: '[data-app-mount="find"]', key: paneViewKey, render: (host) => React.createElement(FindBar, { view: paneView(host).view }) });
-  // The pane picker lays itself out in its pane's flex column, so its root takes no box (sprint 286).
-  mounts.register({ name: "picker", selector: '[data-app-mount="picker"]', key: (host) => host.getAttribute("data-pane-id") ?? "", contents: true,
-    render: (host) => React.createElement(PanePicker, { paneId: Number(host.getAttribute("data-pane-id")) }) });
-  // The meta view's machinery column and its gutter, for the focused pane; its root takes no box, so
-  // the column and the gutter lay out in the meta row as the template's did (sprint 316).
-  mounts.register({ name: "meta", selector: '[data-app-mount="meta"]', key: (host) => host.getAttribute("data-pane-id") ?? "", contents: true,
-    render: (host) => React.createElement(MetaView, { paneId: Number(host.getAttribute("data-pane-id")) }) });
-  // The panes view: the grid, its panes and its gutters; its root takes no box (sprint 323).
-  mounts.register({ name: "panes", selector: '[data-app-mount="panes"]', key: () => "window", contents: true,
-    render: () => React.createElement(PanesView) });
-  mounts.register({ name: "footer", selector: '[data-app-mount="footer"]', key: () => "window",
-    render: () => React.createElement(Footer) });
-  mounts.register({ name: "first-run", selector: '[data-app-mount="first-run"]', key: () => "window",
-    render: () => React.createElement(FirstRun) });
-  mounts.start();
+  const host = document.getElementById("root");
+  if (!host) throw new Error("reveal.html has no #root");
+  ReactDOMClient.createRoot(host).render(React.createElement(App));
 
   // Sprint 080 — native menu wire-up. Only present when running
   // inside Electron. In a plain Chrome tab window.native is
@@ -210,7 +116,7 @@ function boot(): void {
     });
   }
 
-  console.info("[reveal] SessionController booted. Read window.__vm.snapshot() in DevTools.");
+  console.info("[reveal] window rendered. Read window.__vm.snapshot() in DevTools.");
 }
 
 if (document.readyState === "loading") {

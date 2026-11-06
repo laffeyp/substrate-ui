@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2026 Peter Laffey
-// ESLint flat config. Sprint 062 — the reveal shell now lives in
-// TypeScript files (reveal.ts, reveal_component.ts, web/vm/*); ESLint
-// gives us:
+// ESLint flat config. Sprint 062 — the reveal shell lives in TypeScript
+// files (web/reveal.ts, web/app/**, web/vm/*); ESLint gives us:
 //   1. `id-length` — no cryptic single-letter names outside a small
 //      set of idiomatic exceptions (index, coordinate).
 //   2. `no-restricted-syntax` — every raw envelope-kind string must
@@ -25,10 +24,12 @@ const restrictedKindLiterals = [
 
 export default [
   {
-    files: ["web/**/*.ts"],
+    // Sprint 330: the React areas (.tsx) are linted too; before, the glob read .ts only, so neither
+    // rule had checked a component.
+    files: ["web/**/*.ts", "web/**/*.tsx"],
     languageOptions: {
       parser: tsParser,
-      parserOptions: { ecmaVersion: 2022, sourceType: "module" },
+      parserOptions: { ecmaVersion: 2022, sourceType: "module", ecmaFeatures: { jsx: true } },
       globals: { window: "readonly", document: "readonly", console: "readonly", performance: "readonly", setTimeout: "readonly", clearTimeout: "readonly", setInterval: "readonly", clearInterval: "readonly", requestAnimationFrame: "readonly", fetch: "readonly", URL: "readonly", URLSearchParams: "readonly", MutationObserver: "readonly", AbortController: "readonly", EventSource: "readonly", HTMLElement: "readonly", HTMLInputElement: "readonly", HTMLDivElement: "readonly", ParentNode: "readonly" },
     },
     rules: {
@@ -41,20 +42,9 @@ export default [
         "error",
         {
           selector: `Literal[value=/^(${restrictedKindLiterals.join("|")})$/]`,
-          message: "Use EnvelopeKind.* instead of a raw envelope-kind string. See web/reveal_component.ts.",
+          message: "Use EnvelopeKind.* instead of a raw envelope-kind string. See web/vm/kinds.ts.",
         },
       ],
-    },
-  },
-  {
-    // reveal_component.ts is @ts-nocheck for now; the same file has
-    // hundreds of loop-body single-letter identifiers that a later
-    // sprint renames. Skip id-length here until that sprint lands;
-    // the no-restricted-syntax rule still fires and catches raw kind
-    // literals — the higher-impact check of the two.
-    files: ["web/reveal_component.ts"],
-    rules: {
-      "id-length": "off",
     },
   },
   {

@@ -23,7 +23,7 @@ export interface RawEnvelope {
   t?: number;
   schema?: string;
   payload?: Record<string, unknown>;
-  producer?: { kind?: string; instance?: string };
+  producer?: { kind?: string; instance?: string } | null;
 }
 
 export interface StreamRow {

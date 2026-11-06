@@ -7,80 +7,12 @@
 <link rel="icon" href="data:,"><!-- UI sprint 107: no icon to fetch; the missing /favicon.ico 404ed on every load -->
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>substrate · reveal</title>
-<!-- dc-runtime needs React + ReactDOM in window scope before support.js runs. Sprint 199: both load
-     from the app's own server, copied from node_modules at build with an integrity hash (vite.config.ts,
-     vendorReact); before, they came from cdnjs with none (lens finding F320). -->
-<script src="./vendor/react.production.min.js"></script>
-<script src="./vendor/react-dom.production.min.js"></script>
-<script src="./support.js"></script>
+<!-- One module (sprint 329; plan PLAN-2026-11-04-shell-to-react-r5.md, E4): web/reveal.ts boots the
+     pane registry and renders the window (web/app/App.tsx) into #root. The dc-runtime page it
+     replaces is _deprecated/dc-runtime/reveal.html. -->
 <script type="module" src="./reveal.ts"></script>
 </head>
 <body>
-<x-dc>
-<helmet data-dc-atomics><style>body{margin:0;background:#212327}a{color:#82a5c8}a:hover{color:#9db8d6}*{scrollbar-width:thin;scrollbar-color:#33373d transparent}::-webkit-scrollbar{width:5px;height:5px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#33373d;border-radius:3px}::-webkit-scrollbar-thumb:hover{background:#4a4e55}
-@keyframes actglyph{0%{opacity:.4}50%{opacity:1}100%{opacity:.4}}
-.act-pulse{animation:actglyph 1.4s ease-in-out infinite}
-/* UI sprint 142: the lowest text level, for a hint in the workspace bar ("pick a model first"): one step fainter than #4a4e55. */
-:root{--tx-hint:#3c3f45}
-.tx-hint{color:var(--tx-hint)}
-</style></helmet>
-<div style="height:100vh;display:flex;flex-direction:column;background:#212327;color:#b9bec5;font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;font-size:13px;overflow:hidden">
- <!-- One top bar (UI sprint 136): web/app/TopBar.tsx (sprint 231). It shows the focused pane. -->
- <div data-app-mount="top-bar" style="flex:none;min-width:0"></div>
-
- <!-- ══ SESSION · terminal at rest ══ -->
- <sc-if value="{{ showTerminal }}" hint-placeholder-val="{{ true }}">
-  <!-- the panes view: web/app/PanesView.tsx (sprint 323) -->
-  <div data-app-mount="panes" style="display:contents"></div>
- </sc-if>
-
- <!-- ══ SESSION · revealed ══ -->
- <sc-if value="{{ showRevealed }}" hint-placeholder-val="{{ false }}">
-  <div style="flex:1;display:flex;flex-direction:column;min-height:0">
-<div style="flex:1;display:flex;min-height:0;position:relative">
-   <div style="flex:{{ revealFlexL }};display:flex;flex-direction:column;min-width:0;background:#212327">
-    <sc-if value="{{ isMainFocused }}" hint-placeholder-val="{{ true }}">
-    <div data-app-mount="find" data-pane-id="{{ fpRow.id }}" data-view="meta" style="flex:none"></div>
-    <div onClick="{{ focusTranscript }}" style="flex:1;overflow-y:auto;overflow-x:hidden;padding:20px 26px;line-height:1.95;font-size:{{ fontSize }}px;min-width:0">
-     <div data-vm-transcript-mount="reveal" data-pane-id="{{ focusedId }}"></div>
-    </div>
-    </sc-if>
-    <div data-app-mount="activity" data-pane-id="{{ fpRow.id }}" data-view="meta" style="flex:none"></div>
-   <div data-app-mount="tasks" data-pane-id="{{ fpRow.id }}" data-view="meta" style="flex:none"></div>
-    <div style="flex:none;padding:12px 26px 18px">
-    <!-- the input bar: web/app/InputBar.tsx, for this pane (sprint 261) -->
-    <div data-app-mount="input-bar" data-pane-id="{{ fpRow.id }}" data-view="meta"></div>
-    </div>
-   </div>
-   <!-- the machinery column and the gutter: web/app/MetaView.tsx (sprint 316) -->
-   <div data-app-mount="meta" data-pane-id="{{ focusedId }}" style="display:contents"></div>
-  </div>
-  </div>
- </sc-if>
-
- <!-- ══ SURFACE · records ══ -->
- <sc-if value="{{ showRecords }}" hint-placeholder-val="{{ false }}">
-  <!-- The records page: web/app/RecordsPage.tsx (sprint 240). This div is its scroll container. -->
-  <div data-app-mount="records" style="flex:1;overflow:auto;background:#212327;padding:22px 22px"></div>
- </sc-if>
-
- <!-- ══ SURFACE · assay: web/app/AssayPage.tsx (sprint 255; ⌘3, View ▸ Assays) ══ -->
- <sc-if value="{{ showAssay }}" hint-placeholder-val="{{ false }}">
-  <div data-app-mount="assays" style="flex:1;overflow:auto;background:#212327;padding:20px 40px"></div>
- </sc-if>
-
- <!-- footer: web/app/Footer.tsx (sprint 224) -->
- <div data-app-mount="footer" style="flex:none"></div>
-
- <!-- ══ DIALOGS · 19c settings / 19g end-session: web/app/Dialogs.tsx (sprint 216) ══ -->
- <div data-app-mount="dialogs"></div>
-
- <!-- ══ FIRST RUN · 19m: web/app/FirstRun.tsx (sprint 225) ══ -->
- <div data-app-mount="first-run"></div>
-</div>
-</x-dc>
-<script type="text/x-dc" data-dc-script>
-// injected at build time from web/reveal_component.ts (see vite.config.ts)
-</script>
+<div id="root"></div>
 </body>
 </html>
