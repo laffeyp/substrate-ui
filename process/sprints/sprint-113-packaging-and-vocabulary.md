@@ -3,7 +3,9 @@
 ```yaml
 ---
 id: 113
-status: pending
+status: superseded
+superseded_by: process/planning/2026-11-04-shell-to-react/PLAN-2026-11-04-shell-to-react-r5.md for its React and CSP rows, and by that plan's successor for packaging
+superseded_at: 2026-11-05
 opened_at: 2026-10-08
 pass_kind: remediation
 roadmap: substrate-ui/process/planning/ROADMAP-2026-10-08-lens-audit-remediation.md
