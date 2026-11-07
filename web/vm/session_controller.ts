@@ -1378,11 +1378,33 @@ export class SessionController {
     // this controller already holds. UI sprint 102: skip them whole. Before, rawEnvelopes was
     // deduped but the switch below still ran, so every reconnect appended the transcript again.
     const existing = this.snap.rawEnvelopes;
-    if (typeof env.seq === "number" && this.seenSeqs.has(env.seq)) return;
+    if (typeof env.seq === "number" && this.seenSeqs.has(env.seq)) {
+      if (this.paneId !== null) this.emit("TRANSCRIPT_ROW_SKIPPED", { pane_id: this.paneId, session_id: this.snap.sessionId, seq: env.seq, kind: env.kind, reason: "duplicate_seq" });
+      return;
+    }
     if (typeof env.seq === "number") this.seenSeqs.add(env.seq);
     if (typeof env.seq === "number" && env.seq > this.lastSeq) this.lastSeq = env.seq;
     this.emit("STREAM_ENVELOPE_APPENDED", { seq: env.seq, kind: env.kind });
     this.patch({ rawEnvelopes: [...existing, env] });
+    this.envelopeToRows(sessionId, env);
+    this.noteSkipped(env);
+  }
+
+  /** T4 (v0.12): an entry that made no transcript row of its own is TRANSCRIPT_ROW_SKIPPED, with the
+   *  reason the controller's own table gives; a row it made is drawn by Row.tsx, or folded into its
+   *  call's card by Transcript.tsx. */
+  private noteSkipped(env: RecordEnvelope): void {
+    // A controller with no pane (a test's) draws nothing on screen, so it writes no row records.
+    if (typeof env.seq !== "number" || this.paneId === null) return;
+    if (this.snap.transcript.some((row) => row.seq === env.seq)) return;
+    const reason = env.kind === EnvelopeKind.ToolProgress
+      ? "folded"
+      : KIND_DISPOSITION_BY_VALUE[env.kind] === "ignored" ? "hidden_kind" : "other";
+    this.emit("TRANSCRIPT_ROW_SKIPPED", { pane_id: this.paneId, session_id: this.snap.sessionId, seq: env.seq, kind: env.kind, reason });
+  }
+
+  /** The envelope's effect on the snapshot: a transcript row, a state change, or nothing. */
+  private envelopeToRows(sessionId: string, env: RecordEnvelope): void {
     const payload = env.payload ?? {};
     switch (env.kind) {
       case EnvelopeKind.SessionStarted: {

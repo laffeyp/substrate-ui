@@ -13,6 +13,7 @@ import { useController } from "./useController";
 import { Row } from "./Row";
 import { useScrollAnchor } from "./useScrollAnchor";
 import { isToolResultRow } from "../../vm";
+import { emit as emitSignal } from "../../vm/instrumentation/sdd";
 import type { Snapshot, TranscriptRow } from "../../vm";
 
 export interface TranscriptProps {
@@ -52,6 +53,16 @@ export function Transcript(props: TranscriptProps): React.ReactElement | null {
   const { registerRow, attachTo } = useScrollAnchor(`${props.view}:${props.paneId}`);
   const resultByCallId = React.useMemo(() => buildResultByCallId(snapshot), [snapshot.transcript]);
   const rows: TranscriptRow[] = snapshot.transcript.filter((row) => !isToolResultRow(row));
+  // T4 (v0.12): a tool result is drawn inside its call's card, not as a row: TRANSCRIPT_ROW_SKIPPED
+  // folded, once per result per mounted transcript.
+  const foldedRef = React.useRef<Set<number>>(new Set());
+  React.useEffect(() => {
+    for (const row of snapshot.transcript) {
+      if (!isToolResultRow(row) || foldedRef.current.has(row.seq)) continue;
+      foldedRef.current.add(row.seq);
+      emitSignal("TRANSCRIPT_ROW_SKIPPED", { pane_id: props.paneId, session_id: snapshot.sessionId, seq: row.seq, kind: row.kind, reason: "folded" }, { pane_id: props.paneId });
+    }
+  }, [snapshot.transcript, snapshot.sessionId, props.paneId]);
   const start = startLine(snapshot);
   return (
     <div ref={attachTo}>
@@ -68,6 +79,8 @@ export function Transcript(props: TranscriptProps): React.ReactElement | null {
             progressText={progressEntry?.text ?? ""}
             progressEof={progressEntry?.eof ?? false}
             registerRow={registerRow}
+            paneId={props.paneId}
+            sessionId={snapshot.sessionId}
           />
         );
       })}

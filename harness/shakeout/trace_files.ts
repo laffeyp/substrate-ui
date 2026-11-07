@@ -73,6 +73,9 @@ async function main(): Promise<void> {
       await win.keyboard.type("hello");
       await win.keyboard.press("Enter");
       await win.waitForFunction(() => ((window as unknown as { __vmSignals?: { name: string }[] }).__vmSignals ?? []).some((r) => r.name === "TURN_ACK"), undefined, { timeout: 30_000 });
+      // The reply on screen before quitting: its row drawn (T4).
+      await win.waitForFunction(() => ((window as unknown as { __vmSignals?: { name: string; payload: { kind?: string } }[] }).__vmSignals ?? []).some((r) => r.name === "TRANSCRIPT_ROW_DRAWN" && r.payload.kind === "ModelReply"), undefined, { timeout: 15_000 })
+        .catch(() => undefined); // not drawn: T4 below names the entry
     }
     // The boot scan runs in the background (STORE_SCANNED); quit only after it has ended. The server's
     // stdout, which main copies to its stderr, prints the scan's line in every run, capped or not.
@@ -198,13 +201,21 @@ async function main(): Promise<void> {
       throw new Error(`S7: SESSION_CREATED ${JSON.stringify(created.map((r) => r.payload))} vs SESSION_OPEN_ACKED ${JSON.stringify(acked.map((r) => r.payload))}`);
     }
     const sid = created[0].payload?.session_id;
+    // T4 (sprint 358): every entry the pane received is drawn or skipped, same pane and seq, within 1 s.
+    const wallMs = (r: Rec & { wall?: string }) => Date.parse(String((r as { wall?: string }).wall));
+    const appended = recs.filter((r) => r.name === "STREAM_ENVELOPE_APPENDED");
+    const settled = recs.filter((r) => r.name === "TRANSCRIPT_ROW_DRAWN" || r.name === "TRANSCRIPT_ROW_SKIPPED");
+    const unsettled = appended.filter((a) => !settled.some((d) => d.payload?.seq === a.payload?.seq && d.payload?.pane_id === a.pane_id && wallMs(d) - wallMs(a) <= 1000));
+    if (!appended.length || unsettled.length) throw new Error(`T4: ${unsettled.length} of ${appended.length} received entries neither drawn nor skipped within 1 s: ${JSON.stringify(unsettled.map((r) => r.payload))}`);
+    const reply = appended.find((r) => r.payload?.kind === "ModelReply");
+    if (!reply || !settled.some((d) => d.name === "TRANSCRIPT_ROW_DRAWN" && d.payload?.seq === reply.payload?.seq && d.payload?.session_id === sid)) throw new Error("the reply was received but not drawn");
     const accepted = server.filter((r) => r.name === "TURN_ACCEPTED");
     const turnAcks = recs.filter((r) => r.name === "TURN_ACK");
     if (accepted.length !== 1 || accepted[0].payload?.session_id !== sid || accepted[0].payload?.turn_index !== 0 || turnAcks.length !== 1 || turnAcks[0].payload?.session_id !== sid) {
       throw new Error(`S8: TURN_ACCEPTED ${JSON.stringify(accepted.map((r) => r.payload))} vs TURN_ACK ${JSON.stringify(turnAcks.map((r) => r.payload))}`);
     }
     if (process.env.TRACE_PRINT) for (const r of [...main, ...server, ...recs]) console.log(JSON.stringify(r));
-    console.log(`trace_files: ok — ${traceDir}: main ${main.length} lines (APP_BOOTED … APP_QUIT_COMPLETED), server ${server.length} (SERVER_STARTED … SERVER_STOPPED), ${winFiles[0]} ${recs.length} lines, PICKER_FOLDER_ARMED present, session ${String(sid)} created and acked, turn 0 accepted and acked`);
+    console.log(`trace_files: ok — ${traceDir}: main ${main.length} lines (APP_BOOTED … APP_QUIT_COMPLETED), server ${server.length} (SERVER_STARTED … SERVER_STOPPED), ${winFiles[0]} ${recs.length} lines, PICKER_FOLDER_ARMED present, session ${String(sid)} created and acked, turn 0 accepted and acked, ${appended.length} received entries each drawn or skipped (T4)`);
     code = 0;
   } catch (e) {
     console.error(`trace_files: FAIL — ${(e as Error).message}${traceDir ? ` (${traceDir})` : ""}`);

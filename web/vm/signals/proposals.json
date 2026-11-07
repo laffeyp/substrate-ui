@@ -682,6 +682,26 @@
       "rationale": "E1 forbids the response text (it can carry request content); a code per site names the line that decided, which is what a reader needs to find it. The text reaches the trace through the window's SESSION_OPEN_REFUSED and TURN_REFUSED detail, bounded by E2.",
       "ratified": true,
       "ratified_by": "agent-resolved 2026-11-06, sprint 357"
+    },
+    {
+      "id": "P-0.12-ROW-SESSION",
+      "kind": "PAYLOAD_FIELD_PROPOSED",
+      "layer": 2,
+      "element": "TRANSCRIPT_ROW_DRAWN.session_id and TRANSCRIPT_ROW_SKIPPED.session_id admit null",
+      "source": "web/vm/session_controller.ts attachRecordRoot: a pane showing an attached record streams it with no session id (STREAM_ATTACHED carries record_root)",
+      "rationale": "T4 asks every received entry to be drawn or skipped, in record panes too; a non-null session_id made those records unwritable.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-06, sprint 358"
+    },
+    {
+      "id": "P-0.12-SKIP-REASONS",
+      "kind": "INVARIANT_PROPOSED",
+      "layer": 7,
+      "element": "TRANSCRIPT_ROW_SKIPPED.reason defined against the code: hidden_kind from KIND_DISPOSITION ignored, folded inside another row, duplicate_seq a replay, other a rendered kind with no row this time; emit sites named",
+      "source": "web/vm/session_controller.ts KIND_DISPOSITION (every kernel kind rendered or ignored, exhaustive by type) and handleEnvelope; web/reveal/transcript/Transcript.tsx (tool results folded into their call's card)",
+      "rationale": "v0.7 named the four reasons without saying which code decides each; a reader of a skip needs to know what the reason commits to.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-06, sprint 358"
     }
   ]
 }

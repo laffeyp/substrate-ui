@@ -20,6 +20,7 @@ import { isToolCallRow } from "../../vm";
 import { ModelReply } from "./ModelReply";
 import { ToolCard } from "./ToolCard";
 import { AuthPromptCard } from "./AuthPromptCard";
+import { emit as emitSignal } from "../../vm/instrumentation/sdd";
 
 export interface RowProps {
   row: TranscriptRow;
@@ -27,6 +28,9 @@ export interface RowProps {
   progressText: string;
   progressEof: boolean;
   registerRow?: (seq: number, el: HTMLElement | null) => void;
+  /** The pane and its session, for TRANSCRIPT_ROW_DRAWN (v0.12); absent outside a pane. */
+  paneId?: number;
+  sessionId?: string | null;
 }
 
 interface Style {
@@ -62,13 +66,28 @@ function styleFor(row: TranscriptRow): Style {
   }
 }
 
-const RowInner: React.FC<RowProps> = ({ row, paired, progressText, progressEof, registerRow }) => {
+// A row the window made itself (a local echo, a note, help, a model-error line) has a negative or
+// fractional seq: it carries no record seq, and its kind says it is local.
+function drawnSeq(row: TranscriptRow): { seq: number | null; kind: string } {
+  return Number.isInteger(row.seq) && row.seq >= 0
+    ? { seq: row.seq, kind: row.kind }
+    : { seq: null, kind: `local:${row.kind || row.role}` };
+}
+
+const RowInner: React.FC<RowProps> = ({ row, paired, progressText, progressEof, registerRow, paneId, sessionId }) => {
   const style = styleFor(row);
   const text = row.text ?? "";
   const isModel = row.role === "model";
   const isTool = row.role === "tool" && isToolCallRow(row);
   const isAuthPrompt = row.role === "system" && row.kind === "AuthPrompt";
   const streamingShow = progressText.length > 0;
+  // T4 (v0.12): a row on screen is TRANSCRIPT_ROW_DRAWN, once per mount; Transcript keys rows by
+  // seq or call, so a local echo replaced by its record entry mounts again with the record's seq.
+  React.useEffect(() => {
+    if (paneId === undefined) return;
+    const { seq, kind } = drawnSeq(row);
+    emitSignal("TRANSCRIPT_ROW_DRAWN", { pane_id: paneId, session_id: sessionId ?? null, seq, kind }, { pane_id: paneId });
+  }, []);
   const refCb = React.useCallback(
     (el: HTMLDivElement | null) => { registerRow?.(row.seq, el); },
     [registerRow, row.seq],
