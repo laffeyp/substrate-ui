@@ -18,6 +18,7 @@ const fs = require("node:fs");
 const http = require("node:http");
 const path = require("node:path");
 const { installMenu } = require("./menu");
+const { commitsFromPlist, vocabFromPlist } = require("./build_commits");
 const { spawnSync } = require("node:child_process");
 
 // ── The trace (vocabulary v0.7; plan process/planning/2026-11-05-sdd-signals, item 2) ─────────────
@@ -97,12 +98,7 @@ function gitHead(dir, paths) {
 function buildCommits() {
   if (app.isPackaged) {
     try {
-      const plist = fs.readFileSync(path.join(process.resourcesPath, "..", "Info.plist"), "utf8");
-      const read = (key) => { const m = plist.match(new RegExp("<key>" + key + "</key>\\s*<string>([^<]*)</string>")); return m ? m[1] : "unrecorded"; };
-      // fetch-python-runtime.sh marks a kernel built from uncommitted changes not releasable.
-      const kernel = read("SubstrateKernelCommit");
-      const kernelDirty = read("SubstrateKernelReleasable") === "false" && kernel !== "unrecorded";
-      return { app_commit: read("SubstrateUICommit"), kernel_commit: kernel + (kernelDirty ? "+dirty" : "") };
+      return commitsFromPlist(fs.readFileSync(path.join(process.resourcesPath, "..", "Info.plist"), "utf8"));
     } catch { return { app_commit: "unrecorded", kernel_commit: "unrecorded" }; }
   }
   return {
@@ -111,11 +107,13 @@ function buildCommits() {
   };
 }
 
+// The packaged app reads the version its build recorded; a source run reads current.json, the file
+// the window's emitter loads.
 function vocabVersion() {
-  for (const rel of ["../web/vm/signals/versions/current.json", "../web/dist/vocabulary.json"]) {
-    try { return JSON.parse(fs.readFileSync(path.join(__dirname, rel), "utf8")).vocabulary_version || "unknown"; } catch { /* next */ }
-  }
-  return "unknown";
+  try {
+    if (app.isPackaged) return vocabFromPlist(fs.readFileSync(path.join(process.resourcesPath, "..", "Info.plist"), "utf8"));
+    return JSON.parse(fs.readFileSync(path.join(__dirname, "..", "web", "vm", "signals", "versions", "current.json"), "utf8")).vocabulary_version || "unrecorded";
+  } catch { return "unrecorded"; }
 }
 
 function openTrace() {

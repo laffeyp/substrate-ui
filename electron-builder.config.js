@@ -33,6 +33,16 @@ const UI_COMMIT = (() => {
   return head.stdout.trim() + (st.stdout.trim() ? "+dirty" : "");
 })();
 
+// The vocabulary the build's window was compiled against (web/vm/instrumentation/vocabulary.ts imports
+// current.json); APP_BOOTED.vocab_version in a packaged app reads it from Info.plist (sprint 354).
+const VOCAB_VERSION = (() => {
+  try {
+    return JSON.parse(require("node:fs").readFileSync(require("node:path").join(__dirname, "web", "vm", "signals", "versions", "current.json"), "utf8")).vocabulary_version || "unrecorded";
+  } catch {
+    return "unrecorded";
+  }
+})();
+
 /** @type {import("electron-builder").Configuration} */
 const KERNEL_SOURCE = (() => {
   try {
@@ -146,6 +156,7 @@ module.exports = {
     // for every build, so pack:dev records the kernel commit too.
     extendInfo: {
       SubstrateUICommit: UI_COMMIT,
+      SubstrateVocabVersion: VOCAB_VERSION,
       SubstrateKernelCommit: KERNEL_SOURCE.commit,
       SubstrateKernelVersion: KERNEL_SOURCE.version,
       SubstrateKernelReleasable: String(KERNEL_SOURCE.releasable),

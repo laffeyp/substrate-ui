@@ -69,6 +69,9 @@ async function main(): Promise<void> {
     for (const f of ["app_version", "app_commit", "kernel_commit", "vocab_version", "packaged", "home_kind"]) {
       if (!(f in (main[0].payload ?? {}))) throw new Error(`APP_BOOTED lacks ${f}`);
     }
+    // Sprint 354: the vocabulary the launch speaks is the one in the tree it was built from.
+    const vocab = (JSON.parse(readFileSync(join(__dirname, "..", "..", "web", "vm", "signals", "versions", "current.json"), "utf8")) as { vocabulary_version: string }).vocabulary_version;
+    if (main[0].payload?.vocab_version !== vocab) throw new Error(`APP_BOOTED.vocab_version ${String(main[0].payload?.vocab_version)}; current.json is ${vocab}`);
     // Sprint 354: the commit names the code that ran; "+dirty" when the tree had uncommitted changes.
     const appCommit = String(main[0].payload?.app_commit);
     if (!/^[0-9a-f]{12,40}(\+dirty)?$/.test(appCommit)) throw new Error(`APP_BOOTED.app_commit is ${appCommit}`);
@@ -77,6 +80,16 @@ async function main(): Promise<void> {
       const head = execFileSync("git", ["-C", repo, "rev-parse", "--short=12", "HEAD"], { encoding: "utf8" }).trim();
       const dirty = execFileSync("git", ["-C", repo, "status", "--porcelain", "--", ".", ":!runs/packaged", ":!captures"], { encoding: "utf8" }).trim() !== "";
       if (appCommit !== head + (dirty ? "+dirty" : "")) throw new Error(`APP_BOOTED.app_commit ${appCommit}; the tree is ${head}${dirty ? "+dirty" : ""}`);
+    } else {
+      // The packaged app reports what its Info.plist recorded at build time, read here with
+      // PlistBuddy: the UI commit as built, the kernel commit with "+dirty" when the build marked the
+      // kernel not releasable (built from uncommitted changes).
+      const plistPath = join(process.env.SHAKEOUT_APP ?? "", "Contents", "Info.plist");
+      const key = (k: string) => execFileSync("/usr/libexec/PlistBuddy", ["-c", `Print ${k}`, plistPath], { encoding: "utf8" }).trim();
+      const wantApp = key("SubstrateUICommit");
+      const wantKernel = key("SubstrateKernelCommit") + (key("SubstrateKernelReleasable") === "false" ? "+dirty" : "");
+      if (appCommit !== wantApp) throw new Error(`APP_BOOTED.app_commit ${appCommit}; Info.plist records ${wantApp}`);
+      if (main[0].payload?.kernel_commit !== wantKernel) throw new Error(`APP_BOOTED.kernel_commit ${String(main[0].payload?.kernel_commit)}; Info.plist records ${wantKernel}`);
     }
     if (!main.some((r) => r.name === "TRACE_OPENED")) throw new Error("main.jsonl has no TRACE_OPENED");
     const last = main[main.length - 1];
