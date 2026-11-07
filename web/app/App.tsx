@@ -231,7 +231,8 @@ export class App extends React.Component<AppProps, AppState> {
   // model half; the workspace reaches the controller only when the session starts, so a folder armed
   // and disarmed (esc) leaves nothing behind.
   private armWorkspace(paneId: number, ws: string, isDefault: boolean, source: "row" | "dialog" | "typed" = "row"): void {
-    emitSignal("PICKER_FOLDER_ARMED", { pane_id: paneId, workspace: ws, is_default: isDefault, source });
+    // The default row (a per-session sandbox) has no path yet: null, as the vocabulary declares, not "".
+    emitSignal("PICKER_FOLDER_ARMED", { pane_id: paneId, workspace: ws || null, is_default: isDefault, source });
     this.setPane(paneId, { armed: { ws, isDefault }, pickerHalf: "model", modelSelIdx: null });
   }
   // "choose folder…" (⌘O): Electron's folder dialog gives the folder's absolute path, which is recorded
@@ -301,7 +302,7 @@ export class App extends React.Component<AppProps, AppState> {
     this.commitPane(paneId, pane.armed);
   }
   private commitPane(paneId: number, armed: Armed): void {
-    emitSignal("PICKER_COMMITTED", { pane_id: paneId, workspace: armed.ws, is_default: armed.isDefault });
+    emitSignal("PICKER_COMMITTED", { pane_id: paneId, workspace: armed.ws || null, is_default: armed.isDefault });
     const vm = vmOf();
     if (armed.isDefault) {
       vm?.pickWorkspace(null);

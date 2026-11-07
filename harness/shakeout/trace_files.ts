@@ -152,6 +152,7 @@ async function main(): Promise<void> {
       for (const [who, did] of Object.entries(raised)) {
         if (did === packagedRun) throw new Error(`${who} ${did ? "raised" : "did not raise"} in a ${packagedRun ? "packaged" : "source"} run`);
       }
+      if (process.env.TRACE_PRINT) for (const r of [...main, ...server, ...recs]) console.log(JSON.stringify(r));
       console.log(`trace_files: ok (planted rejections) — SIGNAL_REJECTED in main, server and window files; ${packagedRun ? "the packaged app went on in all three" : "all three raised in the source run"}; the picker went on`);
       code = 0;
       return;
@@ -179,6 +180,8 @@ async function main(): Promise<void> {
     if (fromController.some((r) => r.pane_id !== 1)) throw new Error(`a controller record lacks pane_id 1: ${JSON.stringify(fromController.map((r) => [r.name, r.pane_id]))}`);
     const armed = recs.find((r) => r.name === "PICKER_FOLDER_ARMED");
     if (armed && (armed.pane_id !== null || armed.payload?.pane_id !== 1)) throw new Error("PICKER_FOLDER_ARMED should carry pane_id null in context and 1 in payload");
+    // The gate picks the first row, the default sandbox: no path, so workspace is null (sprint 355).
+    if (armed && (armed.payload?.is_default !== true || armed.payload?.workspace !== null)) throw new Error(`PICKER_FOLDER_ARMED for the default row: ${JSON.stringify(armed.payload)}`);
     if (process.env.TRACE_PRINT) for (const r of [...main, ...server, ...recs]) console.log(JSON.stringify(r));
     console.log(`trace_files: ok — ${traceDir}: main ${main.length} lines (APP_BOOTED … APP_QUIT_COMPLETED), server ${server.length} (SERVER_STARTED … SERVER_STOPPED), ${winFiles[0]} ${recs.length} lines, PICKER_FOLDER_ARMED present`);
     code = 0;
