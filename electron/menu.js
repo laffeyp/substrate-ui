@@ -20,8 +20,14 @@
 
 const { Menu } = require("electron");
 
+// onSent(command, win): main writes MENU_COMMAND_SENT for each command a window is sent (v0.7).
+let onSent = () => {};
+
 function send(win, command, payload) {
-  if (win && !win.isDestroyed()) win.webContents.send("menu:" + command, payload ?? null);
+  if (win && !win.isDestroyed()) {
+    win.webContents.send("menu:" + command, payload ?? null);
+    onSent(command, win);
+  }
 }
 
 function buildTemplate(getWin, newWindow) {
@@ -128,7 +134,8 @@ function buildTemplate(getWin, newWindow) {
   ];
 }
 
-function installMenu(getWin, newWindow) {
+function installMenu(getWin, newWindow, sent) {
+  if (sent) onSent = sent;
   const template = buildTemplate(getWin, newWindow);
   const menu = Menu.buildFromTemplate(template);
   Menu.setApplicationMenu(menu);

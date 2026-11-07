@@ -632,6 +632,26 @@
       "rationale": "Sprint 350 Step 3 typed status as an HTTP status by its name; every successful build would have been rejected.",
       "ratified": true,
       "ratified_by": "agent-resolved 2026-11-06, sprint 355"
+    },
+    {
+      "id": "P-0.10-QUIT-CAUSE",
+      "kind": "PAYLOAD_FIELD_PROPOSED",
+      "layer": 2,
+      "element": "APP_QUIT_REQUESTED.cause: enum app | last_window | startup_failed | backend_died, where v0.7 had menu | last_window | signal | update",
+      "source": "electron/main.js: before-quit (app.quit from the app menu's quit role, the Dock, logout, Playwright), window-all-closed, the startup-failure path, onBackendDied (app.exit, which skips before-quit)",
+      "rationale": "Electron's before-quit does not say who asked, so main cannot tell menu from the Dock or a test driver; 'app' names what it can know. Nothing in the app updates itself or traps a signal, so update and signal named events that cannot happen. startup_failed and backend_died are the two quits main starts itself and had no value.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-06, sprint 356"
+    },
+    {
+      "id": "P-0.10-WINDOW-CAUSE",
+      "kind": "PAYLOAD_FIELD_PROPOSED",
+      "layer": 2,
+      "element": "WINDOW_OPENED.cause: enum boot | menu | activate, without second_instance and deep_link",
+      "source": "electron/main.js: createWindow is called at boot, from File ▸ New Window and on activate; second-instance and open-url focus the current window",
+      "rationale": "No code path opens a window for a second instance or a deep link; the two values named events that cannot happen.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-06, sprint 356"
     }
   ]
 }

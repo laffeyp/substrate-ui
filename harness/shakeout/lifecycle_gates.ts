@@ -9,7 +9,13 @@
 //   F5  a `substrate://record/<path>` deep link delivered to the running app must reach the
 //       renderer and attach that record.
 //   F8  the backend dies while the app is in use (UI sprint 102): the app must say so, naming
-//       how it stopped, and exit on Quit; before, nothing listened and the window sat dead.
+//       how it stopped, and exit on Quit; before, nothing listened and the window sat dead. The
+//       trace (sprint 356): SERVER_EXITED expected false, APP_QUIT_REQUESTED backend_died, and
+//       APP_QUIT_COMPLETED still closes main.jsonl, though app.exit skips will-quit.
+//   F9  the backend fails at startup with a usable home (sprint 356): a planted msgspec.py on
+//       PYTHONPATH breaks server.py's import. The error dialog shows; main.jsonl holds
+//       SERVER_SPAWNED, SERVER_EXITED expected false, APP_QUIT_REQUESTED startup_failed and no
+//       SERVER_BOUND, and closes with APP_QUIT_COMPLETED.
 //
 // Runs against source (`electron .`) by default; LIFECYCLE_APP=<path to Substrate.app> runs the
 // same checks against a packaged bundle. Every launch gets its own temp state root.
@@ -18,7 +24,7 @@
 
 import { _electron as electron, type ElectronApplication } from "playwright";
 import { spawnSync } from "node:child_process";
-import { writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { scratchDir } from "./lib/scratch";
 
@@ -31,9 +37,9 @@ const check = (ok: boolean, what: string) => {
   if (!ok) fails.push(what);
 };
 
-function launch(state: string): Promise<ElectronApplication> {
+function launch(state: string, extraEnv: Record<string, string> = {}): Promise<ElectronApplication> {
   const userData = scratchDir("lifecycle-userdata-");
-  const env = { ...process.env, SUBSTRATE_HOME: state } as Record<string, string>;
+  const env = { ...process.env, SUBSTRATE_HOME: state, ...extraEnv } as Record<string, string>;
   return APP
     ? electron.launch({ executablePath: join(APP, "Contents", "MacOS", "Substrate"), args: ["--user-data-dir=" + userData], env })
     : electron.launch({ args: [REPO_ROOT, "--user-data-dir=" + userData], env });
@@ -46,6 +52,16 @@ function backendsFor(state: string): number[] {
     .map((l) => Number(l.trim().split(/\s+/)[0]))
     .filter((pid) => (spawnSync("ps", ["eww", "-o", "command=", "-p", String(pid)], { encoding: "utf8" }).stdout || "").includes("SUBSTRATE_HOME=" + state));
 }
+
+type Rec = { name: string; payload: Record<string, unknown> };
+/** The launch's main.jsonl under a usable state root. */
+function mainTrace(state: string): Rec[] {
+  const root = join(state, "electron", "logs", "traces");
+  const boot = readdirSync(root).sort().pop();
+  if (!boot) return [];
+  return readFileSync(join(root, boot, "main.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as Rec);
+}
+const named = (t: Rec[], name: string) => t.filter((r) => r.name === name);
 
 async function healthy(port: string): Promise<boolean> {
   try { return (await fetch(`http://127.0.0.1:${port}/`)).ok; } catch { return false; }
@@ -157,12 +173,46 @@ async function f8(): Promise<void> {
   // which exits with a code when its python child dies
   check(!!box && /was killed \(SIGKILL\)|exited with code/.test(box[1]), `F8 dialog says how it stopped (${box ? box[1].split("\n")[0] : ""})`);
   check(backendsFor(state).length === 0, "F8 no backend left after Quit");
+  const t = mainTrace(state);
+  const exit = named(t, "SERVER_EXITED");
+  check(exit.length === 1 && exit[0].payload.expected === false, `F8 trace: SERVER_EXITED expected false (${JSON.stringify(exit.map((r) => r.payload))})`);
+  check(named(t, "APP_QUIT_REQUESTED").map((r) => r.payload.cause).join() === "backend_died", "F8 trace: APP_QUIT_REQUESTED backend_died");
+  check(t[t.length - 1]?.name === "APP_QUIT_COMPLETED" && t[t.length - 1]?.payload.signals_lost === 0, `F8 trace: closed by APP_QUIT_COMPLETED, nothing lost (last ${t[t.length - 1]?.name})`);
+  // Every window opened is closed before the closing record, so no WINDOW_CLOSED is written after it.
+  check(named(t, "WINDOW_CLOSED").length === named(t, "WINDOW_OPENED").length, `F8 trace: a WINDOW_CLOSED for each window, before the close (${t.map((r) => r.name).join(" ")})`);
+}
+
+async function f9(): Promise<void> {
+  const state = scratchDir("lifecycle-badimport-");
+  const plant = join(scratchDir("lifecycle-pythonpath-"), "pp");
+  mkdirSync(plant, { recursive: true });
+  writeFileSync(join(plant, "msgspec.py"), 'raise ImportError("planted by lifecycle_gates F9")\n');
+  const app = await launch(state, { PYTHONPATH: plant });
+  let err = "";
+  app.process().stderr?.on("data", (b) => { err += b.toString("utf8"); });
+  const exited = new Promise<void>((r) => app.process().once("exit", () => r()));
+  await app.evaluate(({ dialog }) => {
+    dialog.showErrorBox = (title: string, content: string) => {
+      process.stderr.write(`ERRORBOX ${JSON.stringify([title, content])}\n`);
+    };
+  });
+  await Promise.race([exited, new Promise((r) => setTimeout(r, 30_000))]);
+  await app.close().catch(() => undefined);
+  check(/ERRORBOX \["Substrate could not start"/.test(err), "F9 error dialog shown when the backend's import fails");
+  const t = mainTrace(state);
+  check(named(t, "SERVER_SPAWNED").length === 1, "F9 trace: SERVER_SPAWNED");
+  check(named(t, "SERVER_BOUND").length === 0, "F9 trace: no SERVER_BOUND");
+  const exit = named(t, "SERVER_EXITED");
+  check(exit.length === 1 && exit[0].payload.expected === false, `F9 trace: SERVER_EXITED expected false (${JSON.stringify(exit.map((r) => r.payload))})`);
+  check(named(t, "APP_QUIT_REQUESTED").map((r) => r.payload.cause).join() === "startup_failed", `F9 trace: APP_QUIT_REQUESTED startup_failed (${named(t, "APP_QUIT_REQUESTED").map((r) => String(r.payload.cause)).join()})`);
+  check(t[t.length - 1]?.name === "APP_QUIT_COMPLETED", `F9 trace: closed by APP_QUIT_COMPLETED (last ${t[t.length - 1]?.name})`);
 }
 
 (async () => {
   await f6AndF5();
   await f7();
   await f8();
+  await f9();
   process.stdout.write(fails.length ? `lifecycle_gates: ${fails.length} FAILED\n` : "lifecycle_gates: all passed\n");
   process.exit(fails.length ? 1 : 0);
 })().catch((e) => { console.error(e); process.exit(2); });

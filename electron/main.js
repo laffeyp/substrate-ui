@@ -75,25 +75,29 @@ function reportLoss(name, processName, wrote) {
 let inMainRecord = false;
 // Every main record is checked (v0.9; check_signal.js). A broken one is written as SIGNAL_REJECTED in
 // every build, so the trace holds it; a source run then raises, the packaged app goes on (E6).
-function mainRecord(tag, payload) {
+// windowId: the window a record is about (WINDOW_*, NATIVE_DIALOG_CLOSED, MENU_COMMAND_SENT, ...), in the
+// record context's window_id; null for the app as a whole.
+function mainRecord(tag, payload, windowId = null) {
   const verdict = checkSignal(VOCAB_TAGS, tag, payload);
   if (!verdict.ok) {
     const site = (new Error().stack || "").split("\n").map((l) => l.trim()).filter((l) => l.startsWith("at "))
       .find((l) => !/^at (mainRecord|traceEmit|reportLoss)\b/.test(l)) || "at unknown";
     const rejected = { process: "main", tag: String(tag).slice(0, 80), problem: verdict.problem, call_site: site.slice(3, 203) };
     if (verdict.field) rejected.field = verdict.field;
-    mainRecord("SIGNAL_REJECTED", rejected);
+    mainRecord("SIGNAL_REJECTED", rejected, windowId);
     if (!app.isPackaged) throw new Error(`[electron] signal "${tag}" rejected: ${verdict.problem}${verdict.field ? " (" + verdict.field + ")" : ""} ${site}`);
     return false;
   }
   payload = verdict.payload;
-  const rec = { boot_id: BOOT_ID, process: "main", proc_seq: trace.mainSeq++, wall: new Date().toISOString(), window_id: null, name: tag, payload };
+  // After the closing record nothing can report a loss in the trace; say it on stderr (substrate.log).
+  if (trace.closed) { process.stderr.write("[electron] trace closed; " + tag + " not written\n"); return false; }
+  const rec = { boot_id: BOOT_ID, process: "main", proc_seq: trace.mainSeq++, wall: new Date().toISOString(), window_id: windowId, name: tag, payload };
   return traceWrite("main.jsonl", rec);
 }
 
 // main's own records; a loss on main.jsonl is reported by the next main record that is written.
-function traceEmit(tag, payload) {
-  const wrote = mainRecord(tag, payload);
+function traceEmit(tag, payload, windowId = null) {
+  const wrote = mainRecord(tag, payload, windowId);
   if (!inMainRecord) { inMainRecord = true; reportLoss("main.jsonl", "main", wrote); inMainRecord = false; }
 }
 
@@ -346,9 +350,13 @@ function log(...args) { process.stderr.write("[electron] " + args.join(" ") + "\
 // true when ChildProcess.kill() is used; the group kill below uses
 // process.kill(-pid), so `killed` never reflects a real exit.
 let serverExited = false;
+// Set when main itself stops the server (quit, a failed startup): SERVER_EXITED.expected.
+let serverStopRequested = false;
+let serverSpawnedAt = 0;
 
 function killServerGroup() {
   if (!serverProc || serverExited || !serverProc.pid) return;
+  serverStopRequested = true;
   const pid = serverProc.pid;
   try {
     // Negative pid targets the process group. detached: true at
@@ -419,6 +427,9 @@ function spawnServer() {
       ...(pythonHome ? { PYTHONHOME: pythonHome } : {}),
     },
   });
+  serverSpawnedAt = Date.now();
+  // A spawn that fails has no pid (its "error" event follows); there is then no server to name.
+  if (typeof serverProc.pid === "number") traceEmit("SERVER_SPAWNED", { pid: serverProc.pid, packaged: app.isPackaged });
   serverProc.stdout.on("data", (chunk) => {
     const text = chunk.toString();
     process.stderr.write("[server] " + text);
@@ -440,13 +451,18 @@ function spawnServer() {
     if (serverPort === null) {
       stdoutBuf += text;
       const match = stdoutBuf.match(PORT_READBACK_RE);
-      if (match) serverPort = Number(match[1]);
+      if (match) {
+        serverPort = Number(match[1]);
+        traceEmit("SERVER_BOUND", { port: serverPort, ms: Date.now() - serverSpawnedAt });
+      }
     }
   });
   serverProc.stderr.on("data", (chunk) => process.stderr.write("[server-stderr] " + chunk));
   serverProc.on("exit", (code, signal) => {
     serverExited = true;
     trace.serverExitCode = code;
+    // expected false is the incident: the backend stopped while the app still needed it.
+    traceEmit("SERVER_EXITED", { code: code ?? null, signal: signal ?? null, expected: serverStopRequested });
     log("server exited code=" + code + " signal=" + signal);
     for (const win of BrowserWindow.getAllWindows()) win.webContents.send("server:dead", { code, signal });
     // UI sprint 102: the backend died while the app was in use (not quitting, not starting).
@@ -487,6 +503,9 @@ function pollHealth(port, deadline) {
 }
 
 function forwardDeepLink(url) {
+  // The kind only: a link's path names a record or session, which the window resolves (E1).
+  const kind = /^substrate:\/\/record\//i.test(url) ? "record" : /^substrate:\/\/session\//i.test(url) ? "session" : "unknown";
+  traceEmit("DEEP_LINK_RECEIVED", { link_kind: kind });
   const win = currentWindow();
   if (win && readyWindows.has(win)) {
     win.webContents.send("deep-link", url);
@@ -495,7 +514,8 @@ function forwardDeepLink(url) {
   }
 }
 
-function createWindow() {
+// cause: boot, menu (File ▸ New Window) or activate (the Dock with no window open); v0.10.
+function createWindow(cause) {
   trace.windowsOpened += 1;
   // Sprint 088 — the reveal shell breaks below a certain floor. Lock
   // the MINIMUM to a third of the primary display's work area; the
@@ -528,6 +548,9 @@ function createWindow() {
       additionalArguments: app.isPackaged ? ["--substrate-packaged"] : [],
     },
   });
+  const windowId = win.id;
+  traceEmit("WINDOW_OPENED", { cause }, windowId);
+  win.on("closed", () => traceEmit("WINDOW_CLOSED", {}, windowId));
   win.on("focus", () => { lastFocused = win; });
   lastFocused = win;
   win.webContents.on("did-finish-load", () => {
@@ -551,12 +574,18 @@ function createWindow() {
       return new URL(url).origin !== app_origin;
     } catch (_) { return true; }
   };
+  // Every refusal is NAVIGATION_BLOCKED with the target's kind, never its address (E1).
+  const targetKind = (url) => (isExternal(url) ? "external" : /^file:/i.test(url) ? "file" : "unknown");
   win.webContents.setWindowOpenHandler(({ url }) => {
+    traceEmit("NAVIGATION_BLOCKED", { target_kind: targetKind(url) }, windowId);
     if (isExternal(url)) shell.openExternal(url);
     return { action: "deny" };
   });
   win.webContents.on("will-navigate", (event, url) => {
-    if (isExternal(url)) { event.preventDefault(); shell.openExternal(url); }
+    if (isExternal(url)) {
+      traceEmit("NAVIGATION_BLOCKED", { target_kind: "external" }, windowId);
+      event.preventDefault(); shell.openExternal(url);
+    }
   });
   win.loadURL("http://127.0.0.1:" + serverPort + "/?atom-transcript=1&electron=1");
   if (process.env.SUBSTRATE_UI_DEBUG === "1") {
@@ -600,6 +629,18 @@ if (!singleInstanceLock) {
 let serverUp = false; // set once the backend answered its health check
 let appLogPath = null;
 
+// The launch's closing record (S2) and the trace files' close. will-quit runs it; so does
+// onBackendDied, whose app.exit skips will-quit.
+function closeTrace() {
+  if (!trace.dir || trace.closed) return;
+  traceEmit("APP_QUIT_COMPLETED", {
+    server_exit_code: trace.serverExitCode ?? null, windows_opened: trace.windowsOpened,
+    signals_written: trace.written, signals_lost: trace.lost,
+  });
+  trace.closed = true;
+  for (const f of trace.files.values()) { if (f.fd !== null) { try { fs.closeSync(f.fd); } catch { /* closing at exit */ } } }
+}
+
 async function onBackendDied(code, signal) {
   const how = signal ? "was killed (" + signal + ")" : "exited with code " + code;
   const where = appLogPath ? "\n\nLog: " + appLogPath : "\n\nSee the terminal output for the server's error.";
@@ -612,6 +653,11 @@ async function onBackendDied(code, signal) {
     defaultId: 0,
     cancelId: 1,
   });
+  noteQuit("backend_died");
+  // app.exit closes the windows without will-quit; closing them first puts each WINDOW_CLOSED
+  // before the closing record (destroy guarantees "closed").
+  for (const w of BrowserWindow.getAllWindows()) { try { w.destroy(); } catch { /* already gone */ } }
+  closeTrace();
   if (response === 0) {
     app.relaunch();
   }
@@ -649,13 +695,15 @@ app.whenReady().then(async () => {
       "The backend server did not come up.\n\n" + err.message + logHint,
     );
     killServerGroup();
+    pendingQuitCause = "startup_failed";
     app.quit();
     return;
   }
-  createWindow();
-  installMenu(currentWindow, createWindow);
+  createWindow("boot");
+  // The menu reports each command it sends to a window (MENU_COMMAND_SENT).
+  installMenu(currentWindow, () => createWindow("menu"), (command, win) => traceEmit("MENU_COMMAND_SENT", { command }, win.id));
   app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    if (BrowserWindow.getAllWindows().length === 0) createWindow("activate");
   });
 });
 
@@ -666,7 +714,7 @@ app.whenReady().then(async () => {
 // on real quit (Cmd-Q → `before-quit`) or on non-macOS platforms.
 // Review 2026-09-28 § F6.
 app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") app.quit();
+  if (process.platform !== "darwin") { pendingQuitCause = "last_window"; app.quit(); }
 });
 
 // Quit waits for the backend. The server's SIGTERM handler ends every
@@ -677,7 +725,17 @@ app.on("window-all-closed", () => {
 // the group, and quit for real once the server exits — or once
 // killServerGroup's SIGKILL fallback lands after KILL_GRACE_MS.
 let quitAfterServer = false;
+// APP_QUIT_REQUESTED, once per launch. Main's own quits name their cause first; any other quit
+// (Cmd-Q, the Dock, logout, a test driver) reaches before-quit as "app" (v0.10).
+let pendingQuitCause = "app";
+let quitNoted = false;
+function noteQuit(cause) {
+  if (quitNoted) return;
+  quitNoted = true;
+  traceEmit("APP_QUIT_REQUESTED", { cause });
+}
 app.on("before-quit", (event) => {
+  noteQuit(pendingQuitCause);
   if (!serverProc || serverExited) return;
   event.preventDefault();
   if (quitAfterServer) return;
@@ -689,14 +747,7 @@ app.on("before-quit", (event) => {
 
 // The launch's closing record: the server's exit and the trace's write and loss counts (S2: the
 // last line of main.jsonl). will-quit runs after before-quit has waited for the server.
-app.on("will-quit", () => {
-  if (!trace.dir) return;
-  traceEmit("APP_QUIT_COMPLETED", {
-    server_exit_code: trace.serverExitCode ?? null, windows_opened: trace.windowsOpened,
-    signals_written: trace.written, signals_lost: trace.lost,
-  });
-  for (const f of trace.files.values()) { if (f.fd !== null) { try { fs.closeSync(f.fd); } catch { /* closing at exit */ } } }
-});
+app.on("will-quit", closeTrace);
 
 // Sprint 085 followup — renderer asks main to close its window
 // when Cmd-W closes the last remaining pane.
@@ -714,8 +765,9 @@ ipcMain.handle("native:open-record", async (event) => {
     properties: ["openDirectory"],
     buttonLabel: "Open",
   });
-  if (r.canceled || r.filePaths.length === 0) return null;
-  return r.filePaths[0];
+  const picked = !r.canceled && r.filePaths.length > 0;
+  traceEmit("NATIVE_DIALOG_CLOSED", { dialog: "open_record", outcome: picked ? "picked" : "cancelled" }, win ? win.id : null);
+  return picked ? r.filePaths[0] : null;
 });
 
 // Sprint 086 — Records surface "Add workspace" folder picker.
@@ -729,6 +781,7 @@ ipcMain.handle("native:pick-folder", async (event) => {
     properties: ["openDirectory"],
     buttonLabel: "Add",
   });
-  if (r.canceled || r.filePaths.length === 0) return null;
-  return r.filePaths[0];
+  const picked = !r.canceled && r.filePaths.length > 0;
+  traceEmit("NATIVE_DIALOG_CLOSED", { dialog: "pick_folder", outcome: picked ? "picked" : "cancelled" }, win ? win.id : null);
+  return picked ? r.filePaths[0] : null;
 });
