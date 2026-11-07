@@ -12,17 +12,19 @@ export type TagSpec = {
   stratum: string;
   payload: string[];
   optional_payload: string[];
+  field_types?: Record<string, string>;
 };
 
 export type Vocabulary = Record<string, TagSpec>;
 
 const built: Vocabulary = {};
-for (const t of vocab.tags as Array<TagSpec & { name: string }>) {
+for (const t of vocab.tags as unknown as Array<TagSpec & { name: string }>) {
   built[t.name] = {
     category: t.category,
     stratum: t.stratum,
     payload: t.payload,
     optional_payload: t.optional_payload,
+    field_types: t.field_types,
   };
 }
 

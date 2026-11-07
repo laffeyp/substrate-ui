@@ -49,6 +49,9 @@ function dispatchDeepLink(url) {
 contextBridge.exposeInMainWorld("native", {
   platform: process.platform,
   isElectron: true,
+  // The build posture for the window's signal checker (v0.9 E6): main passes --substrate-packaged to a
+  // packaged app's windows; there a broken emit is written as SIGNAL_REJECTED, elsewhere it raises.
+  packaged: process.argv.includes("--substrate-packaged"),
   onMenuCommand: (cb) => {
     menuListeners.add(cb);
     return () => menuListeners.delete(cb);

@@ -2,7 +2,7 @@
 
 *Project-specific overrides and additions on top of `../sdd-kit-3/AGENTS.md` (imported by `CLAUDE.md` at the repo root). The Agent reads AGENTS.md first (the methodology) then this file (the project specifics). This file augments; it never overrides AGENTS.md hard rules. When the two conflict, AGENTS.md wins.*
 
-*Current as of 2026-11-06 (the vocabulary row and footer name v0.8, 88 tags: sprint 354 split SERVER_STARTED from the store scan). The version it replaces is at `process/archive/WORKING_AGREEMENT-2026-11-05-v0.7.md`; the v0.6 one at `process/archive/WORKING_AGREEMENT-2026-11-05-v0.6.md`, and the one before at `process/archive/WORKING_AGREEMENT-2026-10-11-to-2026-11-05.md`; the one before, at `process/archive/WORKING_AGREEMENT-2026-06-17-to-2026-10-11.md`, described the browser console, its Chrome harnesses and a root `signals/` folder, all retired since.*
+*Current as of 2026-11-06 (the vocabulary row and footer name v0.9, 88 tags; the signal checkers, the linter and the hand-author log added by sprint 355). The version it replaces is at `process/archive/WORKING_AGREEMENT-2026-11-06-v0.8.md`; the v0.7 one at `process/archive/WORKING_AGREEMENT-2026-11-05-v0.7.md`; the v0.6 one at `process/archive/WORKING_AGREEMENT-2026-11-05-v0.6.md`, and the one before atthe one before at `process/archive/WORKING_AGREEMENT-2026-10-11-to-2026-11-05.md`; the one before, at `process/archive/WORKING_AGREEMENT-2026-06-17-to-2026-10-11.md`, described the browser console, its Chrome harnesses and a root `signals/` folder, all retired since.*
 
 ---
 
@@ -46,7 +46,9 @@
 | Widgets that keep their own DOM | `web/app/widgets.ts` | Sprint 347. |
 | Bootstrap: controller registry, menu and deep-link wiring, App mount | `web/reveal.ts` | |
 | The transcript (React) | `web/reveal/transcript/` (`Transcript.tsx`, `Row.tsx`, `ToolCard.tsx`, `ModelReply.tsx`, `useToolOutputMode.ts`, …) | |
-| The window's signal emitter | `web/vm/instrumentation/sdd.ts` | Validates against the vocabulary; stamps the window's part of the record context; hands each record to main. |
+| The window's signal emitter | `web/vm/instrumentation/sdd.ts` | Checks each record (`check.ts`); stamps the window's part of the record context; hands each record to main. |
+| The signal checker: one specification, three implementations | `web/vm/signals/checker-cases.json` (rules and cases); `web/vm/instrumentation/check.ts` (window), `electron/check_signal.js` (main), `server.py` `_check_signal` (server) | Each implementation runs the shared cases: `web/app/__tests__/signal_checker.spec.ts`, `tests/test_signal_checker.py`. A broken emit is written as `SIGNAL_REJECTED` in every build and raises outside the packaged app (sprint 355). |
+| The vocabulary linter and the tags awaiting emit sites | `web/vm/tools/check-vocabulary-parity.ts` (`npm run signals`, run by the pre-commit hook), `web/vm/signals/unemitted.json` | Window, main and server; both directions; the list only shrinks (sprint 355). |
 | The trace on disk: main's writer and the window's records | `electron/main.js` (the trace writer), `electron/preload.js` (`native.signal`) | One folder per launch under the logs folder; one file per process (plan `2026-11-05-sdd-signals` item 2). |
 | The trace on disk: the server's writer | `server.py` (`_Trace`) | Writes `server.jsonl` into the folder main names (item 2); reports its losses to main on stdout, and main writes them to `main.jsonl` as `TRACE_LOST` (sprint 354). |
 | The trace reader | `scripts/` (named when plan item 6 begins) | |
@@ -55,7 +57,7 @@
 | Snapshot and row types | `web/vm/types.ts` | |
 | Fold / unfold all tool output | `web/vm/tool_output_mode.ts` | ⌘E, `/fold`, `/unfold` (UI sprint 140). |
 | Kernel names the UI reads, generated | `web/vm/envelope_kinds.gen.ts`, `web/vm/statuses.gen.ts`, `web/vm/controls.gen.ts` | Written by `scripts/gen_kinds.py` from the kernel; `tests/test_envelope_kinds_generated_096.py` fails when one is stale. Never hand-copy a kernel name. |
-| substrate-ui's own signal vocabulary | `web/vm/signals/versions/current.json` → `0.8.json` (88 tags; window, Electron main and server) + `0.8-rationale.md` (the split) and `0.7-rationale.md` (every other layer); typed proposals in `web/vm/signals/proposals.json`; earlier versions beside it | Every `emit(...)` validates against it; `npm run signals` checks the call sites. |
+| substrate-ui's own signal vocabulary | `web/vm/signals/versions/current.json` → `0.9.json` (88 tags; window, Electron main and server) + `0.9-rationale.md`, `0.8-rationale.md` and `0.7-rationale.md` (every other layer); `npm run build` copies it to `web/dist/vocabulary.json`, the file main and the server read; typed proposals in `web/vm/signals/proposals.json`; earlier versions beside it | Every emit, in every process, is checked against it where it is spoken; `npm run signals` lints the call sites (rows below). |
 | Unit specs | `web/reveal/__tests__/*.spec.ts` | `npm run test:unit`. |
 | Python tests (real server over HTTP) | `tests/*.py` | `npm run test:py`. |
 | Electron gates (the observation contract) | `harness/shakeout/*.ts`, shared helpers in `harness/shakeout/lib/` (`electron.ts`: `launchArgs`, `bindPaneAsUser`) | `npm run gates:electron`. |
@@ -162,4 +164,11 @@ When a fold-pass edit touches surfaces the closed card did not enumerate, it lan
 
 ---
 
-*WORKING_AGREEMENT.md for substrate-ui, current 2026-10-11. An Electron app over the Substrate kernel. Own signal vocabulary at `web/vm/signals/versions/current.json` (v0.8, 88 tags); kernel names reach the UI only through generated files. The eight-word tone canon binds user-facing strings.*
+
+## Hand-author log (hard rule 10)
+
+| Date | Sprint | What was bypassed | Why |
+|---|---|---|---|
+| 2026-11-06 | 355 | Hard rule 6 (two files a sprint): one card covered the vocabulary change, the shared checker specification, the three checkers, the build posture in each process, the linter and the gates, about twenty files. | The three checkers implement one specification and one test runs it against all of them, so a split would have left two of the three processes unchecked between sprints and the cross-run test without its subjects. The dual and observation contracts applied to the whole. |
+
+*WORKING_AGREEMENT.md for substrate-ui, current 2026-10-11. An Electron app over the Substrate kernel. Own signal vocabulary at `web/vm/signals/versions/current.json` (v0.9, 88 tags); kernel names reach the UI only through generated files. The eight-word tone canon binds user-facing strings.*

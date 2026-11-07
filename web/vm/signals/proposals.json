@@ -582,6 +582,56 @@
       "rationale": "One tag named two events: the server starting and the store scan ending, seconds apart on a large store with requests served between them. As one tag, S1 (SERVER_STARTED first) and server_run (opened by SERVER_STARTED) fail on a correct run once requests emit. Split, each tag names one event and S1 holds unchanged in meaning; T2 (SERVER_BOUND to SERVER_STARTED within HEALTH_TIMEOUT_MS) now measures the bind, as its source does. skipped and duration_ms come from the scan's own print line.",
       "ratified": true,
       "ratified_by": "agent-resolved 2026-11-06, sprint 354"
+    },
+    {
+      "id": "P-0.9-FIELD-SIGNAL_REJECTED",
+      "kind": "PAYLOAD_FIELD_PROPOSED",
+      "layer": 2,
+      "element": "SIGNAL_REJECTED gains optional field (the payload field at fault); problem gains wrong_type and out_of_range",
+      "source": "plan item 3 (validation where the signal is spoken); evidence rules E5 (ranges) and field_types (Layer 2)",
+      "rationale": "The checkers enforce field_types and E5, so a rejection must be able to say so; and a rejection that does not name the field leaves the reader to guess which of a tag's fields broke.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-06, sprint 355"
+    },
+    {
+      "id": "P-0.9-E4-STORE_SCANNED",
+      "kind": "INVARIANT_PROPOSED",
+      "layer": 7,
+      "element": "E4 names STORE_SCANNED where it named SERVER_STARTED; E5's target names its fields exactly",
+      "source": "v0.8 split (P-0.8-SPLIT-SERVER_STARTED) moved the counts to STORE_SCANNED; E4 was not updated",
+      "rationale": "Since v0.8, SERVER_STARTED carries only port; E4 as written asked it for outcome counts it no longer has. E5's 'ms' meant fields ending in _ms (duration_ms); the checkers need the exact rule.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-06, sprint 355"
+    },
+    {
+      "id": "P-0.9-TYPE-RUN_FOCUS_REQUESTED",
+      "kind": "PAYLOAD_FIELD_PROPOSED",
+      "layer": 2,
+      "element": "RUN_FOCUS_REQUESTED.sessions typed 'list of {session_id, role, record_root, driven}' where v0.7 wrote 'int or list'",
+      "source": "web/vm/session_controller.ts /run focus: sessions is the RunRow's RunSessionRow[] (web/vm/types.ts); found by the sprint 355 linter",
+      "rationale": "The code sends a list on every path; 'int or list' named two types, which no checker reads, so every emit of the tag would have been rejected.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-06, sprint 355"
+    },
+    {
+      "id": "P-0.9-TYPE-TURN_INTERRUPTED",
+      "kind": "PAYLOAD_FIELD_PROPOSED",
+      "layer": 2,
+      "element": "TURN_INTERRUPTED.signal typed bool where v0.7 wrote 'string or null'",
+      "source": "web/vm/session_controller.ts interruptTurn: signal is result.data?.signal === true; the tag's own note says true for Ctrl+C, false for /interrupt; found by harness/shakeout/copy_key.ts under the sprint 355 rejection check",
+      "rationale": "Sprint 350 Step 3 (e6d72a4) typed the field against its name, not its emit site; every interrupt would have been rejected.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-06, sprint 355"
+    },
+    {
+      "id": "P-0.9-TYPE-SPEC_BUILT",
+      "kind": "PAYLOAD_FIELD_PROPOSED",
+      "layer": 2,
+      "element": "SPEC_BUILT.status typed string where v0.7 wrote 'int (HTTP status)'",
+      "source": "web/vm/session_controller.ts buildSpec: status is String(run.status ?? \"unknown\"); the tag's note: 'status is the Run's terminal or in-flight state'; found by the sprint 355 audit of every emit site against its declared types",
+      "rationale": "Sprint 350 Step 3 typed status as an HTTP status by its name; every successful build would have been rejected.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-06, sprint 355"
     }
   ]
 }

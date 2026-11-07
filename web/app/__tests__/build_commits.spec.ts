@@ -10,9 +10,8 @@ import { test } from "node:test";
 import assert from "node:assert";
 import { createRequire } from "node:module";
 
-const { commitsFromPlist, vocabFromPlist } = createRequire(__filename)("../../../electron/build_commits.js") as {
+const { commitsFromPlist } = createRequire(__filename)("../../../electron/build_commits.js") as {
   commitsFromPlist: (plist: string) => { app_commit: string; kernel_commit: string };
-  vocabFromPlist: (plist: string) => string;
 };
 
 const plist = (releasable: string) => `<dict>
@@ -42,7 +41,3 @@ test("a plist without the keys reads unrecorded, never unrecorded+dirty", () => 
   });
 });
 
-test("the vocabulary version reads as the build recorded it", () => {
-  assert.strictEqual(vocabFromPlist("<dict><key>SubstrateVocabVersion</key><string>0.8</string></dict>"), "0.8");
-  assert.strictEqual(vocabFromPlist("<dict></dict>"), "unrecorded");
-});

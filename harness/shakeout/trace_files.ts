@@ -9,7 +9,10 @@
 // TRACE_LOST for the window and APP_QUIT_COMPLETED counts the loss. TRACE_PLANT=server-cap launches with
 // SUBSTRATE_SERVER_TRACE_CAP=200 (the seam in server.py), which holds SERVER_STARTED only; the server
 // reports the lines it drops on stdout and main.jsonl holds them as TRACE_LOST (process server), summing
-// to 3 (TRACE_OPENED, STORE_SCANNED, SERVER_STOPPED). Run against a bundle with SHAKEOUT_APP=<Substrate.app>.
+// to 3 (TRACE_OPENED, STORE_SCANNED, SERVER_STOPPED). TRACE_PLANT=reject (sprint 355) has main and the
+// server emit an undeclared tag (SUBSTRATE_SIGNAL_PLANT) and the window one through __vmEmit: each
+// process's file holds a SIGNAL_REJECTED naming it, the picker still works, and a source run raises
+// in all three while the packaged app does not. Run against a bundle with SHAKEOUT_APP=<Substrate.app>.
 
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
@@ -25,9 +28,11 @@ function readJsonl(path: string): Rec[] {
 
 async function main(): Promise<void> {
   const plant = process.env.TRACE_PLANT || "";
-  const launch = launchArgs();
+  const launch = launchArgs({ rejections: plant === "reject" ? "expected" : "fail" });
   if (plant === "cap") launch.options.env.SUBSTRATE_TRACE_CAP = "1500";
   if (plant === "server-cap") launch.options.env.SUBSTRATE_SERVER_TRACE_CAP = "200";
+  if (plant === "reject") launch.options.env.SUBSTRATE_SIGNAL_PLANT = "main,server";
+  let windowRaised = "";
   const app = await electron.launch({ ...launch.options, timeout: 60_000 });
   let mainErr = "";
   app.process().stderr?.on("data", (c: Buffer) => { mainErr += c.toString("utf8"); });
@@ -41,6 +46,12 @@ async function main(): Promise<void> {
     const newest = readdirSync(root).filter((n) => statSync(join(root, n)).isDirectory()).sort().pop();
     if (!newest) throw new Error(`no launch folder under ${root}`);
     traceDir = join(root, newest);
+    if (plant === "reject") {
+      windowRaised = await win.evaluate(() => {
+        try { (window as unknown as { __vmEmit: (n: string, p: object) => unknown }).__vmEmit("PLANTED_UNDECLARED", {}); return ""; }
+        catch (e) { return String((e as Error).message); }
+      });
+    }
     const row = win.locator("[data-ws-lit] .hover-picker-row").first();
     await row.waitFor({ state: "visible", timeout: 15_000 });
     await row.click();
@@ -124,6 +135,27 @@ async function main(): Promise<void> {
     if (server[server.length - 1].name !== "SERVER_STOPPED") throw new Error(`server.jsonl does not end with SERVER_STOPPED: ${server[server.length - 1].name}`);
     if (server.some((r, i) => r.proc_seq !== i || r.boot_id !== newest || r.process !== "server")) throw new Error("server.jsonl context or order wrong");
     const winFiles = readdirSync(traceDir).filter((n) => n.startsWith("window-"));
+    if (plant === "reject") {
+      const packagedRun = main[0].payload?.packaged === true;
+      const recs = readJsonl(join(traceDir, winFiles[0]));
+      for (const [who, file] of [["main", main], ["server", server], ["window", recs]] as const) {
+        const r = file.find((x) => x.name === "SIGNAL_REJECTED" && x.payload?.tag === "PLANTED_UNDECLARED");
+        if (!r) throw new Error(`no SIGNAL_REJECTED for the planted tag in ${who}'s file`);
+        if (r.payload?.process !== who || r.payload?.problem !== "unknown_tag" || !String(r.payload?.call_site ?? "")) throw new Error(`${who}'s SIGNAL_REJECTED is ${JSON.stringify(r.payload)}`);
+      }
+      if (!recs.some((x) => x.name === "PICKER_FOLDER_ARMED")) throw new Error("the picker did not go on after the rejections");
+      const raised = {
+        window: /PLANTED_UNDECLARED" rejected: unknown_tag/.test(windowRaised),
+        main: /\[electron\] signal "PLANTED_UNDECLARED" rejected: unknown_tag/.test(mainErr),
+        server: /ValueError: signal "PLANTED_UNDECLARED" rejected: unknown_tag/.test(mainErr),
+      };
+      for (const [who, did] of Object.entries(raised)) {
+        if (did === packagedRun) throw new Error(`${who} ${did ? "raised" : "did not raise"} in a ${packagedRun ? "packaged" : "source"} run`);
+      }
+      console.log(`trace_files: ok (planted rejections) — SIGNAL_REJECTED in main, server and window files; ${packagedRun ? "the packaged app went on in all three" : "all three raised in the source run"}; the picker went on`);
+      code = 0;
+      return;
+    }
     if (plant === "cap") {
       const lost = main.filter((r) => r.name === "TRACE_LOST" && r.payload?.process === "window");
       const lastLost = Number(last.payload?.signals_lost ?? 0);

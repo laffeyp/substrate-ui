@@ -18,7 +18,8 @@ const fs = require("node:fs");
 const http = require("node:http");
 const path = require("node:path");
 const { installMenu } = require("./menu");
-const { commitsFromPlist, vocabFromPlist } = require("./build_commits");
+const { commitsFromPlist } = require("./build_commits");
+const { checkSignal, tagsOf } = require("./check_signal");
 const { spawnSync } = require("node:child_process");
 
 // ── The trace (vocabulary v0.7; plan process/planning/2026-11-05-sdd-signals, item 2) ─────────────
@@ -72,7 +73,20 @@ function reportLoss(name, processName, wrote) {
 }
 
 let inMainRecord = false;
+// Every main record is checked (v0.9; check_signal.js). A broken one is written as SIGNAL_REJECTED in
+// every build, so the trace holds it; a source run then raises, the packaged app goes on (E6).
 function mainRecord(tag, payload) {
+  const verdict = checkSignal(VOCAB_TAGS, tag, payload);
+  if (!verdict.ok) {
+    const site = (new Error().stack || "").split("\n").map((l) => l.trim()).filter((l) => l.startsWith("at "))
+      .find((l) => !/^at (mainRecord|traceEmit|reportLoss)\b/.test(l)) || "at unknown";
+    const rejected = { process: "main", tag: String(tag).slice(0, 80), problem: verdict.problem, call_site: site.slice(3, 203) };
+    if (verdict.field) rejected.field = verdict.field;
+    mainRecord("SIGNAL_REJECTED", rejected);
+    if (!app.isPackaged) throw new Error(`[electron] signal "${tag}" rejected: ${verdict.problem}${verdict.field ? " (" + verdict.field + ")" : ""} ${site}`);
+    return false;
+  }
+  payload = verdict.payload;
   const rec = { boot_id: BOOT_ID, process: "main", proc_seq: trace.mainSeq++, wall: new Date().toISOString(), window_id: null, name: tag, payload };
   return traceWrite("main.jsonl", rec);
 }
@@ -107,14 +121,16 @@ function buildCommits() {
   };
 }
 
-// The packaged app reads the version its build recorded; a source run reads current.json, the file
-// the window's emitter loads.
-function vocabVersion() {
-  try {
-    if (app.isPackaged) return vocabFromPlist(fs.readFileSync(path.join(process.resourcesPath, "..", "Info.plist"), "utf8"));
-    return JSON.parse(fs.readFileSync(path.join(__dirname, "..", "web", "vm", "signals", "versions", "current.json"), "utf8")).vocabulary_version || "unrecorded";
-  } catch { return "unrecorded"; }
-}
+// The vocabulary main checks its records against: web/dist/vocabulary.json, which `npm run build`
+// copies from current.json beside the window's bundle, so main, the window and the server of one build
+// speak one version (sprint 355). A source tree never built falls back to current.json.
+const VOCAB = (() => {
+  for (const rel of [["web", "dist", "vocabulary.json"], ["web", "vm", "signals", "versions", "current.json"]]) {
+    try { return JSON.parse(fs.readFileSync(path.join(__dirname, "..", ...rel), "utf8")); } catch { /* next */ }
+  }
+  return { vocabulary_version: "unrecorded", tags: [] };
+})();
+const VOCAB_TAGS = tagsOf(VOCAB);
 
 function openTrace() {
   try {
@@ -130,9 +146,14 @@ function openTrace() {
   const commits = buildCommits();
   traceEmit("APP_BOOTED", {
     app_version: app.getVersion(), app_commit: commits.app_commit, kernel_commit: commits.kernel_commit,
-    vocab_version: vocabVersion(), packaged: app.isPackaged, home_kind: process.env.SUBSTRATE_HOME ? "env" : "default",
+    vocab_version: VOCAB.vocabulary_version, packaged: app.isPackaged, home_kind: process.env.SUBSTRATE_HOME ? "env" : "default",
   });
   traceEmit("TRACE_OPENED", { process: "main" });
+  // Test seam (harness/shakeout/trace_files.ts, TRACE_PLANT=reject): one record the vocabulary does not
+  // declare. A source run's raise is caught here and printed, so the gate can read that it raised.
+  if ((process.env.SUBSTRATE_SIGNAL_PLANT || "").split(",").includes("main")) {
+    try { traceEmit("PLANTED_UNDECLARED", {}); } catch (err) { process.stderr.write(err.message + "\n"); }
+  }
   process.stderr.write("[electron] trace: " + trace.dir + "\n");
 }
 
@@ -391,6 +412,9 @@ function spawnServer() {
       SUBSTRATE_PARENT_PID: String(process.pid),
       // The trace (item 2): the server writes server.jsonl into this launch's folder.
       SUBSTRATE_BOOT_ID: BOOT_ID,
+      // The server's signal checker posture (v0.9 E6): written and raised in a source run, written
+      // and passed over in the packaged app.
+      ...(app.isPackaged ? { SUBSTRATE_PACKAGED: "1" } : {}),
       ...(trace.dir ? { SUBSTRATE_TRACE_DIR: trace.dir } : {}),
       ...(pythonHome ? { PYTHONHOME: pythonHome } : {}),
     },
@@ -500,6 +524,8 @@ function createWindow() {
       sandbox: true,
       nodeIntegration: false,
       webSecurity: true,
+      // The window's signal checker posture (v0.9 E6), read by preload.js.
+      additionalArguments: app.isPackaged ? ["--substrate-packaged"] : [],
     },
   });
   win.on("focus", () => { lastFocused = win; });

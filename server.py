@@ -30,6 +30,7 @@ import re
 import shutil
 import signal
 import json
+import math
 import subprocess
 import tempfile
 import threading
@@ -431,6 +432,93 @@ def _interrupt_then_end(
     )
 
 
+_RANGED = frozenset({"port", "pid", "count", "seq", "turn_index", "proc_seq"})
+_CUT = frozenset({"detail", "reason", "cause", "error"})
+_CUT_AT = 200
+
+
+def _type_admits(spec: str, v: Any) -> bool:
+    t = re.sub(r"\s*\([^)]*\)", "", spec).strip()
+    nullable = t.endswith(" or null")
+    if nullable:
+        t = t[: -len(" or null")].strip()
+    if v is None:
+        return nullable
+    if t.startswith("enum "):
+        return isinstance(v, str) and v in [x.strip() for x in t[5:].split("|")]
+    if t.startswith("list"):
+        return isinstance(v, list)
+    if t == "int":
+        return isinstance(v, int) and not isinstance(v, bool)
+    if t == "float":
+        return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
+    if t == "string":
+        return isinstance(v, str)
+    if t == "bool":
+        return isinstance(v, bool)
+    if t == "object":
+        return isinstance(v, dict)
+    return False
+
+
+def _in_range(field: str, v: Any) -> bool:
+    if not (field in _RANGED or field.endswith("_ms")):
+        return True
+    if isinstance(v, bool) or not isinstance(v, (int, float)):
+        return True
+    if not (isinstance(v, int) or float(v).is_integer()) or v < 0:
+        return False
+    return field != "port" or 1 <= v <= 65535
+
+
+def _check_signal(tags: dict[str, Any], name: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """The server's signal checker (vocabulary v0.9; sprint 355). The rules and the cases are in
+    web/vm/signals/checker-cases.json; the window (web/vm/instrumentation/check.ts) and main
+    (electron/check_signal.js) implement the same rules and run the same cases. Returns
+    {"ok": True, "payload": ...} with long reasons cut (E2), or {"ok": False, "problem", "field"}:
+    the payload of SIGNAL_REJECTED."""
+    spec = tags.get(name)
+    if spec is None:
+        return {"ok": False, "problem": "unknown_tag", "field": None}
+    for f in spec["payload"]:
+        if f not in payload:
+            return {"ok": False, "problem": "missing_field", "field": f}
+    fields = list(spec["payload"]) + list(spec["optional_payload"])
+    for f in payload:
+        if f not in fields:
+            return {"ok": False, "problem": "extra_field", "field": f}
+    types = spec.get("field_types") or {}
+    for f in fields:
+        if f in payload and f in types and not _type_admits(types[f], payload[f]):
+            return {"ok": False, "problem": "wrong_type", "field": f}
+    for f in fields:
+        if f in payload and not _in_range(f, payload[f]):
+            return {"ok": False, "problem": "out_of_range", "field": f}
+    out = payload
+    for f, v in payload.items():
+        if f in _CUT and isinstance(v, str) and len(v) > _CUT_AT:
+            if out is payload:
+                out = dict(payload)
+            out[f] = v[:_CUT_AT] + f"…[cut {len(v) - _CUT_AT}]"
+    return {"ok": True, "payload": out}
+
+
+def _load_vocabulary() -> dict[str, Any]:
+    """The vocabulary the server checks against: web/dist/vocabulary.json, which `npm run build`
+    copies from current.json beside the window's bundle (one version per build); a tree never
+    built falls back to current.json."""
+    here = Path(__file__).resolve().parent
+    for p in (
+        here / "web" / "dist" / "vocabulary.json",
+        here / "web" / "vm" / "signals" / "versions" / "current.json",
+    ):
+        try:
+            return json.loads(p.read_text())
+        except (OSError, ValueError):
+            continue
+    return {"vocabulary_version": "unrecorded", "tags": []}
+
+
 class _Trace:
     """The server's part of the launch trace (vocabulary v0.8; plan
     process/planning/2026-11-05-sdd-signals, item 2). Electron main names the launch's folder and
@@ -460,6 +548,10 @@ class _Trace:
         self._fd: int | None = None
         folder = os.environ.get("SUBSTRATE_TRACE_DIR")
         self._on = bool(folder)
+        self._packaged = os.environ.get("SUBSTRATE_PACKAGED") == "1"
+        self._tags: dict[str, Any] = (
+            {t["name"]: t for t in _load_vocabulary()["tags"]} if folder else {}
+        )
         if folder:
             try:
                 self._fd = os.open(
@@ -504,8 +596,32 @@ class _Trace:
             pass
 
     def emit(self, name: str, payload: dict[str, Any]) -> None:
+        """Checks the record (v0.9). A broken one is written as SIGNAL_REJECTED in every build, so
+        the trace holds it; then it raises, unless SUBSTRATE_PACKAGED is set (main sets it in the
+        packaged app), where the caller goes on (E6)."""
         if not self._on:
             return
+        verdict = _check_signal(self._tags, name, payload)
+        if not verdict["ok"]:
+            site = "unknown"
+            for frame in traceback.extract_stack()[-2::-1]:
+                if frame.name not in ("emit", "_write"):
+                    site = f"{Path(frame.filename).name}:{frame.name}:{frame.lineno}"
+                    break
+            rejected: dict[str, Any] = {
+                "process": "server",
+                "tag": str(name)[:80],
+                "problem": verdict["problem"],
+                "call_site": site,
+            }
+            if verdict["field"]:
+                rejected["field"] = verdict["field"]
+            self.emit("SIGNAL_REJECTED", rejected)
+            if not self._packaged:
+                field = f" ({verdict['field']})" if verdict["field"] else ""
+                raise ValueError(f'signal "{name}" rejected: {verdict["problem"]}{field} at {site}')
+            return
+        payload = verdict["payload"]
         with self._lock:
             wrote = self._write(name, payload)
             if self.lost > self._reported and (wrote or not self._announced):
@@ -4904,6 +5020,12 @@ def main() -> None:
     # counts follow in STORE_SCANNED when the background scan ends.
     TRACE.emit("SERVER_STARTED", {"port": PORT})
     TRACE.emit("TRACE_OPENED", {"process": "server"})
+    # Test seam (harness/shakeout/trace_files.ts, TRACE_PLANT=reject): one record the vocabulary does
+    # not declare, on its own thread, so a source run's raise prints a traceback, not a dead server.
+    if "server" in os.environ.get("SUBSTRATE_SIGNAL_PLANT", "").split(","):
+        threading.Thread(
+            target=lambda: TRACE.emit("PLANTED_UNDECLARED", {}), name="signal_plant", daemon=True
+        ).start()
     if uds_srv is not None:
         threading.Thread(target=uds_srv.serve_forever, daemon=True).start()
     threading.Thread(target=_run_boot_scan, daemon=True, name="boot_scan").start()

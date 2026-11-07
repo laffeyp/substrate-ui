@@ -1,0 +1,365 @@
+{
+  "_comment": "The one specification of the signal checker that the window (web/vm/instrumentation/check.ts), main (electron/check_signal.js) and the server (server.py _check_signal) each implement; each runs these cases in its own tests (sprint 355, plan 2026-11-05-sdd-signals item 3). The checker takes a vocabulary, a tag and a payload and answers either ok (with the payload to write, long reasons cut by E2) or a rejection: problem and field, the SIGNAL_REJECTED payload of v0.9. Checks run in this order, and the first failure is the answer: unknown_tag; missing_field (declared payload order); extra_field (the payload's key order); wrong_type (declared order, payload then optional_payload, per field_types); out_of_range (E5). Types: the text in parentheses is a comment; 'X or null' admits null; int is an integer and never a boolean; float any finite number; string; bool; object a plain object; 'list of ...' an array; 'enum a | b' one of the listed strings. E5: a field named port, pid, count, seq, turn_index or proc_seq, or ending in _ms, holding a number, is an integer >= 0, and port is 1-65535. E2: a string in a field named detail, reason, cause or error longer than 200 characters (Unicode code points) is cut to its first 200 and marked with the suffix '…[cut N]', N the code points cut.",
+  "vocabulary": {
+    "tags": [
+      {
+        "name": "A_HAPPENED",
+        "payload": [
+          "n",
+          "kind"
+        ],
+        "optional_payload": [
+          "note"
+        ],
+        "field_types": {
+          "n": "int (a count)",
+          "kind": "enum one | two",
+          "note": "string or null"
+        }
+      },
+      {
+        "name": "B_HAPPENED",
+        "payload": [
+          "port",
+          "duration_ms",
+          "t",
+          "ok",
+          "items",
+          "ctx"
+        ],
+        "optional_payload": [],
+        "field_types": {
+          "port": "int",
+          "duration_ms": "int",
+          "t": "float or null",
+          "ok": "bool or null",
+          "items": "list of {id}",
+          "ctx": "object (state)"
+        }
+      },
+      {
+        "name": "C_REFUSED",
+        "payload": [
+          "detail"
+        ],
+        "optional_payload": [],
+        "field_types": {
+          "detail": "string (server error text)"
+        }
+      }
+    ]
+  },
+  "cases": [
+    {
+      "why": "a record that keeps every rule",
+      "tag": "A_HAPPENED",
+      "payload": {
+        "n": 3,
+        "kind": "one"
+      },
+      "ok": true,
+      "out": {
+        "n": 3,
+        "kind": "one"
+      }
+    },
+    {
+      "why": "an optional field present, null where admitted",
+      "tag": "A_HAPPENED",
+      "payload": {
+        "n": 0,
+        "kind": "two",
+        "note": null
+      },
+      "ok": true,
+      "out": {
+        "n": 0,
+        "kind": "two",
+        "note": null
+      }
+    },
+    {
+      "why": "a tag the vocabulary does not declare",
+      "tag": "Z_HAPPENED",
+      "payload": {},
+      "ok": false,
+      "problem": "unknown_tag",
+      "field": null
+    },
+    {
+      "why": "a name every object carries (toString) is still an unknown tag",
+      "tag": "toString",
+      "payload": {},
+      "ok": false,
+      "problem": "unknown_tag",
+      "field": null
+    },
+    {
+      "why": "a required field absent",
+      "tag": "A_HAPPENED",
+      "payload": {
+        "kind": "one"
+      },
+      "ok": false,
+      "problem": "missing_field",
+      "field": "n"
+    },
+    {
+      "why": "a field the tag does not declare (strict extras)",
+      "tag": "A_HAPPENED",
+      "payload": {
+        "n": 1,
+        "kind": "one",
+        "text": "hello"
+      },
+      "ok": false,
+      "problem": "extra_field",
+      "field": "text"
+    },
+    {
+      "why": "a string where an int is declared",
+      "tag": "A_HAPPENED",
+      "payload": {
+        "n": "3",
+        "kind": "one"
+      },
+      "ok": false,
+      "problem": "wrong_type",
+      "field": "n"
+    },
+    {
+      "why": "a boolean is not an int",
+      "tag": "A_HAPPENED",
+      "payload": {
+        "n": true,
+        "kind": "one"
+      },
+      "ok": false,
+      "problem": "wrong_type",
+      "field": "n"
+    },
+    {
+      "why": "a fraction is not an int",
+      "tag": "A_HAPPENED",
+      "payload": {
+        "n": 1.5,
+        "kind": "one"
+      },
+      "ok": false,
+      "problem": "wrong_type",
+      "field": "n"
+    },
+    {
+      "why": "null where null is not admitted",
+      "tag": "A_HAPPENED",
+      "payload": {
+        "n": null,
+        "kind": "one"
+      },
+      "ok": false,
+      "problem": "wrong_type",
+      "field": "n"
+    },
+    {
+      "why": "a value outside the enum",
+      "tag": "A_HAPPENED",
+      "payload": {
+        "n": 1,
+        "kind": "three"
+      },
+      "ok": false,
+      "problem": "wrong_type",
+      "field": "kind"
+    },
+    {
+      "why": "missing is reported before extra",
+      "tag": "A_HAPPENED",
+      "payload": {
+        "extra": 1
+      },
+      "ok": false,
+      "problem": "missing_field",
+      "field": "n"
+    },
+    {
+      "why": "every type admitted",
+      "tag": "B_HAPPENED",
+      "payload": {
+        "port": 8765,
+        "duration_ms": 0,
+        "t": 1.25,
+        "ok": false,
+        "items": [
+          {
+            "id": 1
+          }
+        ],
+        "ctx": {
+          "k": 1
+        }
+      },
+      "ok": true,
+      "out": {
+        "port": 8765,
+        "duration_ms": 0,
+        "t": 1.25,
+        "ok": false,
+        "items": [
+          {
+            "id": 1
+          }
+        ],
+        "ctx": {
+          "k": 1
+        }
+      }
+    },
+    {
+      "why": "an int is a float",
+      "tag": "B_HAPPENED",
+      "payload": {
+        "port": 1,
+        "duration_ms": 5,
+        "t": 2,
+        "ok": null,
+        "items": [],
+        "ctx": {}
+      },
+      "ok": true,
+      "out": {
+        "port": 1,
+        "duration_ms": 5,
+        "t": 2,
+        "ok": null,
+        "items": [],
+        "ctx": {}
+      }
+    },
+    {
+      "why": "a list is not an object",
+      "tag": "B_HAPPENED",
+      "payload": {
+        "port": 1,
+        "duration_ms": 5,
+        "t": null,
+        "ok": true,
+        "items": [],
+        "ctx": []
+      },
+      "ok": false,
+      "problem": "wrong_type",
+      "field": "ctx"
+    },
+    {
+      "why": "an object is not a list",
+      "tag": "B_HAPPENED",
+      "payload": {
+        "port": 1,
+        "duration_ms": 5,
+        "t": null,
+        "ok": true,
+        "items": {},
+        "ctx": {}
+      },
+      "ok": false,
+      "problem": "wrong_type",
+      "field": "items"
+    },
+    {
+      "why": "port 0 is out of range (E5)",
+      "tag": "B_HAPPENED",
+      "payload": {
+        "port": 0,
+        "duration_ms": 5,
+        "t": null,
+        "ok": true,
+        "items": [],
+        "ctx": {}
+      },
+      "ok": false,
+      "problem": "out_of_range",
+      "field": "port"
+    },
+    {
+      "why": "port above 65535 is out of range (E5)",
+      "tag": "B_HAPPENED",
+      "payload": {
+        "port": 65536,
+        "duration_ms": 5,
+        "t": null,
+        "ok": true,
+        "items": [],
+        "ctx": {}
+      },
+      "ok": false,
+      "problem": "out_of_range",
+      "field": "port"
+    },
+    {
+      "why": "a negative duration is out of range (E5)",
+      "tag": "B_HAPPENED",
+      "payload": {
+        "port": 80,
+        "duration_ms": -1,
+        "t": null,
+        "ok": true,
+        "items": [],
+        "ctx": {}
+      },
+      "ok": false,
+      "problem": "out_of_range",
+      "field": "duration_ms"
+    },
+    {
+      "why": "E5 binds only the fields it names: a negative n passes",
+      "tag": "A_HAPPENED",
+      "payload": {
+        "n": -1,
+        "kind": "one"
+      },
+      "ok": true,
+      "out": {
+        "n": -1,
+        "kind": "one"
+      }
+    },
+    {
+      "why": "a short reason passes as it is",
+      "tag": "C_REFUSED",
+      "payload": {
+        "detail": "no such session"
+      },
+      "ok": true,
+      "out": {
+        "detail": "no such session"
+      }
+    },
+    {
+      "why": "a reason over 200 code points is cut and marked (E2)",
+      "tag": "C_REFUSED",
+      "payload": {
+        "detail": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxyyyyy"
+      },
+      "ok": true,
+      "out": {
+        "detail": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx…[cut 5]"
+      }
+    },
+    {
+      "why": "code points, not UTF-16 units: 201 emoji cut to 200",
+      "tag": "C_REFUSED",
+      "payload_repeat": {
+        "field": "detail",
+        "char": "😀",
+        "times": 201
+      },
+      "ok": true,
+      "out_repeat": {
+        "field": "detail",
+        "char": "😀",
+        "times": 200,
+        "suffix": "…[cut 1]"
+      }
+    }
+  ]
+}
