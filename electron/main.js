@@ -31,8 +31,8 @@ const { spawnSync } = require("node:child_process");
 // failure is seen: it is counted, and the next line that can be written is a TRACE_LOST with the
 // count. The server reports its own losses on stdout and main records them (TRACE_LOST, process
 // server). No file has a size cap and no launch folder is removed ("no cap on the trace",
-// 2026-11-05); SUBSTRATE_TRACE_CAP caps main's files and SUBSTRATE_SERVER_TRACE_CAP the server's,
-// for the loss gate only.
+// 2026-11-05); SUBSTRATE_TRACE_CAP caps the window files and SUBSTRATE_SERVER_TRACE_CAP the
+// server's, for the loss gate only.
 // SUBSTRATE_TRACE_CAP (bytes) is a test seam: harness/shakeout/trace_files.ts sets it low to force losses.
 const TRACE_FILE_CAP = Number(process.env.SUBSTRATE_TRACE_CAP) > 0 ? Number(process.env.SUBSTRATE_TRACE_CAP) : Infinity;
 const BOOT_ID = new Date().toISOString().replace(/[-:.]/g, "").replace("T", "-").slice(0, 15) + "-" + Math.random().toString(16).slice(2, 8);
@@ -52,7 +52,9 @@ function traceWrite(name, record) {
   const f = traceFile(name);
   const line = JSON.stringify(record) + "\n";
   let ok = false;
-  if (f.fd !== null && !f.capped && f.bytes + line.length <= TRACE_FILE_CAP) {
+  // The test cap binds window files only: main.jsonl must stay whole to report their losses.
+  const cap = name.startsWith("window-") ? TRACE_FILE_CAP : Infinity;
+  if (f.fd !== null && !f.capped && f.bytes + line.length <= cap) {
     try { fs.writeSync(f.fd, line); f.bytes += line.length; trace.written += 1; ok = true; } catch { ok = false; }
   } else if (f.fd !== null && !f.capped) {
     f.capped = true;
@@ -125,11 +127,11 @@ function buildCommits() {
   };
 }
 
-// The vocabulary main checks its records against: web/dist/vocabulary.json, which `npm run build`
-// copies from current.json beside the window's bundle, so main, the window and the server of one build
-// speak one version (sprint 355). A source tree never built falls back to current.json.
+// The vocabulary main checks its records against: current.json in a source tree, so a vocabulary
+// change needs no rebuild to be checked; in the packaged app, which ships no source tree,
+// web/dist/vocabulary.json, which `npm run build` copies from it (sprints 355, 357).
 const VOCAB = (() => {
-  for (const rel of [["web", "dist", "vocabulary.json"], ["web", "vm", "signals", "versions", "current.json"]]) {
+  for (const rel of [["web", "vm", "signals", "versions", "current.json"], ["web", "dist", "vocabulary.json"]]) {
     try { return JSON.parse(fs.readFileSync(path.join(__dirname, "..", ...rel), "utf8")); } catch { /* next */ }
   }
   return { vocabulary_version: "unrecorded", tags: [] };

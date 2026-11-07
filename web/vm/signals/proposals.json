@@ -652,6 +652,36 @@
       "rationale": "No code path opens a window for a second instance or a deep link; the two values named events that cannot happen.",
       "ratified": true,
       "ratified_by": "agent-resolved 2026-11-06, sprint 356"
+    },
+    {
+      "id": "P-0.11-SHAPE-KERNEL",
+      "kind": "PAYLOAD_FIELD_PROPOSED",
+      "layer": 2,
+      "element": "SESSION_CREATED.workspace_shape: enum flat | worktree | isolate, where v0.7 had flat | worktree | sandbox | path",
+      "source": "../substrate/src/substrate/topologies/session_registry.py WorkspaceShape (FLAT, WORKTREE, ISOLATE); server.py _session_create sets isolate",
+      "rationale": "Workspace is kernel-homed (ENTITY_MERGE_PROPOSED in v0.7); its shape values are the kernel's. sandbox and path are not kernel shapes, and isolate was missing, so every isolated session would have been rejected.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-06, sprint 357"
+    },
+    {
+      "id": "P-0.11-AREA-UNROUTED",
+      "kind": "PAYLOAD_FIELD_PROPOSED",
+      "layer": 2,
+      "element": "API_REFUSED.area and SERVER_FAULTED.area gain unrouted: an /api/ path no route serves",
+      "source": "server.py do_GET/do_POST fall-through 404s; the window still calls /api/validate and /api/build, deleted from the server in 1e326db (2026-10-08)",
+      "rationale": "A request to a path no route serves is a domain event (the window and the server disagree on the API); without a value it could not be written.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-06, sprint 357"
+    },
+    {
+      "id": "P-0.11-CAUSE-SITE",
+      "kind": "PAYLOAD_FIELD_PROPOSED",
+      "layer": 2,
+      "element": "API_REFUSED.cause is the refusing handler and line (function:line)",
+      "source": "server.py: 133 _error call sites and the direct 409/410 answers, each with free text",
+      "rationale": "E1 forbids the response text (it can carry request content); a code per site names the line that decided, which is what a reader needs to find it. The text reaches the trace through the window's SESSION_OPEN_REFUSED and TURN_REFUSED detail, bounded by E2.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-06, sprint 357"
     }
   ]
 }

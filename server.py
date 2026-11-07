@@ -432,6 +432,46 @@ def _interrupt_then_end(
     )
 
 
+# The domain an /api/ path belongs to (API_REFUSED.area, SERVER_FAULTED.area; vocabulary v0.11).
+# Most specific first; a path no route serves is "unrouted".
+_AREA_RULES: tuple[tuple[str, str], ...] = (
+    (r"/api/session/[^/]+/(turn|interrupt)", "turn"),
+    (r"/api/session/[^/]+/(files|file)(/watch)?", "files"),
+    (r"/api/session/[^/]+/children", "children"),
+    (r"/api/session/[^/]+/language(/.*)?", "language"),
+    (r"/api/session/[^/]+/mcp", "mcp"),
+    (r"/api/session/[^/]+/runs(/.*)?", "runs"),
+    (r"/api/session/[^/]+/tasks(/.*)?", "tasks"),
+    (r"/api/sessions?(/.*)?", "session"),
+    (r"/api/workspaces(/.*)?", "workspace"),
+    (r"/api/cli/.*", "cli"),
+    (r"/api/records(/.*)?", "records"),
+    (r"/api/runs(/.*)?", "runs"),
+    (r"/api/assays?(/.*)?", "assays"),
+    (r"/api/(topology|applications)(/.*)?", "topology"),
+    (r"/api/models(/.*)?", "models"),
+    (r"/api/bundles(/.*)?", "bundles"),
+    (r"/api/agent", "agent"),
+    (r"/api/(diff|worktree_diff)", "diff"),
+    (r"/api/resolve_child", "children"),
+)
+
+
+def _api_area(path: str) -> str:
+    for pattern, area in _AREA_RULES:
+        if re.fullmatch(pattern, path):
+            return area
+    return "unrouted"
+
+
+def _site(skip: tuple[str, ...]) -> str:
+    """function:line of the first frame above the named helpers."""
+    for frame in reversed(traceback.extract_stack()[:-1]):
+        if frame.name not in skip:
+            return f"{frame.name}:{frame.lineno}"
+    return "unknown"
+
+
 _RANGED = frozenset({"port", "pid", "count", "seq", "turn_index", "proc_seq"})
 _CUT = frozenset({"detail", "reason", "cause", "error"})
 _CUT_AT = 200
@@ -504,13 +544,13 @@ def _check_signal(tags: dict[str, Any], name: str, payload: dict[str, Any]) -> d
 
 
 def _load_vocabulary() -> dict[str, Any]:
-    """The vocabulary the server checks against: web/dist/vocabulary.json, which `npm run build`
-    copies from current.json beside the window's bundle (one version per build); a tree never
-    built falls back to current.json."""
+    """The vocabulary the server checks against: current.json in a source tree (source runs and
+    the tests, so a vocabulary change needs no rebuild to be checked); in the packaged app, which
+    ships no source tree, web/dist/vocabulary.json, which `npm run build` copies from it."""
     here = Path(__file__).resolve().parent
     for p in (
-        here / "web" / "dist" / "vocabulary.json",
         here / "web" / "vm" / "signals" / "versions" / "current.json",
+        here / "web" / "dist" / "vocabulary.json",
     ):
         try:
             return json.loads(p.read_text())
@@ -2680,6 +2720,18 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
     def _send(self, code: int, body: bytes, ctype: str) -> None:
+        # Every /api/ refusal, from _error or a direct _json(..., 4xx/5xx): API_REFUSED (v0.11), its
+        # cause the handler line that refused. The response text stays out of the trace (E1).
+        path = urlparse(self.path).path
+        if code >= 400 and path.startswith("/api/"):
+            TRACE.emit(
+                "API_REFUSED",
+                {
+                    "area": _api_area(unquote(path)),
+                    "status": code,
+                    "cause": _site(("_send", "_json", "_error", "_fault")),
+                },
+            )
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
@@ -2696,6 +2748,25 @@ class Handler(BaseHTTPRequestHandler):
 
     def _error(self, code: int, message: str) -> None:
         self._json({"error": message}, code)
+
+    def _fault(self, exc: BaseException) -> None:
+        """An exception reached a handler's boundary: SERVER_FAULTED (v0.11) names its type and the
+        deepest server.py function it passed through, then the request gets its 500."""
+        where = "unknown"
+        tb = exc.__traceback__
+        while tb is not None:
+            if tb.tb_frame.f_code.co_filename == __file__:
+                where = tb.tb_frame.f_code.co_name
+            tb = tb.tb_next
+        TRACE.emit(
+            "SERVER_FAULTED",
+            {
+                "area": _api_area(unquote(urlparse(self.path).path)),
+                "error_type": type(exc).__name__,
+                "where": where,
+            },
+        )
+        self._error(500, api.describe_error(exc))
 
     def _host_ok(self) -> bool:
         """DNS-rebinding defence (Jackson et al., *Protecting Browsers from DNS Rebinding Attacks*:
@@ -2814,7 +2885,7 @@ class Handler(BaseHTTPRequestHandler):
                 return
             self._error(404, f"no control endpoint {path!r}")
         except Exception as exc:  # noqa: BLE001 — top-level do_POST boundary: a runaway inside any endpoint must become a JSON 500, not kill the daemon thread.
-            self._error(500, api.describe_error(exc))
+            self._fault(exc)
 
     def _clear_runs(self) -> None:
         """Prune the accumulating session runs under runs/ — the hash-suffixed launch_/build_/resume_
@@ -3128,12 +3199,20 @@ class Handler(BaseHTTPRequestHandler):
             self._error(400, str(exc))
             return
         except Exception as exc:  # noqa: BLE001 — the handler boundary: anything else is a 500 naming its type
-            self._error(500, api.describe_error(exc))
+            self._fault(exc)
             return
         # Sprint 086 — remember this workspace on session open so the
         # Records surface can offer it as a bindable row later.
         # `_remember_workspace` skips session-sandbox and temp paths.
         _remember_workspace(manifest.workspace)
+        TRACE.emit(
+            "SESSION_CREATED",
+            {
+                "session_id": manifest.session_id,
+                "driver": str(manifest.driver),
+                "workspace_shape": str(manifest.workspace_shape),
+            },
+        )
         # Sprint 032c: re-read the manifest post-validation (set_driver_params
         # rolls it forward with the validated dict). driver_params on the
         # response so the UI can echo it in the header without a GET.
@@ -3285,6 +3364,8 @@ class Handler(BaseHTTPRequestHandler):
             # F14: use the registry's in-memory counter instead of scanning
             # the entire record for the tail UserMessage.turn_index.
             next_turn_index = self.app.registry.next_turn_index(session_id)
+            # The turn is handed to the kernel now, under the session's lock (TURN_ACCEPTED).
+            TRACE.emit("TURN_ACCEPTED", {"session_id": session_id, "turn_index": next_turn_index})
             # Sprint 217e: prefix a context slice to assembled_prompt when the
             # caller passed `context` in the body. The extractor is delegate's
             # existing helper; it reads the parent (== this session's) record
@@ -3333,7 +3414,7 @@ class Handler(BaseHTTPRequestHandler):
                 )
                 return
             except Exception as exc:  # noqa: BLE001 — the handler boundary: anything else is a 500 naming its type
-                self._error(500, api.describe_error(exc))
+                self._fault(exc)
                 return
             # Return the record's tail seq so the caller can page /events from there.
             final_seq = _tail_seq(root_after)
@@ -3443,7 +3524,7 @@ class Handler(BaseHTTPRequestHandler):
             )
             return
         except Exception as exc:  # noqa: BLE001 — the handler boundary: anything else is a 500 naming its type
-            self._error(500, api.describe_error(exc))
+            self._fault(exc)
             return
         final_seq = _tail_seq(root_after)
         self._json(
@@ -4052,7 +4133,7 @@ class Handler(BaseHTTPRequestHandler):
                     api.Runtime(record_root).run(topology_factory, name=application_name)
                 )
             except Exception as exc:  # noqa: BLE001 — topology run boundary: any Producer/View failure surfaces as HTTP 500 with the class name.
-                self._error(500, api.describe_error(exc))
+                self._fault(exc)
                 return
             finally:
                 shutil.rmtree(folder, ignore_errors=True)
@@ -4309,6 +4390,10 @@ class Handler(BaseHTTPRequestHandler):
                     bundle=None,
                     seed="",
                 )
+                TRACE.emit(
+                    "SESSION_CREATED",
+                    {"session_id": session_id, "driver": str(driver), "workspace_shape": "flat"},
+                )
             except NameCollision as exc:
                 # Race: another caller with the same name won. Reuse theirs.
                 session_id = exc.existing_session_id
@@ -4319,6 +4404,8 @@ class Handler(BaseHTTPRequestHandler):
 
         def _build(_manifest: Any, _record_root: Path) -> Any:
             next_turn_index = self.app.registry.next_turn_index(session_id)
+            # The turn is handed to the kernel now, under the session's lock (TURN_ACCEPTED).
+            TRACE.emit("TURN_ACCEPTED", {"session_id": session_id, "turn_index": next_turn_index})
             return SessionUserMessage(
                 text=task,
                 turn_index=next_turn_index,
@@ -4337,7 +4424,7 @@ class Handler(BaseHTTPRequestHandler):
             )
             return
         except Exception as exc:  # noqa: BLE001 — bridge surfaces the class + text
-            self._error(500, api.describe_error(exc))
+            self._fault(exc)
             return
 
         self._json(
@@ -4564,7 +4651,7 @@ class Handler(BaseHTTPRequestHandler):
                 return
             self._error(404, f"no patch endpoint {path!r}")
         except Exception as exc:  # noqa: BLE001 — top-level do_PATCH boundary: same shape as do_POST — never let a per-endpoint exception kill the daemon thread.
-            self._error(500, api.describe_error(exc))
+            self._fault(exc)
 
     def do_DELETE(self) -> None:  # noqa: N802 — sprint 214b: DELETE /api/session/<id>
         if self._refuse_foreign_host():
@@ -4585,7 +4672,7 @@ class Handler(BaseHTTPRequestHandler):
                 return
             self._error(404, f"no delete endpoint {path!r}")
         except Exception as exc:  # noqa: BLE001 — top-level do_DELETE boundary: same shape as do_POST / do_PATCH.
-            self._error(500, api.describe_error(exc))
+            self._fault(exc)
 
     def do_GET(self) -> None:  # noqa: N802
         if self._refuse_foreign_host():
@@ -4794,7 +4881,7 @@ class Handler(BaseHTTPRequestHandler):
             # do NOT leak a full traceback (absolute paths, internals) in the response body; the
             # typed name + message is enough for the client. Log the traceback server-side instead.
             traceback.print_exc()
-            self._error(500, api.describe_error(exc))
+            self._fault(exc)
 
     def _api_record(self, rest: str) -> None:
         parts = rest.split("/")

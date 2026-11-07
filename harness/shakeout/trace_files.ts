@@ -56,8 +56,8 @@ async function main(): Promise<void> {
     await row.waitFor({ state: "visible", timeout: 15_000 });
     await row.click();
     await win.locator('[data-model-half][data-armed="1"]').first().waitFor({ state: "visible", timeout: 5_000 });
-    if (plant === "cap") {
-      // More window records than the cap holds: the model, guidance, length and tone picks.
+    if (plant === "cap" || plant === "") {
+      // The model, guidance, length and tone picks (more window records than the cap holds).
       await win.locator('[data-model-row="deterministic"] > span').first().click();
       for (const [line, pos] of [["guidance", "auto"], ["length", "normal"], ["tone", "neutral"]]) {
         const r = win.locator(`[data-${line}-half] [data-${line}-row="${pos}"]`).first();
@@ -65,6 +65,14 @@ async function main(): Promise<void> {
         await r.click();
       }
       await win.locator("[data-input-bar]").first().waitFor({ state: "visible", timeout: 15_000 });
+    }
+    if (plant === "") {
+      // Sprint 357: a first message, so the server's SESSION_CREATED and TURN_ACCEPTED can be read
+      // against the window's SESSION_OPEN_ACKED and TURN_ACK (S7, S8).
+      await win.locator("[data-input-bar]").first().click();
+      await win.keyboard.type("hello");
+      await win.keyboard.press("Enter");
+      await win.waitForFunction(() => ((window as unknown as { __vmSignals?: { name: string }[] }).__vmSignals ?? []).some((r) => r.name === "TURN_ACK"), undefined, { timeout: 30_000 });
     }
     // The boot scan runs in the background (STORE_SCANNED); quit only after it has ended. The server's
     // stdout, which main copies to its stderr, prints the scan's line in every run, capped or not.
@@ -182,8 +190,21 @@ async function main(): Promise<void> {
     if (armed && (armed.pane_id !== null || armed.payload?.pane_id !== 1)) throw new Error("PICKER_FOLDER_ARMED should carry pane_id null in context and 1 in payload");
     // The gate picks the first row, the default sandbox: no path, so workspace is null (sprint 355).
     if (armed && (armed.payload?.is_default !== true || armed.payload?.workspace !== null)) throw new Error(`PICKER_FOLDER_ARMED for the default row: ${JSON.stringify(armed.payload)}`);
+    // S7 and S8 across processes (sprint 357): the server's create and turn pair with the window's
+    // ack of each, on one session id.
+    const created = server.filter((r) => r.name === "SESSION_CREATED");
+    const acked = recs.filter((r) => r.name === "SESSION_OPEN_ACKED");
+    if (created.length !== 1 || acked.length !== 1 || created[0].payload?.session_id !== acked[0].payload?.session_id) {
+      throw new Error(`S7: SESSION_CREATED ${JSON.stringify(created.map((r) => r.payload))} vs SESSION_OPEN_ACKED ${JSON.stringify(acked.map((r) => r.payload))}`);
+    }
+    const sid = created[0].payload?.session_id;
+    const accepted = server.filter((r) => r.name === "TURN_ACCEPTED");
+    const turnAcks = recs.filter((r) => r.name === "TURN_ACK");
+    if (accepted.length !== 1 || accepted[0].payload?.session_id !== sid || accepted[0].payload?.turn_index !== 0 || turnAcks.length !== 1 || turnAcks[0].payload?.session_id !== sid) {
+      throw new Error(`S8: TURN_ACCEPTED ${JSON.stringify(accepted.map((r) => r.payload))} vs TURN_ACK ${JSON.stringify(turnAcks.map((r) => r.payload))}`);
+    }
     if (process.env.TRACE_PRINT) for (const r of [...main, ...server, ...recs]) console.log(JSON.stringify(r));
-    console.log(`trace_files: ok — ${traceDir}: main ${main.length} lines (APP_BOOTED … APP_QUIT_COMPLETED), server ${server.length} (SERVER_STARTED … SERVER_STOPPED), ${winFiles[0]} ${recs.length} lines, PICKER_FOLDER_ARMED present`);
+    console.log(`trace_files: ok — ${traceDir}: main ${main.length} lines (APP_BOOTED … APP_QUIT_COMPLETED), server ${server.length} (SERVER_STARTED … SERVER_STOPPED), ${winFiles[0]} ${recs.length} lines, PICKER_FOLDER_ARMED present, session ${String(sid)} created and acked, turn 0 accepted and acked`);
     code = 0;
   } catch (e) {
     console.error(`trace_files: FAIL — ${(e as Error).message}${traceDir ? ` (${traceDir})` : ""}`);

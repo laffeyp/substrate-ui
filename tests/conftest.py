@@ -42,13 +42,32 @@ _TEST_HOME = tempfile.mkdtemp(prefix="substrate-test-home-")
 os.environ["SUBSTRATE_HOME"] = _TEST_HOME
 _USER_HOME = tempfile.mkdtemp(prefix="substrate-test-user-home-")
 os.environ["HOME"] = _USER_HOME
+# Sprint 357: the server's trace is on in every test, so each request a test makes runs the signal
+# checker (server.py _check_signal) in raise mode; the session fails if any record was rejected.
+_TEST_TRACE = tempfile.mkdtemp(prefix="substrate-test-trace-")
+os.environ["SUBSTRATE_TRACE_DIR"] = _TEST_TRACE
+os.environ["SUBSTRATE_BOOT_ID"] = "pytest"
+os.environ.pop("SUBSTRATE_PACKAGED", None)
 
 
 @pytest.fixture(autouse=True, scope="session")
 def _remove_test_substrate_home() -> object:
     yield
+    rejected = []
+    counts: dict[str, int] = {}
+    for name in sorted(os.listdir(_TEST_TRACE)):
+        with open(os.path.join(_TEST_TRACE, name), encoding="utf-8") as fh:
+            for line in fh:
+                if '"name":"SIGNAL_REJECTED"' in line:
+                    rejected.append(line)
+                tag = line.split('"name":"', 1)[-1].split('"', 1)[0]
+                counts[tag] = counts.get(tag, 0) + 1
+    if os.environ.get("TRACE_PRINT"):  # the server tags the tests drove, by count
+        print(f"\nserver trace during the tests: {dict(sorted(counts.items()))}")
     shutil.rmtree(_TEST_HOME, ignore_errors=True)
     shutil.rmtree(_USER_HOME, ignore_errors=True)
+    shutil.rmtree(_TEST_TRACE, ignore_errors=True)
+    assert not rejected, f"SIGNAL_REJECTED in the server trace during the tests: {rejected[:5]}"
 
 
 def _server_state() -> dict[str, object]:
