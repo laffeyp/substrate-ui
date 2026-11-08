@@ -9,7 +9,7 @@ import * as React from "react";
 import { useSyncExternalStore } from "react";
 import { closeDialog, dialogs } from "./state/dialogs";
 import { fontSize, pickTheme, settings, stepFont, THEMES } from "./state/settings";
-import { PaneDrawnConnection } from "../vm/signals.gen";
+import { DialogClosedOutcome, PaneDrawnConnection } from "../vm/signals.gen";
 
 interface VmLike {
   snapshot?(): { sessionId: string | null; connection: string; parkReason: unknown; endedReason: unknown } | null;
@@ -34,11 +34,14 @@ const BINDINGS: readonly [string, string][] = [
 
 // A click inside a panel stops there, so the backdrop closes only on clicks outside it (sprint 203).
 const swallow = (ev: React.MouseEvent) => ev.stopPropagation();
+// The backdrop and the cancel and close controls (sprint 365: DIALOG_CLOSED cancelled).
+const cancelDialog = () => closeDialog(DialogClosedOutcome.CANCELLED);
+const confirmDialog = () => closeDialog(DialogClosedOutcome.CONFIRMED);
 
 function SettingsDialog({ defaultFontSize }: { defaultFontSize: number }): React.ReactElement {
   const st = useSyncExternalStore(settings.subscribe, settings.getSnapshot, settings.getSnapshot);
   return (
-    <div onClick={closeDialog} style={backdrop}>
+    <div onClick={cancelDialog} style={backdrop}>
       <div onClick={swallow} style={{ ...panel, gap: 14, fontSize: 12 }}>
         <div style={{ fontSize: 9.5, letterSpacing: ".14em", color: "#62676f" }}>SETTINGS · ⌘,</div>
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
@@ -65,7 +68,7 @@ function SettingsDialog({ defaultFontSize }: { defaultFontSize: number }): React
           </div>
         </div>
         <div style={{ display: "flex", justifyContent: "flex-end" }}>
-          <span onClick={closeDialog} style={{ ...cancel, fontSize: 11.5 }}>close esc</span>
+          <span onClick={cancelDialog} style={{ ...cancel, fontSize: 11.5 }}>close esc</span>
         </div>
       </div>
     </div>
@@ -75,7 +78,7 @@ function SettingsDialog({ defaultFontSize }: { defaultFontSize: number }): React
 // 19f, as the template drew it (sprint 334). Its export button closes it, as the template's did.
 function ExportDialog(): React.ReactElement {
   return (
-    <div onClick={closeDialog} style={backdrop}>
+    <div onClick={cancelDialog} style={backdrop}>
       <div onClick={swallow} style={{ ...panel, gap: 12, fontSize: 12 }}>
         <div style={{ fontSize: 9.5, letterSpacing: ".14em", color: "#62676f" }}>EXPORT RECORD · 01M1684 · fix-race-in-metering · 244 ev</div>
         <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 11.5 }}>
@@ -84,8 +87,8 @@ function ExportDialog(): React.ReactElement {
         </div>
         <div style={{ display: "flex", gap: 10, border: "1px solid rgba(255,255,255,.13)", borderRadius: 6, padding: "8px 12px", background: "#1a1c20", fontSize: 11.5 }}><span style={{ color: "#62676f" }}>to</span><span style={{ color: "#e2e5e9" }}>~/exports/fix-race-in-metering.record</span></div>
         <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", fontSize: 11.5 }}>
-          <span onClick={closeDialog} style={{ color: "#9aa0a8", border: "1px solid rgba(255,255,255,.09)", borderRadius: 5, padding: "4px 14px", cursor: "pointer" }}>cancel esc</span>
-          <span onClick={closeDialog} style={{ color: "#0d1013", background: "#82a5c8", borderRadius: 5, padding: "4px 14px", fontWeight: 600, cursor: "pointer" }}>export ↵</span>
+          <span onClick={cancelDialog} style={{ color: "#9aa0a8", border: "1px solid rgba(255,255,255,.09)", borderRadius: 5, padding: "4px 14px", cursor: "pointer" }}>cancel esc</span>
+          <span onClick={confirmDialog} style={{ color: "#0d1013", background: "#82a5c8", borderRadius: 5, padding: "4px 14px", fontWeight: 600, cursor: "pointer" }}>export ↵</span>
         </div>
       </div>
     </div>
@@ -94,7 +97,7 @@ function ExportDialog(): React.ReactElement {
 
 /** D68: a session with a turn in flight has the turn interrupted first, then ends. */
 async function endSession(): Promise<void> {
-  closeDialog();
+  confirmDialog();
   const vm = (window as unknown as { __vm?: VmLike }).__vm;
   if (!vm) return;
   const snap = vm.snapshot ? vm.snapshot() : null;
@@ -107,12 +110,12 @@ async function endSession(): Promise<void> {
 
 function EndSessionDialog({ title }: { title: string }): React.ReactElement {
   return (
-    <div onClick={closeDialog} style={backdrop}>
+    <div onClick={cancelDialog} style={backdrop}>
       <div onClick={swallow} style={{ ...panel, gap: 12 }}>
         <div style={{ color: "#e2e5e9", fontSize: 13 }}>End session {title}?</div>
         <div style={{ color: "#62676f", fontSize: 11.5, lineHeight: 1.7 }}>Interrupts the running turn, emits SessionEnded and finalises the record. The record stays in records; the session cannot be resumed.</div>
         <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", fontSize: 11.5 }}>
-          <span onClick={closeDialog} style={cancel}>cancel esc</span>
+          <span onClick={cancelDialog} style={cancel}>cancel esc</span>
           <span onClick={() => { void endSession(); }} style={{ color: "#e2e5e9", background: "#2e3138", border: "1px solid rgba(255,255,255,.12)", borderRadius: 5, padding: "4px 14px", fontWeight: 600, cursor: "pointer" }}>end session</span>
         </div>
       </div>

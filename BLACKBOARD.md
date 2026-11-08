@@ -1445,3 +1445,11 @@ Two mount divs land in `web/reveal.html`: `<div id="vm-transcript-mount">` insid
   - **Server types:** mypy's 12 errors in `server.py` are fixed with casts and annotations only. `npm run build` now runs `uv run --project ../substrate mypy server.py`, and a planted `Signal.TURN_ACCEPTD` fails it.
   - **Checks:** build 0; unit 147; Python 297 passed, 5 skipped; ruff 0; the six packaged gates 0.
   - **Card:** `process/sprints/sprint-364-pack-signals-gen-and-server-types.md`.
+- **2026-11-07 agent-resolved** — Which outcome settings' "close esc" button writes, since settings has no confirm. Decision: `cancelled`, the same as the backdrop and the other dialogs' cancel buttons. Escape writes `escape`. Grounds: project — `DIALOG_CLOSED.outcome` is `confirmed | cancelled | escape`, and settings' changes apply as they are made, so the button confirms nothing; SDD — hard rule 2 (use the vocabulary's values; propose rather than invent); practice — n/a. Revisit if: settings gains a save step.
+- **2026-11-07 agent-resolved** — `VIEW_CHANGED` had no cause for two paths that change the view: `/language` opening meta on the language lens, and the design tool's `view` prop. Decision: v0.17 adds `language` and `tweak` (`P-0.17-VIEW-CAUSES`, `PAYLOAD_FIELD_PROPOSED`). Grounds: project — `web/app/App.tsx`, the shell subscription's `languageOpenTick` and `componentDidUpdate`'s tweak sync; SDD — `grammar/PRINCIPLES.md` commitment 3 and the proposal taxonomy; practice — n/a. Revisit if: either path is removed.
+- **2026-11-07 built** — Sprints 365 and 366 closed.
+  - **365:** each dialog's opening and closing is written, with how it closed (`DIALOG_OPENED`, `DIALOG_CLOSED`).
+  - **366:** each change of the window's open view is written, with what changed it (`VIEW_CHANGED`, v0.17).
+  - **Checks:** all 67 source gates 0; packaged `dialogs`, `view_signals` and the six earlier packaged gates 0; unit 147; Python 297 passed, 5 skipped. Each gate fails on its plant.
+  - **Tags without an emit site:** 12 (11 for item 4, plus INVARIANT_BROKEN).
+  - **Cards:** `process/sprints/sprint-365-dialog-signals.md`, `process/sprints/sprint-366-view-changed.md`.

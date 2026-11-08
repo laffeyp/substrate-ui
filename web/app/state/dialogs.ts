@@ -11,6 +11,8 @@
 
 import { createStore } from "../store";
 import { clearNote } from "./settings";
+import { emit } from "../../vm/instrumentation/sdd";
+import { DialogClosedOutcome, Signal } from "../../vm/signals.gen";
 
 export type DialogState =
   | { open: null }
@@ -24,23 +26,32 @@ const KEY = "__substrateDialogs";
 const scope = globalThis as unknown as Record<string, ReturnType<typeof createStore<DialogState>> | undefined>;
 export const dialogs = scope[KEY] ?? (scope[KEY] = createStore<DialogState>({ open: null }));
 
+// Sprint 365: each open and close is written, DIALOG_OPENED and DIALOG_CLOSED, with the dialog's id.
+function open(next: Exclude<DialogState, { open: null }>): void {
+  dialogs.set(next);
+  emit(Signal.DIALOG_OPENED, { dialog: next.open });
+}
+
 export function openSettings(): void {
-  dialogs.set({ open: "settings" });
+  open({ open: "settings" });
 }
 
 /** The template held the export dialog's flag; no control set it. */
 export function openExport(): void {
-  dialogs.set({ open: "export" });
+  open({ open: "export" });
 }
 
 export function openEndSession(title: string): void {
-  dialogs.set({ open: "end-session", title });
+  open({ open: "end-session", title });
 }
 
-/** Closes whichever dialog is open; closing settings clears its theme note. */
-export function closeDialog(): void {
-  if (dialogs.getSnapshot().open === "settings") clearNote();
+/** Closes whichever dialog is open; closing settings clears its theme note. `outcome` is how it
+ *  closed: its confirm control, a cancel or close control or the backdrop, or Escape. */
+export function closeDialog(outcome: DialogClosedOutcome): void {
+  const was = dialogs.getSnapshot().open;
+  if (was === "settings") clearNote();
   dialogs.set({ open: null });
+  if (was !== null) emit(Signal.DIALOG_CLOSED, { dialog: was, outcome });
 }
 
 export function dialogOpen(): boolean {

@@ -7,9 +7,12 @@
 // turn, /exit opens the dialog, which names the session the footer names (F351); "cancel esc" closes
 // it and ends nothing; /exit again and "end session" close it, and SESSION_END_REQUESTED then
 // SESSION_ENDED_LOCAL fire.
+//
+// Sprint 365: window-1.jsonl holds each dialog's DIALOG_OPENED and DIALOG_CLOSED, in the order the
+// steps drive them, with the outcome each close came from, and no pane in their context.
 
 import { _electron as electron, type Page } from "playwright";
-import { bindPaneAsUser, launchArgs, settled, waitForApp } from "./lib/electron";
+import { bindPaneAsUser, launchArgs, settled, waitForApp, windowRecords } from "./lib/electron";
 
 const visible = (win: Page, sel: string) => win.locator(sel).filter({ visible: true }).first();
 const signals = (win: Page) => win.evaluate(() =>
@@ -85,6 +88,20 @@ async function main(): Promise<void> {
     const after = await sizeLabel(win);
     if (after !== raised) throw new Error(`after a reload the type size reads ${after}; expected ${raised}`);
     seen.push(`after reload ${after}`);
+
+    // The trace, read once the app has closed and its files are complete.
+    await app.close();
+    const want: [string, string, string | null][] = [
+      ["DIALOG_OPENED", "end-session", null], ["DIALOG_CLOSED", "end-session", "cancelled"],
+      ["DIALOG_OPENED", "end-session", null], ["DIALOG_CLOSED", "end-session", "confirmed"],
+      ["DIALOG_OPENED", "settings", null], ["DIALOG_CLOSED", "settings", "escape"],
+      ["DIALOG_OPENED", "settings", null],
+    ];
+    const got = windowRecords(launch).filter((r) => r.name === "DIALOG_OPENED" || r.name === "DIALOG_CLOSED");
+    const show = got.map((r) => `${r.name} ${String(r.payload.dialog)}${r.payload.outcome ? " " + String(r.payload.outcome) : ""} pane=${String(r.pane_id)}`).join("; ");
+    const match = got.length === want.length && want.every(([n, d, o], i) => got[i].name === n && got[i].payload.dialog === d && (o === null || got[i].payload.outcome === o) && got[i].pane_id === null);
+    if (!match) throw new Error(`dialog records in window-1.jsonl: ${show || "none"}`);
+    seen.push(`trace: ${want.length} dialog records in order`);
 
     console.log(`dialogs: ok — ${seen.join("; ")}`);
     code = 0;

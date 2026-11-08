@@ -59,7 +59,7 @@ import { RecordsPage } from "./RecordsPage";
 import { StudioPage } from "./StudioPage";
 import { TopBar } from "./TopBar";
 import "./window.css";
-import { Signal, PaneBoundBinding, PaneBoundHow, PaneDrawnConnection, PaneDrawnPickerLine, PaneDrawnState, PaneDrawnTurnState, PaneFocusedCause, PaneOpenedCause, PickerFolderArmedSource, PickerFolderDisarmedCause, PickerLineEnteredCause, PickerLineEnteredLine, type SignalPayloads } from "../vm/signals.gen";
+import { Signal, DialogClosedOutcome, ViewChangedCause, PaneBoundBinding, PaneBoundHow, PaneDrawnConnection, PaneDrawnPickerLine, PaneDrawnState, PaneDrawnTurnState, PaneFocusedCause, PaneOpenedCause, PickerFolderArmedSource, PickerFolderDisarmedCause, PickerLineEnteredCause, PickerLineEnteredLine, type SignalPayloads } from "../vm/signals.gen";
 import type { Activity } from "../reveal/activity";
 
 // UI sprint 132 (kernel K288, session vocabulary § R): the guidance levels the bar offers, each with
@@ -218,6 +218,8 @@ export class App extends React.Component<AppProps, AppState> {
   private streamMatches = 0;
   private offTopBarActs: (() => void) | null = null;
   private focusCause: PaneFocusedCause | null = null;
+  /** Why the next commit's open view changed (VIEW_CHANGED, sprint 366), noted by the path that changes it. */
+  private viewCause: ViewChangedCause | null = null;
   private bindHow = new Map<number, PaneBoundHow>();
   /** Panes the layout's tweak props made (componentDidUpdate's tweak sync): PANE_OPENED start. */
   private startPanes = new Set<number>();
@@ -591,6 +593,7 @@ export class App extends React.Component<AppProps, AppState> {
   // is drawn in the panes view, so making one goes there.
   private split(dir: SplitDir, patch?: Partial<AppPane>, then?: (id: number) => void): void {
     let madeId: number | null = null;
+    this.viewCause = ViewChangedCause.SPLIT;
     this.setState((s) => {
       if (s.panes.length >= MAX_PANES) return null;
       const out = splitPane({ cols: s.cols, rows: s.rows, colW: s.colW, rowW: s.rowW }, s.panes, s.focused, dir, { ...this.newPane(), ...(patch || {}) });
@@ -629,7 +632,7 @@ export class App extends React.Component<AppProps, AppState> {
         if (shifts.length) selectSeq(shifts[shifts.length - 1].source_seq);
       }
       this.langTicks[changedPane] = tick;
-      if (revealed) this.setState({ controllerSnapshots: { ...snapshots }, vs: show("meta") });
+      if (revealed) { this.viewCause = ViewChangedCause.LANGUAGE; this.setState({ controllerSnapshots: { ...snapshots }, vs: show("meta") }); }
       else this.setState({ controllerSnapshots: { ...snapshots } });
       // The focused pane's session is the URL's `session`, so a reload reopens it.
       if (changedPane === focusedId && snap.sessionId !== (this.urlSessions[changedPane] ?? null)) {
@@ -654,6 +657,7 @@ export class App extends React.Component<AppProps, AppState> {
       const vm = vmOf();
       if (!vm || !r.sessionId) return;
       this.bindHow.set(this.state.focused, PaneBoundHow.ATTACH);
+      this.viewCause = ViewChangedCause.RECORDS_OPEN;
       this.setState((s) => ({
         vs: closePage(s.vs),
         panes: s.panes.map((pn) => (pn.id === s.focused ? { ...pn, unbound: false, ws: r.workspacePath || "", shape: r.workspaceShape || "flat", name: r.name || pn.name } : pn)),
@@ -666,8 +670,8 @@ export class App extends React.Component<AppProps, AppState> {
       if (picked) this.setPane(1, { driver: picked });
     }));
     this.offs.push(onCommand((command) => {
-      if (command === "toggle-meta") this.toggleMeta();
-      else if (command === "toggle-assays") this.toggleSurface(Surface.Assay);
+      if (command === "toggle-meta") this.toggleMeta(ViewChangedCause.MENU);
+      else if (command === "toggle-assays") this.toggleSurface(Surface.Assay, ViewChangedCause.MENU);
       else if (command === "settings") openSettings();
       else if (command === "close-pane") this.closePaneNow(this.state.focused);
       else if (command === "open") this.openKey();
@@ -749,16 +753,16 @@ export class App extends React.Component<AppProps, AppState> {
       return;
     }
     if (action.kind === "close-find") { closeFind(); return; }
-    if (action.kind === "close-dialog") { closeDialog(); return; }
+    if (action.kind === "close-dialog") { closeDialog(DialogClosedOutcome.ESCAPE); return; }
     if (action.kind === "close-cards") { this.setState({ ddFor: null, wsFor: null }); return; }
-    if (action.kind === "close-surface") { this.setState((st) => ({ vs: closePage(st.vs) })); return; }
+    if (action.kind === "close-surface") { this.viewCause = ViewChangedCause.CLOSE; this.setState((st) => ({ vs: closePage(st.vs) })); return; }
     e.preventDefault();
-    if (action.kind === "toggle-meta") this.toggleMeta();
+    if (action.kind === "toggle-meta") this.toggleMeta(ViewChangedCause.KEY);
     else if (action.kind === "toggle-tools") toggleToolOutputMode();
     else if (action.kind === "split") this.split(action.dir);
     else if (action.kind === "toggle-find") toggleFind();
     else if (action.kind === "settings") openSettings();
-    else if (action.kind === "toggle-assays") this.toggleSurface(Surface.Assay);
+    else if (action.kind === "toggle-assays") this.toggleSurface(Surface.Assay, ViewChangedCause.KEY);
     // Escape is hard by default, the terminal habit: stop now. ⇧Esc is softer: stop after this tool.
     else if (action.kind === "interrupt") ctlOf(s.focused)?.interruptTurn(action.tier).catch(() => undefined);
   }
@@ -788,6 +792,8 @@ export class App extends React.Component<AppProps, AppState> {
   }
   override componentDidUpdate(prevProps: AppProps, prevState: AppState): void {
     this.notePanes(prevState);
+    if (prevState.vs.view !== this.state.vs.view && this.viewCause) emitSignal(Signal.VIEW_CHANGED, { from: prevState.vs.view, to: this.state.vs.view, cause: this.viewCause });
+    this.viewCause = null;
     this.publish();
     this.notePaneDrawn();
     // The template's tweak sync: only when a tweak changed, never against the window's own state.
@@ -804,7 +810,7 @@ export class App extends React.Component<AppProps, AppState> {
       const rowW = Array.from({ length: rows }, (_, i) => state.rowW[i] || 1);
       this.setState({ cols, rows, colW, rowW, panes });
     }
-    if (changed("view") && pv && (pv === "revealed") !== metaBase(state.vs)) this.setState({ vs: show(pv === "revealed" ? "meta" : "panes") });
+    if (changed("view") && pv && (pv === "revealed") !== metaBase(state.vs)) { this.viewCause = ViewChangedCause.TWEAK; this.setState({ vs: show(pv === "revealed" ? "meta" : "panes") }); }
   }
   /** PANE_CLOSED, PANE_OPENED, PANE_BOUND and PANE_FOCUSED for what this commit changed. */
   private notePanes(prev: AppState): void {
@@ -876,13 +882,14 @@ export class App extends React.Component<AppProps, AppState> {
 
   // ⌘M and View ▸ Meta (UI sprint 147). Into meta is refused while the focused pane is still at its
   // picker with no session; back to the panes always works.
-  private toggleMeta(): void {
+  private toggleMeta(cause: ViewChangedCause): void {
     const s = this.state;
     if (!metaBase(s.vs)) {
       const fp = this.pane(s.focused);
       const fs = this.snap(s.focused);
       if (fp && fp.unbound && !(fs && fs.sessionId)) return;
     }
+    this.viewCause = cause;
     this.setState((st) => ({ vs: toggleMeta(st.vs) }));
   }
   // UI sprint 145: what the top bar calls a pane: its session's name when it has one, else its label.
@@ -890,7 +897,8 @@ export class App extends React.Component<AppProps, AppState> {
     return this.snap(pane.id)?.sessionName || pane.name;
   }
   // Sprint 085: the records page reads the sessions again on every open; boot's one read can miss.
-  private toggleSurface(name: Page): void {
+  private toggleSurface(name: Page, cause: ViewChangedCause): void {
+    this.viewCause = cause;
     this.setState((s) => ({ vs: togglePage(s.vs, name) }));
     if (name === Surface.Records) {
       const vm = vmOf();
@@ -1029,12 +1037,13 @@ export class App extends React.Component<AppProps, AppState> {
       // UI sprint 139 (U125): the model chip opens a card, as the workspace chip does; it picks nothing.
       toggleModelCard: () => this.setState((s) => ({ ddFor: s.ddFor === fp.id ? null : fp.id, wsFor: null })),
       toggleWsCard: () => this.setState((s) => ({ wsFor: s.wsFor === fp.id ? null : fp.id, ddFor: null })),
-      openRecords: () => this.toggleSurface(Surface.Records),
-      openStudio: () => this.toggleSurface(Surface.Studio),
+      openRecords: () => this.toggleSurface(Surface.Records, ViewChangedCause.BUTTON),
+      openStudio: () => this.toggleSurface(Surface.Studio, ViewChangedCause.BUTTON),
       // Meta → panes always works; panes → meta waits until the focused pane leaves its picker.
       toggleReveal: () => {
         const s = this.state;
         if (!metaBase(s.vs)) { const p = this.pane(s.focused); if (p && p.unbound) return; }
+        this.viewCause = ViewChangedCause.BUTTON;
         this.setState((st) => ({ vs: toggleMeta(st.vs) }));
       },
     };

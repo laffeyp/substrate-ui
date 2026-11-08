@@ -5,7 +5,7 @@ Regenerate: python3 scripts/gen_signals.py. tests/test_signals_generated.py fail
 
 from enum import StrEnum
 
-VOCAB_VERSION = "0.16"
+VOCAB_VERSION = "0.17"
 
 
 class Signal(StrEnum):
@@ -176,6 +176,8 @@ class ViewChangedCause(StrEnum):
     SPLIT = "split"
     RECORDS_OPEN = "records_open"
     CLOSE = "close"
+    LANGUAGE = "language"
+    TWEAK = "tweak"
 
 
 class KeyRoutedTarget(StrEnum):

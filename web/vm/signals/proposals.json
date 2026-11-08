@@ -832,6 +832,16 @@
       "rationale": "Every tag name and enum value was a raw string at its call site, checked only at runtime by three hand-written checkers. Generated types make the compiler the check; the runtime checkers, their rules and their rejection record go.",
       "ratified": true,
       "ratified_by": "agent-resolved 2026-11-07, sprint 363"
+    },
+    {
+      "id": "P-0.17-VIEW-CAUSES",
+      "kind": "PAYLOAD_FIELD_PROPOSED",
+      "layer": 2,
+      "element": "VIEW_CHANGED.cause gains language and tweak",
+      "source": "web/app/App.tsx: the shell subscription opens meta on the language lens when the focused pane's languageOpenTick rises, which /language bumps (UI sprint 172); componentDidUpdate sets the view from the design tool's view prop (TWEAK_PROPS.view)",
+      "rationale": "Two paths change the open view with none of the six causes; without a value for each, those changes would go unwritten.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-07, sprint 366"
     }
   ]
 }
