@@ -836,6 +836,13 @@ export class SessionController {
   async attachExisting(sessionId: string): Promise<void> {
     if (!sessionId) return;
     this.emit(Signal.SESSION_ATTACH_STARTED, { session_id: sessionId });
+    // A pane switching to another session stops drawing the one it held now, not when the manifest
+    // arrives (sprint 379; S5, v0.21): the records page's open drew the old session's rows under the
+    // new one's attach for the length of this fetch.
+    if (this.snap.sessionId && this.snap.sessionId !== sessionId) {
+      if (this.unsubscribeStream) { this.unsubscribeStream(); this.unsubscribeStream = null; }
+      this.patch({ transcript: [], rawEnvelopes: [] });
+    }
     // Look up the manifest so the snapshot's name/driver/workspace
     // fields carry through the same way openSession does.
     const result = await this.client.fetchJson<{

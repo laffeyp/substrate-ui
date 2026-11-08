@@ -7,6 +7,8 @@
 //   once the renderer loads.
 // No controller tags are declared: a deep link drives the shell, not a session.
 
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 import { _electron as electron } from "playwright";
 import type { Flow, EmittedRecord, Defect, FlowContext } from "./lib/flow";
 import { launchArgs, waitForApp } from "./lib/electron";
@@ -74,6 +76,15 @@ export const flow: Flow = {
           return !!m && Number(m[1]) >= 1;
         };
         if (!(await until(flushed, 10_000))) throw new Error("cold: main-side buffered-flush log line not observed");
+        // Sprint 374: main holds a record asked for before its trace opens, and writes it after
+        // APP_BOOTED, which stays main's first record (S1); the link is in the trace, not dropped.
+        await app.close();
+        const traces = join(launch.state, "electron", "logs", "traces");
+        const boot = readdirSync(traces).sort().pop()!;
+        const names = readFileSync(join(traces, boot, "main.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => (JSON.parse(l) as { name: string }).name);
+        if (names[0] !== "APP_BOOTED" || !names.includes("DEEP_LINK_RECEIVED") || names.includes("INVARIANT_BROKEN")) {
+          throw new Error(`cold: main.jsonl opens ${names.slice(0, 4).join(", ")}; want APP_BOOTED first, a DEEP_LINK_RECEIVED, no INVARIANT_BROKEN`);
+        }
       } catch (err) {
         defects.push({
           category: "electron_deeplink_cold_failed",

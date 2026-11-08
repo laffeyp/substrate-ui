@@ -27,7 +27,10 @@ export interface Launch {
  *  as script, which is how Playwright runs a gate's string predicates (`waitForFunction("...")`), so
  *  gates run with Playwright's bypass by default. `harness/shakeout/csp_holds.ts` asks for "enforce"
  *  and checks the policy itself. */
-export function launchArgs(opts: { roster?: "offline" | "live"; csp?: "bypass" | "enforce" } = {}): Launch {
+/** `plantsBreaks`: the launch plants rule breaks on purpose (harness/shakeout/invariant_signals.ts).
+ *  Every other launch fails its gate at cleanup when main.jsonl holds an INVARIANT_BROKEN: the app broke
+ *  a rule of its own vocabulary while the gate drove it (plan 2026-11-05-sdd-signals item 7, sprint 380). */
+export function launchArgs(opts: { roster?: "offline" | "live"; csp?: "bypass" | "enforce"; plantsBreaks?: boolean } = {}): Launch {
   const dir = scratchDir("electron-shakeout-");
   const state = scratchDir("electron-shakeout-state-");
   const env = { ...process.env, SUBSTRATE_HOME: state } as Record<string, string>;
@@ -43,11 +46,33 @@ export function launchArgs(opts: { roster?: "offline" | "live"; csp?: "bypass" |
       : { args: [REPO_ROOT, "--user-data-dir=" + dir], env, bypassCSP },
     state,
     cleanup: () => {
+      const broken = opts.plantsBreaks ? [] : brokenRules(state);
       for (const d of [dir, state]) {
         try { rmSync(d, { recursive: true, force: true }); } catch { /* best-effort */ }
       }
+      if (broken.length) {
+        console.error(`FAIL — the app emitted ${broken.length} INVARIANT_BROKEN: ${broken.join("; ")}`);
+        process.exit(1);
+      }
     },
   };
+}
+
+/** Every INVARIANT_BROKEN in a launch's main.jsonl files, as "rule state" lines. */
+function brokenRules(state: string): string[] {
+  const traces = join(state, "electron", "logs", "traces");
+  if (!existsSync(traces)) return [];
+  const out: string[] = [];
+  for (const boot of readdirSync(traces)) {
+    const file = join(traces, boot, "main.jsonl");
+    if (!existsSync(file)) continue;
+    for (const line of readFileSync(file, "utf8").split("\n")) {
+      if (!line.includes('"INVARIANT_BROKEN"')) continue;
+      const p = (JSON.parse(line) as { payload: { rule: string; context: { state: unknown } } }).payload;
+      out.push(`${p.rule} ${JSON.stringify(p.context.state).slice(0, 300)}`);
+    }
+  }
+  return out;
 }
 
 /** A window's records from the launch's latest boot (sprint 360). Read after the app has closed, so

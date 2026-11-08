@@ -14,13 +14,16 @@ import { BrowserSubstrateClient, PaneRegistry } from "./vm";
 import { mirrorSnapshot, sendCommand } from "./app/state/shell";
 import { App } from "./app/App";
 import { emit as emitSignal, VOCAB_VERSION } from "./vm/instrumentation/sdd";
-import { RecordOpenedHow, Signal } from "./vm/signals.gen";
+import { PaneOpenedCause, RecordOpenedHow, Signal } from "./vm/signals.gen";
 
 function boot(): void {
   // The window's first record (S1): before the registry and pane 1's controller can write any.
   emitSignal(Signal.WINDOW_BOOTED, { vocab_version: VOCAB_VERSION });
   const registry = new PaneRegistry({ makeClient: () => new BrowserSubstrateClient() });
   const controller = registry.spawn(1); // pane 1 is the initial view
+  // Pane 1 is created here, before the App draws it, so its PANE_OPENED is written here (sprint 377): a
+  // reload's attach below is pane 1's session, and its record must come after the pane's (Layer 3).
+  emitSignal(Signal.PANE_OPENED, { pane_id: 1, cause: PaneOpenedCause.START }, { pane_id: 1 });
   (window as unknown as { __vm: PaneRegistry }).__vm = registry;
 
   // Ring-buffer every pane's typed events. The parity harness reads

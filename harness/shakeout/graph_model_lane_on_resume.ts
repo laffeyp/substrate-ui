@@ -14,7 +14,7 @@
 //   3. side view: the model lane holds three segments (two closed stretches and the open one).
 
 import { _electron as electron } from "playwright";
-import { bindPaneAsUser, launchArgs, waitForApp, waitForReattached } from "./lib/electron";
+import { bindPaneAsUser, launchArgs, waitForApp, waitForReattached, windowRecords } from "./lib/electron";
 
 type Pane = {
   snapshot(): { sessionId: string | null; transcript: { role: string; text: string }[] };
@@ -84,6 +84,13 @@ async function main(): Promise<void> {
     });
     if (modelSegs !== 3) throw new Error(`side graph model lane has ${modelSegs} segments; expected 3 (two ended stretches and the open one)`);
 
+    // Sprint 377: after the reload, pane 1 is opened before its session is attached (Layer 3), in the
+    // trace read once the app has closed.
+    await app.close();
+    const recs = windowRecords(launch);
+    const boots = recs.map((r, i) => (r.name === "WINDOW_BOOTED" ? i : -1)).filter((i) => i >= 0);
+    const after = recs.slice(boots[boots.length - 1]).filter((r) => r.pane_id === 1 && (r.name === "PANE_OPENED" || r.name === "SESSION_ATTACH_STARTED")).map((r) => r.name);
+    if (boots.length < 2 || after.join(",") !== "PANE_OPENED,SESSION_ATTACH_STARTED") throw new Error(`after the reload pane 1 wrote ${after.join(", ") || "neither"}; want PANE_OPENED, then SESSION_ATTACH_STARTED (${boots.length} WINDOW_BOOTED)`);
     console.log(`graph_model_lane_on_resume: ok — ${rows.length - firstEnd - 1} rows after the first end carry the model lane; side model lane has ${modelSegs} segments (${sid})`);
     code = 0;
   } catch (e) {

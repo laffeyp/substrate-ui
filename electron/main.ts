@@ -20,6 +20,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { installMenu } from "./menu";
 import { commitsFromPlist } from "./build_commits";
+import { createChecker, type Broken, type CheckedRecord } from "./invariants";
 import { Signal, VOCAB_VERSION, AppBootedHomeKind, AppQuitRequestedCause, DeepLinkReceivedLinkKind, NativeDialogClosedDialog, NativeDialogClosedOutcome, NavigationBlockedTargetKind, TraceLostProcess, TraceOpenedProcess, WindowOpenedCause, type SignalPayloads } from "./signals.gen";
 
 // ── The trace (vocabulary v0.7; plan process/planning/2026-11-05-sdd-signals, item 2) ─────────────
@@ -36,7 +37,7 @@ import { Signal, VOCAB_VERSION, AppBootedHomeKind, AppQuitRequestedCause, DeepLi
 // SUBSTRATE_TRACE_CAP (bytes) is a test seam: harness/shakeout/trace_files.ts sets it low to force losses.
 const TRACE_FILE_CAP = Number(process.env.SUBSTRATE_TRACE_CAP) > 0 ? Number(process.env.SUBSTRATE_TRACE_CAP) : Infinity;
 const BOOT_ID = new Date().toISOString().replace(/[-:.]/g, "").replace("T", "-").slice(0, 15) + "-" + Math.random().toString(16).slice(2, 8);
-const trace: { [key: string]: any } = { dir: null, files: new Map(), written: 0, lost: 0, mainSeq: 0, windowSeq: new Map(), windowsOpened: 0, serverLost: 0 };
+const trace: { [key: string]: any } = { dir: null, opened: false, held: [], files: new Map(), written: 0, lost: 0, mainSeq: 0, windowSeq: new Map(), windowsOpened: 0, serverLost: 0 };
 
 function traceFile(name) {
   let f = trace.files.get(name);
@@ -74,6 +75,47 @@ function reportLoss(name, processName: TraceLostProcess, wrote) {
   mainRecord(Signal.TRACE_LOST, { process: processName, count });
 }
 
+// The runtime checker (plan item 5, sprint 373; electron/invariants.ts): every record main writes, its
+// own and each window's, goes past the vocabulary's rules in the order it is written, whether or not
+// the write succeeded; a record that breaks one is followed in main.jsonl by an INVARIANT_BROKEN.
+// The timing rules (sprint 375) are also checked on a timer, so a wait that no record ends still
+// breaks when its window passes; the timer does not hold the app open.
+const checker = createChecker();
+function writeBroken(found: Broken[]) {
+  for (const b of found) mainRecord(Signal.INVARIANT_BROKEN, { rule: b.rule, context: b.context }, b.window_id);
+}
+// The server writes server.jsonl itself (server.py _Trace). Its records reach the checker from that
+// file as it grows (sprint 376): read before each record main checks, on the timer, and at the close.
+// A line cut short by the read waits, as bytes, for the rest.
+const serverTail = { offset: 0, rest: Buffer.alloc(0), reading: false };
+function readServerRecords() {
+  if (!trace.dir || serverTail.reading) return;
+  serverTail.reading = true;
+  let fd: number | null = null;
+  try {
+    fd = fs.openSync(path.join(trace.dir, "server.jsonl"), "r");
+    const size = fs.fstatSync(fd).size;
+    if (size <= serverTail.offset) return;
+    const chunk = Buffer.alloc(size - serverTail.offset);
+    fs.readSync(fd, chunk, 0, chunk.length, serverTail.offset);
+    serverTail.offset = size;
+    const bytes = Buffer.concat([serverTail.rest, chunk]);
+    const end = bytes.lastIndexOf(10);
+    serverTail.rest = bytes.subarray(end + 1);
+    for (const line of bytes.subarray(0, end + 1).toString("utf8").split("\n")) {
+      if (!line) continue;
+      let rec: CheckedRecord;
+      try { rec = JSON.parse(line); } catch { continue; }
+      writeBroken(checker.see(rec));
+    }
+  } catch { /* no server.jsonl yet */ } finally {
+    if (fd !== null) fs.closeSync(fd);
+    serverTail.reading = false;
+  }
+}
+function checkRecord(rec: CheckedRecord) { readServerRecords(); writeBroken(checker.see(rec)); }
+setInterval(() => { if (trace.opened && !trace.closed) { readServerRecords(); writeBroken(checker.tick()); } }, 250).unref();
+
 let inMainRecord = false;
 // Main's records, typed by tag from the vocabulary (signals.gen.ts, sprint 363). windowId: the window a
 // record is about (WINDOW_*, NATIVE_DIALOG_CLOSED, MENU_COMMAND_SENT, ...), in the record context's
@@ -81,8 +123,17 @@ let inMainRecord = false;
 function mainRecord<K extends Signal>(tag: K, payload: SignalPayloads[K], windowId: number | null = null) {
   // After the closing record nothing can report a loss in the trace; say it on stderr (substrate.log).
   if (trace.closed) { process.stderr.write("[electron] trace closed; " + tag + " not written\n"); return false; }
-  const rec = { boot_id: BOOT_ID, process: "main", proc_seq: trace.mainSeq++, wall: new Date().toISOString(), window_id: windowId, name: tag, payload };
-  return traceWrite("main.jsonl", rec);
+  // Before the trace opens (an open-url on a cold launch comes before whenReady, sprint 374), a record
+  // is held, and openTrace writes it after APP_BOOTED and TRACE_OPENED, so APP_BOOTED stays first (S1).
+  if (!trace.opened) { trace.held.push({ tag, payload, windowId, wall: new Date().toISOString() }); return true; }
+  return writeMainRecord(tag, payload, windowId, new Date().toISOString());
+}
+
+function writeMainRecord(tag, payload, windowId, wall) {
+  const rec = { boot_id: BOOT_ID, process: "main", proc_seq: trace.mainSeq++, wall, window_id: windowId, name: tag, payload };
+  const wrote = traceWrite("main.jsonl", rec);
+  checkRecord(rec);
+  return wrote;
 }
 
 // main's own records; a loss on main.jsonl is reported by the next main record that is written.
@@ -116,6 +167,10 @@ function buildCommits() {
 }
 
 function openTrace() {
+  // The commits first: buildCommits runs git, and nothing may be written between the folder and
+  // APP_BOOTED.
+  const commits = buildCommits();
+  trace.opened = true;
   try {
     const root = path.join(app.getPath("logs"), "traces");
     fs.mkdirSync(root, { recursive: true });
@@ -123,15 +178,19 @@ function openTrace() {
     fs.mkdirSync(trace.dir, { recursive: true });
   } catch (err) {
     trace.dir = null;
-    process.stderr.write("[electron] trace folder not created: " + err.message + "\n");
+    trace.lost += trace.held.length;
+    process.stderr.write("[electron] trace folder not created: " + err.message + "; " + trace.held.length + " held record(s) not written\n");
+    trace.held = [];
     return;
   }
-  const commits = buildCommits();
   traceEmit(Signal.APP_BOOTED, {
     app_version: app.getVersion(), app_commit: commits.app_commit, kernel_commit: commits.kernel_commit,
     vocab_version: VOCAB_VERSION, packaged: app.isPackaged, home_kind: process.env.SUBSTRATE_HOME ? AppBootedHomeKind.ENV : AppBootedHomeKind.DEFAULT,
   });
   traceEmit(Signal.TRACE_OPENED, { process: TraceOpenedProcess.MAIN });
+  const held = trace.held;
+  trace.held = [];
+  for (const h of held) writeMainRecord(h.tag, h.payload, h.windowId, h.wall);
   process.stderr.write("[electron] trace: " + trace.dir + "\n");
 }
 
@@ -147,6 +206,7 @@ ipcMain.on("native:signal", (event, record) => {
   const rec = { boot_id: BOOT_ID, process: "window", proc_seq: typeof r.proc_seq === "number" ? r.proc_seq : seq, wall: new Date().toISOString(), window_id: windowId, ...r };
   const wrote = traceWrite(key, rec);
   reportLoss(key, TraceLostProcess.WINDOW, wrote);
+  checkRecord(rec);
 });
 
 // F7. Electron reads app.getName() from package.json's `productName`,
@@ -602,6 +662,9 @@ let appLogPath = null;
 // onBackendDied, whose app.exit skips will-quit.
 function closeTrace() {
   if (!trace.dir || trace.closed) return;
+  // A timing rule whose window passed before the close is written before the closing record (S2).
+  readServerRecords();
+  writeBroken(checker.tick());
   traceEmit(Signal.APP_QUIT_COMPLETED, {
     server_exit_code: trace.serverExitCode ?? null, windows_opened: trace.windowsOpened,
     signals_written: trace.written, signals_lost: trace.lost,

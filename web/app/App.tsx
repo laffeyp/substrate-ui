@@ -616,7 +616,8 @@ export class App extends React.Component<AppProps, AppState> {
   }
 
   override componentDidMount(): void {
-    for (const p of this.state.panes) emitSignal(Signal.PANE_OPENED, { pane_id: p.id, cause: PaneOpenedCause.START }, { pane_id: p.id });
+    // Pane 1's PANE_OPENED is written by web/reveal.ts, where pane 1 is created (sprint 377).
+    for (const p of this.state.panes) if (p.id !== 1) emitSignal(Signal.PANE_OPENED, { pane_id: p.id, cause: PaneOpenedCause.START }, { pane_id: p.id });
     // A reload's ?session= is attached to pane 1 by web/reveal.ts, outside the window's controls.
     if (new URLSearchParams(window.location.search).get("session")) this.bindHow.set(1, PaneBoundHow.RESTORE);
     // 19c settings: theme and type size, per viewer (web/app/state/settings.ts, sprint 204).

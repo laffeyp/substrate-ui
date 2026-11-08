@@ -872,6 +872,56 @@
       "rationale": "Settings draws as a dialog, which DIALOG_OPENED writes; no page draws it.",
       "ratified": true,
       "ratified_by": "agent-resolved 2026-11-07, sprint 371"
+    },
+    {
+      "id": "P-0.20-INVARIANT-RULE-IDS",
+      "kind": "PAYLOAD_FIELD_PROPOSED",
+      "layer": 2,
+      "element": "INVARIANT_BROKEN.rule names an evidence constraint as well as a Layer 4-5 rule",
+      "source": "versions/0.19.json evidence_constraints E8: enforceability names 'the runtime checker of plan item 5'; INVARIANT_BROKEN.field_types.rule allowed only state_transitions and temporal_invariants ids",
+      "rationale": "E8 is assigned to the runtime checker, so the checker's incident must be able to name it.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-08, sprint 373"
+    },
+    {
+      "id": "P-0.21-S5-REPLACES",
+      "kind": "INVARIANT_PROPOSED",
+      "layer": 5,
+      "element": "S5 restated: a pane's ack or attach replaces its session; the pane's later row records name the session it holds",
+      "source": "web/app/RecordsPage.tsx and web/vm/session_controller.ts attachExisting: the records page attaches another session into a pane that holds one; the runtime checker (sprint 373) broke the v0.20 statement on view_signals.ts, tool_output_toggle.ts and both_session_shapes.ts, all normal runs",
+      "rationale": "The v0.20 statement forbade a second ack or attach before SESSION_ENDED_LOCAL or PANE_CLOSED, which the app does by design; one session at a time is what a pane's rows can show, so the rule checks that they name the session the pane holds.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-08, sprint 373"
+    },
+    {
+      "id": "P-0.22-S7-WINDOW-SIDE",
+      "kind": "INVARIANT_PROPOSED",
+      "layer": 5,
+      "element": "S7 pairs each window SESSION_OPEN_ACKED with one server SESSION_CREATED, not each server creation with a window ack",
+      "source": "server.py: /api/session serves any client, and API_REFUSED.area names mcp and agent routes; harness/shakeout/page_signals.ts creates a session with a plain fetch; SESSION_CREATED is written before the response (server.py, the POST /api/session handler)",
+      "rationale": "A session another client opens has no window ack, by design; every window ack answers a server creation.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-08, sprint 376"
+    },
+    {
+      "id": "P-0.22-S8-SESSION-COUNT",
+      "kind": "INVARIANT_PROPOSED",
+      "layer": 5,
+      "element": "S8's server half counts a session's window TURN_ACKs against its server TURN_ACCEPTEDs",
+      "source": "versions/0.21.json TURN_ACK payload is [session_id] (no turn_index); TURN_ACCEPTED is written before the kernel takes the turn (server.py turn route); turns posted by other clients have no window ack",
+      "rationale": "The window's ack carries no turn_index to pair on, and other clients' turns have no window ack, so the rule is that a session's window acks never outnumber the server's accepted turns.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-08, sprint 376"
+    },
+    {
+      "id": "P-0.23-PANE-ONE-OPENED",
+      "kind": "PAYLOAD_FIELD_PROPOSED",
+      "layer": 6,
+      "element": "PANE_OPENED for pane 1 is emitted where pane 1 is created, web/reveal.ts",
+      "source": "web/reveal.ts spawns pane 1's controller and, on a reload, attaches its session before the App mounts; the App's mount wrote pane 1's PANE_OPENED after that SESSION_ATTACH_STARTED (found by the runtime checker, sprint 373)",
+      "rationale": "PANE_OPENED means a pane was created; pane 1 is created in reveal.ts, and a session tag must not come before its pane's open tag (Layer 3: pane_session's parent is pane).",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-08, sprint 377"
     }
   ]
 }
