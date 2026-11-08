@@ -7,7 +7,7 @@
   "main": "dist-main/main.js",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && tsc -p harness && tsc -p electron && npm run lint && vite build",
+    "build": "tsc --noEmit && tsc -p harness && rm -rf dist-main && tsc -p electron && uv run --project ../substrate mypy server.py && npm run lint && vite build",
     "typecheck": "tsc --noEmit",
     "lint": "eslint web/",
     "smoke:vm": "npx tsx harness/vm_smoke.ts",
@@ -16,7 +16,7 @@
     "shakeout": "npx tsx harness/shakeout/run.ts",
     "signals": "npx tsx web/vm/tools/check-vocabulary-parity.ts",
     "test:unit": "npm run --silent signals && npx tsx --test web/reveal/__tests__/*.spec.ts web/app/__tests__/*.spec.ts",
-    "electron": "tsc -p electron && SUBSTRATE_HOME=$HOME/.substrate-dev electron .",
+    "electron": "rm -rf dist-main && tsc -p electron && SUBSTRATE_HOME=$HOME/.substrate-dev electron .",
     "electron:smoke": "SHAKEOUT_AXIS=C SHAKEOUT_RUNS=1 npx tsx harness/shakeout/run.ts",
     "smoke:packaged": "npx tsx harness/shakeout/packaged_app_smoke.ts",
     "pack:runtime": "bash scripts/fetch-python-runtime.sh",

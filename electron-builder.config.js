@@ -58,6 +58,7 @@ module.exports = {
     "server.py",
     "session_errors.py",
     "demo_topologies.py",
+    "signals_gen.py",
     // Python's http server serves the reveal shell from disk via
     // `Path(__file__).parent / "web" / "dist"`. Inside asar the
     // files are compressed archive members Python can't stat.
@@ -72,6 +73,7 @@ module.exports = {
     "server.py",
     "session_errors.py",
     "demo_topologies.py",
+    "signals_gen.py",
     "package.json",
     "!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}",
     "!**/node_modules/*/{test,__tests__,tests,powered-test,example,examples}",

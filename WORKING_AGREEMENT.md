@@ -98,7 +98,7 @@ Read each hit: on 2026-10-11 the eight hits were docstrings where "agent" names 
 
 *From `substrate-ui/`. Report exit codes; do not silently retry.*
 
-- **Build:** `npm run build` — tsc, the harness tsc, eslint, then Vite into `web/dist/` (the server serves `web/dist/`). Expected exit 0.
+- **Build:** `npm run build` — tsc, the harness tsc, Electron main's tsc into a cleared `dist-main/`, mypy on `server.py` (`uv run --project ../substrate mypy server.py`), eslint, then Vite into `web/dist/` (the server serves `web/dist/`). Expected exit 0.
 - **Generated kernel names:** `uv run --project ../substrate python scripts/gen_kinds.py` after any kernel vocabulary change; `--check` exits 1 when a file is stale.
 - **Unit specs, with the signal-vocabulary check:** `npm run test:unit` — runs `npm run signals` (every `emit` names a locked tag) and then the specs. Expected exit 0.
 - **Python tests:** `npm run test:py`. Expected exit 0.
@@ -170,6 +170,7 @@ When a fold-pass edit touches surfaces the closed card did not enumerate, it lan
 
 | Date | Sprint | What was bypassed | Why |
 |---|---|---|---|
+| 2026-11-07 | 364 | Hard rule 6: four files (`electron-builder.config.js`, `package.json`, `server.py`, this file's build line). | The packaging fix and the server's type check close the same gap left by sprint 363, which shipped `signals_gen.py` with no packager entry and no type checker; mypy cannot join the build until its 12 errors are fixed. |
 | 2026-11-07 | 363 | Hard rule 6: one card covered Electron main's move to TypeScript, the generator, the typed emitters in three processes, every emit call site, the checker's removal and the gates that used it. | A call site moved to generated names compiles only once its emitter is typed, and an emitter typed by tag leaves the runtime checker nothing to check; the parts do not stand alone. |
 | 2026-11-06 | 358 | Hard rule 6: three files (`session_controller.ts`, `Row.tsx`, `Transcript.tsx`). | A skip without its draw, or a draw without its fold, leaves T4 unanswerable; the scroll tag was split off to sprint 359. |
 | 2026-11-06 | 355 | Hard rule 6 (two files a sprint): one card covered the vocabulary change, the shared checker specification, the three checkers, the build posture in each process, the linter and the gates, about twenty files. | The three checkers implement one specification and one test runs it against all of them, so a split would have left two of the three processes unchecked between sprints and the cross-run test without its subjects. The dual and observation contracts applied to the whole. |

@@ -1439,3 +1439,9 @@ Two mount divs land in `web/reveal.html`: `<div id="vm-transcript-mount">` insid
   - **Checks:** all 66 gates 0 from source; unit 147; Python 297 passed, 5 skipped; signals 0; the generated files current.
   - **Open:** `server.py` has no type checker; mypy at default settings reports 12 errors there, none about signals, to be fixed as their own change before mypy joins the build. The packaged build has not been run since the TypeScript main.
   - **Cards:** `process/sprints/sprint-362-pane-drawn.md`, `process/sprints/sprint-363-vocabulary-names-typed.md`.
+- **2026-11-07 built** — Sprint 364 closed: the packaged app starts again, and the build type-checks `server.py`.
+  - **Fault found:** the sprint 363 package (`ce3e66c`) did not start. Its server exited with `ModuleNotFoundError: No module named 'signals_gen'`, because `electron-builder.config.js` did not list the generated file. That package also carried a stale `dist-main/check_signal.js`.
+  - **Fix:** `signals_gen.py` is in `asarUnpack` and `files`, and `dist-main/` is cleared before main's compile.
+  - **Server types:** mypy's 12 errors in `server.py` are fixed with casts and annotations only. `npm run build` now runs `uv run --project ../substrate mypy server.py`, and a planted `Signal.TURN_ACCEPTD` fails it.
+  - **Checks:** build 0; unit 147; Python 297 passed, 5 skipped; ruff 0; the six packaged gates 0.
+  - **Card:** `process/sprints/sprint-364-pack-signals-gen-and-server-types.md`.

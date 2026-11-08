@@ -41,7 +41,7 @@ from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from collections.abc import Callable
-from typing import Any
+from typing import Any, cast
 from urllib.parse import parse_qs, unquote, urlparse
 
 import msgspec
@@ -78,6 +78,7 @@ from substrate.app import (
     FreshSessionRequiresUserMessage,
     NameCollision,
     SessionEndedMidTurn,
+    SessionManifest,
     SessionRegistry,
     SessionStatus,
     TornRecordOnResume,
@@ -400,7 +401,8 @@ def _load_daemon_config(config_path: Path | None = None) -> dict[str, Any]:
     except (OSError, tomllib.TOMLDecodeError) as exc:
         print(f"daemon config at {path}: {api.describe_error(exc)}; using defaults", flush=True)
         return defaults
-    session_section = data.get("session") if isinstance(data.get("session"), dict) else {}
+    section = data.get("session")
+    session_section = section if isinstance(section, dict) else {}
     cap = session_section.get("turn_queue_cap", defaults["turn_queue_cap"])
     if isinstance(cap, int) and cap >= 1:
         defaults["turn_queue_cap"] = cap
@@ -805,9 +807,9 @@ def _build_session_topology_from_manifest(
     # `~/.substrate/sandbox`; a CLI driver given that as its cwd fails with FileNotFoundError on
     # every turn. Resolve it once, by the open's own rule, for every use below; the manifest on
     # disk is left as it is.
-    if isinstance(manifest, msgspec.Struct) and str(manifest.workspace).startswith("~"):
+    if isinstance(manifest, msgspec.Struct) and str(cast(Any, manifest).workspace).startswith("~"):
         manifest = msgspec.structs.replace(
-            manifest, workspace=_resolve_workspace_arg(manifest.workspace)
+            manifest, workspace=_resolve_workspace_arg(cast(Any, manifest).workspace)
         )
 
     responder = _daemon_driver_resolver(
@@ -848,14 +850,14 @@ def _build_session_topology_from_manifest(
         "list_records": make_list_records(_sessions_base()),
         "list_topologies": make_list_topologies(),
         "list_applications": make_list_applications(app.applications),
-        "list_sessions": make_list_sessions(app.registry),
+        "list_sessions": make_list_sessions(cast(SessionRegistry, app.registry)),
         # Sprint 053: fold `delegate` in, closing the Sprint 228 card-vs-implementation
         # drift the shakeout (sprint 052) surfaced. Sprint 228's card specified eight
         # substrate-toolkit tools including delegate; commit c455b5a shipped seven.
         # Kernel K333: every child is a session in the registry, on this session's model unless
         # the call names another, with this session's bundle, controls and tools.
         "delegate": make_delegate(
-            session_registry=app.registry,
+            session_registry=cast(SessionRegistry, app.registry),
             parent_session_id=manifest.session_id,
             parent_record_root=Path(manifest.record_root),
         ),
@@ -2458,7 +2460,7 @@ def _records_index(app: App, exclude_sessions: bool = False) -> list[dict[str, o
     return out
 
 
-def _io(events: list[dict[str, object]]) -> dict[str, object]:
+def _io(events: list[dict[str, Any]]) -> dict[str, object]:
     """The I/O surface, derived from the record (nothing invented, §7.1): INPUT = the seed the run
     ran on (the initial firing's resolved_input — often null for a build-parameterized topology);
     OUTPUTS = the application events as artifacts (each citing its seq); finalisation = the
@@ -2662,7 +2664,7 @@ class Handler(BaseHTTPRequestHandler):
         to forge; file permissions guard it."""
         if isinstance(self.server, _UnixHTTPServer):
             return True
-        port = self.server.server_address[1]
+        port = cast(tuple[Any, ...], self.server.server_address)[1]
         allowed = {f"127.0.0.1:{port}", f"localhost:{port}", f"[::1]:{port}"}
         return self.headers.get("Host", "") in allowed
 
@@ -3210,7 +3212,9 @@ class Handler(BaseHTTPRequestHandler):
         # driver whose profile takes slash commands gets it, as written (session vocabulary
         # § P.11); the model's history leaves the turn out.
         if body.get("driver_command"):
-            driver_name = self.app.registry.get(session_id).driver
+            driver_name = cast(
+                SessionManifest, cast(SessionRegistry, self.app.registry).get(session_id)
+            ).driver
             if not (KNOWN_CLI_ADAPTERS.get(driver_name) or {}).get("slash_commands"):
                 self._error(400, f"This driver has no slash commands ({driver_name}).")
                 return
@@ -3249,7 +3253,7 @@ class Handler(BaseHTTPRequestHandler):
         def _build(_manifest: Any, record_root_locked: Path) -> Any:
             # F14: use the registry's in-memory counter instead of scanning
             # the entire record for the tail UserMessage.turn_index.
-            next_turn_index = self.app.registry.next_turn_index(session_id)
+            next_turn_index = cast(SessionRegistry, self.app.registry).next_turn_index(session_id)
             # The turn is handed to the kernel now, under the session's lock (TURN_ACCEPTED).
             TRACE.emit(
                 Signal.TURN_ACCEPTED, {"session_id": session_id, "turn_index": next_turn_index}
@@ -4295,7 +4299,7 @@ class Handler(BaseHTTPRequestHandler):
         from substrate.topologies.session import UserMessage as SessionUserMessage
 
         def _build(_manifest: Any, _record_root: Path) -> Any:
-            next_turn_index = self.app.registry.next_turn_index(session_id)
+            next_turn_index = cast(SessionRegistry, self.app.registry).next_turn_index(session_id)
             # The turn is handed to the kernel now, under the session's lock (TURN_ACCEPTED).
             TRACE.emit(
                 Signal.TURN_ACCEPTED, {"session_id": session_id, "turn_index": next_turn_index}
