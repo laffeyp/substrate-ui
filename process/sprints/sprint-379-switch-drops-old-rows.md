@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 379
-status: active
+status: closed
 phase: SDD re-centre
 pass_kind: functional
 ---

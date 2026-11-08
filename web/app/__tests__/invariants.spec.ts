@@ -266,3 +266,20 @@ test("each planted break of a server pairing breaks its rule", () => {
   at(15_001);
   assert.deepStrictEqual(c.tick().map((b) => b.rule), ["T2"]);
 });
+
+test("from the quit on, only the quit's own wait stays: a window's waits end and none opens", () => {
+  const { c, at } = clocked();
+  const seen: Broken[] = [];
+  seen.push(...c.see(win("STREAM_ENVELOPE_APPENDED", { seq: 38, kind: EnvelopeKind.SessionEnded })));
+  at(500);
+  seen.push(...c.see(main("APP_QUIT_REQUESTED", { cause: "menu" })));
+  seen.push(...c.see(win("STREAM_ENVELOPE_APPENDED", { seq: 39, kind: EnvelopeKind.RunFinalised })));
+  at(20_000); seen.push(...c.tick());
+  assert.deepStrictEqual(seen.map((b) => b.rule), []);
+  at(46_000);
+  assert.deepStrictEqual(c.tick().map((b) => b.rule), ["T3"], "the quit's own wait still breaks");
+  const late = clocked();
+  late.c.see(win("STREAM_ENVELOPE_APPENDED", { seq: 1, kind: EnvelopeKind.ModelReply }));
+  late.at(1_500);
+  assert.deepStrictEqual(late.c.see(main("APP_QUIT_REQUESTED", { cause: "menu" })).map((b) => b.rule), ["T4"], "a wait late before the quit breaks");
+});

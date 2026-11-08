@@ -33,8 +33,11 @@
 // clock as the records reach the checker; wall time is never read. A rule breaks when its window
 // passes with no answer, found by the next record or by tick(), which main calls on a timer and before
 // its closing record. A pane's waits end with its PANE_CLOSED, a window's with that window's reload
-// (WINDOW_BOOTED again) or its WINDOW_CLOSED: what is gone can draw nothing. A wait still open when the
-// boot ends is not reported: its window had not passed.
+// (WINDOW_BOOTED again) or its WINDOW_CLOSED: what is gone can draw nothing. From main's
+// APP_QUIT_REQUESTED every wait but T3's ends and none opens: a quitting app's window stops drawing
+// (the packaged key_signals gate, 2026-11-08: the server's SessionEnded at quit drew no row before the
+// window closed), and its server is being stopped. A wait already late before the quit still breaks.
+// A wait still open when the boot ends is not reported: its window had not passed.
 // The rules that pair the Python server's records (server.jsonl, which main reads as it grows and
 // hands here before each of its own and each window's records; sprint 376, vocabulary v0.22):
 //   S1  the server's first record is SERVER_STARTED.
@@ -97,6 +100,7 @@ export function createChecker(now: () => number = () => performance.now()): { se
   const started = new Set<string>();
   const panes = new Map<string, PaneState>();
   let waits: Wait[] = [];
+  let quitting = false;
   // Counts across the boot, by session_id or area: what the server wrote, what the windows wrote.
   const serverPorts = new Set<unknown>();
   const created = new Map<string, number>(), acked = new Map<string, number>();
@@ -121,6 +125,7 @@ export function createChecker(now: () => number = () => performance.now()): { se
   }
 
   function wait(rule: Wait["rule"], r: CheckedRecord, answers: Wait["answers"]): void {
+    if (quitting && rule !== "T3") return;
     waits.push({ rule, from: r, at: now(), window_id: r.process === "window" ? r.window_id : null, pane_id: paneOf(r), answers });
   }
 
@@ -136,13 +141,14 @@ export function createChecker(now: () => number = () => performance.now()): { se
     const gone = (w: Wait) =>
       (r.name === Signal.PANE_CLOSED && isWindow(r, w) && w.pane_id !== null && paneOf(r) === w.pane_id)
       || (r.name === Signal.WINDOW_BOOTED && isWindow(r, w))
-      || (r.name === Signal.WINDOW_CLOSED && r.process === "main" && w.window_id !== null && r.window_id === w.window_id);
+      || (r.name === Signal.WINDOW_CLOSED && r.process === "main" && w.window_id !== null && r.window_id === w.window_id)
+      || (r.name === Signal.APP_QUIT_REQUESTED && r.process === "main" && w.rule !== "T3");
     waits = waits.filter((w) => !w.answers(r) && !gone(w));
 
     // New waits.
     switch (r.process === "main" ? r.name : "") {
       case Signal.SERVER_SPAWNED: wait("T1", r, (x) => x.process === "main" && x.name === Signal.SERVER_BOUND); break;
-      case Signal.APP_QUIT_REQUESTED: wait("T3", r, (x) => x.process === "main" && x.name === Signal.APP_QUIT_COMPLETED); break;
+      case Signal.APP_QUIT_REQUESTED: quitting = true; wait("T3", r, (x) => x.process === "main" && x.name === Signal.APP_QUIT_COMPLETED); break;
       case Signal.SERVER_BOUND:
         if (!serverPorts.has(p.port)) wait("T2", r, (x) => x.process === "server" && x.name === Signal.SERVER_STARTED && x.payload?.port === p.port);
         break;

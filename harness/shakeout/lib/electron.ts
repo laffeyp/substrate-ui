@@ -68,8 +68,9 @@ function brokenRules(state: string): string[] {
     if (!existsSync(file)) continue;
     for (const line of readFileSync(file, "utf8").split("\n")) {
       if (!line.includes('"INVARIANT_BROKEN"')) continue;
-      const p = (JSON.parse(line) as { payload: { rule: string; context: { state: unknown } } }).payload;
-      out.push(`${p.rule} ${JSON.stringify(p.context.state).slice(0, 300)}`);
+      const p = (JSON.parse(line) as { payload: { rule: string; context: { state: unknown; recent: { name: string; process: string; pane_id?: number | null; payload?: Record<string, unknown> }[] } } }).payload;
+      const last = p.context.recent.slice(-8).map((r) => `${r.process}${r.pane_id != null ? ":" + r.pane_id : ""} ${r.name}${r.payload?.seq !== undefined ? " seq=" + String(r.payload.seq) : ""}`).join(", ");
+      out.push(`${p.rule} ${JSON.stringify(p.context.state).slice(0, 300)}; last records: ${last}`);
     }
   }
   return out;

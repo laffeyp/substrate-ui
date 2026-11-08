@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 375
-status: active
+status: closed
 phase: SDD re-centre
 pass_kind: architecture
 ---
@@ -64,3 +64,9 @@ Plant: with the checker's expiry never breaking, the gate's T4, T5 and T6 never 
 ## done criteria
 
 A wait that passes its window without an answer is followed in the trace by an incident naming the rule, the record that opened it and how long it waited; the app's normal runs break none.
+
+## result
+
+- **Spec:** 12 cases, each timing rule late by tick and by the next record.
+- **Gate:** `invariant_signals` 0 from source and packaged: T4, T5 and T6 after the ordering plants. The expiry plant fails it.
+- **Quit (found on the packaged `key_signals`, 2026-11-08):** from APP_QUIT_REQUESTED every wait but T3's ends and none opens. A quitting app's window drew no row for the server's SessionEnded before it closed. A wait already late before the quit still breaks.
