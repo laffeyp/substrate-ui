@@ -39,7 +39,9 @@ export const flow: Flow = {
     const rows = () => controller.snapshot().transcript;
 
     await controller.submitLine("/help");
-    if (!rows().some((r) => r.text.startsWith("slash commands:"))) fail("help_no_listing", "no 'slash commands:' row", "/help lists the commands");
+    // UI sprint 162 (fcc9ace) made /help one SlashHelp row with its commands in helpRows, as vm_smoke reads it.
+    const help = rows().find((r) => r.kind === "SlashHelp") as { helpRows?: unknown[] } | undefined;
+    if (!help?.helpRows?.length) fail("help_no_listing", help ? "a SlashHelp row with no commands" : "no SlashHelp row", "/help lists the commands");
 
     await controller.submitLine("/model deterministic");
     if (controller.snapshot().driver !== "deterministic") fail("model_not_set", `driver ${controller.snapshot().driver}`, "/model sets the driver");

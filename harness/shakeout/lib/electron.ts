@@ -47,7 +47,9 @@ export function launchArgs(opts: { roster?: "offline" | "live"; csp?: "bypass" |
     state,
     cleanup: () => {
       const broken = opts.plantsBreaks ? [] : brokenRules(state);
-      for (const d of [dir, state]) {
+      // SHAKEOUT_KEEP_SCRATCH=1 (lib/scratch.ts) keeps the launch's trace and session store, for
+      // scripts/read_trace.py --home <state>.
+      for (const d of process.env.SHAKEOUT_KEEP_SCRATCH === "1" ? [] : [dir, state]) {
         try { rmSync(d, { recursive: true, force: true }); } catch { /* best-effort */ }
       }
       if (broken.length) {

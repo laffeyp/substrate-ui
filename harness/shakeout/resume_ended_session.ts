@@ -21,8 +21,8 @@
 //   5. assert: same session id, the old reply still on screen, a new model
 //      reply, the turn parks, server status "parked".
 //
-// SMOKE_TARGET=source runs `electron .`; otherwise SMOKE_APP or
-// dist-electron/mac-arm64/Substrate.app. HOME is a temp dir, so the run
+// It runs `electron .`; SMOKE_APP or SHAKEOUT_APP names a bundle to run instead, and
+// SMOKE_TARGET=packaged runs dist-electron/mac-arm64/Substrate.app. HOME is a temp dir, so the run
 // never touches ~/.substrate. UV_CACHE_DIR and UV_PYTHON_INSTALL_DIR stay on
 // the real home in source mode: uv's content-addressed package and
 // interpreter caches are build inputs, not app state, and an empty cache
@@ -34,7 +34,9 @@ import { scratchDir } from "./lib/scratch";
 import { bindPaneAsUser } from "./lib/electron";
 
 const REPO_ROOT = resolve(__dirname, "..", "..");
-const TARGET = process.env.SMOKE_TARGET === "source" ? "source" : "packaged";
+// Source unless a packaged app is named, as lib/electron.ts launchArgs does: in gates:electron this
+// gate tested whatever bundle sat in dist-electron (2026-11-08: a clean build left none, ENOENT).
+const TARGET = process.env.SMOKE_TARGET === "packaged" || process.env.SMOKE_APP || process.env.SHAKEOUT_APP ? "packaged" : "source";
 const APP_ROOT =
   process.env.SMOKE_APP || process.env.SHAKEOUT_APP || join(REPO_ROOT, "dist-electron", "mac-arm64", "Substrate.app");
 const FIRST = "reply with the single word ok and use no tools";
