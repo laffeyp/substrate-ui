@@ -10,7 +10,7 @@ import { test } from "node:test";
 import assert from "node:assert";
 import { createRequire } from "node:module";
 
-const { commitsFromPlist } = createRequire(__filename)("../../../electron/build_commits.js") as {
+const { commitsFromPlist } = createRequire(__filename)("../../../electron/build_commits.ts") as {
   commitsFromPlist: (plist: string) => { app_commit: string; kernel_commit: string };
 };
 

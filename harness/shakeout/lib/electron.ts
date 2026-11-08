@@ -27,10 +27,7 @@ export interface Launch {
  *  as script, which is how Playwright runs a gate's string predicates (`waitForFunction("...")`), so
  *  gates run with Playwright's bypass by default. `harness/shakeout/csp_holds.ts` asks for "enforce"
  *  and checks the policy itself. */
-/** `rejections`: a launch whose trace holds a SIGNAL_REJECTED fails at cleanup (sprint 355), since a
- *  rejected emit in a source run throws where a caller may swallow it; a gate that plants one passes
- *  "expected". */
-export function launchArgs(opts: { roster?: "offline" | "live"; csp?: "bypass" | "enforce"; rejections?: "fail" | "expected" } = {}): Launch {
+export function launchArgs(opts: { roster?: "offline" | "live"; csp?: "bypass" | "enforce" } = {}): Launch {
   const dir = scratchDir("electron-shakeout-");
   const state = scratchDir("electron-shakeout-state-");
   const env = { ...process.env, SUBSTRATE_HOME: state } as Record<string, string>;
@@ -46,14 +43,8 @@ export function launchArgs(opts: { roster?: "offline" | "live"; csp?: "bypass" |
       : { args: [REPO_ROOT, "--user-data-dir=" + dir], env, bypassCSP },
     state,
     cleanup: () => {
-      const rejected = (opts.rejections ?? "fail") === "fail" ? rejectedIn(join(state, "electron", "logs", "traces")) : [];
       for (const d of [dir, state]) {
         try { rmSync(d, { recursive: true, force: true }); } catch { /* best-effort */ }
-      }
-      if (rejected.length) {
-        console.error(`SIGNAL_REJECTED in the trace (${rejected.length}):`);
-        for (const r of rejected) console.error("  " + r);
-        process.exit(1);
       }
     },
   };
@@ -68,21 +59,6 @@ export function windowRecords(launch: Launch, windowId = 1): WindowRecord[] {
   return readFileSync(join(traces, boot, `window-${windowId}.jsonl`), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as WindowRecord);
 }
 
-/** Every SIGNAL_REJECTED line in a launch's trace files. */
-function rejectedIn(traces: string): string[] {
-  if (!existsSync(traces)) return [];
-  const out: string[] = [];
-  for (const boot of readdirSync(traces)) {
-    let files: string[] = [];
-    try { files = readdirSync(join(traces, boot)); } catch { continue; }
-    for (const f of files.filter((n) => n.endsWith(".jsonl"))) {
-      for (const line of readFileSync(join(traces, boot, f), "utf8").split("\n")) {
-        if (line.includes('"name":"SIGNAL_REJECTED"')) out.push(`${f}: ${line}`);
-      }
-    }
-  }
-  return out;
-}
 
 /** Wait until the shell's view-model is up. */
 export async function waitForApp(win: Page, timeout = 30_000): Promise<void> {

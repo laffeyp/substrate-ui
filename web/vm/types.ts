@@ -7,6 +7,7 @@
 // the classic shell, now in _deprecated/classic-tree/, and dc-runtime, now in _deprecated/dc-runtime/.)
 import type { TaskStatusValue } from "./statuses.gen";
 import { EnvelopeKind } from "./envelope_kinds.gen";
+import { PaneDrawnConnection } from "./signals.gen";
 
 /** One envelope on the SSE record stream, mirrored from substrate-side. */
 export interface RecordEnvelope {
@@ -202,12 +203,7 @@ export interface TopologyGraph {
 }
 
 /** The connection lifecycle the transcript reflects. */
-export type ConnectionState =
-  | "idle"
-  | "connecting"
-  | "connected"
-  | "reconnecting"
-  | "closed";
+export type ConnectionState = PaneDrawnConnection;
 
 /** The full read-model. Every View pulls its fields from here. */
 export interface Snapshot {

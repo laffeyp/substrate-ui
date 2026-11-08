@@ -20,6 +20,7 @@ import { toggleToolOutputMode } from "../vm/tool_output_mode";
 import { GUIDANCE_LEVEL_BUNDLES, LENGTH_DEFAULT, LengthPosition, TONE_DEFAULT, TonePosition } from "../vm/controls.gen";
 import { buildLanguageLens, type Lens } from "../reveal/language_lens";
 import { Transcript } from "../reveal/transcript";
+import { liveActivity } from "../reveal/activity";
 import { fontSize, loadSettings, settings } from "./state/settings";
 import { closeDialog, dialogOpen, openSettings } from "./state/dialogs";
 import { chrome } from "./state/chrome";
@@ -58,6 +59,8 @@ import { RecordsPage } from "./RecordsPage";
 import { StudioPage } from "./StudioPage";
 import { TopBar } from "./TopBar";
 import "./window.css";
+import { Signal, PaneBoundBinding, PaneBoundHow, PaneDrawnConnection, PaneDrawnPickerLine, PaneDrawnState, PaneDrawnTurnState, PaneFocusedCause, PaneOpenedCause, PickerFolderArmedSource, PickerFolderDisarmedCause, PickerLineEnteredCause, PickerLineEnteredLine, type SignalPayloads } from "../vm/signals.gen";
+import type { Activity } from "../reveal/activity";
 
 // UI sprint 132 (kernel K288, session vocabulary § R): the guidance levels the bar offers, each with
 // the bundle that carries it. `auto` names none, so the daemon picks the model's default. UI sprint
@@ -79,7 +82,7 @@ const TONE_DEFAULT_AT = TONE_OPTIONS.findIndex((opt) => opt.value === TONE_DEFAU
 
 /** A folder picked in the workspace column, waiting on a model. `isDefault` is the per-session sandbox. */
 interface Armed { ws: string; isDefault: boolean }
-type PickerHalf = "ws" | "model" | "guidance" | "length" | "tone";
+type PickerHalf = PaneDrawnPickerLine;
 type SelKey = "guidanceSel" | "lengthSel" | "toneSel";
 
 export interface AppPane extends Cell {
@@ -163,16 +166,25 @@ const ctlOf = (paneId: number): SessionController | undefined => vmOf()?.get(pan
 
 const newPaneFields = (id: number): AppPane => ({
   id, col: 1, row: 1, cw: 1, rh: 1, name: "pane-" + id, driver: null, unbound: true, editing: false, nameVal: "",
-  wsQ: "", armed: null, pickerHalf: "ws", wsSelIdx: 0, modelSelIdx: null,
+  wsQ: "", armed: null, pickerHalf: PaneDrawnPickerLine.WS, wsSelIdx: 0, modelSelIdx: null,
 });
 
 // The pane lifecycle records (vocabulary v0.14, sprint 360), written from the commit that shows the
 // change (componentDidMount, componentDidUpdate). Where the state cannot say why, the path that made
 // the change notes it first: a click or an open path for focus, the picker or an attach for binding.
-type FocusCause = "click" | "open";
-type BindHow = "picker" | "attach" | "restore";
 /** The pane no longer shows its picker: as `session(p)` in computeViews. */
 const showsBinding = (p: AppPane, snaps: Snapshots): boolean => !p.unbound || !!snaps[p.id]?.sessionId;
+/** The picker line PICKER_LINE_ENTERED names, as the pane's open line. */
+const HALF_OF_LINE: Record<PickerLineEnteredLine, PaneDrawnPickerLine> = {
+  [PickerLineEnteredLine.MODEL]: PaneDrawnPickerLine.MODEL,
+  [PickerLineEnteredLine.GUIDANCE]: PaneDrawnPickerLine.GUIDANCE,
+  [PickerLineEnteredLine.LENGTH]: PaneDrawnPickerLine.LENGTH,
+  [PickerLineEnteredLine.TONE]: PaneDrawnPickerLine.TONE,
+};
+/** PANE_DRAWN.turn_state for what the activity line draws (web/reveal/activity.ts). */
+const TURN_OF_ACTIVITY: Record<Activity["kind"], PaneDrawnTurnState> = {
+  live: PaneDrawnTurnState.RUNNING, failed: PaneDrawnTurnState.FAILED, recap: PaneDrawnTurnState.PARKED,
+};
 
 type Handler = (ev?: unknown) => void;
 interface KeyEv { key: string; shiftKey: boolean; altKey: boolean; metaKey: boolean; ctrlKey: boolean; preventDefault(): void }
@@ -205,10 +217,12 @@ export class App extends React.Component<AppProps, AppState> {
   private topBarActs: Omit<TopBarActions, "finishEdit"> | null = null;
   private streamMatches = 0;
   private offTopBarActs: (() => void) | null = null;
-  private focusCause: FocusCause | null = null;
-  private bindHow = new Map<number, BindHow>();
+  private focusCause: PaneFocusedCause | null = null;
+  private bindHow = new Map<number, PaneBoundHow>();
   /** Panes the layout's tweak props made (componentDidUpdate's tweak sync): PANE_OPENED start. */
   private startPanes = new Set<number>();
+  /** Each pane's last PANE_DRAWN payload, so a record is written only when what it draws changed. */
+  private lastDrawn = new Map<number, string>();
 
   private snap(paneId: number): Snapshot | undefined { return this.state.controllerSnapshots[paneId]; }
   private setPane(paneId: number, patch: Partial<AppPane>): void {
@@ -242,10 +256,10 @@ export class App extends React.Component<AppProps, AppState> {
   // UI sprint 124: the workspace bar runs left to right. A folder pick arms the folder and ungreys the
   // model half; the workspace reaches the controller only when the session starts, so a folder armed
   // and disarmed (esc) leaves nothing behind.
-  private armWorkspace(paneId: number, ws: string, isDefault: boolean, source: "row" | "dialog" | "typed" = "row"): void {
+  private armWorkspace(paneId: number, ws: string, isDefault: boolean, source: PickerFolderArmedSource = PickerFolderArmedSource.ROW): void {
     // The default row (a per-session sandbox) has no path yet: null, as the vocabulary declares, not "".
-    emitSignal("PICKER_FOLDER_ARMED", { pane_id: paneId, workspace: ws || null, is_default: isDefault, source }, { pane_id: paneId });
-    this.setPane(paneId, { armed: { ws, isDefault }, pickerHalf: "model", modelSelIdx: null });
+    emitSignal(Signal.PICKER_FOLDER_ARMED, { pane_id: paneId, workspace: ws || null, is_default: isDefault, source }, { pane_id: paneId });
+    this.setPane(paneId, { armed: { ws, isDefault }, pickerHalf: PaneDrawnPickerLine.MODEL, modelSelIdx: null });
   }
   // "choose folder…" (⌘O): Electron's folder dialog gives the folder's absolute path, which is recorded
   // as a recent workspace and armed. Commit 4fcc3bf removed this method and left its call, so the row
@@ -259,7 +273,7 @@ export class App extends React.Component<AppProps, AppState> {
     const path = await native.pickFolder().catch(() => null);
     if (!path) return;
     await vmOf()?.addWorkspace(path).catch(() => undefined);
-    this.armWorkspace(paneId, path, false, "dialog");
+    this.armWorkspace(paneId, path, false, PickerFolderArmedSource.DIALOG);
   }
   // F362: ⌘O. The picker's "choose folder…" row names the key; with the focused pane's picker
   // showing (panes in view, no page open, no session bound) it opens the folder chooser. Anywhere
@@ -279,43 +293,43 @@ export class App extends React.Component<AppProps, AppState> {
       if (path) vmOf()?.get(1)?.attachRecordRoot(path).catch(() => undefined);
     }).catch(() => undefined);
   }
-  private disarmWorkspace(paneId: number, cause: "escape" | "arrow_left" | "list_click"): void {
-    emitSignal("PICKER_FOLDER_DISARMED", { pane_id: paneId, cause }, { pane_id: paneId });
-    this.setPane(paneId, { armed: null, pickerHalf: "ws", modelSelIdx: null });
+  private disarmWorkspace(paneId: number, cause: PickerFolderDisarmedCause): void {
+    emitSignal(Signal.PICKER_FOLDER_DISARMED, { pane_id: paneId, cause }, { pane_id: paneId });
+    this.setPane(paneId, { armed: null, pickerHalf: PaneDrawnPickerLine.WS, modelSelIdx: null });
   }
   private enterGuidance(paneId: number): void {
-    emitSignal("PICKER_LINE_ENTERED", { pane_id: paneId, line: "guidance", cause: "picked" }, { pane_id: paneId });
+    emitSignal(Signal.PICKER_LINE_ENTERED, { pane_id: paneId, line: PickerLineEnteredLine.GUIDANCE, cause: PickerLineEnteredCause.PICKED }, { pane_id: paneId });
     this.setState((st) => ({ panes: st.panes.map((x) => {
       if (x.id !== paneId) return x;
       const at = GUIDANCE_OPTIONS.findIndex((gd) => gd.level === (x.guidance ?? null));
-      return { ...x, pickerHalf: "guidance" as const, guidanceSel: at < 0 ? 0 : at };
+      return { ...x, pickerHalf: PaneDrawnPickerLine.GUIDANCE, guidanceSel: at < 0 ? 0 : at };
     }) }));
   }
   private pane(paneId: number): AppPane | undefined { return this.state.panes.find((x) => x.id === paneId); }
   private pickGuidance(paneId: number, option: GuidanceOption): void {
     const pane = this.pane(paneId);
-    if (!pane || !pane.armed || pane.pickerHalf !== "guidance") return;
+    if (!pane || !pane.armed || pane.pickerHalf !== PaneDrawnPickerLine.GUIDANCE) return;
     // UI sprint 143: the guidance level no longer starts the session; LENGTH comes next.
-    emitSignal("PICKER_LINE_ENTERED", { pane_id: paneId, line: "length", cause: "picked" }, { pane_id: paneId });
-    this.setPane(paneId, { guidance: option.level, pickerHalf: "length", lengthSel: LENGTH_DEFAULT_AT });
+    emitSignal(Signal.PICKER_LINE_ENTERED, { pane_id: paneId, line: PickerLineEnteredLine.LENGTH, cause: PickerLineEnteredCause.PICKED }, { pane_id: paneId });
+    this.setPane(paneId, { guidance: option.level, pickerHalf: PaneDrawnPickerLine.LENGTH, lengthSel: LENGTH_DEFAULT_AT });
     vmOf()?.pickBundle(option.bundle);
   }
   private pickLength(paneId: number, option: ValueOption): void {
     const pane = this.pane(paneId);
-    if (!pane || !pane.armed || pane.pickerHalf !== "length") return;
-    emitSignal("PICKER_LINE_ENTERED", { pane_id: paneId, line: "tone", cause: "picked" }, { pane_id: paneId });
-    this.setPane(paneId, { length: option.value, pickerHalf: "tone", toneSel: TONE_DEFAULT_AT });
+    if (!pane || !pane.armed || pane.pickerHalf !== PaneDrawnPickerLine.LENGTH) return;
+    emitSignal(Signal.PICKER_LINE_ENTERED, { pane_id: paneId, line: PickerLineEnteredLine.TONE, cause: PickerLineEnteredCause.PICKED }, { pane_id: paneId });
+    this.setPane(paneId, { length: option.value, pickerHalf: PaneDrawnPickerLine.TONE, toneSel: TONE_DEFAULT_AT });
   }
   private pickTone(paneId: number, option: ValueOption): void {
     const pane = this.pane(paneId);
-    if (!pane || !pane.armed || pane.pickerHalf !== "tone") return;
+    if (!pane || !pane.armed || pane.pickerHalf !== PaneDrawnPickerLine.TONE) return;
     this.setPane(paneId, { tone: option.value });
     vmOf()?.pickControls(pane.length || null, option.value);
     this.commitPane(paneId, pane.armed);
   }
   private commitPane(paneId: number, armed: Armed): void {
-    emitSignal("PICKER_COMMITTED", { pane_id: paneId, workspace: armed.ws || null, is_default: armed.isDefault }, { pane_id: paneId });
-    this.bindHow.set(paneId, "picker");
+    emitSignal(Signal.PICKER_COMMITTED, { pane_id: paneId, workspace: armed.ws || null, is_default: armed.isDefault }, { pane_id: paneId });
+    this.bindHow.set(paneId, PaneBoundHow.PICKER);
     const vm = vmOf();
     if (armed.isDefault) {
       vm?.pickWorkspace(null);
@@ -409,7 +423,7 @@ export class App extends React.Component<AppProps, AppState> {
     const attach = (row: SessionRow) => {
       const vm = vmOf();
       if (!vm || !row.sessionId) return;
-      this.bindHow.set(p.id, "attach");
+      this.bindHow.set(p.id, PaneBoundHow.ATTACH);
       this.setPane(p.id, { unbound: false, ws: row.workspacePath || "", shape: row.workspaceShape || "flat", name: row.name || p.name });
       void vm.attachExisting(row.sessionId);
     };
@@ -456,10 +470,10 @@ export class App extends React.Component<AppProps, AppState> {
       for (const el of Array.from(document.querySelectorAll(sel))) el.scrollIntoView({ block: "nearest" });
     }, 0);
     // UI sprint 143: GUIDANCE, LENGTH and TONE share a line's keys (lineStep); esc or ↑ steps back.
-    const lines: [PickerHalf, ChoiceOption[], SelKey, number, (o: ChoiceOption) => void, PickerHalf][] = [
-      ["guidance", GUIDANCE_OPTIONS, "guidanceSel", 0, (opt) => this.pickGuidance(paneId, opt as GuidanceOption), "model"],
-      ["length", LENGTH_OPTIONS, "lengthSel", 1, (opt) => this.pickLength(paneId, opt as ValueOption), "guidance"],
-      ["tone", TONE_OPTIONS, "toneSel", 1, (opt) => this.pickTone(paneId, opt as ValueOption), "length"],
+    const lines: [PickerHalf, ChoiceOption[], SelKey, number, (o: ChoiceOption) => void, PickerLineEnteredLine][] = [
+      [PaneDrawnPickerLine.GUIDANCE, GUIDANCE_OPTIONS, "guidanceSel", 0, (opt) => this.pickGuidance(paneId, opt as GuidanceOption), PickerLineEnteredLine.MODEL],
+      [PaneDrawnPickerLine.LENGTH, LENGTH_OPTIONS, "lengthSel", 1, (opt) => this.pickLength(paneId, opt as ValueOption), PickerLineEnteredLine.GUIDANCE],
+      [PaneDrawnPickerLine.TONE, TONE_OPTIONS, "toneSel", 1, (opt) => this.pickTone(paneId, opt as ValueOption), PickerLineEnteredLine.LENGTH],
     ];
     for (const [half, opts, selKey, start, pick, back] of lines) {
       if (p.pickerHalf !== half || !p.armed) continue;
@@ -469,12 +483,12 @@ export class App extends React.Component<AppProps, AppState> {
       if ("move" in step) this.setPane(paneId, { [selKey]: step.move });
       else if ("pick" in step) pick(opts[step.pick]);
       else {
-        emitSignal("PICKER_LINE_ENTERED", { pane_id: paneId, line: back, cause: "back" }, { pane_id: paneId });
-        this.setPane(paneId, { pickerHalf: back });
+        emitSignal(Signal.PICKER_LINE_ENTERED, { pane_id: paneId, line: back, cause: PickerLineEnteredCause.BACK }, { pane_id: paneId });
+        this.setPane(paneId, { pickerHalf: HALF_OF_LINE[back] });
       }
       return;
     }
-    if (p.pickerHalf === "model" && p.armed) {
+    if (p.pickerHalf === PaneDrawnPickerLine.MODEL && p.armed) {
       const opts = this.modelHalfRows(p, fsnap);
       if (!opts.length) return;
       const at = Math.max(0, Math.min(this.modelSelIdx(p, opts), opts.length - 1));
@@ -505,12 +519,12 @@ export class App extends React.Component<AppProps, AppState> {
         let up = at - 1;
         while (up >= 0 && opts[up].indent >= row.indent) up--;
         if (up >= 0 && opts[up].expanded) { move(up); opts[up].toggleExpand(); return; }
-        this.disarmWorkspace(paneId, "arrow_left");
+        this.disarmWorkspace(paneId, PickerFolderDisarmedCause.ARROW_LEFT);
         return;
       }
       if (opens) { ev.preventDefault(); move(at); if (row.expandable) row.toggleExpand(); return; }
       if (ev.key === "Enter") { ev.preventDefault(); move(at); row.pick(); return; }
-      if (ev.key === "Escape") { ev.preventDefault(); this.disarmWorkspace(paneId, "escape"); }
+      if (ev.key === "Escape") { ev.preventDefault(); this.disarmWorkspace(paneId, PickerFolderDisarmedCause.ESCAPE); }
       return;
     }
     const rows = this.wsPickerRows(p, fsnap?.recentWorkspaces ?? []);
@@ -545,12 +559,12 @@ export class App extends React.Component<AppProps, AppState> {
       const root = String(sess.record_root || "");
       if (!root) continue;
       const shown = this.state.panes.find((p) => p.runRoot === root);
-      if (shown) { this.focusCause = "open"; this.setState({ focused: shown.id }); vm?.setActive(shown.id); continue; }
+      if (shown) { this.focusCause = PaneFocusedCause.OPEN; this.setState({ focused: shown.id }); vm?.setActive(shown.id); continue; }
       if (this.state.panes.length >= MAX_PANES) {
         vm?.get(callerPaneId)?.noteLine(`run ${String(run.run_id)}: eight panes are open; close one, then /run focus ${String(run.run_id)}`);
         continue;
       }
-      this.focusCause = "open";
+      this.focusCause = PaneFocusedCause.OPEN;
       this.setState({ focused: callerPaneId }, () => this.split("right", {
         unbound: false, name: `${String(run.topology)} ${String(run.run_id)}`, runRoot: root, ws: "", shape: "flat",
       }, (id) => { vm?.get(id)?.attachRun(root, String(run.topology || "run"), String(run.run_id || "")).catch(() => undefined); }));
@@ -562,12 +576,12 @@ export class App extends React.Component<AppProps, AppState> {
     if (!sessionId) return;
     const vm = vmOf();
     const shown = this.state.panes.find((p) => p.childSid === sessionId);
-    if (shown) { this.focusCause = "open"; this.setState({ focused: shown.id }); vm?.setActive(shown.id); return; }
+    if (shown) { this.focusCause = PaneFocusedCause.OPEN; this.setState({ focused: shown.id }); vm?.setActive(shown.id); return; }
     if (this.state.panes.length >= MAX_PANES) {
       vm?.get(callerPaneId)?.noteLine(`delegate child ${sessionId}: eight panes are open; close one to see it`);
       return;
     }
-    this.focusCause = "open";
+    this.focusCause = PaneFocusedCause.OPEN;
     this.setState({ focused: callerPaneId }, () => this.split("right", {
       unbound: false, name: "delegate " + sessionId.slice(2, 10), childSid: sessionId, ws: "", shape: "flat",
     }, (id) => { vm?.get(id)?.attachExisting(sessionId).catch(() => undefined); }));
@@ -591,9 +605,9 @@ export class App extends React.Component<AppProps, AppState> {
   }
 
   override componentDidMount(): void {
-    for (const p of this.state.panes) emitSignal("PANE_OPENED", { pane_id: p.id, cause: "start" }, { pane_id: p.id });
+    for (const p of this.state.panes) emitSignal(Signal.PANE_OPENED, { pane_id: p.id, cause: PaneOpenedCause.START }, { pane_id: p.id });
     // A reload's ?session= is attached to pane 1 by web/reveal.ts, outside the window's controls.
-    if (new URLSearchParams(window.location.search).get("session")) this.bindHow.set(1, "restore");
+    if (new URLSearchParams(window.location.search).get("session")) this.bindHow.set(1, PaneBoundHow.RESTORE);
     // 19c settings: theme and type size, per viewer (web/app/state/settings.ts, sprint 204).
     loadSettings();
     this.offs.push(settings.subscribe(() => this.forceUpdate()));
@@ -629,6 +643,7 @@ export class App extends React.Component<AppProps, AppState> {
     this.offs.push(shell.subscribe(applyShell));
     applyShell();
     this.publish();
+    this.notePaneDrawn();
     // The left column's width follows the meta view's split (web/app/state/meta.ts, sprint 313).
     this.offs.push(meta.subscribe(() => this.setState({ metaSplit: meta.getSnapshot().split })));
     // The input bar's /exit names the pane's session (web/app/state/input_bar.ts, sprint 261).
@@ -638,7 +653,7 @@ export class App extends React.Component<AppProps, AppState> {
     this.offs.push(setOpenSession((r) => {
       const vm = vmOf();
       if (!vm || !r.sessionId) return;
-      this.bindHow.set(this.state.focused, "attach");
+      this.bindHow.set(this.state.focused, PaneBoundHow.ATTACH);
       this.setState((s) => ({
         vs: closePage(s.vs),
         panes: s.panes.map((pn) => (pn.id === s.focused ? { ...pn, unbound: false, ws: r.workspacePath || "", shape: r.workspaceShape || "flat", name: r.name || pn.name } : pn)),
@@ -715,7 +730,7 @@ export class App extends React.Component<AppProps, AppState> {
       pickerFocused: !!(fp && fp.unbound && !(fsnap && fsnap.sessionId)),
       languageTurns: !!(lens && lens.turns.length),
       findOpen: find.getSnapshot().open, dialogOpen: dialogOpen(), cardOpen: !!(s.ddFor || s.wsFor),
-      running: !!(fsnap && fsnap.sessionId && fsnap.connection === "connected" && !fsnap.parkReason && !fsnap.endedReason),
+      running: !!(fsnap && fsnap.sessionId && fsnap.connection === PaneDrawnConnection.CONNECTED && !fsnap.parkReason && !fsnap.endedReason),
     });
     if (!action) return;
     if (action.kind === "records") { recordsKey(e); return; }
@@ -774,6 +789,7 @@ export class App extends React.Component<AppProps, AppState> {
   override componentDidUpdate(prevProps: AppProps, prevState: AppState): void {
     this.notePanes(prevState);
     this.publish();
+    this.notePaneDrawn();
     // The template's tweak sync: only when a tweak changed, never against the window's own state.
     const changed = (k: keyof AppProps) => this.props[k] !== prevProps[k];
     if (!changed("columns") && !changed("rows") && !changed("view")) return;
@@ -797,28 +813,61 @@ export class App extends React.Component<AppProps, AppState> {
     const nowIds = new Set(s.panes.map((p) => p.id));
     for (const p of prev.panes) {
       if (nowIds.has(p.id)) continue;
-      emitSignal("PANE_CLOSED", { pane_id: p.id, had_session: showsBinding(p, prev.controllerSnapshots) }, { pane_id: p.id });
+      emitSignal(Signal.PANE_CLOSED, { pane_id: p.id, had_session: showsBinding(p, prev.controllerSnapshots) }, { pane_id: p.id });
       this.bindHow.delete(p.id);
     }
     for (const p of s.panes) {
       const isNew = !prevIds.has(p.id);
       if (isNew) {
-        const cause = this.startPanes.delete(p.id) ? "start" : p.runRoot ? "run" : p.childSid ? "delegate" : "split";
-        emitSignal("PANE_OPENED", { pane_id: p.id, cause }, { pane_id: p.id });
+        const cause = this.startPanes.delete(p.id) ? PaneOpenedCause.START : p.runRoot ? PaneOpenedCause.RUN : p.childSid ? PaneOpenedCause.DELEGATE : PaneOpenedCause.SPLIT;
+        emitSignal(Signal.PANE_OPENED, { pane_id: p.id, cause }, { pane_id: p.id });
       }
       const was = isNew ? false : showsBinding(prev.panes.find((x) => x.id === p.id)!, prev.controllerSnapshots);
       if (was || !showsBinding(p, s.controllerSnapshots)) continue;
       const noted = this.bindHow.get(p.id);
       this.bindHow.delete(p.id);
-      const how = p.runRoot ? "run" : p.childSid ? "child" : noted ?? "direct";
+      const how = p.runRoot ? PaneBoundHow.RUN : p.childSid ? PaneBoundHow.CHILD : noted ?? PaneBoundHow.DIRECT;
       const sid = p.childSid || s.controllerSnapshots[p.id]?.sessionId || null;
-      emitSignal("PANE_BOUND", { pane_id: p.id, binding: p.runRoot ? "record" : "session", how, ...(sid ? { session_id: sid } : {}) }, { pane_id: p.id });
+      emitSignal(Signal.PANE_BOUND, { pane_id: p.id, binding: p.runRoot ? PaneBoundBinding.RECORD : PaneBoundBinding.SESSION, how, ...(sid ? { session_id: sid } : {}) }, { pane_id: p.id });
     }
     if (s.focused !== prev.focused) {
-      const cause = !prevIds.has(s.focused) ? "split" : !nowIds.has(prev.focused) ? "close" : this.focusCause ?? undefined;
-      emitSignal("PANE_FOCUSED", { pane_id: s.focused, cause }, { pane_id: s.focused });
+      const cause = !prevIds.has(s.focused) ? PaneFocusedCause.SPLIT : !nowIds.has(prev.focused) ? PaneFocusedCause.CLOSE : this.focusCause;
+      if (cause) emitSignal(Signal.PANE_FOCUSED, { pane_id: s.focused, cause }, { pane_id: s.focused });
     }
     this.focusCause = null;
+  }
+  /** PANE_DRAWN (v0.15) for each pane whose drawn state this commit changed, from the values publish
+   *  just gave the areas that draw it: the picker's view, or the session's snapshot. */
+  private notePaneDrawn(): void {
+    const s = this.state;
+    const live = new Set<number>();
+    for (const p of s.panes) {
+      live.add(p.id);
+      const snap = this.snap(p.id);
+      let payload: SignalPayloads[Signal.PANE_DRAWN];
+      if (!showsBinding(p, s.controllerSnapshots)) {
+        const view = this.pickerViews[p.id];
+        payload = {
+          pane_id: p.id, state: PaneDrawnState.PICKER, picker_line: p.pickerHalf, armed: !!p.armed,
+          folder_rows: view ? view.wsRows.length : 0, model_rows: view ? view.modelRows.length : 0,
+          driver_shown: this.paneDriver(p),
+        };
+      } else {
+        const activity = liveActivity(snap);
+        const drawn = activity ? TURN_OF_ACTIVITY[activity.kind] : PaneDrawnTurnState.IDLE;
+        const turn = drawn === PaneDrawnTurnState.PARKED && snap?.endedReason ? PaneDrawnTurnState.ENDED : drawn;
+        payload = {
+          pane_id: p.id, state: p.runRoot ? PaneDrawnState.RECORD : PaneDrawnState.SESSION, connection: snap?.connection ?? PaneDrawnConnection.IDLE, turn_state: turn,
+          driver_shown: this.paneDriver(p), named: !!snap?.sessionName,
+          ...(snap?.sessionId ? { session_id: snap.sessionId } : {}),
+        };
+      }
+      const key = JSON.stringify(payload);
+      if (this.lastDrawn.get(p.id) === key) continue;
+      this.lastDrawn.set(p.id, key);
+      emitSignal(Signal.PANE_DRAWN, payload, { pane_id: p.id });
+    }
+    for (const id of Array.from(this.lastDrawn.keys())) if (!live.has(id)) this.lastDrawn.delete(id);
   }
   override componentWillUnmount(): void {
     for (const off of this.offs.splice(0)) off();
@@ -854,7 +903,7 @@ export class App extends React.Component<AppProps, AppState> {
   private pickerView(p: AppPane, fsnap: Snapshot | undefined, paneW: number): PickerView {
     const wsRows = this.wsPickerRows(p, fsnap?.recentWorkspaces ?? []);
     const rows = this.modelHalfRows(p, fsnap);
-    const sel = p.pickerHalf === "model" && p.armed ? this.modelSelIdx(p, rows) : -1;
+    const sel = p.pickerHalf === PaneDrawnPickerLine.MODEL && p.armed ? this.modelSelIdx(p, rows) : -1;
     const noop = () => undefined;
     const modelRowViews: ModelRowView[] = rows.map((opt, i) => {
       if (!p.armed) return { ...opt, color: "#4a4e55", bg: "transparent", cursor: "default", pick: noop, toggleExpand: noop, liveRow: false, greyRow: true, lit: "0" };
@@ -863,8 +912,8 @@ export class App extends React.Component<AppProps, AppState> {
     });
     // UI sprint 132 (kernel K288): the guidance level for the session the bar will open. Auto leaves it
     // to the daemon. UI sprint 143: once LENGTH or TONE is open, the picked level shows in white.
-    const guidanceOpen = !!p.armed && p.pickerHalf === "guidance";
-    const pastGuidance = !!p.armed && (p.pickerHalf === "length" || p.pickerHalf === "tone");
+    const guidanceOpen = !!p.armed && p.pickerHalf === PaneDrawnPickerLine.GUIDANCE;
+    const pastGuidance = !!p.armed && (p.pickerHalf === PaneDrawnPickerLine.LENGTH || p.pickerHalf === PaneDrawnPickerLine.TONE);
     const guidanceRows: ChoiceRowView[] = GUIDANCE_OPTIONS.map((gd, i) => {
       const lit = guidanceOpen && i === (p.guidanceSel ?? 0);
       const picked = pastGuidance && (p.guidance ?? null) === gd.level;
@@ -891,8 +940,8 @@ export class App extends React.Component<AppProps, AppState> {
         note: open ? opts[at].meta : "",
       };
     };
-    const len = line("length", LENGTH_OPTIONS, "lengthSel", (opt) => this.pickLength(p.id, opt), p.length, LENGTH_DEFAULT_AT);
-    const tone = line("tone", TONE_OPTIONS, "toneSel", (opt) => this.pickTone(p.id, opt), p.tone, TONE_DEFAULT_AT);
+    const len = line(PaneDrawnPickerLine.LENGTH, LENGTH_OPTIONS, "lengthSel", (opt) => this.pickLength(p.id, opt), p.length, LENGTH_DEFAULT_AT);
+    const tone = line(PaneDrawnPickerLine.TONE, TONE_OPTIONS, "toneSel", (opt) => this.pickTone(p.id, opt), p.tone, TONE_DEFAULT_AT);
     const narrow = paneW < 480;
     const armedOn = (half: PickerHalf) => !!p.armed && p.pickerHalf === half;
     return {
@@ -905,7 +954,7 @@ export class App extends React.Component<AppProps, AppState> {
       // A click on the list's empty space, with a folder armed, goes back to the workspace column.
       onWsListClick: (ev?: unknown) => {
         const t = (ev as { target?: EventTarget | null } | undefined)?.target;
-        if (p.armed && !(t instanceof Element && t.closest("[data-ws-lit]"))) this.disarmWorkspace(p.id, "list_click");
+        if (p.armed && !(t instanceof Element && t.closest("[data-ws-lit]"))) this.disarmWorkspace(p.id, PickerFolderDisarmedCause.LIST_CLICK);
       },
       wsRows,
       modelArmed: p.armed ? "1" : "0",
@@ -921,21 +970,21 @@ export class App extends React.Component<AppProps, AppState> {
       guidancePos: narrow ? "static" : "absolute",
       lines: [
         // UI sprint 142: before a model is picked the guidance note is a hint, at the hint level.
-        { key: "guidance", head: "GUIDANCE", bottom: narrow ? "0" : "62px", headColor: armedOn("guidance") ? "#62676f" : "#4a4e55", rows: guidanceRows,
-          noteClass: armedOn("guidance") ? "" : "tx-hint", noteColor: armedOn("guidance") ? "#62676f" : "var(--tx-hint)",
-          note: armedOn("guidance") ? GUIDANCE_OPTIONS[Math.max(0, Math.min(p.guidanceSel ?? 0, GUIDANCE_OPTIONS.length - 1))].meta : pastGuidance ? "" : "pick a model first" },
-        { key: "length", head: "LENGTH", bottom: narrow ? "0" : "31px", headColor: len.headColor, rows: len.rows, noteClass: "", noteColor: "#62676f", note: len.note },
-        { key: "tone", head: "TONE", bottom: "0", headColor: tone.headColor, rows: tone.rows, noteClass: "", noteColor: "#62676f", note: tone.note },
+        { key: PaneDrawnPickerLine.GUIDANCE, head: "GUIDANCE", bottom: narrow ? "0" : "62px", headColor: armedOn(PaneDrawnPickerLine.GUIDANCE) ? "#62676f" : "#4a4e55", rows: guidanceRows,
+          noteClass: armedOn(PaneDrawnPickerLine.GUIDANCE) ? "" : "tx-hint", noteColor: armedOn(PaneDrawnPickerLine.GUIDANCE) ? "#62676f" : "var(--tx-hint)",
+          note: armedOn(PaneDrawnPickerLine.GUIDANCE) ? GUIDANCE_OPTIONS[Math.max(0, Math.min(p.guidanceSel ?? 0, GUIDANCE_OPTIONS.length - 1))].meta : pastGuidance ? "" : "pick a model first" },
+        { key: PaneDrawnPickerLine.LENGTH, head: "LENGTH", bottom: narrow ? "0" : "31px", headColor: len.headColor, rows: len.rows, noteClass: "", noteColor: "#62676f", note: len.note },
+        { key: PaneDrawnPickerLine.TONE, head: "TONE", bottom: "0", headColor: tone.headColor, rows: tone.rows, noteClass: "", noteColor: "#62676f", note: tone.note },
       ],
       wsQ: p.wsQ,
-      wsPlaceholder: armedOn("tone") ? "← → moves · ↵ picks the tone and starts · esc back to length"
-        : armedOn("length") ? "← → moves · ↵ picks the length · esc back to guidance"
-        : armedOn("guidance") ? "← → moves · ↵ picks the guidance · esc back to models"
-        : armedOn("model") ? "↑↓ moves · ⇧↵ opens · ↵ picks the model · esc back"
+      wsPlaceholder: armedOn(PaneDrawnPickerLine.TONE) ? "← → moves · ↵ picks the tone and starts · esc back to length"
+        : armedOn(PaneDrawnPickerLine.LENGTH) ? "← → moves · ↵ picks the length · esc back to guidance"
+        : armedOn(PaneDrawnPickerLine.GUIDANCE) ? "← → moves · ↵ picks the guidance · esc back to models"
+        : armedOn(PaneDrawnPickerLine.MODEL) ? "↑↓ moves · ⇧↵ opens · ↵ picks the model · esc back"
         : "↑↓ moves · ⇧↵ opens · ↵ picks the folder",
       onWsQ: (ev) => {
-        if (this.pane(p.id)?.armed) emitSignal("PICKER_FOLDER_DISARMED", { pane_id: p.id, cause: "typed" }, { pane_id: p.id });
-        this.setPane(p.id, { wsQ: ev.target.value, wsSelIdx: 0, armed: null, pickerHalf: "ws", modelSelIdx: null });
+        if (this.pane(p.id)?.armed) emitSignal(Signal.PICKER_FOLDER_DISARMED, { pane_id: p.id, cause: PickerFolderDisarmedCause.TYPED }, { pane_id: p.id });
+        this.setPane(p.id, { wsQ: ev.target.value, wsSelIdx: 0, armed: null, pickerHalf: PaneDrawnPickerLine.WS, modelSelIdx: null });
       },
       onWsKey: (ev?: unknown) => this.wsKey(p.id, ev as KeyEv),
     };
@@ -969,7 +1018,7 @@ export class App extends React.Component<AppProps, AppState> {
         gridCol: p.col + " / span " + p.cw, gridRow: p.row + " / span " + p.rh,
         opacity: state.panes.length > 1 && p.id !== state.focused ? ".55" : "1",
         session: session(p),
-        focus: () => { this.focusCause = "click"; this.setState({ focused: p.id }); },
+        focus: () => { this.focusCause = PaneFocusedCause.CLICK; this.setState({ focused: p.id }); },
       })),
       colGutters: gutterStops(state.colW).map((left, i) => ({ left, grab: (ev?: { preventDefault(): void }) => { ev?.preventDefault(); this.gut = { type: "col", i: i + 1 }; } })),
       rowGutters: gutterStops(state.rowW).map((top, i) => ({ top, grab: (ev?: { preventDefault(): void }) => { ev?.preventDefault(); this.gut = { type: "row", i: i + 1 }; } })),

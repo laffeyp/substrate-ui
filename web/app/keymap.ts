@@ -13,6 +13,7 @@
 // then the ⌘ keys; then Escape, which closes the innermost open thing or interrupts a running turn
 // (⇧Esc softly: stop after this tool); then Ctrl+C.
 
+import { TurnInterruptedTier } from "../vm/signals.gen";
 export interface KeyLike { key: string; metaKey: boolean; ctrlKey: boolean; shiftKey: boolean; altKey: boolean; }
 
 export interface KeyContext {
@@ -43,7 +44,7 @@ export type KeyAction =
   | { kind: "toggle-meta" } | { kind: "toggle-tools" } | { kind: "split"; dir: "right" | "down" }
   | { kind: "toggle-find" } | { kind: "settings" } | { kind: "toggle-assays" }
   | { kind: "close-find" } | { kind: "close-dialog" } | { kind: "close-cards" } | { kind: "close-surface" }
-  | { kind: "interrupt"; tier: "soft" | "hard" };
+  | { kind: "interrupt"; tier: TurnInterruptedTier };
 
 const ARROWS = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Enter"];
 
@@ -72,8 +73,8 @@ export function windowKey(ev: KeyLike, ctx: KeyContext): KeyAction | null {
     if (ctx.dialogOpen) return { kind: "close-dialog" };
     if (ctx.cardOpen) return { kind: "close-cards" };
     if (ctx.surface) return { kind: "close-surface" };
-    return ctx.running ? { kind: "interrupt", tier: ev.shiftKey ? "soft" : "hard" } : null;
+    return ctx.running ? { kind: "interrupt", tier: ev.shiftKey ? TurnInterruptedTier.SOFT : TurnInterruptedTier.HARD } : null;
   }
-  if (ev.ctrlKey && !ev.metaKey && key === "c" && ctx.typing && ctx.caretOnly) return { kind: "interrupt", tier: "hard" };
+  if (ev.ctrlKey && !ev.metaKey && key === "c" && ctx.typing && ctx.caretOnly) return { kind: "interrupt", tier: TurnInterruptedTier.HARD };
   return null;
 }

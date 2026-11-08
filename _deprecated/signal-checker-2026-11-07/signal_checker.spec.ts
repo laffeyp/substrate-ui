@@ -19,7 +19,7 @@ const spec = JSON.parse(readFileSync(join(__dirname, "..", "..", "vm", "signals"
 const tags = Object.fromEntries(spec.vocabulary.tags.map((t) => [t.name, t]));
 const repeat = (r: Repeat) => ({ [r.field]: r.char.repeat(r.times) + (r.suffix ?? "") });
 
-const mainChecker = createRequire(__filename)("../../../electron/check_signal.js") as {
+const mainChecker = createRequire(__filename)("../../../electron/check_signal.ts") as {
   checkSignal: typeof checkSignal; tagsOf: (v: { tags: (CheckTag & { name: string })[] }) => Record<string, CheckTag>;
 };
 const checkers: [string, typeof checkSignal, Record<string, CheckTag>][] = [

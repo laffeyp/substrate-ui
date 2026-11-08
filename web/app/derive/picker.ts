@@ -8,6 +8,7 @@
 import type { SessionRow, WorkspaceRow } from "../../vm/types";
 import { sessionStatusLook } from "../../reveal/session_status";
 import type { TreeItem } from "./tree_key";
+import { PaneDrawnPickerLine } from "../../vm/signals.gen";
 
 /** The shared sandbox as the UI names it. The server reads this exact string as the sandbox under its
  *  own state root (server.py `_resolve_workspace_arg`), so a gate's home keeps its own (F337: the
@@ -52,8 +53,8 @@ export interface PickerInput {
   /** The path typed in the column's box. */
   typed: string;
   armed: { ws: string; isDefault: boolean } | null;
-  /** The column the keys work: "ws" until a folder is armed. */
-  pickerHalf: string;
+  /** The column the keys work: the folder column until a folder is armed. */
+  pickerHalf: PaneDrawnPickerLine;
   /** The lit place in `flat`. */
   sel: number;
   expanded: Readonly<Record<string, boolean>>;
@@ -105,7 +106,7 @@ export function workspaceRows(input: PickerInput): { rows: PickerRow[]; flat: Pi
   }
   base.push({ kind: "choose", path: "choose folder…", meta: "", expandable: false, expandKey: "choose folder…", key: "⌘O" });
 
-  const onModel = input.pickerHalf === "model";
+  const onModel = input.pickerHalf === PaneDrawnPickerLine.MODEL;
   const flat: PickerFlat[] = [];
   const rows = base.map((b, at): PickerRow => {
     const nav = flat.length;

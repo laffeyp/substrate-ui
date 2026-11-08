@@ -18,12 +18,12 @@
 // it (registerAccelerator is Linux/Windows only), and a registered one
 // would compete with the renderer's handler for the same press.
 
-const { Menu } = require("electron");
+import { Menu } from "electron";
 
 // onSent(command, win): main writes MENU_COMMAND_SENT for each command a window is sent (v0.7).
-let onSent = () => {};
+let onSent: (command: string, win: any) => void = () => {};
 
-function send(win, command, payload) {
+function send(win, command, payload?) {
   if (win && !win.isDestroyed()) {
     win.webContents.send("menu:" + command, payload ?? null);
     onSent(command, win);
@@ -137,9 +137,9 @@ function buildTemplate(getWin, newWindow) {
 function installMenu(getWin, newWindow, sent) {
   if (sent) onSent = sent;
   const template = buildTemplate(getWin, newWindow);
-  const menu = Menu.buildFromTemplate(template);
+  const menu = Menu.buildFromTemplate(template as any);
   Menu.setApplicationMenu(menu);
   return menu;
 }
 
-module.exports = { installMenu };
+export { installMenu };

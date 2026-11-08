@@ -12,7 +12,9 @@
 //   - ⌘D: PANE_OPENED 3 split, PANE_FOCUSED 3 split; a session opened through window.__vm on pane 3:
 //     PANE_BOUND 3 direct, with its id;
 //   - a reload with ?session=<pane 1's session>: WINDOW_BOOTED, PANE_OPENED 1 start, PANE_BOUND 1
-//     restore with that id.
+//     restore with that id;
+//   - PANE_DRAWN (v0.15): pane 1 drawn at each picker line, then its session idle, then connected,
+//     and after the reload its picker, then the restored session.
 // Every pane record carries its pane in the record context. SHAKEOUT_APP=<Substrate.app> runs the
 // packaged bundle.
 
@@ -72,6 +74,7 @@ async function main(): Promise<void> {
     if ((await panes(win)) !== 1) throw new Error("the reload did not come back with one pane");
     const logs = await app.evaluate(({ app: a }) => a.getPath("logs"));
     await app.close();
+    step = "reading window-1.jsonl";
 
     const root = join(logs, "traces");
     const dir = join(root, readdirSync(root).sort().pop()!);
@@ -104,12 +107,28 @@ async function main(): Promise<void> {
     let i = 0;
     for (const r of w) if (i < want.length && r.name === want[i][0] && want[i][1](r)) i += 1;
     if (i < want.length) throw new Error(`window-1.jsonl lacks ${want[i][0]} (step ${i + 1} of ${want.length}) in order:\n${show(w)}`);
+    // PANE_DRAWN (v0.15, sprint 362): pane 1 through its picker to its session, and back after the reload.
+    const d = (r: Rec, f: Record<string, unknown>) => r.name === "PANE_DRAWN" && p(r, 1) && Object.entries(f).every(([k, x]) => r.payload[k] === x);
+    const drawnWant: [string, (r: Rec) => boolean][] = [
+      ["picker, folder column", (r) => d(r, { state: "picker", picker_line: "ws", armed: false })],
+      ["picker, folder armed", (r) => d(r, { state: "picker", picker_line: "model", armed: true })],
+      ["picker, guidance", (r) => d(r, { state: "picker", picker_line: "guidance", driver_shown: "deterministic" })],
+      ["picker, length", (r) => d(r, { state: "picker", picker_line: "length" })],
+      ["picker, tone", (r) => d(r, { state: "picker", picker_line: "tone" })],
+      ["session, not yet open", (r) => d(r, { state: "session", connection: "idle", turn_state: "idle" }) && !("session_id" in r.payload)],
+      ["session connected", (r) => d(r, { state: "session", connection: "connected", session_id: sid1 })],
+      ["reload: picker", (r) => d(r, { state: "picker", picker_line: "ws" })],
+      ["reload: session restored", (r) => d(r, { state: "session", connection: "connected", session_id: sid1 })],
+    ];
+    let j = 0;
+    for (const r of w) if (j < drawnWant.length && drawnWant[j][1](r)) j += 1;
+    if (j < drawnWant.length) throw new Error(`PANE_DRAWN: pane 1 lacks "${drawnWant[j][0]}" (step ${j + 1} of ${drawnWant.length}):\n${show(w)}`);
     // No pane record beyond the ones the steps make: one binding per pane, one focus per move.
     const counts = (n: string) => w.filter((r) => r.name === n).length;
     const extra = [["PANE_OPENED", 4], ["PANE_BOUND", 3], ["PANE_FOCUSED", 5], ["PANE_CLOSED", 1]].filter(([n, k]) => counts(n as string) !== k);
     if (extra.length) throw new Error(`record counts ${extra.map(([n, k]) => `${String(n)} ${counts(n as string)} (expected ${String(k)})`).join(", ")}:\n${show(w)}`);
     if (process.env.TRACE_PRINT) console.log(show(w));
-    console.log(`pane_signals: ok — ${want.length} window records in order; WINDOW_BOOTED first (v${VOCAB.vocabulary_version}); every pane record in its pane's context`);
+    console.log(`pane_signals: ok — ${want.length} window records in order; pane 1 drawn through ${drawnWant.length} states; WINDOW_BOOTED first (v${VOCAB.vocabulary_version}); every pane record in its pane's context`);
     code = 0;
   } catch (e) {
     console.error(`pane_signals: FAIL at ${step} — ${(e as Error).message}`);

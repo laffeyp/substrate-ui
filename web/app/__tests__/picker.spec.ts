@@ -8,6 +8,7 @@ import { test } from "node:test";
 import assert from "node:assert";
 import type { SessionRow } from "../../vm/types";
 import { lineStep, paneShape, SHARED_SANDBOX, shapeLabel, tabFill, workspaceRows, type PickerInput } from "../derive/picker";
+import { PaneDrawnPickerLine } from "../../vm/signals.gen";
 
 const base: PickerInput = {
   recentWorkspaces: [
@@ -17,7 +18,7 @@ const base: PickerInput = {
     { path: "/Users/someone/notes", shape: "path" },
     { path: "/Users/someone/third", shape: "path" },
   ],
-  inherit: null, typed: "", armed: null, pickerHalf: "ws", sel: 0, expanded: {}, paged: {},
+  inherit: null, typed: "", armed: null, pickerHalf: PaneDrawnPickerLine.WS, sel: 0, expanded: {}, paged: {},
 };
 
 test("the column offers the default, the shared sandbox, two recent folders and choose", () => {
@@ -49,7 +50,7 @@ test("an open row lists at most five sessions, and the keys walk them", () => {
 });
 
 test("with a folder armed the column lights it and shows →", () => {
-  const { rows } = workspaceRows({ ...base, armed: { ws: "/Users/someone/notes", isDefault: false }, pickerHalf: "model" });
+  const { rows } = workspaceRows({ ...base, armed: { ws: "/Users/someone/notes", isDefault: false }, pickerHalf: PaneDrawnPickerLine.MODEL });
   assert.deepStrictEqual(rows.filter((r) => r.lit).map((r) => [r.path, r.key]), [["/Users/someone/notes", "→"]]);
 });
 

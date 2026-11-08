@@ -9,6 +9,7 @@ import * as React from "react";
 import { useSyncExternalStore } from "react";
 import { closeDialog, dialogs } from "./state/dialogs";
 import { fontSize, pickTheme, settings, stepFont, THEMES } from "./state/settings";
+import { PaneDrawnConnection } from "../vm/signals.gen";
 
 interface VmLike {
   snapshot?(): { sessionId: string | null; connection: string; parkReason: unknown; endedReason: unknown } | null;
@@ -97,7 +98,7 @@ async function endSession(): Promise<void> {
   const vm = (window as unknown as { __vm?: VmLike }).__vm;
   if (!vm) return;
   const snap = vm.snapshot ? vm.snapshot() : null;
-  const isLive = !!(snap && snap.sessionId && snap.connection === "connected" && !snap.parkReason && !snap.endedReason);
+  const isLive = !!(snap && snap.sessionId && snap.connection === PaneDrawnConnection.CONNECTED && !snap.parkReason && !snap.endedReason);
   if (isLive && typeof vm.interruptTurn === "function") {
     try { await vm.interruptTurn(); } catch { /* end regardless */ }
   }

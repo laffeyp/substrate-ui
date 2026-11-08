@@ -66,4 +66,4 @@ function tagsOf(vocab) {
   return tags;
 }
 
-module.exports = { checkSignal, tagsOf };
+export { checkSignal, tagsOf };

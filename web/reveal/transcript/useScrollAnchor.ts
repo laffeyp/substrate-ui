@@ -39,12 +39,13 @@ export interface ScrollAnchor {
 
 // Distance from the bottom, in px, that still counts as "at the bottom" (shared with the stream).
 import { STICK_PX } from "../scroll_stick";
+import { Signal, TranscriptScrolledCause } from "../../vm/signals.gen";
 export { STICK_PX };
 
 interface Saved { scrollTop: number; following: boolean }
 const savedByKey = new Map<string, Saved>();
 
-type ScrollCause = "row_arrived" | "user" | "resized" | "view_switch";
+type ScrollCause = TranscriptScrolledCause;
 interface Sits { at_bottom: boolean; following: boolean; pinned: boolean }
 // The last place reported per pane per view, so a remount knows it is a return.
 const reportedByKey = new Map<string, Sits>();
@@ -134,8 +135,8 @@ export function useScrollAnchor(key: string, paneId: number): ScrollAnchor {
     const last = reportedByKey.get(key);
     reportedByKey.set(key, now);
     if (!last) return; // the first draw of this pane's transcript in this view
-    if (cause !== "view_switch" && last.at_bottom === now.at_bottom && last.following === now.following && last.pinned === now.pinned) return;
-    emitSignal("TRANSCRIPT_SCROLLED", { pane_id: paneId, at_bottom: now.at_bottom, following: now.following, pinned: now.pinned, cause }, { pane_id: paneId });
+    if (cause !== TranscriptScrolledCause.VIEW_SWITCH && last.at_bottom === now.at_bottom && last.following === now.following && last.pinned === now.pinned) return;
+    emitSignal(Signal.TRANSCRIPT_SCROLLED, { pane_id: paneId, at_bottom: now.at_bottom, following: now.following, pinned: now.pinned, cause }, { pane_id: paneId });
   }, [key, paneId]);
 
   // The user moved the view: hold nothing they scrolled away from, follow again at the bottom.
@@ -150,7 +151,7 @@ export function useScrollAnchor(key: string, paneId: number): ScrollAnchor {
     seenTopRef.current = scroller.scrollTop;
     savedByKey.set(key, { scrollTop: scroller.scrollTop, following });
     updateAnchor();
-    report("user");
+    report(TranscriptScrolledCause.USER);
   }, [key, updateAnchor, report]);
 
   const place = useCallback(() => {
@@ -217,7 +218,7 @@ export function useScrollAnchor(key: string, paneId: number): ScrollAnchor {
       write(scroller, scroller.scrollHeight);
     }
     updateAnchor();
-    report("view_switch");
+    report(TranscriptScrolledCause.VIEW_SWITCH);
     scroller.addEventListener("scroll", onScroll, { passive: true });
     // A click on a card header pins it before the card opens or closes (capture: before the
     // <details> toggles and the layout changes).
@@ -239,12 +240,12 @@ export function useScrollAnchor(key: string, paneId: number): ScrollAnchor {
       lastHeight = scroller.clientHeight;
       if (wasHidden && lastHeight > 0) {
         const back = savedByKey.get(key);
-        if (back && !back.following) { write(scroller, back.scrollTop); updateAnchor(); report("view_switch"); return; }
+        if (back && !back.following) { write(scroller, back.scrollTop); updateAnchor(); report(TranscriptScrolledCause.VIEW_SWITCH); return; }
         place();
-        report("view_switch");
+        report(TranscriptScrolledCause.VIEW_SWITCH);
         return;
       }
-      settle("resized");
+      settle(TranscriptScrolledCause.RESIZED);
     });
     observer.observe(scroller);
     observer.observe(mount);
@@ -256,7 +257,7 @@ export function useScrollAnchor(key: string, paneId: number): ScrollAnchor {
   }, [findScroller, key, onScroll, place, report, settle, updateAnchor, write]);
 
   // Every commit (new rows, streaming text) settles before paint.
-  useLayoutEffect(() => { settle("row_arrived"); });
+  useLayoutEffect(() => { settle(TranscriptScrolledCause.ROW_ARRIVED); });
 
   const registerRow = useCallback((seq: number, element: HTMLElement | null) => {
     if (element) rowRefs.current.set(seq, element);

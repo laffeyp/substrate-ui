@@ -4,18 +4,15 @@
 /**
  * web/vm/tools/check-vocabulary-parity.ts
  *
- * The vocabulary linter for the whole app (sprint 355, plan 2026-11-05-sdd-signals item 3). Walks the
- * window's code (web/vm/, web/reveal.ts, web/reveal_component.ts, web/reveal/, web/app/), Electron
- * main (electron/*.js) and the server (server.py) for emit sites: emit, emitSignal, sddEmit (window),
- * traceEmit, mainRecord (main), TRACE.emit (server), each with its tag as a string literal. Checks:
- *   - every emitted tag is declared and live in web/vm/signals/versions/current.json;
- *   - every declared tag is emitted somewhere, or is listed in web/vm/signals/unemitted.json (the tags
- *     whose emit sites a later plan item writes); a listed tag that is emitted fails too, so the list
- *     only shrinks;
- *   - no emit passes its tag as a variable, except the two pass-throughs named in PASS_THROUGH;
- *   - every declared field has a field_types entry the checkers parse, and no field carries a name
- *     evidence rule E1 bans;
- *   - PLANTED_* tags (test seams) appear only at the seams named in PLANTED_SITES.
+ * The vocabulary linter for the whole app. The code names tags through the generated `Signal`
+ * (web/vm/signals.gen.ts, electron/signals.gen.ts, signals_gen.py; sprint 363). Walks the window's
+ * code, Electron main (electron/) and the server (server.py). Checks:
+ *   - no emit call passes a tag as a raw string;
+ *   - every declared live tag is named somewhere as Signal.<TAG>, or is listed in
+ *     web/vm/signals/unemitted.json (the tags whose emit sites a later plan item writes); a listed tag
+ *     that is named fails too, so the list only shrinks;
+ *   - every declared field has a field_types entry the generator reads, and no field carries a name
+ *     evidence rule E1 bans.
  * Fails with a typed report.
  *
  * Usage:  npx tsx web/vm/tools/check-vocabulary-parity.ts
@@ -70,10 +67,6 @@ const SCAN_PATHS = [
 ];
 const SCAN_EXTS = new Set([".ts", ".tsx", ".js", ".py"]);
 const UNEMITTED_PATH = join(__dirname, "..", "signals", "unemitted.json");
-/** Emits whose tag is a parameter they pass on: the pane controller's wrapper and main's traceEmit. */
-const PASS_THROUGH = new Set(["web/vm/session_controller.ts:sddEmit(tag", "electron/main.js:mainRecord(tag"]);
-/** The test seams that emit a planted undeclared tag (harness/shakeout/trace_files.ts, TRACE_PLANT=reject). */
-const PLANTED_SITES = new Set(["electron/main.js", "server.py"]);
 /** E1: field names that would carry content. */
 const TYPE_RE = /^(int|float|string|bool|object|list\b.*|enum [a-z0-9_]+( \| [a-z0-9_]+)*)( or null)?$/;
 const BANNED_FIELDS = new Set(["text", "content", "prompt", "output", "token", "password", "key_value"]);
@@ -81,9 +74,10 @@ const SELF = "web/vm/tools/check-vocabulary-parity.ts";
 // __tests__: tests plant broken emits on purpose (sprint 355).
 const SKIP_DIRS = new Set(["node_modules", "dist", "_deprecated", "signals", "tools", "__tests__"]);
 
-const EMIT_RE = /\b(?:emit|emitSignal|sddEmit|traceEmit|mainRecord)\s*\(\s*["']([A-Z][A-Z0-9_]*)["']/g;
-const DYNAMIC_RE = /(?<![\w.])(?:(?:this|TRACE|self)\.)?(emit|emitSignal|sddEmit|traceEmit|mainRecord)\s*\(\s*([a-z_][A-Za-z0-9_]*)\s*[,)]/g;
-const dynamic: string[] = [];
+const NAMED_RE = /\bSignal\.([A-Z][A-Z0-9_]*)\b/g;
+const RAW_RE = /\b(?:emit|emitSignal|sddEmit|traceEmit|mainRecord)\s*\(\s*["']([A-Z][A-Z0-9_]*)["']/g;
+const GENERATED = new Set(["web/vm/signals.gen.ts", "electron/signals.gen.ts", "signals_gen.py"]);
+const raw: string[] = [];
 
 function fail(code: number, msg: string): never {
   console.error(`[vm-vocab-parity] ${msg}`);
@@ -162,22 +156,17 @@ function findEmittedTags(): Map<string, string[]> {
     if (rel === SELF) continue;
     let body: string;
     try { body = readFileSync(file, "utf8"); } catch { continue; }
+    if (GENERATED.has(rel)) continue;
     let m;
-    EMIT_RE.lastIndex = 0;
-    while ((m = EMIT_RE.exec(body)) !== null) {
+    NAMED_RE.lastIndex = 0;
+    while ((m = NAMED_RE.exec(body)) !== null) {
       const tag = m[1];
       if (!found.has(tag)) found.set(tag, []);
-      found.get(tag)!.push(rel);
+      if (!found.get(tag)!.includes(rel)) found.get(tag)!.push(rel);
     }
-    DYNAMIC_RE.lastIndex = 0;
-    while ((m = DYNAMIC_RE.exec(body)) !== null) {
-      const lineStart = body.lastIndexOf("\n", m.index) + 1;
-      const line = body.slice(lineStart, body.indexOf("\n", m.index));
-      if (/^\s*(function|def|async function|export function)\b/.test(line)) continue;
-      const key = `${rel}:${m[1]}(${m[2]}`;
-      if (!PASS_THROUGH.has(key)) dynamic.push(`${rel}:${body.slice(0, m.index).split("\n").length}: ${line.trim()}`);
+    RAW_RE.lastIndex = 0;
+    while ((m = RAW_RE.exec(body)) !== null) raw.push(`${rel}:${body.slice(0, m.index).split("\n").length}: ${m[0]}`);
     }
-  }
   return found;
 }
 
@@ -190,19 +179,14 @@ function main(): void {
   const emitted = findEmittedTags();
 
   const errs: string[] = [];
-  for (const d of dynamic) errs.push(`emit with a variable tag (not a known pass-through): ${d}`);
+  for (const r of raw) errs.push(`raw tag string at an emit call (name it Signal.<TAG>): ${r}`);
   for (const t of lock.tags as (Tag & { field_types?: Record<string, string> })[]) {
     const types = t.field_types ?? {};
     for (const f of [...t.payload, ...t.optional_payload]) {
       if (BANNED_FIELDS.has(f)) errs.push(`${t.name}.${f}: a field name E1 bans`);
       if (!(f in types)) errs.push(`${t.name}.${f}: no field_types entry`);
-      else if (!TYPE_RE.test(types[f].replace(/\s*\([^)]*\)/g, "").trim())) errs.push(`${t.name}.${f}: type "${types[f]}" is not one the checkers read`);
+      else if (!TYPE_RE.test(types[f].replace(/\s*\([^)]*\)/g, "").trim())) errs.push(`${t.name}.${f}: type "${types[f]}" is not one the generator reads`);
     }
-  }
-  for (const [tag, sites] of emitted) {
-    if (!tag.startsWith("PLANTED_")) continue;
-    for (const s of sites) if (!PLANTED_SITES.has(s)) errs.push(`${tag}: planted tag outside a test seam, at ${s}`);
-    emitted.delete(tag);
   }
   let unemittedList: string[] = [];
   try { unemittedList = (JSON.parse(readFileSync(UNEMITTED_PATH, "utf8")) as { tags: string[] }).tags; }

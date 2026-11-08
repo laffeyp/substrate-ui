@@ -12,6 +12,7 @@ import { SessionController } from "./session_controller";
 import type { SubstrateClient } from "./client";
 import type { ControllerEvent, OpenSessionRequest } from "./session_controller";
 import type { AssayReport, AssayRow, Snapshot } from "./types";
+import { TurnInterruptedTier } from "./signals.gen";
 
 export interface PaneRegistryDeps {
   makeClient: () => SubstrateClient;
@@ -126,7 +127,7 @@ export class PaneRegistry {
   pickBundle(slug: string | null): void { this.active().pickBundle(slug); }
   pickControls(length: string | null, tone: string | null): void { this.active().pickControls(length, tone); }
   pickWorkspace(path: string | null): void { this.active().pickWorkspace(path); }
-  interruptTurn(tier: "soft" | "hard" = "hard", recordRoot?: string): Promise<void> { return this.active().interruptTurn(tier, recordRoot); }
+  interruptTurn(tier: TurnInterruptedTier = TurnInterruptedTier.HARD, recordRoot?: string): Promise<void> { return this.active().interruptTurn(tier, recordRoot); }
   validateSpec(spec: Record<string, unknown>): Promise<{ valid: boolean; error?: string }> { return this.active().validateSpec(spec); }
   buildSpec(spec: Record<string, unknown>): Promise<{ ok: boolean; run?: Record<string, unknown>; error?: string }> { return this.active().buildSpec(spec); }
 }

@@ -67,7 +67,7 @@ module.exports = {
   ],
 
   files: [
-    "electron/**/*",
+    "dist-main/**/*",
     "web/dist/**/*",
     "server.py",
     "session_errors.py",

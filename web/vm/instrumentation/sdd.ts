@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2026 Peter Laffey
-// Signal emitter for the reveal shell. Validates every emit against
-// the reveal shell's own locked vocabulary. Unknown tags throw.
-// Missing required payload fields throw. Buffer exposed as
-// window.__vmSignals for the parity harness to read.
+// Signal emitter for the window. The tag and its payload are typed from the vocabulary
+// (web/vm/signals.gen.ts, generated from current.json; sprint 363), so the compiler rejects an
+// unknown tag, a missing or extra field, or a value outside its enum. Buffer exposed as
+// window.__vmSignals for the gates to read.
 //
 // The classic shell's emitter (window.__signals) is in _deprecated/classic-tree/web/instrumentation/;
 // the two share no runtime state (sprint 341, plan row F6, F348: this comment named a
 // web/instrumentation/ that no longer exists).
 
 import { VOCABULARY, VOCAB_VERSION } from "./vocabulary";
-import { checkSignal } from "./check";
+import { Signal, TraceLostProcess, type SignalPayloads } from "../signals.gen";
 
 export type SignalRecord = {
   ts: number;
@@ -53,34 +53,7 @@ let procSeq = storedSeq();
 let sendLost = 0;
 let reportingLoss = false;
 
-/** A broken emit is written as SIGNAL_REJECTED in every build; source and test builds then raise,
- *  and the packaged app goes on (v0.9 E6). preload.js sets native.packaged from main's app.isPackaged. */
-function packaged(): boolean {
-  return typeof window !== "undefined" && (window as unknown as { native?: { packaged?: boolean } }).native?.packaged === true;
-}
-
-/** The emitting line: the first stack frame above emit. Frame 0 is callSite, frame 1 emit; a
- *  method named emit (the pane controller's wrapper) is passed over too. Names survive in source
- *  builds; a packaged build's frames are minified and give the bundle's line and column. */
-function callSite(): string {
-  const frames = (new Error().stack ?? "").split("\n").map((l) => l.trim()).filter((l) => l.startsWith("at "));
-  const caller = frames.slice(2).find((l) => !/(^|\.)emit$/.test(l.slice(3).split(" (")[0]));
-  return (caller ?? "unknown").slice(3, 203);
-}
-
-export function emit(name: string, payload: Record<string, unknown> = {}, context: { pane_id?: number | null } = {}): SignalRecord | null {
-  const verdict = checkSignal(VOCABULARY, name, payload);
-  if (!verdict.ok) {
-    const site = callSite();
-    const message = `[vm-sdd] signal "${name}" rejected: ${verdict.problem}${verdict.field ? ` (${verdict.field})` : ""} at ${site}`;
-    // Written in every build, so the trace holds it even where a caller swallows the throw.
-    const rejected: Record<string, unknown> = { process: "window", tag: name.slice(0, 80), problem: verdict.problem, call_site: site };
-    if (verdict.field) rejected.field = verdict.field;
-    emit("SIGNAL_REJECTED", rejected, context);
-    if (!packaged()) throw new Error(message);
-    return null;
-  }
-  payload = verdict.payload;
+export function emit<K extends Signal>(name: K, payload: SignalPayloads[K], context: { pane_id?: number | null } = {}): SignalRecord {
   const spec = VOCABULARY[name];
   const record: SignalRecord = {
     ts: +(nowMs() - sessionStart).toFixed(4),
@@ -89,15 +62,13 @@ export function emit(name: string, payload: Record<string, unknown> = {}, contex
     name,
     category: spec.category,
     stratum: spec.stratum,
-    payload,
+    payload: payload as Record<string, unknown>,
   };
   storeSeq(procSeq);
   buffer.push(record);
   if (buffer.length > SIGNAL_CAP) buffer.splice(0, buffer.length - SIGNAL_CAP);
   if (typeof window !== "undefined") {
     (window as unknown as { __vmSignals: SignalRecord[] }).__vmSignals = buffer;
-    // The gates reach the emitter here to drive the checker in a packaged app (sprint 355).
-    (window as unknown as { __vmEmit: typeof emit }).__vmEmit = emit;
     // The trace on disk (v0.7, plan 2026-11-05-sdd-signals item 2): inside Electron each record also
     // goes to main, which writes it to this launch's window-<id>.jsonl with the boot and window ids.
     // A send that throws is counted, and the next send that works is followed by a TRACE_LOST with
@@ -110,7 +81,7 @@ export function emit(name: string, payload: Record<string, unknown> = {}, contex
         const count = sendLost;
         sendLost = 0;
         reportingLoss = true;
-        try { emit("TRACE_LOST", { process: "window", count }); } finally { reportingLoss = false; }
+        try { emit(Signal.TRACE_LOST, { process: TraceLostProcess.WINDOW, count }); } finally { reportingLoss = false; }
       }
     }
   }

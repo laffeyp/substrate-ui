@@ -792,6 +792,46 @@
       "rationale": "A reader that filters a pane's records by context missed its picker steps; the definition now says what the window's components already do.",
       "ratified": true,
       "ratified_by": "agent-resolved 2026-11-07, sprint 360"
+    },
+    {
+      "id": "P-0.15-DRAWN-CONNECTION",
+      "kind": "PAYLOAD_FIELD_PROPOSED",
+      "layer": 2,
+      "element": "PANE_DRAWN.connection gains idle",
+      "source": "web/vm/types.ts ConnectionState: idle | connecting | connected | reconnecting | closed; a bound pane before its session opens is idle",
+      "rationale": "The v0.7 enum would have rejected every record of a bound pane whose session had not opened.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-07, sprint 362"
+    },
+    {
+      "id": "P-0.15-DRAWN-TURN",
+      "kind": "PAYLOAD_FIELD_PROPOSED",
+      "layer": 2,
+      "element": "PANE_DRAWN.turn_state gains failed; each value defined by the activity line",
+      "source": "web/reveal/activity.ts liveActivity: no strip, live, failed (the turn request failed, drawn in red), recap; recap reads ended when the session ended",
+      "rationale": "turn_state is the strip's state; a failed turn is drawn differently from a returned one and had no value.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-07, sprint 362"
+    },
+    {
+      "id": "P-0.15-DRAWN-FIELDS",
+      "kind": "INVARIANT_PROPOSED",
+      "layer": 7,
+      "element": "PANE_DRAWN: which optional fields each state carries; written on change",
+      "source": "web/app/App.tsx computeViews (pickerViews, session(p)); web/app/PanesView.tsx draws PanePicker or PaneSession",
+      "rationale": "A reader comparing two records of a pane needs the same fields each time for the same state.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-07, sprint 362"
+    },
+    {
+      "id": "P-0.16-TYPED-NAMES",
+      "kind": "TAG_DEPRECATION_PROPOSED",
+      "layer": 10,
+      "element": "SIGNAL_REJECTED retired; E2, E5, E6 removed; the vocabulary's names and payload types are generated for the code (web/vm/signals.gen.ts, electron/signals.gen.ts, signals_gen.py)",
+      "source": "scripts/gen_signals.py; sprint 363",
+      "rationale": "Every tag name and enum value was a raw string at its call site, checked only at runtime by three hand-written checkers. Generated types make the compiler the check; the runtime checkers, their rules and their rejection record go.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-07, sprint 363"
     }
   ]
 }

@@ -17,4 +17,4 @@ function commitsFromPlist(plist) {
   return { app_commit: plistString(plist, "SubstrateUICommit"), kernel_commit: kernel + (kernelDirty ? "+dirty" : "") };
 }
 
-module.exports = { commitsFromPlist };
+export { commitsFromPlist };

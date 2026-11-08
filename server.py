@@ -30,7 +30,6 @@ import re
 import shutil
 import signal
 import json
-import math
 import subprocess
 import tempfile
 import threading
@@ -46,6 +45,7 @@ from typing import Any
 from urllib.parse import parse_qs, unquote, urlparse
 
 import msgspec
+from signals_gen import ApiRefusedArea, Signal, SessionCreatedWorkspaceShape, TraceOpenedProcess
 from substrate import api
 from substrate.topologies import bundled
 from substrate.topologies.session.environment import session_baseline
@@ -434,34 +434,34 @@ def _interrupt_then_end(
 
 # The domain an /api/ path belongs to (API_REFUSED.area, SERVER_FAULTED.area; vocabulary v0.11).
 # Most specific first; a path no route serves is "unrouted".
-_AREA_RULES: tuple[tuple[str, str], ...] = (
-    (r"/api/session/[^/]+/(turn|interrupt)", "turn"),
-    (r"/api/session/[^/]+/(files|file)(/watch)?", "files"),
-    (r"/api/session/[^/]+/children", "children"),
-    (r"/api/session/[^/]+/language(/.*)?", "language"),
-    (r"/api/session/[^/]+/mcp", "mcp"),
-    (r"/api/session/[^/]+/runs(/.*)?", "runs"),
-    (r"/api/session/[^/]+/tasks(/.*)?", "tasks"),
-    (r"/api/sessions?(/.*)?", "session"),
-    (r"/api/workspaces(/.*)?", "workspace"),
-    (r"/api/cli/.*", "cli"),
-    (r"/api/records(/.*)?", "records"),
-    (r"/api/runs(/.*)?", "runs"),
-    (r"/api/assays?(/.*)?", "assays"),
-    (r"/api/(topology|applications)(/.*)?", "topology"),
-    (r"/api/models(/.*)?", "models"),
-    (r"/api/bundles(/.*)?", "bundles"),
-    (r"/api/agent", "agent"),
-    (r"/api/(diff|worktree_diff)", "diff"),
-    (r"/api/resolve_child", "children"),
+_AREA_RULES: tuple[tuple[str, ApiRefusedArea], ...] = (
+    (r"/api/session/[^/]+/(turn|interrupt)", ApiRefusedArea.TURN),
+    (r"/api/session/[^/]+/(files|file)(/watch)?", ApiRefusedArea.FILES),
+    (r"/api/session/[^/]+/children", ApiRefusedArea.CHILDREN),
+    (r"/api/session/[^/]+/language(/.*)?", ApiRefusedArea.LANGUAGE),
+    (r"/api/session/[^/]+/mcp", ApiRefusedArea.MCP),
+    (r"/api/session/[^/]+/runs(/.*)?", ApiRefusedArea.RUNS),
+    (r"/api/session/[^/]+/tasks(/.*)?", ApiRefusedArea.TASKS),
+    (r"/api/sessions?(/.*)?", ApiRefusedArea.SESSION),
+    (r"/api/workspaces(/.*)?", ApiRefusedArea.WORKSPACE),
+    (r"/api/cli/.*", ApiRefusedArea.CLI),
+    (r"/api/records(/.*)?", ApiRefusedArea.RECORDS),
+    (r"/api/runs(/.*)?", ApiRefusedArea.RUNS),
+    (r"/api/assays?(/.*)?", ApiRefusedArea.ASSAYS),
+    (r"/api/(topology|applications)(/.*)?", ApiRefusedArea.TOPOLOGY),
+    (r"/api/models(/.*)?", ApiRefusedArea.MODELS),
+    (r"/api/bundles(/.*)?", ApiRefusedArea.BUNDLES),
+    (r"/api/agent", ApiRefusedArea.AGENT),
+    (r"/api/(diff|worktree_diff)", ApiRefusedArea.DIFF),
+    (r"/api/resolve_child", ApiRefusedArea.CHILDREN),
 )
 
 
-def _api_area(path: str) -> str:
+def _api_area(path: str) -> ApiRefusedArea:
     for pattern, area in _AREA_RULES:
         if re.fullmatch(pattern, path):
             return area
-    return "unrouted"
+    return ApiRefusedArea.UNROUTED
 
 
 def _site(skip: tuple[str, ...]) -> str:
@@ -470,93 +470,6 @@ def _site(skip: tuple[str, ...]) -> str:
         if frame.name not in skip:
             return f"{frame.name}:{frame.lineno}"
     return "unknown"
-
-
-_RANGED = frozenset({"port", "pid", "count", "seq", "turn_index", "proc_seq"})
-_CUT = frozenset({"detail", "reason", "cause", "error"})
-_CUT_AT = 200
-
-
-def _type_admits(spec: str, v: Any) -> bool:
-    t = re.sub(r"\s*\([^)]*\)", "", spec).strip()
-    nullable = t.endswith(" or null")
-    if nullable:
-        t = t[: -len(" or null")].strip()
-    if v is None:
-        return nullable
-    if t.startswith("enum "):
-        return isinstance(v, str) and v in [x.strip() for x in t[5:].split("|")]
-    if t.startswith("list"):
-        return isinstance(v, list)
-    if t == "int":
-        return isinstance(v, int) and not isinstance(v, bool)
-    if t == "float":
-        return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
-    if t == "string":
-        return isinstance(v, str)
-    if t == "bool":
-        return isinstance(v, bool)
-    if t == "object":
-        return isinstance(v, dict)
-    return False
-
-
-def _in_range(field: str, v: Any) -> bool:
-    if not (field in _RANGED or field.endswith("_ms")):
-        return True
-    if isinstance(v, bool) or not isinstance(v, (int, float)):
-        return True
-    if not (isinstance(v, int) or float(v).is_integer()) or v < 0:
-        return False
-    return field != "port" or 1 <= v <= 65535
-
-
-def _check_signal(tags: dict[str, Any], name: str, payload: dict[str, Any]) -> dict[str, Any]:
-    """The server's signal checker (vocabulary v0.9; sprint 355). The rules and the cases are in
-    web/vm/signals/checker-cases.json; the window (web/vm/instrumentation/check.ts) and main
-    (electron/check_signal.js) implement the same rules and run the same cases. Returns
-    {"ok": True, "payload": ...} with long reasons cut (E2), or {"ok": False, "problem", "field"}:
-    the payload of SIGNAL_REJECTED."""
-    spec = tags.get(name)
-    if spec is None:
-        return {"ok": False, "problem": "unknown_tag", "field": None}
-    for f in spec["payload"]:
-        if f not in payload:
-            return {"ok": False, "problem": "missing_field", "field": f}
-    fields = list(spec["payload"]) + list(spec["optional_payload"])
-    for f in payload:
-        if f not in fields:
-            return {"ok": False, "problem": "extra_field", "field": f}
-    types = spec.get("field_types") or {}
-    for f in fields:
-        if f in payload and f in types and not _type_admits(types[f], payload[f]):
-            return {"ok": False, "problem": "wrong_type", "field": f}
-    for f in fields:
-        if f in payload and not _in_range(f, payload[f]):
-            return {"ok": False, "problem": "out_of_range", "field": f}
-    out = payload
-    for f, v in payload.items():
-        if f in _CUT and isinstance(v, str) and len(v) > _CUT_AT:
-            if out is payload:
-                out = dict(payload)
-            out[f] = v[:_CUT_AT] + f"…[cut {len(v) - _CUT_AT}]"
-    return {"ok": True, "payload": out}
-
-
-def _load_vocabulary() -> dict[str, Any]:
-    """The vocabulary the server checks against: current.json in a source tree (source runs and
-    the tests, so a vocabulary change needs no rebuild to be checked); in the packaged app, which
-    ships no source tree, web/dist/vocabulary.json, which `npm run build` copies from it."""
-    here = Path(__file__).resolve().parent
-    for p in (
-        here / "web" / "vm" / "signals" / "versions" / "current.json",
-        here / "web" / "dist" / "vocabulary.json",
-    ):
-        try:
-            return json.loads(p.read_text())
-        except (OSError, ValueError):
-            continue
-    return {"vocabulary_version": "unrecorded", "tags": []}
 
 
 class _Trace:
@@ -588,10 +501,6 @@ class _Trace:
         self._fd: int | None = None
         folder = os.environ.get("SUBSTRATE_TRACE_DIR")
         self._on = bool(folder)
-        self._packaged = os.environ.get("SUBSTRATE_PACKAGED") == "1"
-        self._tags: dict[str, Any] = (
-            {t["name"]: t for t in _load_vocabulary()["tags"]} if folder else {}
-        )
         if folder:
             try:
                 self._fd = os.open(
@@ -635,33 +544,10 @@ class _Trace:
         except OSError:
             pass
 
-    def emit(self, name: str, payload: dict[str, Any]) -> None:
-        """Checks the record (v0.9). A broken one is written as SIGNAL_REJECTED in every build, so
-        the trace holds it; then it raises, unless SUBSTRATE_PACKAGED is set (main sets it in the
-        packaged app), where the caller goes on (E6)."""
+    def emit(self, name: Signal, payload: dict[str, Any]) -> None:
+        """Writes the record. The tag is a generated name (signals_gen.py, sprint 363)."""
         if not self._on:
             return
-        verdict = _check_signal(self._tags, name, payload)
-        if not verdict["ok"]:
-            site = "unknown"
-            for frame in traceback.extract_stack()[-2::-1]:
-                if frame.name not in ("emit", "_write"):
-                    site = f"{Path(frame.filename).name}:{frame.name}:{frame.lineno}"
-                    break
-            rejected: dict[str, Any] = {
-                "process": "server",
-                "tag": str(name)[:80],
-                "problem": verdict["problem"],
-                "call_site": site,
-            }
-            if verdict["field"]:
-                rejected["field"] = verdict["field"]
-            self.emit("SIGNAL_REJECTED", rejected)
-            if not self._packaged:
-                field = f" ({verdict['field']})" if verdict["field"] else ""
-                raise ValueError(f'signal "{name}" rejected: {verdict["problem"]}{field} at {site}')
-            return
-        payload = verdict["payload"]
         with self._lock:
             wrote = self._write(name, payload)
             if self.lost > self._reported and (wrote or not self._announced):
@@ -2725,7 +2611,7 @@ class Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         if code >= 400 and path.startswith("/api/"):
             TRACE.emit(
-                "API_REFUSED",
+                Signal.API_REFUSED,
                 {
                     "area": _api_area(unquote(path)),
                     "status": code,
@@ -2759,7 +2645,7 @@ class Handler(BaseHTTPRequestHandler):
                 where = tb.tb_frame.f_code.co_name
             tb = tb.tb_next
         TRACE.emit(
-            "SERVER_FAULTED",
+            Signal.SERVER_FAULTED,
             {
                 "area": _api_area(unquote(urlparse(self.path).path)),
                 "error_type": type(exc).__name__,
@@ -3206,7 +3092,7 @@ class Handler(BaseHTTPRequestHandler):
         # `_remember_workspace` skips session-sandbox and temp paths.
         _remember_workspace(manifest.workspace)
         TRACE.emit(
-            "SESSION_CREATED",
+            Signal.SESSION_CREATED,
             {
                 "session_id": manifest.session_id,
                 "driver": str(manifest.driver),
@@ -3365,7 +3251,9 @@ class Handler(BaseHTTPRequestHandler):
             # the entire record for the tail UserMessage.turn_index.
             next_turn_index = self.app.registry.next_turn_index(session_id)
             # The turn is handed to the kernel now, under the session's lock (TURN_ACCEPTED).
-            TRACE.emit("TURN_ACCEPTED", {"session_id": session_id, "turn_index": next_turn_index})
+            TRACE.emit(
+                Signal.TURN_ACCEPTED, {"session_id": session_id, "turn_index": next_turn_index}
+            )
             # Sprint 217e: prefix a context slice to assembled_prompt when the
             # caller passed `context` in the body. The extractor is delegate's
             # existing helper; it reads the parent (== this session's) record
@@ -4391,8 +4279,12 @@ class Handler(BaseHTTPRequestHandler):
                     seed="",
                 )
                 TRACE.emit(
-                    "SESSION_CREATED",
-                    {"session_id": session_id, "driver": str(driver), "workspace_shape": "flat"},
+                    Signal.SESSION_CREATED,
+                    {
+                        "session_id": session_id,
+                        "driver": str(driver),
+                        "workspace_shape": SessionCreatedWorkspaceShape.FLAT,
+                    },
                 )
             except NameCollision as exc:
                 # Race: another caller with the same name won. Reuse theirs.
@@ -4405,7 +4297,9 @@ class Handler(BaseHTTPRequestHandler):
         def _build(_manifest: Any, _record_root: Path) -> Any:
             next_turn_index = self.app.registry.next_turn_index(session_id)
             # The turn is handed to the kernel now, under the session's lock (TURN_ACCEPTED).
-            TRACE.emit("TURN_ACCEPTED", {"session_id": session_id, "turn_index": next_turn_index})
+            TRACE.emit(
+                Signal.TURN_ACCEPTED, {"session_id": session_id, "turn_index": next_turn_index}
+            )
             return SessionUserMessage(
                 text=task,
                 turn_index=next_turn_index,
@@ -5055,7 +4949,7 @@ def main() -> None:
                 note += f" ... (+{len(skipped) - 5} more)"
         print(note, flush=True)
         TRACE.emit(
-            "STORE_SCANNED",
+            Signal.STORE_SCANNED,
             {
                 "sessions_found": len(manifests),
                 "parked": sum(1 for m in manifests if m.status == SessionStatus.PARKED),
@@ -5105,14 +4999,8 @@ def main() -> None:
     print(summary)
     # v0.8 S1: the server's first record, written before either listener serves; the store's
     # counts follow in STORE_SCANNED when the background scan ends.
-    TRACE.emit("SERVER_STARTED", {"port": PORT})
-    TRACE.emit("TRACE_OPENED", {"process": "server"})
-    # Test seam (harness/shakeout/trace_files.ts, TRACE_PLANT=reject): one record the vocabulary does
-    # not declare, on its own thread, so a source run's raise prints a traceback, not a dead server.
-    if "server" in os.environ.get("SUBSTRATE_SIGNAL_PLANT", "").split(","):
-        threading.Thread(
-            target=lambda: TRACE.emit("PLANTED_UNDECLARED", {}), name="signal_plant", daemon=True
-        ).start()
+    TRACE.emit(Signal.SERVER_STARTED, {"port": PORT})
+    TRACE.emit(Signal.TRACE_OPENED, {"process": TraceOpenedProcess.SERVER})
     if uds_srv is not None:
         threading.Thread(target=uds_srv.serve_forever, daemon=True).start()
     threading.Thread(target=_run_boot_scan, daemon=True, name="boot_scan").start()
@@ -5143,7 +5031,7 @@ def main() -> None:
             f"failed={outcome['failed']}"
         )
         TRACE.emit(
-            "SERVER_STOPPED",
+            Signal.SERVER_STOPPED,
             {
                 "ended": outcome["ended"],
                 "skipped": outcome["skipped_fresh"] + outcome["skipped_ended"],

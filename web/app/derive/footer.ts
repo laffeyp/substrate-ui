@@ -8,6 +8,7 @@
 // (open item 34), and a design-tool prop drew a made-up rate-limit line (F356, F328).
 
 import type { ConnectionState } from "../../vm/types";
+import { PaneDrawnConnection } from "../../vm/signals.gen";
 
 export interface FooterInput {
   /** The focused pane has no workspace yet. */
@@ -36,7 +37,7 @@ export function footerText(input: FooterInput): FooterText {
   if (input.rateLimited) { status = "◌ rate-limited · retry 3/6 in 14s"; statusColor = "#7fb3b8"; }
   else if (snap && snap.endedReason) status = "● finalised";
   else if (snap && snap.sessionId) {
-    if (snap.connection === "connected") { status = "● live"; statusColor = LIVE; }
+    if (snap.connection === PaneDrawnConnection.CONNECTED) { status = "● live"; statusColor = LIVE; }
     else status = "○ " + snap.connection;
   }
   return {

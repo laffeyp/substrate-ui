@@ -7,10 +7,11 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import { clearBuffer, emit, SIGNAL_CAP, snapshot } from "../../vm/instrumentation/sdd";
+import { Signal } from "../../vm/signals.gen";
 
 test("past the cap the oldest signals go, in order", () => {
   clearBuffer();
-  for (let i = 0; i < SIGNAL_CAP + 25; i++) emit("STREAM_ENVELOPE_APPENDED", { seq: i, kind: "x" });
+  for (let i = 0; i < SIGNAL_CAP + 25; i++) emit(Signal.STREAM_ENVELOPE_APPENDED, { seq: i, kind: "x" });
   const kept = snapshot();
   assert.strictEqual(kept.length, SIGNAL_CAP);
   assert.strictEqual(kept[0].payload.seq, 25);

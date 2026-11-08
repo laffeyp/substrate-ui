@@ -12,7 +12,7 @@
 // set. contextBridge.exposeInMainWorld is the only way to reach
 // the renderer.
 
-const { contextBridge, ipcRenderer } = require("electron");
+import { contextBridge, ipcRenderer } from "electron";
 
 // Menu-command dispatch. Every menu item in electron/menu.js that
 // carries a click handler calls webContents.send("menu:<command>",
@@ -20,8 +20,8 @@ const { contextBridge, ipcRenderer } = require("electron");
 // The wrapper delivers only the parsed command + payload; the raw
 // IpcRendererEvent stays inside the preload per the Electron 44
 // security guide's approved contextBridge pattern.
-const menuListeners = new Set();
-const deepLinkListeners = new Set();
+const menuListeners = new Set<any>();
+const deepLinkListeners = new Set<any>();
 
 ipcRenderer.on("menu:open-record", (_e, p) => dispatchMenu("open-record", p));
 ipcRenderer.on("menu:open", (_e, p) => dispatchMenu("open", p));
@@ -49,9 +49,6 @@ function dispatchDeepLink(url) {
 contextBridge.exposeInMainWorld("native", {
   platform: process.platform,
   isElectron: true,
-  // The build posture for the window's signal checker (v0.9 E6): main passes --substrate-packaged to a
-  // packaged app's windows; there a broken emit is written as SIGNAL_REJECTED, elsewhere it raises.
-  packaged: process.argv.includes("--substrate-packaged"),
   onMenuCommand: (cb) => {
     menuListeners.add(cb);
     return () => menuListeners.delete(cb);

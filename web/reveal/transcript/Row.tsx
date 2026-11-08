@@ -21,6 +21,7 @@ import { ModelReply } from "./ModelReply";
 import { ToolCard } from "./ToolCard";
 import { AuthPromptCard } from "./AuthPromptCard";
 import { emit as emitSignal } from "../../vm/instrumentation/sdd";
+import { Signal } from "../../vm/signals.gen";
 
 export interface RowProps {
   row: TranscriptRow;
@@ -86,7 +87,7 @@ const RowInner: React.FC<RowProps> = ({ row, paired, progressText, progressEof, 
   React.useEffect(() => {
     if (paneId === undefined) return;
     const { seq, kind } = drawnSeq(row);
-    emitSignal("TRANSCRIPT_ROW_DRAWN", { pane_id: paneId, session_id: sessionId ?? null, seq, kind }, { pane_id: paneId });
+    emitSignal(Signal.TRANSCRIPT_ROW_DRAWN, { pane_id: paneId, session_id: sessionId ?? null, seq, kind }, { pane_id: paneId });
   }, []);
   const refCb = React.useCallback(
     (el: HTMLDivElement | null) => { registerRow?.(row.seq, el); },

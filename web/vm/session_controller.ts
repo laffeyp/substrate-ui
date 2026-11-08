@@ -35,6 +35,7 @@ import { setToolOutputMode, toggleToolOutputMode } from "./tool_output_mode";
 import { SessionStatus, TaskStatus } from "./statuses.gen";
 import { GUIDANCE_LEVEL_BUNDLES, HANDOFF_DEFAULT, HandoffPosition, LENGTH_DEFAULT, LengthPosition, TONE_DEFAULT, TonePosition } from "./controls.gen";
 import type { EnvelopeKindValue } from "./kinds";
+import { PaneDrawnConnection, Signal, TranscriptRowSkippedReason, TurnInterruptedTier, type SignalPayloads } from "./signals.gen";
 
 /** One slash command (UI sprint 162). */
 interface SlashCommand {
@@ -229,7 +230,7 @@ const EMPTY_SNAPSHOT: Snapshot = {
   liveSessions: [],
   recentWorkspaces: [],
   bundleRoster: [],
-  connection: "idle",
+  connection: PaneDrawnConnection.IDLE,
   lastError: null,
   topologyGraph: null,
   rawEnvelopes: [],
@@ -292,10 +293,8 @@ export class SessionController {
     return () => { this.eventListeners.delete(listener); };
   }
 
-  private emit(tag: string, payload: Record<string, unknown> = {}): void {
-    // Validate against the locked vocabulary at the speaker's mouth.
-    // Unknown tag or missing required payload field throws — the whole
-    // point of the lock.
+  private emit<K extends Signal>(tag: K, payload: SignalPayloads[K]): void {
+    // The tag and payload are typed from the vocabulary (web/vm/signals.gen.ts).
     sddEmit(tag, payload, { pane_id: this.paneId });
     const event: ControllerEvent = { tag, payload, at: Date.now() };
     for (const listener of this.eventListeners) listener(event);
@@ -334,7 +333,7 @@ export class SessionController {
       ? result.data.cli_versions
       : null;
     this.patch({ driverRoster: roster, driverDefault: defaultDriver, driverGroups, cliVersions });
-    this.emit("DRIVER_ROSTER_LOADED", { count: roster.length, default: defaultDriver });
+    this.emit(Signal.DRIVER_ROSTER_LOADED, { count: roster.length, default: defaultDriver });
   }
 
   /** Sprint 087 — record which model version to run for a CLI. The
@@ -348,7 +347,7 @@ export class SessionController {
     if (versionId == null) delete next[driver];
     else next[driver] = versionId;
     this.patch({ driverVersion: next });
-    this.emit("DRIVER_VERSION_PICKED", { driver, version: versionId });
+    this.emit(Signal.DRIVER_VERSION_PICKED, { driver, version: versionId });
   }
 
   async loadLiveSessions(): Promise<void> {
@@ -360,7 +359,7 @@ export class SessionController {
     for (const s of result.data.interrupted ?? []) rows.push(rowFrom(s, "interrupted"));
     for (const s of result.data.ended ?? []) rows.push(rowFrom(s, "ended"));
     this.patch({ liveSessions: rows });
-    this.emit("SESSIONS_LOADED", { count: rows.length });
+    this.emit(Signal.SESSIONS_LOADED, { count: rows.length });
   }
 
   /** Fetch the record's topology graph off /api/records/<name>/topology_graph.
@@ -418,7 +417,7 @@ export class SessionController {
     const baseline = obj((raw as { baseline?: unknown }).baseline);
     const config = obj((raw as { config?: unknown }).config);
     this.patch({ topologyGraph: { producers, triggers, views, termination, routes, outside, exports, baseline, config } });
-    this.emit("TOPOLOGY_LOADED", { producer_count: producers.length, trigger_count: triggers.length });
+    this.emit(Signal.TOPOLOGY_LOADED, { producer_count: producers.length, trigger_count: triggers.length });
   }
 
   /** The machine's assays, from /api/assays. Returned to the page that asked; the listing is the
@@ -427,7 +426,7 @@ export class SessionController {
     const result = await this.client.fetchJson<unknown[]>("/api/assays");
     if (!result.ok) { this.patch({ lastError: `assays: ${result.detail}` }); return []; }
     const rows = (Array.isArray(result.data) ? result.data : []).filter(isRecord).map(assayRowFrom);
-    this.emit("ASSAYS_LOADED", { count: rows.length });
+    this.emit(Signal.ASSAYS_LOADED, { count: rows.length });
     return rows;
   }
 
@@ -436,7 +435,7 @@ export class SessionController {
     const result = await this.client.fetchJson<Record<string, unknown>>(`/api/assay/${encodeURIComponent(name)}`);
     if (!result.ok) { this.patch({ lastError: `assay ${name}: ${result.detail}` }); return null; }
     const report = assayReportFrom(result.data);
-    this.emit("ASSAY_REPORT_LOADED", { name: report.name, arms: report.arms.length });
+    this.emit(Signal.ASSAY_REPORT_LOADED, { name: report.name, arms: report.arms.length });
     return report;
   }
 
@@ -452,7 +451,7 @@ export class SessionController {
         .map((r) => ({ path: r.path, shape: r.shape ?? "flat" }))
       : [];
     this.patch({ recentWorkspaces: rows });
-    this.emit("WORKSPACES_LOADED", { count: rows.length });
+    this.emit(Signal.WORKSPACES_LOADED, { count: rows.length });
   }
 
   /** Sprint 086 — POST /api/workspaces {path}. Server appends the path
@@ -509,7 +508,7 @@ export class SessionController {
         slotCount: typeof r.slot_count === "number" ? r.slot_count : 0,
       }));
     this.patch({ bundleRoster: rows });
-    this.emit("BUNDLE_ROSTER_LOADED", { count: rows.length });
+    this.emit(Signal.BUNDLE_ROSTER_LOADED, { count: rows.length });
   }
 
   // ── session lifecycle ───────────────────────────────────────────────
@@ -551,12 +550,12 @@ export class SessionController {
     const name = request.name ?? this.snap.sessionName;
     if (name) body.name = name;
     if (request.isolate) body.isolate = request.isolate;
-    this.patch({ connection: "connecting", lastError: null, driver });
-    this.emit("SESSION_OPEN_REQUESTED", { driver, workspace: request.workspace ?? null, bundle: request.bundle ?? null });
+    this.patch({ connection: PaneDrawnConnection.CONNECTING, lastError: null, driver });
+    this.emit(Signal.SESSION_OPEN_REQUESTED, { driver, workspace: request.workspace ?? null, bundle: request.bundle ?? null });
     const result = await this.client.fetchJson<OpenSessionAck>("/api/session", { method: "POST", body });
     if (!result.ok) {
-      this.patch({ connection: "closed", lastError: `session_open: ${result.detail}` });
-      this.emit("SESSION_OPEN_REFUSED", { failure_class: result.failureClass, detail: result.detail });
+      this.patch({ connection: PaneDrawnConnection.CLOSED, lastError: `session_open: ${result.detail}` });
+      this.emit(Signal.SESSION_OPEN_REFUSED, { failure_class: result.failureClass, detail: result.detail });
       return;
     }
     const ack = result.data;
@@ -595,7 +594,7 @@ export class SessionController {
     this.attachStream(ack.session_id);
     // No graph fetch here: a fresh session has no record until its first turn, so the request
     // 404'd on every open (UI sprint 107). The SessionStarted handler fetches it once it exists.
-    this.emit("SESSION_OPEN_ACKED", { session_id: ack.session_id, name: ack.name ?? null, driver });
+    this.emit(Signal.SESSION_OPEN_ACKED, { session_id: ack.session_id, name: ack.name ?? null, driver });
   }
 
   /** UI sprint 105: reload this session's background tasks; keep polling every 3 s while any runs. */
@@ -646,7 +645,7 @@ export class SessionController {
     for (const c of result.data?.children ?? []) {
       if (this.childrenSeen.has(c.session_id) || c.created_at < from) continue;
       this.childrenSeen.add(c.session_id);
-      this.emit("DELEGATE_CHILD_STARTED", { session_id: c.session_id, driver: c.driver });
+      this.emit(Signal.DELEGATE_CHILD_STARTED, { session_id: c.session_id, driver: c.driver });
     }
     if (this.childrenTimer) { clearTimeout(this.childrenTimer); this.childrenTimer = null; }
     if (this.delegateCalls.size) {
@@ -667,7 +666,7 @@ export class SessionController {
       return;
     }
     this.patch({ runs: result.data?.runs ?? this.snap.runs });
-    this.emit("RUN_STOP_REQUESTED", { run_id: runId });
+    this.emit(Signal.RUN_STOP_REQUESTED, { run_id: runId });
     void this.refreshRuns();
   }
 
@@ -726,7 +725,7 @@ export class SessionController {
     if (!trimmed) return;
     if (this.snap.viewOnly) {
       this.controlRow(this.snap.viewOnly, true);
-      this.emit("TURN_REFUSED_VIEW_ONLY", {});
+      this.emit(Signal.TURN_REFUSED_VIEW_ONLY, {});
       return;
     }
     if (!this.snap.sessionId) await this.openSession();
@@ -748,7 +747,7 @@ export class SessionController {
     });
     const turnIndex = this.snap.turnIndex;
     this.patch({ turnIndex: turnIndex + 1, parkReason: null, turnFailure: null });
-    this.emit("TURN_SUBMITTED", { session_id: sessionId, turn_index: turnIndex, text_length: trimmed.length });
+    this.emit(Signal.TURN_SUBMITTED, { session_id: sessionId, turn_index: turnIndex, text_length: trimmed.length });
     const result = await this.client.fetchJson<unknown>(
       `/api/session/${encodeURIComponent(sessionId)}/turn`,
       {
@@ -768,9 +767,9 @@ export class SessionController {
         text: `turn refused: ${result.detail}`,
       });
       this.patch({ turnFailure: { detail: String(result.detail), atT: Date.now() / 1000 } });
-      this.emit("TURN_REFUSED", { failure_class: result.failureClass, detail: result.detail });
+      this.emit(Signal.TURN_REFUSED, { failure_class: result.failureClass, detail: result.detail });
     } else {
-      this.emit("TURN_ACK", { session_id: sessionId });
+      this.emit(Signal.TURN_ACK, { session_id: sessionId });
     }
   }
 
@@ -807,14 +806,14 @@ export class SessionController {
       languageClearedSeq: -1,
       languageOpenTick: 0,
       endedReason: null,
-      connection: "connecting",
+      connection: PaneDrawnConnection.CONNECTING,
     });
-    this.emit("CHILD_RECORD_ATTACH_REQUESTED", { record_root: recordRoot });
+    this.emit(Signal.CHILD_RECORD_ATTACH_REQUESTED, { record_root: recordRoot });
     this.unsubscribeStream = this.client.streamRecordByPath(recordRoot, -1, {
-      onOpen: () => { this.patch({ connection: "connected" }); this.emit("STREAM_ATTACHED", { record_root: recordRoot }); },
+      onOpen: () => { this.patch({ connection: PaneDrawnConnection.CONNECTED }); this.emit(Signal.STREAM_ATTACHED, { record_root: recordRoot }); },
       onEnvelope: (env) => this.handleEnvelope(recordRoot, env),
-      onClose: () => { this.patch({ connection: "closed" }); this.emit("STREAM_CLOSED", { record_root: recordRoot }); },
-      onError: () => { this.patch({ connection: "reconnecting" }); this.emit("STREAM_RECONNECTING", { record_root: recordRoot }); },
+      onClose: () => { this.patch({ connection: PaneDrawnConnection.CLOSED }); this.emit(Signal.STREAM_CLOSED, { record_root: recordRoot }); },
+      onError: () => { this.patch({ connection: PaneDrawnConnection.RECONNECTING }); this.emit(Signal.STREAM_RECONNECTING, { record_root: recordRoot }); },
     });
   }
 
@@ -824,7 +823,7 @@ export class SessionController {
 
   async attachExisting(sessionId: string): Promise<void> {
     if (!sessionId) return;
-    this.emit("SESSION_ATTACH_STARTED", { session_id: sessionId });
+    this.emit(Signal.SESSION_ATTACH_STARTED, { session_id: sessionId });
     // Look up the manifest so the snapshot's name/driver/workspace
     // fields carry through the same way openSession does.
     const result = await this.client.fetchJson<{
@@ -890,7 +889,7 @@ export class SessionController {
   async endSession(reason: string = "user_exit"): Promise<void> {
     const sessionId = this.snap.sessionId;
     if (!sessionId) return;
-    this.emit("SESSION_END_REQUESTED", { session_id: sessionId, reason });
+    this.emit(Signal.SESSION_END_REQUESTED, { session_id: sessionId, reason });
     const result = await this.client.fetchJson<unknown>(
       `/api/session/${encodeURIComponent(sessionId)}/end`,
       // The server reads `source` (server.py, the /end route) onto the record's SessionEndRequested;
@@ -934,7 +933,7 @@ export class SessionController {
     } else {
       this.patch({ driver: name });
     }
-    this.emit("DRIVER_PICKED", { driver: name });
+    this.emit(Signal.DRIVER_PICKED, { driver: name });
     // Auth card only fires pre-session for CLIs whose login flow fits
     // the AuthPromptCard shape.
     if (!this.snap.sessionId && this.cliLoginSupported.includes(name)) {
@@ -980,7 +979,7 @@ export class SessionController {
   pickBundle(slug: string | null): void {
     if (this.snap.sessionId) return;
     this.patch({ bundleSlug: slug });
-    this.emit("BUNDLE_PICKED", { bundle: slug });
+    this.emit(Signal.BUNDLE_PICKED, { bundle: slug });
   }
 
   /** Sprint 086 followup — thread the picker's chosen workspace into
@@ -997,16 +996,16 @@ export class SessionController {
    * pair so parity harnesses can see the round trip. */
   async validateSpec(spec: Record<string, unknown>): Promise<{ valid: boolean; error?: string }> {
     const name = typeof spec.name === "string" ? spec.name : "";
-    this.emit("SPEC_VALIDATE_REQUESTED", name ? { topology_name: name } : {});
+    this.emit(Signal.SPEC_VALIDATE_REQUESTED, name ? { topology_name: name } : {});
     const result = await this.client.fetchJson<{ valid: boolean; error?: string }>("/api/validate", { method: "POST", body: spec });
     if (!result.ok) {
       const err = `validate: ${result.detail}`;
-      this.emit("SPEC_VALIDATED", { valid: false, error: err });
+      this.emit(Signal.SPEC_VALIDATED, { valid: false, error: err });
       return { valid: false, error: err };
     }
     const r = result.data;
-    if (r.valid) this.emit("SPEC_VALIDATED", { valid: true });
-    else this.emit("SPEC_VALIDATED", { valid: false, error: String(r.error ?? "") });
+    if (r.valid) this.emit(Signal.SPEC_VALIDATED, { valid: true });
+    else this.emit(Signal.SPEC_VALIDATED, { valid: false, error: String(r.error ?? "") });
     return { valid: !!r.valid, error: r.error };
   }
 
@@ -1016,22 +1015,22 @@ export class SessionController {
    * pair or SPEC_BUILD_REJECTED. */
   async buildSpec(spec: Record<string, unknown>): Promise<{ ok: boolean; run?: Record<string, unknown>; error?: string }> {
     const name = typeof spec.name === "string" ? spec.name : "";
-    this.emit("SPEC_BUILD_REQUESTED", name ? { topology_name: name } : {});
+    this.emit(Signal.SPEC_BUILD_REQUESTED, name ? { topology_name: name } : {});
     const v = await this.client.fetchJson<{ valid: boolean; error?: string }>("/api/validate", { method: "POST", body: spec });
     if (!v.ok || !v.data.valid) {
       const err = !v.ok ? `validate: ${v.detail}` : String(v.data.error ?? "invalid spec");
-      this.emit("SPEC_BUILD_REJECTED", { reason: err });
+      this.emit(Signal.SPEC_BUILD_REJECTED, { reason: err });
       return { ok: false, error: err };
     }
     const r = await this.client.fetchJson<Record<string, unknown>>("/api/build", { method: "POST", body: spec });
     if (!r.ok) {
       const err = `build: ${r.detail}`;
-      this.emit("SPEC_BUILD_REJECTED", { reason: err });
+      this.emit(Signal.SPEC_BUILD_REJECTED, { reason: err });
       return { ok: false, error: err };
     }
     const run = r.data;
     const unfired = Array.isArray(run.unfired_triggers) ? run.unfired_triggers : [];
-    this.emit("SPEC_BUILT", {
+    this.emit(Signal.SPEC_BUILT, {
       run_name: String(run.name ?? ""),
       status: String(run.status ?? "unknown"),
       ...(unfired.length ? { unfired_triggers_count: unfired.length } : {}),
@@ -1057,7 +1056,7 @@ export class SessionController {
     const parts = text.slice(1).split(/\s+/);
     const cmd = parts[0].toLowerCase();
     const rest = parts.slice(1).join(" ");
-    this.emit("SLASH_ROUTED", { cmd });
+    this.emit(Signal.SLASH_ROUTED, { cmd });
     const command = this.slashCommands().find((c) => c.names.includes(cmd));
     if (command) {
       await command.run(rest);
@@ -1068,7 +1067,7 @@ export class SessionController {
       kind: "SlashUnknown", role: "warning",
       text: `unknown slash: /${cmd}. /help for the list.`,
     });
-    this.emit("SLASH_UNKNOWN", { cmd });
+    this.emit(Signal.SLASH_UNKNOWN, { cmd });
     return true;
   }
 
@@ -1172,7 +1171,7 @@ export class SessionController {
           const run = id ? runs.find((r) => r.run_id === id) : pool[pool.length - 1];
           if (!run) { this.controlRow(id ? `no run ${id} in this session` : "no run to " + action, true); return; }
           if (action === "stop") await this.stopRun(run.run_id);
-          else if (action === "focus") this.emit("RUN_FOCUS_REQUESTED", { run_id: run.run_id, topology: run.topology, sessions: run.sessions });
+          else if (action === "focus") this.emit(Signal.RUN_FOCUS_REQUESTED, { run_id: run.run_id, topology: run.topology, sessions: run.sessions });
           else this.controlRow(`run: unknown action ${JSON.stringify(action)}. use /run [stop|focus] [run id].`, true);
         },
       },
@@ -1286,7 +1285,7 @@ export class SessionController {
   /** Interrupt the in-flight turn. Server refuses if no turn is
    * running (returns {interrupted: false}). Records the outcome as a
    * transcript row so the UI shows what happened. */
-  async interruptTurn(tier: "soft" | "hard" = "hard", recordRoot?: string): Promise<void> {
+  async interruptTurn(tier: TurnInterruptedTier = TurnInterruptedTier.HARD, recordRoot?: string): Promise<void> {
     const sessionId = this.snap.sessionId;
     if (!sessionId) return;
     // Phase 8 item 9 descent scope: when `recordRoot` is set, the client
@@ -1321,7 +1320,7 @@ export class SessionController {
     let text: string;
     if (isSignal) {
       text = `^C — soft interrupt requested; the model will stop after this tool${scopeSuffix}`;
-    } else if (wasInterrupted && tier === "hard") {
+    } else if (wasInterrupted && tier === TurnInterruptedTier.HARD) {
       text = scope === "descent"
         ? "^C — hard interrupt; tool cancelled · cancel_producer on the child's runtime"
         : "^C — hard interrupt; producer cancelled";
@@ -1333,7 +1332,7 @@ export class SessionController {
         : "^C — no turn in flight";
     }
     this.appendTranscript({ seq: -Math.round(Date.now()) - 6, kind: "Interrupted", role: "system", text });
-    this.emit("TURN_INTERRUPTED", { was_interrupted: wasInterrupted, landed, tier, signal: isSignal, scope });
+    this.emit(Signal.TURN_INTERRUPTED, { was_interrupted: wasInterrupted, landed, tier, signal: isSignal, scope });
   }
 
   disconnect(): void {
@@ -1345,9 +1344,9 @@ export class SessionController {
   // ── internal ────────────────────────────────────────────────────────
   private attachStream(sessionId: string): void {
     if (this.unsubscribeStream) { this.unsubscribeStream(); this.unsubscribeStream = null; }
-    this.patch({ connection: "connecting" });
+    this.patch({ connection: PaneDrawnConnection.CONNECTING });
     this.unsubscribeStream = this.client.streamRecord(sessionId, this.lastSeq, {
-      onOpen: () => { this.patch({ connection: "connected" }); this.emit("STREAM_ATTACHED", { session_id: sessionId }); },
+      onOpen: () => { this.patch({ connection: PaneDrawnConnection.CONNECTED }); this.emit(Signal.STREAM_ATTACHED, { session_id: sessionId }); },
       onEnvelope: (env) => this.handleEnvelope(sessionId, env),
       onClose: () => this.handleStreamClose(sessionId),
       onError: () => this.handleStreamError(sessionId),
@@ -1358,14 +1357,14 @@ export class SessionController {
     // Graceful close on RunFinalised; the SessionEnded envelope already
     // updated state. Move connection to closed and stop.
     if (this.snap.sessionId !== sessionId) return;
-    this.patch({ connection: "closed" });
-    this.emit("STREAM_CLOSED", { session_id: sessionId });
+    this.patch({ connection: PaneDrawnConnection.CLOSED });
+    this.emit(Signal.STREAM_CLOSED, { session_id: sessionId });
   }
 
   private handleStreamError(sessionId: string): void {
     if (this.snap.sessionId !== sessionId) return;
-    this.patch({ connection: "reconnecting" });
-    this.emit("STREAM_RECONNECTING", { session_id: sessionId });
+    this.patch({ connection: PaneDrawnConnection.RECONNECTING });
+    this.emit(Signal.STREAM_RECONNECTING, { session_id: sessionId });
     if (this.reconnectTimer) return;
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
@@ -1379,12 +1378,12 @@ export class SessionController {
     // deduped but the switch below still ran, so every reconnect appended the transcript again.
     const existing = this.snap.rawEnvelopes;
     if (typeof env.seq === "number" && this.seenSeqs.has(env.seq)) {
-      if (this.paneId !== null) this.emit("TRANSCRIPT_ROW_SKIPPED", { pane_id: this.paneId, session_id: this.snap.sessionId, seq: env.seq, kind: env.kind, reason: "duplicate_seq" });
+      if (this.paneId !== null) this.emit(Signal.TRANSCRIPT_ROW_SKIPPED, { pane_id: this.paneId, session_id: this.snap.sessionId, seq: env.seq, kind: env.kind, reason: TranscriptRowSkippedReason.DUPLICATE_SEQ });
       return;
     }
     if (typeof env.seq === "number") this.seenSeqs.add(env.seq);
     if (typeof env.seq === "number" && env.seq > this.lastSeq) this.lastSeq = env.seq;
-    this.emit("STREAM_ENVELOPE_APPENDED", { seq: env.seq, kind: env.kind });
+    this.emit(Signal.STREAM_ENVELOPE_APPENDED, { seq: env.seq, kind: env.kind });
     this.patch({ rawEnvelopes: [...existing, env] });
     this.envelopeToRows(sessionId, env);
     this.noteSkipped(env);
@@ -1398,9 +1397,9 @@ export class SessionController {
     if (typeof env.seq !== "number" || this.paneId === null) return;
     if (this.snap.transcript.some((row) => row.seq === env.seq)) return;
     const reason = env.kind === EnvelopeKind.ToolProgress
-      ? "folded"
-      : KIND_DISPOSITION_BY_VALUE[env.kind] === "ignored" ? "hidden_kind" : "other";
-    this.emit("TRANSCRIPT_ROW_SKIPPED", { pane_id: this.paneId, session_id: this.snap.sessionId, seq: env.seq, kind: env.kind, reason });
+      ? TranscriptRowSkippedReason.FOLDED
+      : KIND_DISPOSITION_BY_VALUE[env.kind] === "ignored" ? TranscriptRowSkippedReason.HIDDEN_KIND : TranscriptRowSkippedReason.OTHER;
+    this.emit(Signal.TRANSCRIPT_ROW_SKIPPED, { pane_id: this.paneId, session_id: this.snap.sessionId, seq: env.seq, kind: env.kind, reason });
   }
 
   /** The envelope's effect on the snapshot: a transcript row, a state change, or nothing. */
@@ -1615,7 +1614,7 @@ export class SessionController {
           // In a run's pane the topology writes the next message, so it is never the person's turn.
           text: this.snap.viewOnly ? `· returned (${reason})` : `· returned (${reason}) — your turn`,
         });
-        this.emit("TURN_PARKED", { park_reason: reason });
+        this.emit(Signal.TURN_PARKED, { park_reason: reason });
         return;
       }
       case EnvelopeKind.SessionEnded: {
@@ -1630,7 +1629,7 @@ export class SessionController {
         // the turns after it are still to come. The server ends the stream (an `end` event) when
         // the record's last frame is a RunFinalised; sendTurn reopens it to resume.
         this.patch({ endedReason: reason });
-        this.emit("SESSION_ENDED_LOCAL", { reason });
+        this.emit(Signal.SESSION_ENDED_LOCAL, { reason });
         return;
       }
       case EnvelopeKind.BackgroundTaskEnded: {
@@ -1655,7 +1654,7 @@ export class SessionController {
           seq: env.seq, kind: env.kind, role: "system",
           text: `run ${runId} · ${topology} started · /run stop ${runId} stops it, /run focus ${runId} shows it`,
         });
-        this.emit("RUN_STARTED", { run_id: runId, topology, sessions, t: env.t ?? null });
+        this.emit(Signal.RUN_STARTED, { run_id: runId, topology, sessions, t: env.t ?? null });
         void this.refreshRuns();
         return;
       }
@@ -1782,10 +1781,10 @@ export class SessionController {
     const hadStream = this.unsubscribeStream != null;
     if (this.unsubscribeStream) { this.unsubscribeStream(); this.unsubscribeStream = null; }
     if (this.reconnectTimer) { clearTimeout(this.reconnectTimer); this.reconnectTimer = null; }
-    this.patch({ connection: "closed" as ConnectionState, endedReason: reason });
+    this.patch({ connection: PaneDrawnConnection.CLOSED, endedReason: reason });
     // Emit STREAM_CLOSED once, when this call is the one that closed it;
     // the client-side onClose callback races the patched snapshot.
-    if (hadStream && sessionId) this.emit("STREAM_CLOSED", { session_id: sessionId });
+    if (hadStream && sessionId) this.emit(Signal.STREAM_CLOSED, { session_id: sessionId });
   }
 
   /** Close the stream and unbind the session — an explicit endSession.

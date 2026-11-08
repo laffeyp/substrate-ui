@@ -15,6 +15,7 @@ import { useScrollAnchor } from "./useScrollAnchor";
 import { isToolResultRow } from "../../vm";
 import { emit as emitSignal } from "../../vm/instrumentation/sdd";
 import type { Snapshot, TranscriptRow } from "../../vm";
+import { Signal, TranscriptRowSkippedReason } from "../../vm/signals.gen";
 
 export interface TranscriptProps {
   paneId: number;
@@ -60,7 +61,7 @@ export function Transcript(props: TranscriptProps): React.ReactElement | null {
     for (const row of snapshot.transcript) {
       if (!isToolResultRow(row) || foldedRef.current.has(row.seq)) continue;
       foldedRef.current.add(row.seq);
-      emitSignal("TRANSCRIPT_ROW_SKIPPED", { pane_id: props.paneId, session_id: snapshot.sessionId, seq: row.seq, kind: row.kind, reason: "folded" }, { pane_id: props.paneId });
+      emitSignal(Signal.TRANSCRIPT_ROW_SKIPPED, { pane_id: props.paneId, session_id: snapshot.sessionId, seq: row.seq, kind: row.kind, reason: TranscriptRowSkippedReason.FOLDED }, { pane_id: props.paneId });
     }
   }, [snapshot.transcript, snapshot.sessionId, props.paneId]);
   const start = startLine(snapshot);

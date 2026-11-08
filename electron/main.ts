@@ -12,15 +12,15 @@
 //
 // Sprint 079 replaces the hard-coded 8765 with --port 0 + readback.
 
-const { app, BrowserWindow, shell, ipcMain, dialog, screen } = require("electron");
-const { spawn } = require("node:child_process");
-const fs = require("node:fs");
-const http = require("node:http");
-const path = require("node:path");
-const { installMenu } = require("./menu");
-const { commitsFromPlist } = require("./build_commits");
-const { checkSignal, tagsOf } = require("./check_signal");
-const { spawnSync } = require("node:child_process");
+import { app, BrowserWindow, shell, ipcMain, dialog, screen } from "electron";
+import { spawn, spawnSync } from "node:child_process";
+import * as fs from "node:fs";
+import * as http from "node:http";
+import * as os from "node:os";
+import * as path from "node:path";
+import { installMenu } from "./menu";
+import { commitsFromPlist } from "./build_commits";
+import { Signal, VOCAB_VERSION, AppBootedHomeKind, AppQuitRequestedCause, DeepLinkReceivedLinkKind, NativeDialogClosedDialog, NativeDialogClosedOutcome, NavigationBlockedTargetKind, TraceLostProcess, TraceOpenedProcess, WindowOpenedCause, type SignalPayloads } from "./signals.gen";
 
 // ── The trace (vocabulary v0.7; plan process/planning/2026-11-05-sdd-signals, item 2) ─────────────
 // Each launch writes <logs>/traces/<boot_id>/: main.jsonl (main's records), window-<id>.jsonl (each
@@ -36,7 +36,7 @@ const { spawnSync } = require("node:child_process");
 // SUBSTRATE_TRACE_CAP (bytes) is a test seam: harness/shakeout/trace_files.ts sets it low to force losses.
 const TRACE_FILE_CAP = Number(process.env.SUBSTRATE_TRACE_CAP) > 0 ? Number(process.env.SUBSTRATE_TRACE_CAP) : Infinity;
 const BOOT_ID = new Date().toISOString().replace(/[-:.]/g, "").replace("T", "-").slice(0, 15) + "-" + Math.random().toString(16).slice(2, 8);
-const trace = { dir: null, files: new Map(), written: 0, lost: 0, mainSeq: 0, windowSeq: new Map(), windowsOpened: 0, serverLost: 0 };
+const trace: { [key: string]: any } = { dir: null, files: new Map(), written: 0, lost: 0, mainSeq: 0, windowSeq: new Map(), windowsOpened: 0, serverLost: 0 };
 
 function traceFile(name) {
   let f = trace.files.get(name);
@@ -65,32 +65,20 @@ function traceWrite(name, record) {
 
 // A file's losses reach main.jsonl as TRACE_LOST: the first loss at once, later ones as one count
 // when that file next writes (a capped file never does; its total is on APP_QUIT_COMPLETED).
-function reportLoss(name, processName, wrote) {
+function reportLoss(name, processName: TraceLostProcess, wrote) {
   const f = trace.files.get(name);
   if (!f || f.unreported === 0) return;
   if (f.announced && !wrote) return;
   const count = f.unreported;
   f.unreported = 0; f.announced = true;
-  mainRecord("TRACE_LOST", { process: processName, count });
+  mainRecord(Signal.TRACE_LOST, { process: processName, count });
 }
 
 let inMainRecord = false;
-// Every main record is checked (v0.9; check_signal.js). A broken one is written as SIGNAL_REJECTED in
-// every build, so the trace holds it; a source run then raises, the packaged app goes on (E6).
-// windowId: the window a record is about (WINDOW_*, NATIVE_DIALOG_CLOSED, MENU_COMMAND_SENT, ...), in the
-// record context's window_id; null for the app as a whole.
-function mainRecord(tag, payload, windowId = null) {
-  const verdict = checkSignal(VOCAB_TAGS, tag, payload);
-  if (!verdict.ok) {
-    const site = (new Error().stack || "").split("\n").map((l) => l.trim()).filter((l) => l.startsWith("at "))
-      .find((l) => !/^at (mainRecord|traceEmit|reportLoss)\b/.test(l)) || "at unknown";
-    const rejected = { process: "main", tag: String(tag).slice(0, 80), problem: verdict.problem, call_site: site.slice(3, 203) };
-    if (verdict.field) rejected.field = verdict.field;
-    mainRecord("SIGNAL_REJECTED", rejected, windowId);
-    if (!app.isPackaged) throw new Error(`[electron] signal "${tag}" rejected: ${verdict.problem}${verdict.field ? " (" + verdict.field + ")" : ""} ${site}`);
-    return false;
-  }
-  payload = verdict.payload;
+// Main's records, typed by tag from the vocabulary (signals.gen.ts, sprint 363). windowId: the window a
+// record is about (WINDOW_*, NATIVE_DIALOG_CLOSED, MENU_COMMAND_SENT, ...), in the record context's
+// window_id; null for the app as a whole.
+function mainRecord<K extends Signal>(tag: K, payload: SignalPayloads[K], windowId: number | null = null) {
   // After the closing record nothing can report a loss in the trace; say it on stderr (substrate.log).
   if (trace.closed) { process.stderr.write("[electron] trace closed; " + tag + " not written\n"); return false; }
   const rec = { boot_id: BOOT_ID, process: "main", proc_seq: trace.mainSeq++, wall: new Date().toISOString(), window_id: windowId, name: tag, payload };
@@ -98,9 +86,9 @@ function mainRecord(tag, payload, windowId = null) {
 }
 
 // main's own records; a loss on main.jsonl is reported by the next main record that is written.
-function traceEmit(tag, payload, windowId = null) {
+function traceEmit<K extends Signal>(tag: K, payload: SignalPayloads[K], windowId: number | null = null) {
   const wrote = mainRecord(tag, payload, windowId);
-  if (!inMainRecord) { inMainRecord = true; reportLoss("main.jsonl", "main", wrote); inMainRecord = false; }
+  if (!inMainRecord) { inMainRecord = true; reportLoss("main.jsonl", TraceLostProcess.MAIN, wrote); inMainRecord = false; }
 }
 
 // A commit with uncommitted changes in the paths the build ships is "<sha>+dirty", so a trace never
@@ -127,17 +115,6 @@ function buildCommits() {
   };
 }
 
-// The vocabulary main checks its records against: current.json in a source tree, so a vocabulary
-// change needs no rebuild to be checked; in the packaged app, which ships no source tree,
-// web/dist/vocabulary.json, which `npm run build` copies from it (sprints 355, 357).
-const VOCAB = (() => {
-  for (const rel of [["web", "vm", "signals", "versions", "current.json"], ["web", "dist", "vocabulary.json"]]) {
-    try { return JSON.parse(fs.readFileSync(path.join(__dirname, "..", ...rel), "utf8")); } catch { /* next */ }
-  }
-  return { vocabulary_version: "unrecorded", tags: [] };
-})();
-const VOCAB_TAGS = tagsOf(VOCAB);
-
 function openTrace() {
   try {
     const root = path.join(app.getPath("logs"), "traces");
@@ -150,16 +127,11 @@ function openTrace() {
     return;
   }
   const commits = buildCommits();
-  traceEmit("APP_BOOTED", {
+  traceEmit(Signal.APP_BOOTED, {
     app_version: app.getVersion(), app_commit: commits.app_commit, kernel_commit: commits.kernel_commit,
-    vocab_version: VOCAB.vocabulary_version, packaged: app.isPackaged, home_kind: process.env.SUBSTRATE_HOME ? "env" : "default",
+    vocab_version: VOCAB_VERSION, packaged: app.isPackaged, home_kind: process.env.SUBSTRATE_HOME ? AppBootedHomeKind.ENV : AppBootedHomeKind.DEFAULT,
   });
-  traceEmit("TRACE_OPENED", { process: "main" });
-  // Test seam (harness/shakeout/trace_files.ts, TRACE_PLANT=reject): one record the vocabulary does not
-  // declare. A source run's raise is caught here and printed, so the gate can read that it raised.
-  if ((process.env.SUBSTRATE_SIGNAL_PLANT || "").split(",").includes("main")) {
-    try { traceEmit("PLANTED_UNDECLARED", {}); } catch (err) { process.stderr.write(err.message + "\n"); }
-  }
+  traceEmit(Signal.TRACE_OPENED, { process: TraceOpenedProcess.MAIN });
   process.stderr.write("[electron] trace: " + trace.dir + "\n");
 }
 
@@ -174,7 +146,7 @@ ipcMain.on("native:signal", (event, record) => {
   const r = record && typeof record === "object" ? record : {};
   const rec = { boot_id: BOOT_ID, process: "window", proc_seq: typeof r.proc_seq === "number" ? r.proc_seq : seq, wall: new Date().toISOString(), window_id: windowId, ...r };
   const wrote = traceWrite(key, rec);
-  reportLoss(key, "window", wrote);
+  reportLoss(key, TraceLostProcess.WINDOW, wrote);
 });
 
 // F7. Electron reads app.getName() from package.json's `productName`,
@@ -201,7 +173,7 @@ if (process.env.SUBSTRATE_HOME) {
     // app before the backend could fail and show its dialog; keep the run off the real ~/Library
     // with a temp root it removes at quit, and let the backend report the bad state.
     process.stderr.write("[electron] SUBSTRATE_HOME unusable for app state: " + err.message + "\n");
-    root = fs.mkdtempSync(path.join(require("node:os").tmpdir(), "substrate-electron-"));
+    root = fs.mkdtempSync(path.join(os.tmpdir(), "substrate-electron-"));
     fs.mkdirSync(path.join(root, "profile"));
     app.on("will-quit", () => { try { fs.rmSync(root, { recursive: true, force: true }); } catch { /* best-effort */ } });
   }
@@ -245,7 +217,7 @@ const PATH_MARK = "__SUBSTRATE_PATH__";
 // Sprint 094: the probe starts when main.js loads and runs while Electron initialises; spawnServer
 // awaits it. It used to be a spawnSync inside whenReady that blocked startup ~0.4 s (measured).
 function probeShellPath() {
-  return new Promise((resolve) => {
+  return new Promise<{ shell: string; path: string | null; why: string }>((resolve) => {
     const shell = process.env.SHELL || "/bin/zsh";
     let out = "";
     let child;
@@ -422,16 +394,13 @@ function spawnServer() {
       SUBSTRATE_PARENT_PID: String(process.pid),
       // The trace (item 2): the server writes server.jsonl into this launch's folder.
       SUBSTRATE_BOOT_ID: BOOT_ID,
-      // The server's signal checker posture (v0.9 E6): written and raised in a source run, written
-      // and passed over in the packaged app.
-      ...(app.isPackaged ? { SUBSTRATE_PACKAGED: "1" } : {}),
       ...(trace.dir ? { SUBSTRATE_TRACE_DIR: trace.dir } : {}),
       ...(pythonHome ? { PYTHONHOME: pythonHome } : {}),
     },
   });
   serverSpawnedAt = Date.now();
   // A spawn that fails has no pid (its "error" event follows); there is then no server to name.
-  if (typeof serverProc.pid === "number") traceEmit("SERVER_SPAWNED", { pid: serverProc.pid, packaged: app.isPackaged });
+  if (typeof serverProc.pid === "number") traceEmit(Signal.SERVER_SPAWNED, { pid: serverProc.pid, packaged: app.isPackaged });
   serverProc.stdout.on("data", (chunk) => {
     const text = chunk.toString();
     process.stderr.write("[server] " + text);
@@ -448,14 +417,14 @@ function spawnServer() {
       const count = total - trace.serverLost;
       trace.serverLost = total;
       trace.lost += count;
-      traceEmit("TRACE_LOST", { process: "server", count });
+      traceEmit(Signal.TRACE_LOST, { process: TraceLostProcess.SERVER, count });
     }
     if (serverPort === null) {
       stdoutBuf += text;
       const match = stdoutBuf.match(PORT_READBACK_RE);
       if (match) {
         serverPort = Number(match[1]);
-        traceEmit("SERVER_BOUND", { port: serverPort, ms: Date.now() - serverSpawnedAt });
+        traceEmit(Signal.SERVER_BOUND, { port: serverPort, ms: Date.now() - serverSpawnedAt });
       }
     }
   });
@@ -464,7 +433,7 @@ function spawnServer() {
     serverExited = true;
     trace.serverExitCode = code;
     // expected false is the incident: the backend stopped while the app still needed it.
-    traceEmit("SERVER_EXITED", { code: code ?? null, signal: signal ?? null, expected: serverStopRequested });
+    traceEmit(Signal.SERVER_EXITED, { code: code ?? null, signal: signal ?? null, expected: serverStopRequested });
     log("server exited code=" + code + " signal=" + signal);
     for (const win of BrowserWindow.getAllWindows()) win.webContents.send("server:dead", { code, signal });
     // UI sprint 102: the backend died while the app was in use (not quitting, not starting).
@@ -486,7 +455,7 @@ function waitForPortReadback(deadline) {
 }
 
 function pollHealth(port, deadline) {
-  return new Promise((resolve, reject) => {
+  return new Promise<void>((resolve, reject) => {
     const attempt = () => {
       const req = http.get({ host: "127.0.0.1", port, path: "/", timeout: 500 }, (res) => {
         res.resume();
@@ -506,8 +475,8 @@ function pollHealth(port, deadline) {
 
 function forwardDeepLink(url) {
   // The kind only: a link's path names a record or session, which the window resolves (E1).
-  const kind = /^substrate:\/\/record\//i.test(url) ? "record" : /^substrate:\/\/session\//i.test(url) ? "session" : "unknown";
-  traceEmit("DEEP_LINK_RECEIVED", { link_kind: kind });
+  const kind = /^substrate:\/\/record\//i.test(url) ? DeepLinkReceivedLinkKind.RECORD : /^substrate:\/\/session\//i.test(url) ? DeepLinkReceivedLinkKind.SESSION : DeepLinkReceivedLinkKind.UNKNOWN;
+  traceEmit(Signal.DEEP_LINK_RECEIVED, { link_kind: kind });
   const win = currentWindow();
   if (win && readyWindows.has(win)) {
     win.webContents.send("deep-link", url);
@@ -517,7 +486,7 @@ function forwardDeepLink(url) {
 }
 
 // cause: boot, menu (File ▸ New Window) or activate (the Dock with no window open); v0.10.
-function createWindow(cause) {
+function createWindow(cause: WindowOpenedCause) {
   trace.windowsOpened += 1;
   // Sprint 088 — the reveal shell breaks below a certain floor. Lock
   // the MINIMUM to a third of the primary display's work area; the
@@ -546,13 +515,11 @@ function createWindow(cause) {
       sandbox: true,
       nodeIntegration: false,
       webSecurity: true,
-      // The window's signal checker posture (v0.9 E6), read by preload.js.
-      additionalArguments: app.isPackaged ? ["--substrate-packaged"] : [],
     },
   });
   const windowId = win.id;
-  traceEmit("WINDOW_OPENED", { cause }, windowId);
-  win.on("closed", () => traceEmit("WINDOW_CLOSED", {}, windowId));
+  traceEmit(Signal.WINDOW_OPENED, { cause }, windowId);
+  win.on("closed", () => traceEmit(Signal.WINDOW_CLOSED, {}, windowId));
   win.on("focus", () => { lastFocused = win; });
   lastFocused = win;
   win.webContents.on("did-finish-load", () => {
@@ -577,15 +544,15 @@ function createWindow(cause) {
     } catch (_) { return true; }
   };
   // Every refusal is NAVIGATION_BLOCKED with the target's kind, never its address (E1).
-  const targetKind = (url) => (isExternal(url) ? "external" : /^file:/i.test(url) ? "file" : "unknown");
+  const targetKind = (url) => (isExternal(url) ? NavigationBlockedTargetKind.EXTERNAL : /^file:/i.test(url) ? NavigationBlockedTargetKind.FILE : NavigationBlockedTargetKind.UNKNOWN);
   win.webContents.setWindowOpenHandler(({ url }) => {
-    traceEmit("NAVIGATION_BLOCKED", { target_kind: targetKind(url) }, windowId);
+    traceEmit(Signal.NAVIGATION_BLOCKED, { target_kind: targetKind(url) }, windowId);
     if (isExternal(url)) shell.openExternal(url);
     return { action: "deny" };
   });
   win.webContents.on("will-navigate", (event, url) => {
     if (isExternal(url)) {
-      traceEmit("NAVIGATION_BLOCKED", { target_kind: "external" }, windowId);
+      traceEmit(Signal.NAVIGATION_BLOCKED, { target_kind: NavigationBlockedTargetKind.EXTERNAL }, windowId);
       event.preventDefault(); shell.openExternal(url);
     }
   });
@@ -635,7 +602,7 @@ let appLogPath = null;
 // onBackendDied, whose app.exit skips will-quit.
 function closeTrace() {
   if (!trace.dir || trace.closed) return;
-  traceEmit("APP_QUIT_COMPLETED", {
+  traceEmit(Signal.APP_QUIT_COMPLETED, {
     server_exit_code: trace.serverExitCode ?? null, windows_opened: trace.windowsOpened,
     signals_written: trace.written, signals_lost: trace.lost,
   });
@@ -655,7 +622,7 @@ async function onBackendDied(code, signal) {
     defaultId: 0,
     cancelId: 1,
   });
-  noteQuit("backend_died");
+  noteQuit(AppQuitRequestedCause.BACKEND_DIED);
   // app.exit closes the windows without will-quit; closing them first puts each WINDOW_CLOSED
   // before the closing record (destroy guarantees "closed").
   for (const w of BrowserWindow.getAllWindows()) { try { w.destroy(); } catch { /* already gone */ } }
@@ -697,15 +664,15 @@ app.whenReady().then(async () => {
       "The backend server did not come up.\n\n" + err.message + logHint,
     );
     killServerGroup();
-    pendingQuitCause = "startup_failed";
+    pendingQuitCause = AppQuitRequestedCause.STARTUP_FAILED;
     app.quit();
     return;
   }
-  createWindow("boot");
+  createWindow(WindowOpenedCause.BOOT);
   // The menu reports each command it sends to a window (MENU_COMMAND_SENT).
-  installMenu(currentWindow, () => createWindow("menu"), (command, win) => traceEmit("MENU_COMMAND_SENT", { command }, win.id));
+  installMenu(currentWindow, () => createWindow(WindowOpenedCause.MENU), (command, win) => traceEmit(Signal.MENU_COMMAND_SENT, { command }, win.id));
   app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow("activate");
+    if (BrowserWindow.getAllWindows().length === 0) createWindow(WindowOpenedCause.ACTIVATE);
   });
 });
 
@@ -716,7 +683,7 @@ app.whenReady().then(async () => {
 // on real quit (Cmd-Q → `before-quit`) or on non-macOS platforms.
 // Review 2026-09-28 § F6.
 app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") { pendingQuitCause = "last_window"; app.quit(); }
+  if (process.platform !== "darwin") { pendingQuitCause = AppQuitRequestedCause.LAST_WINDOW; app.quit(); }
 });
 
 // Quit waits for the backend. The server's SIGTERM handler ends every
@@ -729,12 +696,12 @@ app.on("window-all-closed", () => {
 let quitAfterServer = false;
 // APP_QUIT_REQUESTED, once per launch. Main's own quits name their cause first; any other quit
 // (Cmd-Q, the Dock, logout, a test driver) reaches before-quit as "app" (v0.10).
-let pendingQuitCause = "app";
+let pendingQuitCause: AppQuitRequestedCause = AppQuitRequestedCause.APP;
 let quitNoted = false;
-function noteQuit(cause) {
+function noteQuit(cause: AppQuitRequestedCause) {
   if (quitNoted) return;
   quitNoted = true;
-  traceEmit("APP_QUIT_REQUESTED", { cause });
+  traceEmit(Signal.APP_QUIT_REQUESTED, { cause });
 }
 app.on("before-quit", (event) => {
   noteQuit(pendingQuitCause);
@@ -768,7 +735,7 @@ ipcMain.handle("native:open-record", async (event) => {
     buttonLabel: "Open",
   });
   const picked = !r.canceled && r.filePaths.length > 0;
-  traceEmit("NATIVE_DIALOG_CLOSED", { dialog: "open_record", outcome: picked ? "picked" : "cancelled" }, win ? win.id : null);
+  traceEmit(Signal.NATIVE_DIALOG_CLOSED, { dialog: NativeDialogClosedDialog.OPEN_RECORD, outcome: picked ? NativeDialogClosedOutcome.PICKED : NativeDialogClosedOutcome.CANCELLED }, win ? win.id : null);
   return picked ? r.filePaths[0] : null;
 });
 
@@ -784,6 +751,6 @@ ipcMain.handle("native:pick-folder", async (event) => {
     buttonLabel: "Add",
   });
   const picked = !r.canceled && r.filePaths.length > 0;
-  traceEmit("NATIVE_DIALOG_CLOSED", { dialog: "pick_folder", outcome: picked ? "picked" : "cancelled" }, win ? win.id : null);
+  traceEmit(Signal.NATIVE_DIALOG_CLOSED, { dialog: NativeDialogClosedDialog.PICK_FOLDER, outcome: picked ? NativeDialogClosedOutcome.PICKED : NativeDialogClosedOutcome.CANCELLED }, win ? win.id : null);
   return picked ? r.filePaths[0] : null;
 });

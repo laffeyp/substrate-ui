@@ -24,13 +24,14 @@ test("refused sends are counted and reported as one TRACE_LOST after the next go
     },
   };
   const { emit, snapshot } = await import("../../vm/instrumentation/sdd");
-  emit("TRACE_OPENED", { process: "window" });
-  emit("TRACE_OPENED", { process: "window" });
+  const { Signal, TraceOpenedProcess } = await import("../../vm/signals.gen");
+  emit(Signal.TRACE_OPENED, { process: TraceOpenedProcess.WINDOW });
+  emit(Signal.TRACE_OPENED, { process: TraceOpenedProcess.WINDOW });
   assert.strictEqual(sent.length, 0, "both refused sends stay unsent");
-  emit("TRACE_OPENED", { process: "window" });
+  emit(Signal.TRACE_OPENED, { process: TraceOpenedProcess.WINDOW });
   assert.deepStrictEqual(sent.map((r) => [r.name, r.proc_seq]), [["TRACE_OPENED", 2], ["TRACE_LOST", 3]]);
   assert.deepStrictEqual(sent[1].payload, { process: "window", count: 2 });
   assert.strictEqual(snapshot().length, 4, "the buffer keeps every record, the refused ones too");
-  emit("TRACE_OPENED", { process: "window" });
+  emit(Signal.TRACE_OPENED, { process: TraceOpenedProcess.WINDOW });
   assert.strictEqual(sent.filter((r) => r.name === "TRACE_LOST").length, 1, "a loss is reported once");
 });

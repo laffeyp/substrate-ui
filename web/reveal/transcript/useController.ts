@@ -11,6 +11,7 @@
 
 import { useCallback, useSyncExternalStore } from "react";
 import type { Snapshot } from "../../vm";
+import { PaneDrawnConnection } from "../../vm/signals.gen";
 
 interface ControllerLike {
   snapshot(): Snapshot;
@@ -50,7 +51,7 @@ const EMPTY_SNAPSHOT: Snapshot = {
   liveSessions: [],
   recentWorkspaces: [],
   bundleRoster: [],
-  connection: "idle",
+  connection: PaneDrawnConnection.IDLE,
   lastError: null,
   topologyGraph: null,
   rawEnvelopes: [],
