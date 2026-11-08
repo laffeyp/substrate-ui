@@ -6,12 +6,14 @@
 //   1. bind pane 1 as a user; open a session with its script and attach pane 1; send one message;
 //   2. two panes open on their own, one per run, each bound to its run's record and view-only;
 //   3. each build ends done: its pane shows its task and its report, and stays open after the end;
-//   4. typing into a build's pane is refused, and the pane says why.
+//   4. typing into a build's pane is refused, and the pane says why;
+//   5. the window's trace (vocabulary v0.14): each run pane is written PANE_OPENED run and PANE_BOUND
+//      record run, in its own pane's context.
 // Stopping a run from the caller is tested on a run held open by a sleeping model
 // (tests/test_run_routes_182.py): a deterministic build here ends in about a second.
 
 import { _electron as electron } from "playwright";
-import { bindPaneAsUser, launchArgs, settled, waitForApp } from "./lib/electron";
+import { bindPaneAsUser, launchArgs, settled, waitForApp, windowRecords } from "./lib/electron";
 import { scratchDir } from "./lib/scratch";
 
 type Row = { role: string; text: string };
@@ -97,7 +99,15 @@ async function main(): Promise<void> {
     // The second build's pane also ends with its report and stays.
     await win.waitForFunction((n) => ((window as unknown as { __vm: Vm }).__vm.get(n)?.snapshot().transcript ?? []).some((r) => r.text.startsWith("report · done")), longPane, { timeout: 30_000 })
       .catch(async () => { throw new Error(`the second pane has no report: ${JSON.stringify((await snap(longPane))!.transcript.map((r) => r.text))}`); });
-    console.log(`run_panes: ok — two runs opened two view-only panes; ${doneRun.run_id} and ${otherRun.run_id} ended done and their panes stayed; typing was refused (${sid})`);
+    // 5. The trace.
+    await app.close();
+    const w = windowRecords(launch);
+    for (const id of runPanes) {
+      const mine = w.filter((r) => r.pane_id === id && r.payload.pane_id === id);
+      if (!mine.some((r) => r.name === "PANE_OPENED" && r.payload.cause === "run")) throw new Error(`pane ${id}: no PANE_OPENED run; ${JSON.stringify(mine.filter((r) => r.name.startsWith("PANE_")))}`);
+      if (!mine.some((r) => r.name === "PANE_BOUND" && r.payload.binding === "record" && r.payload.how === "run")) throw new Error(`pane ${id}: no PANE_BOUND record run; ${JSON.stringify(mine.filter((r) => r.name.startsWith("PANE_")))}`);
+    }
+    console.log(`run_panes: ok — two runs opened two view-only panes; ${doneRun.run_id} and ${otherRun.run_id} ended done and their panes stayed; typing was refused; each run pane written opened and bound by its run (${sid})`);
     code = 0;
   } catch (e) {
     console.error(`run_panes: FAIL — ${(e as Error).message}`);

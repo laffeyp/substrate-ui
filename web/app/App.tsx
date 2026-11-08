@@ -166,6 +166,14 @@ const newPaneFields = (id: number): AppPane => ({
   wsQ: "", armed: null, pickerHalf: "ws", wsSelIdx: 0, modelSelIdx: null,
 });
 
+// The pane lifecycle records (vocabulary v0.14, sprint 360), written from the commit that shows the
+// change (componentDidMount, componentDidUpdate). Where the state cannot say why, the path that made
+// the change notes it first: a click or an open path for focus, the picker or an attach for binding.
+type FocusCause = "click" | "open";
+type BindHow = "picker" | "attach" | "restore";
+/** The pane no longer shows its picker: as `session(p)` in computeViews. */
+const showsBinding = (p: AppPane, snaps: Snapshots): boolean => !p.unbound || !!snaps[p.id]?.sessionId;
+
 type Handler = (ev?: unknown) => void;
 interface KeyEv { key: string; shiftKey: boolean; altKey: boolean; metaKey: boolean; ctrlKey: boolean; preventDefault(): void }
 const stop = (ev: unknown) => { const e = ev as { stopPropagation?: () => void } | undefined; e?.stopPropagation?.(); };
@@ -197,6 +205,10 @@ export class App extends React.Component<AppProps, AppState> {
   private topBarActs: Omit<TopBarActions, "finishEdit"> | null = null;
   private streamMatches = 0;
   private offTopBarActs: (() => void) | null = null;
+  private focusCause: FocusCause | null = null;
+  private bindHow = new Map<number, BindHow>();
+  /** Panes the layout's tweak props made (componentDidUpdate's tweak sync): PANE_OPENED start. */
+  private startPanes = new Set<number>();
 
   private snap(paneId: number): Snapshot | undefined { return this.state.controllerSnapshots[paneId]; }
   private setPane(paneId: number, patch: Partial<AppPane>): void {
@@ -232,7 +244,7 @@ export class App extends React.Component<AppProps, AppState> {
   // and disarmed (esc) leaves nothing behind.
   private armWorkspace(paneId: number, ws: string, isDefault: boolean, source: "row" | "dialog" | "typed" = "row"): void {
     // The default row (a per-session sandbox) has no path yet: null, as the vocabulary declares, not "".
-    emitSignal("PICKER_FOLDER_ARMED", { pane_id: paneId, workspace: ws || null, is_default: isDefault, source });
+    emitSignal("PICKER_FOLDER_ARMED", { pane_id: paneId, workspace: ws || null, is_default: isDefault, source }, { pane_id: paneId });
     this.setPane(paneId, { armed: { ws, isDefault }, pickerHalf: "model", modelSelIdx: null });
   }
   // "choose folder…" (⌘O): Electron's folder dialog gives the folder's absolute path, which is recorded
@@ -268,11 +280,11 @@ export class App extends React.Component<AppProps, AppState> {
     }).catch(() => undefined);
   }
   private disarmWorkspace(paneId: number, cause: "escape" | "arrow_left" | "list_click"): void {
-    emitSignal("PICKER_FOLDER_DISARMED", { pane_id: paneId, cause });
+    emitSignal("PICKER_FOLDER_DISARMED", { pane_id: paneId, cause }, { pane_id: paneId });
     this.setPane(paneId, { armed: null, pickerHalf: "ws", modelSelIdx: null });
   }
   private enterGuidance(paneId: number): void {
-    emitSignal("PICKER_LINE_ENTERED", { pane_id: paneId, line: "guidance", cause: "picked" });
+    emitSignal("PICKER_LINE_ENTERED", { pane_id: paneId, line: "guidance", cause: "picked" }, { pane_id: paneId });
     this.setState((st) => ({ panes: st.panes.map((x) => {
       if (x.id !== paneId) return x;
       const at = GUIDANCE_OPTIONS.findIndex((gd) => gd.level === (x.guidance ?? null));
@@ -284,14 +296,14 @@ export class App extends React.Component<AppProps, AppState> {
     const pane = this.pane(paneId);
     if (!pane || !pane.armed || pane.pickerHalf !== "guidance") return;
     // UI sprint 143: the guidance level no longer starts the session; LENGTH comes next.
-    emitSignal("PICKER_LINE_ENTERED", { pane_id: paneId, line: "length", cause: "picked" });
+    emitSignal("PICKER_LINE_ENTERED", { pane_id: paneId, line: "length", cause: "picked" }, { pane_id: paneId });
     this.setPane(paneId, { guidance: option.level, pickerHalf: "length", lengthSel: LENGTH_DEFAULT_AT });
     vmOf()?.pickBundle(option.bundle);
   }
   private pickLength(paneId: number, option: ValueOption): void {
     const pane = this.pane(paneId);
     if (!pane || !pane.armed || pane.pickerHalf !== "length") return;
-    emitSignal("PICKER_LINE_ENTERED", { pane_id: paneId, line: "tone", cause: "picked" });
+    emitSignal("PICKER_LINE_ENTERED", { pane_id: paneId, line: "tone", cause: "picked" }, { pane_id: paneId });
     this.setPane(paneId, { length: option.value, pickerHalf: "tone", toneSel: TONE_DEFAULT_AT });
   }
   private pickTone(paneId: number, option: ValueOption): void {
@@ -302,7 +314,8 @@ export class App extends React.Component<AppProps, AppState> {
     this.commitPane(paneId, pane.armed);
   }
   private commitPane(paneId: number, armed: Armed): void {
-    emitSignal("PICKER_COMMITTED", { pane_id: paneId, workspace: armed.ws || null, is_default: armed.isDefault });
+    emitSignal("PICKER_COMMITTED", { pane_id: paneId, workspace: armed.ws || null, is_default: armed.isDefault }, { pane_id: paneId });
+    this.bindHow.set(paneId, "picker");
     const vm = vmOf();
     if (armed.isDefault) {
       vm?.pickWorkspace(null);
@@ -396,6 +409,7 @@ export class App extends React.Component<AppProps, AppState> {
     const attach = (row: SessionRow) => {
       const vm = vmOf();
       if (!vm || !row.sessionId) return;
+      this.bindHow.set(p.id, "attach");
       this.setPane(p.id, { unbound: false, ws: row.workspacePath || "", shape: row.workspaceShape || "flat", name: row.name || p.name });
       void vm.attachExisting(row.sessionId);
     };
@@ -455,7 +469,7 @@ export class App extends React.Component<AppProps, AppState> {
       if ("move" in step) this.setPane(paneId, { [selKey]: step.move });
       else if ("pick" in step) pick(opts[step.pick]);
       else {
-        emitSignal("PICKER_LINE_ENTERED", { pane_id: paneId, line: back, cause: "back" });
+        emitSignal("PICKER_LINE_ENTERED", { pane_id: paneId, line: back, cause: "back" }, { pane_id: paneId });
         this.setPane(paneId, { pickerHalf: back });
       }
       return;
@@ -531,11 +545,12 @@ export class App extends React.Component<AppProps, AppState> {
       const root = String(sess.record_root || "");
       if (!root) continue;
       const shown = this.state.panes.find((p) => p.runRoot === root);
-      if (shown) { this.setState({ focused: shown.id }); vm?.setActive(shown.id); continue; }
+      if (shown) { this.focusCause = "open"; this.setState({ focused: shown.id }); vm?.setActive(shown.id); continue; }
       if (this.state.panes.length >= MAX_PANES) {
         vm?.get(callerPaneId)?.noteLine(`run ${String(run.run_id)}: eight panes are open; close one, then /run focus ${String(run.run_id)}`);
         continue;
       }
+      this.focusCause = "open";
       this.setState({ focused: callerPaneId }, () => this.split("right", {
         unbound: false, name: `${String(run.topology)} ${String(run.run_id)}`, runRoot: root, ws: "", shape: "flat",
       }, (id) => { vm?.get(id)?.attachRun(root, String(run.topology || "run"), String(run.run_id || "")).catch(() => undefined); }));
@@ -547,11 +562,12 @@ export class App extends React.Component<AppProps, AppState> {
     if (!sessionId) return;
     const vm = vmOf();
     const shown = this.state.panes.find((p) => p.childSid === sessionId);
-    if (shown) { this.setState({ focused: shown.id }); vm?.setActive(shown.id); return; }
+    if (shown) { this.focusCause = "open"; this.setState({ focused: shown.id }); vm?.setActive(shown.id); return; }
     if (this.state.panes.length >= MAX_PANES) {
       vm?.get(callerPaneId)?.noteLine(`delegate child ${sessionId}: eight panes are open; close one to see it`);
       return;
     }
+    this.focusCause = "open";
     this.setState({ focused: callerPaneId }, () => this.split("right", {
       unbound: false, name: "delegate " + sessionId.slice(2, 10), childSid: sessionId, ws: "", shape: "flat",
     }, (id) => { vm?.get(id)?.attachExisting(sessionId).catch(() => undefined); }));
@@ -575,6 +591,9 @@ export class App extends React.Component<AppProps, AppState> {
   }
 
   override componentDidMount(): void {
+    for (const p of this.state.panes) emitSignal("PANE_OPENED", { pane_id: p.id, cause: "start" }, { pane_id: p.id });
+    // A reload's ?session= is attached to pane 1 by web/reveal.ts, outside the window's controls.
+    if (new URLSearchParams(window.location.search).get("session")) this.bindHow.set(1, "restore");
     // 19c settings: theme and type size, per viewer (web/app/state/settings.ts, sprint 204).
     loadSettings();
     this.offs.push(settings.subscribe(() => this.forceUpdate()));
@@ -619,6 +638,7 @@ export class App extends React.Component<AppProps, AppState> {
     this.offs.push(setOpenSession((r) => {
       const vm = vmOf();
       if (!vm || !r.sessionId) return;
+      this.bindHow.set(this.state.focused, "attach");
       this.setState((s) => ({
         vs: closePage(s.vs),
         panes: s.panes.map((pn) => (pn.id === s.focused ? { ...pn, unbound: false, ws: r.workspacePath || "", shape: r.workspaceShape || "flat", name: r.name || pn.name } : pn)),
@@ -751,7 +771,8 @@ export class App extends React.Component<AppProps, AppState> {
     this.setPane(id, { editing: false });
     if (name) ctlOf(id)?.nameSession(name);
   }
-  override componentDidUpdate(prevProps: AppProps): void {
+  override componentDidUpdate(prevProps: AppProps, prevState: AppState): void {
+    this.notePanes(prevState);
     this.publish();
     // The template's tweak sync: only when a tweak changed, never against the window's own state.
     const changed = (k: keyof AppProps) => this.props[k] !== prevProps[k];
@@ -762,12 +783,42 @@ export class App extends React.Component<AppProps, AppState> {
       const cols = pc || state.cols, rows = pr || state.rows;
       const need = cols * rows;
       const panes = state.panes.slice(0, Math.max(1, need));
-      while (panes.length < need) panes.push(this.newPane());
+      while (panes.length < need) { const made = this.newPane(); this.startPanes.add(made.id); panes.push(made); }
       const colW = Array.from({ length: cols }, (_, i) => state.colW[i] || 1);
       const rowW = Array.from({ length: rows }, (_, i) => state.rowW[i] || 1);
       this.setState({ cols, rows, colW, rowW, panes });
     }
     if (changed("view") && pv && (pv === "revealed") !== metaBase(state.vs)) this.setState({ vs: show(pv === "revealed" ? "meta" : "panes") });
+  }
+  /** PANE_CLOSED, PANE_OPENED, PANE_BOUND and PANE_FOCUSED for what this commit changed. */
+  private notePanes(prev: AppState): void {
+    const s = this.state;
+    const prevIds = new Set(prev.panes.map((p) => p.id));
+    const nowIds = new Set(s.panes.map((p) => p.id));
+    for (const p of prev.panes) {
+      if (nowIds.has(p.id)) continue;
+      emitSignal("PANE_CLOSED", { pane_id: p.id, had_session: showsBinding(p, prev.controllerSnapshots) }, { pane_id: p.id });
+      this.bindHow.delete(p.id);
+    }
+    for (const p of s.panes) {
+      const isNew = !prevIds.has(p.id);
+      if (isNew) {
+        const cause = this.startPanes.delete(p.id) ? "start" : p.runRoot ? "run" : p.childSid ? "delegate" : "split";
+        emitSignal("PANE_OPENED", { pane_id: p.id, cause }, { pane_id: p.id });
+      }
+      const was = isNew ? false : showsBinding(prev.panes.find((x) => x.id === p.id)!, prev.controllerSnapshots);
+      if (was || !showsBinding(p, s.controllerSnapshots)) continue;
+      const noted = this.bindHow.get(p.id);
+      this.bindHow.delete(p.id);
+      const how = p.runRoot ? "run" : p.childSid ? "child" : noted ?? "direct";
+      const sid = p.childSid || s.controllerSnapshots[p.id]?.sessionId || null;
+      emitSignal("PANE_BOUND", { pane_id: p.id, binding: p.runRoot ? "record" : "session", how, ...(sid ? { session_id: sid } : {}) }, { pane_id: p.id });
+    }
+    if (s.focused !== prev.focused) {
+      const cause = !prevIds.has(s.focused) ? "split" : !nowIds.has(prev.focused) ? "close" : this.focusCause ?? undefined;
+      emitSignal("PANE_FOCUSED", { pane_id: s.focused, cause }, { pane_id: s.focused });
+    }
+    this.focusCause = null;
   }
   override componentWillUnmount(): void {
     for (const off of this.offs.splice(0)) off();
@@ -883,7 +934,7 @@ export class App extends React.Component<AppProps, AppState> {
         : armedOn("model") ? "↑↓ moves · ⇧↵ opens · ↵ picks the model · esc back"
         : "↑↓ moves · ⇧↵ opens · ↵ picks the folder",
       onWsQ: (ev) => {
-        if (this.pane(p.id)?.armed) emitSignal("PICKER_FOLDER_DISARMED", { pane_id: p.id, cause: "typed" });
+        if (this.pane(p.id)?.armed) emitSignal("PICKER_FOLDER_DISARMED", { pane_id: p.id, cause: "typed" }, { pane_id: p.id });
         this.setPane(p.id, { wsQ: ev.target.value, wsSelIdx: 0, armed: null, pickerHalf: "ws", modelSelIdx: null });
       },
       onWsKey: (ev?: unknown) => this.wsKey(p.id, ev as KeyEv),
@@ -918,7 +969,7 @@ export class App extends React.Component<AppProps, AppState> {
         gridCol: p.col + " / span " + p.cw, gridRow: p.row + " / span " + p.rh,
         opacity: state.panes.length > 1 && p.id !== state.focused ? ".55" : "1",
         session: session(p),
-        focus: () => this.setState({ focused: p.id }),
+        focus: () => { this.focusCause = "click"; this.setState({ focused: p.id }); },
       })),
       colGutters: gutterStops(state.colW).map((left, i) => ({ left, grab: (ev?: { preventDefault(): void }) => { ev?.preventDefault(); this.gut = { type: "col", i: i + 1 }; } })),
       rowGutters: gutterStops(state.rowW).map((top, i) => ({ top, grab: (ev?: { preventDefault(): void }) => { ev?.preventDefault(); this.gut = { type: "row", i: i + 1 }; } })),

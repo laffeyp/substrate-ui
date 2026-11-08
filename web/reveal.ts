@@ -13,8 +13,11 @@ import * as ReactDOMClient from "react-dom/client";
 import { BrowserSubstrateClient, PaneRegistry } from "./vm";
 import { mirrorSnapshot, sendCommand } from "./app/state/shell";
 import { App } from "./app/App";
+import { emit as emitSignal, VOCAB_VERSION } from "./vm/instrumentation/sdd";
 
 function boot(): void {
+  // The window's first record (S1): before the registry and pane 1's controller can write any.
+  emitSignal("WINDOW_BOOTED", { vocab_version: VOCAB_VERSION });
   const registry = new PaneRegistry({ makeClient: () => new BrowserSubstrateClient() });
   const controller = registry.spawn(1); // pane 1 is the initial view
   (window as unknown as { __vm: PaneRegistry }).__vm = registry;

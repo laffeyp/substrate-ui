@@ -59,6 +59,15 @@ export function launchArgs(opts: { roster?: "offline" | "live"; csp?: "bypass" |
   };
 }
 
+/** A window's records from the launch's latest boot (sprint 360). Read after the app has closed, so
+ *  the file is complete. */
+export interface WindowRecord { proc_seq: number; pane_id: number | null; name: string; payload: Record<string, unknown> }
+export function windowRecords(launch: Launch, windowId = 1): WindowRecord[] {
+  const traces = join(launch.state, "electron", "logs", "traces");
+  const boot = readdirSync(traces).sort().pop()!;
+  return readFileSync(join(traces, boot, `window-${windowId}.jsonl`), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as WindowRecord);
+}
+
 /** Every SIGNAL_REJECTED line in a launch's trace files. */
 function rejectedIn(traces: string): string[] {
   if (!existsSync(traces)) return [];

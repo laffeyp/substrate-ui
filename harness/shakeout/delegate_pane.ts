@@ -7,10 +7,12 @@
 //   2. a pane opens on its own on the child session (the caller's only child), and shows the
 //      delegated task as the child's first message;
 //   3. the caller's delegate call returns, and the child's pane is still open;
-//   4. a line typed in the child's pane reaches the child's record as its next message.
+//   4. a line typed in the child's pane reaches the child's record as its next message;
+//   5. the window's trace (vocabulary v0.14): the child's pane is written PANE_OPENED delegate and
+//      PANE_BOUND session child with the child's id, in its own pane's context.
 
 import { _electron as electron } from "playwright";
-import { bindPaneAsUser, launchArgs, waitForApp } from "./lib/electron";
+import { bindPaneAsUser, launchArgs, waitForApp, windowRecords } from "./lib/electron";
 import { scratchDir } from "./lib/scratch";
 
 type Row = { role: string; text: string };
@@ -83,7 +85,12 @@ async function main(): Promise<void> {
       const m = await (await fetch(`/api/session/${c}`)).json();
       return m;
     }, child);
-    console.log(`delegate_pane: ok — ${sid} delegated; child ${child} (${(record as { driver: string }).driver}) opened pane ${childPane}, interactive; it stayed after the call returned and took a typed message`);
+    // 5. The trace.
+    await app.close();
+    const mine = windowRecords(launch).filter((r) => r.pane_id === childPane && r.payload.pane_id === childPane);
+    if (!mine.some((r) => r.name === "PANE_OPENED" && r.payload.cause === "delegate")) throw new Error(`pane ${childPane}: no PANE_OPENED delegate; ${JSON.stringify(mine.filter((r) => r.name.startsWith("PANE_")))}`);
+    if (!mine.some((r) => r.name === "PANE_BOUND" && r.payload.how === "child" && r.payload.session_id === child)) throw new Error(`pane ${childPane}: no PANE_BOUND child ${child}; ${JSON.stringify(mine.filter((r) => r.name.startsWith("PANE_")))}`);
+    console.log(`delegate_pane: ok — ${sid} delegated; child ${child} (${(record as { driver: string }).driver}) opened pane ${childPane}, interactive; it stayed after the call returned and took a typed message; written opened and bound as the child's`);
     code = 0;
   } catch (e) {
     console.error(`delegate_pane: FAIL — ${(e as Error).message}`);

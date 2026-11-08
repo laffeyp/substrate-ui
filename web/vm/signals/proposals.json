@@ -732,6 +732,66 @@
       "rationale": "The postmortem's failure is exactly a pane that follows and is not at the bottom; stated as a rule, any trace shows it.",
       "ratified": true,
       "ratified_by": "agent-resolved 2026-11-07, sprint 359"
+    },
+    {
+      "id": "P-0.14-PANE-OPENED",
+      "kind": "PAYLOAD_FIELD_PROPOSED",
+      "layer": 2,
+      "element": "PANE_OPENED.cause loses restore",
+      "source": "web/app/App.tsx: panes are made at start (state, the tweak sync), by split, openRunPanes and openSessionPane; nothing reopens panes on a reload, which restores pane 1's session only",
+      "rationale": "A value names an event that can happen at its emit site (v0.10); a reload's restore is a binding, PANE_BOUND how restore.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-07, sprint 360"
+    },
+    {
+      "id": "P-0.14-PANE-FOCUSED",
+      "kind": "PAYLOAD_FIELD_PROPOSED",
+      "layer": 2,
+      "element": "PANE_FOCUSED.cause loses key, gains close",
+      "source": "web/app/keymap.ts has no key that moves focus between panes; App.tsx closePaneNow gives focus to the closed pane's neighbour",
+      "rationale": "key could not happen; close happens on every ⌘W with more than one pane and had no value.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-07, sprint 360"
+    },
+    {
+      "id": "P-0.14-PANE-BOUND",
+      "kind": "PAYLOAD_FIELD_PROPOSED",
+      "layer": 2,
+      "element": "PANE_BOUND.how gains direct; bound defined as the pane no longer showing its picker",
+      "source": "App.tsx computeViews session(p): a pane shows its transcript when the window marked it bound or its controller holds a session; reveal.ts attaches the ?session= of a reload and the gates open sessions through window.__vm, neither through the window's controls",
+      "rationale": "Ten gates and the registry's calls bind panes without a window path; naming them direct keeps the record true about how.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-07, sprint 360"
+    },
+    {
+      "id": "P-0.14-PANE-CLOSED",
+      "kind": "INVARIANT_PROPOSED",
+      "layer": 7,
+      "element": "PANE_CLOSED.had_session: the pane showed a session or record",
+      "source": "App.tsx closePaneNow; session(p) as above",
+      "rationale": "v0.7 left had_session undefined for a run's record pane, which has no session id.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-07, sprint 360"
+    },
+    {
+      "id": "P-0.14-WINDOW-BOOTED",
+      "kind": "INVARIANT_PROPOSED",
+      "layer": 5,
+      "element": "WINDOW_BOOTED written at the start of boot, before the registry",
+      "source": "web/reveal.ts boot: registry.spawn(1) and the roster loads run before App mounts; S1 requires WINDOW_BOOTED first",
+      "rationale": "v0.7's note said after App mounted, which records of pane 1 could precede, breaking S1.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-07, sprint 360"
+    },
+    {
+      "id": "P-0.14-CONTEXT-PANE",
+      "kind": "PAYLOAD_FIELD_PROPOSED",
+      "layer": 2,
+      "element": "record_context.pane_id: the pane the record is about, not only the controller that emitted it",
+      "source": "web/app/App.tsx: the eight PICKER_* emits wrote pane_id null in the context while their payload named the pane; Row.tsx, Transcript.tsx and useScrollAnchor.ts already pass their pane",
+      "rationale": "A reader that filters a pane's records by context missed its picker steps; the definition now says what the window's components already do.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-07, sprint 360"
     }
   ]
 }
