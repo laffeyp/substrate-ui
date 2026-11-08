@@ -8,6 +8,8 @@
 // entry); that page is in _deprecated/assay-page-b5/.
 
 import * as React from "react";
+import { emit as emitSignal } from "../vm/instrumentation/sdd";
+import { PageDrawnPage, Signal } from "../vm/signals.gen";
 
 interface ArmRow {
   name: string; nameColor: string; barW: string; barColor: string; overall: string;
@@ -21,6 +23,8 @@ const ARMS: readonly ArmRow[] = [];
 const head: React.CSSProperties = { color: "#62676f", fontSize: 10, letterSpacing: ".1em" };
 
 export function AssayPage(): React.ReactElement {
+  // PAGE_DRAWN (sprint 372): the arm rows, when the page opens.
+  React.useEffect(() => { emitSignal(Signal.PAGE_DRAWN, { page: PageDrawnPage.ASSAYS, rows: ARMS.length }); }, []);
   if (ARMS.length === 0) {
     return (
       <div data-assays-empty="1" style={{ maxWidth: 640, padding: "18px 20px", background: "#1a1c20", borderLeft: "2px solid #665f7d", borderRadius: "0 5px 5px 0", color: "#9aa0a8", fontSize: 12.5, lineHeight: 1.65 }}>

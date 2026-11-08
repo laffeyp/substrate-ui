@@ -14,7 +14,7 @@ import { BrowserSubstrateClient, PaneRegistry } from "./vm";
 import { mirrorSnapshot, sendCommand } from "./app/state/shell";
 import { App } from "./app/App";
 import { emit as emitSignal, VOCAB_VERSION } from "./vm/instrumentation/sdd";
-import { Signal } from "./vm/signals.gen";
+import { RecordOpenedHow, Signal } from "./vm/signals.gen";
 
 function boot(): void {
   // The window's first record (S1): before the registry and pane 1's controller can write any.
@@ -85,7 +85,7 @@ function boot(): void {
         sendCommand(command);
       } else if (command === "open-record") {
         const rec = payload as { path?: string } | null;
-        if (rec?.path) controller.attachRecordRoot(rec.path).catch(() => undefined);
+        if (rec?.path) controller.attachRecordRoot(rec.path, RecordOpenedHow.OPEN_RECORD).catch(() => undefined);
       } else if (command === "close-window") {
         // Handled main-side; nothing renderer needs to do.
       }
@@ -100,7 +100,7 @@ function boot(): void {
       const match = url.match(/^substrate:\/\/record\/(.+)$/);
       if (!match) return;
       const recordRoot = decodeURIComponent(match[1]);
-      controller.attachRecordRoot(recordRoot).catch(() => undefined);
+      controller.attachRecordRoot(recordRoot, RecordOpenedHow.DEEP_LINK).catch(() => undefined);
     });
   }
 

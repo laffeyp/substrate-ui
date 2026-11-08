@@ -9,6 +9,8 @@
 import * as React from "react";
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import { doBuild, doValidate, dragCard, rmItem, studio, updItem, type StudioState } from "./state/studio";
+import { emit as emitSignal } from "../vm/instrumentation/sdd";
+import { PageDrawnPage, Signal } from "../vm/signals.gen";
 
 const input: React.CSSProperties = { background: "#1a1c20", border: "1px solid rgba(255,255,255,.07)", borderRadius: 5, padding: "5px 11px", color: "#e2e5e9", fontFamily: "inherit", fontSize: 12, outline: "none" };
 const heading: React.CSSProperties = { fontSize: 10, letterSpacing: ".12em", color: "#62676f", margin: "16px 0 6px" };
@@ -50,6 +52,10 @@ function canvasGeometry(st: StudioState): { edges: Edge[]; labels: Label[]; slot
 
 export function StudioPage(): React.ReactElement {
   const st = useSyncExternalStore(studio.subscribe, studio.getSnapshot);
+  // PAGE_DRAWN (sprint 372): the form's rows, its producers, views, triggers and routes, when the
+  // page opens and when their count changes. The page is inert: no endpoint stands behind it.
+  const rows = st.prods.length + st.sviews.length + st.trigs.length + st.sroutes.length;
+  useEffect(() => { emitSignal(Signal.PAGE_DRAWN, { page: PageDrawnPage.STUDIO, rows, inert: true }); }, [rows]);
   // A card dragged on the canvas follows the pointer while the button is down.
   const drag = useRef<string | null>(null);
   useEffect(() => {

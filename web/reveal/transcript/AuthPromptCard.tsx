@@ -18,8 +18,11 @@
 
 import * as React from "react";
 import { AnsiTerminal, keyToBytes, type Sgr } from "./ansi";
+import { emit as emitSignal } from "../../vm/instrumentation/sdd";
+import { CliLoginFinishedOutcome, Signal } from "../../vm/signals.gen";
 
-interface Props { cli: string }
+/** `paneId` is the pane whose transcript holds the card (CLI_LOGIN_FINISHED, sprint 370). */
+interface Props { cli: string; paneId?: number }
 
 interface State {
   sid: string | null;
@@ -73,7 +76,7 @@ function renderRun(text: string, sgr: Sgr, key: string): React.ReactNode {
   return <span key={key} style={style}>{parts}</span>;
 }
 
-const AuthPromptCardInner: React.FC<Props> = ({ cli }) => {
+const AuthPromptCardInner: React.FC<Props> = ({ cli, paneId }) => {
   const [state, setState] = React.useState<State>({
     sid: null, exited: false, exitCode: null, postAuth: null, startError: null, version: 0,
   });
@@ -82,17 +85,26 @@ const AuthPromptCardInner: React.FC<Props> = ({ cli }) => {
   const esRef = React.useRef<EventSource | null>(null);
   const containerRef = React.useRef<HTMLDivElement | null>(null);
   const sidRef = React.useRef<string | null>(null);
+  // CLI_LOGIN_FINISHED once per run of the flow: signed in or failed when it ends, dismissed when
+  // it is cancelled or the card goes before it ends. A retry starts a new run.
+  const endedRef = React.useRef(false);
+  const finish = React.useCallback((outcome: CliLoginFinishedOutcome) => {
+    if (endedRef.current) return;
+    endedRef.current = true;
+    if (paneId !== undefined) emitSignal(Signal.CLI_LOGIN_FINISHED, { pane_id: paneId, driver: cli, outcome }, { pane_id: paneId });
+  }, [cli, paneId]);
 
   const start = React.useCallback(async () => {
     termRef.current.reset();
+    endedRef.current = false;
     decoderRef.current = new TextDecoder("utf-8", { fatal: false });
     setState({ sid: null, exited: false, exitCode: null, postAuth: null, startError: null, version: 0 });
     try {
       const res = await fetch(`/api/cli/${encodeURIComponent(cli)}/pty/start`, { method: "POST" });
-      if (!res.ok) { setState((s) => ({ ...s, startError: `pty start failed: ${res.status}` })); return; }
+      if (!res.ok) { setState((s) => ({ ...s, startError: `pty start failed: ${res.status}` })); finish(CliLoginFinishedOutcome.FAILED); return; }
       const body = (await res.json()) as { sid?: string };
       const sid = body.sid;
-      if (!sid) { setState((s) => ({ ...s, startError: "no sid in response" })); return; }
+      if (!sid) { setState((s) => ({ ...s, startError: "no sid in response" })); finish(CliLoginFinishedOutcome.FAILED); return; }
       sidRef.current = sid;
       setState((s) => ({ ...s, sid }));
       const es = new EventSource(`/api/cli/${encodeURIComponent(cli)}/pty/stream/${sid}`);
@@ -116,18 +128,23 @@ const AuthPromptCardInner: React.FC<Props> = ({ cli }) => {
         es.close();
         void fetch(`/api/cli/${encodeURIComponent(cli)}/status`)
           .then((r) => r.json())
-          .then((raw) => setState((s) => ({ ...s, postAuth: raw as { authed: boolean | null; raw: string } })))
-          .catch(() => undefined);
+          .then((raw) => {
+            setState((s) => ({ ...s, postAuth: raw as { authed: boolean | null; raw: string } }));
+            finish((raw as { authed?: boolean | null }).authed ? CliLoginFinishedOutcome.SIGNED_IN : CliLoginFinishedOutcome.FAILED);
+          })
+          .catch(() => finish(CliLoginFinishedOutcome.FAILED));
       });
       es.onerror = () => { /* server hangup — exit event usually fires first */ };
     } catch (err) {
       setState((s) => ({ ...s, startError: err instanceof Error ? err.message : String(err) }));
+      finish(CliLoginFinishedOutcome.FAILED);
     }
-  }, [cli]);
+  }, [cli, finish]);
 
   React.useEffect(() => {
     void start();
     return () => {
+      finish(CliLoginFinishedOutcome.DISMISSED);
       if (esRef.current) esRef.current.close();
       const sid = sidRef.current;
       if (sid) {
@@ -137,7 +154,7 @@ const AuthPromptCardInner: React.FC<Props> = ({ cli }) => {
           .catch(() => undefined);
       }
     };
-  }, [start, cli]);
+  }, [start, cli, finish]);
 
   const onKeyDown = React.useCallback((ev: React.KeyboardEvent<HTMLDivElement>) => {
     if (state.exited || !state.sid) return;
@@ -157,9 +174,10 @@ const AuthPromptCardInner: React.FC<Props> = ({ cli }) => {
 
   const cancel = React.useCallback(async () => {
     if (!state.sid) return;
+    finish(CliLoginFinishedOutcome.DISMISSED);
     await fetch(`/api/cli/${encodeURIComponent(cli)}/pty/close/${state.sid}`, { method: "POST" })
       .catch(() => undefined);
-  }, [cli, state.sid]);
+  }, [cli, state.sid, finish]);
 
   const snap = termRef.current.snapshot();
   const badge = state.exited

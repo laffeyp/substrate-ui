@@ -12,7 +12,7 @@ import { SessionController } from "./session_controller";
 import type { SubstrateClient } from "./client";
 import type { ControllerEvent, OpenSessionRequest } from "./session_controller";
 import type { AssayReport, AssayRow, Snapshot } from "./types";
-import { TurnInterruptedTier } from "./signals.gen";
+import { TurnInterruptedTier, type RecordOpenedHow } from "./signals.gen";
 
 export interface PaneRegistryDeps {
   makeClient: () => SubstrateClient;
@@ -121,7 +121,7 @@ export class PaneRegistry {
   submitLine(text: string): Promise<boolean> { return this.active().submitLine(text); }
   endSession(reason: string): Promise<void> { return this.active().endSession(reason); }
   attachExisting(id: string): Promise<void> { return this.active().attachExisting(id); }
-  attachRecordRoot(recordRoot: string): Promise<void> { return this.active().attachRecordRoot(recordRoot); }
+  attachRecordRoot(recordRoot: string, how: RecordOpenedHow): Promise<void> { return this.active().attachRecordRoot(recordRoot, how); }
   pickDriver(name: string): void { this.active().pickDriver(name); }
   pickDriverVersion(driver: string, versionId: string | null): void { this.active().pickDriverVersion(driver, versionId); }
   pickBundle(slug: string | null): void { this.active().pickBundle(slug); }

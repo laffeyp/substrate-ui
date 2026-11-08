@@ -842,6 +842,36 @@
       "rationale": "Two paths change the open view with none of the six causes; without a value for each, those changes would go unwritten.",
       "ratified": true,
       "ratified_by": "agent-resolved 2026-11-07, sprint 366"
+    },
+    {
+      "id": "P-0.18-LENS-SET",
+      "kind": "PAYLOAD_FIELD_PROPOSED",
+      "layer": 2,
+      "element": "LENS_CHANGED.lens drops graph: the values are the meta view's five lenses",
+      "source": "web/app/MetaView.tsx LENSES: stream+graph (GraphMode.Stream), i/o, structure, language, scene; web/vm/kinds.ts GraphMode has no graph",
+      "rationale": "The stream lens draws the stream and its graph as one lens; no lens change could carry graph, so the value named nothing the app does.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-07, sprint 368"
+    },
+    {
+      "id": "P-0.19-RECORD-HOW",
+      "kind": "PAYLOAD_FIELD_PROPOSED",
+      "layer": 2,
+      "element": "RECORD_OPENED.how: open_record | deep_link | run (records_page dropped, run added); outcome decided by the record stream's first open or error",
+      "source": "callers of web/vm/session_controller.ts attachRecordRoot: web/reveal.ts (menu open-record; substrate://record/ deep link), web/app/App.tsx openKey (⌘O), attachRun (UI sprint 182 run panes); the records page opens sessions through attachExisting, not records",
+      "rationale": "No path attaches a record from the records page, and the run pane, which does, had no value.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-07, sprint 371"
+    },
+    {
+      "id": "P-0.19-PAGE-SET",
+      "kind": "PAYLOAD_FIELD_PROPOSED",
+      "layer": 2,
+      "element": "PAGE_DRAWN.page drops settings",
+      "source": "web/app/Dialogs.tsx: settings is a dialog (DIALOG_OPENED settings), not a page; web/vm/kinds.ts Surface: records, assay, studio",
+      "rationale": "Settings draws as a dialog, which DIALOG_OPENED writes; no page draws it.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-07, sprint 371"
     }
   ]
 }

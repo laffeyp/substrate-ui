@@ -5,7 +5,7 @@ Regenerate: python3 scripts/gen_signals.py. tests/test_signals_generated.py fail
 
 from enum import StrEnum
 
-VOCAB_VERSION = "0.17"
+VOCAB_VERSION = "0.19"
 
 
 class Signal(StrEnum):
@@ -225,7 +225,6 @@ class PaneBoundHow(StrEnum):
 
 class LensChangedLens(StrEnum):
     STREAM = "stream"
-    GRAPH = "graph"
     STRUCTURE = "structure"
     LANGUAGE = "language"
     SCENE = "scene"
@@ -316,9 +315,9 @@ class TraceLostProcess(StrEnum):
 
 
 class RecordOpenedHow(StrEnum):
-    RECORDS_PAGE = "records_page"
-    DEEP_LINK = "deep_link"
     OPEN_RECORD = "open_record"
+    DEEP_LINK = "deep_link"
+    RUN = "run"
 
 
 class RecordOpenedOutcome(StrEnum):
@@ -360,7 +359,6 @@ class PageDrawnPage(StrEnum):
     RECORDS = "records"
     ASSAYS = "assays"
     STUDIO = "studio"
-    SETTINGS = "settings"
 
 
 class TranscriptScrolledCause(StrEnum):

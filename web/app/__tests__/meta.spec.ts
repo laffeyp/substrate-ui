@@ -10,11 +10,11 @@ import { GraphDirection, GraphMode } from "../../vm/kinds";
 import { meta, pickSeq, selectSeq, setDir, setMode, splitAfterDrag, SPLIT_MAX, SPLIT_MIN } from "../state/meta";
 
 test("leaving the stream resets the direction to down; the stream keeps it", () => {
-  setMode(GraphMode.Stream);
+  setMode(GraphMode.Stream, 1, null);
   setDir(GraphDirection.Side);
-  setMode(GraphMode.Stream);
+  setMode(GraphMode.Stream, 1, null);
   assert.strictEqual(meta.getSnapshot().dir, GraphDirection.Side);
-  setMode(GraphMode.Structure);
+  setMode(GraphMode.Structure, 1, null);
   assert.deepStrictEqual([meta.getSnapshot().mode, meta.getSnapshot().dir], [GraphMode.Structure, GraphDirection.Down]);
 });
 

@@ -8,6 +8,8 @@
 
 import { createStore } from "../store";
 import { GraphDirection, GraphMode, RevealLevel } from "../../vm/kinds";
+import { emit } from "../../vm/instrumentation/sdd";
+import { LensChangedLens, Signal } from "../../vm/signals.gen";
 
 export type MetaMode = (typeof GraphMode)[keyof typeof GraphMode];
 export type MetaDir = (typeof GraphDirection)[keyof typeof GraphDirection];
@@ -30,10 +32,22 @@ const KEY = "__substrateMeta";
 const scope = globalThis as unknown as Record<string, ReturnType<typeof createStore<MetaState>> | undefined>;
 export const meta = scope[KEY] ?? (scope[KEY] = createStore<MetaState>({ mode: GraphMode.Stream, dir: GraphDirection.Down, level: RevealLevel.All, sel: null, split: 1.15 }));
 
+/** Each lens as LENS_CHANGED names it (sprint 368). */
+const LENS_OF: Record<MetaMode, LensChangedLens> = {
+  [GraphMode.Stream]: LensChangedLens.STREAM,
+  [GraphMode.Structure]: LensChangedLens.STRUCTURE,
+  [GraphMode.Language]: LensChangedLens.LANGUAGE,
+  [GraphMode.Scene]: LensChangedLens.SCENE,
+  [GraphMode.IO]: LensChangedLens.IO,
+};
+
 /** Direction is the stream lens's alone, so leaving the stream resets it to down: a side direction
- *  carried into another lens would leave no chip on screen to change it. */
-export function setMode(mode: MetaMode): void {
+ *  carried into another lens would leave no chip on screen to change it. A change of lens for the
+ *  meta view of `paneId` is written as LENS_CHANGED, with the pane's session when it has one. */
+export function setMode(mode: MetaMode, paneId: number, sessionId: string | null): void {
+  const was = meta.getSnapshot().mode;
   meta.set(mode === GraphMode.Stream ? { mode } : { mode, dir: GraphDirection.Down });
+  if (mode !== was) emit(Signal.LENS_CHANGED, { lens: LENS_OF[mode], ...(sessionId ? { session_id: sessionId } : {}) }, { pane_id: paneId });
 }
 
 export function setDir(dir: MetaDir): void {

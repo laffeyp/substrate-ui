@@ -35,7 +35,7 @@ import { setToolOutputMode, toggleToolOutputMode } from "./tool_output_mode";
 import { SessionStatus, TaskStatus } from "./statuses.gen";
 import { GUIDANCE_LEVEL_BUNDLES, HANDOFF_DEFAULT, HandoffPosition, LENGTH_DEFAULT, LengthPosition, TONE_DEFAULT, TonePosition } from "./controls.gen";
 import type { EnvelopeKindValue } from "./kinds";
-import { PaneDrawnConnection, Signal, TranscriptRowSkippedReason, TurnInterruptedTier, type SignalPayloads } from "./signals.gen";
+import { PaneDrawnConnection, RecordOpenedHow, RecordOpenedOutcome, SessionRenamedOutcome, Signal, TranscriptRowSkippedReason, TurnInterruptedTier, WorkspaceAddedOutcome, type SignalPayloads } from "./signals.gen";
 
 /** One slash command (UI sprint 162). */
 interface SlashCommand {
@@ -464,7 +464,9 @@ export class SessionController {
       // refused (400), so no folder from "choose folder…" or the records page reached the recents.
       "/api/workspaces", { method: "POST", body: { path } },
     );
-    if (!result.ok || !result.data?.ok) return;
+    const added = result.ok && !!result.data?.ok;
+    if (this.paneId !== null) this.emit(Signal.WORKSPACE_ADDED, { pane_id: this.paneId, outcome: added ? WorkspaceAddedOutcome.ADDED : WorkspaceAddedOutcome.REFUSED });
+    if (!added) return;
     const rows: WorkspaceRow[] = Array.isArray(result.data.workspaces)
       ? result.data.workspaces.filter((r): r is RecentWorkspaceRow => !!r && typeof r.path === "string")
         .map((r) => ({ path: r.path, shape: r.shape ?? "flat" }))
@@ -676,7 +678,7 @@ export class SessionController {
   /** UI sprint 182: show a run's session in this pane. Its topology writes its messages, so the
    *  pane refuses typing and says why. */
   async attachRun(recordRoot: string, topology: string, runId: string): Promise<void> {
-    await this.attachRecordRoot(recordRoot);
+    await this.attachRecordRoot(recordRoot, RecordOpenedHow.RUN);
     // The run's own SessionStarted names its worktree; until then the pane names no workspace.
     this.patch({
       viewOnly: `view only: the ${topology} writes this session's messages`,
@@ -713,6 +715,7 @@ export class SessionController {
   async stopTask(taskId: string): Promise<void> {
     const sessionId = this.snap.sessionId;
     if (!sessionId) return;
+    this.emit(Signal.TASK_STOP_REQUESTED, { session_id: sessionId, task_id: taskId });
     await this.client.fetchJson<unknown>(
       `/api/session/${encodeURIComponent(sessionId)}/tasks/${encodeURIComponent(taskId)}/stop`,
       { method: "POST" },
@@ -781,7 +784,10 @@ export class SessionController {
    * child's envelopes into the snapshot the same way `attachExisting`
    * does for a session. The pane's descent stack governs which record
    * feeds the transcript. */
-  async attachRecordRoot(recordRoot: string): Promise<void> {
+  /** Attach a run record read-only. `how` is the path that asked (RECORD_OPENED, sprint 371), which
+   *  is written once: attached when the record's stream opens, refused when it errors or closes first
+   *  (a missing record's 404 closes the EventSource). */
+  async attachRecordRoot(recordRoot: string, how: RecordOpenedHow): Promise<void> {
     if (this.unsubscribeStream) { this.unsubscribeStream(); this.unsubscribeStream = null; }
     this.lastSeq = -1;
     this.seenSeqs.clear();
@@ -809,11 +815,17 @@ export class SessionController {
       connection: PaneDrawnConnection.CONNECTING,
     });
     this.emit(Signal.CHILD_RECORD_ATTACH_REQUESTED, { record_root: recordRoot });
+    let opened = false;
+    const decide = (outcome: RecordOpenedOutcome) => {
+      if (opened) return;
+      opened = true;
+      if (this.paneId !== null) this.emit(Signal.RECORD_OPENED, { pane_id: this.paneId, how, outcome });
+    };
     this.unsubscribeStream = this.client.streamRecordByPath(recordRoot, -1, {
-      onOpen: () => { this.patch({ connection: PaneDrawnConnection.CONNECTED }); this.emit(Signal.STREAM_ATTACHED, { record_root: recordRoot }); },
+      onOpen: () => { this.patch({ connection: PaneDrawnConnection.CONNECTED }); this.emit(Signal.STREAM_ATTACHED, { record_root: recordRoot }); decide(RecordOpenedOutcome.ATTACHED); },
       onEnvelope: (env) => this.handleEnvelope(recordRoot, env),
-      onClose: () => { this.patch({ connection: PaneDrawnConnection.CLOSED }); this.emit(Signal.STREAM_CLOSED, { record_root: recordRoot }); },
-      onError: () => { this.patch({ connection: PaneDrawnConnection.RECONNECTING }); this.emit(Signal.STREAM_RECONNECTING, { record_root: recordRoot }); },
+      onClose: () => { this.patch({ connection: PaneDrawnConnection.CLOSED }); this.emit(Signal.STREAM_CLOSED, { record_root: recordRoot }); decide(RecordOpenedOutcome.REFUSED); },
+      onError: () => { this.patch({ connection: PaneDrawnConnection.RECONNECTING }); this.emit(Signal.STREAM_RECONNECTING, { record_root: recordRoot }); decide(RecordOpenedOutcome.REFUSED); },
     });
   }
 
@@ -946,9 +958,14 @@ export class SessionController {
       const res = await this.client.fetchJson<{ authed: boolean | null }>(
         `/api/cli/${encodeURIComponent(cli)}/status`,
       );
+      // CLI_STATUS_CHECKED (sprint 370): authed is null when the probe gave no answer.
+      this.emit(Signal.CLI_STATUS_CHECKED, { driver: cli, authed: res.ok ? res.data.authed : null });
       if (!res.ok) return;
       if (res.data.authed === false) this.openAuthPrompt(cli);
-    } catch { /* status probe unreachable — silent */ }
+    } catch {
+      // status probe unreachable — no card
+      this.emit(Signal.CLI_STATUS_CHECKED, { driver: cli, authed: null });
+    }
   }
 
   openAuthPrompt(cli: string): void {
@@ -962,6 +979,7 @@ export class SessionController {
       role: "system",
       text: cli,
     });
+    if (this.paneId !== null) this.emit(Signal.CLI_LOGIN_PROMPTED, { pane_id: this.paneId, driver: cli });
   }
 
   /** Choose the bundle openSession will pass unless overridden. Null
@@ -971,9 +989,10 @@ export class SessionController {
    * Silent no-op after a session opens: a change then is a PATCH, recorded as SessionChanged. */
   pickControls(length: string | null, tone: string | null): void {
     if (this.snap.sessionId) return;
-    // No signal of its own: the pick travels in POST /api/session and lands on the manifest and,
-    // as SessionStarted.length/tone and the `control` fragments, on the record.
+    // The pick travels in POST /api/session and lands on the manifest and, as SessionStarted.length/
+    // tone and the `control` fragments, on the record; CONTROLS_PICKED writes it when made (sprint 369).
     this.patch({ length, tone });
+    if (this.paneId !== null) this.emit(Signal.CONTROLS_PICKED, { pane_id: this.paneId, length, tone });
   }
 
   pickBundle(slug: string | null): void {
@@ -1266,6 +1285,7 @@ export class SessionController {
       `/api/session/${encodeURIComponent(sessionId)}`,
       { method: "PATCH", body: { name: newName } },
     );
+    if (this.paneId !== null) this.emit(Signal.SESSION_RENAMED, { pane_id: this.paneId, session_id: sessionId, outcome: result.ok ? SessionRenamedOutcome.RENAMED : SessionRenamedOutcome.REFUSED });
     if (!result.ok) {
       this.appendTranscript({
         seq: -Math.round(Date.now()) - 7,

@@ -46,7 +46,8 @@ export type KeyAction =
   | { kind: "close-find" } | { kind: "close-dialog" } | { kind: "close-cards" } | { kind: "close-surface" }
   | { kind: "interrupt"; tier: TurnInterruptedTier };
 
-const ARROWS = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Enter"];
+/** The list keys: the arrows and Enter. With Escape and the ⌘ and Ctrl chords, the keys this map reads. */
+export const ARROWS = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Enter"];
 
 /** The action a key takes, or null to leave it to the page (⌘C among them). */
 export function windowKey(ev: KeyLike, ctx: KeyContext): KeyAction | null {

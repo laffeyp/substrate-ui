@@ -113,7 +113,7 @@ const RowInner: React.FC<RowProps> = ({ row, paired, progressText, progressEof, 
           streamingShow={streamingShow}
         />
       ) : isAuthPrompt ? (
-        <AuthPromptCard cli={text} />
+        <AuthPromptCard cli={text} paneId={paneId} />
       ) : row.helpRows ? (
         // UI sprint 162: /help as the menu draws commands: usage, then its description in grey.
         <span style={{ display: "inline-block", verticalAlign: "top" }}>

@@ -41,7 +41,7 @@ import { meta, selectSeq, setMode } from "./state/meta";
 import { closePane, dragCols, dragRows, gutterStops, MAX_PANES, splitPane, trackList, type Cell, type SplitDir } from "./derive/panes";
 import { language, setLanguageLane } from "./state/language";
 import { languageKey, selectedTurn } from "./derive/language_keys";
-import { windowKey } from "./keymap";
+import { ARROWS, windowKey, type KeyAction } from "./keymap";
 import { findText, streamRows } from "./derive/stream";
 import { onCommand, shell } from "./state/shell";
 import { emit as emitSignal } from "../vm/instrumentation/sdd";
@@ -59,7 +59,7 @@ import { RecordsPage } from "./RecordsPage";
 import { StudioPage } from "./StudioPage";
 import { TopBar } from "./TopBar";
 import "./window.css";
-import { Signal, DialogClosedOutcome, ViewChangedCause, PaneBoundBinding, PaneBoundHow, PaneDrawnConnection, PaneDrawnPickerLine, PaneDrawnState, PaneDrawnTurnState, PaneFocusedCause, PaneOpenedCause, PickerFolderArmedSource, PickerFolderDisarmedCause, PickerLineEnteredCause, PickerLineEnteredLine, type SignalPayloads } from "../vm/signals.gen";
+import { Signal, DialogClosedOutcome, KeyRoutedTarget, RecordOpenedHow, ViewChangedCause, PaneBoundBinding, PaneBoundHow, PaneDrawnConnection, PaneDrawnPickerLine, PaneDrawnState, PaneDrawnTurnState, PaneFocusedCause, PaneOpenedCause, PickerFolderArmedSource, PickerFolderDisarmedCause, PickerLineEnteredCause, PickerLineEnteredLine, type SignalPayloads } from "../vm/signals.gen";
 import type { Activity } from "../reveal/activity";
 
 // UI sprint 132 (kernel K288, session vocabulary § R): the guidance levels the bar offers, each with
@@ -174,6 +174,14 @@ const newPaneFields = (id: number): AppPane => ({
 // the change notes it first: a click or an open path for focus, the picker or an attach for binding.
 /** The pane no longer shows its picker: as `session(p)` in computeViews. */
 const showsBinding = (p: AppPane, snaps: Snapshots): boolean => !p.unbound || !!snaps[p.id]?.sessionId;
+/** The keys KEY_ROUTED leaves out when pressed alone (sprint 367). */
+const MODIFIER_KEYS = ["Meta", "Control", "Alt", "Shift"];
+/** Where a key's action went (KEY_ROUTED); every other action is the window's. */
+const KEY_TARGET: Partial<Record<KeyAction["kind"], KeyRoutedTarget>> = {
+  records: KeyRoutedTarget.RECORDS,
+  picker: KeyRoutedTarget.PICKER,
+  language: KeyRoutedTarget.LANGUAGE,
+};
 /** The picker line PICKER_LINE_ENTERED names, as the pane's open line. */
 const HALF_OF_LINE: Record<PickerLineEnteredLine, PaneDrawnPickerLine> = {
   [PickerLineEnteredLine.MODEL]: PaneDrawnPickerLine.MODEL,
@@ -292,7 +300,7 @@ export class App extends React.Component<AppProps, AppState> {
     const native = (window as unknown as { native?: { openRecordDialog?: () => Promise<string | null> } }).native;
     if (!native?.openRecordDialog) return;
     void native.openRecordDialog().then((path) => {
-      if (path) vmOf()?.get(1)?.attachRecordRoot(path).catch(() => undefined);
+      if (path) vmOf()?.get(1)?.attachRecordRoot(path, RecordOpenedHow.OPEN_RECORD).catch(() => undefined);
     }).catch(() => undefined);
   }
   private disarmWorkspace(paneId: number, cause: PickerFolderDisarmedCause): void {
@@ -627,7 +635,7 @@ export class App extends React.Component<AppProps, AppState> {
       const tick = snap.languageOpenTick ?? 0;
       if (changedPane === focusedId && tick > (this.langTicks[changedPane] ?? 0)) {
         revealed = true;
-        setMode(GraphMode.Language);
+        setMode(GraphMode.Language, changedPane, snap.sessionId);
         const shifts = snap.language?.shifts ?? [];
         if (shifts.length) selectSeq(shifts[shifts.length - 1].source_seq);
       }
@@ -736,6 +744,16 @@ export class App extends React.Component<AppProps, AppState> {
       findOpen: find.getSnapshot().open, dialogOpen: dialogOpen(), cardOpen: !!(s.ddFor || s.wsFor),
       running: !!(fsnap && fsnap.sessionId && fsnap.connection === PaneDrawnConnection.CONNECTED && !fsnap.parkReason && !fsnap.endedReason),
     });
+    // KEY_ROUTED (sprint 367): the keys the keymap reads, the arrows, Enter, Escape and any ⌘ or Ctrl
+    // chord, with the action they took and where it went: a key with no action pressed in a text box
+    // went to the box (its target, as the Enter that runs `/language` has unmounted it by now). A typed
+    // character is never written.
+    if (ARROWS.includes(e.key) || e.key === "Escape" || ((e.metaKey || e.ctrlKey) && !MODIFIER_KEYS.includes(e.key))) {
+      const name = [e.metaKey && "Meta", e.ctrlKey && "Control", e.altKey && "Alt", e.shiftKey && "Shift", e.key].filter(Boolean).join("+");
+      const target = action ? KEY_TARGET[action.kind] ?? KeyRoutedTarget.WINDOW : isBox(e.target) ? KeyRoutedTarget.BOX : KeyRoutedTarget.NONE;
+      const routed: KeyAction["kind"] | "none" = action ? action.kind : "none";
+      emitSignal(Signal.KEY_ROUTED, { key: name, action: routed, target });
+    }
     if (!action) return;
     if (action.kind === "records") { recordsKey(e); return; }
     if (action.kind === "picker" && fp) {
@@ -749,7 +767,7 @@ export class App extends React.Component<AppProps, AppState> {
       e.preventDefault();
       if ("sel" in step) selectSeq(step.sel);
       else if ("lane" in step) setLanguageLane(step.lane);
-      else setMode(GraphMode.Stream);
+      else setMode(GraphMode.Stream, s.focused, fsnap ? fsnap.sessionId : null);
       return;
     }
     if (action.kind === "close-find") { closeFind(); return; }

@@ -9,6 +9,8 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import { chrome } from "./state/chrome";
 import { addWorkspace, canAddWorkspace, currentRecords, loadMore, openSession, recordsState, toggleWorkspace } from "./state/records";
 import { shell } from "./state/shell";
+import { emit as emitSignal } from "../vm/instrumentation/sdd";
+import { PageDrawnPage, Signal } from "../vm/signals.gen";
 import "./hover.css";
 
 /** The relative times ("12s ago") read the clock; the page redraws every 500 ms while open, as the
@@ -27,7 +29,10 @@ export function RecordsPage(): React.ReactElement {
   useSyncExternalStore(shell.subscribe, shell.getSnapshot, shell.getSnapshot);
   useSyncExternalStore(chrome.subscribe, chrome.getSnapshot, chrome.getSnapshot);
   const now = useSecondTick();
-  const { groups } = currentRecords(now);
+  const { groups, flat } = currentRecords(now);
+  // PAGE_DRAWN (sprint 372): the rows the page draws, a workspace's and each session's shown, when
+  // the page opens and when their count changes.
+  useEffect(() => { emitSignal(Signal.PAGE_DRAWN, { page: PageDrawnPage.RECORDS, rows: flat.length }); }, [flat.length]);
   const onListScroll = (path: string, hasMore: boolean) => (ev: React.UIEvent<HTMLDivElement>) => {
     if (!hasMore) return;
     const el = ev.currentTarget;

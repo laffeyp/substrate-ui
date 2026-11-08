@@ -8,7 +8,7 @@
 //   3. each build ends done: its pane shows its task and its report, and stays open after the end;
 //   4. typing into a build's pane is refused, and the pane says why;
 //   5. the window's trace (vocabulary v0.14): each run pane is written PANE_OPENED run and PANE_BOUND
-//      record run, in its own pane's context.
+//      record run, in its own pane's context; and RECORD_OPENED run attached (v0.19, sprint 371).
 // Stopping a run from the caller is tested on a run held open by a sleeping model
 // (tests/test_run_routes_182.py): a deterministic build here ends in about a second.
 
@@ -106,8 +106,10 @@ async function main(): Promise<void> {
       const mine = w.filter((r) => r.pane_id === id && r.payload.pane_id === id);
       if (!mine.some((r) => r.name === "PANE_OPENED" && r.payload.cause === "run")) throw new Error(`pane ${id}: no PANE_OPENED run; ${JSON.stringify(mine.filter((r) => r.name.startsWith("PANE_")))}`);
       if (!mine.some((r) => r.name === "PANE_BOUND" && r.payload.binding === "record" && r.payload.how === "run")) throw new Error(`pane ${id}: no PANE_BOUND record run; ${JSON.stringify(mine.filter((r) => r.name.startsWith("PANE_")))}`);
+      const opened = mine.filter((r) => r.name === "RECORD_OPENED");
+      if (opened.length !== 1 || opened[0].payload.how !== "run" || opened[0].payload.outcome !== "attached") throw new Error(`pane ${id}: RECORD_OPENED ${JSON.stringify(opened.map((r) => r.payload))}; want one, run attached`);
     }
-    console.log(`run_panes: ok — two runs opened two view-only panes; ${doneRun.run_id} and ${otherRun.run_id} ended done and their panes stayed; typing was refused; each run pane written opened and bound by its run (${sid})`);
+    console.log(`run_panes: ok — two runs opened two view-only panes; ${doneRun.run_id} and ${otherRun.run_id} ended done and their panes stayed; typing was refused; each run pane written opened, bound and its record attached by its run (${sid})`);
     code = 0;
   } catch (e) {
     console.error(`run_panes: FAIL — ${(e as Error).message}`);

@@ -32,14 +32,14 @@ export const LENSES: readonly { mode: MetaMode; label: string }[] = [
   { mode: GraphMode.Language, label: "language" }, { mode: GraphMode.Scene, label: "scene" },
 ];
 
-interface Controller { refreshLanguage?(): void }
+interface Controller { refreshLanguage?(): void; snapshot?(): { sessionId: string | null } }
 const controller = (paneId: number): Controller | null => {
   const vm = (window as unknown as { __vm?: { get?(id: number): Controller | null } }).__vm;
   return vm && typeof vm.get === "function" ? vm.get(paneId) : null;
 };
 
 function pickLens(mode: MetaMode, paneId: number): void {
-  setMode(mode);
+  setMode(mode, paneId, controller(paneId)?.snapshot?.().sessionId ?? null);
   // The language lens asks for a fresh measure of the record when it opens.
   if (mode === GraphMode.Language) controller(paneId)?.refreshLanguage?.();
 }

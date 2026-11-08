@@ -1453,3 +1453,18 @@ Two mount divs land in `web/reveal.html`: `<div id="vm-transcript-mount">` insid
   - **Checks:** all 67 source gates 0; packaged `dialogs`, `view_signals` and the six earlier packaged gates 0; unit 147; Python 297 passed, 5 skipped. Each gate fails on its plant.
   - **Tags without an emit site:** 12 (11 for item 4, plus INVARIANT_BROKEN).
   - **Cards:** `process/sprints/sprint-365-dialog-signals.md`, `process/sprints/sprint-366-view-changed.md`.
+- **2026-11-07 agent-resolved** — Which keys KEY_ROUTED writes. Decision: the keys `web/app/keymap.ts` reads: the arrows, Enter, Escape, and any ⌘ or Ctrl chord. A lone modifier, Backspace, Tab and every typed character are left out. A key with no action is `box` when its target is a text box, and `none` otherwise. Grounds: project — `keymap.ts` `windowKey` and its `ARROWS`; `KEY_ROUTED.key` reads "never a printable character"; SDD — `grammar/PRINCIPLES.md` Layer 7 (tags carry kinds, never what was typed); practice — n/a. Revisit if: the keymap reads another key.
+- **2026-11-07 agent-resolved** — Value sets that named nothing the app does. Decision: v0.18 drops `graph` from `LENS_CHANGED.lens`, because the stream lens draws its graph under one chip. v0.19 sets `RECORD_OPENED.how` to `open_record | deep_link | run` and drops `settings` from `PAGE_DRAWN.page` (`P-0.18-LENS-SET`, `P-0.19-RECORD-HOW`, `P-0.19-PAGE-SET`). Grounds: project — `web/app/MetaView.tsx` `LENSES`; the callers of `attachRecordRoot`; settings is a dialog; SDD — the proposal taxonomy, `PAYLOAD_FIELD_PROPOSED`; practice — n/a. Revisit if: a lens, a record path or a page is added.
+- **2026-11-07 built** — Sprints 367 to 372 closed. Plan r3 item 4 is done: every declared tag but INVARIANT_BROKEN (item 5) has an emit site and a gate.
+  - **367:** KEY_ROUTED.
+  - **368:** LENS_CHANGED (v0.18).
+  - **369:** CONTROLS_PICKED, WORKSPACE_ADDED, SESSION_RENAMED, TASK_STOP_REQUESTED.
+  - **370:** CLI_STATUS_CHECKED, CLI_LOGIN_PROMPTED, CLI_LOGIN_FINISHED.
+  - **371:** RECORD_OPENED (v0.19).
+  - **372:** PAGE_DRAWN.
+  - **Corrections, made while running the gates:**
+    - KEY_ROUTED reads `box` from the key's target;
+    - a record stream that closes before it opens counts as refused;
+    - the key gate types its letters key by key, so its no-typed-character check can fail.
+  - **Checks:** 73 of 73 source gates 0; 14 packaged gates 0; unit 147; Python 297 passed, 5 skipped. Each new gate fails on its plant.
+  - **Cards:** `process/sprints/sprint-367-key-routed.md` through `process/sprints/sprint-372-page-drawn.md`.
