@@ -702,6 +702,36 @@
       "rationale": "v0.7 named the four reasons without saying which code decides each; a reader of a skip needs to know what the reason commits to.",
       "ratified": true,
       "ratified_by": "agent-resolved 2026-11-06, sprint 358"
+    },
+    {
+      "id": "P-0.13-SCROLL-CAUSE",
+      "kind": "PAYLOAD_FIELD_PROPOSED",
+      "layer": 2,
+      "element": "TRANSCRIPT_SCROLLED.cause gains resized",
+      "source": "web/reveal/transcript/useScrollAnchor.ts: a ResizeObserver on the scroller and the mount settles the view when content grows outside a React commit (a card opened, a font loaded) or the scroller changes size",
+      "rationale": "v0.7 named three causes; the scroll owner moves the view for a fourth, and calling it row_arrived would say a record entry arrived when none did.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-07, sprint 359"
+    },
+    {
+      "id": "P-0.13-SCROLL-PINNED",
+      "kind": "PAYLOAD_FIELD_PROPOSED",
+      "layer": 2,
+      "element": "TRANSCRIPT_SCROLLED.pinned (bool, required)",
+      "source": "web/reveal/transcript/useScrollAnchor.ts pinRef: a clicked <summary> is held at its viewport offset in either mode until the user scrolls (sprint 075's caret pin)",
+      "rationale": "While a header is pinned a following transcript is legitimately not at the bottom; without the field a reader cannot tell that from the follow-bottom regression of 2026-10-02.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-07, sprint 359"
+    },
+    {
+      "id": "P-0.13-E8-FOLLOW",
+      "kind": "INVARIANT_PROPOSED",
+      "layer": 7,
+      "element": "E8: in TRANSCRIPT_SCROLLED, following and not pinned implies at_bottom",
+      "source": "process/planning/POSTMORTEM-2026-10-02-transcript-follow-bottom-regression.md (no gate measured follow-bottom); useScrollAnchor.ts settle writes the bottom whenever following and not pinned",
+      "rationale": "The postmortem's failure is exactly a pane that follows and is not at the bottom; stated as a rule, any trace shows it.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-07, sprint 359"
     }
   ]
 }

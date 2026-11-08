@@ -7,6 +7,10 @@
 //   resume    — scrolled back to the bottom, following resumes;
 //   switch    — terminal → reveal → terminal returns to the same place, scrolled up or not.
 //
+// Then the trace (vocabulary v0.13, sprint 359): window-1.jsonl holds TRANSCRIPT_SCROLLED for each
+// step, in order (user: up, user: bottom, user: up, view_switch: up, user: bottom, view_switch:
+// following), and every record keeps E8: following and not pinned implies at_bottom.
+//
 // No gate measured any of this, which is how it stayed broken from 2026-09-24 to 2026-10-02
 // (process/planning/POSTMORTEM-2026-10-02-transcript-follow-bottom-regression.md).
 //
@@ -15,6 +19,8 @@
 //
 //   npx tsx harness/shakeout/transcript_follow.ts
 
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 import { _electron as electron, type ElectronApplication, type Page } from "playwright";
 import { bindPaneAsUser, launchArgs } from "./lib/electron";
 
@@ -29,11 +35,22 @@ const check = (ok: boolean, what: string) => {
 // `deterministic` on every machine. Its own launch used this machine's live roster, so its turns
 // went to a real cloud model and binding waited on Ollama's tag list (2026-10-14: one run in eight
 // timed out waiting for the default model's row).
+let traces = "";
 function launch(): Promise<ElectronApplication> {
   if (process.env.SCROLL_APP && !process.env.SHAKEOUT_APP) process.env.SHAKEOUT_APP = process.env.SCROLL_APP;
   const args = launchArgs();
+  traces = join(args.state, "electron", "logs", "traces");
   process.on("exit", args.cleanup);
   return electron.launch(args.options);
+}
+
+interface Scrolled { proc_seq: number; pane_id: number | null; payload: { pane_id: number; at_bottom: boolean; following: boolean; pinned: boolean; cause: string } }
+/** Pane 1's TRANSCRIPT_SCROLLED records from the launch's window-1.jsonl, read after the app closes. */
+function scrolledRecords(): Scrolled[] {
+  const boot = readdirSync(traces).sort().pop()!;
+  return readFileSync(join(traces, boot, "window-1.jsonl"), "utf8").split("\n").filter(Boolean)
+    .map((l) => JSON.parse(l) as Scrolled & { name: string })
+    .filter((r) => r.name === "TRANSCRIPT_SCROLLED" && r.payload.pane_id === 1);
 }
 
 interface Geo { top: number; height: number; client: number; dist: number }
@@ -183,6 +200,29 @@ async function toggleView(win: Page): Promise<void> {
     check(false, `flow error: ${e instanceof Error ? e.message : String(e)}`);
   } finally {
     await app?.close().catch(() => undefined);
+  }
+  try {
+    const recs = scrolledRecords();
+    const show = recs.map((r) => `  ${r.proc_seq} ${r.payload.cause} at_bottom=${r.payload.at_bottom} following=${r.payload.following} pinned=${r.payload.pinned}`).join("\n");
+    if (process.env.TRACE_PRINT) process.stdout.write(show + "\n");
+    const broken = recs.filter((r) => r.payload.following && !r.payload.pinned && !r.payload.at_bottom);
+    check(broken.length === 0, `E8: following and not pinned implies at_bottom, in all ${recs.length} records${broken.length ? ` (broken at proc_seq ${broken.map((r) => r.proc_seq).join(", ")})` : ""}`);
+    check(recs.every((r) => r.pane_id === 1), "every record carries pane 1 in its context");
+    const want: [string, string, boolean][] = [
+      ["reading", "user", false],
+      ["resume", "user", true],
+      ["switch scrolled up", "user", false],
+      ["switch scrolled up", "view_switch", false],
+      ["switch at the bottom", "user", true],
+      ["switch at the bottom", "view_switch", true],
+    ];
+    let i = 0;
+    for (const r of recs) if (i < want.length && r.payload.cause === want[i][1] && r.payload.following === want[i][2] && r.payload.at_bottom === want[i][2]) i += 1;
+    check(i === want.length, i === want.length
+      ? `trace: TRANSCRIPT_SCROLLED for each step in order (${want.length} of ${recs.length} records)`
+      : `trace: no TRANSCRIPT_SCROLLED ${want[i][1]} following=${want[i][2]} for step "${want[i][0]}" (step ${i + 1} of ${want.length}); records:\n${show}`);
+  } catch (e) {
+    check(false, `trace read: ${e instanceof Error ? e.message : String(e)}`);
   }
   process.stdout.write(fails.length ? `transcript_follow: ${fails.length} FAILED\n` : "transcript_follow: all passed\n");
   process.exit(fails.length ? 1 : 0);

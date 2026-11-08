@@ -50,7 +50,7 @@ function startLine(snapshot: Snapshot): string | null {
 
 export function Transcript(props: TranscriptProps): React.ReactElement | null {
   const snapshot = useController(props.paneId);
-  const { registerRow, attachTo } = useScrollAnchor(`${props.view}:${props.paneId}`);
+  const { registerRow, attachTo } = useScrollAnchor(`${props.view}:${props.paneId}`, props.paneId);
   const resultByCallId = React.useMemo(() => buildResultByCallId(snapshot), [snapshot.transcript]);
   const rows: TranscriptRow[] = snapshot.transcript.filter((row) => !isToolResultRow(row));
   // T4 (v0.12): a tool result is drawn inside its call's card, not as a row: TRANSCRIPT_ROW_SKIPPED

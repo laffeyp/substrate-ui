@@ -23,8 +23,14 @@
 //
 // The scroller is the nearest ancestor of the mount div with overflow-y auto|scroll. Its
 // `overflow-anchor` is set to `none` so Chromium's own anchoring does not race this hook.
+//
+// TRANSCRIPT_SCROLLED (vocabulary v0.13) says where the view sits after each move, and why:
+// row_arrived (a commit), user, resized (a ResizeObserver settle), view_switch (shown again). A
+// view_switch is written each time; the others only when at_bottom, following or pinned changed
+// since the last record for this pane and view. The first draw writes nothing.
 
 import { useCallback, useLayoutEffect, useRef } from "react";
+import { emit as emitSignal } from "../../vm/instrumentation/sdd";
 
 export interface ScrollAnchor {
   registerRow: (seq: number, element: HTMLElement | null) => void;
@@ -38,7 +44,12 @@ export { STICK_PX };
 interface Saved { scrollTop: number; following: boolean }
 const savedByKey = new Map<string, Saved>();
 
-export function useScrollAnchor(key: string): ScrollAnchor {
+type ScrollCause = "row_arrived" | "user" | "resized" | "view_switch";
+interface Sits { at_bottom: boolean; following: boolean; pinned: boolean }
+// The last place reported per pane per view, so a remount knows it is a return.
+const reportedByKey = new Map<string, Sits>();
+
+export function useScrollAnchor(key: string, paneId: number): ScrollAnchor {
   const rowRefs = useRef<Map<number, HTMLElement>>(new Map());
   const anchorSeqRef = useRef<number | null>(null);
   const anchorOffsetRef = useRef<number>(0);
@@ -110,6 +121,23 @@ export function useScrollAnchor(key: string): ScrollAnchor {
     }
   }, []);
 
+  // Write TRANSCRIPT_SCROLLED for where the view now sits. A hidden scroller says nothing.
+  const report = useCallback((cause: ScrollCause) => {
+    const scroller = scrollerRef.current;
+    if (!scroller || scroller.clientHeight === 0) return;
+    const pin = pinRef.current;
+    const now: Sits = {
+      at_bottom: scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <= STICK_PX,
+      following: followingRef.current,
+      pinned: !!pin && pin.el.isConnected,
+    };
+    const last = reportedByKey.get(key);
+    reportedByKey.set(key, now);
+    if (!last) return; // the first draw of this pane's transcript in this view
+    if (cause !== "view_switch" && last.at_bottom === now.at_bottom && last.following === now.following && last.pinned === now.pinned) return;
+    emitSignal("TRANSCRIPT_SCROLLED", { pane_id: paneId, at_bottom: now.at_bottom, following: now.following, pinned: now.pinned, cause }, { pane_id: paneId });
+  }, [key, paneId]);
+
   // The user moved the view: hold nothing they scrolled away from, follow again at the bottom.
   const readUserScroll = useCallback((scroller: HTMLElement) => {
     ownWritesRef.current.clear();
@@ -122,9 +150,10 @@ export function useScrollAnchor(key: string): ScrollAnchor {
     seenTopRef.current = scroller.scrollTop;
     savedByKey.set(key, { scrollTop: scroller.scrollTop, following });
     updateAnchor();
-  }, [key, updateAnchor]);
+    report("user");
+  }, [key, updateAnchor, report]);
 
-  const settle = useCallback(() => {
+  const place = useCallback(() => {
     const scroller = scrollerRef.current;
     if (!scroller || scroller.clientHeight === 0) return;
     const seen = seenTopRef.current;
@@ -153,6 +182,11 @@ export function useScrollAnchor(key: string): ScrollAnchor {
     const delta = anchor.getBoundingClientRect().top - scroller.getBoundingClientRect().top - anchorOffsetRef.current;
     if (delta !== 0) write(scroller, scroller.scrollTop + delta);
   }, [write, readUserScroll]);
+
+  const settle = useCallback((cause: ScrollCause) => {
+    place();
+    report(cause);
+  }, [place, report]);
 
   const onScroll = useCallback(() => {
     const scroller = scrollerRef.current;
@@ -183,6 +217,7 @@ export function useScrollAnchor(key: string): ScrollAnchor {
       write(scroller, scroller.scrollHeight);
     }
     updateAnchor();
+    report("view_switch");
     scroller.addEventListener("scroll", onScroll, { passive: true });
     // A click on a card header pins it before the card opens or closes (capture: before the
     // <details> toggles and the layout changes).
@@ -204,9 +239,12 @@ export function useScrollAnchor(key: string): ScrollAnchor {
       lastHeight = scroller.clientHeight;
       if (wasHidden && lastHeight > 0) {
         const back = savedByKey.get(key);
-        if (back && !back.following) { write(scroller, back.scrollTop); updateAnchor(); return; }
+        if (back && !back.following) { write(scroller, back.scrollTop); updateAnchor(); report("view_switch"); return; }
+        place();
+        report("view_switch");
+        return;
       }
-      settle();
+      settle("resized");
     });
     observer.observe(scroller);
     observer.observe(mount);
@@ -215,10 +253,10 @@ export function useScrollAnchor(key: string): ScrollAnchor {
       mount.removeEventListener("click", onClick, true);
       observer.disconnect();
     };
-  }, [findScroller, key, onScroll, settle, updateAnchor, write]);
+  }, [findScroller, key, onScroll, place, report, settle, updateAnchor, write]);
 
   // Every commit (new rows, streaming text) settles before paint.
-  useLayoutEffect(() => { settle(); });
+  useLayoutEffect(() => { settle("row_arrived"); });
 
   const registerRow = useCallback((seq: number, element: HTMLElement | null) => {
     if (element) rowRefs.current.set(seq, element);
