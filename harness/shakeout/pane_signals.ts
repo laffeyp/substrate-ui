@@ -77,6 +77,9 @@ async function main(): Promise<void> {
     const dir = join(root, readdirSync(root).sort().pop()!);
     const w = readFileSync(join(dir, "window-1.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as Rec);
     const show = (rs: Rec[]) => rs.filter((r) => /^(WINDOW_BOOTED|PANE_|PICKER_COMMITTED)/.test(r.name)).map((r) => `  ${r.proc_seq} p${r.pane_id} ${r.name} ${JSON.stringify(r.payload)}`).join("\n");
+    // The order key rises through the file, across the reload (sprint 361).
+    const back = w.findIndex((r, k) => k > 0 && r.proc_seq <= w[k - 1].proc_seq);
+    if (back >= 0) throw new Error(`proc_seq goes back in window-1.jsonl: ${w[back - 1].proc_seq} ${w[back - 1].name}, then ${w[back].proc_seq} ${w[back].name}`);
     if (w[0]?.name !== "WINDOW_BOOTED") throw new Error(`S1: window-1.jsonl opens with ${w[0]?.name}`);
     if (w[0].payload.vocab_version !== VOCAB.vocabulary_version) throw new Error(`WINDOW_BOOTED vocab_version ${String(w[0].payload.vocab_version)}, current.json ${VOCAB.vocabulary_version}`);
     const p = (r: Rec, id: number) => r.payload.pane_id === id && r.pane_id === id;

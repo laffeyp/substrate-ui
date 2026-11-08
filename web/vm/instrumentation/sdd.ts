@@ -14,7 +14,7 @@ import { checkSignal } from "./check";
 
 export type SignalRecord = {
   ts: number;
-  /** The window's record number from 0 (vocabulary v0.7 record context): the order key in the trace. */
+  /** The window's record number from 0 within the boot, on across reloads (v0.7 record context): the order key in the trace. */
   proc_seq: number;
   /** The pane whose controller emitted it; null for window-level code (v0.7 record context). */
   pane_id: number | null;
@@ -38,7 +38,17 @@ function nowMs(): number {
   return Date.now();
 }
 
-let procSeq = 0;
+// The window's record number goes on across a reload: the boot and its window-<id>.jsonl do, and two
+// records with one order key in a file cannot be ordered (sprint 360 found the reload starting it again
+// at 0). sessionStorage lives as long as the window, not the page. Without it (node tests) it starts at 0.
+const SEQ_KEY = "substrate.proc_seq";
+function storedSeq(): number {
+  try { return typeof sessionStorage === "undefined" ? 0 : Number(sessionStorage.getItem(SEQ_KEY) ?? 0) || 0; } catch { return 0; }
+}
+function storeSeq(next: number): void {
+  try { if (typeof sessionStorage !== "undefined") sessionStorage.setItem(SEQ_KEY, String(next)); } catch { /* the number still rises within the page */ }
+}
+let procSeq = storedSeq();
 /** Records native.signal refused since the last one it took; reported as TRACE_LOST (v0.7). */
 let sendLost = 0;
 let reportingLoss = false;
@@ -81,6 +91,7 @@ export function emit(name: string, payload: Record<string, unknown> = {}, contex
     stratum: spec.stratum,
     payload,
   };
+  storeSeq(procSeq);
   buffer.push(record);
   if (buffer.length > SIGNAL_CAP) buffer.splice(0, buffer.length - SIGNAL_CAP);
   if (typeof window !== "undefined") {
