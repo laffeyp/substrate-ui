@@ -27,6 +27,7 @@ test("i/o: the input and output documents in seq order, a tool's output as text"
   ]);
 });
 
+// The template: web/reveal.html at d4322e1, the dc-runtime page before the move.
 test("scene: the template's search: the latest grid; an oversized or throwing one ends it with none", () => {
   const gen = (seq: number, grid: unknown) => ({ seq, kind: "Generation", payload: { grid } });
   assert.deepStrictEqual(sceneOf([]), { kind: "none" });

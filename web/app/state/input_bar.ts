@@ -5,8 +5,8 @@
 // `histDraft`; UI sprints 141, 164, 165).
 //
 // Each pane keeps its own draft, so a keystroke in one pane never shows in another. The bar is keyed
-// by its pane, not by where the template puts it (design D90: the prompt is in every view), so the
-// panes view, the meta view and later the editor view can each mount one for any pane.
+// by its pane, not by where a page puts it (design D90: the prompt is in every view), so the panes
+// view, the meta view and later the editor view can each mount one for any pane.
 //
 // ↵ sends; ⇧↵ and ⌥↵ make a new line; ↵ while an input method composes finishes the composition;
 // ↑ on the first line and ↓ on the last walk the pane's sent lines, back to the draft; Tab completes
@@ -50,7 +50,7 @@ const shared: Shared = scope[KEY] ?? (scope[KEY] = {
 
 export const inputBar = shared.store;
 
-/** DCLogic, which names the panes until plan group E, registers how a pane's title reads. */
+/** App, which names the panes, registers how a pane's title reads. */
 export function setTitleOf(fn: (paneId: number) => string): () => void {
   shared.titleOf.current = fn;
   return () => { if (shared.titleOf.current === fn) shared.titleOf.current = (paneId) => "pane-" + paneId; };

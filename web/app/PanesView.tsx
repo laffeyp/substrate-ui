@@ -2,11 +2,11 @@
 // Copyright (C) 2026 Peter Laffey
 // The panes view (sprint 322; plan PLAN-2026-11-04-shell-to-react-r5.md, E2, F361): the grid of panes
 // and its gutters. A pane with a session draws `PaneSession` (find, the transcript, the bar line, the
-// task rows, the input bar); an unbound one draws its picker. Styles are the template's (reveal.html
-// panes block); the view comes from DCLogic (web/app/state/panes.ts).
+// task rows, the input bar); an unbound one draws its picker. Styles are copied from the panes block of
+// the dc-runtime template (`web/reveal.html` at `d4322e1`); App writes the view (web/app/state/panes.ts).
 //
-// F361: the transcript was its own React root, which reveal.ts re-attached each time dc-runtime cleared
-// its mount div; it is now a child of its pane, so nothing clears it.
+// F361: each pane's transcript is a child of its pane. It was a React root of its own, which reveal.ts
+// re-attached each time dc-runtime cleared its mount div.
 
 import * as React from "react";
 import { useSyncExternalStore } from "react";

@@ -2,7 +2,8 @@
 // Copyright (C) 2026 Peter Laffey
 // Meta's stream lens (sprint 291; plan PLAN-2026-11-04-shell-to-react-r5.md, D2, F328): the lifelines'
 // legend, one row per envelope with its seq, time, kind and gist, and under the lit row the inspector.
-// Styles are the template's (reveal.html stream block). The rows come from web/app/derive/stream.ts;
+// Styles are the stream block's in the dc-runtime template (`web/reveal.html` at `d4322e1`).
+// The rows come from web/app/derive/stream.ts;
 // the record from web/app/state/stream.ts, the view's state from web/app/state/meta.ts and find's
 // query from web/app/state/find.ts.
 //

@@ -2,7 +2,8 @@
 // Copyright (C) 2026 Peter Laffey
 // The records page (sprint 237; plan PLAN-2026-11-04-shell-to-react-r5.md, B4): every workspace on
 // record, each opening to its sessions in pages of 50; a session opens in the focused pane. Styles
-// are the template's (reveal.html records block); its host div is the page's scroll container.
+// are the records block's in the dc-runtime template (`web/reveal.html` at `d4322e1`); its host div
+// is the page's scroll container.
 
 import * as React from "react";
 import { useEffect, useState, useSyncExternalStore } from "react";

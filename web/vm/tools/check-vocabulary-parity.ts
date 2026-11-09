@@ -51,14 +51,8 @@ const LOCK_PATH = join(__dirname, "..", "signals", "versions", "current.json");
 const SCAN_PATHS = [
   join(REPO_ROOT, "web", "vm"),
   join(REPO_ROOT, "web", "reveal.ts"),
-  // Sprint 058: reveal_component.ts hosts the dc-runtime class body
-  // that used to sit inline in reveal.html. The class does not emit
-  // signals today, but the parity gate must scan it so a future emit
-  // added inside the shell trips a drift check.
-  join(REPO_ROOT, "web", "reveal_component.ts"),
-  // Sprint 200 (F359): the React trees. web/reveal/ holds the transcript's
-  // .tsx; web/app/ is where the shell's components land as they leave
-  // dc-runtime (plan PLAN-2026-11-04-shell-to-react-r4.md).
+  // Sprint 200 (F359): the React trees. web/reveal/ holds the transcript's .tsx; web/app/ holds the
+  // window's components. (web/reveal_component.ts, scanned from sprint 058, retired with dc-runtime.)
   join(REPO_ROOT, "web", "reveal"),
   join(REPO_ROOT, "web", "app"),
   // Sprint 355: Electron main and the server.

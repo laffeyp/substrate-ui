@@ -540,7 +540,7 @@ class _Trace:
         return True
 
     def _report(self) -> None:
-        # stdout is main's pipe; main parses this line (electron/main.js, SERVER_LOSS_RE).
+        # stdout is main's pipe; main parses this line (electron/main.ts, SERVER_LOSS_RE).
         self._reported = self.lost
         try:
             print(f"substrate-ui trace_lost={self.lost}", flush=True)
@@ -4929,7 +4929,7 @@ def main() -> None:
     _install_fault_hooks()
     # Sprint 079: --port / --host CLI flags. --port 0 binds an
     # ephemeral port; the readback line printed before serve_forever
-    # is what Electron (electron/main.js) matches to learn the bound
+    # is what Electron (electron/main.ts) matches to learn the bound
     # port. The default is the module-level HOST/PORT.
     import argparse
 
@@ -5041,7 +5041,7 @@ def main() -> None:
     # Sprint 079: bound-port readback for the Electron main process.
     # ThreadingHTTPServer((HOST, 0), ...) picks an ephemeral port; the
     # actual bound value lives on srv.server_address. Print it as the
-    # first stdout line, flushed, so electron/main.js can match
+    # first stdout line, flushed, so electron/main.ts can match
     # /^substrate-ui port=(\d+)$/ deterministically before any other
     # output. PORT is refreshed too so the summary line below prints
     # the real value.
@@ -5143,7 +5143,7 @@ def main() -> None:
     # mode the chain is Electron -> `uv run` -> python; when Electron dies,
     # `uv` lives on, our ppid never changes, and the backend orphans
     # (2026-10-01: 11 source-mode backends from Sep 28-30 still running).
-    # electron/main.js passes its own pid as SUBSTRATE_PARENT_PID.
+    # electron/main.ts passes its own pid as SUBSTRATE_PARENT_PID.
     try:
         app_pid = int(os.environ.get("SUBSTRATE_PARENT_PID", "") or 0) or None
     except ValueError:

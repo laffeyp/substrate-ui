@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2026 Peter Laffey
 // The activity strip above the prompt: what the current turn is doing, or how the last one
-// ended. Moved out of reveal_component.ts (UI sprint 101) so it can be tested without the
-// template runtime; Component._liveActivity delegates here.
+// ended. Moved out of reveal_component.ts (UI sprint 101) so it can be tested alone;
+// web/app/ActivityLine.tsx and App call it.
 
 import { EnvelopeKind } from "../vm/kinds";
 import { formatClock, formatDuration } from "./timeline";
@@ -34,8 +34,8 @@ type Scan =
   | { kind: "live"; turnWord: string; umT: number | null; tools: number; liveToolName: string };
 const scans = new WeakMap<object, Scan | null>();
 
-/** What the strip shows at `nowSec` (unix seconds). The snapshot arrives untyped from the dc-runtime
- *  component. */
+/** What the strip shows at `nowSec` (unix seconds), from a pane's snapshot. The parameter is untyped,
+ *  as it was when the dc-runtime component passed it. */
 export function liveActivity(snap: any, nowSec: number = Date.now() / 1000): Activity | null {
   if (!snap || typeof snap !== "object") return null;
   let scan = scans.get(snap);

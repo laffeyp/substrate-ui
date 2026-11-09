@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2026 Peter Laffey
-// electron/preload.js
+// electron/preload.ts
 // Sprint 078 — tiny placeholder for the Electron wrapping's
 // preload. Exposes window.native so the renderer can detect it is
 // running inside Electron. Sprint 080 grows this to carry menu-
@@ -14,7 +14,7 @@
 
 import { contextBridge, ipcRenderer } from "electron";
 
-// Menu-command dispatch. Every menu item in electron/menu.js that
+// Menu-command dispatch. Every menu item in electron/menu.ts that
 // carries a click handler calls webContents.send("menu:<command>",
 // payload). The renderer subscribes via window.native.onMenuCommand.
 // The wrapper delivers only the parsed command + payload; the raw

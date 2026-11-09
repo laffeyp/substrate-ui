@@ -2,11 +2,12 @@
 // Copyright (C) 2026 Peter Laffey
 // First run and the footer (sprint 207; plan PLAN-2026-11-04-shell-to-react-r5.md, A9).
 //
-// Footer: no status and "unbound — pick a workspace" before a session; "● live" and "session <name>"
-// after a turn; the records page's hint; "● finalised" after the session ends (open item 34, fixed
-// in plan row B2, sprint 224). First run (?firstrun=1): a row per driver in the controller's roster,
-// the template's texts ("s-1a04" in its top bar, "~/Documents/substrate · default · created on bind"
-// as the workspace; restored in sprint 334), and a pick that closes it and fires DRIVER_PICKED.
+// Footer: no status and "unbound — pick a workspace" before a session; "● live" and "session
+// <name>" after a turn; the records page's hint; "● finalised" after the session ends (open item
+// 34, fixed in plan row B2, sprint 224). First run (?firstrun=1): a row per driver in the
+// controller's roster, the texts of the dc-runtime template (`web/reveal.html` at `d4322e1`)
+// ("s-1a04" in its top bar, "~/Documents/substrate · default · created on bind" as the workspace;
+// restored in sprint 334), and a pick that closes it and fires DRIVER_PICKED.
 
 import { _electron as electron, type Page } from "playwright";
 import { bindPaneAsUser, launchArgs, settled, waitForApp } from "./lib/electron";

@@ -4,8 +4,8 @@
 // PLAN-2026-11-04-shell-to-react-r5.md, A5b). They never reach the server or a session's record.
 //
 // Moved out of reveal_component.ts unchanged: the same key, the same checks on load, the same note.
-// DCLogic reads `settings.getSnapshot()` and calls the actions below until the settings dialog is a
-// React component (B1).
+// App loads them at mount (`loadSettings`) and reads the type size; the settings dialog
+// (web/app/Dialogs.tsx) calls `pickTheme` and `stepFont`.
 
 import { createStore } from "../store";
 
@@ -24,9 +24,8 @@ export interface SettingsState {
   settingsNote: string;
 }
 
-// One instance per window, as in shell.ts: the page script (esbuild, with reveal_component.ts) and the
-// Vite bundle each hold a copy of this module, and the settings dialog moves to the Vite side in B1
-// while DCLogic still reads the size (sprint 213).
+// One instance per window, kept on globalThis as in shell.ts. The page once loaded two copies of this
+// module (sprint 213); Vite now bundles one, and the shared key costs nothing.
 const KEY_SHARED = "__substrateSettings";
 const scope = globalThis as unknown as Record<string, ReturnType<typeof createStore<SettingsState>> | undefined>;
 export const settings = scope[KEY_SHARED] ?? (scope[KEY_SHARED] = createStore<SettingsState>({ theme: "dark", fontOverride: null, settingsNote: "" }));

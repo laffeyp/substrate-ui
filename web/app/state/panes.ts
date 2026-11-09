@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2026 Peter Laffey
-// What the panes view draws (sprint 321; plan PLAN-2026-11-04-shell-to-react-r5.md, E2). DCLogic owns
-// the panes, the focus and the grid until App does (plan row E4); after each render it writes the
-// grid's tracks and gutters and each pane's place, emphasis and kind here, with the focus and gutter
-// actions. web/app/PanesView.tsx draws them.
+// What the panes view draws (sprint 321; plan PLAN-2026-11-04-shell-to-react-r5.md, E2). App owns the
+// panes, the focus and the grid; after each render it writes the grid's tracks and gutters and each
+// pane's place, emphasis and kind here, with the focus and gutter actions. web/app/PanesView.tsx draws
+// them.
 
 import { createStore } from "../store";
 

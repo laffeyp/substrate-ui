@@ -4,8 +4,8 @@
 //
 // Which workspaces are open, the pages of sessions fetched for each, the lit row, and whether the
 // folder picker is up. The rows themselves are derived (web/app/derive/records.ts) from this and the
-// focused pane's snapshot. Opening a session binds the focused pane and closes the page; DCLogic owns
-// the panes until plan group E, so it registers that action here.
+// focused pane's snapshot. Opening a session binds the focused pane and closes the page; App owns the
+// panes, so it registers that action here.
 
 import type { SessionRow } from "../../vm/types";
 import { createStore } from "../store";
@@ -41,7 +41,7 @@ export const recordsState = shared.store;
 
 const vm = () => (window as unknown as { __vm?: Vm }).__vm;
 
-/** DCLogic registers how a picked session opens in the focused pane; the returned function removes it. */
+/** App registers how a picked session opens in the focused pane; the returned function removes it. */
 export function setOpenSession(open: (row: SessionRow) => void): () => void {
   shared.open.current = open;
   return () => { if (shared.open.current === open) shared.open.current = () => undefined; };

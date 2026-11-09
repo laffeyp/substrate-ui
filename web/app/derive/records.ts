@@ -64,9 +64,10 @@ export function isScratchPath(path: string): boolean {
     || /substrate-harness-/.test(path);
 }
 
-/** As the template wrote it: the floored clock less `createdAt`, which is fractional, so a time under a
- *  minute keeps the fraction ("11.5s ago"). Sprint 241 had floored it to whole seconds; sprint 334
- *  restores the template's output (BLACKBOARD, 2026-11-05 failure entry). */
+/** As the dc-runtime template (`web/reveal.html` at `d4322e1`) wrote it: the floored clock less
+ *  `createdAt`, which is fractional, so a time under a minute keeps the fraction ("11.5s ago").
+ *  Sprint 241 had floored it to whole seconds; sprint 334 restores the template's output
+ *  (BLACKBOARD, 2026-11-05 failure entry). */
 export function relTime(unixSeconds: number, now: number): string {
   if (!unixSeconds || typeof unixSeconds !== "number") return "";
   const seconds = Math.max(0, Math.floor(now) - unixSeconds);

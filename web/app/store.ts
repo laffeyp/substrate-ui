@@ -3,9 +3,8 @@
 // The store pattern each area of the window keeps its state in (sprint 201; plan
 // PLAN-2026-11-04-shell-to-react-r4.md, "One store pattern, one store file per area").
 //
-// Each area's state lives in its own file under web/app/state/, made with createStore. React reads it
-// with useSyncExternalStore(store.subscribe, store.getSnapshot); while dc-runtime still draws part of
-// the window, DCLogic reads and writes the same store, so both sides see one value.
+// Each area's state lives in its own file under web/app/state/, made with createStore. Components read
+// it with useSyncExternalStore(store.subscribe, store.getSnapshot); App and the area's actions write it.
 
 export type Listener = () => void;
 export type Patch<T> = Partial<T> | ((state: T) => Partial<T>);

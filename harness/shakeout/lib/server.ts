@@ -58,7 +58,7 @@ export class ServerHandle {
     // signal the whole group (uv + python). Killing only uv leaves the
     // python child running and holding the port.
     // SHAKEOUT_APP=<path to Substrate.app> runs the flows against a PACKAGED bundle: its own
-    // interpreter and its own server.py, spawned the way electron/main.js spawns them
+    // interpreter and its own server.py, spawned the way electron/main.ts spawns them
     // (Sprint 098; the parity gate Sprint 091 named and never built).
     // PYTHONDONTWRITEBYTECODE: a .pyc written inside a signed bundle breaks its seal.
     const app = process.env.SHAKEOUT_APP;

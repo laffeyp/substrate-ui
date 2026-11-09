@@ -2,9 +2,9 @@
 // Copyright (C) 2026 Peter Laffey
 // The pane picker (sprint 283; plan PLAN-2026-11-04-shell-to-react-r5.md, C5, C6): the workspace
 // column with each open row's sessions, the model column, the GUIDANCE, LENGTH and TONE lines, and the
-// typed-path box with the keys' hint. An unbound pane draws it at its bottom. Styles and hooks are the
-// template's (reveal.html picker block, web/partials/choice-line.html); the view comes from DCLogic
-// (web/app/state/picker.ts).
+// typed-path box with the keys' hint. An unbound pane draws it at its bottom. Styles and data-* hooks are
+// copied from the picker block of the dc-runtime template (`web/reveal.html` at `d4322e1`) and its
+// `web/partials/choice-line.html`; App writes the view (web/app/state/picker.ts).
 
 import * as React from "react";
 import { useEffect, useState, useSyncExternalStore } from "react";
@@ -13,8 +13,8 @@ import "./hover.css";
 
 const head: React.CSSProperties = { padding: "0 14px", fontSize: 9.5, letterSpacing: ".14em" };
 
-/** The typed path keeps its own copy, so the caret stays put while DCLogic catches up; a change
- *  DCLogic makes (⇥ fills the path, a pick clears it) replaces it. */
+/** The typed path keeps its own copy, so the caret stays put until App's view catches up; a change
+ *  App makes (⇥ fills the path, a pick clears it) replaces it. */
 function WsInput({ paneId, view }: { paneId: number; view: PickerView }): React.ReactElement {
   const [text, setText] = useState(view.wsQ);
   useEffect(() => { setText(view.wsQ); }, [view.wsQ]);

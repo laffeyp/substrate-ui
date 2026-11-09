@@ -5,7 +5,8 @@
 // One row per driver in the controller's roster, in four groups: local ollama models, ollama cloud
 // models (a `:cloud` suffix), CLIs, then the built-in deterministic driver, which is always last. The
 // CLIs are the snapshot's "cli agents" driver group, the server's `cli` list of CLIs found on PATH
-// (`cliAgents` below); the template read a `cli` field no snapshot has and fell back to a fixed pair.
+// (`cliAgents` below); the dc-runtime template (`web/reveal.html` at `d4322e1`) read a `cli` field no
+// snapshot has and fell back to a fixed pair.
 
 export interface FirstRunRow {
   name: string;

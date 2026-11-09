@@ -1,16 +1,12 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2026 Peter Laffey
-// Sprint 073 — markdown parser and renderer, extracted verbatim from
-// `reveal_component.ts:120-215` (methods `_mdInlines`, `_mdBlocks`,
-// `_mdRenderInline`, `_mdRenderBlock`). Behaviour-preserving. Every
-// branch is carried over; every regex is copied character-for-
-// character. Unit tests at `web/reveal/__tests__/markdown.spec.ts`
+// Sprint 073 — markdown parser and renderer, extracted verbatim from reveal_component.ts's
+// `_mdInlines`, `_mdBlocks`, `_mdRenderInline` and `_mdRenderBlock`: every branch carried over, every
+// regex copied character for character. Unit tests at `web/reveal/__tests__/markdown.spec.ts`
 // exercise every block kind and inline segment shape.
 //
-// The parser turns chat-markdown text into a block sequence. The
-// renderer attaches per-kind boolean gates so the dc-runtime template
-// and the React `<ModelReply>` component both flow one flat prop bag
-// per block.
+// The parser turns chat-markdown text into a block sequence. The renderer attaches per-kind boolean
+// gates, so `<ModelReply>` reads one flat prop bag per block.
 
 export type InlineSegment = { t: string; code?: true; bold?: true; italic?: true };
 
@@ -171,7 +167,7 @@ export function mdBlocks(text: string): ParsedBlock[] {
 
 export function renderInline(seg: InlineSegment): RenderedInline {
   // Precompute the CSS variants a renderer flows. Every rendered span
-  // reads all six style keys, so the template / component stays flat.
+  // reads all six style keys, so the component stays flat.
   const styled: RenderedInline = {
     t: seg.t || "",
     font: "inherit",

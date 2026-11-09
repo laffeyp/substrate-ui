@@ -2,7 +2,8 @@
 // Copyright (C) 2026 Peter Laffey
 // Meta's structure lens (sprint 301; plan PLAN-2026-11-04-shell-to-react-r5.md, D4): the focused
 // session's topology, section by section: producers, triggers, views, ends, routes, run, events.
-// Styles are the template's (reveal.html structure block) and web/app/structure.css; the lists come
+// Styles are the structure block's in the dc-runtime template (`web/reveal.html` at `d4322e1`)
+// and web/app/structure.css; the lists come
 // from web/app/derive/structure.ts, the graph from web/app/state/stream.ts.
 
 import * as React from "react";

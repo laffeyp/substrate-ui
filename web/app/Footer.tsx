@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2026 Peter Laffey
 // The window's footer (sprint 220; plan PLAN-2026-11-04-shell-to-react-r5.md, B2): the focused
-// session's status, its name, and the key hint. Styles are the template's (reveal.html footer line).
+// session's status, its name, and the key hint. Styles are the footer line's in
+// the dc-runtime template (`web/reveal.html` at `d4322e1`).
 // The status span is drawn when empty, as the template drew it, so the gaps stay where they were.
 
 import * as React from "react";

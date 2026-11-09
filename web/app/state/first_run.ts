@@ -3,8 +3,8 @@
 // First run (sprint 221; plan PLAN-2026-11-04-shell-to-react-r5.md, B2).
 //
 // The window opens on first run with `?firstrun=1`. A pick closes it, sets the controller's driver,
-// and records the pick here; DCLogic, which owns the panes until plan group E, reads `picked` and
-// gives pane 1 that driver, as the template's pick did.
+// and records the pick here; App, which owns the panes, reads `picked` and gives pane 1 that driver,
+// as the old page's pick did.
 
 import { createStore } from "../store";
 

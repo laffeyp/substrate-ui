@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2026 Peter Laffey
-// Studio (sprint 334): "studio · author a topology", as the template drew it (reveal.html studio
-// block) before sprint 243 removed it, which a refactor may not do (BLACKBOARD, 2026-11-05 failure
-// entry). The page is inert until the topology-picker rewrite lands
-// (process/planning/FUTURE-DIRECTIONS-2026-09-27, section 1): everything under the header is dimmed and
+// Studio (sprint 334): "studio · author a topology", as the dc-runtime template (`web/reveal.html`
+// at `d4322e1`) drew its studio block before sprint 243 removed it, which a refactor may not do
+// (BLACKBOARD, 2026-11-05 failure entry). The page is inert until the Studio rewrite to a topology
+// viewer lands (FUTURE-DIRECTIONS-2026-09-27-cockpit-post-ship.md, section 1, in
+// process/planning/2026-09-27-post-ship-directions/): everything under the header is dimmed and
 // takes no pointer. Its state and actions are web/app/state/studio.ts.
 
 import * as React from "react";

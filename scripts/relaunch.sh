@@ -5,7 +5,7 @@
 # back up as one atomic operation — no half-alive processes, no stale
 # window fooling the developer.
 #
-# Why this exists: electron/main.js calls
+# Why this exists: electron/main.ts calls
 # app.requestSingleInstanceLock() (line 196). A stray Electron process
 # from an earlier launch holds the lock; a new `npm run electron` then
 # fails the lock and exits, leaving the old window. This script kills

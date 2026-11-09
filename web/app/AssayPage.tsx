@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2026 Peter Laffey
-// The assay page as the template drew it (reveal.html assay block; sprint 334). Its arm rows came
-// from a list the shell left empty until substrate exposes the projection, so the page shows its
-// empty-state note; the arm table, with its tier columns, draws only when there are arms. ⌘3 and
-// View ▸ Assays open it (a logged fix: before, nothing did). Sprints 247-257 had replaced this page
+// The assay page as the dc-runtime template (`web/reveal.html` at `d4322e1`) drew its assay block
+// (sprint 334). Its arm rows came from a list the shell left empty until substrate exposes the
+// projection, so the page shows its empty-state note; the arm table, with its tier columns, draws
+// only when there are arms. ⌘3 and View ▸ Assays open it (a logged fix: before, nothing did). Sprints 247-257 had replaced this page
 // with one of the agent's own design, which a refactor may not do (BLACKBOARD, 2026-11-05 failure
 // entry); that page is in _deprecated/assay-page-b5/.
 

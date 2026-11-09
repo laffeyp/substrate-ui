@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2026 Peter Laffey
-// electron/menu.js
+// electron/menu.ts
 // Sprint 080 — native macOS menu bar.
 //
 // Every menu item that carries a command (File · View items with an
@@ -69,7 +69,7 @@ function buildTemplate(getWin, newWindow) {
           accelerator: "CmdOrCtrl+O",
           // F362: the pane picker's "choose folder…" row names ⌘O. The window decides: with the
           // focused pane's picker showing, ⌘O opens the folder chooser; anywhere else it opens
-          // this dialog, as before (native:open-record in main.js).
+          // this dialog, as before (native:open-record in main.ts).
           click: () => send(getWin(), "open"),
         },
         { type: "separator" },

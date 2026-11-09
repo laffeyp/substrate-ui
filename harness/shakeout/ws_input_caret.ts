@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2026 Peter Laffey
 // The pane picker's typed path keeps its caret (sprint 287; plan PLAN-2026-11-04-shell-to-react-r5.md,
-// C5). The box is a React input whose value DCLogic also holds; a controlled input given its value a
+// C5). The box is a React input whose value App also holds; a controlled input given its value a
 // render late puts the caret at the end, so the box keeps its own copy of the text
 // (web/app/PanePicker.tsx, WsInput).
 //

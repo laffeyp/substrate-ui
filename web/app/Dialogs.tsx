@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2026 Peter Laffey
 // The settings dialog and the end-session confirm (sprint 214; plan PLAN-2026-11-04-shell-to-react-r5.md,
-// B1). Moved from reveal.html's dialog block; the styles are the template's, copied as written, so the
+// B1). Moved from the dialog block of the dc-runtime template (`web/reveal.html` at `d4322e1`);
+// the styles are copied as written, so the
 // pixel captures hold. The end-session confirm names the session it ends, where the template named a
 // fixed example session (F351).
 

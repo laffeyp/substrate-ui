@@ -3,8 +3,8 @@
 // The meta view's own state (sprint 313; plan PLAN-2026-11-04-shell-to-react-r5.md, D7): the lens on
 // show, the stream's direction and level, the selected seq, and the split between the transcript and
 // the machinery. Moved from DCLogic's state (`mode`, `dir`, `level`, `sel`, `revealL`). The meta view
-// (web/app/MetaView.tsx) and its lenses read and write it; DCLogic reads it for the language keys and
-// the left column's width, and writes it when `/language` opens the lens.
+// (web/app/MetaView.tsx) and its lenses read and write it; App reads it for the language keys and the
+// transcript column's width, and writes it when `/language` opens the lens.
 
 import { createStore } from "../store";
 import { GraphDirection, GraphMode, RevealLevel } from "../../vm/kinds";

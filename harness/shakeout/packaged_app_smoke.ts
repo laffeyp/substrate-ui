@@ -38,7 +38,7 @@
 // Preconditions asserted after launch:
 //   - `process.resourcesPath` in the main process points at
 //     dist-electron/mac-arm64/Substrate.app/Contents/Resources.
-//   - main.js's "spawning server: ..." log names the bundled
+//   - main's "spawning server: ..." log names the bundled
 //     python3 (build/python/bin/python3 → Contents/Resources/python/bin/python3),
 //     not `uv`.
 //   - stderr contains no ModuleNotFoundError.
@@ -48,9 +48,8 @@
 //   - The typed literal appears in the transcript DOM.
 //   - The turn runs on a real model: the app's own default driver
 //     (`default` in /api/models; SMOKE_DRIVER overrides) and parks.
-//   - After the turn, the pane's topologyGraph holds producers — the
-//     field Reveal → Structure renders (reveal_component.ts:2092-2093,
-//     "no topology loaded" when empty). Review 2026-09-28 / postmortem § 11.
+//   - After the turn, the pane's topologyGraph holds producers: the field meta's structure lens draws
+//     (web/app/StructureLens.tsx, "no topology loaded" when empty). Review 2026-09-28, postmortem § 11.
 //   - Launched with launchd's PATH (/usr/bin:/bin:/usr/sbin:/sbin), as a
 //     Finder launch is, every CLI driver found on the harness's own PATH
 //     still appears in the driver roster (review § F2).
@@ -124,7 +123,7 @@ function newestMtime(paths: string[]): { path: string; mtimeMs: number } {
 }
 
 // CLIs the harness's own shell PATH can see. A Finder-launched app must
-// see the same set once main.js restores the shell PATH.
+// see the same set once main restores the shell PATH.
 function clisOnHarnessPath(): string[] {
   return CLI_NAMES.filter((n) => spawnSync("/usr/bin/which", [n], { encoding: "utf8" }).status === 0);
 }
@@ -174,7 +173,7 @@ async function checkBundle(): Promise<void> {
 async function run(): Promise<void> {
   const expectedClis = clisOnHarnessPath();
 
-  // 4. Launch. Fresh user-data-dir sidesteps main.js's single-instance
+  // 4. Launch. Fresh user-data-dir sidesteps main's single-instance
   //    lock so a running dev instance does not block the smoke. The
   //    packaged target gets launchd's PATH, as a Finder launch does;
   //    the source target keeps the shell PATH `npm run electron` has.
@@ -218,7 +217,7 @@ async function run(): Promise<void> {
     mark("window_created");
     win.on("console", (m) => consoleChunks.push("[" + m.type() + "] " + m.text()));
 
-    // 6. Wait for the reveal shell mount. electron/main.js logs `spawning
+    // 6. Wait for the reveal shell mount. electron/main.ts logs `spawning
     //    server: <exe> <args>` on the main-process stderr and the
     //    bundled python path is asserted after the run via the same
     //    captured stream (Playwright's _electron.launch buffers a
@@ -363,7 +362,7 @@ async function run(): Promise<void> {
       if (exitCode === 0) exitCode = 3;
     }
     // 14. Orphan sweep. Playwright's app.close() SIGTERMs the main
-    //     process; main.js's will-quit hook that kills the server group
+    //     process; main's will-quit hook that kills the server group
     //     does not always fire in time. A backend of THIS run (found by
     //     its SUBSTRATE_HOME, never by a name pattern: the installed app
     //     may be running the same interpreter) still alive after the

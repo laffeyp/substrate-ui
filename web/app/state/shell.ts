@@ -2,14 +2,12 @@
 // Copyright (C) 2026 Peter Laffey
 // What the boot script hands the window (sprint 211; plan PLAN-2026-11-04-shell-to-react-r5.md, A7).
 //
-// web/reveal.ts used to reach the dc-runtime component through React's private fiber fields to set
-// its state and call its methods. It now writes here instead: each pane controller's latest snapshot
-// into the store, and the menu's commands into the channel. DCLogic subscribes to both.
+// web/reveal.ts writes here: each pane controller's latest snapshot into the store, and the menu's
+// commands into the channel. App subscribes to both. (reveal.ts used to reach the dc-runtime component
+// through React's private fiber fields instead, until sprint 211.)
 //
-// The window has two copies of this module: Vite bundles one into reveal-*.js for the boot script, and
-// esbuild bundles another into the page with reveal_component.ts (vite.config.ts, inlineDcScript). The
-// store and the channel therefore live on the window, made by whichever copy loads first, so both
-// copies share them (sprint 212). One bundle after dc-runtime retires (plan E4) makes this one copy.
+// The store and the channel live on the window, made by whichever copy of this module loads first.
+// The page loaded two copies while dc-runtime ran (sprint 212); Vite now bundles one.
 
 import type { Snapshot } from "../../vm/types";
 import { createStore } from "../store";

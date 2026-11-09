@@ -2,8 +2,7 @@
 // Copyright (C) 2026 Peter Laffey
 // Sprint 072 — Transcript subscribes to a pane's SessionController
 // and renders each transcript row as a <Row>, keyed by callId+seq.
-// ToolResult envelopes fold into their matching ToolCall (mirrors
-// the dc-runtime filter at reveal_component.ts:519).
+// ToolResult envelopes fold into their matching ToolCall, as the dc-runtime page folded them.
 //
 // Scroll is owned by useScrollAnchor (UI sprint 102): follow the bottom while the user is
 // there, hold the row being read once they scroll up, per pane per view.

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2026 Peter Laffey
 // What each unbound pane's picker shows (sprint 283; plan PLAN-2026-11-04-shell-to-react-r5.md, C5,
-// C6). DCLogic owns the picker's state (the armed folder, the lit rows, the open groups) and its
-// actions until the pane grid moves (plan group E); after each render it writes each unbound pane's
-// view here, rows and handlers included, built with web/app/derive/picker.ts and driver_label.ts.
+// C6). App owns the picker's state (the armed folder, the lit rows, the open groups) and its actions;
+// after each render it writes each unbound pane's view here, rows and handlers included, built with
+// web/app/derive/picker.ts and driver_label.ts.
 // web/app/PanePicker.tsx draws it.
 
 import { createStore } from "../store";

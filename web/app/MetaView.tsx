@@ -2,8 +2,8 @@
 // Copyright (C) 2026 Peter Laffey
 // The meta view's machinery column (sprint 316; plan PLAN-2026-11-04-shell-to-react-r5.md, D7): the
 // lens chips, the stream's level and direction, the side graph, the scroller and the lens on show,
-// and the gutter between the transcript and the machinery. Its state is web/app/state/meta.ts. The
-// transcript column beside it stays in the template until the panes move (plan group E).
+// and the gutter between the transcript and the machinery. Its state is web/app/state/meta.ts; App
+// draws the transcript column beside it.
 //
 // Every lens takes its width from this column (D81): none reads the window's width, so each draws the
 // same in meta's right half and in the editor view's 400px column. The structure lens's narrow layout

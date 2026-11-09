@@ -2,10 +2,10 @@
 // Copyright (C) 2026 Peter Laffey
 // Which dialog the window shows (sprint 214; plan PLAN-2026-11-04-shell-to-react-r5.md, B1).
 //
-// One dialog at a time: settings, or the end-session confirm for a named session. DCLogic opens them
+// One dialog at a time: settings, or the end-session confirm for a named session. App opens them
 // (⌘,, the menu's Settings…, /exit) and reads `dialogOpen()` for the Escape order and the keys it
-// leaves alone while a dialog is up; the React dialogs (web/app/Dialogs.tsx) draw them and close them.
-// The export dialog (19f) is drawn as the template drew it; nothing in the window opens it, as before.
+// leaves alone while a dialog is up; web/app/Dialogs.tsx draws them and closes them.
+// The export dialog (19f) is drawn as the old page drew it; nothing in the window opens it, as before.
 // Sprint 216 had dropped it, which a refactor may not do; sprint 334 restored it (BLACKBOARD, 2026-11-05
 // failure entry).
 
@@ -36,7 +36,8 @@ export function openSettings(): void {
   open({ open: "settings" });
 }
 
-/** The template held the export dialog's flag; no control set it. */
+/** The export dialog's flag, held as the dc-runtime template (`web/reveal.html` at `d4322e1`) held it;
+ *  no control sets it. */
 export function openExport(): void {
   open({ open: "export" });
 }

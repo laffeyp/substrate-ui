@@ -5,7 +5,7 @@
 // the drift detector fired, and one readout row for the selected turn. The geometry comes from
 // web/reveal/language_lens.ts; the stream, view and lane from web/app/state/language.ts; the language
 // view from web/app/state/stream.ts; the selection from web/app/state/meta.ts. Styles and hooks are
-// the template's (reveal.html language block).
+// the language block's in the dc-runtime template (`web/reveal.html` at `d4322e1`).
 
 import * as React from "react";
 import { useMemo, useSyncExternalStore } from "react";

@@ -1,20 +1,21 @@
 /* SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0 */
 /* Copyright (C) 2026 Peter Laffey */
 /* Hover rules for the React areas (sprints 222, 229, 238; plan PLAN-2026-11-04-shell-to-react-r5.md, "Styles"). */
-/* One class per element. Each replaces a template `style-hover` attribute, which dc-runtime drew as  */
+/* One class per element. Each replaces a `style-hover` attribute of the dc-runtime template          */
+/* (`web/reveal.html` at `d4322e1`), which dc-runtime drew as                                         */
 /* a generated `:hover` rule with every declaration `!important` (support.js, createPseudoSheet), so  */
 /* the rule beats the element's inline background as it did there.                                   */
 
-/* First run: a driver row (reveal.html first-run block). */
+/* First run: a driver row (the template's first-run block). */
 .hover-first-run-row:hover { background: #2e3138 !important; }
 
-/* Top bar (reveal.html top bar): the driver chip, the workspace chip, the records and studio buttons. */
+/* Top bar (the template's top bar): the driver chip, the workspace chip, the records and studio buttons. */
 .hover-top-bar-model-chip:hover { color: #d7dade !important; }
 .hover-top-bar-ws-chip:hover { color: #9aa0a8 !important; }
 .hover-top-bar-records:hover { color: #d7dade !important; }
 .hover-top-bar-studio:hover { color: #d7dade !important; }
 
-/* Records page (reveal.html records block): add workspace, a workspace row, a session row, load more. */
+/* Records page (the template's records block): add workspace, a workspace row, a session row, load more. */
 .hover-records-add:hover { color: #a0c0e0 !important; }
 .hover-records-workspace:hover { color: #e2e5e9 !important; }
 .hover-records-session:hover { background: #26292e !important; }
@@ -23,16 +24,16 @@
 /* Assay page: a row in the listing (web/app/AssayPage.tsx; new, no template rule). */
 .hover-assay-row:hover { background: #26292e !important; }
 
-/* Input bar (web/partials/input-bar.html): a slash menu row. */
+/* Input bar (`web/partials/input-bar.html` at `d4322e1`): a slash menu row. */
 .hover-slash-row:hover { background: #2e3138 !important; }
 
-/* Pane picker (reveal.html picker block, partials/choice-line.html): a workspace row's pick area, a
+/* Pane picker (the picker block and `partials/choice-line.html` at `d4322e1`): a workspace row's pick area, a
    session row, a live model row; a live choice in GUIDANCE, LENGTH or TONE. */
 .hover-picker-row:hover { background: #2e3138 !important; }
 .hover-choice-row:hover { background: #2e3138 !important; }
 
-/* Meta's stream (reveal.html stream block): a row. */
+/* Meta's stream (the template's stream block): a row. */
 .hover-stream-row:hover { background: #26292e !important; }
 
-/* Meta's side graph (reveal.html side block): a segment. */
+/* Meta's side graph (the template's side block): a segment. */
 .hover-side-seg:hover { outline: 1px solid #9db8d6 !important; }

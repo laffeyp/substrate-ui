@@ -143,8 +143,8 @@ async function toggleView(win: Page): Promise<void> {
     await win.waitForLoadState("load");
     await app.evaluate(({ BrowserWindow }) => { BrowserWindow.getAllWindows()[0]?.setSize(900, 560); });
     await win.waitForFunction(() => (window as any).__vm != null, undefined, { timeout: 15_000 });
-    // Bind the pane as a user does; the view switch (ctrl+`) is a no-op on an unbound pane
-    // (reveal_component.ts), which let the switch checks below pass without switching.
+    // Bind the pane as a user does; the view switch (⌘M) does nothing on an unbound pane, which let
+    // the switch checks below pass without switching.
     await bindPaneAsUser(win);
     await win.evaluate(async () => {
       const c = (window as any).__vm.get(1) ?? (window as any).__vm.spawn(1);

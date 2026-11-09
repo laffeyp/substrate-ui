@@ -1,11 +1,9 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2026 Peter Laffey
-// Sprint 074 — tool card. Header + expandable body matching
-// reveal.html:112-133. Local `useState({ open })` per card, keyed on
-// callId; auto-open on `toolRunning` alone (streaming does not drive
-// visibility); explicit `false` closes even against auto-open. The
-// body carries `data-tool-card-body="1"` so the Sprint 075 caret-pin
-// harness can select it.
+// Sprint 074 — tool card: a header and an expandable body, as the dc-runtime page drew one. Local
+// `useState({ open })` per card, keyed on callId; it opens on `toolRunning` alone (streaming does not
+// drive visibility); an explicit `false` closes it even against that. The body carries
+// `data-tool-card-body="1"` so the sprint 075 caret-pin harness can select it.
 
 import * as React from "react";
 import type { TranscriptRow } from "../../vm";
@@ -33,12 +31,10 @@ function statusColor(toolRunning: boolean, failed: boolean): string {
   return "#9aa0a8";
 }
 
-// The `<Transcript>` root re-mounts every time dc-runtime clears the
-// mount div's children (any renderVals-driven commit), so a
-// per-instance useState would reset the card's open flag on every
-// snapshot tick and the caret glyph would flip back to the closed
-// direction under the user. The map below outlives re-mounts and is
-// keyed by callId — the atom identity.
+// The panes view and meta's transcript column each draw their own `<Transcript>`
+// (web/app/PanesView.tsx, web/app/App.tsx), so a card unmounts and mounts again when the view
+// changes, and a per-instance useState would lose its open flag. (Under dc-runtime the root remounted
+// on every snapshot.) The map below outlives a remount and is keyed by callId.
 // Each entry keeps the toggle generation it was clicked under (UI sprint 140): a flip of the
 // expand/collapse-all toggle supersedes every earlier click.
 const openByCallId: Map<string, { open: boolean; generation: number }> = new Map();
@@ -83,17 +79,15 @@ const ToolCardInner: React.FC<Props> = ({ call, result, progressText, progressEo
   const cardCaret = isOpen ? "▾" : "▸";
   const argList = (call.args ?? []).map((value, index) => ({ i: `[${index}]`, v: value }));
 
-  // hasResult mirrors reveal_component.ts:1094: output is visible when
-  // the tool is not running AND either there was no stream OR the
-  // stream has sealed with eof.
+  // Output shows when the tool is not running and either there was no stream or the stream has
+  // sealed with eof.
   const hasResult = !toolRunning && (!streamingShow || progressEof);
   const outputText = result?.output ?? "";
   const errorText = result?.error ?? "";
   const hasError = !!errorText;
 
-  // Descend affordance mirrors reveal_component.ts:1075. Only delegate
-  // tool results carry a child_root; for now we surface it whenever
-  // the paired ToolResult's output includes a child_root string.
+  // The descend control: only delegate tool results carry a child_root, and the control shows whenever
+  // the paired ToolResult's output names one. (It does nothing: F329, left as it is, 2026-11-05.)
   let descendPath: string | null = null;
   if (result && result.output && typeof result.output === "string") {
     try {

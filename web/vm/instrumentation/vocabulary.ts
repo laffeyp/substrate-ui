@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2026 Peter Laffey
-// Vocabulary loader for the reveal shell. Reads the locked lock file
-// at web/vm/signals/versions/current.json and builds a typed dictionary
-// keyed by tag name. Separate from the classic shell's loader and its signals/versions/ tree, which
-// are in _deprecated/classic-tree/ (sprint 341, plan row F6, F348).
+// Vocabulary loader for the window. Reads the locked vocabulary at
+// web/vm/signals/versions/current.json and builds a typed dictionary keyed by tag name. (The classic
+// shell's loader and its signals/versions/ tree are in _deprecated/classic-tree/; sprint 341, F348.)
 
 import vocab from "../signals/versions/current.json";
 

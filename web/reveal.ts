@@ -65,15 +65,13 @@ function boot(): void {
     controller.attachExisting(attachId).catch(() => undefined);
   }
 
-  // Sprint 083 — Electron top-bar cooperation. `?electron=1` (set by
-  // electron/main.js loadURL) flips body[data-electron="1"]. Rules scoped to it then hide the decorative dot triads (Chromium
-  // draws the real traffic-lights over that same inset under
-  // titleBarStyle:'hiddenInset'), left-pads the top bar
-  // by 78px to yield the inset, and marks the bar draggable while
-  // keeping interactive descendants no-drag (the name renames on double-click, which a drag
-  // region would take as a window zoom).
-  // The rules it turns on are in web/app/window.css (sprint 332: a <style> element written here would
-  // break the page's Content-Security-Policy, style-src 'self').
+  // Sprint 083 — Electron top-bar cooperation. `?electron=1` (set by electron/main.ts loadURL)
+  // flips body[data-electron="1"]. Rules scoped to it then hide the decorative dot triads (Chromium
+  // draws the real traffic-lights over that same inset under titleBarStyle:'hiddenInset'),
+  // left-pads the top bar by 78px to yield the inset, and marks the bar draggable while keeping
+  // interactive descendants no-drag (the name renames on double-click, which a drag region would
+  // take as a window zoom). The rules it turns on are in web/app/window.css (sprint 332: a <style>
+  // element written here would break the page's Content-Security-Policy, style-src 'self').
   if (params.get("electron") === "1") document.body.setAttribute("data-electron", "1");
 
   // Every pane controller's snapshot goes to the window's store; the component reads it there.

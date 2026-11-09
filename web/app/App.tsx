@@ -116,9 +116,9 @@ export interface AppPane extends Cell {
 
 type Snapshots = Record<number, Snapshot>;
 
-/** The design tool's tweak props, as the template declared them on its script tag (`data-props`;
- *  restored in sprint 334). dc-runtime's tweak editor set them; with no editor, each takes its
- *  default, which changes nothing. */
+/** The design tool's tweak props, as the dc-runtime template (`web/reveal.html` at `d4322e1`)
+ *  declared them on its script tag (`data-props`; restored in sprint 334). dc-runtime's tweak
+ *  editor set them; with no editor, each takes its default, which changes nothing. */
 export const TWEAK_PROPS = {
   transcriptFontSize: { editor: "range", default: 13, min: 6.5, max: 19.5, step: 0.5, tsType: "number", section: "Type — default ±50%" },
   columns: { editor: "range", default: 1, min: 1, max: 4, step: 1, tsType: "number", section: "Test the splits (⌘D also works once clicked in)" },

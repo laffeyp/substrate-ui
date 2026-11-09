@@ -4,7 +4,8 @@
 // along the seq axis, one lane for the model, one per tool by name, one for the turn ends. A click on a
 // segment lights its seq, as a click on its row does. The lane names are drawn twice: hidden in the
 // scrolling track, to size it, and over it, fixed at the left, so they stay in view as the graph
-// scrolls. Styles are the template's (reveal.html side block); the lanes come from
+// scrolls. Styles are the side block's in
+// the dc-runtime template (`web/reveal.html` at `d4322e1`); the lanes come from
 // web/app/derive/stream.ts, the record from web/app/state/stream.ts, the selection from
 // web/app/state/meta.ts.
 

@@ -2,8 +2,9 @@
 // Copyright (C) 2026 Peter Laffey
 // The one input bar, with its slash menu and hint (sprint 260; plan PLAN-2026-11-04-shell-to-react-r5.md,
 // C1). It serves the pane it is given (`paneId`), wherever it is mounted: the panes view, the meta
-// view, and later the editor view and the pages (design D90, the prompt in every view). Styles are the
-// template's (web/partials/input-bar.html); the data-* hooks are the ones the gates read.
+// view, and later the editor view and the pages (design D90, the prompt in every view). Styles are
+// the dc-runtime template's (`web/partials/input-bar.html` at `d4322e1`); the data-* hooks are the
+// ones the gates read.
 
 import * as React from "react";
 import { useSyncExternalStore } from "react";

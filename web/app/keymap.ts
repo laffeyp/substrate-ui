@@ -60,7 +60,7 @@ export function windowKey(ev: KeyLike, ctx: KeyContext): KeyAction | null {
   const cmd = ev.metaKey && !ev.ctrlKey;
   const plainCmd = cmd && !ev.shiftKey && !ev.altKey;
   const key = ev.key.toLowerCase();
-  // ⌘M: the menu's Minimize gives up the key (electron/menu.js).
+  // ⌘M: the menu's Minimize gives up the key (electron/menu.ts).
   if (plainCmd && key === "m") return { kind: "toggle-meta" };
   if (plainCmd && key === "e") return { kind: "toggle-tools" };
   if (ev.metaKey && key === "d") return { kind: "split", dir: ev.shiftKey ? "down" : "right" };

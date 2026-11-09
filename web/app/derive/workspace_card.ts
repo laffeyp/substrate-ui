@@ -2,11 +2,12 @@
 // Copyright (C) 2026 Peter Laffey
 // The top bar's workspace card (sprint 232; plan PLAN-2026-11-04-shell-to-react-r5.md, B3, F328).
 //
-// The template's card fell back to `~/.substrate/sandbox` and `sandbox` for any pane without a
-// folder: an unbound pane, and a pane on the default per-session sandbox, whose folder the server
-// mints. Its branch line showed the folder's path, or for a git folder `substrate/<pane name>`, a
-// branch no session has (F339: sessions get no worktree, UI sprint 154). The card names the folder the
-// server reports for the session, else the folder the pane was bound to; a pane with neither says so.
+// The card of the dc-runtime template (`web/reveal.html` at `d4322e1`) fell back to
+// `~/.substrate/sandbox` and `sandbox` for any pane without a folder: an unbound pane, and a pane
+// on the default per-session sandbox, whose folder the server mints. Its branch line showed the
+// folder's path, or for a git folder `substrate/<pane name>`, a branch no session has (F339:
+// sessions get no worktree, UI sprint 154). The card names the folder the server reports for the
+// session, else the folder the pane was bound to; a pane with neither says so.
 //
 // Sprint 334: the shape reads as the pane's own shape and the branch line is back, as the template drew
 // them (a git folder reads "worktree" and its branch `substrate/<pane name>`; any other pane's branch

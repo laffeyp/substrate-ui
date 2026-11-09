@@ -2,8 +2,10 @@
 // Copyright (C) 2026 Peter Laffey
 // Studio's state and its spec (sprint 334): moved from reveal_component.ts as it was before sprint 242
 // removed it, which a refactor may not do (BLACKBOARD, 2026-11-05 failure entry). The page is inert
-// ("coming soon…") until the topology-picker rewrite lands; its state and actions are carried over as
-// they were. It lived on the window's component, so it lasts across closing and opening the page.
+// ("coming soon…") until the Studio rewrite to a topology viewer lands
+// (FUTURE-DIRECTIONS-2026-09-27-cockpit-post-ship.md, section 1, in
+// process/planning/2026-09-27-post-ship-directions/); its state and actions are carried over as they
+// were. It lived on the window's component, so it lasts across closing and opening the page.
 
 import { createStore } from "../store";
 

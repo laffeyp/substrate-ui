@@ -9,7 +9,8 @@
 // Steps: on the unbound pane, click the workspace chip: the card reads "none yet". Bind pane 1 on the
 // default folder (the per-session sandbox) and take one turn: the card names the folder the server
 // reports for the session (home written ~) and shape isolated; its branch line is the bound folder,
-// empty for the per-session sandbox, as the template drew it (restored in sprint 334).
+// empty for the per-session sandbox, as the dc-runtime template (`web/reveal.html` at `d4322e1`) drew
+// it (restored in sprint 334).
 
 import { _electron as electron, type Page } from "playwright";
 import { bindPaneAsUser, launchArgs, settled, waitForApp } from "./lib/electron";

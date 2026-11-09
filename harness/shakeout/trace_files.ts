@@ -5,7 +5,7 @@
 // reads <logs>/traces/<boot_id>/: main.jsonl opens with APP_BOOTED and TRACE_OPENED and ends with
 // APP_QUIT_COMPLETED (signals_lost 0); window-<id>.jsonl holds the window's records in proc_seq order,
 // each with the boot id and window id. TRACE_PLANT=cap launches with SUBSTRATE_TRACE_CAP=1500 (the
-// test seam in electron/main.js), so the window's file caps and drops lines; main.jsonl then holds a
+// test seam in electron/main.ts), so the window's file caps and drops lines; main.jsonl then holds a
 // TRACE_LOST for the window and APP_QUIT_COMPLETED counts the loss. TRACE_PLANT=server-cap launches with
 // SUBSTRATE_SERVER_TRACE_CAP=200 (the seam in server.py), which holds SERVER_STARTED only; the server
 // reports the lines it drops on stdout and main.jsonl holds them as TRACE_LOST (process server), summing

@@ -3,7 +3,7 @@
 // Sprint 073 — model-reply block renderer.
 //
 // Consumes `mdBlocks` + `renderBlock` from `web/reveal/markdown.ts`
-// and emits the block markup byte-for-byte with reveal.html:96-108.
+// and emits the block markup the dc-runtime page drew for a reply, byte for byte.
 // Wrapped in `React.memo` so a re-render only happens when the raw
 // text changes.
 

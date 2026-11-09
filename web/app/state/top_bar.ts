@@ -4,9 +4,9 @@
 // PLAN-2026-11-04-shell-to-react-r5.md, B3).
 //
 // The bar shows the focused pane: its status dot, its name, its driver and workspace chips and their
-// cards, and the page and view buttons. DCLogic owns the panes, the open page and the view until
-// they move (plan group E), so it computes these fields after each render and writes them here, and
-// it registers the actions the bar's controls call. The React bar (web/app/TopBar.tsx) draws them.
+// cards, and the page and view buttons. App owns the panes, the open page and the view, so it computes
+// these fields after each render and writes them here, with the actions the bar's controls call. The
+// bar (web/app/TopBar.tsx) draws them.
 
 import { createStore } from "../store";
 
@@ -76,7 +76,7 @@ const shared: Shared = scope[KEY] ?? (scope[KEY] = { store: createStore<TopBarSt
 
 export const topBar = shared.store;
 
-/** DCLogic registers its actions at mount; the returned function removes them. */
+/** App registers its actions after each render; the returned function removes them. */
 export function setTopBarActions(actions: TopBarActions): () => void {
   shared.actions.current = actions;
   return () => { if (shared.actions.current === actions) shared.actions.current = NO_ACTIONS; };

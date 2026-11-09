@@ -102,7 +102,7 @@ codesign --verify --deep --strict "$APP"
   || { echo "[release] Info.plist does not record kernel commit $KERNEL_COMMIT" >&2; exit 1; }
 
 say "6/7 gates against the built bundle"
-# UI sprint 107: every gate gives the app its own SUBSTRATE_HOME, and main.js keeps the app's logs and
+# UI sprint 107: every gate gives the app its own SUBSTRATE_HOME, and electron/main.ts keeps the app's logs and
 # Chromium profile under it. Anything a gate writes to these real-HOME paths fails the release.
 GATE_MARK="$(mktemp)"
 (cd "$REPO" && SMOKE_APP="$APP" npx tsx harness/shakeout/packaged_app_smoke.ts) | tee "$LOG_DIR/release-$STAMP-smoke.log"

@@ -2,10 +2,11 @@
 // Copyright (C) 2026 Peter Laffey
 // The footer's text (sprint 218; plan PLAN-2026-11-04-shell-to-react-r5.md, B2).
 //
-// Status reads the focused pane's controller snapshot: "● finalised" once its session has ended,
-// "● live" while it is connected, "○ <state>" while connecting, reconnecting or closed, and nothing
-// with no session. The template read `ended`, which nothing set, so it said "● live" in every state
-// (open item 34), and a design-tool prop drew a made-up rate-limit line (F356, F328).
+// Status reads the focused pane's controller snapshot: "● finalised" once its session has ended, "●
+// live" while it is connected, "○ <state>" while connecting, reconnecting or closed, and nothing
+// with no session. The dc-runtime template (`web/reveal.html` at `d4322e1`) read `ended`, which
+// nothing set, so it said "● live" in every state (open item 34), and a design-tool prop drew a
+// made-up rate-limit line (F356, F328).
 
 import type { ConnectionState } from "../../vm/types";
 import { PaneDrawnConnection } from "../../vm/signals.gen";

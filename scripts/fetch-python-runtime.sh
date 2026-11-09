@@ -236,7 +236,7 @@ echo "[fetch-python-runtime] precompiled: $(find "$OUT" -name '*.pyc' | wc -l | 
 # Contents/Frameworks/python-native/), with bin/ and lib/ kept as siblings so the interpreter's
 # @rpath (@executable_path/../lib) still finds libpython, and no dotted directory names (codesign
 # treats `name.ext` directories as bundles). A relative symlink stays at each old path, so Python's
-# import system is unchanged. electron/main.js sets PYTHONHOME to Resources/python because the
+# import system is unchanged. electron/main.ts sets PYTHONHOME to Resources/python because the
 # interpreter, resolved through its symlink, now lives elsewhere.
 NATIVE="$REPO/build/python-native"
 rm -rf "$NATIVE"

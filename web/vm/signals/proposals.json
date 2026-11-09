@@ -982,6 +982,16 @@
       "rationale": "A server that has exited can bind and start nothing; its SERVER_EXITED already names the fault, so the timing rules about its start end there, as a pane's waits end at PANE_CLOSED.",
       "ratified": true,
       "ratified_by": "agent-resolved 2026-11-08, sprints 382-386"
+    },
+    {
+      "id": "P-0.25-EMIT-SITES",
+      "kind": "PAYLOAD_FIELD_PROPOSED",
+      "layer": 6,
+      "element": "emit sites, entity and rule sources, and operator homes name the files and functions the code has",
+      "source": "comment audit 2026-11-08: twenty entries named electron/main.js, menu.js or preload.js, which are .ts since sprint 363; TOP_BAR_CARD_SET named App.tsx setCards, whose method is noteCards (v0.24); the Server operator cited server.py lines 2466 and 270 for Handler and _daemon_driver_resolver, now at 2646 and 273; LENS_CHANGED and PAGE_DRAWN gave short paths",
+      "rationale": "An emit site is how an agent reading the trace finds the line that decided a record (foundation 01). A site that names a file the tree does not have, or a function under another name, sends the reader to nothing. Tags, payloads, enums and rules are unchanged; line numbers are dropped, since they move with every edit.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-08, comment audit"
     }
   ]
 }

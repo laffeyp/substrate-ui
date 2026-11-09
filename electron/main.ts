@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2026 Peter Laffey
-// electron/main.js
+// electron/main.ts
 // Sprint 078 — spawn-and-load skeleton.
 //
 // The main process spawns server.py in a detached process group,
@@ -339,7 +339,7 @@ const SERVER_LOSS_RE = /^substrate-ui trace_lost=(\d+)$/;
 // and extracted — the method sindresorhus/shell-env uses.
 // DISABLE_AUTO_UPDATE stops oh-my-zsh from prompting during the probe.
 const PATH_MARK = "__SUBSTRATE_PATH__";
-// Sprint 094: the probe starts when main.js loads and runs while Electron initialises; spawnServer
+// Sprint 094: the probe starts when main loads and runs while Electron initialises; spawnServer
 // awaits it. It used to be a spawnSync inside whenReady that blocked startup ~0.4 s (measured).
 function probeShellPath() {
   return new Promise<{ shell: string; path: string | null; why: string }>((resolve) => {
@@ -436,9 +436,8 @@ let serverPort = null;
 let stdoutBuf = "";
 let serverLineBuf = "";
 // Sprint 081 — buffered-pending dispatch for deep-links that fire
-// before the renderer is ready. Reuses the pattern the 2026-09-12
-// electron/main.js:51-72 used (see _deprecated/electron-bridge-
-// 2026-09-12/main.js). A window joins readyWindows on did-finish-load;
+// before the renderer is ready. Reuses the pattern of the 2026-09-12 bridge
+// (_deprecated/electron-bridge-2026-09-12/main.js). A window joins readyWindows on did-finish-load;
 // pending deep-links flush in order to the first window that loads.
 const readyWindows = new WeakSet();
 const pendingDeepLinks = [];

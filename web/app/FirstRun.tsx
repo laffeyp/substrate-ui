@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2026 Peter Laffey
 // First run (sprint 221; plan PLAN-2026-11-04-shell-to-react-r5.md, B2): the drivers this machine
-// has, one row each, and the workspace a session gets by default. Styles are the template's
-// (reveal.html first-run block), and so is its text: the top bar's "s-1a04" and the workspace line
-// "~/Documents/substrate · default · created on bind". Sprint 221 had replaced those two texts;
+// has, one row each, and the workspace a session gets by default. Styles are the first-run block's
+// in the dc-runtime template (`web/reveal.html` at `d4322e1`), and so is its text: the top bar's
+// "s-1a04" and the workspace line "~/Documents/substrate · default · created on bind". Sprint 221 had replaced those two texts;
 // sprint 334 restored them, since a refactor changes no text (BLACKBOARD, 2026-11-05 failure entry).
 
 import * as React from "react";

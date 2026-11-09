@@ -3,7 +3,7 @@
 // Bundle picked: load the bundle roster, pick the first one, assert
 // BUNDLE_PICKED fires with that bundle's name and the controller holds it.
 // UI sprint 107: the flow picked `roster[0].slug`, a field BundleRow does not have, so it picked
-// `undefined` and passed on the tag alone; no gate type-checked harness/ until this sprint.
+// `undefined` and passed on the tag alone; no gate type-checked harness/ until UI sprint 107.
 
 import { SessionController } from "../../web/vm/session_controller";
 import { NodeSubstrateClient } from "./lib/client";

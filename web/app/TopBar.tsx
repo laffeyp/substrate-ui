@@ -2,7 +2,8 @@
 // Copyright (C) 2026 Peter Laffey
 // The one top bar (sprint 228; plan PLAN-2026-11-04-shell-to-react-r5.md, B3): the focused pane's
 // dot and name (double-click renames), its driver chip and model card, its workspace chip and card,
-// and the page and view buttons. Styles are the template's (reveal.html top bar). The data-*
+// and the page and view buttons. Styles are the top bar's in
+// the dc-runtime template (`web/reveal.html` at `d4322e1`). The data-*
 // attributes are the ones the gates and the Electron rules (reveal.ts) find the bar by.
 
 import * as React from "react";

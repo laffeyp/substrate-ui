@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2026 Peter Laffey
-// The assay page as the template drew it, and its openers (sprint 334; plan
-// PLAN-2026-11-04-shell-to-react-r5.md, B5's opener kept as a logged fix).
+// The assay page as the dc-runtime template (`web/reveal.html` at `d4322e1`) drew it, and its openers
+// (sprint 334; plan PLAN-2026-11-04-shell-to-react-r5.md, B5's opener kept as a logged fix).
 //
 // Steps: ⌘3 opens the page, which shows the template's empty-state note; ⌘3 again returns to the
 // panes. View ▸ Assays opens it again and Escape closes it.

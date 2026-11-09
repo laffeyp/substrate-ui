@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2026 Peter Laffey
 // Meta's i/o lens (sprint 305; plan PLAN-2026-11-04-shell-to-react-r5.md, D5): each input and output
-// document on the focused session's record, titled, with its seq. Styles are the template's
-// (reveal.html i/o block); the documents come from web/app/derive/io.ts.
+// document on the focused session's record, titled, with its seq. Styles are the i/o block's
+// in the dc-runtime template (`web/reveal.html` at `d4322e1`); the documents come from web/app/derive/io.ts.
 
 import * as React from "react";
 import { useMemo, useSyncExternalStore } from "react";

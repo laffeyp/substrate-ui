@@ -2,7 +2,8 @@
 // Copyright (C) 2026 Peter Laffey
 // The find bar (sprint 270; plan PLAN-2026-11-04-shell-to-react-r5.md, C3): the query and what it
 // matches in the scope, the transcript's lines of the focused pane or meta's stream events. Styles
-// are the template's; the panes and meta views differ only in padding.
+// are the dc-runtime template's (`web/reveal.html` at `d4322e1`); the panes and meta views differ
+// only in padding.
 
 import * as React from "react";
 import { useSyncExternalStore } from "react";

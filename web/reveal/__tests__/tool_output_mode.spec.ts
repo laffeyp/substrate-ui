@@ -31,7 +31,8 @@ test("a flip applies to every card, running or finished, and counts a generation
 });
 
 test("two copies of the module share one setting", async () => {
-  // reveal_component.ts and the transcript are separate bundles; the state lives on globalThis.
+  // The state lives on globalThis, so any copy of the module (the page had two while dc-runtime ran)
+  // reads the same setting.
   const shared = (globalThis as unknown as Record<string, { state: { mode: string } }>).__substrateToolOutputMode;
   setToolOutputMode("expanded", ToolOutputModeSetCause.SLASH);
   assert.strictEqual(shared.state.mode, "expanded");

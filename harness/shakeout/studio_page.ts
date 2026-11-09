@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2026 Peter Laffey
-// Studio is there, as the template drew it (sprint 334; restored after sprints 242-245 removed it:
-// BLACKBOARD, 2026-11-05 failure entry).
+// Studio is there, as the dc-runtime template (`web/reveal.html` at `d4322e1`) drew it (sprint 334;
+// restored after sprints 242-245 removed it: BLACKBOARD, 2026-11-05 failure entry).
 //
 // Steps: the top bar's "studio" button opens the page; the crumb ends "› studio"; the page reads
 // "studio · author a topology" and "coming soon…"; its body is dimmed (opacity 0.4) and takes no

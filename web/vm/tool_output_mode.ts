@@ -5,10 +5,10 @@
 // every card, those already drawn and those that arrive later; `generation` counts flips, so a click
 // on one card holds only until the next flip.
 //
-// Flipped by ⌘E (reveal_component.ts) and by /fold and /unfold (session_controller.ts); read by
-// the tool cards (reveal/transcript/useToolOutputMode.ts). No React here, and no state of its own:
-// reveal_component.ts is compiled as its own bundle, apart from the rest, and each bundle gets its
-// own copy of this module, so the state lives on one global object the copies share.
+// Flipped by ⌘E (web/app/keymap.ts, then App) and by /fold and /unfold (session_controller.ts); read
+// by the tool cards (reveal/transcript/useToolOutputMode.ts). No React here. The state lives on one
+// global object that every copy of the module shares; the page loaded two copies while dc-runtime ran,
+// and Vite now bundles one.
 
 import { emit } from "./instrumentation/sdd";
 import { Signal, ToolOutputModeSetCause, ToolOutputModeSetMode } from "./signals.gen";

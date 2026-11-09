@@ -3,9 +3,8 @@
 // What the window's chrome reads about the focused pane (sprint 220; plan
 // PLAN-2026-11-04-shell-to-react-r5.md, B2).
 //
-// DCLogic owns the pane grid until it moves (plan group E), so it writes these fields after each
-// render; the React footer reads them, and the pane's snapshot from shell.ts. A write that changes
-// nothing notifies no one (store.ts).
+// App owns the pane grid, so it writes these fields after each render; the footer reads them, and the
+// pane's snapshot from shell.ts. A write that changes nothing notifies no one (store.ts).
 
 import { createStore } from "../store";
 
@@ -18,7 +17,7 @@ export interface ChromeState {
   /** The records, assays or studio page is open over the panes. */
   surfaceOpen: boolean;
   /** The design tool's simulateRateLimit scenario (restored in sprint 334): the footer shows the
-   *  template's rate-limited status. */
+   *  rate-limited status line of the dc-runtime template (`web/reveal.html` at `d4322e1`). */
   rateLimited: boolean;
 }
 

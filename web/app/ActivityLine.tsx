@@ -3,7 +3,8 @@
 // The session bar line and the running background tasks under a pane's transcript (sprint 266; plan
 // PLAN-2026-11-04-shell-to-react-r5.md, C2). The line names the turn and what it is doing, or how the
 // last one ended (web/reveal/activity.ts), then the session's settings and language shifts
-// (web/reveal/settings_tail.ts). Styles are the template's; the panes view and the meta view differ
+// (web/reveal/settings_tail.ts). Styles are those of
+// the dc-runtime template (`web/reveal.html` at `d4322e1`); the panes view and the meta view differ
 // only in padding, so `view` picks it.
 
 import * as React from "react";

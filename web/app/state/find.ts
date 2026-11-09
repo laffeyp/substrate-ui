@@ -2,8 +2,8 @@
 // Copyright (C) 2026 Peter Laffey
 // Find (⌘F; sprint 270; plan PLAN-2026-11-04-shell-to-react-r5.md, C3): whether it is open, the
 // query, and its scope, the lens last clicked (the transcript or meta's stream). The find bar
-// (web/app/FindBar.tsx) draws them; DCLogic reads them to dim the stream's rows that do not match,
-// and writes the stream's match count here, since it builds the stream's rows until plan row D1.
+// (web/app/FindBar.tsx) draws them; the stream lens dims the rows that do not match; App counts the
+// stream's matches after each render and writes the count here.
 
 import { createStore } from "../store";
 import { emit } from "../../vm/instrumentation/sdd";
@@ -15,7 +15,7 @@ export interface FindState {
   open: boolean;
   q: string;
   scope: FindScope;
-  /** Events in meta's stream matching `q`, counted by DCLogic. */
+  /** Events in meta's stream matching `q`, counted by App. */
   streamMatches: number;
 }
 

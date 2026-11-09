@@ -2,9 +2,9 @@
 // Copyright (C) 2026 Peter Laffey
 // The focused session's record as meta's lenses read it (sprints 291, 296, 301, 309; plan
 // PLAN-2026-11-04-shell-to-react-r5.md, D2-D7): its envelopes, its topology and its language view.
-// DCLogic owns the panes and their controllers until plan group E; after each render it writes the
-// focused pane's here. The meta view's own state (lens, direction, level, selection) is
-// web/app/state/meta.ts (sprint 313).
+// App owns the panes and their controllers; after each render it writes the focused pane's here.
+// The meta view's own state (lens, direction, level, selection) is web/app/state/meta.ts (sprint
+// 313).
 
 import { createStore } from "../store";
 import type { RawEnvelope } from "../derive/stream";

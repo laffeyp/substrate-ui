@@ -2,11 +2,9 @@
 // Copyright (C) 2026 Peter Laffey
 // Sprint 072/074 — Row dispatch by role.
 //
-// Renders one transcript row keyed on `envelope.callId` (for tool
-// rows) or `envelope.seq` (for everything else). Role-specific glyph
-// + colour + marginTop mirror the dc-runtime template
-// (reveal.html:91-136) and the row provider
-// (reveal_component.ts:326-343).
+// Renders one transcript row keyed on `envelope.callId` (for tool rows) or `envelope.seq` (for
+// everything else). Each role's glyph, colour and top margin are the ones the dc-runtime page drew;
+// the pixel captures hold them.
 //
 // Real subtrees:
 //   role=user, park, ended, warning — full markup as text-only spans.

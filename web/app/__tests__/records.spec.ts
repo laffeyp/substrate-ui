@@ -47,6 +47,7 @@ test("an open group lists its page, its total and what is left", () => {
   assert.strictEqual(grp.lit, false);
 });
 
+// The template: web/reveal.html at d4322e1, the dc-runtime page before the move.
 test("relative times are the template's: the floored clock less the fractional start", () => {
   assert.strictEqual(relTime(100.5, 112.9), "11.5s ago");
   assert.strictEqual(relTime(0, 50), "");

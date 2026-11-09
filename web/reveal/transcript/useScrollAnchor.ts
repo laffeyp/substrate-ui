@@ -18,8 +18,8 @@
 //               from 457 to 450). The padding goes when the user scrolls.
 //
 // Scrolling back to the bottom resumes following. The mode and position are saved per pane per
-// view (`key`), so switching terminal ↔ reveal, or the root remounting when dc-runtime clears
-// its mount div, comes back to the same place.
+// view (`key`), so switching between the panes view and meta, which draw separate transcripts, comes
+// back to the same place.
 //
 // The scroller is the nearest ancestor of the mount div with overflow-y auto|scroll. Its
 // `overflow-anchor` is set to `none` so Chromium's own anchoring does not race this hook.

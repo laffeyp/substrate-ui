@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2026 Peter Laffey
 // Meta's scene lens (sprint 305; plan PLAN-2026-11-04-shell-to-react-r5.md, D5): the latest 2-D grid
-// on the focused session's record, or the template's line when there is none. Styles are the
-// template's (reveal.html scene block); the grid comes from web/app/derive/scene.ts.
+// on the focused session's record, or the template's line when there is none. Styles are the scene
+// block's in the dc-runtime template (`web/reveal.html` at `d4322e1`); the grid comes from
+// web/app/derive/scene.ts.
 
 import * as React from "react";
 import { useMemo, useSyncExternalStore } from "react";
