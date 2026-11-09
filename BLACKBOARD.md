@@ -1544,3 +1544,21 @@ Two mount divs land in `web/reveal.html`: `<div id="vm-transcript-mount">` insid
 - **2026-11-08 user** — "there are full comprehensive test suites. have the been run. read the runbook and the sdd kit. have all the tests been run are you lying about any part of this. what parts have been done poorly." Answered in chat the same day: no. The report of the first clean build said "every suite has run on it", and that was false. It skipped runbook steps 2 (`ruff format --check`), 3 (`gen_kinds.py --check`), 10 (packaged smoke), 12 (axis A on the bundle), 15 (tasks gate), 17–20 (install) and the Verification checks, plus the release chapter's axis B and pytest under an empty HOME. It ran 18 of the 77 Electron gates on the bundle. The rerun recorded in the `built` entry above ran every one of them.
 - **2026-11-08 surfaced** — Correction to the `built` entry "Clean build and every suite" above. Its title and its chat report claimed every suite; the runbook steps listed in the entry just above were not run. Two of its lines were also wrong. "Generated names 0" was `gen_signals.py`, not the runbook's `gen_kinds.py`. "Packaged gates 17 of 18" counted a subset chosen by hand. The build it left in `dist-electron` was not installed, and the app on the screen stayed the 5 November build until the install recorded in the latest `built` entry.
 - **2026-11-08 user** — "ok, we need to recenter back to the prior part of the project." The SDD signals plan has closed. The work it paused on 2026-11-05 ("All other work, the editor shared work included, waits") resumes: `process/planning/2026-11-05-editor-shared-work/PLAN-2026-11-05-editor-shared-work.md`. Done: 0(a) (sprint 346), 0(b) (347), 0(c) list and read (348) and watch (349), and 0(d) (kernel K340, `5f96b0a7`). Next: 0(c)'s write through `SessionRegistry.append_event`, then 0(e)–0(h), then the editor view's code mode. The planning index had no row for the folder; one is added.
+- **2026-11-08 built** — The move to React, checked against its plan's goal (`PLAN-2026-11-04-shell-to-react-r5.md`).
+  - **What holds:**
+    - no `@ts-nocheck` directive (the one hit is a comment);
+    - the page loads one local module under a CSP with no `unsafe-eval`;
+    - `support.js`, `reveal_component.ts`, `web/shims/` and the dc-runtime Vite plugins are in `_deprecated/dc-runtime/`, and no live code imports from it;
+    - no reads of React's fiber fields;
+    - 77 of 77 gates pass;
+    - the U112 ledger closes the lens-audit rows.
+  - **Pixels:** all 28 captures today equal the capture at the move's close (`g1`), so nothing visible changed in the work since. Against the pre-move baseline, the same 8 differ, each a logged fix: the end dialog names its session, the inspector shows the payload as recorded, the footer drops "● live" with no session.
+  - **Found and fixed:** about 30 comments described dc-runtime and DCLogic as live.
+- **2026-11-08 agent-resolved** — 23 emit sites, sources and operator homes in vocabulary v0.24 named code the tree does not have: `electron/main.js`, `menu.js` and `preload.js`, which are `.ts` since sprint 363; `App.tsx setCards`, whose method is `noteCards`; server line numbers 2466 and 270, now 2646 and 273. Decision: v0.25 (`P-0.25-EMIT-SITES`) names the files and symbols, drops line numbers, and changes no tag, payload or rule. Grounds: project — an emit site is how a reader of the trace finds the deciding line (foundation 01); SDD — `grammar/PRINCIPLES.md`, a change goes through a proposal and a version; practice — n/a. Revisit if: an emit site moves.
+- **2026-11-08 built** — Comment audit, `0af4da0`.
+  - **Comments in `web/app/`, `web/reveal/`, `web/vm/` and the gates** now name App where they named DCLogic. The template's styles point at `web/reveal.html` at `d4322e1`, its last version before the move.
+  - **Old line references** into retired files are replaced by the rule they cited.
+  - **The Electron files** are named `.ts`, and the Studio comments' planning path is current.
+  - **The parity check** no longer lists the removed `web/reveal_component.ts`.
+  - **Checks:** build 0, unit 161, ruff format 0, `gen_signals.py --check` 0, `trace_reader` 0.
+- **2026-11-08 user** — "update blackboard and go": the editor view's shared work resumes at 0(c)'s write.
