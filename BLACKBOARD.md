@@ -1510,3 +1510,34 @@ Two mount divs land in `web/reveal.html`: `<div id="vm-transcript-mount">` insid
 - **2026-11-08 surfaced** — The packaged `dialogs` failure (⌘, after a reload opened no settings, once in 26 runs). One hypothesis was tested and is false. `waitForApp` waits on `__vm`, which `reveal.ts` sets before React mounts the App's key listener, so a key could arrive before the listener. But in 100 reloads, 40 idle and 60 under eight busy loops, the App had committed every time the gate first saw `__vm`. The gate now prints the window's records since the reload when it fails, and keeps the launch (sprint 386); the plant shows `KEY_ROUTED Meta+.→none@none`. No cause is on file yet.
 - **2026-11-08 agent-resolved** — K340-Q-1: the kernel's `test_inspect_record_summary_read_back_by_model` failed 6 of 6. Decision, made in the kernel as K341 (`4a7be72c`): the error for a path with no record names the records near it and the call that reads one; the test's own session record moves to `tmp_path/session/`. Grounds: project — printed from the real test run: the model dropped `/seeded`, got "no record at <folder>", and asked for a path; with two records named it read the session's own; with one named and no call named it asked again; with the call named it passed 6 of 6; the memory "tools are functions": a tool points to the next move; SDD — n/a; practice — n/a. Revisit if: another tool's error leaves a model with no next move.
 - **2026-11-08 agent-resolved** — Correction to the entry above on how each process writes its faults: its practice ground quoted the Node.js `process` docs from memory as "does not override the default behavior", which is not their wording. The docs (nodejs.org/api/process.html, read 2026-11-08) say: "Installing an `'uncaughtExceptionMonitor'` listener does not change the behavior once an `'uncaughtException'` event is emitted." On `'warning'`: "By default, Node.js will print process warnings to `stderr`. The `--no-warnings` command-line option can be used to suppress the default console output". A listener alone is not named as suppressing it; the Electron 44 probe showed the warning still printed. The decision stands.
+- **2026-11-08 built** — Sprints 382–386 and plan r4 items 9–14. The packaged app at `6ba0883` (kernel `4a7be72c`) is installed at `/Applications/Substrate.app` and open on the screen.
+  - **The build.** The runbook's "Build and install — no Apple", every step, on a clean build: `dist-main`, `web/dist`, `build/python`, `build/python-native` and `dist-electron` were removed first.
+    - Steps 1–7 exit 0: ruff check, ruff format, `gen_kinds.py --check` (and `gen_signals.py --check`), build, `test:unit`, `vm_smoke`, `test:py`. `test:py` also exits 0 under an empty HOME.
+    - The pack: `pack:runtime` 0 (no VERIFICATION_BUILD); `pack:dev` 0; Info.plist names `6ba0883…` and `4a7be72c…`, CFBundleVersion 1794195095.
+  - **The bundle** passes:
+    - packaged smoke 0;
+    - axis C 0 (3 flows, 0 defects);
+    - the tasks gate 0;
+    - all 77 commands of `gates:electron` with the bundle named, 0. `fault_signals` and `action_signals` were rerun with their state kept: every launch's APP_BOOTED reads `packaged: true`, `6ba0883`, vocabulary 0.24.
+  - **From source:** 77 of 77 gates 0.
+  - **The kernel:** 1,692 passed, 14 skipped, none failed; ruff check and format 0.
+  - **Axis A, source and bundle:** one defect, `cli_discovery`, now named `cli_model_error`. The kernel record of the cursor-agent session reads `CliResponder(cursor-agent) exit 1: ActionRequiredError: You've hit your usage limit`. The Cursor account is at its limit (an account question); claude and codex replied.
+  - **Axis B, bundle:** 22 flows, one defect: `tool_grep`, `wrong_tool_called`. Five more runs: 4 called `list_dir`, `write_file` and `grep`. One called `list_dir` alone, then ended its turn (`end_turn`) with a reply saying it had written `sample.txt` and run `grep`, neither in the record, and no tool call in its text. The model `kimi-k2.7-code:cloud` claimed calls it did not make, 1 of 6 runs. The app recorded what happened, and the flow caught it.
+  - **Install (steps 17–20).**
+    - The app on the screen (pid 45111, started from `dist-electron`) quit by its bundle id `com.greenrosesystems.substrate`.
+    - The old bundle (1793161234) is at `~/.Trash/Substrate-1793161234-replaced-20261108-194409.app`.
+    - `ditto` 0; `open` 0.
+  - **Verification (5.1).** CFBundleVersion 1794195095 > 1793161234; SubstrateKernelCommit `4a7be72c` equals the kernel's HEAD; SubstrateKernelVersion 1.1.2 equals `pyproject.toml`.
+    - main pid 68003, backend pid 68271; `substrate.log` reads app boot, spawning server, server bound port=59360, server up.
+    - Launch `20261109-034411-2777a7`: APP_BOOTED `packaged: true`, `6ba0883`, 0.24; window 1 booted and drawn; no INVARIANT_BROKEN, so the app it replaced closed (S2).
+    - The window is on screen: 1440×900 at (36, 33), layer 0, owner pid 68003 (CGWindowList). A screenshot is not available: this shell lacks Screen Recording permission.
+  - **Rubber Duck Pass**, on the installed launch's trace:
+    - main booted, opened its trace, spawned the server and saw it bound, and opened window 1;
+    - the server started, opened its trace and scanned the store;
+    - the window booted, opened pane 1, drew it, loaded sessions, bundles, workspaces and the driver roster, and drew it again.
+
+    Observations: none.
+  - **Open:**
+    - the `dialogs` cause (surfaced above; instrumented);
+    - the Cursor account's limit.
+  - **Cards:** `process/sprints/sprint-382-faults-are-written.md` through `sprint-386-no-cause-left-unfound.md`.
