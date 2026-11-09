@@ -966,3 +966,25 @@ The clean build that followed was reported as "every suite has run". It had not:
 2. "Done" for a plan includes a review of the running app against the plan's goal, after the items close.
 3. A probe that fails to reproduce a race says how many tries, under what load, and that the race is not ruled out. To rule it out, measure the state where the race bites.
 4. The last stage of a build is the runbook's install, with the new build open on the screen.
+
+---
+
+### 2026-11-08 — The runbook run, step by step, and what it caught
+
+**What happened.** After the entry above, the runbook's "Build and install — no Apple" ran in full on a clean build. The run was in two scripts: one for the source side, one for the bundle. Each step and each of the 77 gates ran as its own command, with its exit code logged, so a failure could not stop the steps after it. Every step exits 0 but two shakeout defects. The new build is installed at `/Applications/Substrate.app` and open on the screen.
+
+**What worked.**
+- **Its own exit code.** A chain joined with `&&` stops at the first failure and hides the rest. This run showed axis A's one defect, and still ran the kernel suite and all 77 gates after it.
+- **A suspiciously fast run checked.** All 77 gates passed on the bundle in 4 minutes. Two of them were rerun with their state kept: every launch's APP_BOOTED read `packaged: true`, the commit and vocabulary 0.24, and the action gate's trace held every tag at the expected count. Fast was real; it was checked, not assumed.
+- **Defects read to their cause in the kernel record.** cursor-agent's "empty reply" was its usage limit, and the gate now names that. The cloud model's "wrong tool" was a reply claiming calls it never made, 1 of 6 runs; the record shows no call in its text.
+- **The install proved by the runbook's own checks.** These were the plist versions and commits, the main and backend pids, the log lines, a clean trace, and no S2 from the boot it replaced. The window list confirmed the window was on screen, without the Screen Recording permission a screenshot needs.
+
+**What got in the way.**
+- **A guessed bundle id** for the quit. It cost one failed call. The plist names the real one.
+- **An unquoted path.** A script passed the bundle path to PlistBuddy unquoted, and the path has spaces.
+- **A quote from memory.** A BLACKBOARD entry quoted the Node.js docs without reading them. The docs were checked after, and a correction appended.
+
+**What the kit could say.**
+1. A build runs as one logged command per runbook step and per gate, never one chained command, so one failure leaves the rest measured.
+2. A packaged gate run proves it ran the bundle: every launch writes `packaged: true` and the build's commit, and a sample is read.
+3. A quote of a source is read from the source in the same turn, or it is not put in quotation marks.
