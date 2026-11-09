@@ -1002,6 +1002,16 @@
       "rationale": "Each call of the workspace file API is a server domain event the trace did not hold. FILE_WRITTEN carries the kernel seq of the FileWritten entry, which joins the trace to the record. Paths and text stay out (E1); refusals stay API_REFUSED with area files.",
       "ratified": true,
       "ratified_by": "agent-resolved 2026-11-08, sprint 387"
+    },
+    {
+      "id": "P-0.27-TURN-ATTACHMENTS",
+      "kind": "PAYLOAD_FIELD_PROPOSED",
+      "layer": 2,
+      "element": "TURN_ACCEPTED.attachments",
+      "source": "editor plan round 2, item 0(e): kernel K344 gives UserMessage attachments; sprint 388 has the turn route accept and resolve them",
+      "rationale": "A turn sent with chips and one sent without read the same in the trace. The count tells a reader of server.jsonl that the record's UserMessage at this turn carries attachments; kinds, refs and text stay on the record (E1).",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-08, sprint 388"
     }
   ]
 }

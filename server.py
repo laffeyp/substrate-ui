@@ -2006,6 +2006,84 @@ def _workspace_read(root: Path, rel: str, max_bytes: int = WORKSPACE_READ_MAX) -
     return out
 
 
+# UI sprint 388, editor shared work 0(e): a turn's attachments (kernel K344, session vocabulary
+# § AC). The kinds the chips carry; file, lines and event resolve to text the model reads, the
+# others are recorded with empty text (a folder by § AC.1; an image until a responder takes images).
+ATTACHMENT_KINDS = (
+    "file",
+    "folder",
+    "lines",
+    "image",
+    "time_range",
+    "element",
+    "plan_item",
+    "event",
+)
+
+
+def _attachment_file_text(workspace: Path, rel: str) -> str:
+    facts = _workspace_read(workspace, rel)
+    if facts["too_large"]:
+        raise ValueError(f"{rel!r} is over {WORKSPACE_READ_MAX} bytes")
+    if facts["encoding"] != "utf-8":
+        raise ValueError(f"{rel!r} is not UTF-8 text")
+    return str(facts["text"])
+
+
+def _resolve_attachments(raw: object, workspace: Path, record_root: Path) -> tuple[Any, ...]:
+    """The body's `attachments`, each {kind, label, ref, span?}, as kernel `Attachment`s with their
+    text read now from the workspace or the record. ValueError (and the workspace read's
+    WorkspaceEscapeError, FileNotFoundError, NotADirectoryError) names the first one that fails."""
+    from substrate.topologies.session.vocabulary import Attachment
+
+    if raw is None:
+        return ()
+    if not isinstance(raw, list):
+        raise ValueError("attachments must be a list or absent")
+    out: list[Any] = []
+    for i, item in enumerate(raw):
+        if not isinstance(item, dict):
+            raise ValueError(f"attachments[{i}] must be an object")
+        kind, label, ref = item.get("kind"), item.get("label"), item.get("ref")
+        if kind not in ATTACHMENT_KINDS:
+            raise ValueError(f"attachments[{i}].kind must be one of {', '.join(ATTACHMENT_KINDS)}")
+        if not isinstance(label, str) or not label:
+            raise ValueError(f"attachments[{i}].label must be a non-empty string")
+        if not isinstance(ref, str):
+            raise ValueError(f"attachments[{i}].ref must be a string")
+        span_raw = item.get("span", [])
+        if not (
+            isinstance(span_raw, list)
+            and all(isinstance(x, (int, float)) and not isinstance(x, bool) for x in span_raw)
+        ):
+            raise ValueError(f"attachments[{i}].span must be a list of numbers")
+        span = tuple(float(x) for x in span_raw)
+        text = ""
+        if kind == "file":
+            text = _attachment_file_text(workspace, ref)
+        elif kind == "lines":
+            if len(span) != 2 or not all(x == int(x) for x in span) or not 1 <= span[0] <= span[1]:
+                raise ValueError(f"attachments[{i}].span must be [first, last] lines, from 1")
+            lines = _attachment_file_text(workspace, ref).splitlines(keepends=True)
+            text = "".join(lines[int(span[0]) - 1 : int(span[1])])
+        elif kind == "folder":
+            if not _workspace_target(workspace, ref or ".").is_dir():
+                raise NotADirectoryError(f"{ref!r} is not a directory")
+        elif kind == "event":
+            m = re.fullmatch(r"seq:(\d+)", ref)
+            if m is None:
+                raise ValueError(f"attachments[{i}].ref must be seq:<n> for an event")
+            seq = int(m.group(1))
+            entry = next((e for e in api.read_record(record_root) if e.get("seq") == seq), None)
+            if entry is None:
+                raise ValueError(f"the record has no event at seq {seq}")
+            text = json.dumps(
+                {"kind": entry.get("kind"), "payload": entry.get("payload")}, ensure_ascii=False
+            )
+        out.append(Attachment(kind=kind, label=label, ref=ref, span=span, text=text))
+    return tuple(out)
+
+
 # UI sprint 349, editor shared work 0(c): watching a workspace. A snapshot maps each file's path
 # (relative, "/"-separated) to its modified time and size; two snapshots give the changes. Links are
 # not followed, and `.git` folders are left out. A tree past WATCH_MAX_FILES is cut there, and the
@@ -3194,6 +3272,8 @@ class Handler(BaseHTTPRequestHandler):
         Runs one turn via SessionRegistry.turn_sync (the same seam the delegate
         wire uses, per piece-C review finding 3's fix). Per-session threading.Lock
         serializes concurrent callers. Returns {status, final_seq?, error?}.
+        UI sprint 388: optional `attachments`, each {kind, label, ref, span?}, go on the
+        UserMessage with their text (`_resolve_attachments`).
         """
         if self.app.registry is None:
             self._error(503, "session registry not initialized (boot ordering)")
@@ -3287,6 +3367,14 @@ class Handler(BaseHTTPRequestHandler):
                 self._error(400, "a driver command starts with /")
                 return
             slash_source = "driver"
+        # UI sprint 388: attachments, resolved now so a bad one is a 400 before the turn queues.
+        try:
+            attachments = _resolve_attachments(
+                body.get("attachments"), Path(manifest.workspace), Path(manifest.record_root)
+            )
+        except (ValueError, OSError) as exc:
+            self._error(400, str(exc))
+            return
         # Sprint 216: per-session queue cap. Increment the counter under the
         # registry's fast lock; refuse the (cap+1)th caller with 429
         # immediately (no block). Every admission MUST pair with
@@ -3321,7 +3409,12 @@ class Handler(BaseHTTPRequestHandler):
             next_turn_index = cast(SessionRegistry, self.app.registry).next_turn_index(session_id)
             # The turn is handed to the kernel now, under the session's lock (TURN_ACCEPTED).
             TRACE.emit(
-                Signal.TURN_ACCEPTED, {"session_id": session_id, "turn_index": next_turn_index}
+                Signal.TURN_ACCEPTED,
+                {
+                    "session_id": session_id,
+                    "turn_index": next_turn_index,
+                    "attachments": len(attachments),
+                },
             )
             # Sprint 217e: prefix a context slice to assembled_prompt when the
             # caller passed `context` in the body. The extractor is delegate's
@@ -3341,6 +3434,7 @@ class Handler(BaseHTTPRequestHandler):
                 turn_index=next_turn_index,
                 assembled_prompt=assembled_prompt,
                 slash_source=slash_source,
+                attachments=attachments,
             )
 
         try:
@@ -4497,7 +4591,8 @@ class Handler(BaseHTTPRequestHandler):
             next_turn_index = cast(SessionRegistry, self.app.registry).next_turn_index(session_id)
             # The turn is handed to the kernel now, under the session's lock (TURN_ACCEPTED).
             TRACE.emit(
-                Signal.TURN_ACCEPTED, {"session_id": session_id, "turn_index": next_turn_index}
+                Signal.TURN_ACCEPTED,
+                {"session_id": session_id, "turn_index": next_turn_index, "attachments": 0},
             )
             return SessionUserMessage(
                 text=task,

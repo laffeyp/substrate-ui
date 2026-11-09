@@ -167,7 +167,7 @@ test("answers inside their windows break no timing rule", () => {
   step(15_900, win("TRANSCRIPT_ROW_DRAWN", { pane_id: 1, session_id: "s1", seq: 7, kind: EnvelopeKind.ModelReply }));
   step(16_000, win("TRANSCRIPT_ROW_SKIPPED", { pane_id: 1, session_id: "s1", seq: 8, kind: EnvelopeKind.RunStarted, reason: "hidden_kind" }));
   step(16_000, win("TURN_SUBMITTED", { session_id: "s1", turn_index: 0, text_length: 5 }));
-  step(24_900, srv("TURN_ACCEPTED", { session_id: "s1", turn_index: 0 }));
+  step(24_900, srv("TURN_ACCEPTED", { session_id: "s1", turn_index: 0, attachments: 0 }));
   step(25_000, win("TURN_ACK", { session_id: "s1" }));
   step(30_000, main("APP_QUIT_REQUESTED", { cause: "menu" }));
   at(74_000); seen.push(...c.tick());
@@ -228,9 +228,9 @@ test("the server's records paired with the window's and main's break no rule", (
   step(500, srv("SESSION_CREATED", { session_id: "s1", driver: "deterministic", workspace_shape: "sandbox" }));
   step(600, win("SESSION_OPEN_ACKED", { session_id: "s1", name: null, driver: "deterministic" }));
   step(700, win("TURN_SUBMITTED", { session_id: "s1", turn_index: 0, text_length: 5 }));
-  step(800, srv("TURN_ACCEPTED", { session_id: "s1", turn_index: 0 }));
+  step(800, srv("TURN_ACCEPTED", { session_id: "s1", turn_index: 0, attachments: 0 }));
   step(900, win("TURN_ACK", { session_id: "s1" }));
-  step(950, srv("TURN_ACCEPTED", { session_id: "s1", turn_index: 1 }));
+  step(950, srv("TURN_ACCEPTED", { session_id: "s1", turn_index: 1, attachments: 0 }));
   step(1_000, win("TURN_SUBMITTED", { session_id: "s1", turn_index: 1, text_length: 1 }));
   step(1_100, srv("API_REFUSED", { area: "turn", status: 409, cause: "_turn:3200" }));
   step(1_200, win("TURN_REFUSED", { failure_class: "http_error", detail: "busy" }));
