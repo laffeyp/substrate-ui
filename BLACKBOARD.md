@@ -1563,3 +1563,11 @@ Two mount divs land in `web/reveal.html`: `<div id="vm-transcript-mount">` insid
   - **Checks:** build 0, unit 161, ruff format 0, `gen_signals.py --check` 0, `trace_reader` 0.
 - **2026-11-08 user** — "update blackboard and go": the editor view's shared work resumes at 0(c)'s write.
 - **2026-11-08 agent-resolved** — The editor view's plan, round 2 (`process/planning/2026-11-05-editor-shared-work/PLAN-2026-11-08-editor-shared-work-r2.md`; round 1 to `superseded/`). Decision: every behaviour item proposes its tags first and closes on the packaged trace. 0(c)'s list, read and watch, built before the trace rule with no tags, get them with its write. The diff base for "changes in this file" is the workspace's git HEAD. Grounds: project — `WORKING_AGREEMENT.md`'s trace rule (2026-11-08); every session workspace is a git repository (kernel K328; sprint 349); SDD — hard rules 2 and 9; practice — VS Code's source control view shows the working tree against HEAD. Revisit if: a workspace kind without git appears.
+- **2026-11-08 built** — Sprint 387 (editor plan round 2, item 0(c)): the workspace file API writes through the session's record, and its list, read, write and watch have tags (vocabulary v0.26, `P-0.26-WORKSPACE-FILES`); `4829a15`.
+  - **The write:** `PUT /api/session/<id>/file` records FileWritten through `append_event` before the file changes. A refusing record, a stale `base_sha256`, an escape or a missing folder leaves the file as it was.
+  - **The watch** sees a hang-up at its next poll.
+  - **The gate helper keeps a failed launch's folder.** Sprint 386's keep-on-failure kept nothing, because `scratch.ts`'s exit handler deleted it.
+  - **Checks:** build 0; unit 161; Python 307 passed, 5 skipped; signals 0.
+  - **Gates:** `workspace_files_signals` 0 from source and packaged, FileWritten at seq 37. With FILE_WRITTEN's emit removed it exits 1 and keeps its folder. `invariant_signals`, `trace_reader`, `fault_signals` and `action_signals` 0 packaged.
+  - **Installed:** `/Applications/Substrate.app`, CFBundleVersion 1794206190 over 1794195095 (the old one in the Trash), open on the screen as pid 45704. Its APP_BOOTED reads `packaged: true`, `4829a15`, vocabulary 0.26, and no rule is broken.
+  - **Rubber Duck Pass:** in the card, `process/sprints/sprint-387-workspace-file-write.md`.
