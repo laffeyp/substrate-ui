@@ -13,6 +13,7 @@ import { useMemo, useSyncExternalStore } from "react";
 import { segBox, sideAxis, sideLanes, streamRows, streamSpans } from "./derive/stream";
 import { stream } from "./state/stream";
 import { meta, pickSeq } from "./state/meta";
+import { SeqSelectedHow } from "../vm/signals.gen";
 import "./hover.css";
 
 const LIT = "#9db8d6";
@@ -20,9 +21,9 @@ const lanesCol: React.CSSProperties = { display: "flex", flexDirection: "column"
 const laneRow: React.CSSProperties = { display: "flex", alignItems: "center", gap: 10 };
 
 /** The meta view ties the graph's scroll to the stream's (web/app/MetaView.tsx). */
-export interface SideGraphProps { scrollRef: React.Ref<HTMLDivElement>; onScroll(el: HTMLDivElement): void; }
+export interface SideGraphProps { scrollRef: React.Ref<HTMLDivElement>; onScroll(el: HTMLDivElement): void; paneId: number; }
 
-export function SideGraph({ scrollRef, onScroll }: SideGraphProps): React.ReactElement {
+export function SideGraph({ scrollRef, onScroll, paneId }: SideGraphProps): React.ReactElement {
   const st = useSyncExternalStore(stream.subscribe, stream.getSnapshot);
   const sel = useSyncExternalStore(meta.subscribe, meta.getSnapshot).sel;
   const rows = useMemo(() => streamRows(st.envelopes), [st.envelopes]);
@@ -42,7 +43,7 @@ export function SideGraph({ scrollRef, onScroll }: SideGraphProps): React.ReactE
                 <div style={{ position: "relative", flex: 1, height: 12 }}>
                   {ln.segs.map((sg) => {
                     const box = segBox(sg, axis);
-                    return <div key={sg.seq + ":" + sg.from} className="hover-side-seg" onClick={() => pickSeq(sg.seq)} title={"seq " + sg.seq + " — click to inspect"}
+                    return <div key={sg.seq + ":" + sg.from} className="hover-side-seg" onClick={() => pickSeq(sg.seq, paneId, SeqSelectedHow.SIDE_GRAPH)} title={"seq " + sg.seq + " — click to inspect"}
                       style={{ position: "absolute", left: box.l, width: box.w, top: 1, height: 10, borderRadius: 2, background: sel === sg.seq ? LIT : sg.base, cursor: "pointer" }} />;
                   })}
                 </div>

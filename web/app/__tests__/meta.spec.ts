@@ -6,12 +6,14 @@
 
 import { test } from "node:test";
 import assert from "node:assert";
-import { GraphDirection, GraphMode } from "../../vm/kinds";
-import { meta, pickSeq, selectSeq, setDir, setMode, splitAfterDrag, SPLIT_MAX, SPLIT_MIN } from "../state/meta";
+import { GraphDirection, GraphMode, RevealLevel } from "../../vm/kinds";
+import { meta, pickSeq, selectSeq, setDir, setLevel, setMode, splitAfterDrag, SPLIT_MAX, SPLIT_MIN } from "../state/meta";
+import { clearBuffer, snapshot } from "../../vm/instrumentation/sdd";
+import { SeqSelectedHow, Signal } from "../../vm/signals.gen";
 
 test("leaving the stream resets the direction to down; the stream keeps it", () => {
   setMode(GraphMode.Stream, 1, null);
-  setDir(GraphDirection.Side);
+  setDir(GraphDirection.Side, 1);
   setMode(GraphMode.Stream, 1, null);
   assert.strictEqual(meta.getSnapshot().dir, GraphDirection.Side);
   setMode(GraphMode.Structure, 1, null);
@@ -19,14 +21,36 @@ test("leaving the stream resets the direction to down; the stream keeps it", () 
 });
 
 test("a pick toggles the seq; a select sets it", () => {
-  selectSeq(null);
-  pickSeq(4);
+  selectSeq(null, 1, SeqSelectedHow.LANGUAGE_ROW);
+  pickSeq(4, 1, SeqSelectedHow.STREAM_ROW);
   assert.strictEqual(meta.getSnapshot().sel, 4);
-  pickSeq(4);
+  pickSeq(4, 1, SeqSelectedHow.STREAM_ROW);
   assert.strictEqual(meta.getSnapshot().sel, null);
-  selectSeq(7);
-  selectSeq(7);
+  selectSeq(7, 1, SeqSelectedHow.LANGUAGE_ROW);
+  selectSeq(7, 1, SeqSelectedHow.LANGUAGE_ROW);
   assert.strictEqual(meta.getSnapshot().sel, 7);
+});
+
+test("each change of direction, level or lit seq is written once, in its pane; a set to the value shown writes none", () => {
+  setMode(GraphMode.Stream, 2, null);
+  setDir(GraphDirection.Down, 2);
+  setLevel(RevealLevel.All, 2);
+  selectSeq(null, 2, SeqSelectedHow.LANGUAGE_ROW);
+  clearBuffer();
+  setDir(GraphDirection.Side, 2);
+  setDir(GraphDirection.Side, 2);
+  setLevel(RevealLevel.App, 2);
+  setLevel(RevealLevel.App, 2);
+  pickSeq(9, 2, SeqSelectedHow.SIDE_GRAPH);
+  pickSeq(9, 2, SeqSelectedHow.SIDE_GRAPH);
+  selectSeq(null, 2, SeqSelectedHow.LANGUAGE_KEY);
+  const got = snapshot().map((r) => [r.name, r.pane_id, r.payload]);
+  assert.deepStrictEqual(got, [
+    [Signal.STREAM_DIRECTION_SET, 2, { direction: "side" }],
+    [Signal.STREAM_LEVEL_SET, 2, { level: "app" }],
+    [Signal.SEQ_SELECTED, 2, { seq: 9, how: "side_graph" }],
+    [Signal.SEQ_SELECTED, 2, { seq: null, how: "side_graph" }],
+  ]);
 });
 
 test("the split follows the drag in proportion and stays within its bounds", () => {

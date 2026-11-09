@@ -18,7 +18,14 @@ Join. A record that names a session and a seq (TRANSCRIPT_ROW_DRAWN, TRANSCRIPT_
 pane's STREAM_ENVELOPE_APPENDED, whose session is the pane's last acked or attached one) is followed by
 the kernel's entry at that seq, read with substrate's read_record from the record_root the session's
 manifest names: `↳ kernel seq=<n> <kind> producer=<p> <payload, cut to 120 characters>`. An entry
-that is not there prints as `↳ kernel seq=<n> not in the record` (evidence E7).
+that is not there prints as `↳ kernel seq=<n> not in the record of <session> (... ends at seq <m>)`
+(evidence E7); a session with no manifest, or whose record cannot be read, says that instead.
+
+Damage and closing. A line that is not a whole JSON record (a launch killed mid-write leaves its last
+line cut short) is skipped and counted in the header by file and line number. The header also says
+whether the launch closed: APP_QUIT_COMPLETED is main's last record (rule S2); a launch that does not
+end with it either is still running or ended without closing, and when a later launch is in the same
+folder it has ended, so S2 is broken. The INVARIANT_BROKEN records are counted by rule.
 
 Usage, from substrate-ui/:
   uv run --project ../substrate python scripts/read_trace.py [--boot ID] [--home DIR]
@@ -57,12 +64,27 @@ def paths(home: str | None) -> tuple[Path, Path]:
     )
 
 
-def load_boot(folder: Path) -> list[list[dict[str, Any]]]:
+def load_boot(
+    folder: Path, unreadable: dict[str, list[int]] | None = None
+) -> list[list[dict[str, Any]]]:
+    """Each file's records in proc_seq order. A line that is not a JSON record is skipped, and its
+    1-based line number is added to `unreadable[file name]` when that dict is given."""
     chains = []
     for f in sorted(folder.glob("*.jsonl")):
-        recs = [
-            json.loads(line) for line in f.read_text(encoding="utf-8").splitlines() if line.strip()
-        ]
+        recs = []
+        text = f.read_text(encoding="utf-8", errors="replace")
+        for n, line in enumerate(text.splitlines(), 1):
+            if not line.strip():
+                continue
+            try:
+                rec = json.loads(line)
+            except ValueError:
+                rec = None
+            if not isinstance(rec, dict) or "name" not in rec or "process" not in rec:
+                if unreadable is not None:
+                    unreadable.setdefault(f.name, []).append(n)
+                continue
+            recs.append(rec)
         recs.sort(key=lambda r: r.get("proc_seq", 0))
         chains.append(recs)
     return chains
@@ -129,21 +151,35 @@ class Kernel:
 
     def __init__(self, sessions: Path) -> None:
         self.sessions = sessions
-        self.cache: dict[str, dict[int, dict[str, Any]] | None] = {}
+        # session id -> (entries by seq, record root), or the reason the record could not be read
+        self.cache: dict[str, tuple[dict[int, dict[str, Any]], str] | str] = {}
 
-    def entry(self, session_id: str, seq: int) -> dict[str, Any] | None:
+    def _load(self, session_id: str) -> tuple[dict[int, dict[str, Any]], str] | str:
+        manifest = self.sessions / session_id / "manifest.json"
+        try:
+            root = json.loads(manifest.read_text(encoding="utf-8"))["record_root"]
+        except OSError:
+            return f"no manifest for session {session_id} at {manifest}"
+        except (KeyError, ValueError, TypeError) as exc:
+            return f"the manifest of {session_id} at {manifest} names no record_root ({type(exc).__name__})"
+        try:
+            return {int(e["seq"]): e for e in read_record(root, resolve_blobs=True)}, str(root)
+        except Exception as exc:  # noqa: BLE001 - the reader reports any failure to read a record
+            return f"the record of {session_id} at {root} could not be read ({type(exc).__name__})"
+
+    def entry(self, session_id: str, seq: int) -> tuple[dict[str, Any] | None, str]:
+        """The entry at seq, or None and why: the seq is not in the record, or the record is not there."""
         if session_id not in self.cache:
-            self.cache[session_id] = None
-            manifest = self.sessions / session_id / "manifest.json"
-            try:
-                root = json.loads(manifest.read_text(encoding="utf-8"))["record_root"]
-                self.cache[session_id] = {
-                    int(e["seq"]): e for e in read_record(root, resolve_blobs=True)
-                }
-            except (OSError, KeyError, ValueError):
-                pass
-        rec = self.cache[session_id]
-        return rec.get(seq) if rec else None
+            self.cache[session_id] = self._load(session_id)
+        got = self.cache[session_id]
+        if isinstance(got, str):
+            return None, got
+        entries, root = got
+        if seq in entries:
+            return entries[seq], ""
+        last = max(entries) if entries else None
+        ends = f"ends at seq {last}" if last is not None else "is empty"
+        return None, f"not in the record of {session_id} (the record at {root} {ends})"
 
 
 def short(v: Any, n: int = 120) -> str:
@@ -171,7 +207,8 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 1
     vocab = {t["name"]: t for t in json.loads(VOCAB.read_text(encoding="utf-8"))["tags"]}
-    records = merge(load_boot(traces / boot))
+    unreadable: dict[str, list[int]] = {}
+    records = merge(load_boot(traces / boot, unreadable))
     kernel = Kernel(sessions)
     cats = set(a.category.split(",")) if a.category else None
 
@@ -220,9 +257,9 @@ def main(argv: list[str] | None = None) -> int:
         )
         shown += 1
         if r["name"] in JOINED and sid and isinstance(p.get("seq"), int) and p["seq"] >= 0:
-            e = kernel.entry(str(sid), p["seq"])
+            e, why = kernel.entry(str(sid), p["seq"])
             if e is None:
-                lines.append(f"      ↳ kernel seq={p['seq']} not in the record of {sid}")
+                lines.append(f"      ↳ kernel seq={p['seq']} {why}")
             else:
                 lines.append(
                     f"      ↳ kernel seq={p['seq']} {e.get('kind')} producer={short(e.get('producer'), 60)} {short(e.get('payload'))}"
@@ -247,6 +284,35 @@ def main(argv: list[str] | None = None) -> int:
         + (f"; only {filters}" if filters else "")
     )
     print(f"Total signals: {shown} of {len(records)}")
+    mains = [r for r in records if r["process"] == "main"]
+    later = [b for b in boots if b > boot]
+    if mains and mains[-1]["name"] == "APP_QUIT_COMPLETED":
+        print("Closed: yes (APP_QUIT_COMPLETED is main's last record)")
+    else:
+        ends = mains[-1]["name"] if mains else "no main record"
+        print(
+            f"Closed: no; main's last record is {ends}; "
+            + (
+                f"a later launch ({later[0]}) is in the folder, so this one ended without closing (S2 broken)"
+                if later
+                else "no later launch: still running, or ended without closing"
+            )
+        )
+    breaks: dict[str, int] = defaultdict(int)
+    for r in records:
+        if r["name"] == "INVARIANT_BROKEN":
+            breaks[str((r.get("payload") or {}).get("rule"))] += 1
+    print(
+        "Rule breaks: "
+        + (", ".join(f"{k} {v}" for k, v in sorted(breaks.items())) if breaks else "none")
+    )
+    if unreadable:
+        print(
+            "Unreadable lines (skipped): "
+            + "; ".join(
+                f"{f} line {', '.join(map(str, ns))}" for f, ns in sorted(unreadable.items())
+            )
+        )
     print("\n".join(lines))
     return 0
 

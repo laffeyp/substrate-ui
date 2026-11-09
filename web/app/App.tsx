@@ -59,7 +59,7 @@ import { RecordsPage } from "./RecordsPage";
 import { StudioPage } from "./StudioPage";
 import { TopBar } from "./TopBar";
 import "./window.css";
-import { Signal, DialogClosedOutcome, KeyRoutedTarget, RecordOpenedHow, ViewChangedCause, PaneBoundBinding, PaneBoundHow, PaneDrawnConnection, PaneDrawnPickerLine, PaneDrawnState, PaneDrawnTurnState, PaneFocusedCause, PaneOpenedCause, PickerFolderArmedSource, PickerFolderDisarmedCause, PickerLineEnteredCause, PickerLineEnteredLine, type SignalPayloads } from "../vm/signals.gen";
+import { Signal, SeqSelectedHow, ToolOutputModeSetCause, TopBarCardSetCard, TopBarCardSetCause, DialogClosedOutcome, KeyRoutedTarget, RecordOpenedHow, ViewChangedCause, PaneBoundBinding, PaneBoundHow, PaneDrawnConnection, PaneDrawnPickerLine, PaneDrawnState, PaneDrawnTurnState, PaneFocusedCause, PaneOpenedCause, PickerFolderArmedSource, PickerFolderDisarmedCause, PickerLineEnteredCause, PickerLineEnteredLine, type SignalPayloads } from "../vm/signals.gen";
 import type { Activity } from "../reveal/activity";
 
 // UI sprint 132 (kernel K288, session vocabulary § R): the guidance levels the bar offers, each with
@@ -386,6 +386,7 @@ export class App extends React.Component<AppProps, AppState> {
       expandedCli: s.driverExpandedCli, expandedFamily: s.driverExpandedFamily,
     });
     const pickDriverAndVersion = (cli: string, versionId: string | null) => {
+      this.noteCards({ ddFor: null, wsFor: this.state.wsFor }, TopBarCardSetCause.PICKED);
       this.setState((st) => ({ ddFor: null, driverExpandedCli: null, driverExpandedFamily: null, panes: st.panes.map((x) => (x.id === p.id ? { ...x, driver: cli } : x)) }));
       const vm = vmOf();
       if (vm) { vm.pickDriver(cli); vm.pickDriverVersion(cli, versionId); }
@@ -638,7 +639,7 @@ export class App extends React.Component<AppProps, AppState> {
         revealed = true;
         setMode(GraphMode.Language, changedPane, snap.sessionId);
         const shifts = snap.language?.shifts ?? [];
-        if (shifts.length) selectSeq(shifts[shifts.length - 1].source_seq);
+        if (shifts.length) selectSeq(shifts[shifts.length - 1].source_seq, changedPane, SeqSelectedHow.LANGUAGE_OPEN);
       }
       this.langTicks[changedPane] = tick;
       if (revealed) { this.viewCause = ViewChangedCause.LANGUAGE; this.setState({ controllerSnapshots: { ...snapshots }, vs: show("meta") }); }
@@ -702,6 +703,7 @@ export class App extends React.Component<AppProps, AppState> {
       const s = this.state;
       if (!s.ddFor && !s.wsFor) return;
       if (ev.target instanceof Element && ev.target.closest("[data-dropdown-region]")) return;
+      this.noteCards({ ddFor: null, wsFor: null }, TopBarCardSetCause.OUTSIDE);
       this.setState({ ddFor: null, wsFor: null });
     };
     this.listen(document, "mousedown", outside as EventListener, true);
@@ -766,24 +768,39 @@ export class App extends React.Component<AppProps, AppState> {
       const step = languageKey(lens.turns, lens.lanes.length, mt.sel, language.getSnapshot().lane, e.key);
       if (!step) return;
       e.preventDefault();
-      if ("sel" in step) selectSeq(step.sel);
-      else if ("lane" in step) setLanguageLane(step.lane);
+      if ("sel" in step) selectSeq(step.sel, s.focused, SeqSelectedHow.LANGUAGE_KEY);
+      else if ("lane" in step) setLanguageLane(step.lane, s.focused);
       else setMode(GraphMode.Stream, s.focused, fsnap ? fsnap.sessionId : null);
       return;
     }
     if (action.kind === "close-find") { closeFind(); return; }
     if (action.kind === "close-dialog") { closeDialog(DialogClosedOutcome.ESCAPE); return; }
-    if (action.kind === "close-cards") { this.setState({ ddFor: null, wsFor: null }); return; }
+    if (action.kind === "close-cards") { this.noteCards({ ddFor: null, wsFor: null }, TopBarCardSetCause.ESCAPE); this.setState({ ddFor: null, wsFor: null }); return; }
     if (action.kind === "close-surface") { this.viewCause = ViewChangedCause.CLOSE; this.setState((st) => ({ vs: closePage(st.vs) })); return; }
     e.preventDefault();
     if (action.kind === "toggle-meta") this.toggleMeta(ViewChangedCause.KEY);
-    else if (action.kind === "toggle-tools") toggleToolOutputMode();
+    else if (action.kind === "toggle-tools") toggleToolOutputMode(ToolOutputModeSetCause.KEY);
     else if (action.kind === "split") this.split(action.dir);
     else if (action.kind === "toggle-find") toggleFind();
     else if (action.kind === "settings") openSettings();
     else if (action.kind === "toggle-assays") this.toggleSurface(Surface.Assay, ViewChangedCause.KEY);
     // Escape is hard by default, the terminal habit: stop now. ⇧Esc is softer: stop after this tool.
     else if (action.kind === "interrupt") ctlOf(s.focused)?.interruptTurn(action.tier).catch(() => undefined);
+  }
+
+  /** The top bar's cards (model: ddFor, workspace: wsFor), each a pane id or null. A card that opens or
+   *  closes is TOP_BAR_CARD_SET in its pane's context (v0.24, P-0.24-ACTIONS); a card closed because
+   *  the other one opened says other_card. Called with the state about to be set, before setState. */
+  private noteCards(next: { ddFor: number | null; wsFor: number | null }, cause: TopBarCardSetCause): void {
+    const cards: [TopBarCardSetCard, number | null, number | null][] = [
+      [TopBarCardSetCard.MODEL, this.state.ddFor, next.ddFor],
+      [TopBarCardSetCard.WORKSPACE, this.state.wsFor, next.wsFor],
+    ];
+    const opening = cards.some(([, was, now]) => now !== null && now !== was);
+    for (const [card, was, now] of cards) {
+      if (was !== null && was !== now) emitSignal(Signal.TOP_BAR_CARD_SET, { card, open: false, cause: opening && now === null && cause === TopBarCardSetCause.CLICK ? TopBarCardSetCause.OTHER_CARD : cause }, { pane_id: was });
+      if (now !== null && now !== was) emitSignal(Signal.TOP_BAR_CARD_SET, { card, open: true, cause }, { pane_id: now });
+    }
   }
 
   /** The stores the window's other areas read, written after each render. */
@@ -1054,8 +1071,14 @@ export class App extends React.Component<AppProps, AppState> {
     this.topBarActs = {
       startEdit: () => this.setPane(fp.id, { editing: true, nameVal: this.paneTitle(fp) }),
       // UI sprint 139 (U125): the model chip opens a card, as the workspace chip does; it picks nothing.
-      toggleModelCard: () => this.setState((s) => ({ ddFor: s.ddFor === fp.id ? null : fp.id, wsFor: null })),
-      toggleWsCard: () => this.setState((s) => ({ wsFor: s.wsFor === fp.id ? null : fp.id, ddFor: null })),
+      toggleModelCard: () => {
+        this.noteCards({ ddFor: this.state.ddFor === fp.id ? null : fp.id, wsFor: null }, TopBarCardSetCause.CLICK);
+        this.setState((s) => ({ ddFor: s.ddFor === fp.id ? null : fp.id, wsFor: null }));
+      },
+      toggleWsCard: () => {
+        this.noteCards({ ddFor: null, wsFor: this.state.wsFor === fp.id ? null : fp.id }, TopBarCardSetCause.CLICK);
+        this.setState((s) => ({ wsFor: s.wsFor === fp.id ? null : fp.id, ddFor: null }));
+      },
       openRecords: () => this.toggleSurface(Surface.Records, ViewChangedCause.BUTTON),
       openStudio: () => this.toggleSurface(Surface.Studio, ViewChangedCause.BUTTON),
       // Meta → panes always works; panes → meta waits until the focused pane leaves its picker.

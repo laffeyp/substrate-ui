@@ -14,11 +14,26 @@ import { BrowserSubstrateClient, PaneRegistry } from "./vm";
 import { mirrorSnapshot, sendCommand } from "./app/state/shell";
 import { App } from "./app/App";
 import { emit as emitSignal, VOCAB_VERSION } from "./vm/instrumentation/sdd";
-import { PaneOpenedCause, RecordOpenedHow, Signal } from "./vm/signals.gen";
+import { PaneOpenedCause, RecordOpenedHow, Signal, WindowFaultedSource } from "./vm/signals.gen";
+
+/** The class of what was thrown: an Error's name, or non-error (a thrown string, a rejection with no Error). */
+function errorClass(err: unknown): string {
+  return err instanceof Error ? err.name || "Error" : "non-error";
+}
 
 function boot(): void {
   // The window's first record (S1): before the registry and pane 1's controller can write any.
   emitSignal(Signal.WINDOW_BOOTED, { vocab_version: VOCAB_VERSION });
+  // Errors that escape the window's code (v0.24, P-0.24-FAULTS), after WINDOW_BOOTED (S1). React 18
+  // rethrows a render error no boundary catches, so it reaches the error event too. The listeners only
+  // read: the browser still logs each error as before. No message text (E1).
+  window.addEventListener("error", (ev) => {
+    const file = ev.filename ? ev.filename.split("?")[0].split("/").pop() : "";
+    emitSignal(Signal.WINDOW_FAULTED, { error_type: errorClass(ev.error), source: WindowFaultedSource.ERROR, where: file ? file + ":" + ev.lineno : "unknown" });
+  });
+  window.addEventListener("unhandledrejection", (ev) => {
+    emitSignal(Signal.WINDOW_FAULTED, { error_type: errorClass(ev.reason), source: WindowFaultedSource.REJECTION, where: "unknown" });
+  });
   const registry = new PaneRegistry({ makeClient: () => new BrowserSubstrateClient() });
   const controller = registry.spawn(1); // pane 1 is the initial view
   // Pane 1 is created here, before the App draws it, so its PANE_OPENED is written here (sprint 377): a

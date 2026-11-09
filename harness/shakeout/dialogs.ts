@@ -106,10 +106,20 @@ async function main(): Promise<void> {
     console.log(`dialogs: ok — ${seen.join("; ")}`);
     code = 0;
   } catch (e) {
-    console.error(`dialogs: FAIL — ${(e as Error).message}; passed: ${seen.join("; ") || "none"}`);
+    // What the window wrote since its last boot (the reload): whether ⌘, reached the App's keys
+    // (KEY_ROUTED Meta+, and its action) and whether a dialog opened, so a failure names its step.
+    await app.close().catch(() => undefined);
+    let after = "";
+    try {
+      const recs = windowRecords(launch);
+      const boot = recs.map((r) => r.name).lastIndexOf("WINDOW_BOOTED");
+      after = recs.slice(boot).filter((r) => /^(WINDOW_BOOTED|KEY_ROUTED|DIALOG_|VIEW_CHANGED|PANE_DRAWN)$/.test(r.name))
+        .map((r) => `${r.name}${r.name === "KEY_ROUTED" ? ` ${String(r.payload.key)}→${String(r.payload.action)}@${String(r.payload.target)}` : r.name.startsWith("DIALOG_") ? ` ${String(r.payload.dialog)}` : ""}`).join(", ");
+    } catch (err) { after = `(window-1.jsonl unreadable: ${(err as Error).message})`; }
+    console.error(`dialogs: FAIL — ${(e as Error).message}; passed: ${seen.join("; ") || "none"}; the window's records since its last boot: ${after || "none"}`);
   } finally {
     await app.close().catch(() => undefined);
-    launch.cleanup();
+    launch.cleanup({ keep: code !== 0 });
   }
   process.exit(code);
 }

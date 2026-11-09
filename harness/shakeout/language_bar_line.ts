@@ -13,11 +13,12 @@
 //      · handoff normal" (UI sprint 184 added handoff, which has no shifts);
 //   3. /language on shows it, /language clear hides it;
 //   4. /language opens the meta view on the language lens with turn 0, the shift's turn, selected
-//      (with no selection the lens would show the last turn, t1).
+//      (with no selection the lens would show the last turn, t1), and window-1.jsonl holds that
+//      selection as SEQ_SELECTED how language_open at the shift's source seq, in pane 1 (v0.24).
 
 import { _electron as electron } from "playwright";
 import type { Page } from "playwright";
-import { bindPaneAsUser, launchArgs, settled, waitForApp } from "./lib/electron";
+import { bindPaneAsUser, launchArgs, settled, waitForApp, windowRecords } from "./lib/electron";
 
 const BAR = `(document.querySelector('[data-pane="1"] [data-session-bar-line]')?.textContent || "").replace(/\\s+/g, " ").trim()`;
 
@@ -72,7 +73,13 @@ async function main(): Promise<void> {
       const snap = await win.evaluate(`JSON.stringify({ tick: window.__vm.get(1).snapshot().languageOpenTick, shifts: window.__vm.get(1).snapshot().language?.shifts })`);
       throw new Error(`/language opened the lens on ${JSON.stringify(label)} (${JSON.stringify(later)} 500 ms later), not the shift's turn t0; ${snap}`);
     }
-    console.log(`language_bar_line: ok — ${JSON.stringify(plain.slice(plain.indexOf("guidance")))}; a words shift added to the route read "length normal words ↑" with its note; off/on/clear did; /language opened the lens on t0, the shift's turn`);
+    const shiftSeq = await win.evaluate(`window.__vm.get(1).snapshot().language.shifts[0].source_seq`) as number;
+    await app.close();
+    const opened = windowRecords(launch).filter((r) => r.name === "SEQ_SELECTED" && r.payload.how === "language_open");
+    if (opened.length !== 1 || opened[0].payload.seq !== shiftSeq || opened[0].pane_id !== 1) {
+      throw new Error(`/language's selection in window-1.jsonl: ${JSON.stringify(opened.map((r) => [r.pane_id, r.payload]))}, expected one at seq ${shiftSeq} in pane 1`);
+    }
+    console.log(`language_bar_line: ok — ${JSON.stringify(plain.slice(plain.indexOf("guidance")))}; a words shift added to the route read "length normal words ↑" with its note; off/on/clear did; /language opened the lens on t0, the shift's turn, written as SEQ_SELECTED language_open seq ${shiftSeq}`);
     code = 0;
   } catch (e) {
     console.error(`language_bar_line: FAIL — ${(e as Error).message}`);

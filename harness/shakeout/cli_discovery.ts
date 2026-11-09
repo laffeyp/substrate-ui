@@ -75,7 +75,18 @@ export const flow: Flow = {
           });
         }
         const modelRow = snap.transcript.find((r) => r.kind === "ModelReply");
-        if (!modelRow || !modelRow.text || modelRow.text.length === 0) {
+        // A CLI that failed ends the turn with Returned model_error and a ModelError row naming its
+        // exception (session_controller.ts); that is the CLI's failure, not an empty reply.
+        const failed = snap.parkReason === "model_error" ? snap.transcript.find((r) => r.kind === "ModelError") : undefined;
+        if (failed) {
+          defects.push({
+            category: "cli_model_error",
+            observed: `driver ${driver}: ${String(failed.text).slice(0, 240)}`,
+            expected: `the CLI answers the turn`,
+            reproduces: true,
+            severity: "high",
+          });
+        } else if (!modelRow || !modelRow.text || modelRow.text.length === 0) {
           defects.push({
             category: "cli_empty_reply",
             observed: `driver ${driver} returned no ModelReply text`,

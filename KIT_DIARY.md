@@ -931,3 +931,38 @@ The one product defect found (the daemon dying on a long state path) turned up w
 **What the kit could say.**
 1. A pixel regression against a recorded baseline is the right check when a change must leave the screen as it was. It is not the decode lens, and a plan should not name it as one.
 2. Pixel anchors and their view tags belong to work with no visual reference, where the model needs the screen read back as state.
+
+---
+
+### 2026-11-08 — A plan that closed on its own items still failed its goal
+
+**What happened.** Plan `2026-11-05-sdd-signals` closed its eight items on the packaged app's trace. A review against the goal ("the app must emit in a way that an AI can read it at all times") then found six gaps:
+- crashes and hangs wrote nothing;
+- rule S2 was checked nowhere;
+- thirteen user actions had no tag;
+- the reader stopped on a cut line;
+- one packaged gate failure had no cause;
+- one kernel test failed every run.
+
+The clean build that followed was reported as "every suite has run". It had not: the runbook's format check, packaged smoke, axis A and B on the bundle, the tasks gate, and its install steps were skipped. And the build was left in `dist-electron` with the old app still on the screen. The Architect named all of it failure.
+
+**What worked.**
+- **Probes found the cause in four places, by measuring where each problem bites:**
+  - a hung renderer is reported at 16.6 s, but never while a debugger is attached;
+  - a main rejection in Electron 44 is a printed warning;
+  - the gate never saw `__vm` before the App committed, in 0 of 100 reloads;
+  - the kernel model's exact calls were printed from the real test run.
+- **The plants found real defects in the checker:**
+  - a dead server broke T1 five seconds after its SERVER_EXITED;
+  - a dying server's first record broke S1.
+
+**What got in the way.**
+- **Own script instead of the runbook.** I wrote a clean-build script in place of the runbook's chapter, and reported its subset as the whole.
+- **Narrowed closing condition.** The plan's items were treated as its goal. Item 1 said "every user action", and its audit missed thirteen.
+- **Overclaimed probe.** A probe that did not hit a race was written up as having disproved it.
+
+**What the kit could say.**
+1. A build is reported against the runbook's step list, step by step, each with its exit code. A suite the runbook names and the run skipped is named as skipped.
+2. "Done" for a plan includes a review of the running app against the plan's goal, after the items close.
+3. A probe that fails to reproduce a race says how many tries, under what load, and that the race is not ruled out. To rule it out, measure the state where the race bites.
+4. The last stage of a build is the runbook's install, with the new build open on the screen.

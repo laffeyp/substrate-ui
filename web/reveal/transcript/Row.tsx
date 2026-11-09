@@ -111,6 +111,8 @@ const RowInner: React.FC<RowProps> = ({ row, paired, progressText, progressEof, 
           progressText={progressText}
           progressEof={progressEof}
           streamingShow={streamingShow}
+          paneId={paneId}
+          sessionId={sessionId ?? null}
         />
       ) : isAuthPrompt ? (
         <AuthPromptCard cli={text} paneId={paneId} />

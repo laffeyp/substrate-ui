@@ -6,6 +6,8 @@
 // and writes the stream's match count here, since it builds the stream's rows until plan row D1.
 
 import { createStore } from "../store";
+import { emit } from "../../vm/instrumentation/sdd";
+import { FindClosedCause, FindOpenedScope, FindScopeSetScope, Signal } from "../../vm/signals.gen";
 
 export type FindScope = "transcript" | "stream";
 
@@ -22,21 +24,35 @@ const KEY = "__substrateFind";
 const scope = globalThis as unknown as Record<string, ReturnType<typeof createStore<FindState>> | undefined>;
 export const find = scope[KEY] ?? (scope[KEY] = createStore<FindState>({ open: false, q: "", scope: "transcript", streamMatches: 0 }));
 
-/** ⌘F: opens find, or closes it; either way the query starts empty. */
+const SCOPE_OF: Record<FindScope, FindOpenedScope> = { transcript: FindOpenedScope.TRANSCRIPT, stream: FindOpenedScope.STREAM };
+
+/** ⌘F: opens find, or closes it; either way the query starts empty. FIND_OPENED or FIND_CLOSED (v0.24). */
 export function toggleFind(): void {
+  const was = find.getSnapshot();
   find.set((s) => ({ open: !s.open, q: "" }));
+  if (was.open) emit(Signal.FIND_CLOSED, { cause: FindClosedCause.TOGGLE });
+  else emit(Signal.FIND_OPENED, { scope: SCOPE_OF[was.scope] });
 }
 
+/** Escape closes find; FIND_CLOSED when it was open. */
 export function closeFind(): void {
+  const wasOpen = find.getSnapshot().open;
   find.set({ open: false, q: "" });
+  if (wasOpen) emit(Signal.FIND_CLOSED, { cause: FindClosedCause.ESCAPE });
 }
 
+/** The query as typed; FIND_QUERY_CHANGED carries its length, never the text (E1). */
 export function setFindQuery(q: string): void {
+  const was = find.getSnapshot().q;
   find.set({ q });
+  if (q !== was) emit(Signal.FIND_QUERY_CHANGED, { length: q.length });
 }
 
+/** The lens last clicked; FIND_SCOPE_SET when it changes. */
 export function setFindScope(next: FindScope): void {
+  const was = find.getSnapshot().scope;
   find.set({ scope: next });
+  if (next !== was) emit(Signal.FIND_SCOPE_SET, { scope: next === "stream" ? FindScopeSetScope.STREAM : FindScopeSetScope.TRANSCRIPT });
 }
 
 /** The query as matched: lowercased and trimmed, empty while find is closed. */

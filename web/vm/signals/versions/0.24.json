@@ -1,0 +1,2441 @@
+{
+  "vocabulary_version": "0.24",
+  "locked": true,
+  "locked_at": "2026-11-08",
+  "locked_by": "agent-resolved 2026-11-08 (BLACKBOARD), sprints 382-386: P-0.24-FAULTS, P-0.24-SERVER-EXITED-CAUSE, P-0.24-ACTIONS, P-0.24-S2-NEXT-BOOT, P-0.24-S1-SERVER-CRASH, P-0.24-T1-T2-END-AT-EXIT",
+  "supersedes": "0.23",
+  "tag_count": 109,
+  "categories": [
+    "session",
+    "driver",
+    "bundle",
+    "workspace",
+    "turn",
+    "stream",
+    "records",
+    "topology",
+    "spec",
+    "slash",
+    "runs",
+    "assays",
+    "picker",
+    "app",
+    "window",
+    "pane",
+    "transcript",
+    "cli",
+    "server",
+    "trace"
+  ],
+  "strata": [
+    "event",
+    "ambient",
+    "summary",
+    "incident"
+  ],
+  "tags": [
+    {
+      "name": "SESSION_OPEN_REQUESTED",
+      "category": "session",
+      "stratum": "event",
+      "payload": [
+        "driver",
+        "workspace",
+        "bundle"
+      ],
+      "optional_payload": [],
+      "note": "SessionController.openSession() entry. Driver is the selected model name; workspace and bundle are nullable if the caller left them unset.",
+      "field_types": {
+        "driver": "string (driver name)",
+        "workspace": "string (absolute path) or null",
+        "bundle": "string or null"
+      },
+      "emit_site": "web/vm/session_controller.ts"
+    },
+    {
+      "name": "SESSION_OPEN_ACKED",
+      "category": "session",
+      "stratum": "event",
+      "payload": [
+        "session_id",
+        "name",
+        "driver"
+      ],
+      "optional_payload": [],
+      "note": "The server returned a session_id on POST /api/session. name is nullable when the server has not yet named the record.",
+      "field_types": {
+        "session_id": "string (kernel session id)",
+        "name": "string or null",
+        "driver": "string (driver name)"
+      },
+      "emit_site": "web/vm/session_controller.ts"
+    },
+    {
+      "name": "SESSION_OPEN_REFUSED",
+      "category": "session",
+      "stratum": "incident",
+      "payload": [
+        "failure_class",
+        "detail"
+      ],
+      "optional_payload": [],
+      "note": "POST /api/session failed. failure_class is the typed reason from the SubstrateClient; detail is a human string.",
+      "field_types": {
+        "failure_class": "string (client failure class: network, http_error, or the server's failure_class)",
+        "detail": "string (server error text; Layer 7 bounds it)"
+      },
+      "emit_site": "web/vm/session_controller.ts"
+    },
+    {
+      "name": "SESSION_ATTACH_STARTED",
+      "category": "session",
+      "stratum": "event",
+      "payload": [
+        "session_id"
+      ],
+      "optional_payload": [],
+      "note": "attachExisting(sessionId) began; the controller is opening the SSE stream against a session it did not itself create.",
+      "field_types": {
+        "session_id": "string (kernel session id)"
+      },
+      "emit_site": "web/vm/session_controller.ts"
+    },
+    {
+      "name": "SESSION_END_REQUESTED",
+      "category": "session",
+      "stratum": "event",
+      "payload": [
+        "session_id",
+        "reason"
+      ],
+      "optional_payload": [],
+      "note": "endSession(reason) entry. reason is the caller's label: user_end (the end-session confirm, /exit) or user_close (Close Pane, ⌘W).",
+      "field_types": {
+        "session_id": "string (kernel session id)",
+        "reason": "string"
+      },
+      "emit_site": "web/vm/session_controller.ts"
+    },
+    {
+      "name": "SESSION_ENDED_LOCAL",
+      "category": "session",
+      "stratum": "event",
+      "payload": [
+        "reason"
+      ],
+      "optional_payload": [],
+      "note": "A SessionEnded envelope reached the controller; snapshot flipped to endedReason. Distinct from SESSION_END_REQUESTED because a session can end without the local caller asking.",
+      "field_types": {
+        "reason": "string"
+      },
+      "emit_site": "web/vm/session_controller.ts"
+    },
+    {
+      "name": "DRIVER_ROSTER_LOADED",
+      "category": "driver",
+      "stratum": "summary",
+      "payload": [
+        "count",
+        "default"
+      ],
+      "optional_payload": [],
+      "note": "loadDriverRoster() populated snapshot.driverRoster from /api/models. default is nullable when the server names no default.",
+      "field_types": {
+        "count": "int",
+        "default": "string or null"
+      },
+      "emit_site": "web/vm/session_controller.ts"
+    },
+    {
+      "name": "DRIVER_PICKED",
+      "category": "driver",
+      "stratum": "event",
+      "payload": [
+        "driver"
+      ],
+      "optional_payload": [],
+      "note": "pickDriver(name) was called. The controller records the choice; no server call fires until session-open.",
+      "field_types": {
+        "driver": "string (driver name)"
+      },
+      "emit_site": "web/vm/session_controller.ts"
+    },
+    {
+      "name": "DRIVER_VERSION_PICKED",
+      "category": "driver",
+      "stratum": "event",
+      "payload": [
+        "driver",
+        "version"
+      ],
+      "optional_payload": [],
+      "note": "pickDriverVersion(driver, versionId) was called. version is null when the pick is cleared and the server will fall back to the CLI's default_version. Only meaningful for CLI drivers; ollama tags carry their model in the driver name.",
+      "field_types": {
+        "driver": "string (driver name)",
+        "version": "string or null"
+      },
+      "emit_site": "web/vm/session_controller.ts"
+    },
+    {
+      "name": "BUNDLE_ROSTER_LOADED",
+      "category": "bundle",
+      "stratum": "summary",
+      "payload": [
+        "count"
+      ],
+      "optional_payload": [],
+      "note": "loadBundleRoster() populated snapshot.bundleRoster from /api/bundles.",
+      "field_types": {
+        "count": "int"
+      },
+      "emit_site": "web/vm/session_controller.ts"
+    },
+    {
+      "name": "BUNDLE_PICKED",
+      "category": "bundle",
+      "stratum": "event",
+      "payload": [
+        "bundle"
+      ],
+      "optional_payload": [],
+      "note": "pickBundle(slug) was called. Records the choice; no server call fires until session-open.",
+      "field_types": {
+        "bundle": "string or null"
+      },
+      "emit_site": "web/vm/session_controller.ts"
+    },
+    {
+      "name": "WORKSPACES_LOADED",
+      "category": "workspace",
+      "stratum": "summary",
+      "payload": [
+        "count"
+      ],
+      "optional_payload": [],
+      "note": "loadRecentWorkspaces() populated snapshot.recentWorkspaces from /api/workspaces.",
+      "field_types": {
+        "count": "int"
+      },
+      "emit_site": "web/vm/session_controller.ts"
+    },
+    {
+      "name": "TURN_SUBMITTED",
+      "category": "turn",
+      "stratum": "event",
+      "payload": [
+        "session_id",
+        "turn_index",
+        "text_length"
+      ],
+      "optional_payload": [],
+      "note": "sendTurn(text) entry. turn_index counts from zero over the session's lifetime; text_length is the trimmed input character count.",
+      "field_types": {
+        "session_id": "string (kernel session id)",
+        "turn_index": "int (kernel)",
+        "text_length": "int"
+      },
+      "emit_site": "web/vm/session_controller.ts"
+    },
+    {
+      "name": "TURN_ACK",
+      "category": "turn",
+      "stratum": "event",
+      "payload": [
+        "session_id"
+      ],
+      "optional_payload": [],
+      "note": "POST /api/session/<id>/turn returned 200. The envelope stream carries the model's reply from here on.",
+      "field_types": {
+        "session_id": "string (kernel session id)"
+      },
+      "emit_site": "web/vm/session_controller.ts"
+    },
+    {
+      "name": "TURN_REFUSED",
+      "category": "turn",
+      "stratum": "incident",
+      "payload": [
+        "failure_class",
+        "detail"
+      ],
+      "optional_payload": [],
+      "note": "Turn POST failed. failure_class is the typed reason; detail is the human string.",
+      "field_types": {
+        "failure_class": "string (client failure class: network, http_error, or the server's failure_class)",
+        "detail": "string (server error text; Layer 7 bounds it)"
+      },
+      "emit_site": "web/vm/session_controller.ts"
+    },
+    {
+      "name": "TURN_PARKED",
+      "category": "turn",
+      "stratum": "event",
+      "payload": [
+        "park_reason"
+      ],
+      "optional_payload": [],
+      "note": "A Park envelope arrived; the driver is waiting on the human. park_reason names the wait (rate_limit, awaiting_input, etc).",
+      "field_types": {
+        "park_reason": "string"
+      },
+      "emit_site": "web/vm/session_controller.ts"
+    },
+    {
+      "name": "TURN_INTERRUPTED",
+      "category": "turn",
+      "stratum": "event",
+      "payload": [
+        "was_interrupted",
+        "landed",
+        "tier",
+        "signal",
+        "scope"
+      ],
+      "optional_payload": [],
+      "note": "interruptTurn() completed. was_interrupted true when the server killed an in-flight turn; landed is the server's ACK for the interrupt; tier is soft or hard; signal true for Ctrl+C, false for /interrupt; scope names what got interrupted.",
+      "field_types": {
+        "was_interrupted": "bool",
+        "landed": "bool",
+        "tier": "enum soft | hard",
+        "signal": "bool",
+        "scope": "string"
+      },
+      "emit_site": "web/vm/session_controller.ts"
+    },
+    {
+      "name": "STREAM_ATTACHED",
+      "category": "stream",
+      "stratum": "event",
+      "payload": [],
+      "optional_payload": [
+        "session_id",
+        "record_root"
+      ],
+      "note": "SSE onopen; snapshot.connection = 'connected'. Payload carries session_id for a session stream, record_root for a child-record attach. Exactly one of the two is present.",
+      "field_types": {
+        "session_id": "string (kernel session id)",
+        "record_root": "string (absolute path)"
+      },
+      "emit_site": "web/vm/session_controller.ts"
+    },
+    {
+      "name": "STREAM_CLOSED",
+      "category": "stream",
+      "stratum": "event",
+      "payload": [],
+      "optional_payload": [
+        "session_id",
+        "record_root"
+      ],
+      "note": "SSE closed cleanly (RunFinalised, session-end, or attach to a new session). Same session_id/record_root branching as STREAM_ATTACHED.",
+      "field_types": {
+        "session_id": "string (kernel session id)",
+        "record_root": "string (absolute path)"
+      },
+      "emit_site": "web/vm/session_controller.ts"
+    },
+    {
+      "name": "STREAM_RECONNECTING",
+      "category": "stream",
+      "stratum": "event",
+      "payload": [],
+      "optional_payload": [
+        "session_id",
+        "record_root"
+      ],
+      "note": "SSE error tripped the 1s reconnect timer. Same session_id/record_root branching as STREAM_ATTACHED.",
+      "field_types": {
+        "session_id": "string (kernel session id)",
+        "record_root": "string (absolute path)"
+      },
+      "emit_site": "web/vm/session_controller.ts"
+    },
+    {
+      "name": "STREAM_ENVELOPE_APPENDED",
+      "category": "stream",
+      "stratum": "ambient",
+      "payload": [
+        "seq",
+        "kind"
+      ],
+      "optional_payload": [],
+      "note": "One envelope folded into the transcript. seq is the substrate Run's monotonic sequence number; kind is the envelope kind string (UserMessage, ModelReply, ToolCall, etc).",
+      "field_types": {
+        "seq": "int (kernel record seq)",
+        "kind": "string (kernel envelope kind)"
+      },
+      "emit_site": "web/vm/session_controller.ts"
+    },
+    {
+      "name": "SESSIONS_LOADED",
+      "category": "records",
+      "stratum": "summary",
+      "payload": [
+        "count"
+      ],
+      "optional_payload": [],
+      "note": "loadLiveSessions() populated snapshot.liveSessions from /api/session.",
+      "field_types": {
+        "count": "int"
+      },
+      "emit_site": "web/vm/session_controller.ts"
+    },
+    {
+      "name": "CHILD_RECORD_ATTACH_REQUESTED",
+      "category": "records",
+      "stratum": "event",
+      "payload": [
+        "record_root"
+      ],
+      "optional_payload": [],
+      "note": "attachRecordRoot(recordRoot) entry. The controller is subscribing to a child record's stream (a delegate tool call's substrate Run).",
+      "field_types": {
+        "record_root": "string (absolute path)"
+      },
+      "emit_site": "web/vm/session_controller.ts"
+    },
+    {
+      "name": "TOPOLOGY_LOADED",
+      "category": "topology",
+      "stratum": "summary",
+      "payload": [
+        "producer_count",
+        "trigger_count"
+      ],
+      "optional_payload": [],
+      "note": "loadTopologyGraph(name) returned. Counts describe the structure of the record's authored topology.",
+      "field_types": {
+        "producer_count": "int",
+        "trigger_count": "int"
+      },
+      "emit_site": "web/vm/session_controller.ts"
+    },
+    {
+      "name": "SPEC_VALIDATE_REQUESTED",
+      "category": "spec",
+      "stratum": "event",
+      "payload": [],
+      "optional_payload": [
+        "topology_name"
+      ],
+      "note": "validateSpec() entry. topology_name is present when the spec names one.",
+      "field_types": {
+        "topology_name": "string"
+      },
+      "emit_site": "web/vm/session_controller.ts"
+    },
+    {
+      "name": "SPEC_VALIDATED",
+      "category": "spec",
+      "stratum": "event",
+      "payload": [
+        "valid"
+      ],
+      "optional_payload": [
+        "error"
+      ],
+      "note": "Server responded to /api/validate. valid is the boolean verdict; error carries the reason on false.",
+      "field_types": {
+        "valid": "bool",
+        "error": "string or null"
+      },
+      "emit_site": "web/vm/session_controller.ts"
+    },
+    {
+      "name": "SPEC_BUILD_REQUESTED",
+      "category": "spec",
+      "stratum": "event",
+      "payload": [],
+      "optional_payload": [
+        "topology_name"
+      ],
+      "note": "buildSpec() entry. topology_name is present when the spec names one.",
+      "field_types": {
+        "topology_name": "string"
+      },
+      "emit_site": "web/vm/session_controller.ts"
+    },
+    {
+      "name": "SPEC_BUILD_REJECTED",
+      "category": "spec",
+      "stratum": "incident",
+      "payload": [
+        "reason"
+      ],
+      "optional_payload": [],
+      "note": "The server refused the build, or the validator rejected the spec before POST.",
+      "field_types": {
+        "reason": "string"
+      },
+      "emit_site": "web/vm/session_controller.ts"
+    },
+    {
+      "name": "SPEC_BUILT",
+      "category": "spec",
+      "stratum": "event",
+      "payload": [
+        "run_name",
+        "status"
+      ],
+      "optional_payload": [
+        "unfired_triggers_count"
+      ],
+      "note": "The build succeeded and a substrate Run was started. run_name is the record identifier; status is the Run's terminal or in-flight state; unfired_triggers_count is present when at least one trigger in the authored topology never fired.",
+      "field_types": {
+        "run_name": "string",
+        "status": "string (the run's state as /api/build returns it, or unknown)",
+        "unfired_triggers_count": "int"
+      },
+      "emit_site": "web/vm/session_controller.ts"
+    },
+    {
+      "name": "SLASH_ROUTED",
+      "category": "slash",
+      "stratum": "event",
+      "payload": [
+        "cmd"
+      ],
+      "optional_payload": [],
+      "note": "submitLine() matched a known slash. cmd is the leading token (exit, model, help, clear, interrupt, name, list, tools, workspace, bundle, isolate).",
+      "field_types": {
+        "cmd": "string (slash token)"
+      },
+      "emit_site": "web/vm/session_controller.ts"
+    },
+    {
+      "name": "SLASH_UNKNOWN",
+      "category": "slash",
+      "stratum": "event",
+      "payload": [
+        "cmd"
+      ],
+      "optional_payload": [],
+      "note": "submitLine() matched no known slash. cmd is the leading token.",
+      "field_types": {
+        "cmd": "string (slash token)"
+      },
+      "emit_site": "web/vm/session_controller.ts"
+    },
+    {
+      "name": "RUN_STARTED",
+      "category": "runs",
+      "stratum": "event",
+      "payload": [
+        "run_id",
+        "topology",
+        "sessions"
+      ],
+      "optional_payload": [
+        "t"
+      ],
+      "note": "A TopologyRunStarted reached this session's record. sessions lists the run's sessions (session_id, role, record_root, driven); t is the record's write time, which the shell reads to open panes only for a run that starts now.",
+      "field_types": {
+        "run_id": "string (kernel)",
+        "topology": "string",
+        "sessions": "list of {session_id, role, record_root}",
+        "t": "float or null"
+      },
+      "emit_site": "web/vm/session_controller.ts"
+    },
+    {
+      "name": "RUN_FOCUS_REQUESTED",
+      "category": "runs",
+      "stratum": "event",
+      "payload": [
+        "run_id",
+        "topology",
+        "sessions"
+      ],
+      "optional_payload": [],
+      "note": "`/run focus` named a run; the shell focuses its pane, or opens one.",
+      "field_types": {
+        "run_id": "string (kernel)",
+        "topology": "string",
+        "sessions": "list of {session_id, role, record_root, driven} (the run's sessions, as RUN_STARTED)"
+      },
+      "emit_site": "web/vm/session_controller.ts"
+    },
+    {
+      "name": "RUN_STOP_REQUESTED",
+      "category": "runs",
+      "stratum": "event",
+      "payload": [
+        "run_id"
+      ],
+      "optional_payload": [],
+      "note": "The server accepted a stop for one of this session's runs; the run's session ends caller_stop.",
+      "field_types": {
+        "run_id": "string (kernel)"
+      },
+      "emit_site": "web/vm/session_controller.ts"
+    },
+    {
+      "name": "TURN_REFUSED_VIEW_ONLY",
+      "category": "turn",
+      "stratum": "incident",
+      "payload": [],
+      "optional_payload": [],
+      "note": "A line was sent in a pane that shows a run's session, whose topology writes its messages; nothing was posted.",
+      "field_types": {},
+      "emit_site": "web/vm/session_controller.ts"
+    },
+    {
+      "name": "DELEGATE_CHILD_STARTED",
+      "category": "runs",
+      "stratum": "event",
+      "payload": [
+        "session_id",
+        "driver"
+      ],
+      "optional_payload": [],
+      "note": "A delegate call this session made now started a child session (its parent is this session); the shell opens an interactive pane on it.",
+      "field_types": {
+        "session_id": "string (kernel session id)",
+        "driver": "string (driver name)"
+      },
+      "emit_site": "web/vm/session_controller.ts"
+    },
+    {
+      "name": "ASSAYS_LOADED",
+      "category": "assays",
+      "stratum": "summary",
+      "payload": [
+        "count"
+      ],
+      "optional_payload": [],
+      "note": "loadAssays() read /api/assays: one row per cells file in the bench results folder. count is the number of rows.",
+      "field_types": {
+        "count": "int"
+      },
+      "emit_site": "web/vm/session_controller.ts"
+    },
+    {
+      "name": "ASSAY_REPORT_LOADED",
+      "category": "assays",
+      "stratum": "summary",
+      "payload": [
+        "name",
+        "arms"
+      ],
+      "optional_payload": [],
+      "note": "loadAssayReport(name) read /api/assay/<name>: one assay's arm matrix. arms is the number of arms in the report.",
+      "field_types": {
+        "name": "string or null",
+        "arms": "int"
+      },
+      "emit_site": "web/vm/session_controller.ts"
+    },
+    {
+      "name": "PICKER_FOLDER_ARMED",
+      "category": "picker",
+      "stratum": "event",
+      "payload": [
+        "pane_id",
+        "workspace",
+        "is_default",
+        "source"
+      ],
+      "optional_payload": [],
+      "note": "A pane's picker armed a folder and moved to the model column. source: row (a listed folder or the sandbox row), dialog (choose folder), typed (the path box).",
+      "field_types": {
+        "pane_id": "int",
+        "workspace": "string (absolute path) or null",
+        "is_default": "bool",
+        "source": "enum row | dialog | typed"
+      },
+      "emit_site": "web/app/App.tsx (armWorkspace, disarmWorkspace, enterGuidance, pickGuidance, pickLength, commitPane, wsKey)"
+    },
+    {
+      "name": "PICKER_FOLDER_DISARMED",
+      "category": "picker",
+      "stratum": "event",
+      "payload": [
+        "pane_id",
+        "cause"
+      ],
+      "optional_payload": [],
+      "note": "A pane's picker dropped its armed folder and went back to the folder column. cause: escape, arrow_left, list_click (a click on the folder list's empty space), typed (the path box changed).",
+      "field_types": {
+        "pane_id": "int",
+        "cause": "enum escape | arrow_left | list_click | typed"
+      },
+      "emit_site": "web/app/App.tsx (armWorkspace, disarmWorkspace, enterGuidance, pickGuidance, pickLength, commitPane, wsKey)"
+    },
+    {
+      "name": "PICKER_LINE_ENTERED",
+      "category": "picker",
+      "stratum": "event",
+      "payload": [
+        "pane_id",
+        "line",
+        "cause"
+      ],
+      "optional_payload": [],
+      "note": "A pane's picker moved to a line: model, guidance, length or tone. cause: picked (the line before it was picked) or back (escape or arrow up from the line after it).",
+      "field_types": {
+        "pane_id": "int",
+        "line": "enum model | guidance | length | tone",
+        "cause": "enum picked | back"
+      },
+      "emit_site": "web/app/App.tsx (armWorkspace, disarmWorkspace, enterGuidance, pickGuidance, pickLength, commitPane, wsKey)"
+    },
+    {
+      "name": "PICKER_COMMITTED",
+      "category": "picker",
+      "stratum": "summary",
+      "payload": [
+        "pane_id",
+        "workspace",
+        "is_default"
+      ],
+      "optional_payload": [],
+      "note": "The tone pick bound the pane to its folder; the chat prompt shows and the session opens on the first message.",
+      "field_types": {
+        "pane_id": "int",
+        "workspace": "string (absolute path) or null",
+        "is_default": "bool"
+      },
+      "emit_site": "web/app/App.tsx (armWorkspace, disarmWorkspace, enterGuidance, pickGuidance, pickLength, commitPane, wsKey)"
+    },
+    {
+      "name": "APP_BOOTED",
+      "category": "app",
+      "stratum": "event",
+      "payload": [
+        "app_version",
+        "app_commit",
+        "kernel_commit",
+        "vocab_version",
+        "packaged",
+        "home_kind"
+      ],
+      "optional_payload": [],
+      "note": "First signal of an app launch: which build and vocabulary is running and which store it uses. Opens the AppBoot session; every other tag of the launch carries its boot_id.",
+      "emit_site": "electron/main.js app.whenReady",
+      "field_types": {
+        "app_version": "string",
+        "app_commit": "string",
+        "kernel_commit": "string",
+        "vocab_version": "string",
+        "packaged": "bool",
+        "home_kind": "enum default | env | dev"
+      }
+    },
+    {
+      "name": "APP_QUIT_REQUESTED",
+      "category": "app",
+      "stratum": "event",
+      "payload": [
+        "cause"
+      ],
+      "optional_payload": [],
+      "note": "Quit began. cause: app (a quit asked of the app from outside main's code: Cmd-Q, the Dock, logout or a test driver; Electron does not say which), last_window (the last window closed, off macOS), startup_failed (the backend did not come up), backend_died (the backend stopped while the app ran; the user chose Relaunch or Quit).",
+      "emit_site": "electron/main.js before-quit, onBackendDied",
+      "field_types": {
+        "cause": "enum app | last_window | startup_failed | backend_died"
+      }
+    },
+    {
+      "name": "APP_QUIT_COMPLETED",
+      "category": "app",
+      "stratum": "summary",
+      "payload": [
+        "server_exit_code",
+        "windows_opened",
+        "signals_written",
+        "signals_lost"
+      ],
+      "optional_payload": [],
+      "note": "The launch ended; the server's exit and the trace's write and loss counts. Closes the AppBoot session.",
+      "emit_site": "electron/main.js will-quit",
+      "field_types": {
+        "server_exit_code": "int or null",
+        "windows_opened": "int",
+        "signals_written": "int",
+        "signals_lost": "int"
+      }
+    },
+    {
+      "name": "SERVER_SPAWNED",
+      "category": "app",
+      "stratum": "event",
+      "payload": [
+        "pid",
+        "packaged"
+      ],
+      "optional_payload": [],
+      "note": "Main started the server process.",
+      "emit_site": "electron/main.js server spawn",
+      "field_types": {
+        "pid": "int",
+        "packaged": "bool"
+      }
+    },
+    {
+      "name": "SERVER_BOUND",
+      "category": "app",
+      "stratum": "event",
+      "payload": [
+        "port",
+        "ms"
+      ],
+      "optional_payload": [],
+      "note": "The server reported its port; ms since spawn.",
+      "emit_site": "electron/main.js server bound",
+      "field_types": {
+        "port": "int",
+        "ms": "int"
+      }
+    },
+    {
+      "name": "SERVER_EXITED",
+      "category": "app",
+      "stratum": "incident",
+      "payload": [
+        "code",
+        "signal",
+        "expected"
+      ],
+      "optional_payload": [
+        "error_type"
+      ],
+      "note": "The server process ended. An incident when expected is false: the window has no backend. error_type names the exception the server died of, read from its stderr, when it printed a traceback (a crash before its own trace opened leaves no other record).",
+      "emit_site": "electron/main.js server exit",
+      "field_types": {
+        "code": "int or null",
+        "signal": "string or null",
+        "expected": "bool",
+        "error_type": "string (the exception class on the last line of the server's stderr traceback, when it printed one)"
+      }
+    },
+    {
+      "name": "WINDOW_OPENED",
+      "category": "app",
+      "stratum": "event",
+      "payload": [
+        "cause"
+      ],
+      "optional_payload": [],
+      "note": "Main created a window. cause: boot (the first window), menu (File ▸ New Window), activate (the Dock with no window open). A second instance or a deep link focuses the current window and opens none.",
+      "emit_site": "electron/main.js createWindow",
+      "field_types": {
+        "cause": "enum boot | menu | activate"
+      }
+    },
+    {
+      "name": "WINDOW_CLOSED",
+      "category": "app",
+      "stratum": "event",
+      "payload": [],
+      "optional_payload": [],
+      "note": "A window closed.",
+      "emit_site": "electron/main.js win closed",
+      "field_types": {}
+    },
+    {
+      "name": "NAVIGATION_BLOCKED",
+      "category": "app",
+      "stratum": "incident",
+      "payload": [
+        "target_kind"
+      ],
+      "optional_payload": [],
+      "note": "The window tried to leave the app's page and main refused it.",
+      "emit_site": "electron/main.js will-navigate",
+      "field_types": {
+        "target_kind": "enum external | file | unknown"
+      }
+    },
+    {
+      "name": "DEEP_LINK_RECEIVED",
+      "category": "app",
+      "stratum": "event",
+      "payload": [
+        "link_kind"
+      ],
+      "optional_payload": [],
+      "note": "The OS passed a substrate:// link.",
+      "emit_site": "electron/main.js open-url",
+      "field_types": {
+        "link_kind": "enum record | session | unknown"
+      }
+    },
+    {
+      "name": "MENU_COMMAND_SENT",
+      "category": "app",
+      "stratum": "event",
+      "payload": [
+        "command"
+      ],
+      "optional_payload": [],
+      "note": "A native menu item fired and main sent its command to the window.",
+      "emit_site": "electron/menu.js send",
+      "field_types": {
+        "command": "string (menu command)"
+      }
+    },
+    {
+      "name": "NATIVE_DIALOG_CLOSED",
+      "category": "app",
+      "stratum": "event",
+      "payload": [
+        "dialog",
+        "outcome"
+      ],
+      "optional_payload": [],
+      "note": "A native file dialog closed. dialog: pick_folder, open_record. outcome: picked, cancelled.",
+      "emit_site": "electron/main.js native:pick-folder, native:open-record",
+      "field_types": {
+        "dialog": "enum pick_folder | open_record",
+        "outcome": "enum picked | cancelled"
+      }
+    },
+    {
+      "name": "WINDOW_BOOTED",
+      "category": "window",
+      "stratum": "event",
+      "payload": [
+        "vocab_version"
+      ],
+      "optional_payload": [],
+      "note": "The window's page started its boot, before the pane registry is built, so it is the window's first record (S1). Opens the Window session in the window's own trace.",
+      "emit_site": "web/reveal.ts boot (first statement)",
+      "field_types": {
+        "vocab_version": "string"
+      }
+    },
+    {
+      "name": "VIEW_CHANGED",
+      "category": "window",
+      "stratum": "event",
+      "payload": [
+        "from",
+        "to",
+        "cause"
+      ],
+      "optional_payload": [],
+      "note": "The window's open view changed: panes, meta or a page. cause: key, button, menu, split, records_open, close; language when the /language command opens meta on the language lens; tweak when the design tool's view prop sets it.",
+      "emit_site": "web/app/App.tsx (setState of vs)",
+      "field_types": {
+        "from": "string (open view)",
+        "to": "string (open view)",
+        "cause": "enum key | button | menu | split | records_open | close | language | tweak"
+      }
+    },
+    {
+      "name": "KEY_ROUTED",
+      "category": "window",
+      "stratum": "event",
+      "payload": [
+        "key",
+        "action",
+        "target"
+      ],
+      "optional_payload": [],
+      "note": "A named key (never a typed character) was routed. action: the keymap action or none; target: picker, records, language, window, box.",
+      "emit_site": "web/app/App.tsx onKey",
+      "field_types": {
+        "key": "string (named key with modifiers, e.g. Enter, Escape, Meta+d; never a printable character)",
+        "action": "string (keymap action kind or none)",
+        "target": "enum picker | records | language | window | box | none"
+      }
+    },
+    {
+      "name": "DIALOG_OPENED",
+      "category": "window",
+      "stratum": "event",
+      "payload": [
+        "dialog"
+      ],
+      "optional_payload": [],
+      "note": "The window opened one of its dialogs.",
+      "emit_site": "web/app/Dialogs.tsx",
+      "field_types": {
+        "dialog": "string (dialog id)"
+      }
+    },
+    {
+      "name": "DIALOG_CLOSED",
+      "category": "window",
+      "stratum": "event",
+      "payload": [
+        "dialog",
+        "outcome"
+      ],
+      "optional_payload": [],
+      "note": "A window dialog closed. outcome: confirmed, cancelled, escape.",
+      "emit_site": "web/app/Dialogs.tsx",
+      "field_types": {
+        "dialog": "string (dialog id)",
+        "outcome": "enum confirmed | cancelled | escape"
+      }
+    },
+    {
+      "name": "PANE_OPENED",
+      "category": "pane",
+      "stratum": "event",
+      "payload": [
+        "pane_id",
+        "cause"
+      ],
+      "optional_payload": [],
+      "note": "A pane was created. cause: start (a pane the window starts with: pane 1, or the layout's tweak props), split (the user split a pane), run (a run's session opened beside its caller), delegate (a delegate child opened beside its caller).",
+      "emit_site": "web/reveal.ts (pane 1, where its controller is spawned); web/app/App.tsx componentDidMount (the other starting panes), componentDidUpdate (the commit that shows the change)",
+      "field_types": {
+        "pane_id": "int",
+        "cause": "enum start | split | run | delegate"
+      }
+    },
+    {
+      "name": "PANE_CLOSED",
+      "category": "pane",
+      "stratum": "event",
+      "payload": [
+        "pane_id",
+        "had_session"
+      ],
+      "optional_payload": [],
+      "note": "A pane was removed. had_session: it showed a session or record, not its picker.",
+      "emit_site": "web/app/App.tsx componentDidMount, componentDidUpdate (the commit that shows the change)",
+      "field_types": {
+        "pane_id": "int",
+        "had_session": "bool"
+      }
+    },
+    {
+      "name": "PANE_FOCUSED",
+      "category": "pane",
+      "stratum": "event",
+      "payload": [
+        "pane_id",
+        "cause"
+      ],
+      "optional_payload": [],
+      "note": "Focus moved to a pane. cause: click (the user clicked it), split (the pane just made by a split), open (a run or delegate pane already showing, or its caller before the split beside it), close (the neighbour of the pane just closed).",
+      "emit_site": "web/app/App.tsx componentDidMount, componentDidUpdate (the commit that shows the change)",
+      "field_types": {
+        "pane_id": "int",
+        "cause": "enum click | split | open | close"
+      }
+    },
+    {
+      "name": "PANE_BOUND",
+      "category": "pane",
+      "stratum": "event",
+      "payload": [
+        "pane_id",
+        "binding",
+        "how"
+      ],
+      "optional_payload": [
+        "session_id"
+      ],
+      "note": "A pane stopped showing its picker: the window marked it bound, or its controller holds a session. binding: session or record (a run's record). how: picker (the picker committed), attach (a session picked under a workspace row or on the records page), run, child (a delegate child), restore (the ?session= of a reload), direct (the controller opened or attached a session through window.__vm, outside the window's controls: the gates' driver and the registry's calls). session_id when the window knows it at that commit.",
+      "emit_site": "web/app/App.tsx componentDidMount, componentDidUpdate (the commit that shows the change)",
+      "field_types": {
+        "pane_id": "int",
+        "binding": "enum session | record",
+        "how": "enum picker | attach | run | child | restore | direct",
+        "session_id": "string (kernel session id)"
+      }
+    },
+    {
+      "name": "LENS_CHANGED",
+      "category": "pane",
+      "stratum": "event",
+      "payload": [
+        "lens"
+      ],
+      "optional_payload": [
+        "session_id"
+      ],
+      "note": "Meta's lens changed: stream (drawn with its graph, the chip reads stream+graph), structure, language, scene, io. Written when the lens differs from the one shown.",
+      "emit_site": "web/app/MetaView.tsx; state/meta.ts setMode",
+      "field_types": {
+        "lens": "enum stream | structure | language | scene | io",
+        "session_id": "string (kernel session id)"
+      }
+    },
+    {
+      "name": "TRANSCRIPT_ROW_DRAWN",
+      "category": "transcript",
+      "stratum": "event",
+      "payload": [
+        "pane_id",
+        "session_id",
+        "seq",
+        "kind"
+      ],
+      "optional_payload": [],
+      "note": "A record entry of a session became a row on screen. The view pair of every kernel session kind the window shows (kernel session vocabulary § G).",
+      "emit_site": "web/reveal/transcript/Row.tsx (row mounted)",
+      "field_types": {
+        "pane_id": "int",
+        "session_id": "string or null (the kernel session id; null in a pane showing an attached record, whose RECORD_OPENED names it)",
+        "seq": "int or null (null for a row the window made itself: a note, help, a sign-in card)",
+        "kind": "string (kernel envelope kind, or local:note, local:help, local:auth for rows the window made)"
+      }
+    },
+    {
+      "name": "TRANSCRIPT_ROW_SKIPPED",
+      "category": "transcript",
+      "stratum": "event",
+      "payload": [
+        "pane_id",
+        "session_id",
+        "seq",
+        "kind",
+        "reason"
+      ],
+      "optional_payload": [],
+      "note": "A record entry the pane received and drew as no row of its own, with why. hidden_kind: the controller's KIND_DISPOSITION ignores the kind (bookkeeping such as TriggerFired, PromptFragment); folded: drawn inside another row (a tool result or tool progress inside its call's card); duplicate_seq: an entry the stream replayed, already held; other: a kind the controller renders that made no row this time (an empty model reply, a final answer repeating the reply, SessionStarted shown in the pane's header).",
+      "emit_site": "web/vm/session_controller.ts handleEnvelope (hidden_kind, duplicate_seq, other, tool progress folded); web/reveal/transcript/Transcript.tsx (tool results folded)",
+      "field_types": {
+        "pane_id": "int",
+        "session_id": "string or null (the kernel session id; null in a pane showing an attached record, whose RECORD_OPENED names it)",
+        "seq": "int (kernel record seq)",
+        "kind": "string (kernel envelope kind)",
+        "reason": "enum hidden_kind | duplicate_seq | folded | other"
+      }
+    },
+    {
+      "name": "WORKSPACE_ADDED",
+      "category": "workspace",
+      "stratum": "event",
+      "payload": [
+        "pane_id",
+        "outcome"
+      ],
+      "optional_payload": [],
+      "note": "A folder was sent to the recent-workspace list. outcome: added, refused.",
+      "emit_site": "web/vm/session_controller.ts addWorkspace",
+      "field_types": {
+        "pane_id": "int",
+        "outcome": "enum added | refused"
+      }
+    },
+    {
+      "name": "CONTROLS_PICKED",
+      "category": "session",
+      "stratum": "event",
+      "payload": [
+        "pane_id",
+        "length",
+        "tone"
+      ],
+      "optional_payload": [],
+      "note": "The length and tone picks were recorded for the next session.",
+      "emit_site": "web/vm/session_controller.ts pickControls",
+      "field_types": {
+        "pane_id": "int",
+        "length": "string or null",
+        "tone": "string or null"
+      }
+    },
+    {
+      "name": "SESSION_RENAMED",
+      "category": "session",
+      "stratum": "event",
+      "payload": [
+        "pane_id",
+        "session_id",
+        "outcome"
+      ],
+      "optional_payload": [],
+      "note": "A session's name changed. outcome: renamed, refused.",
+      "emit_site": "web/vm/session_controller.ts renameSession",
+      "field_types": {
+        "pane_id": "int",
+        "session_id": "string (kernel session id)",
+        "outcome": "enum renamed | refused"
+      }
+    },
+    {
+      "name": "TASK_STOP_REQUESTED",
+      "category": "runs",
+      "stratum": "event",
+      "payload": [
+        "session_id",
+        "task_id"
+      ],
+      "optional_payload": [],
+      "note": "The person asked a background task to stop.",
+      "emit_site": "web/vm/session_controller.ts stopTask",
+      "field_types": {
+        "session_id": "string (kernel session id)",
+        "task_id": "string"
+      }
+    },
+    {
+      "name": "CLI_STATUS_CHECKED",
+      "category": "cli",
+      "stratum": "event",
+      "payload": [
+        "driver",
+        "authed"
+      ],
+      "optional_payload": [],
+      "note": "The window asked whether a CLI driver is signed in.",
+      "emit_site": "web/vm/session_controller.ts maybeOpenAuthPrompt",
+      "field_types": {
+        "driver": "string (driver name)",
+        "authed": "bool or null"
+      }
+    },
+    {
+      "name": "CLI_LOGIN_PROMPTED",
+      "category": "cli",
+      "stratum": "event",
+      "payload": [
+        "pane_id",
+        "driver"
+      ],
+      "optional_payload": [],
+      "note": "The sign-in card was shown for a CLI driver.",
+      "emit_site": "web/vm/session_controller.ts openAuthPrompt",
+      "field_types": {
+        "pane_id": "int",
+        "driver": "string (driver name)"
+      }
+    },
+    {
+      "name": "CLI_LOGIN_FINISHED",
+      "category": "cli",
+      "stratum": "event",
+      "payload": [
+        "pane_id",
+        "driver",
+        "outcome"
+      ],
+      "optional_payload": [],
+      "note": "The sign-in card's flow ended. outcome: signed_in, failed, dismissed.",
+      "emit_site": "web/reveal/transcript/AuthPromptCard.tsx",
+      "field_types": {
+        "pane_id": "int",
+        "driver": "string (driver name)",
+        "outcome": "enum signed_in | failed | dismissed"
+      }
+    },
+    {
+      "name": "SERVER_STARTED",
+      "category": "server",
+      "stratum": "event",
+      "payload": [
+        "port"
+      ],
+      "optional_payload": [],
+      "note": "The server bound its port; written before either listener serves, so it is the server's first record (S1) and opens server_run. The store's counts follow in STORE_SCANNED.",
+      "emit_site": "server.py main, after the port readback",
+      "field_types": {
+        "port": "int"
+      }
+    },
+    {
+      "name": "STORE_SCANNED",
+      "category": "server",
+      "stratum": "summary",
+      "payload": [
+        "sessions_found",
+        "parked",
+        "interrupted",
+        "ended",
+        "skipped",
+        "duration_ms"
+      ],
+      "optional_payload": [],
+      "note": "The server's boot scan of the session store finished; the store as found. The scan runs on a background thread while the server serves, so request records may precede it.",
+      "emit_site": "server.py main, _run_boot_scan",
+      "field_types": {
+        "sessions_found": "int (session manifests the boot scan read)",
+        "parked": "int",
+        "interrupted": "int",
+        "ended": "int",
+        "skipped": "int (manifests that did not parse)",
+        "duration_ms": "int"
+      }
+    },
+    {
+      "name": "SESSION_CREATED",
+      "category": "server",
+      "stratum": "event",
+      "payload": [
+        "session_id",
+        "driver",
+        "workspace_shape"
+      ],
+      "optional_payload": [],
+      "note": "The server created a session for a window's open request.",
+      "emit_site": "server.py POST /api/session",
+      "field_types": {
+        "session_id": "string (kernel session id)",
+        "driver": "string (driver name)",
+        "workspace_shape": "enum flat | worktree | isolate (the kernel's WorkspaceShape)"
+      }
+    },
+    {
+      "name": "TURN_ACCEPTED",
+      "category": "server",
+      "stratum": "event",
+      "payload": [
+        "session_id",
+        "turn_index"
+      ],
+      "optional_payload": [],
+      "note": "The server accepted a turn and handed it to the kernel.",
+      "emit_site": "server.py turn route",
+      "field_types": {
+        "session_id": "string (kernel session id)",
+        "turn_index": "int (kernel)"
+      }
+    },
+    {
+      "name": "API_REFUSED",
+      "category": "server",
+      "stratum": "incident",
+      "payload": [
+        "area",
+        "status",
+        "cause"
+      ],
+      "optional_payload": [],
+      "note": "The server answered an /api/ request with an error (status 400 or over). area: the domain its path names, unrouted when no route serves the path; cause: the handler function and line that refused, never the request's content.",
+      "emit_site": "server.py Handler._send, for every /api/ response of status 400 or over",
+      "field_types": {
+        "area": "enum session | turn | workspace | files | records | cli | runs | tasks | assays | topology | models | bundles | language | children | mcp | agent | diff | unrouted",
+        "status": "int (HTTP status)",
+        "cause": "string (the refusing handler and line, function:line in server.py; the response text stays in the window's *_REFUSED detail)"
+      }
+    },
+    {
+      "name": "SERVER_FAULTED",
+      "category": "server",
+      "stratum": "incident",
+      "payload": [
+        "area",
+        "error_type",
+        "where"
+      ],
+      "optional_payload": [],
+      "note": "An exception escaped a handler; the request failed with 500.",
+      "emit_site": "server.py handler",
+      "field_types": {
+        "area": "enum session | turn | workspace | files | records | cli | runs | tasks | assays | topology | models | bundles | language | children | mcp | agent | diff | unrouted",
+        "error_type": "string (exception class name)",
+        "where": "string (handler function name)"
+      }
+    },
+    {
+      "name": "SERVER_STOPPED",
+      "category": "server",
+      "stratum": "summary",
+      "payload": [
+        "ended",
+        "skipped",
+        "failed"
+      ],
+      "optional_payload": [],
+      "note": "The server's shutdown ended its sessions and exited.",
+      "emit_site": "server.py SIGTERM path",
+      "field_types": {
+        "ended": "int",
+        "skipped": "int",
+        "failed": "int"
+      }
+    },
+    {
+      "name": "TRACE_OPENED",
+      "category": "trace",
+      "stratum": "event",
+      "payload": [
+        "process"
+      ],
+      "optional_payload": [],
+      "note": "A process opened its trace file for this launch.",
+      "emit_site": "the sink (plan item 2)",
+      "field_types": {
+        "process": "enum main | window | server"
+      }
+    },
+    {
+      "name": "TRACE_LOST",
+      "category": "trace",
+      "stratum": "incident",
+      "payload": [
+        "process",
+        "count"
+      ],
+      "optional_payload": [],
+      "note": "Lines that could not be written since the last line that was.",
+      "emit_site": "the sink (plan item 2)",
+      "field_types": {
+        "process": "enum main | window | server",
+        "count": "int"
+      }
+    },
+    {
+      "name": "SIGNAL_REJECTED",
+      "category": "trace",
+      "stratum": "incident",
+      "payload": [
+        "process",
+        "tag",
+        "problem",
+        "call_site"
+      ],
+      "optional_payload": [
+        "field"
+      ],
+      "note": "An emit broke the vocabulary: an unknown tag, a required field missing, a field not declared, a value of the wrong type (field_types) or out of range (E5). Raised in source and test builds; written in the packaged app (E6), and the rejected record is not. Retired in v0.16: the code names tags, fields and values through types generated from this file (scripts/gen_signals.py), so the compiler rejects a broken emit and no runtime checker writes this record.",
+      "emit_site": "each process's emitter (plan item 3)",
+      "field_types": {
+        "process": "enum main | window | server",
+        "tag": "string",
+        "problem": "enum unknown_tag | missing_field | extra_field | wrong_type | out_of_range",
+        "call_site": "string (file:function)",
+        "field": "string (the payload field at fault; absent for unknown_tag)"
+      },
+      "retired": true,
+      "replaced_by": null
+    },
+    {
+      "name": "INVARIANT_BROKEN",
+      "category": "trace",
+      "stratum": "incident",
+      "payload": [
+        "rule",
+        "context"
+      ],
+      "optional_payload": [],
+      "note": "A Layer 4–5 rule failed at runtime; context holds the recent trace and the state involved.",
+      "emit_site": "electron/invariants.ts (the runtime checker), fed by electron/main.ts with every record main writes",
+      "field_types": {
+        "rule": "string (rule id in state_transitions, temporal_invariants or evidence_constraints)",
+        "context": "object (recent records and the state the rule read)"
+      }
+    },
+    {
+      "name": "RECORD_OPENED",
+      "category": "records",
+      "stratum": "event",
+      "payload": [
+        "pane_id",
+        "how",
+        "outcome"
+      ],
+      "optional_payload": [],
+      "note": "A pane attached a run record read-only (attachRecordRoot). how: open_record (File ▸ Open Record or ⌘O), deep_link (a substrate://record/ link), run (a run pane showing its run's record). outcome: attached when the record's stream opens, refused when it errors or closes first.",
+      "emit_site": "web/vm/session_controller.ts attachRecordRoot",
+      "field_types": {
+        "pane_id": "int",
+        "how": "enum open_record | deep_link | run",
+        "outcome": "enum attached | refused"
+      }
+    },
+    {
+      "name": "PANE_DRAWN",
+      "category": "pane",
+      "stratum": "event",
+      "payload": [
+        "pane_id",
+        "state"
+      ],
+      "optional_payload": [
+        "session_id",
+        "picker_line",
+        "armed",
+        "connection",
+        "turn_state",
+        "driver_shown",
+        "folder_rows",
+        "model_rows",
+        "named"
+      ],
+      "note": "A pane's drawn state changed: written from the commit, with the values App published to the areas that draw the pane, when any field differs from the pane's last record. state: picker (the pane shows its picker), session (it shows a session, or is bound and its session not yet opened), record (a run's record). A picker record carries picker_line, armed, folder_rows (rows in the workspace column: the sandbox, choose folder, recent and typed folders, not the sessions under an open row), model_rows (rows in the model column) and driver_shown. A session or record carries connection, turn_state (what the activity line draws: idle, no turn yet; running, a live turn; parked, the last turn returned or parked; ended, the session ended; failed, the last turn's request failed), driver_shown, named (the session has a name), and session_id when the pane holds one. The view pair of the picker, session-open, stream, turn, driver and workspace tags.",
+      "emit_site": "web/app/App.tsx componentDidMount, componentDidUpdate (after publish)",
+      "field_types": {
+        "pane_id": "int",
+        "state": "enum picker | session | record",
+        "session_id": "string (kernel session id)",
+        "picker_line": "enum ws | model | guidance | length | tone",
+        "armed": "bool",
+        "connection": "enum idle | connecting | connected | reconnecting | closed",
+        "turn_state": "enum idle | running | parked | ended | failed",
+        "driver_shown": "string or null",
+        "folder_rows": "int",
+        "model_rows": "int",
+        "named": "bool"
+      }
+    },
+    {
+      "name": "PAGE_DRAWN",
+      "category": "window",
+      "stratum": "event",
+      "payload": [
+        "page",
+        "rows"
+      ],
+      "optional_payload": [
+        "inert"
+      ],
+      "note": "A page committed its rows: records, assays, studio. inert is true for a page with no endpoint behind it (studio). The view pair of the *_LOADED tags.",
+      "emit_site": "web/app/RecordsPage.tsx, AssayPage, StudioPage (commit)",
+      "field_types": {
+        "page": "enum records | assays | studio",
+        "rows": "int",
+        "inert": "bool"
+      }
+    },
+    {
+      "name": "TRANSCRIPT_SCROLLED",
+      "category": "transcript",
+      "stratum": "event",
+      "payload": [
+        "pane_id",
+        "at_bottom",
+        "following",
+        "pinned",
+        "cause"
+      ],
+      "optional_payload": [],
+      "note": "Where a pane's transcript sits after a change. at_bottom: within STICK_PX of the bottom; following: new content will scroll into view; pinned: a clicked card header is held in place, which overrides following until the user scrolls. cause: row_arrived (a React commit of the pane's rows), user (the user scrolled), resized (the layout changed outside a commit: a card opened or closed, the window resized), view_switch (the pane's transcript shown again, its saved place restored). Written for view_switch each time; for the other causes only when at_bottom, following or pinned differs from the last record for that pane and view. The first draw of a pane's transcript writes nothing.",
+      "emit_site": "web/reveal/transcript/useScrollAnchor.ts (the scroll owner)",
+      "field_types": {
+        "pane_id": "int",
+        "at_bottom": "bool",
+        "following": "bool",
+        "pinned": "bool",
+        "cause": "enum row_arrived | user | resized | view_switch"
+      }
+    },
+    {
+      "name": "WINDOW_FAULTED",
+      "category": "window",
+      "stratum": "incident",
+      "payload": [
+        "error_type",
+        "source",
+        "where"
+      ],
+      "optional_payload": [],
+      "note": "An error escaped the window's code: an uncaught exception (a render error that no boundary catches reaches it too), an unhandled promise rejection, or a preload script that threw (written by main for that window). No message text (E1).",
+      "emit_site": "web/reveal.ts error, unhandledrejection; electron/main.ts preload-error",
+      "field_types": {
+        "error_type": "string (the error's class name, e.g. TypeError; non-error when what was thrown is not an Error)",
+        "source": "enum error | rejection | preload",
+        "where": "string (script file name and line, e.g. index-abc.js:12; unknown when none is given)"
+      }
+    },
+    {
+      "name": "MAIN_FAULTED",
+      "category": "app",
+      "stratum": "incident",
+      "payload": [
+        "error_type",
+        "source"
+      ],
+      "optional_payload": [],
+      "note": "An error escaped Electron main: an uncaught exception (Electron then shows its error dialog) or an unhandled rejection (Electron prints a warning and goes on). Observed, never handled: the app behaves as without the record.",
+      "emit_site": "electron/main.ts uncaughtExceptionMonitor, warning",
+      "field_types": {
+        "error_type": "string (the error's class name; non-error when what was thrown is not an Error)",
+        "source": "enum exception | rejection"
+      }
+    },
+    {
+      "name": "RENDERER_GONE",
+      "category": "app",
+      "stratum": "incident",
+      "payload": [
+        "reason",
+        "exit_code"
+      ],
+      "optional_payload": [],
+      "note": "A window's renderer process ended (Electron render-process-gone); the window shows nothing until it is reloaded or closed.",
+      "emit_site": "electron/main.ts render-process-gone",
+      "field_types": {
+        "reason": "enum clean_exit | abnormal_exit | killed | crashed | oom | launch_failed | integrity_failure | memory_eviction",
+        "exit_code": "int"
+      }
+    },
+    {
+      "name": "WINDOW_UNRESPONSIVE",
+      "category": "app",
+      "stratum": "incident",
+      "payload": [],
+      "optional_payload": [],
+      "note": "A window's renderer stopped answering (Electron unresponsive). Written once per hang: Electron repeats the event about every 16 s while the renderer stays hung.",
+      "emit_site": "electron/main.ts unresponsive",
+      "field_types": {}
+    },
+    {
+      "name": "WINDOW_RESPONSIVE",
+      "category": "app",
+      "stratum": "event",
+      "payload": [
+        "unresponsive_ms"
+      ],
+      "optional_payload": [],
+      "note": "A window that was unresponsive answers again (Electron responsive).",
+      "emit_site": "electron/main.ts responsive",
+      "field_types": {
+        "unresponsive_ms": "int (since its WINDOW_UNRESPONSIVE, on main's clock)"
+      }
+    },
+    {
+      "name": "CHILD_PROCESS_GONE",
+      "category": "app",
+      "stratum": "incident",
+      "payload": [
+        "type",
+        "reason",
+        "exit_code"
+      ],
+      "optional_payload": [],
+      "note": "An Electron child process other than a renderer ended unexpectedly (Electron child-process-gone).",
+      "emit_site": "electron/main.ts child-process-gone",
+      "field_types": {
+        "type": "enum utility | zygote | sandbox_helper | gpu | pepper_plugin | pepper_plugin_broker | unknown",
+        "reason": "enum clean_exit | abnormal_exit | killed | crashed | oom | launch_failed | integrity_failure | memory_eviction",
+        "exit_code": "int"
+      }
+    },
+    {
+      "name": "RUN_FAULTED",
+      "category": "server",
+      "stratum": "incident",
+      "payload": [
+        "run_id",
+        "error_type",
+        "where"
+      ],
+      "optional_payload": [],
+      "note": "A topology run in the background raised; the run's status poll reports the error.",
+      "emit_site": "server.py _run_background",
+      "field_types": {
+        "run_id": "string (the run's id, as RUN_STARTED names it)",
+        "error_type": "string (exception class name)",
+        "where": "string (the deepest server.py function the exception passed through)"
+      }
+    },
+    {
+      "name": "SERVER_UNCAUGHT",
+      "category": "server",
+      "stratum": "incident",
+      "payload": [
+        "thread",
+        "error_type",
+        "where"
+      ],
+      "optional_payload": [],
+      "note": "An exception escaped a server thread outside the request handlers (threading.excepthook, sys.excepthook); Python then prints it as before.",
+      "emit_site": "server.py _install_fault_hooks",
+      "field_types": {
+        "thread": "string (the thread's name)",
+        "error_type": "string (exception class name)",
+        "where": "string (the deepest server.py function the exception passed through)"
+      }
+    },
+    {
+      "name": "STREAM_DIRECTION_SET",
+      "category": "pane",
+      "stratum": "event",
+      "payload": [
+        "direction"
+      ],
+      "optional_payload": [],
+      "note": "Meta's stream lens changed its direction. Written when it differs from the one shown.",
+      "emit_site": "web/app/state/meta.ts setDir",
+      "field_types": {
+        "direction": "enum down | side"
+      }
+    },
+    {
+      "name": "STREAM_LEVEL_SET",
+      "category": "pane",
+      "stratum": "event",
+      "payload": [
+        "level"
+      ],
+      "optional_payload": [],
+      "note": "Meta's stream lens changed its level: every event, or the machinery hidden. Written when it differs.",
+      "emit_site": "web/app/state/meta.ts setLevel",
+      "field_types": {
+        "level": "enum all | app"
+      }
+    },
+    {
+      "name": "SEQ_SELECTED",
+      "category": "pane",
+      "stratum": "event",
+      "payload": [
+        "seq",
+        "how"
+      ],
+      "optional_payload": [],
+      "note": "Meta lit a record seq to inspect, or cleared it. Written when the lit seq changes.",
+      "emit_site": "web/app/state/meta.ts pickSeq, selectSeq",
+      "field_types": {
+        "seq": "int or null (the record seq lit; null when the click cleared it)",
+        "how": "enum stream_row | side_graph | language_row | language_key | language_open"
+      }
+    },
+    {
+      "name": "LANGUAGE_STREAM_SET",
+      "category": "pane",
+      "stratum": "event",
+      "payload": [
+        "stream"
+      ],
+      "optional_payload": [],
+      "note": "The language lens changed the stream it reads. Written when it differs.",
+      "emit_site": "web/app/state/language.ts setLanguageStream",
+      "field_types": {
+        "stream": "enum model | user | relation"
+      }
+    },
+    {
+      "name": "LANGUAGE_VIEW_SET",
+      "category": "pane",
+      "stratum": "event",
+      "payload": [
+        "view"
+      ],
+      "optional_payload": [],
+      "note": "The language lens changed its view (sides is the side by side view). Written when it differs.",
+      "emit_site": "web/app/state/language.ts setLanguageView",
+      "field_types": {
+        "view": "enum bars | deviation | ribbons | sides | measures"
+      }
+    },
+    {
+      "name": "LANGUAGE_LANE_SET",
+      "category": "pane",
+      "stratum": "event",
+      "payload": [
+        "lane"
+      ],
+      "optional_payload": [],
+      "note": "The language lens moved its focus to another lane. Written when it differs.",
+      "emit_site": "web/app/state/language.ts setLanguageLane",
+      "field_types": {
+        "lane": "int (the lane's index)"
+      }
+    },
+    {
+      "name": "FIND_OPENED",
+      "category": "window",
+      "stratum": "event",
+      "payload": [
+        "scope"
+      ],
+      "optional_payload": [],
+      "note": "The find bar opened (⌘F).",
+      "emit_site": "web/app/state/find.ts toggleFind",
+      "field_types": {
+        "scope": "enum transcript | stream"
+      }
+    },
+    {
+      "name": "FIND_CLOSED",
+      "category": "window",
+      "stratum": "event",
+      "payload": [
+        "cause"
+      ],
+      "optional_payload": [],
+      "note": "The find bar closed: ⌘F again, or Escape.",
+      "emit_site": "web/app/state/find.ts toggleFind, closeFind",
+      "field_types": {
+        "cause": "enum toggle | escape"
+      }
+    },
+    {
+      "name": "FIND_QUERY_CHANGED",
+      "category": "window",
+      "stratum": "event",
+      "payload": [
+        "length"
+      ],
+      "optional_payload": [],
+      "note": "The find query changed.",
+      "emit_site": "web/app/state/find.ts setFindQuery",
+      "field_types": {
+        "length": "int (characters in the query; never the query, E1)"
+      }
+    },
+    {
+      "name": "FIND_SCOPE_SET",
+      "category": "window",
+      "stratum": "event",
+      "payload": [
+        "scope"
+      ],
+      "optional_payload": [],
+      "note": "Find's scope moved to the lens last clicked. Written when it differs.",
+      "emit_site": "web/app/state/find.ts setFindScope",
+      "field_types": {
+        "scope": "enum transcript | stream"
+      }
+    },
+    {
+      "name": "TOP_BAR_CARD_SET",
+      "category": "pane",
+      "stratum": "event",
+      "payload": [
+        "card",
+        "open",
+        "cause"
+      ],
+      "optional_payload": [],
+      "note": "A top bar card opened or closed in its pane's state: its chip clicked, Escape, a click outside the cards, a model picked in a pane's picker (⌘D focuses a new pane's picker and leaves the card's pane holding it open), or the other card opened. A card hidden because another pane took the focus is still open and writes nothing.",
+      "emit_site": "web/app/App.tsx setCards",
+      "field_types": {
+        "card": "enum model | workspace",
+        "open": "bool",
+        "cause": "enum click | escape | outside | picked | other_card"
+      }
+    },
+    {
+      "name": "TOOL_CARD_TOGGLED",
+      "category": "transcript",
+      "stratum": "event",
+      "payload": [
+        "pane_id",
+        "session_id",
+        "seq",
+        "open"
+      ],
+      "optional_payload": [],
+      "note": "A click opened or closed one tool card. A card opened or closed by the fold toggle writes nothing; TOOL_OUTPUT_MODE_SET names that.",
+      "emit_site": "web/reveal/transcript/ToolCard.tsx onDetailsToggle",
+      "field_types": {
+        "pane_id": "int",
+        "session_id": "string or null (kernel session id)",
+        "seq": "int or null (the ToolCall row's seq)",
+        "open": "bool"
+      }
+    },
+    {
+      "name": "TOOL_OUTPUT_MODE_SET",
+      "category": "transcript",
+      "stratum": "event",
+      "payload": [
+        "mode",
+        "cause"
+      ],
+      "optional_payload": [],
+      "note": "Every tool card's output was folded or unfolded: ⌘E, /fold or /unfold. Written each time it is applied: a second /unfold reopens the cards a click closed.",
+      "emit_site": "web/vm/tool_output_mode.ts setToolOutputMode",
+      "field_types": {
+        "mode": "enum expanded | collapsed",
+        "cause": "enum key | slash"
+      }
+    }
+  ],
+  "ontology": {
+    "entities": [
+      {
+        "name": "AppBoot",
+        "home": "app",
+        "definition": "One launch of the packaged or source app: Electron main starts, spawns the server, opens windows; ends at quit.",
+        "source": "electron/main.js (app.whenReady, setupLogFile, the server spawn)"
+      },
+      {
+        "name": "Window",
+        "home": "app",
+        "definition": "One BrowserWindow and its renderer; holds panes, the open view and pages.",
+        "source": "electron/main.js createWindow; web/app/App.tsx"
+      },
+      {
+        "name": "Server",
+        "home": "app",
+        "definition": "The backend process server.py for one AppBoot: its port, its session registry.",
+        "source": "electron/main.js spawn; server.py"
+      },
+      {
+        "name": "Pane",
+        "home": "app",
+        "definition": "One cell of a window's grid; unbound (shows the picker) or bound to one session or record.",
+        "source": "web/app/App.tsx AppPane, newPaneFields"
+      },
+      {
+        "name": "Picker",
+        "home": "app",
+        "definition": "A pane's workspace bar while unbound: the folder column and the model, guidance, length and tone lines; its armed folder.",
+        "source": "web/app/PanePicker.tsx; App.tsx armWorkspace, wsKey"
+      },
+      {
+        "name": "OpenView",
+        "home": "app",
+        "definition": "Which view a window shows: panes, meta, or a page over one of them.",
+        "source": "web/app/derive/open_view.ts"
+      },
+      {
+        "name": "Page",
+        "home": "app",
+        "definition": "A full-window surface: records, assays, studio, settings.",
+        "source": "web/vm/kinds.ts Surface; App.tsx toggleSurface"
+      },
+      {
+        "name": "Lens",
+        "home": "app",
+        "definition": "One way meta shows a session: stream, graph, structure, language, scene, i/o.",
+        "source": "web/app/MetaView.tsx; state/meta.ts GraphMode"
+      },
+      {
+        "name": "Dialog",
+        "home": "app",
+        "definition": "A modal the window opens (settings, end session, export, confirmations).",
+        "source": "web/app/Dialogs.tsx"
+      },
+      {
+        "name": "KeyAction",
+        "home": "app",
+        "definition": "What a key press did at window level, chosen by the key map.",
+        "source": "web/app/keymap.ts KeyAction"
+      },
+      {
+        "name": "Stream",
+        "home": "app",
+        "definition": "A pane's live connection to one session's record events (SSE), with its reconnects.",
+        "source": "web/vm/session_controller.ts attach, STREAM_* tags"
+      },
+      {
+        "name": "Transcript",
+        "home": "app",
+        "definition": "The rows a pane draws for a session, one per record event it shows.",
+        "source": "web/reveal/transcript/; session_controller.ts transcript"
+      },
+      {
+        "name": "Workspace",
+        "home": "kernel",
+        "definition": "The folder a session works in; the app keeps a recents list of them.",
+        "source": "kernel SessionManifest.workspace; server /api/workspaces",
+        "join_key": "workspace path"
+      },
+      {
+        "name": "Driver",
+        "home": "kernel",
+        "definition": "The model or CLI agent a session runs on, with its version.",
+        "source": "kernel SessionManifest.driver; server /api/models",
+        "join_key": "driver name"
+      },
+      {
+        "name": "Session",
+        "home": "kernel",
+        "definition": "A kernel session: a manifest and a run record under ~/.substrate/sessions/<id>/.",
+        "source": "substrate.topologies.session_registry; session vocabulary § B",
+        "join_key": "session_id"
+      },
+      {
+        "name": "Turn",
+        "home": "kernel",
+        "definition": "One user message and its reply within a session.",
+        "source": "session vocabulary § C (UserMessage.turn_index)",
+        "join_key": "session_id + turn_index"
+      },
+      {
+        "name": "RecordEntry",
+        "home": "kernel",
+        "definition": "One envelope of a session's run record (kernel Envelope).",
+        "source": "kernel vocabulary 0.4 Envelope",
+        "join_key": "session_id + seq"
+      },
+      {
+        "name": "Run",
+        "home": "kernel",
+        "definition": "A topology run a session started or the user started.",
+        "source": "session vocabulary § Z",
+        "join_key": "run_id"
+      },
+      {
+        "name": "Task",
+        "home": "kernel",
+        "definition": "A background command a session started.",
+        "source": "server /api/session/<id>/tasks; BackgroundTaskEnded",
+        "join_key": "session_id + task id"
+      },
+      {
+        "name": "Child",
+        "home": "kernel",
+        "definition": "A delegate session started by another session.",
+        "source": "server /api/session/<id>/children; DELEGATE_CHILD_STARTED",
+        "join_key": "child session_id"
+      },
+      {
+        "name": "Record",
+        "home": "kernel",
+        "definition": "A run record opened read-only from the records page or a deep link.",
+        "source": "server /api/records; attachRecordRoot",
+        "join_key": "record path"
+      },
+      {
+        "name": "Spec",
+        "home": "app",
+        "definition": "A topology spec authored in Studio.",
+        "source": "web/app/StudioPage.tsx; validateSpec, buildSpec"
+      },
+      {
+        "name": "Assay",
+        "home": "app",
+        "definition": "A test run's report shown on the assays page.",
+        "source": "server /api/assays; ASSAY_* tags"
+      },
+      {
+        "name": "CliLogin",
+        "home": "app",
+        "definition": "A CLI driver's sign-in state and the card that asks for it.",
+        "source": "web/reveal/transcript/AuthPromptCard.tsx; server /api/cli/<name>/status"
+      },
+      {
+        "name": "TraceFile",
+        "home": "app",
+        "definition": "The on-disk trace a process writes for one AppBoot (plan item 2).",
+        "source": "PLAN-2026-11-05-sdd-signals-r3.md item 2"
+      }
+    ]
+  },
+  "record_context": {
+    "_comment": "Layer 2 universal fields the emitter stamps on every trace record, outside the payload (PAYLOAD_FIELD_PROPOSED P-0.7-CONTEXT). They join every tag to its launch, process, order, window and pane.",
+    "boot_id": "string: the AppBoot id main mints and passes to the window and the server",
+    "process": "enum main | window | server",
+    "proc_seq": "int: this process's record number within the boot, from 0; the order key",
+    "wall": "string: ISO-8601 time written; recorded, never used to order",
+    "window_id": "int or null: the BrowserWindow id (main and window records)",
+    "pane_id": "int or null: the pane the record is about (a controller's own pane; the pane a window component draws or changes); null for window- or app-level records"
+  },
+  "validator_extras": "strict",
+  "sessions": {
+    "_comment": "Layer 3. Nesting: app_boot contains server_run and window; window contains pane; pane contains picker_run and pane_session.",
+    "strata": [
+      {
+        "name": "app_boot",
+        "open": "APP_BOOTED",
+        "close": "APP_QUIT_COMPLETED",
+        "persistent": [
+          "boot_id",
+          "app_commit",
+          "kernel_commit",
+          "vocab_version",
+          "packaged",
+          "home_kind"
+        ],
+        "frames": "every record with this boot_id",
+        "parent": null
+      },
+      {
+        "name": "server_run",
+        "open": "SERVER_STARTED",
+        "close": "SERVER_STOPPED",
+        "persistent": [
+          "port"
+        ],
+        "frames": "process=server records",
+        "parent": "app_boot"
+      },
+      {
+        "name": "window",
+        "open": "WINDOW_BOOTED",
+        "close": "WINDOW_CLOSED (main's record; the window's own trace ends without a close tag when the window is destroyed)",
+        "persistent": [
+          "window_id",
+          "vocab_version"
+        ],
+        "frames": "records with this window_id",
+        "parent": "app_boot"
+      },
+      {
+        "name": "pane",
+        "open": "PANE_OPENED",
+        "close": "PANE_CLOSED",
+        "persistent": [
+          "pane_id"
+        ],
+        "frames": "records with this pane_id",
+        "parent": "window"
+      },
+      {
+        "name": "picker_run",
+        "open": "PANE_OPENED (unbound) or PICKER_FOLDER_DISARMED",
+        "close": "PICKER_COMMITTED or PANE_CLOSED",
+        "re_entry": "PICKER_FOLDER_DISARMED returns to the folder column",
+        "persistent": [],
+        "frames": "picker tags of the pane",
+        "parent": "pane"
+      },
+      {
+        "name": "pane_session",
+        "open": "SESSION_OPEN_ACKED or SESSION_ATTACH_STARTED",
+        "close": "SESSION_ENDED_LOCAL or PANE_CLOSED",
+        "persistent": [
+          "session_id"
+        ],
+        "frames": "session, turn, stream and transcript tags of the pane; joins the kernel Session by session_id",
+        "parent": "pane"
+      }
+    ]
+  },
+  "temporal_invariants": {
+    "invariants": [
+      {
+        "id": "T1",
+        "kind": "window",
+        "from": "SERVER_SPAWNED",
+        "to": "SERVER_BOUND",
+        "within_ms": 5000,
+        "source": "electron/main.js READBACK_TIMEOUT_MS",
+        "ends_at": "SERVER_EXITED: a server that exits binds and starts nothing, and SERVER_EXITED (expected false) is its incident"
+      },
+      {
+        "id": "T2",
+        "kind": "window",
+        "from": "SERVER_BOUND",
+        "to": "SERVER_STARTED",
+        "within_ms": 15000,
+        "source": "electron/main.js HEALTH_TIMEOUT_MS",
+        "ends_at": "SERVER_EXITED: a server that exits binds and starts nothing, and SERVER_EXITED (expected false) is its incident"
+      },
+      {
+        "id": "T3",
+        "kind": "window",
+        "from": "APP_QUIT_REQUESTED",
+        "to": "APP_QUIT_COMPLETED",
+        "within_ms": 45000,
+        "source": "electron/main.js KILL_GRACE_MS"
+      },
+      {
+        "id": "T4",
+        "kind": "window",
+        "from": "STREAM_ENVELOPE_APPENDED",
+        "to": "TRANSCRIPT_ROW_DRAWN or TRANSCRIPT_ROW_SKIPPED",
+        "match": [
+          "pane_id",
+          "seq"
+        ],
+        "within_ms": 1000,
+        "source": "Nielsen, Usability Engineering (1993) ch. 5: 1.0 s is the limit for the user's flow of thought; the screen must show what the record holds within it"
+      },
+      {
+        "id": "T5",
+        "kind": "eventually_must",
+        "from": "SESSION_OPEN_REQUESTED",
+        "to": "SESSION_OPEN_ACKED or SESSION_OPEN_REFUSED",
+        "match": [
+          "pane_id"
+        ],
+        "within_ms": 10000,
+        "source": "Nielsen 1993: 10 s is the limit for keeping attention on the dialogue"
+      },
+      {
+        "id": "T6",
+        "kind": "eventually_must",
+        "from": "TURN_SUBMITTED",
+        "to": "TURN_ACK or TURN_REFUSED or TURN_REFUSED_VIEW_ONLY",
+        "match": [
+          "pane_id"
+        ],
+        "within_ms": 10000,
+        "source": "Nielsen 1993, as T5"
+      }
+    ]
+  },
+  "state_transitions": {
+    "rules": [
+      {
+        "id": "S1",
+        "kind": "terminal",
+        "statement": "APP_BOOTED is main's first record of a boot; WINDOW_BOOTED a window's first; SERVER_STARTED the server's first, written when its port is bound and before it serves, unless the server dies before it binds, when its first record is the SERVER_UNCAUGHT it dies of."
+      },
+      {
+        "id": "S2",
+        "kind": "terminal",
+        "statement": "APP_QUIT_COMPLETED is main's last record of a boot. A boot whose main.jsonl does not end with it ended without closing (killed or crashed); the next boot in the same trace folder finds it and writes INVARIANT_BROKEN S2 naming that boot and its last record (one app runs per machine, so the earlier boot has ended)."
+      },
+      {
+        "id": "S3",
+        "kind": "pairing_ordering",
+        "statement": "PICKER_FOLDER_ARMED precedes any PICKER_LINE_ENTERED of the same pane since its last PANE_OPENED or PICKER_FOLDER_DISARMED."
+      },
+      {
+        "id": "S4",
+        "kind": "pairing_ordering",
+        "statement": "PICKER_COMMITTED follows PICKER_LINE_ENTERED with line tone for the same pane, and is followed by PANE_BOUND with how picker."
+      },
+      {
+        "id": "S5",
+        "kind": "pairing_ordering",
+        "statement": "A pane holds one session at a time: its last SESSION_OPEN_ACKED or SESSION_ATTACH_STARTED names that session, replacing any before it, until PANE_CLOSED; every later TRANSCRIPT_ROW_DRAWN and TRANSCRIPT_ROW_SKIPPED of the pane that names a session names that one."
+      },
+      {
+        "id": "S6",
+        "kind": "pairing_ordering",
+        "statement": "SESSION_OPEN_ACKED follows SESSION_OPEN_REQUESTED for the same pane."
+      },
+      {
+        "id": "S7",
+        "kind": "pairing_ordering",
+        "statement": "Across processes: each SESSION_OPEN_ACKED (window) pairs with exactly one SESSION_CREATED (server) with the same session_id in the same boot, written before it. The server also creates sessions for other clients (its mcp and agent routes, a plain POST /api/session), which no window acks."
+      },
+      {
+        "id": "S8",
+        "kind": "pairing_ordering",
+        "statement": "TURN_SUBMITTED for a pane names the session of that pane's last SESSION_OPEN_ACKED or SESSION_ATTACH_STARTED; across processes, a session's TURN_ACK records (window) never outnumber its TURN_ACCEPTED records (server) in the same boot, each written before the window's ack."
+      },
+      {
+        "id": "S9",
+        "kind": "pairing_ordering",
+        "statement": "Each window *_REFUSED tag caused by a server answer pairs with one API_REFUSED (server) in the same boot."
+      }
+    ]
+  },
+  "operators": {
+    "operators": [
+      {
+        "name": "AppMain",
+        "home": "electron/main.js, electron/menu.js, electron/preload.js",
+        "responsibilities": "Launch, the server process, windows, native dialogs, menus, deep links; writes main's trace.",
+        "emits": [
+          "APP_BOOTED",
+          "APP_QUIT_COMPLETED",
+          "APP_QUIT_REQUESTED",
+          "CHILD_PROCESS_GONE",
+          "DEEP_LINK_RECEIVED",
+          "MAIN_FAULTED",
+          "MENU_COMMAND_SENT",
+          "NATIVE_DIALOG_CLOSED",
+          "NAVIGATION_BLOCKED",
+          "RENDERER_GONE",
+          "SERVER_BOUND",
+          "SERVER_EXITED",
+          "SERVER_SPAWNED",
+          "WINDOW_CLOSED",
+          "WINDOW_OPENED",
+          "WINDOW_RESPONSIVE",
+          "WINDOW_UNRESPONSIVE"
+        ],
+        "runtime_notes": []
+      },
+      {
+        "name": "WindowShell",
+        "home": "web/app/App.tsx, web/app/keymap.ts, web/app/Dialogs.tsx, web/reveal.ts",
+        "responsibilities": "The window's open view, panes, focus, keys, dialogs and the picker.",
+        "emits": [
+          "DIALOG_CLOSED",
+          "DIALOG_OPENED",
+          "FIND_CLOSED",
+          "FIND_OPENED",
+          "FIND_QUERY_CHANGED",
+          "FIND_SCOPE_SET",
+          "KEY_ROUTED",
+          "LANGUAGE_LANE_SET",
+          "LANGUAGE_STREAM_SET",
+          "LANGUAGE_VIEW_SET",
+          "LENS_CHANGED",
+          "PAGE_DRAWN",
+          "PANE_BOUND",
+          "PANE_CLOSED",
+          "PANE_DRAWN",
+          "PANE_FOCUSED",
+          "PANE_OPENED",
+          "PICKER_COMMITTED",
+          "PICKER_FOLDER_ARMED",
+          "PICKER_FOLDER_DISARMED",
+          "PICKER_LINE_ENTERED",
+          "SEQ_SELECTED",
+          "STREAM_DIRECTION_SET",
+          "STREAM_LEVEL_SET",
+          "TOOL_OUTPUT_MODE_SET",
+          "TOP_BAR_CARD_SET",
+          "VIEW_CHANGED",
+          "WINDOW_BOOTED",
+          "WINDOW_FAULTED"
+        ],
+        "runtime_notes": []
+      },
+      {
+        "name": "PaneController",
+        "home": "web/vm/session_controller.ts (one per pane, spawned by web/vm/pane_registry.ts)",
+        "responsibilities": "A pane's session: open, attach, turns, slash commands, stream, controls, CLI status.",
+        "emits": [
+          "ASSAYS_LOADED",
+          "ASSAY_REPORT_LOADED",
+          "BUNDLE_PICKED",
+          "BUNDLE_ROSTER_LOADED",
+          "CHILD_RECORD_ATTACH_REQUESTED",
+          "CLI_LOGIN_PROMPTED",
+          "CLI_STATUS_CHECKED",
+          "CONTROLS_PICKED",
+          "DELEGATE_CHILD_STARTED",
+          "DRIVER_PICKED",
+          "DRIVER_ROSTER_LOADED",
+          "DRIVER_VERSION_PICKED",
+          "RECORD_OPENED",
+          "RUN_FOCUS_REQUESTED",
+          "RUN_STARTED",
+          "RUN_STOP_REQUESTED",
+          "SESSIONS_LOADED",
+          "SESSION_ATTACH_STARTED",
+          "SESSION_ENDED_LOCAL",
+          "SESSION_END_REQUESTED",
+          "SESSION_OPEN_ACKED",
+          "SESSION_OPEN_REFUSED",
+          "SESSION_OPEN_REQUESTED",
+          "SESSION_RENAMED",
+          "SLASH_ROUTED",
+          "SLASH_UNKNOWN",
+          "SPEC_BUILD_REJECTED",
+          "SPEC_BUILD_REQUESTED",
+          "SPEC_BUILT",
+          "SPEC_VALIDATED",
+          "SPEC_VALIDATE_REQUESTED",
+          "STREAM_ATTACHED",
+          "STREAM_CLOSED",
+          "STREAM_ENVELOPE_APPENDED",
+          "STREAM_RECONNECTING",
+          "TASK_STOP_REQUESTED",
+          "TOPOLOGY_LOADED",
+          "TRANSCRIPT_ROW_SKIPPED",
+          "TURN_ACK",
+          "TURN_INTERRUPTED",
+          "TURN_PARKED",
+          "TURN_REFUSED",
+          "TURN_REFUSED_VIEW_ONLY",
+          "TURN_SUBMITTED",
+          "WORKSPACES_LOADED",
+          "WORKSPACE_ADDED"
+        ],
+        "runtime_notes": []
+      },
+      {
+        "name": "TranscriptRenderer",
+        "home": "web/reveal/transcript/",
+        "responsibilities": "Draws a pane's record entries as rows.",
+        "emits": [
+          "CLI_LOGIN_FINISHED",
+          "TOOL_CARD_TOGGLED",
+          "TRANSCRIPT_ROW_DRAWN",
+          "TRANSCRIPT_SCROLLED"
+        ],
+        "runtime_notes": []
+      },
+      {
+        "name": "Server",
+        "home": "server.py Handler (line 2466), _daemon_driver_resolver (line 270)",
+        "responsibilities": "HTTP API over the kernel: creates sessions, takes turns, serves records, files and rosters; resolves the driver a session runs on.",
+        "emits": [
+          "API_REFUSED",
+          "RUN_FAULTED",
+          "SERVER_FAULTED",
+          "SERVER_STARTED",
+          "SERVER_STOPPED",
+          "SERVER_UNCAUGHT",
+          "SESSION_CREATED",
+          "TURN_ACCEPTED"
+        ],
+        "runtime_notes": [
+          "route: driver resolved to a CLI agent, an Ollama model or deterministic; SESSION_CREATED.driver names it"
+        ]
+      },
+      {
+        "name": "Sink",
+        "home": "the trace writers of main, the window and the server (plan item 2)",
+        "responsibilities": "Writes each process's records; counts what it could not write.",
+        "emits": [
+          "INVARIANT_BROKEN",
+          "SIGNAL_REJECTED",
+          "TRACE_LOST",
+          "TRACE_OPENED"
+        ],
+        "runtime_notes": []
+      }
+    ],
+    "dual_classification": "Pane is an entity (Layer 0) and, through its PaneController, an operator; Server likewise."
+  },
+  "evidence_constraints": {
+    "constraints": [
+      {
+        "id": "E1",
+        "kind": "content",
+        "target": "all tags",
+        "rule": "No message text, model output, file contents, prompt text, environment values or credentials in any payload; such content lives in the kernel record, reached by session_id and seq.",
+        "enforceability": "mechanical (the emitter refuses fields named text, content, prompt, output, token, password, key_value; the linter checks payload field names)"
+      },
+      {
+        "id": "E3",
+        "kind": "diagnostic_required",
+        "target": "incident tags",
+        "rule": "SERVER_EXITED carries code and signal; NAVIGATION_BLOCKED target_kind; API_REFUSED area, status, cause; SERVER_FAULTED error_type and where; TRACE_LOST count; SIGNAL_REJECTED tag, problem, call_site; INVARIANT_BROKEN rule and context; FILE_SKIPPED-style refusals their reason.",
+        "enforceability": "mechanical (required fields)"
+      },
+      {
+        "id": "E4",
+        "kind": "outcome_required",
+        "target": "summary tags",
+        "rule": "APP_QUIT_COMPLETED, STORE_SCANNED, SERVER_STOPPED, PICKER_COMMITTED carry their outcome counts or binding.",
+        "enforceability": "mechanical"
+      },
+      {
+        "id": "E7",
+        "kind": "cross_reference",
+        "target": "session_id, seq",
+        "rule": "A session_id names a session under the boot's store; a seq names an entry of that session's record.",
+        "enforceability": "mechanical (the reader joins and reports what does not resolve)"
+      },
+      {
+        "id": "E8",
+        "kind": "cross_field",
+        "target": "TRANSCRIPT_SCROLLED",
+        "rule": "following and not pinned implies at_bottom: a transcript that says it follows the bottom is at the bottom.",
+        "enforceability": "mechanical (harness/shakeout/transcript_follow.ts reads every record; the runtime checker of plan item 5)"
+      }
+    ]
+  },
+  "report_binding": {
+    "observed": "every behaviour tag, merged across main, window and server by boot_id, proc_seq and the causal keys",
+    "rendered": [
+      "PANE_DRAWN",
+      "PAGE_DRAWN",
+      "TRANSCRIPT_ROW_DRAWN",
+      "TRANSCRIPT_ROW_SKIPPED",
+      "TRANSCRIPT_SCROLLED",
+      "VIEW_CHANGED",
+      "LENS_CHANGED",
+      "DIALOG_OPENED",
+      "DIALOG_CLOSED"
+    ],
+    "notes": [
+      "SESSION_OPEN_REFUSED",
+      "TURN_REFUSED",
+      "SPEC_BUILD_REJECTED",
+      "TURN_REFUSED_VIEW_ONLY",
+      "SERVER_EXITED",
+      "NAVIGATION_BLOCKED",
+      "API_REFUSED",
+      "SERVER_FAULTED",
+      "TRACE_LOST",
+      "SIGNAL_REJECTED",
+      "INVARIANT_BROKEN",
+      "WINDOW_FAULTED",
+      "MAIN_FAULTED",
+      "RENDERER_GONE",
+      "WINDOW_UNRESPONSIVE",
+      "CHILD_PROCESS_GONE",
+      "RUN_FAULTED",
+      "SERVER_UNCAUGHT"
+    ],
+    "grammar_drift": "SIGNAL_REJECTED, and the open proposals in ../proposals.json"
+  },
+  "grammar_growth": {
+    "taxonomy_version": "0.1",
+    "project_overrides": [
+      "validator extras strict",
+      "record_context stamped by the emitter on every trace record (P-0.7-CONTEXT)",
+      "kernel entities joined by key, never redeclared"
+    ]
+  },
+  "version_meta": {
+    "version_id": "0.24",
+    "prior_version": "0.23",
+    "migration_proposals": "../proposals.json (P-0.24-*)"
+  }
+}

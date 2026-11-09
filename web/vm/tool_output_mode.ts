@@ -10,6 +10,9 @@
 // reveal_component.ts is compiled as its own bundle, apart from the rest, and each bundle gets its
 // own copy of this module, so the state lives on one global object the copies share.
 
+import { emit } from "./instrumentation/sdd";
+import { Signal, ToolOutputModeSetCause, ToolOutputModeSetMode } from "./signals.gen";
+
 export type ToolOutputMode = "auto" | "expanded" | "collapsed";
 
 export interface ToolOutputState {
@@ -38,16 +41,19 @@ export function getToolOutputMode(): ToolOutputState {
   return store().state;
 }
 
-export function setToolOutputMode(next: ToolOutputMode): void {
+/** Applies `next` to every card; each application is TOOL_OUTPUT_MODE_SET (v0.24), since even the
+ *  mode already set reopens or recloses the cards a click changed. */
+export function setToolOutputMode(next: Exclude<ToolOutputMode, "auto">, cause: ToolOutputModeSetCause): void {
   const shared = store();
   shared.state = { mode: next, generation: shared.state.generation + 1 };
+  emit(Signal.TOOL_OUTPUT_MODE_SET, { mode: next === "expanded" ? ToolOutputModeSetMode.EXPANDED : ToolOutputModeSetMode.COLLAPSED, cause });
   shared.listeners.forEach((fn) => fn());
 }
 
 /** The flip the toggle makes: expanded goes to collapsed; anything else goes to expanded. */
-export function toggleToolOutputMode(): ToolOutputMode {
-  const next: ToolOutputMode = store().state.mode === "expanded" ? "collapsed" : "expanded";
-  setToolOutputMode(next);
+export function toggleToolOutputMode(cause: ToolOutputModeSetCause): ToolOutputMode {
+  const next = store().state.mode === "expanded" ? "collapsed" : "expanded";
+  setToolOutputMode(next, cause);
   return next;
 }
 

@@ -9,7 +9,7 @@
 import { createStore } from "../store";
 import { GraphDirection, GraphMode, RevealLevel } from "../../vm/kinds";
 import { emit } from "../../vm/instrumentation/sdd";
-import { LensChangedLens, Signal } from "../../vm/signals.gen";
+import { LensChangedLens, SeqSelectedHow, Signal, StreamDirectionSetDirection, StreamLevelSetLevel } from "../../vm/signals.gen";
 
 export type MetaMode = (typeof GraphMode)[keyof typeof GraphMode];
 export type MetaDir = (typeof GraphDirection)[keyof typeof GraphDirection];
@@ -50,22 +50,45 @@ export function setMode(mode: MetaMode, paneId: number, sessionId: string | null
   if (mode !== was) emit(Signal.LENS_CHANGED, { lens: LENS_OF[mode], ...(sessionId ? { session_id: sessionId } : {}) }, { pane_id: paneId });
 }
 
-export function setDir(dir: MetaDir): void {
+/** Each direction and level as the vocabulary names them (v0.24, P-0.24-ACTIONS). */
+const DIRECTION_OF: Record<MetaDir, StreamDirectionSetDirection> = {
+  [GraphDirection.Down]: StreamDirectionSetDirection.DOWN,
+  [GraphDirection.Side]: StreamDirectionSetDirection.SIDE,
+};
+const LEVEL_OF: Record<MetaLevel, StreamLevelSetLevel> = {
+  [RevealLevel.All]: StreamLevelSetLevel.ALL,
+  [RevealLevel.App]: StreamLevelSetLevel.APP,
+};
+
+/** The stream lens's direction for the meta view of `paneId`; a change is STREAM_DIRECTION_SET. */
+export function setDir(dir: MetaDir, paneId: number): void {
+  const was = meta.getSnapshot().dir;
   meta.set({ dir });
+  if (dir !== was) emit(Signal.STREAM_DIRECTION_SET, { direction: DIRECTION_OF[dir] }, { pane_id: paneId });
 }
 
-export function setLevel(level: MetaLevel): void {
+/** The stream lens's level; a change is STREAM_LEVEL_SET. */
+export function setLevel(level: MetaLevel, paneId: number): void {
+  const was = meta.getSnapshot().level;
   meta.set({ level });
+  if (level !== was) emit(Signal.STREAM_LEVEL_SET, { level: LEVEL_OF[level] }, { pane_id: paneId });
+}
+
+/** The lit seq, written as SEQ_SELECTED when it changes (null: cleared). */
+function setSel(sel: number | null, paneId: number, how: SeqSelectedHow): void {
+  const was = meta.getSnapshot().sel;
+  meta.set({ sel });
+  if (sel !== was) emit(Signal.SEQ_SELECTED, { seq: sel, how }, { pane_id: paneId });
 }
 
 /** A click on a stream row or a side-graph segment lights its seq, or clears it when lit. */
-export function pickSeq(seq: number): void {
-  meta.set((s) => ({ sel: s.sel === seq ? null : seq }));
+export function pickSeq(seq: number, paneId: number, how: SeqSelectedHow.STREAM_ROW | SeqSelectedHow.SIDE_GRAPH): void {
+  setSel(meta.getSnapshot().sel === seq ? null : seq, paneId, how);
 }
 
-/** A click on a language row lights its turn's seq, lit or not. */
-export function selectSeq(seq: number | null): void {
-  meta.set({ sel: seq });
+/** A click on a language row lights its turn's seq, lit or not; so do the language keys and `/language`. */
+export function selectSeq(seq: number | null, paneId: number, how: SeqSelectedHow.LANGUAGE_ROW | SeqSelectedHow.LANGUAGE_KEY | SeqSelectedHow.LANGUAGE_OPEN): void {
+  setSel(seq, paneId, how);
 }
 
 /** The split after a drag of `dx` pixels in a window `winW` wide: the gutter follows the pointer. */

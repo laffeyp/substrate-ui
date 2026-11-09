@@ -35,7 +35,7 @@ import { setToolOutputMode, toggleToolOutputMode } from "./tool_output_mode";
 import { SessionStatus, TaskStatus } from "./statuses.gen";
 import { GUIDANCE_LEVEL_BUNDLES, HANDOFF_DEFAULT, HandoffPosition, LENGTH_DEFAULT, LengthPosition, TONE_DEFAULT, TonePosition } from "./controls.gen";
 import type { EnvelopeKindValue } from "./kinds";
-import { PaneDrawnConnection, RecordOpenedHow, RecordOpenedOutcome, SessionRenamedOutcome, Signal, TranscriptRowSkippedReason, TurnInterruptedTier, WorkspaceAddedOutcome, type SignalPayloads } from "./signals.gen";
+import { PaneDrawnConnection, RecordOpenedHow, RecordOpenedOutcome, SessionRenamedOutcome, Signal, TranscriptRowSkippedReason, TurnInterruptedTier, WorkspaceAddedOutcome, type SignalPayloads, ToolOutputModeSetCause } from "./signals.gen";
 
 /** One slash command (UI sprint 162). */
 interface SlashCommand {
@@ -1202,8 +1202,8 @@ export class SessionController {
         },
       },
       // UI sprint 140: fold or unfold every tool card, as ⌘E does. /fold flips; /unfold unfolds.
-      { names: ["fold"], usage: "/fold", about: "fold or unfold all tool output (also ⌘E)", run: () => { toggleToolOutputMode(); } },
-      { names: ["unfold"], usage: "/unfold", about: "unfold all tool output", run: () => { setToolOutputMode("expanded"); } },
+      { names: ["fold"], usage: "/fold", about: "fold or unfold all tool output (also ⌘E)", run: () => { toggleToolOutputMode(ToolOutputModeSetCause.SLASH); } },
+      { names: ["unfold"], usage: "/unfold", about: "unfold all tool output", run: () => { setToolOutputMode("expanded", ToolOutputModeSetCause.SLASH); } },
       { names: ["clear"], usage: "/clear", about: "clear the transcript view", run: () => { this.patch({ transcript: [] }); } },
       {
         names: ["help", "?"], usage: "/help", about: "list these commands",

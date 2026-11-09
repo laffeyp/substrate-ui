@@ -12,6 +12,8 @@ import type { TranscriptRow } from "../../vm";
 import { ProgressStream } from "./ProgressStream";
 import { defaultOpen } from "../../vm/tool_output_mode";
 import { useToolOutputMode } from "./useToolOutputMode";
+import { emit as emitSignal } from "../../vm/instrumentation/sdd";
+import { Signal } from "../../vm/signals.gen";
 
 interface Props {
   call: TranscriptRow;                 // the ToolCall row
@@ -20,6 +22,9 @@ interface Props {
   progressEof: boolean;
   streamingShow: boolean;
   onDescend?: (recordRoot: string) => void;
+  /** The pane and session the card is drawn in, for TOOL_CARD_TOGGLED (v0.24). */
+  paneId?: number | undefined;
+  sessionId?: string | null;
 }
 
 function statusColor(toolRunning: boolean, failed: boolean): string {
@@ -38,7 +43,7 @@ function statusColor(toolRunning: boolean, failed: boolean): string {
 // expand/collapse-all toggle supersedes every earlier click.
 const openByCallId: Map<string, { open: boolean; generation: number }> = new Map();
 
-const ToolCardInner: React.FC<Props> = ({ call, result, progressText, progressEof, streamingShow, onDescend }) => {
+const ToolCardInner: React.FC<Props> = ({ call, result, progressText, progressEof, streamingShow, onDescend, paneId, sessionId }) => {
   const toolRunning = !result;
   const failed = result?.toolOk === false;
   const callId = call.callId ?? "";
@@ -57,11 +62,18 @@ const ToolCardInner: React.FC<Props> = ({ call, result, progressText, progressEo
     seenGeneration.current = toggle.generation;
     setIsOpen(defaultOpen(toggle.mode, toolRunning));
   }, [toggle.generation, toggle.mode, toolRunning]);
+  // The toggle event fires for a click and for React writing `open` from state; only a click makes the
+  // element differ from the state, so only a click is TOOL_CARD_TOGGLED (v0.24, P-0.24-ACTIONS).
+  const shown = React.useRef(isOpen);
+  shown.current = isOpen;
   const onDetailsToggle = React.useCallback((event: React.SyntheticEvent<HTMLDetailsElement>) => {
     const next = event.currentTarget.open;
+    if (next !== shown.current && paneId !== undefined) {
+      emitSignal(Signal.TOOL_CARD_TOGGLED, { pane_id: paneId, session_id: sessionId ?? null, seq: typeof call.seq === "number" ? call.seq : null, open: next }, { pane_id: paneId });
+    }
     setIsOpen(next);
     if (openKey) openByCallId.set(openKey, { open: next, generation: toggle.generation });
-  }, [openKey, toggle.generation]);
+  }, [openKey, toggle.generation, paneId, sessionId, call.seq]);
 
   const toolName = call.toolName ?? "";
   const toolPreview = call.args?.[0] ?? "";

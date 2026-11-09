@@ -922,6 +922,66 @@
       "rationale": "PANE_OPENED means a pane was created; pane 1 is created in reveal.ts, and a session tag must not come before its pane's open tag (Layer 3: pane_session's parent is pane).",
       "ratified": true,
       "ratified_by": "agent-resolved 2026-11-08, sprint 377"
+    },
+    {
+      "id": "P-0.24-FAULTS",
+      "kind": "NEW_TAG_PROPOSED",
+      "layer": 1,
+      "element": "WINDOW_FAULTED, MAIN_FAULTED, RENDERER_GONE, WINDOW_UNRESPONSIVE, WINDOW_RESPONSIVE, CHILD_PROCESS_GONE, RUN_FAULTED, SERVER_UNCAUGHT",
+      "source": "BLACKBOARD 2026-11-08 surfaced review: the window has no error or unhandledrejection hook; main has no render-process-gone, unresponsive or uncaught-exception handler; server.py _run_background prints its exception to stderr only",
+      "rationale": "A crash or hang is the event an agent most needs to read and the one the trace did not hold: each process now writes the fault it already reported to stderr or to nobody. Each hook observes only (Node's uncaughtExceptionMonitor and warning events, DOM error events, Electron's events, Python's excepthooks chained to the defaults), so the app behaves as before.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-08, sprints 382-386"
+    },
+    {
+      "id": "P-0.24-SERVER-EXITED-CAUSE",
+      "kind": "PAYLOAD_FIELD_PROPOSED",
+      "layer": 7,
+      "element": "SERVER_EXITED.error_type (optional)",
+      "source": "launch 20261108-060110-406b03: SERVER_EXITED code 1, its cause (ModuleNotFoundError, no signals_gen.py in the bundle) in substrate.log only",
+      "rationale": "A server that dies before its trace opens leaves main's SERVER_EXITED as the only record; the exception class from its stderr traceback names the cause without its text (E1).",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-08, sprints 382-386"
+    },
+    {
+      "id": "P-0.24-ACTIONS",
+      "kind": "NEW_TAG_PROPOSED",
+      "layer": 1,
+      "element": "STREAM_DIRECTION_SET, STREAM_LEVEL_SET, SEQ_SELECTED, LANGUAGE_STREAM_SET, LANGUAGE_VIEW_SET, LANGUAGE_LANE_SET, FIND_OPENED, FIND_CLOSED, FIND_QUERY_CHANGED, FIND_SCOPE_SET, TOP_BAR_CARD_SET, TOOL_CARD_TOGGLED, TOOL_OUTPUT_MODE_SET",
+      "source": "BLACKBOARD 2026-11-08 surfaced review: web/app/state/meta.ts setDir, setLevel, pickSeq, selectSeq; web/app/state/language.ts; web/app/state/find.ts; App.tsx toggleModelCard, toggleWsCard; ToolCard.tsx; tool_output_mode.ts",
+      "rationale": "Plan r3 item 1's audit covers every user action; these changed what the window shows and wrote nothing. The find query is written as its length only (E1).",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-08, sprints 382-386"
+    },
+    {
+      "id": "P-0.24-S2-NEXT-BOOT",
+      "kind": "INVARIANT_PROPOSED",
+      "layer": 5,
+      "element": "S2 is checked by the next boot",
+      "source": "S2 was checked nowhere (BLACKBOARD 2026-11-08 surfaced review); main's own writer refuses records after APP_QUIT_COMPLETED, so the rule breaks only when a boot ends without its closing record, which that boot cannot report",
+      "rationale": "The single-instance lock means a new boot's start proves the earlier boot has ended; the new boot reads the earlier boot's main.jsonl and reports a missing closing record as INVARIANT_BROKEN S2. The reader reports it too.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-08, sprints 382-386"
+    },
+    {
+      "id": "P-0.24-S1-SERVER-CRASH",
+      "kind": "INVARIANT_PROPOSED",
+      "layer": 5,
+      "element": "S1's server half admits SERVER_UNCAUGHT as the first record of a server that dies before it binds",
+      "source": "server.py run with <home>/sessions a file (2026-11-08): install_registry raises FileExistsError before the port is bound; the excepthook writes SERVER_UNCAUGHT as server.jsonl's only record",
+      "rationale": "A server that never started has no SERVER_STARTED to come first; the record of its death is its first and only one, and reporting that as a broken S1 would name the wrong fault.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-08, sprints 382-386"
+    },
+    {
+      "id": "P-0.24-T1-T2-END-AT-EXIT",
+      "kind": "SEQUENCE_RULE_PROPOSED",
+      "layer": 4,
+      "element": "T1 and T2 waits end at main's SERVER_EXITED",
+      "source": "fault_signals launch 3 (2026-11-08): the server died at startup (FileExistsError); main wrote SERVER_EXITED expected false at once, and 5 s later the checker wrote INVARIANT_BROKEN T1 for the same fault",
+      "rationale": "A server that has exited can bind and start nothing; its SERVER_EXITED already names the fault, so the timing rules about its start end there, as a pane's waits end at PANE_CLOSED.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-08, sprints 382-386"
     }
   ]
 }

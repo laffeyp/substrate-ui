@@ -187,3 +187,86 @@ def test_the_listing_joins_a_seq_to_the_kernel_record(
     assert "↳ kernel seq=1 ModelReply producer=model" in out
     assert "↳ kernel seq=7 not in the record of s1" in out
     assert "SERVER_STARTED" not in out  # --pane 1 keeps pane 1's records only
+
+
+def _records_of(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        read_trace,
+        "read_record",
+        lambda root, resolve_blobs=False: iter(
+            [{"seq": 1, "kind": "ModelReply", "producer": "model", "payload": {}}]
+        ),
+    )
+
+
+def test_a_line_cut_short_is_skipped_and_counted(
+    home: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A launch killed mid-write leaves its last line cut short; the reader reads the rest."""
+    _records_of(monkeypatch)
+    main = home / "electron" / "logs" / "traces" / "b1" / "main.jsonl"
+    with main.open("a", encoding="utf-8") as f:
+        f.write('{"boot_id":"b1","process":"main","proc_seq":3,"na')
+    assert read_trace.main(["--home", str(home)]) == 0
+    out = capsys.readouterr().out
+    assert "Unreadable lines (skipped): main.jsonl line 4" in out
+    assert "WINDOW_OPENED" in out
+
+
+def test_each_join_failure_says_which(
+    home: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _records_of(monkeypatch)
+    assert read_trace.main(["--home", str(home), "--pane", "1"]) == 0
+    out = capsys.readouterr().out
+    assert "↳ kernel seq=7 not in the record of s1 (the record at " in out
+    assert "ends at seq 1)" in out
+    (home / "sessions" / "s1" / "manifest.json").unlink()
+    assert read_trace.main(["--home", str(home), "--pane", "1"]) == 0
+    out = capsys.readouterr().out
+    assert "↳ kernel seq=1 no manifest for session s1 at " in out
+
+    def unreadable(root: str, resolve_blobs: bool = False) -> None:
+        raise PermissionError(root)
+
+    (home / "sessions" / "s1" / "manifest.json").write_text(
+        json.dumps({"session_id": "s1", "record_root": "/r"}), encoding="utf-8"
+    )
+    monkeypatch.setattr(read_trace, "read_record", unreadable)
+    assert read_trace.main(["--home", str(home), "--pane", "1"]) == 0
+    out = capsys.readouterr().out
+    assert "↳ kernel seq=1 the record of s1 at /r could not be read (PermissionError)" in out
+
+
+def test_the_header_says_whether_the_launch_closed(
+    home: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """S2: APP_QUIT_COMPLETED is main's last record; a later launch means an open one has ended."""
+    _records_of(monkeypatch)
+    assert read_trace.main(["--home", str(home)]) == 0
+    out = capsys.readouterr().out
+    assert "Closed: no; main's last record is WINDOW_OPENED; no later launch" in out
+    assert "Rule breaks: none" in out
+    _write(
+        home / "electron" / "logs" / "traces" / "b2",
+        "main.jsonl",
+        [
+            _rec("main", 0, "APP_BOOTED", "2026-11-08T11:00:00.000Z", {}),
+            _rec(
+                "main",
+                1,
+                "INVARIANT_BROKEN",
+                "2026-11-08T11:00:00.001Z",
+                {"rule": "S2", "context": {}},
+            ),
+            _rec("main", 2, "APP_QUIT_COMPLETED", "2026-11-08T11:00:01.000Z", {}),
+        ],
+    )
+    assert read_trace.main(["--home", str(home), "--boot", "b1"]) == 0
+    assert (
+        "a later launch (b2) is in the folder, so this one ended without closing (S2 broken)"
+        in capsys.readouterr().out
+    )
+    assert read_trace.main(["--home", str(home)]) == 0
+    out = capsys.readouterr().out
+    assert "Closed: yes" in out and "Rule breaks: S2 1" in out

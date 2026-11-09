@@ -16,6 +16,7 @@ import { eventTimes, type EventTime } from "../reveal/timeline";
 import { find } from "./state/find";
 import { stream } from "./state/stream";
 import { meta, pickSeq } from "./state/meta";
+import { SeqSelectedHow } from "../vm/signals.gen";
 import { GraphDirection, RevealLevel } from "../vm/kinds";
 import "./hover.css";
 
@@ -62,7 +63,7 @@ function Inspector({ row, lens, down, times }: { row: StreamRow; lens: LensRow; 
   );
 }
 
-export function StreamLens(): React.ReactElement {
+export function StreamLens({ paneId }: { paneId: number }): React.ReactElement {
   const st = useSyncExternalStore(stream.subscribe, stream.getSnapshot);
   const fd = useSyncExternalStore(find.subscribe, find.getSnapshot);
   const mt = useSyncExternalStore(meta.subscribe, meta.getSnapshot);
@@ -84,7 +85,7 @@ export function StreamLens(): React.ReactElement {
       <div style={{ fontSize: 12, lineHeight: 2.05, paddingBottom: 8 }}>
         {shown.map((r) => (
           <React.Fragment key={r.seq}>
-            <div data-stream-row={String(r.seq)} className="hover-stream-row" onClick={() => pickSeq(r.seq)} title="click to inspect · click again to close"
+            <div data-stream-row={String(r.seq)} className="hover-stream-row" onClick={() => pickSeq(r.seq, paneId, SeqSelectedHow.STREAM_ROW)} title="click to inspect · click again to close"
               style={{ padding: "1px 16px", display: "flex", gap: 10, alignItems: "stretch", cursor: "pointer", background: r.bg, opacity: r.opacity }}>
               {down && <Cells row={r} conn={true} />}
               <span style={{ color: "#4a4e55", width: 34, flex: "none", textAlign: "right" }}>{r.seq}</span>

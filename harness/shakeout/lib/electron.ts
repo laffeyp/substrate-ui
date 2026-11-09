@@ -14,7 +14,8 @@ const REPO_ROOT = join(__dirname, "..", "..", "..");
 export interface Launch {
   options: { args: string[]; env: Record<string, string>; executablePath?: string; bypassCSP: boolean };
   state: string;
-  cleanup: () => void;
+  /** keep: leave the launch's folders on disk (a failed gate keeps its trace for read_trace.py). */
+  cleanup: (opts?: { keep?: boolean }) => void;
 }
 
 /** Each launch gets its own user-data dir (Electron's single-instance lock keys on it) and its own
@@ -45,11 +46,13 @@ export function launchArgs(opts: { roster?: "offline" | "live"; csp?: "bypass" |
       ? { executablePath: join(app, "Contents", "MacOS", "Substrate"), args: ["--user-data-dir=" + dir], env, bypassCSP }
       : { args: [REPO_ROOT, "--user-data-dir=" + dir], env, bypassCSP },
     state,
-    cleanup: () => {
+    cleanup: (how: { keep?: boolean } = {}) => {
       const broken = opts.plantsBreaks ? [] : brokenRules(state);
       // SHAKEOUT_KEEP_SCRATCH=1 (lib/scratch.ts) keeps the launch's trace and session store, for
-      // scripts/read_trace.py --home <state>.
-      for (const d of process.env.SHAKEOUT_KEEP_SCRATCH === "1" ? [] : [dir, state]) {
+      // scripts/read_trace.py --home <state>; so does a gate that failed, or a launch that broke a rule.
+      const keep = how.keep || broken.length > 0 || process.env.SHAKEOUT_KEEP_SCRATCH === "1";
+      if (keep && process.env.SHAKEOUT_KEEP_SCRATCH !== "1") console.error(`[scratch] kept ${state} (read it: uv run --project ../substrate python scripts/read_trace.py --home ${state})`);
+      for (const d of keep ? [] : [dir, state]) {
         try { rmSync(d, { recursive: true, force: true }); } catch { /* best-effort */ }
       }
       if (broken.length) {

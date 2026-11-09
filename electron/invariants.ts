@@ -8,6 +8,8 @@
 //
 // Rules checked here, by their ids in the vocabulary:
 //   S1  main's first record is APP_BOOTED; each window's first is WINDOW_BOOTED.
+//   S2  main's last record is APP_QUIT_COMPLETED: checked by the next boot in electron/main.ts
+//       (checkLastBoot), since a boot that ends without it cannot report it (v0.24).
 //   S3  a pane's PICKER_LINE_ENTERED comes after a PICKER_FOLDER_ARMED, since the pane last opened
 //       or disarmed its folder.
 //   S4  PICKER_COMMITTED comes after the pane's tone line, and the pane's next PANE_BOUND says how
@@ -20,7 +22,8 @@
 //   S8  a pane's TURN_SUBMITTED names the session its last ack or attach named (a turn that
 //       resumes an ended session reopens the stream and writes no new attach).
 //   E8  a TRANSCRIPT_SCROLLED that follows the bottom, unpinned, is at the bottom.
-//   T1  SERVER_SPAWNED, then SERVER_BOUND within its window (main).
+//   T1  SERVER_SPAWNED, then SERVER_BOUND within its window (main); a SERVER_EXITED first ends the
+//       wait, as it ends T2's (v0.24).
 //   T3  APP_QUIT_REQUESTED, then APP_QUIT_COMPLETED within its window (main).
 //   T4  a pane's STREAM_ENVELOPE_APPENDED, then its TRANSCRIPT_ROW_DRAWN or _SKIPPED (same pane, same
 //       seq) within its window.
@@ -40,7 +43,8 @@
 // A wait still open when the boot ends is not reported: its window had not passed.
 // The rules that pair the Python server's records (server.jsonl, which main reads as it grows and
 // hands here before each of its own and each window's records; sprint 376, vocabulary v0.22):
-//   S1  the server's first record is SERVER_STARTED.
+//   S1  the server's first record is SERVER_STARTED, or the SERVER_UNCAUGHT of a server that dies
+//       before it binds (v0.24).
 //   T2  main's SERVER_BOUND, then the server's SERVER_STARTED on that port within its window (the
 //       server prints its port before it writes SERVER_STARTED; one already seen answers at once).
 //   S7  each window SESSION_OPEN_ACKED has exactly one server SESSION_CREATED of that session before
@@ -142,7 +146,9 @@ export function createChecker(now: () => number = () => performance.now()): { se
       (r.name === Signal.PANE_CLOSED && isWindow(r, w) && w.pane_id !== null && paneOf(r) === w.pane_id)
       || (r.name === Signal.WINDOW_BOOTED && isWindow(r, w))
       || (r.name === Signal.WINDOW_CLOSED && r.process === "main" && w.window_id !== null && r.window_id === w.window_id)
-      || (r.name === Signal.APP_QUIT_REQUESTED && r.process === "main" && w.rule !== "T3");
+      || (r.name === Signal.APP_QUIT_REQUESTED && r.process === "main" && w.rule !== "T3")
+      // A server that exits binds and starts nothing; SERVER_EXITED is its incident (v0.24, P-0.24-T1-T2-END-AT-EXIT).
+      || (r.name === Signal.SERVER_EXITED && r.process === "main" && (w.rule === "T1" || w.rule === "T2"));
     waits = waits.filter((w) => !w.answers(r) && !gone(w));
 
     // New waits.
@@ -169,7 +175,9 @@ export function createChecker(now: () => number = () => performance.now()): { se
     if (!started.has(stream)) {
       started.add(stream);
       const first = r.process === "main" ? Signal.APP_BOOTED : r.process === "server" ? Signal.SERVER_STARTED : Signal.WINDOW_BOOTED;
-      if (r.name !== first) broke("S1", { process: r.process, window_id: r.window_id, first: r.name, expected: first });
+      // A server that dies before it binds writes the SERVER_UNCAUGHT it dies of first (v0.24, P-0.24-S1-SERVER-CRASH).
+      const crashed = r.process === "server" && r.name === Signal.SERVER_UNCAUGHT;
+      if (r.name !== first && !crashed) broke("S1", { process: r.process, window_id: r.window_id, first: r.name, expected: first });
     }
 
     // The server's records, counted; each window record checked against them.

@@ -31,6 +31,7 @@ import shutil
 import signal
 import json
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -564,6 +565,50 @@ class _Trace:
 
 
 TRACE = _Trace()
+
+
+def _fault_where(exc: BaseException) -> str:
+    """The deepest server.py function an exception passed through (SERVER_FAULTED.where, RUN_FAULTED,
+    SERVER_UNCAUGHT); unknown when it never passed through this file."""
+    where = "unknown"
+    tb = exc.__traceback__
+    while tb is not None:
+        if tb.tb_frame.f_code.co_filename == __file__:
+            where = tb.tb_frame.f_code.co_name
+        tb = tb.tb_next
+    return where
+
+
+def _install_fault_hooks() -> None:
+    """An exception that escapes a server thread outside the request handlers is written as
+    SERVER_UNCAUGHT (vocabulary v0.24, P-0.24-FAULTS), then handed to the hook that was there before,
+    so Python prints it as it always did. The main thread's own uncaught exception goes through
+    sys.excepthook the same way."""
+    before_thread = threading.excepthook
+    before_sys = sys.excepthook
+
+    def on_thread(args: threading.ExceptHookArgs) -> None:
+        if args.exc_value is not None and not isinstance(args.exc_value, SystemExit):
+            TRACE.emit(
+                Signal.SERVER_UNCAUGHT,
+                {
+                    "thread": args.thread.name if args.thread is not None else "unknown",
+                    "error_type": type(args.exc_value).__name__,
+                    "where": _fault_where(args.exc_value),
+                },
+            )
+        before_thread(args)
+
+    def on_main(kind: type[BaseException], value: BaseException, tb: Any) -> None:
+        if not isinstance(value, (SystemExit, KeyboardInterrupt)):
+            TRACE.emit(
+                Signal.SERVER_UNCAUGHT,
+                {"thread": "MainThread", "error_type": kind.__name__, "where": _fault_where(value)},
+            )
+        before_sys(kind, value, tb)
+
+    threading.excepthook = on_thread
+    sys.excepthook = on_main
 
 
 def _shutdown_all_sessions(app: App, *, per_session_timeout: float = 10.0) -> dict[str, int]:
@@ -2640,18 +2685,12 @@ class Handler(BaseHTTPRequestHandler):
     def _fault(self, exc: BaseException) -> None:
         """An exception reached a handler's boundary: SERVER_FAULTED (v0.11) names its type and the
         deepest server.py function it passed through, then the request gets its 500."""
-        where = "unknown"
-        tb = exc.__traceback__
-        while tb is not None:
-            if tb.tb_frame.f_code.co_filename == __file__:
-                where = tb.tb_frame.f_code.co_name
-            tb = tb.tb_next
         TRACE.emit(
             Signal.SERVER_FAULTED,
             {
                 "area": _api_area(unquote(urlparse(self.path).path)),
                 "error_type": type(exc).__name__,
-                "where": where,
+                "where": _fault_where(exc),
             },
         )
         self._error(500, api.describe_error(exc))
@@ -4054,6 +4093,14 @@ class Handler(BaseHTTPRequestHandler):
                 run_handle["result_status"] = result.status
             except Exception as exc:  # noqa: BLE001 — background worker; kept for the status poll
                 traceback.print_exc()
+                TRACE.emit(
+                    Signal.RUN_FAULTED,
+                    {
+                        "run_id": run_id,
+                        "error_type": type(exc).__name__,
+                        "where": _fault_where(exc),
+                    },
+                )
                 # UI sprint 102: a run that raised left no RunFinalised, and the status poll
                 # read "running" forever. The error is kept for it to report.
                 run_handle["error"] = api.describe_error(exc)
@@ -4879,6 +4926,7 @@ def main() -> None:
     # UI sprint 177: this interpreter found its home at startup; the processes the server starts (a
     # session's bash, a run's checks, a CLI driver) get the user's environment, not the bundle's.
     release_python_home()
+    _install_fault_hooks()
     # Sprint 079: --port / --host CLI flags. --port 0 binds an
     # ephemeral port; the readback line printed before serve_forever
     # is what Electron (electron/main.js) matches to learn the bound

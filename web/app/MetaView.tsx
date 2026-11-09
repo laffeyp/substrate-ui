@@ -47,11 +47,11 @@ function pickLens(mode: MetaMode, paneId: number): void {
 const toggles: React.CSSProperties = { flex: "none", display: "flex", border: "1px solid rgba(255,255,255,.09)", borderRadius: 4, overflow: "hidden", fontSize: 11 };
 const toggle = (on: boolean): React.CSSProperties => ({ cursor: "pointer", padding: "2px 9px", whiteSpace: "nowrap", color: on ? ON : OFF, background: on ? LIT_BG : "transparent" });
 
-function Lens({ mode }: { mode: MetaMode }): React.ReactElement | null {
-  if (mode === GraphMode.Stream) return <StreamLens />;
+function Lens({ mode, paneId }: { mode: MetaMode; paneId: number }): React.ReactElement | null {
+  if (mode === GraphMode.Stream) return <StreamLens paneId={paneId} />;
   if (mode === GraphMode.IO) return <IoLens />;
   if (mode === GraphMode.Structure) return <StructureLens />;
-  if (mode === GraphMode.Language) return <LanguageLens />;
+  if (mode === GraphMode.Language) return <LanguageLens paneId={paneId} />;
   if (mode === GraphMode.Scene) return <SceneLens />;
   return null;
 }
@@ -99,18 +99,18 @@ export function MetaView({ paneId }: { paneId: number }): React.ReactElement {
           ))}
           {mt.mode === GraphMode.Stream && <>
             <span style={{ ...toggles, marginLeft: "auto" }}>
-              <span onClick={() => setLevel(RevealLevel.All)} style={toggle(mt.level === RevealLevel.All)} title="every event on the record, lifecycle included">all</span>
-              <span onClick={() => setLevel(RevealLevel.App)} style={toggle(mt.level === RevealLevel.App)} title="hide the low-level machinery: TriggerFired · ProducerStarted · ProducerCompleted">app</span>
+              <span onClick={() => setLevel(RevealLevel.All, paneId)} style={toggle(mt.level === RevealLevel.All)} title="every event on the record, lifecycle included">all</span>
+              <span onClick={() => setLevel(RevealLevel.App, paneId)} style={toggle(mt.level === RevealLevel.App)} title="hide the low-level machinery: TriggerFired · ProducerStarted · ProducerCompleted">app</span>
             </span>
             <span style={toggles}>
-              <span onClick={() => setDir(GraphDirection.Down)} style={toggle(mt.dir === GraphDirection.Down)}>⇅ down</span>
-              <span onClick={() => setDir(GraphDirection.Side)} style={toggle(mt.dir === GraphDirection.Side)}>→ side</span>
+              <span onClick={() => setDir(GraphDirection.Down, paneId)} style={toggle(mt.dir === GraphDirection.Down)}>⇅ down</span>
+              <span onClick={() => setDir(GraphDirection.Side, paneId)} style={toggle(mt.dir === GraphDirection.Side)}>→ side</span>
             </span>
           </>}
         </div>
-        {side && <SideGraph scrollRef={graphEl} onScroll={onGraphScroll} />}
+        {side && <SideGraph scrollRef={graphEl} onScroll={onGraphScroll} paneId={paneId} />}
         <div ref={streamRef} data-stream-scroll="1" onScroll={(ev) => onStreamScroll(ev.currentTarget)} onClick={() => setFindScope("stream")} style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
-          <Lens mode={mt.mode} />
+          <Lens mode={mt.mode} paneId={paneId} />
         </div>
       </div>
       <div data-meta-gutter="1" onMouseDown={(ev) => { ev.preventDefault(); dragging.current = true; }} title="drag — more transcript or more machinery"

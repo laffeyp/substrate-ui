@@ -84,8 +84,14 @@ def render_ts(vocab: dict) -> str:
     lines = [*("// " + h for h in HEADER.splitlines()), *("// " + n for n in NOTE.splitlines()), ""]
     lines.append(f"export const VOCAB_VERSION = {q(vocab['vocabulary_version'])};")
     # Each Layer-4 rule's window, by id, for the runtime checker (electron/invariants.ts, sprint 375).
-    windows = ", ".join(f"{i['id']}: {i['within_ms']}" for i in vocab["temporal_invariants"]["invariants"])
-    lines += ["", "/** Each temporal rule's window in ms, by its id in temporal_invariants. */", f"export const TEMPORAL_WITHIN_MS = {{ {windows} }} as const;"]
+    windows = ", ".join(
+        f"{i['id']}: {i['within_ms']}" for i in vocab["temporal_invariants"]["invariants"]
+    )
+    lines += [
+        "",
+        "/** Each temporal rule's window in ms, by its id in temporal_invariants. */",
+        f"export const TEMPORAL_WITHIN_MS = {{ {windows} }} as const;",
+    ]
     # String enums: a plain string is not assignable to a member, so a raw tag or value fails tsc.
     lines += ["", "export enum Signal {"]
     lines += [f"  {t['name']} = {q(t['name'])}," for t in live_tags(vocab)]

@@ -21,7 +21,7 @@ import * as path from "node:path";
 import { installMenu } from "./menu";
 import { commitsFromPlist } from "./build_commits";
 import { createChecker, type Broken, type CheckedRecord } from "./invariants";
-import { Signal, VOCAB_VERSION, AppBootedHomeKind, AppQuitRequestedCause, DeepLinkReceivedLinkKind, NativeDialogClosedDialog, NativeDialogClosedOutcome, NavigationBlockedTargetKind, TraceLostProcess, TraceOpenedProcess, WindowOpenedCause, type SignalPayloads } from "./signals.gen";
+import { Signal, VOCAB_VERSION, AppBootedHomeKind, AppQuitRequestedCause, ChildProcessGoneReason, ChildProcessGoneType, DeepLinkReceivedLinkKind, MainFaultedSource, NativeDialogClosedDialog, NativeDialogClosedOutcome, NavigationBlockedTargetKind, RendererGoneReason, TraceLostProcess, TraceOpenedProcess, WindowFaultedSource, WindowOpenedCause, type SignalPayloads } from "./signals.gen";
 
 // ── The trace (vocabulary v0.7; plan process/planning/2026-11-05-sdd-signals, item 2) ─────────────
 // Each launch writes <logs>/traces/<boot_id>/: main.jsonl (main's records), window-<id>.jsonl (each
@@ -191,8 +191,73 @@ function openTrace() {
   const held = trace.held;
   trace.held = [];
   for (const h of held) writeMainRecord(h.tag, h.payload, h.windowId, h.wall);
+  checkLastBoot(path.dirname(trace.dir));
   process.stderr.write("[electron] trace: " + trace.dir + "\n");
 }
+
+// S2 (vocabulary v0.24, P-0.24-S2-NEXT-BOOT): APP_QUIT_COMPLETED is main's last record of a boot.
+// main's writer refuses records after it (mainRecord), so the rule breaks only when a boot ends
+// without it, killed or crashed, and that boot cannot say so. One app runs per machine (the
+// single-instance lock), so when this boot opens its trace the boot before it in the same folder has
+// ended: read the end of its main.jsonl and report a missing closing record here.
+const S2_TAIL_BYTES = 64 * 1024;
+function checkLastBoot(root: string) {
+  let prior: string | undefined;
+  try {
+    prior = fs.readdirSync(root).filter((n) => n !== BOOT_ID && /^\d{8}-\d{6}-[0-9a-f]+$/.test(n)).sort().pop();
+  } catch { return; }
+  if (!prior) return;
+  let last: Record<string, unknown> | null = null;
+  try {
+    const fd = fs.openSync(path.join(root, prior, "main.jsonl"), "r");
+    try {
+      const size = fs.fstatSync(fd).size;
+      const len = Math.min(size, S2_TAIL_BYTES);
+      const buf = Buffer.alloc(len);
+      fs.readSync(fd, buf, 0, len, size - len);
+      // The last whole line; a line cut short by the kill is not a record.
+      for (const line of buf.toString("utf8").split("\n").reverse()) {
+        if (!line.trim()) continue;
+        try { last = JSON.parse(line); break; } catch { continue; }
+      }
+    } finally { fs.closeSync(fd); }
+  } catch { /* no main.jsonl: a boot that never opened its trace wrote no record to close */ return; }
+  if (last && last.name === Signal.APP_QUIT_COMPLETED) return;
+  mainRecord(Signal.INVARIANT_BROKEN, {
+    rule: "S2",
+    context: { state: { boot_id: prior, last: last ? { name: last.name, proc_seq: last.proc_seq, wall: last.wall } : null, expected: Signal.APP_QUIT_COMPLETED }, recent: [] },
+  });
+}
+
+// Faults (vocabulary v0.24, P-0.24-FAULTS). Each hook observes and changes nothing: Node's
+// uncaughtExceptionMonitor runs before the default handler, so Electron still shows its dialog; an
+// unhandled rejection in Electron main is only a warning (measured on Electron 44, 2026-11-08), read
+// here from the warning event, which leaves the printed warning as it was. No message text (E1).
+const ERROR_CLASS_RE = /^([A-Z][A-Za-z0-9_]*(?:Error|Exception))\b/;
+function errorClass(err: unknown): string {
+  if (err instanceof Error) return err.name || err.constructor?.name || "Error";
+  return "non-error";
+}
+process.on("uncaughtExceptionMonitor", (err, origin) => {
+  traceEmit(Signal.MAIN_FAULTED, { error_type: errorClass(err), source: origin === "unhandledRejection" ? MainFaultedSource.REJECTION : MainFaultedSource.EXCEPTION });
+});
+process.on("warning", (w) => {
+  // Node writes two warnings per rejection; the first carries the reason, the second its advice.
+  if (w.name !== "UnhandledPromiseRejectionWarning" || w.message.startsWith("Unhandled promise rejection.")) return;
+  traceEmit(Signal.MAIN_FAULTED, { error_type: ERROR_CLASS_RE.exec(w.message)?.[1] ?? "non-error", source: MainFaultedSource.REJECTION });
+});
+// Electron's reasons and process types, as the vocabulary spells them (hyphens and spaces to _).
+const asEnum = <E extends string>(values: Record<string, E>, raw: string, fallback: E): E => {
+  const v = raw.toLowerCase().replace(/[- ]/g, "_");
+  return (Object.values(values) as string[]).includes(v) ? (v as E) : fallback;
+};
+app.on("child-process-gone", (_e, details) => {
+  traceEmit(Signal.CHILD_PROCESS_GONE, {
+    type: asEnum(ChildProcessGoneType, details.type, ChildProcessGoneType.UNKNOWN),
+    reason: asEnum(ChildProcessGoneReason, details.reason, ChildProcessGoneReason.ABNORMAL_EXIT),
+    exit_code: details.exitCode,
+  });
+});
 
 // A window's records. The window stamps proc_seq and pane_id (sprint 352); main adds the launch and
 // window. Until a window stamps its own proc_seq, main numbers what it receives from that window.
@@ -488,12 +553,20 @@ function spawnServer() {
       }
     }
   });
-  serverProc.stderr.on("data", (chunk) => process.stderr.write("[server-stderr] " + chunk));
+  // The end of the server's stderr, for SERVER_EXITED.error_type (v0.24): a server that dies prints
+  // its traceback last, and a crash before its trace opened (an import that fails) leaves no other cause.
+  let stderrTail = "";
+  serverProc.stderr.on("data", (chunk) => {
+    process.stderr.write("[server-stderr] " + chunk);
+    stderrTail = (stderrTail + chunk.toString()).slice(-4096);
+  });
   serverProc.on("exit", (code, signal) => {
     serverExited = true;
     trace.serverExitCode = code;
+    const lastLine = stderrTail.split("\n").map((l) => l.trim()).filter(Boolean).pop() ?? "";
+    const died = /^(?:[A-Za-z_][\w.]*\.)?([A-Z]\w*(?:Error|Exception|Interrupt|Exit))(?::|$)/.exec(lastLine);
     // expected false is the incident: the backend stopped while the app still needed it.
-    traceEmit(Signal.SERVER_EXITED, { code: code ?? null, signal: signal ?? null, expected: serverStopRequested });
+    traceEmit(Signal.SERVER_EXITED, { code: code ?? null, signal: signal ?? null, expected: serverStopRequested, ...(died ? { error_type: died[1] } : {}) });
     log("server exited code=" + code + " signal=" + signal);
     for (const win of BrowserWindow.getAllWindows()) win.webContents.send("server:dead", { code, signal });
     // UI sprint 102: the backend died while the app was in use (not quitting, not starting).
@@ -580,6 +653,27 @@ function createWindow(cause: WindowOpenedCause) {
   const windowId = win.id;
   traceEmit(Signal.WINDOW_OPENED, { cause }, windowId);
   win.on("closed", () => traceEmit(Signal.WINDOW_CLOSED, {}, windowId));
+  // A window's renderer that dies or hangs, and a preload that throws (v0.24, P-0.24-FAULTS): the
+  // window cannot write these itself. Listening changes nothing; Electron does what it did before.
+  win.webContents.on("render-process-gone", (_e, details) => {
+    traceEmit(Signal.RENDERER_GONE, { reason: asEnum(RendererGoneReason, details.reason, RendererGoneReason.ABNORMAL_EXIT), exit_code: details.exitCode }, windowId);
+  });
+  let unresponsiveAt: number | null = null;
+  // Electron repeats unresponsive about every 16 s while a renderer stays hung (measured on Electron 44,
+  // 2026-11-08): one record per hang, timed from its first report.
+  win.on("unresponsive", () => {
+    if (unresponsiveAt !== null) return;
+    unresponsiveAt = performance.now();
+    traceEmit(Signal.WINDOW_UNRESPONSIVE, {}, windowId);
+  });
+  win.on("responsive", () => {
+    if (unresponsiveAt === null) return;
+    traceEmit(Signal.WINDOW_RESPONSIVE, { unresponsive_ms: Math.round(performance.now() - unresponsiveAt) }, windowId);
+    unresponsiveAt = null;
+  });
+  win.webContents.on("preload-error", (_e, preloadPath, error) => {
+    traceEmit(Signal.WINDOW_FAULTED, { error_type: errorClass(error), source: WindowFaultedSource.PRELOAD, where: path.basename(preloadPath) }, windowId);
+  });
   win.on("focus", () => { lastFocused = win; });
   lastFocused = win;
   win.webContents.on("did-finish-load", () => {

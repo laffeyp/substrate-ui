@@ -14,13 +14,14 @@ import { selectedTurn } from "./derive/language_keys";
 import { language, setLanguageStream, setLanguageView } from "./state/language";
 import { stream } from "./state/stream";
 import { meta, selectSeq } from "./state/meta";
+import { SeqSelectedHow } from "../vm/signals.gen";
 
 const ON = "#d7dade";
 const OFF = "#62676f";
 const abs: React.CSSProperties = { position: "absolute" };
 const line = (left: number, color: string): React.CSSProperties => ({ position: "absolute", top: 0, bottom: 0, left, width: 1, background: color, pointerEvents: "none" });
 
-export function LanguageLens(): React.ReactElement {
+export function LanguageLens({ paneId }: { paneId: number }): React.ReactElement {
   const st = useSyncExternalStore(stream.subscribe, stream.getSnapshot);
   const lg = useSyncExternalStore(language.subscribe, language.getSnapshot);
   const sel = useSyncExternalStore(meta.subscribe, meta.getSnapshot).sel;
@@ -31,11 +32,11 @@ export function LanguageLens(): React.ReactElement {
     <div data-lang="1" style={{ padding: "0 16px 16px", fontSize: 11 }}>
       <div style={{ display: "flex", gap: 12, padding: "0 0 8px", fontSize: 11, alignItems: "center" }}>
         {LANGUAGE_STREAM_TABS.map((tab) => (
-          <span key={tab.id} data-lang-stream={tab.label} onClick={() => setLanguageStream(tab.id)} style={{ cursor: "pointer", color: lg.stream === tab.id ? ON : OFF }}>{tab.label}</span>
+          <span key={tab.id} data-lang-stream={tab.label} onClick={() => setLanguageStream(tab.id, paneId)} style={{ cursor: "pointer", color: lg.stream === tab.id ? ON : OFF }}>{tab.label}</span>
         ))}
         <span style={{ marginLeft: "auto", display: "flex", border: "1px solid rgba(255,255,255,.09)", borderRadius: 4, overflow: "hidden" }}>
           {languageViewTabs(lg.stream).map((view) => (
-            <span key={view} data-lang-view={view} onClick={() => setLanguageView(view)} style={{ cursor: "pointer", padding: "2px 9px", color: viewNow === view ? ON : OFF, background: viewNow === view ? "#2e3138" : "transparent" }}>{view}</span>
+            <span key={view} data-lang-view={view} onClick={() => setLanguageView(view, paneId)} style={{ cursor: "pointer", padding: "2px 9px", color: viewNow === view ? ON : OFF, background: viewNow === view ? "#2e3138" : "transparent" }}>{view}</span>
           ))}
         </span>
       </div>
@@ -65,7 +66,7 @@ export function LanguageLens(): React.ReactElement {
                     </div>
                   )}
                   {row.isTurn && (
-                    <div data-lang-row={row.turn} onClick={() => selectSeq(row.seq)} style={{ ...abs, left: 0, right: 0, top: row.top, height: 18, cursor: "pointer", background: row.selected ? "#2a2d33" : "transparent" }}>
+                    <div data-lang-row={row.turn} onClick={() => selectSeq(row.seq, paneId, SeqSelectedHow.LANGUAGE_ROW)} style={{ ...abs, left: 0, right: 0, top: row.top, height: 18, cursor: "pointer", background: row.selected ? "#2a2d33" : "transparent" }}>
                       <span style={{ ...abs, left: 0, top: 2, color: OFF, fontSize: 10.5 }}>{row.label}</span>
                       {row.cells.map((cell, ci) => (
                         <React.Fragment key={ci}>

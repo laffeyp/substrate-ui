@@ -243,6 +243,15 @@ test("the server's records paired with the window's and main's break no rule", (
   early.c.see(main("SERVER_BOUND", { port: 7, ms: 90 }));
   early.at(100_000);
   assert.deepStrictEqual(early.c.tick().map((b) => b.rule), [], "a SERVER_STARTED read before main's bind answers T2");
+  // v0.24 (P-0.24-T1-T2-END-AT-EXIT): a server that exits ends the waits on its start.
+  for (const before of [[main("SERVER_SPAWNED", { pid: 1, packaged: false })], [main("SERVER_BOUND", { port: 8, ms: 90 })]]) {
+    const dead = clocked();
+    dead.c.see(main("APP_BOOTED"));
+    for (const r of before) dead.c.see(r);
+    dead.c.see(main("SERVER_EXITED", { code: 1, signal: null, expected: false, error_type: "FileExistsError" }));
+    dead.at(100_000);
+    assert.deepStrictEqual(dead.c.tick().map((b) => b.rule), [], `SERVER_EXITED after ${before[0].name} ends its wait`);
+  }
 });
 
 test("each planted break of a server pairing breaks its rule", () => {
@@ -261,6 +270,8 @@ test("each planted break of a server pairing breaks its rule", () => {
   }
   const fresh = createChecker();
   assert.deepStrictEqual(fresh.see(srv("STORE_SCANNED", { sessions_found: 0, parked: 0, interrupted: 0 })).map((b) => b.rule), ["S1"], "S1: the server's first record");
+  // v0.24 (P-0.24-S1-SERVER-CRASH): a server that dies before it binds writes the SERVER_UNCAUGHT it dies of first.
+  assert.deepStrictEqual(createChecker().see(srv("SERVER_UNCAUGHT", { thread: "MainThread", error_type: "FileExistsError", where: "install_registry" })), [], "S1: a server that died before it bound");
   const { c, at } = clocked();
   c.see(main("SERVER_BOUND", { port: 5, ms: 100 }));
   at(15_001);

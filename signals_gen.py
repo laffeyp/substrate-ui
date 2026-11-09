@@ -5,7 +5,7 @@ Regenerate: python3 scripts/gen_signals.py. tests/test_signals_generated.py fail
 
 from enum import StrEnum
 
-VOCAB_VERSION = "0.23"
+VOCAB_VERSION = "0.24"
 
 
 class Signal(StrEnum):
@@ -96,6 +96,27 @@ class Signal(StrEnum):
     PANE_DRAWN = "PANE_DRAWN"
     PAGE_DRAWN = "PAGE_DRAWN"
     TRANSCRIPT_SCROLLED = "TRANSCRIPT_SCROLLED"
+    WINDOW_FAULTED = "WINDOW_FAULTED"
+    MAIN_FAULTED = "MAIN_FAULTED"
+    RENDERER_GONE = "RENDERER_GONE"
+    WINDOW_UNRESPONSIVE = "WINDOW_UNRESPONSIVE"
+    WINDOW_RESPONSIVE = "WINDOW_RESPONSIVE"
+    CHILD_PROCESS_GONE = "CHILD_PROCESS_GONE"
+    RUN_FAULTED = "RUN_FAULTED"
+    SERVER_UNCAUGHT = "SERVER_UNCAUGHT"
+    STREAM_DIRECTION_SET = "STREAM_DIRECTION_SET"
+    STREAM_LEVEL_SET = "STREAM_LEVEL_SET"
+    SEQ_SELECTED = "SEQ_SELECTED"
+    LANGUAGE_STREAM_SET = "LANGUAGE_STREAM_SET"
+    LANGUAGE_VIEW_SET = "LANGUAGE_VIEW_SET"
+    LANGUAGE_LANE_SET = "LANGUAGE_LANE_SET"
+    FIND_OPENED = "FIND_OPENED"
+    FIND_CLOSED = "FIND_CLOSED"
+    FIND_QUERY_CHANGED = "FIND_QUERY_CHANGED"
+    FIND_SCOPE_SET = "FIND_SCOPE_SET"
+    TOP_BAR_CARD_SET = "TOP_BAR_CARD_SET"
+    TOOL_CARD_TOGGLED = "TOOL_CARD_TOGGLED"
+    TOOL_OUTPUT_MODE_SET = "TOOL_OUTPUT_MODE_SET"
 
 
 class TurnInterruptedTier(StrEnum):
@@ -366,3 +387,116 @@ class TranscriptScrolledCause(StrEnum):
     USER = "user"
     RESIZED = "resized"
     VIEW_SWITCH = "view_switch"
+
+
+class WindowFaultedSource(StrEnum):
+    ERROR = "error"
+    REJECTION = "rejection"
+    PRELOAD = "preload"
+
+
+class MainFaultedSource(StrEnum):
+    EXCEPTION = "exception"
+    REJECTION = "rejection"
+
+
+class RendererGoneReason(StrEnum):
+    CLEAN_EXIT = "clean_exit"
+    ABNORMAL_EXIT = "abnormal_exit"
+    KILLED = "killed"
+    CRASHED = "crashed"
+    OOM = "oom"
+    LAUNCH_FAILED = "launch_failed"
+    INTEGRITY_FAILURE = "integrity_failure"
+    MEMORY_EVICTION = "memory_eviction"
+
+
+class ChildProcessGoneType(StrEnum):
+    UTILITY = "utility"
+    ZYGOTE = "zygote"
+    SANDBOX_HELPER = "sandbox_helper"
+    GPU = "gpu"
+    PEPPER_PLUGIN = "pepper_plugin"
+    PEPPER_PLUGIN_BROKER = "pepper_plugin_broker"
+    UNKNOWN = "unknown"
+
+
+class ChildProcessGoneReason(StrEnum):
+    CLEAN_EXIT = "clean_exit"
+    ABNORMAL_EXIT = "abnormal_exit"
+    KILLED = "killed"
+    CRASHED = "crashed"
+    OOM = "oom"
+    LAUNCH_FAILED = "launch_failed"
+    INTEGRITY_FAILURE = "integrity_failure"
+    MEMORY_EVICTION = "memory_eviction"
+
+
+class StreamDirectionSetDirection(StrEnum):
+    DOWN = "down"
+    SIDE = "side"
+
+
+class StreamLevelSetLevel(StrEnum):
+    ALL = "all"
+    APP = "app"
+
+
+class SeqSelectedHow(StrEnum):
+    STREAM_ROW = "stream_row"
+    SIDE_GRAPH = "side_graph"
+    LANGUAGE_ROW = "language_row"
+    LANGUAGE_KEY = "language_key"
+    LANGUAGE_OPEN = "language_open"
+
+
+class LanguageStreamSetStream(StrEnum):
+    MODEL = "model"
+    USER = "user"
+    RELATION = "relation"
+
+
+class LanguageViewSetView(StrEnum):
+    BARS = "bars"
+    DEVIATION = "deviation"
+    RIBBONS = "ribbons"
+    SIDES = "sides"
+    MEASURES = "measures"
+
+
+class FindOpenedScope(StrEnum):
+    TRANSCRIPT = "transcript"
+    STREAM = "stream"
+
+
+class FindClosedCause(StrEnum):
+    TOGGLE = "toggle"
+    ESCAPE = "escape"
+
+
+class FindScopeSetScope(StrEnum):
+    TRANSCRIPT = "transcript"
+    STREAM = "stream"
+
+
+class TopBarCardSetCard(StrEnum):
+    MODEL = "model"
+    WORKSPACE = "workspace"
+
+
+class TopBarCardSetCause(StrEnum):
+    CLICK = "click"
+    ESCAPE = "escape"
+    OUTSIDE = "outside"
+    PICKED = "picked"
+    OTHER_CARD = "other_card"
+
+
+class ToolOutputModeSetMode(StrEnum):
+    EXPANDED = "expanded"
+    COLLAPSED = "collapsed"
+
+
+class ToolOutputModeSetCause(StrEnum):
+    KEY = "key"
+    SLASH = "slash"
