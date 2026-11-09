@@ -24,11 +24,15 @@ Then open http://127.0.0.1:8765/ .
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import functools
+import hashlib
 import os
 import re
+import select
 import shutil
 import signal
+import socket
 import json
 import subprocess
 import sys
@@ -46,7 +50,14 @@ from typing import Any, cast
 from urllib.parse import parse_qs, unquote, urlparse
 
 import msgspec
-from signals_gen import ApiRefusedArea, Signal, SessionCreatedWorkspaceShape, TraceOpenedProcess
+from signals_gen import (
+    ApiRefusedArea,
+    FileReadEncoding,
+    FileWrittenWritten,
+    Signal,
+    SessionCreatedWorkspaceShape,
+    TraceOpenedProcess,
+)
 from substrate import api
 from substrate.topologies import bundled
 from substrate.topologies.session.environment import session_baseline
@@ -1901,10 +1912,10 @@ def _resolve_workspace_arg(raw: str) -> str:
     return str(path)
 
 
-# Editor shared work 0(c) (UI sprint 348): the workspace file API, read side. Each path is held to
-# the session's workspace: an absolute path is refused, and so is any path that resolves, symlinks
-# followed, outside it. Writes wait for the kernel's edit event (item 0(d)), since every edit goes on
-# the record.
+# Editor shared work 0(c) (UI sprints 348, 387): the workspace file API. Each path is held to the
+# session's workspace: an absolute path is refused, and so is any path that resolves, symlinks
+# followed, outside it. A write goes on the session's record as the kernel's FileWritten (item 0(d),
+# K340) before the file changes.
 WORKSPACE_READ_MAX = 2 * 1024 * 1024
 
 
@@ -1951,9 +1962,23 @@ def _line_endings(text: str) -> str | None:
     return "mixed" if crlf and lf else "crlf" if crlf else "lf"
 
 
+def _file_sha256(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as fh:
+        for block in iter(lambda: fh.read(1 << 20), b""):
+            h.update(block)
+    return h.hexdigest()
+
+
+class WorkspaceConflictError(ValueError):
+    """A write that would overwrite something it may not: the file changed since the caller read it
+    (`base_sha256` differs), or the file is not UTF-8 text."""
+
+
 def _workspace_read(root: Path, rel: str, max_bytes: int = WORKSPACE_READ_MAX) -> dict[str, object]:
-    """A file's facts and, for UTF-8 text up to `max_bytes`, its text: size, modified time,
-    encoding (`utf-8` or `binary`), line endings. Over the cap the text is null and `too_large` true."""
+    """A file's facts and, for UTF-8 text up to `max_bytes`, its text: size, modified time, the
+    sha256 of its bytes (a write sends it back as `base_sha256`), encoding (`utf-8` or `binary`),
+    line endings. Over the cap the text is null and `too_large` true."""
     target = _workspace_target(root, rel)
     if not target.is_file():
         raise FileNotFoundError(f"{rel!r} is not a file in the workspace")
@@ -1964,6 +1989,7 @@ def _workspace_read(root: Path, rel: str, max_bytes: int = WORKSPACE_READ_MAX) -
         "size": st.st_size,
         "modified": st.st_mtime,
         "too_large": st.st_size > max_bytes,
+        "sha256": _file_sha256(target),
         "encoding": None,
         "line_endings": None,
         "text": None,
@@ -3499,12 +3525,22 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         try:
             before, cut = _workspace_snapshot(root)
+            sent = 0
+            TRACE.emit(
+                Signal.FILES_WATCH_OPENED,
+                {"session_id": session_id, "files": len(before), "truncated": cut},
+            )
             ready = msgspec.json.encode({"files": len(before), "truncated": cut})
             self.wfile.write(b"event: ready\ndata: " + ready + b"\n\n")
             self.wfile.flush()
             last_write = time.monotonic()
             while True:
                 time.sleep(WATCH_POLL_S)
+                # A client that hung up makes its socket readable with nothing to read; without this
+                # check the hang-up showed only at the second write after it (TCP accepts the first).
+                readable, _, _ = select.select([self.connection], [], [], 0)
+                if readable and not self.connection.recv(1, socket.MSG_PEEK):
+                    raise ConnectionResetError("the client closed the watch stream")
                 after, _ = _workspace_snapshot(root)
                 changes = _workspace_changes(before, after)
                 before = after
@@ -3513,12 +3549,14 @@ class Handler(BaseHTTPRequestHandler):
                         b"data: " + msgspec.json.encode({"changes": changes}) + b"\n\n"
                     )
                     self.wfile.flush()
+                    sent += 1
                     last_write = time.monotonic()
                 elif time.monotonic() - last_write >= 15.0:
                     self.wfile.write(b": ping\n\n")
                     self.wfile.flush()
                     last_write = time.monotonic()
         except (BrokenPipeError, ConnectionResetError, OSError):
+            TRACE.emit(Signal.FILES_WATCH_CLOSED, {"session_id": session_id, "change_events": sent})
             return
 
     def _session_files(self, session_id: str, what: str, q: dict[str, list[str]]) -> None:
@@ -3530,13 +3568,123 @@ class Handler(BaseHTTPRequestHandler):
             return
         try:
             if what == "files":
-                self._json(_workspace_list(root, q.get("dir", [""])[0]))
+                listing = _workspace_list(root, q.get("dir", [""])[0])
+                TRACE.emit(
+                    Signal.FILES_LISTED,
+                    {"session_id": session_id, "entries": len(cast(list[Any], listing["entries"]))},
+                )
+                self._json(listing)
             else:
-                self._json(_workspace_read(root, q.get("path", [""])[0]))
+                facts = _workspace_read(root, q.get("path", [""])[0])
+                encoding = (
+                    FileReadEncoding.TOO_LARGE
+                    if facts["too_large"]
+                    else FileReadEncoding.UTF8
+                    if facts["encoding"] == "utf-8"
+                    else FileReadEncoding.BINARY
+                )
+                TRACE.emit(
+                    Signal.FILE_READ,
+                    {"session_id": session_id, "bytes": facts["size"], "encoding": encoding},
+                )
+                self._json(facts)
         except WorkspaceEscapeError as exc:
             self._error(400, str(exc))
         except (FileNotFoundError, NotADirectoryError) as exc:
             self._error(404, str(exc))
+
+    def _session_file_write(self, session_id: str, q: dict[str, list[str]]) -> None:
+        """UI sprint 387: PUT /api/session/<id>/file?path=<rel>, body `{"text": str, "base_sha256":
+        str?, "view": str?}`. The new text goes to a temporary file beside the target; the edit goes
+        on the session's record as FileWritten (SessionRegistry.append_event, kernel K340); then the
+        temporary file replaces the target. A record that refuses the edit (no record yet, an ended
+        session) leaves the file as it was: 409. `base_sha256`, the hash the read returned, makes a
+        write to a file changed since then a 409 (optimistic concurrency, as HTTP's If-Match). A
+        path outside the workspace is 400; a folder that does not exist, 404."""
+        from substrate.topologies.session import FileWritten
+
+        registry = self.app.registry
+        if registry is None:
+            self._error(503, "no session registry: the daemon has not started")
+            return
+        root = self._session_workspace_root(session_id)
+        if root is None:
+            return
+        rel = q.get("path", [""])[0]
+        try:
+            body = self._read_json_body()
+            text = body.get("text")
+            if not isinstance(text, str):
+                raise ValueError("body needs `text`, a string")
+            view = str(body.get("view") or "editor")
+            target = _workspace_target(root, rel)
+            if not target.parent.is_dir():
+                raise FileNotFoundError(f"no folder for {rel!r} in the workspace")
+            if target.is_dir():
+                raise WorkspaceEscapeError(f"{rel!r} is a folder")
+            old_text: str | None = None
+            if target.exists():
+                base = body.get("base_sha256")
+                if base is not None and base != _file_sha256(target):
+                    raise WorkspaceConflictError(f"{rel!r} changed since it was read")
+                try:
+                    old_text = target.read_bytes().decode("utf-8")
+                except UnicodeDecodeError:
+                    raise WorkspaceConflictError(f"{rel!r} is not a UTF-8 text file") from None
+            new_bytes = text.encode("utf-8")
+            if len(new_bytes) > WORKSPACE_READ_MAX:
+                raise WorkspaceConflictError(f"text over {WORKSPACE_READ_MAX} bytes")
+            rel_path = str(target.relative_to(root.resolve(strict=True)))
+            fd, tmp = tempfile.mkstemp(dir=str(target.parent), prefix=".substrate-write-")
+            try:
+                with os.fdopen(fd, "wb") as fh:
+                    fh.write(new_bytes)
+                written = registry.append_event(
+                    session_id,
+                    FileWritten(path=rel_path, old_text=old_text, new_text=text, view=view),
+                )
+                os.replace(tmp, target)
+            except BaseException:
+                with contextlib.suppress(FileNotFoundError):
+                    os.unlink(tmp)
+                raise
+        except BodyTooLarge as exc:
+            self._error(413, str(exc))
+            return
+        except WorkspaceEscapeError as exc:
+            self._error(400, str(exc))
+            return
+        except ValueError as exc:
+            self._error(409 if isinstance(exc, WorkspaceConflictError) else 400, str(exc))
+            return
+        except FileNotFoundError as exc:
+            self._error(404, str(exc))
+            return
+        except api.RecordNotAtRestError as exc:
+            self._error(409, f"the edit cannot go on the record, so the file is unchanged: {exc}")
+            return
+        except TimeoutError as exc:
+            self._error(503, f"the record was busy, so the file is unchanged: {exc}")
+            return
+        TRACE.emit(
+            Signal.FILE_WRITTEN,
+            {
+                "session_id": session_id,
+                "bytes": len(new_bytes),
+                "created": old_text is None,
+                "written": FileWrittenWritten(written["written"]),
+                "seq": written["seq"],
+            },
+        )
+        self._json(
+            {
+                "path": rel_path,
+                "size": len(new_bytes),
+                "sha256": hashlib.sha256(new_bytes).hexdigest(),
+                "written": written["written"],
+                "seq": written["seq"],
+            }
+        )
 
     def _session_tasks(self, session_id: str) -> None:
         """UI sprint 105: GET /api/session/<id>/tasks — the session's bash background tasks."""
@@ -4596,6 +4744,20 @@ class Handler(BaseHTTPRequestHandler):
                 return
             self._error(404, f"no patch endpoint {path!r}")
         except Exception as exc:  # noqa: BLE001 — top-level do_PATCH boundary: same shape as do_POST — never let a per-endpoint exception kill the daemon thread.
+            self._fault(exc)
+
+    def do_PUT(self) -> None:  # noqa: N802 — UI sprint 387: PUT /api/session/<id>/file
+        if self._refuse_foreign_host():
+            return
+        parsed = urlparse(self.path)
+        path = unquote(parsed.path)
+        try:
+            m = re.fullmatch(r"/api/session/([^/]+)/file", path)
+            if m:
+                self._session_file_write(m.group(1), parse_qs(parsed.query))
+                return
+            self._error(404, f"no put endpoint {path!r}")
+        except Exception as exc:  # noqa: BLE001 — top-level do_PUT boundary: same shape as do_POST / do_PATCH.
             self._fault(exc)
 
     def do_DELETE(self) -> None:  # noqa: N802 — sprint 214b: DELETE /api/session/<id>

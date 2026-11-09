@@ -7,7 +7,7 @@ import { existsSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import type { Page } from "playwright";
 import type { EmittedRecord } from "./flow";
-import { scratchDir } from "./scratch";
+import { keepScratch, scratchDir } from "./scratch";
 
 const REPO_ROOT = join(__dirname, "..", "..", "..");
 
@@ -52,6 +52,7 @@ export function launchArgs(opts: { roster?: "offline" | "live"; csp?: "bypass" |
       // scripts/read_trace.py --home <state>; so does a gate that failed, or a launch that broke a rule.
       const keep = how.keep || broken.length > 0 || process.env.SHAKEOUT_KEEP_SCRATCH === "1";
       if (keep && process.env.SHAKEOUT_KEEP_SCRATCH !== "1") console.error(`[scratch] kept ${state} (read it: uv run --project ../substrate python scripts/read_trace.py --home ${state})`);
+      if (keep) { keepScratch(dir); keepScratch(state); }
       for (const d of keep ? [] : [dir, state]) {
         try { rmSync(d, { recursive: true, force: true }); } catch { /* best-effort */ }
       }

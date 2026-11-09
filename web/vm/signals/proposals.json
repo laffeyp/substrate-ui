@@ -992,6 +992,16 @@
       "rationale": "An emit site is how an agent reading the trace finds the line that decided a record (foundation 01). A site that names a file the tree does not have, or a function under another name, sends the reader to nothing. Tags, payloads, enums and rules are unchanged; line numbers are dropped, since they move with every edit.",
       "ratified": true,
       "ratified_by": "agent-resolved 2026-11-08, comment audit"
+    },
+    {
+      "id": "P-0.26-WORKSPACE-FILES",
+      "kind": "NEW_TAG_PROPOSED",
+      "layer": 1,
+      "element": "FILES_LISTED, FILE_READ, FILE_WRITTEN, FILES_WATCH_OPENED, FILES_WATCH_CLOSED",
+      "source": "the workspace file API (editor plan round 2, item 0(c)): sprints 348 and 349 built list, read and watch with no tags, before the trace rule; sprint 387 adds the write",
+      "rationale": "Each call of the workspace file API is a server domain event the trace did not hold. FILE_WRITTEN carries the kernel seq of the FileWritten entry, which joins the trace to the record. Paths and text stay out (E1); refusals stay API_REFUSED with area files.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-08, sprint 387"
     }
   ]
 }

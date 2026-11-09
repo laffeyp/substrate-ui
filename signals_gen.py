@@ -5,7 +5,7 @@ Regenerate: python3 scripts/gen_signals.py. tests/test_signals_generated.py fail
 
 from enum import StrEnum
 
-VOCAB_VERSION = "0.25"
+VOCAB_VERSION = "0.26"
 
 
 class Signal(StrEnum):
@@ -117,6 +117,11 @@ class Signal(StrEnum):
     TOP_BAR_CARD_SET = "TOP_BAR_CARD_SET"
     TOOL_CARD_TOGGLED = "TOOL_CARD_TOGGLED"
     TOOL_OUTPUT_MODE_SET = "TOOL_OUTPUT_MODE_SET"
+    FILES_LISTED = "FILES_LISTED"
+    FILE_READ = "FILE_READ"
+    FILE_WRITTEN = "FILE_WRITTEN"
+    FILES_WATCH_OPENED = "FILES_WATCH_OPENED"
+    FILES_WATCH_CLOSED = "FILES_WATCH_CLOSED"
 
 
 class TurnInterruptedTier(StrEnum):
@@ -500,3 +505,14 @@ class ToolOutputModeSetMode(StrEnum):
 class ToolOutputModeSetCause(StrEnum):
     KEY = "key"
     SLASH = "slash"
+
+
+class FileReadEncoding(StrEnum):
+    UTF8 = "utf8"
+    BINARY = "binary"
+    TOO_LARGE = "too_large"
+
+
+class FileWrittenWritten(StrEnum):
+    AT_REST = "at_rest"
+    LIVE = "live"

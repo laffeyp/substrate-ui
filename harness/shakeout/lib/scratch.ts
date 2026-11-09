@@ -21,6 +21,12 @@ process.on("exit", () => {
   }
 });
 
+/** Keep `dir` past the process's exit (a failed gate's trace): the exit handler leaves it. */
+export function keepScratch(dir: string): void {
+  const i = made.indexOf(dir);
+  if (i >= 0) made.splice(i, 1);
+}
+
 export function scratchDir(prefix: string): string {
   const d = mkdtempSync(join(tmpdir(), prefix));
   made.push(d);
