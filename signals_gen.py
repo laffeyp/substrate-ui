@@ -5,7 +5,7 @@ Regenerate: python3 scripts/gen_signals.py. tests/test_signals_generated.py fail
 
 from enum import StrEnum
 
-VOCAB_VERSION = "0.41"
+VOCAB_VERSION = "0.42"
 
 
 class Signal(StrEnum):
@@ -137,6 +137,7 @@ class Signal(StrEnum):
     EDITOR_HUNK_DRAWN = "EDITOR_HUNK_DRAWN"
     EDITOR_CHIP_ADDED = "EDITOR_CHIP_ADDED"
     EDITOR_SEARCH_QUERIED = "EDITOR_SEARCH_QUERIED"
+    EDITOR_SEARCH_REPLACED = "EDITOR_SEARCH_REPLACED"
     EDITOR_FIND_QUERIED = "EDITOR_FIND_QUERIED"
     EDITOR_REPLACED = "EDITOR_REPLACED"
     EDITOR_QUICK_OPENED = "EDITOR_QUICK_OPENED"
@@ -149,6 +150,7 @@ class Signal(StrEnum):
     EDITOR_COLUMN_RESIZED = "EDITOR_COLUMN_RESIZED"
     DIFF_READ = "DIFF_READ"
     FILES_SEARCHED = "FILES_SEARCHED"
+    FILES_REPLACE_PREPARED = "FILES_REPLACE_PREPARED"
 
 
 class TurnInterruptedTier(StrEnum):
@@ -610,6 +612,12 @@ class EditorChipAddedKind(StrEnum):
     RANGE = "range"
 
 
+class EditorSearchReplacedScope(StrEnum):
+    ALL = "all"
+    FILE = "file"
+    ONE = "one"
+
+
 class EditorReplacedScope(StrEnum):
     ONE = "one"
     ALL = "all"
@@ -679,3 +687,9 @@ class DiffReadBase(StrEnum):
     DEFAULT_BRANCH = "default_branch"
     FIRST_COMMIT = "first_commit"
     NONE = "none"
+
+
+class FilesReplacePreparedScope(StrEnum):
+    ALL = "all"
+    FILE = "file"
+    ONE = "one"

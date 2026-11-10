@@ -1262,6 +1262,26 @@
       "rationale": "left_tab was written as files always; with the search tab it follows the drawn tab, and the pixel anchor carries it as it carries every live drawn field.",
       "ratified": true,
       "ratified_by": "agent-resolved 2026-11-10, sprint 434; grounds: project — roadmap r10 E8; SDD — BOOTSTRAP step 9; practice — n/a"
+    },
+    {
+      "id": "P-0.42-SEARCH-STANDARD",
+      "kind": "PAYLOAD_FIELD_PROPOSED",
+      "layer": 2,
+      "element": "FILES_SEARCHED and EDITOR_SEARCH_QUERIED gain word; FILES_SEARCHED gains matches; its note names the server's own walk",
+      "source": "RESEARCH-2026-11-10-editor-search-r2",
+      "rationale": "The search moves off git grep to the server's own walk and Python's re, with whole word, as editors search.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-10, sprint 435; grounds: project — the research r2; SDD — BOOTSTRAP step 9; practice — VS Code's ripgrepTextSearchEngine.ts"
+    },
+    {
+      "id": "P-0.42-SEARCH-REPLACE",
+      "kind": "TAG_PROPOSED",
+      "layer": 1,
+      "element": "FILES_REPLACE_PREPARED (server), EDITOR_SEARCH_REPLACED (editor)",
+      "source": "RESEARCH-2026-11-10-editor-search-r2",
+      "rationale": "Replace one match, in one file, or all, worked out on the server with the search's own engine and written by the page through the file API; each side of it needs its tag.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-10, sprint 435; grounds: project — the research r2; SDD — BOOTSTRAP step 9; practice — VS Code's replaceService.ts"
     }
   ]
 }

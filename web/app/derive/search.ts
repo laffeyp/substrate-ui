@@ -1,51 +1,39 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2026 Peter Laffey
-// The workspace search's text work (sprint 434; roadmap 2026-11-09-code-editor r10, E8; frame 24j): the
-// query as a JavaScript pattern, the matches in a result line, and a file's text with every match
-// replaced. The server finds the lines (git grep, server.py `_workspace_search`); this lights and counts
-// the matches in them and makes the replace-all text. No I/O, no state.
-//
-// A regular-expression query is read by git as POSIX extended syntax and here as JavaScript's; the two
-// agree on the common forms (classes, groups, alternation, anchors, quantifiers). A query JavaScript
-// cannot compile lights nothing and counts one match per line git returned.
+// The workspace search's rows (sprints 434, 435; roadmap 2026-11-09-code-editor r10, E8; research
+// RESEARCH-2026-11-10-editor-search-r2). The server finds the matches with its own walk and Python's re and
+// sends each match's [start, end) in UTF-16 units (server.py `_workspace_search`); the page matches nothing
+// itself, so it lights exactly what the server found. One row per match, as VS Code lists them. No I/O.
 
-export interface SearchSpec { query: string; caseSensitive: boolean; regexp: boolean }
-export interface SearchLine { line: number; text: string }
+export interface SearchSpec { query: string; caseSensitive: boolean; regexp: boolean; word: boolean; include: string; exclude: string }
+export interface SearchLine { line: number; text: string; ranges: [number, number][] }
 export interface SearchFile { path: string; lines: SearchLine[] }
-export interface SearchResult { files: SearchFile[]; lines: number; truncated: boolean }
+export interface SearchResult { files: SearchFile[]; lines: number; matches: number; truncated: boolean }
+/** One match: its file, line, its index among the line's matches, and the line's text with it. */
+export interface SearchRow { path: string; line: number; index: number; text: string; from: number; to: number }
 
-const escape = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
-/** The query as a global pattern, or null when it is empty or does not compile. */
-export function matcher(spec: SearchSpec): RegExp | null {
-  if (!spec.query) return null;
-  try {
-    return new RegExp(spec.regexp ? spec.query : escape(spec.query), spec.caseSensitive ? "g" : "gi");
-  } catch {
-    return null;
-  }
+/** The search's query string (GET …/search). */
+export function searchQuery(spec: SearchSpec): string {
+  const q = new URLSearchParams({ q: spec.query, regex: spec.regexp ? "1" : "0", case: spec.caseSensitive ? "1" : "0", word: spec.word ? "1" : "0" });
+  if (spec.include.trim()) q.set("include", spec.include);
+  if (spec.exclude.trim()) q.set("exclude", spec.exclude);
+  return q.toString();
 }
 
-/** The [from, to) ranges of the matches in one line; an empty match is skipped. */
-export function matchRanges(text: string, re: RegExp | null): [number, number][] {
-  if (!re) return [];
-  const out: [number, number][] = [];
-  for (const m of text.matchAll(re)) if (m[0].length) out.push([m.index, m.index + m[0].length]);
+/** Where a row's text begins on screen: the indent dropped, and a long run before the match cut to the
+ *  `LEAD` characters before it behind an ellipsis, so the match is in view in a narrow column. */
+const LEAD = 20;
+function clip(text: string, from: number, to: number): { text: string; from: number; to: number } {
+  const indent = text.length - text.trimStart().length;
+  let cut = Math.min(indent, from);
+  let lead = "";
+  if (from - cut > LEAD + 10) { cut = from - LEAD; lead = "…"; }
+  return { text: lead + text.slice(cut), from: from - cut + lead.length, to: to - cut + lead.length };
+}
+
+/** The result as rows, one per match, in file and line order. */
+export function searchRows(result: SearchResult): SearchRow[] {
+  const out: SearchRow[] = [];
+  for (const f of result.files) for (const l of f.lines) l.ranges.forEach(([a, b], index) => out.push({ path: f.path, line: l.line, index, ...clip(l.text, a, b) }));
   return out;
-}
-
-/** The matches in a result: every line git returned counts at least one. */
-export function countMatches(result: SearchResult, spec: SearchSpec): number {
-  const re = matcher(spec);
-  let n = 0;
-  for (const f of result.files) for (const l of f.lines) n += Math.max(1, matchRanges(l.text, re).length);
-  return n;
-}
-
-/** A file's text with every match replaced. A fixed-string query's replacement is taken as written; a
- *  regular expression's may name its groups ($1, $&), as JavaScript's String.replace reads them. */
-export function replaceAll(text: string, spec: SearchSpec, replacement: string): string {
-  const re = matcher(spec);
-  if (!re) return text;
-  return spec.regexp ? text.replace(re, replacement) : text.replace(re, () => replacement);
 }

@@ -1,34 +1,26 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2026 Peter Laffey
-// The workspace search's text work (sprint 434): lighting, counting and replacing matches.
+// The workspace search's rows (sprint 435): one per match, lit where the server says, the indent dropped.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { countMatches, matchRanges, matcher, replaceAll } from "../derive/search";
+import { searchQuery, searchRows } from "../derive/search";
 
-const fixed = { query: "a.b", caseSensitive: true, regexp: false };
-
-test("a fixed string is not a pattern, and case folds unless asked", () => {
-  assert.deepEqual(matchRanges("a.b axb a.b", matcher(fixed)), [[0, 3], [8, 11]]);
-  assert.deepEqual(matchRanges("Total total", matcher({ query: "total", caseSensitive: false, regexp: false })), [[0, 5], [6, 11]]);
-  assert.deepEqual(matchRanges("Total total", matcher({ query: "total", caseSensitive: true, regexp: false })), [[6, 11]]);
+test("one row per match, at the server's ranges, the indent dropped", () => {
+  const result = { files: [{ path: "a.ts", lines: [{ line: 3, text: "    x = total + total;", ranges: [[8, 13], [16, 21]] as [number, number][] }] }], lines: 1, matches: 2, truncated: false };
+  const rows = searchRows(result);
+  assert.deepEqual(rows.map((r) => [r.line, r.index, r.text.slice(r.from, r.to)]), [[3, 0, "total"], [3, 1, "total"]]);
+  assert.equal(rows[0].text, "x = total + total;");
 });
 
-test("a pattern that does not compile lights nothing and counts a match per line", () => {
-  const spec = { query: "(", caseSensitive: true, regexp: true };
-  assert.equal(matcher(spec), null);
-  const result = { files: [{ path: "a.ts", lines: [{ line: 1, text: "f(" }, { line: 2, text: "g(" }] }], lines: 2, truncated: false };
-  assert.equal(countMatches(result, spec), 2);
+test("a match far along a line is shown with the text just before it", () => {
+  const text = "a".repeat(80) + "needle";
+  const [row] = searchRows({ files: [{ path: "b.ts", lines: [{ line: 1, text, ranges: [[80, 86]] }] }], lines: 1, matches: 1, truncated: false });
+  assert.ok(row.text.startsWith("…") && row.text.slice(row.from, row.to) === "needle" && row.from === 21);
 });
 
-test("the count is every match in every returned line", () => {
-  const result = { files: [{ path: "a.ts", lines: [{ line: 1, text: "cents cents" }] }, { path: "b.ts", lines: [{ line: 4, text: "cents" }] }], lines: 2, truncated: false };
-  assert.equal(countMatches(result, { query: "cents", caseSensitive: true, regexp: false }), 3);
-});
-
-test("replace all: a fixed replacement is taken as written; a pattern's may name its groups", () => {
-  assert.equal(replaceAll("a.b axb a.b", fixed, "$&!"), "$&! axb $&!");
-  assert.equal(replaceAll("price * qty", { query: "(\\w+) \\* (\\w+)", caseSensitive: true, regexp: true }, "$2 * $1"), "qty * price");
-  assert.equal(replaceAll("Cart cart", { query: "cart", caseSensitive: false, regexp: false }, "basket"), "basket basket");
-  assert.equal(replaceAll("unchanged", { query: "", caseSensitive: true, regexp: false }, "x"), "unchanged");
+test("the query names every option, and the globs only when given", () => {
+  const spec = { query: "a b", caseSensitive: true, regexp: false, word: true, include: "", exclude: " " };
+  assert.equal(searchQuery(spec), "q=a+b&regex=0&case=1&word=1");
+  assert.equal(searchQuery({ ...spec, include: "src, *.md" }), "q=a+b&regex=0&case=1&word=1&include=src%2C+*.md");
 });

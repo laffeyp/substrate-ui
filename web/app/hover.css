@@ -37,3 +37,9 @@
 
 /* Meta's side graph (the template's side block): a segment. */
 .hover-side-seg:hover { outline: 1px solid #9db8d6 !important; }
+
+/* Editor search (sprint 435): a match row's and a file row's replace glyph shows while the pointer is on the
+   row. CSS tracks the pointer itself, so a row that moves under a still pointer (the row above it replaced
+   away) shows its glyph; React's mouseenter does not fire then. */
+.hover-search-row .hover-search-act { visibility: hidden; }
+.hover-search-row:hover .hover-search-act { visibility: visible; }

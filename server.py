@@ -54,6 +54,7 @@ from signals_gen import (
     ApiRefusedArea,
     DiffReadBase,
     FileReadEncoding,
+    FilesReplacePreparedScope,
     FileWrittenWritten,
     Signal,
     SessionCreatedWorkspaceShape,
@@ -451,7 +452,7 @@ def _interrupt_then_end(
 # Most specific first; a path no route serves is "unrouted".
 _AREA_RULES: tuple[tuple[str, ApiRefusedArea], ...] = (
     (r"/api/session/[^/]+/(turn|interrupt)", ApiRefusedArea.TURN),
-    (r"/api/session/[^/]+/(files|file|diff|search)(/watch)?", ApiRefusedArea.FILES),
+    (r"/api/session/[^/]+/(files|file|diff|search|search/replace)(/watch)?", ApiRefusedArea.FILES),
     (r"/api/session/[^/]+/children", ApiRefusedArea.CHILDREN),
     (r"/api/session/[^/]+/language(/.*)?", ApiRefusedArea.LANGUAGE),
     (r"/api/session/[^/]+/mcp", ApiRefusedArea.MCP),
@@ -2058,60 +2059,346 @@ def _workspace_hunks(root: Path, rel: str) -> dict[str, object]:
     return {"base": base_kind, "path": rel, "hunks": hunks}
 
 
-# UI sprint 434 (roadmap 2026-11-09-code-editor r10, E8; frame 24j): the workspace search's caps. A line
-# longer than the text cap is cut there; past the line cap the result is marked truncated.
+# UI sprints 434, 435 (roadmap 2026-11-09-code-editor r10, E8; research RESEARCH-2026-11-10-editor-search-r2): the
+# workspace search, the server's own walk and match as VS Code's ripgrep does it, with no git. The walk skips
+# VS Code's files.exclude names and its search.exclude folders, applies each folder's .gitignore and .ignore
+# whether or not the workspace is a git repository (ripgrep --no-require-git), searches hidden files, follows
+# no symlink, and skips a file over the file API's read cap, with a NUL byte (binary, as ripgrep decides) or
+# not UTF-8. Lines split on \n, as the editor counts them; a match never spans lines.
+WORKSPACE_SKIP_NAMES = frozenset({".git", ".svn", ".hg", ".jj", ".DS_Store", "Thumbs.db"})
+WORKSPACE_SKIP_DIRS = frozenset({"node_modules", "bower_components"})
+WORKSPACE_IGNORE_FILES = (".gitignore", ".ignore")
+WORKSPACE_WALK_MAX_FILES = 50_000
 WORKSPACE_SEARCH_MAX_LINES = 2000
 WORKSPACE_SEARCH_MAX_TEXT = 1000
 
 
 class SearchQueryError(ValueError):
-    """git grep refused the query (a pattern that does not compile)."""
+    """The query does not compile, or a glob is malformed."""
 
 
-def _workspace_search(root: Path, query: str, *, regex: bool, case: bool) -> dict[str, object]:
-    """The workspace's lines that match `query` (UI sprint 434; roadmap r10 E8): `git grep` in a work
-    tree with `--untracked` (tracked and untracked files, ignored ones left out), and `git grep
-    --no-index` outside one. Binary files are skipped (`-I`). `regex` reads the query as an extended
-    regular expression (`-E`), else as a fixed string (`-F`); `case` false matches either case (`-i`).
-    Paths are relative to the workspace, in git's order. Each file is `{path, lines: [{line, text}]}`.
-    git grep exits 1 when nothing matches; any other failure is a SearchQueryError with git's message."""
-    base = root.resolve(strict=True)
-    if not query:
-        return {"files": [], "lines": 0, "truncated": False}
-    inside = (_git_out(base, "rev-parse", "--is-inside-work-tree") or "").strip() == "true"
-    args = ["grep", "-n", "-I", "-z", "--no-color", "--untracked" if inside else "--no-index", "-E" if regex else "-F"]
-    if not case:
-        args.append("-i")
-    try:
-        proc = subprocess.run(  # noqa: S603 — git with fixed arguments; the query is passed after -e
-            ["git", "-C", str(base), *args, "-e", query, "--"],  # noqa: S607 — git from PATH, as _git_out
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=30,
-            check=False,
-        )
-    except (OSError, subprocess.SubprocessError) as exc:
-        raise SearchQueryError(str(exc)) from exc
-    if proc.returncode not in (0, 1):
-        raise SearchQueryError(proc.stderr.strip() or f"git grep exited {proc.returncode}")
-    files: list[dict[str, object]] = []
-    count = 0
-    truncated = False
-    for row in proc.stdout.splitlines():
-        parts = row.split("\x00", 2)
-        if len(parts) != 3 or not parts[1].isdigit():
+def _glob_regex(pat: str) -> str:
+    """A gitignore(5) glob as a regex over a /-separated path: `*` and `?` stop at `/`, `**/` is any run of
+    folders, a trailing `**` everything below, `[...]` a class (`[!...]` negated), `\\x` the literal x."""
+    out: list[str] = []
+    i = 0
+    while i < len(pat):
+        c = pat[i]
+        if c == "*" and pat[i : i + 2] == "**":
+            if pat[i + 2 : i + 3] == "/":
+                out.append("(?:.*/)?")
+                i += 3
+            else:
+                out.append(".*")
+                i += 2
             continue
-        if count == WORKSPACE_SEARCH_MAX_LINES:
-            truncated = True
+        if c == "*":
+            out.append("[^/]*")
+        elif c == "?":
+            out.append("[^/]")
+        elif c == "[":
+            end = pat.find("]", i + 2 if pat[i + 1 : i + 2] in ("!", "^") else i + 1)
+            if end < 0:
+                out.append(re.escape(c))
+            else:
+                body = pat[i + 1 : end]
+                neg = body[:1] in ("!", "^")
+                body = body[1:] if neg else body
+                out.append("[" + ("^" if neg else "") + body.replace("\\", "\\\\") + "]")
+                i = end + 1
+                continue
+        elif c == "\\" and i + 1 < len(pat):
+            out.append(re.escape(pat[i + 1]))
+            i += 2
+            continue
+        else:
+            out.append(re.escape(c))
+        i += 1
+    return "".join(out)
+
+
+class _Glob:
+    """One gitignore-style pattern, read from a file in folder `base` (or given as a search glob, base "").
+    A pattern with a `/` before its end is anchored to `base`; one without matches a name at any depth."""
+
+    def __init__(self, line: str, base: str) -> None:
+        self.negate = line.startswith("!")
+        pat = line[1:] if self.negate else line
+        if pat.startswith("\\!") or pat.startswith("\\#"):
+            pat = pat[1:]
+        self.dir_only = pat.endswith("/")
+        pat = pat.rstrip("/")
+        self.anchored = "/" in pat
+        pat = pat.lstrip("/")
+        self.base = base
+        self.rx = re.compile(_glob_regex(pat), re.DOTALL)
+
+    def matches(self, rel: str, is_dir: bool) -> bool:
+        if self.dir_only and not is_dir:
+            return False
+        if self.base:
+            if not rel.startswith(self.base + "/"):
+                return False
+            rel = rel[len(self.base) + 1 :]
+        return bool(self.rx.fullmatch(rel if self.anchored else rel.rsplit("/", 1)[-1]))
+
+
+def _ignore_rules(folder: Path, base: str) -> list[_Glob]:
+    rules: list[_Glob] = []
+    for name in WORKSPACE_IGNORE_FILES:
+        try:
+            text = (folder / name).read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        for raw in text.splitlines():
+            line = raw.rstrip() if not raw.endswith("\\ ") else raw
+            if not line or line.startswith("#"):
+                continue
+            try:
+                rules.append(_Glob(line, base))
+            except re.error:
+                continue  # a line git would not read either
+    return rules
+
+
+def _ignored(rules: list[_Glob], rel: str, is_dir: bool) -> bool:
+    """gitignore's rule: the last pattern that matches decides; `!` re-includes."""
+    out = False
+    for r in rules:
+        if r.matches(rel, is_dir):
+            out = not r.negate
+    return out
+
+
+def _globs(spec: str) -> list[_Glob]:
+    """VS Code's "files to include / exclude": comma-separated globs, read as ripgrep's -g reads them, the
+    way .gitignore patterns are read; a leading `./` anchors to the workspace."""
+    out: list[_Glob] = []
+    for part in spec.split(","):
+        p = part.strip()
+        if p.startswith("./"):
+            p = "/" + p[2:]
+        if p:
+            try:
+                out.append(_Glob(p, ""))
+            except re.error as exc:
+                raise SearchQueryError(f"glob {p!r}: {exc}") from None
+    return out
+
+
+def _workspace_files(root: Path, include: str = "", exclude: str = "") -> tuple[list[str], bool]:
+    """The workspace's searchable files, relative and /-separated, in path order, and whether the walk
+    stopped at WORKSPACE_WALK_MAX_FILES. An include glob keeps a file when it or one of its folders matches."""
+    base = root.resolve(strict=True)
+    inc, exc = _globs(include), _globs(exclude)
+    found: list[str] = []
+    cut = False
+
+    def included(rel: str) -> bool:
+        if not inc:
+            return True
+        parts = rel.split("/")
+        return any(g.matches("/".join(parts[:n]), n < len(parts)) for g in inc for n in range(1, len(parts) + 1))
+
+    def walk(folder: Path, rel_dir: str, rules: list[_Glob]) -> None:
+        nonlocal cut
+        rules = rules + _ignore_rules(folder, rel_dir)
+        try:
+            entries = sorted(os.scandir(folder), key=lambda e: e.name)
+        except OSError:
+            return
+        for entry in entries:
+            if cut:
+                return
+            if entry.name in WORKSPACE_SKIP_NAMES or entry.is_symlink():
+                continue
+            rel = f"{rel_dir}/{entry.name}" if rel_dir else entry.name
+            is_dir = entry.is_dir(follow_symlinks=False)
+            if is_dir and entry.name in WORKSPACE_SKIP_DIRS:
+                continue
+            if _ignored(rules, rel, is_dir) or any(g.matches(rel, is_dir) for g in exc):
+                continue
+            if is_dir:
+                walk(Path(entry.path), rel, rules)
+            elif entry.is_file(follow_symlinks=False) and included(rel):
+                if len(found) == WORKSPACE_WALK_MAX_FILES:
+                    cut = True
+                    return
+                found.append(rel)
+
+    walk(base, "", [])
+    found.sort()
+    return found, cut
+
+
+def _read_text(path: Path) -> tuple[str, str] | None:
+    """A file's text and its SHA-256, or None when it is over the read cap, binary or not UTF-8."""
+    try:
+        if path.stat().st_size > WORKSPACE_READ_MAX:
+            return None
+        data = path.read_bytes()
+    except OSError:
+        return None
+    if b"\x00" in data:
+        return None
+    try:
+        return data.decode("utf-8"), hashlib.sha256(data).hexdigest()
+    except UnicodeDecodeError:
+        return None
+
+
+def _search_regex(query: str, *, regex: bool, case: bool, word: bool) -> re.Pattern[str]:
+    """The query as Python's `re` reads it: a pattern, or the text escaped. Whole word adds `\\b` at an end
+    that is a word character, as VS Code's createRegExp does."""
+    src = query if regex else re.escape(query)
+    if word:
+        src = ("\\b" if re.match(r"\w", query[:1]) else "") + f"(?:{src})" + ("\\b" if re.match(r"\w", query[-1:]) else "")
+    try:
+        return re.compile(src, 0 if case else re.IGNORECASE)
+    except re.error as exc:
+        raise SearchQueryError(str(exc)) from None
+
+
+def _u16(s: str, i: int) -> int:
+    """Index i of s counted in UTF-16 units, as the page's strings count."""
+    return i if s.isascii() else len(s[:i].encode("utf-16-le")) // 2
+
+
+def _lines(text: str) -> list[tuple[str, str]]:
+    """Each line's text and its end (`\\r\\n`, `\\n`, or "" for the last)."""
+    out: list[tuple[str, str]] = []
+    for part in text.split("\n"):
+        out.append((part[:-1], "\r\n") if part.endswith("\r") else (part, "\n"))
+    out[-1] = (out[-1][0] + ("\r" if out[-1][1] == "\r\n" else ""), "")
+    return out
+
+
+def _workspace_search(
+    root: Path, query: str, *, regex: bool, case: bool, word: bool = False, include: str = "", exclude: str = ""
+) -> dict[str, object]:
+    """The workspace's matches (UI sprint 435). Each file is `{path, lines: [{line, text, ranges}]}`, ranges
+    the [start, end) of each match in UTF-16 units; `lines` and `matches` count them; `truncated` marks a
+    result cut at WORKSPACE_SEARCH_MAX_LINES or a walk cut at WORKSPACE_WALK_MAX_FILES."""
+    if not query:
+        return {"files": [], "lines": 0, "matches": 0, "truncated": False}
+    rx = _search_regex(query, regex=regex, case=case, word=word)
+    paths, truncated = _workspace_files(root, include, exclude)
+    base = root.resolve(strict=True)
+    files: list[dict[str, object]] = []
+    count = matches = 0
+    for rel in paths:
+        got = _read_text(base / rel)
+        if got is None:
+            continue
+        hits: list[dict[str, object]] = []
+        for n, (line, _end) in enumerate(_lines(got[0]), 1):
+            ranges = [[_u16(line, m.start()), _u16(line, m.end())] for m in rx.finditer(line) if m.end() > m.start()]
+            if not ranges:
+                continue
+            if count == WORKSPACE_SEARCH_MAX_LINES:
+                truncated = True
+                break
+            text = line[:WORKSPACE_SEARCH_MAX_TEXT]
+            cap = _u16(line, len(text))
+            hits.append({"line": n, "text": text, "ranges": [r for r in ranges if r[0] < cap]})
+            count += 1
+            matches += len(ranges)
+        if hits:
+            files.append({"path": rel, "lines": hits})
+        if count == WORKSPACE_SEARCH_MAX_LINES and truncated:
             break
-        path, line, text = parts
-        if not files or files[-1]["path"] != path:
-            files.append({"path": path, "lines": []})
-        cast(list[dict[str, object]], files[-1]["lines"]).append({"line": int(line), "text": text[:WORKSPACE_SEARCH_MAX_TEXT]})
-        count += 1
-    return {"files": files, "lines": count, "truncated": truncated}
+    return {"files": files, "lines": count, "matches": matches, "truncated": truncated}
+
+
+def _expand_replacement(template: str, m: re.Match[str]) -> str:
+    """A regex replacement as editors write it: `$1`–`$99`, `$<name>`, `$&` the match, `$$` a dollar, and
+    `\\n`, `\\t`, `\\\\`; anything else as written."""
+    out: list[str] = []
+    i = 0
+    while i < len(template):
+        c, nxt = template[i], template[i + 1 : i + 2]
+        if c == "$" and nxt == "$":
+            out.append("$")
+            i += 2
+        elif c == "$" and nxt == "&":
+            out.append(m.group(0))
+            i += 2
+        elif c == "$" and nxt.isdigit():
+            two = template[i + 1 : i + 3]
+            k = int(two) if two.isdigit() and int(two) <= (m.re.groups or 0) else int(nxt)
+            if 0 < k <= (m.re.groups or 0):
+                out.append(m.group(k) or "")
+                i += 1 + len(str(k))
+            else:
+                out.append(c)
+                i += 1
+        elif c == "$" and nxt == "<" and ">" in template[i + 2 :]:
+            name = template[i + 2 : template.index(">", i + 2)]
+            if name in m.re.groupindex:
+                out.append(m.group(name) or "")
+                i += 3 + len(name)
+            else:
+                out.append(c)
+                i += 1
+        elif c == "\\" and nxt in ("n", "t", "\\"):
+            out.append({"n": "\n", "t": "\t", "\\": "\\"}[nxt])
+            i += 2
+        else:
+            out.append(c)
+            i += 1
+    return "".join(out)
+
+
+def _replaced(text: str, rx: re.Pattern[str], replacement: str, *, regex: bool, line: int | None = None, index: int | None = None) -> tuple[str, int]:
+    """The text with its matches replaced line by line, as the search found them (so `^` and `$` are each
+    line's), and how many: every match, the matches on one line, or the index-th match on that line."""
+    out: list[str] = []
+    done = 0
+    for n, (body, end) in enumerate(_lines(text), 1):
+        if line is not None and n != line:
+            out.append(body + end)
+            continue
+        seen = 0
+
+        def sub(m: re.Match[str]) -> str:
+            nonlocal seen, done
+            if m.end() == m.start():
+                return m.group(0)
+            seen += 1
+            if index is not None and seen - 1 != index:
+                return m.group(0)
+            done += 1
+            return _expand_replacement(replacement, m) if regex else replacement
+
+        out.append(rx.sub(sub, body) + end)
+    return "".join(out), done
+
+
+def _workspace_replace(
+    root: Path, query: str, replacement: str, *, regex: bool, case: bool, word: bool = False, include: str = "", exclude: str = "",
+    path: str | None = None, line: int | None = None, index: int | None = None,
+) -> dict[str, object]:
+    """The new text of each file a replace changes (UI sprint 435), not written: every file the search
+    finds, the one `path`, or one match (`path`, `line`, `index`). Each file is `{path, text, sha256,
+    replaced}`, sha256 the hash of the text as read, for the write's conflict check."""
+    rx = _search_regex(query, regex=regex, case=case, word=word)
+    base = root.resolve(strict=True)
+    if path is not None:
+        _workspace_target(root, path)
+        paths = [path]
+    else:
+        paths = _workspace_files(root, include, exclude)[0]
+    files: list[dict[str, object]] = []
+    total = 0
+    for rel in paths:
+        got = _read_text(base / rel)
+        if got is None:
+            continue
+        text, n = _replaced(got[0], rx, replacement, regex=regex, line=line, index=index)
+        if n:
+            files.append({"path": rel, "text": text, "sha256": got[1], "replaced": n})
+            total += n
+    return {"files": files, "replaced": total}
 
 
 def _line_endings(text: str) -> str | None:
@@ -3026,6 +3313,10 @@ class Handler(BaseHTTPRequestHandler):
                 session_id = path[len("/api/session/") : -len("/interrupt")]
                 self._session_interrupt(session_id)
                 return
+            m_replace = re.fullmatch(r"/api/session/([^/]+)/search/replace", path)
+            if m_replace:  # UI sprint 435: a replace's new texts, for the page to write through PUT …/file
+                self._session_search_replace(m_replace.group(1))
+                return
             m_mcp = re.fullmatch(r"/api/session/([^/]+)/mcp", path)
             if m_mcp:  # UI sprint 129
                 self._session_mcp(m_mcp.group(1))
@@ -3882,15 +4173,55 @@ class Handler(BaseHTTPRequestHandler):
         root = self._session_workspace_root(session_id)
         if root is None:
             return
-        regex = q.get("regex", ["0"])[0] == "1"
+        def flag(key: str) -> bool:
+            return q.get(key, ["0"])[0] == "1"
+
+        regex, word = flag("regex"), flag("word")
         try:
-            out = _workspace_search(root, q.get("q", [""])[0], regex=regex, case=q.get("case", ["0"])[0] == "1")
+            out = _workspace_search(
+                root, q.get("q", [""])[0], regex=regex, case=flag("case"), word=word,
+                include=q.get("include", [""])[0], exclude=q.get("exclude", [""])[0],
+            )
         except SearchQueryError as exc:
             self._error(400, str(exc))
             return
         TRACE.emit(
             Signal.FILES_SEARCHED,
-            {"session_id": session_id, "regex": regex, "files": len(cast(list[Any], out["files"])), "lines": out["lines"], "truncated": out["truncated"]},
+            {"session_id": session_id, "regex": regex, "word": word, "files": len(cast(list[Any], out["files"])), "lines": out["lines"], "matches": out["matches"], "truncated": out["truncated"]},
+        )
+        self._json(out)
+
+    def _session_search_replace(self, session_id: str) -> None:
+        """UI sprint 435: POST /api/session/<id>/search/replace, body `{q, regex, case, word, include,
+        exclude, replace, path?, line?, index?}`: the new text of each file the replace changes, and the
+        hash each was read at (`_workspace_replace`). Nothing is written here; the page writes each file
+        through PUT …/file, one FileWritten each, and a file changed since is refused there (409)."""
+        root = self._session_workspace_root(session_id)
+        if root is None:
+            return
+        try:
+            body = self._read_json_body()
+            line, index = body.get("line"), body.get("index")
+            out = _workspace_replace(
+                root, str(body.get("q") or ""), str(body.get("replace") or ""),
+                regex=body.get("regex") is True, case=body.get("case") is True, word=body.get("word") is True,
+                include=str(body.get("include") or ""), exclude=str(body.get("exclude") or ""),
+                path=str(body["path"]) if body.get("path") else None,
+                line=line if isinstance(line, int) else None, index=index if isinstance(index, int) else None,
+            )
+        except BodyTooLarge as exc:
+            self._error(413, str(exc))
+            return
+        except (SearchQueryError, WorkspaceEscapeError) as exc:
+            self._error(400, str(exc))
+            return
+        except ValueError as exc:
+            self._error(400, str(exc))
+            return
+        scope = FilesReplacePreparedScope.ONE if body.get("index") is not None else FilesReplacePreparedScope.FILE if body.get("path") else FilesReplacePreparedScope.ALL
+        TRACE.emit(
+            Signal.FILES_REPLACE_PREPARED,
+            {"session_id": session_id, "scope": scope, "files": len(cast(list[Any], out["files"])), "replaced": out["replaced"]},
         )
         self._json(out)
 
