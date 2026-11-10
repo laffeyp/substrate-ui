@@ -1012,6 +1012,206 @@
       "rationale": "A turn sent with chips and one sent without read the same in the trace. The count tells a reader of server.jsonl that the record's UserMessage at this turn carries attachments; kinds, refs and text stay on the record (E1).",
       "ratified": true,
       "ratified_by": "agent-resolved 2026-11-08, sprint 388"
+    },
+    {
+      "id": "P-0.28-EDITOR",
+      "kind": "NEW_TAG_PROPOSED",
+      "layer": 1,
+      "element": "EDITOR_OPENED, EDITOR_CLOSED, EDITOR_FILE_OPENED, EDITOR_FILE_SAVED, EDITOR_FILE_CLOSED, EDITOR_COLUMN_FOLDED, EDITOR_FOLLOW_MARKED, EDITOR_FOLLOW_CONFIRMED, EDITOR_FOLLOW_WITHDRAWN, EDITOR_HUNK_DRAWN, EDITOR_CHIP_ADDED, EDITOR_SEARCH_QUERIED, EDITOR_QUICK_OPENED, EDITOR_INSPECTOR_SWAPPED, EDITOR_KEY_REFUSED, EDITOR_DRAWN",
+      "source": "the code editor view (design spec section 24; ROADMAP-2026-11-09-code-editor-r4.md): 16 tags for the editor's lifecycle, files, columns, follow marks, hunks, chips, search, quick open, inspector swap, refused keys, and the structural view",
+      "rationale": "The code editor is the first mode beyond terminal and meta. Each interaction the roadmap names (file opened, column folded, follow mark, hunk drawn, chip added, search, quick open, key refused) is one or more tags. EDITOR_DRAWN is the view-category tag that pairs with the behavior tags in the dual contract. EDITOR_HUNK_DRAWN is the view tag for the diff computation. EDITOR_KEY_REFUSED is the incident tag for blocked actions. No path or text in any payload (E1). The file is identified by following session_id and seq to the kernel record. New entity (EditorView), new session stratum (editor_run under pane), new operator (EditorController), two state-transition rules (S10 follow pairing, S11 editor_run terminal), one evidence constraint (E9 diagnostic-required on EDITOR_KEY_REFUSED).",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-09, vocabulary session"
+    },
+    {
+      "id": "P-0.28-PANE-DRAWN-EDITOR",
+      "kind": "PAYLOAD_FIELD_PROPOSED",
+      "layer": 2,
+      "element": "PANE_DRAWN.state gains enum value editor",
+      "source": "the code editor view: PANE_DRAWN's state enum (picker | session | record) has no value for a pane showing the editor",
+      "rationale": "The editor is a distinct visual state of the pane, not a sub-state of session. A trace reader filtering PANE_DRAWN by state=editor finds every commit where the pane showed the code editor. The existing values (picker, session, record) stay; editor is added.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-09, vocabulary session"
+    },
+    {
+      "id": "P-0.28-KEY-ROUTED-EDITOR",
+      "kind": "PAYLOAD_FIELD_PROPOSED",
+      "layer": 2,
+      "element": "KEY_ROUTED.target gains enum value editor",
+      "source": "the code editor view: keys routed to the editor (⌘P, ⌘F when CM focused, ⌘⇧F) need a target value",
+      "rationale": "KEY_ROUTED.target distinguishes where a named key was dispatched. Menu keys like ⌘P that route to the editor when it is open have a different target from the same key when the editor is closed. The existing values stay; editor is added.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-09, vocabulary session"
+    },
+    {
+      "id": "P-0.29-VIEW-EDITOR",
+      "kind": "PAYLOAD_FIELD_PROPOSED",
+      "layer": 2,
+      "element": "VIEW_CHANGED from and to take the value editor",
+      "source": "spec r6 §4; D86; frames 24a, 24h; web/app/derive/open_view.ts header",
+      "rationale": "The editor is an open view beside panes and meta, so a change into or out of it is a VIEW_CHANGED like any other.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-09, sprint 404; grounds: project — spec r6 §4, D86, 24h; SDD — PRINCIPLES commitment 1; practice — n/a"
+    },
+    {
+      "id": "P-0.29-PANE-DRAWN-EDITOR-RETIRED",
+      "kind": "TAG_DEPRECATION_PROPOSED",
+      "layer": 2,
+      "element": "PANE_DRAWN.state loses the value editor (added in v0.28 by P-0.28-PANE-DRAWN-EDITOR)",
+      "source": "BLACKBOARD 2026-11-09 agent-resolved: the editor is a window view",
+      "rationale": "Panes are not drawn while the editor view shows, as while meta shows; the value was emitted only by the build sprints 389–402 made, set aside in _deprecated/editor-phase-1-2026-11-09/.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-09, sprint 404; grounds: project — spec r6 §4, D35, frame 24a; SDD — PRINCIPLES commitment 1 (retire explicitly); practice — n/a"
+    },
+    {
+      "id": "P-0.29-KEY-REFUSED-NO-SESSION",
+      "kind": "PAYLOAD_FIELD_PROPOSED",
+      "layer": 2,
+      "element": "EDITOR_KEY_REFUSED.reason gains no_session",
+      "source": "roadmap r6 R1",
+      "rationale": "⌘⇧E at a picker with no session does nothing; the refusal must be in the trace so a key that 'does nothing' says why.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-09, sprint 404; grounds: project — roadmap r6 R1; App.toggleMeta refuses the same case; SDD — BOOTSTRAP step 8 (incident tags carry a diagnostic); practice — n/a"
+    },
+    {
+      "id": "P-0.29-COLUMN-FOLDED-CAUSE",
+      "kind": "PAYLOAD_FIELD_PROPOSED",
+      "layer": 2,
+      "element": "EDITOR_COLUMN_FOLDED gains required cause: key | menu | rail | focus",
+      "source": "spec r6 §5.1 (1), (4); D51; frame 16c",
+      "rationale": "A fold comes from a key, the View menu, a click on the rail, or focus; a reader needs to tell focus's folds from a person's.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-09, sprint 404; grounds: project — spec r6 §5.1; SDD — BOOTSTRAP step 3 (payload carries what a consumer acts on differently); practice — n/a"
+    },
+    {
+      "id": "P-0.29-BINDING-OPTIONAL",
+      "kind": "PAYLOAD_FIELD_PROPOSED",
+      "layer": 2,
+      "element": "EDITOR_OPENED.binding and EDITOR_DRAWN.binding move from required to optional",
+      "source": "D6; roadmap r6 (no binding setting before Phase 2)",
+      "rationale": "No vim/nano setting exists in Phase 1; a required field would force an invented value.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-09, sprint 404; grounds: project — D6; SDD — PRINCIPLES commitment 2 (validated at the mouth: a required field must be true); practice — n/a"
+    },
+    {
+      "id": "P-0.29-EDITOR-DRAWN-LAYOUT",
+      "kind": "PAYLOAD_FIELD_PROPOSED",
+      "layer": 2,
+      "element": "EDITOR_DRAWN gains dock, sides_swapped, focus, tree_rows, modified_dots",
+      "source": "roadmap r6 R4–R9; frames 24a, 16c",
+      "rationale": "Each behaviour Phase 1 adds needs its drawn counterpart in the view tag (dual contract).",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-09, sprint 404; grounds: project — spec r6 §5.1; SDD — BOOTSTRAP step 9 (dual-contract audit); practice — n/a"
+    },
+    {
+      "id": "P-0.29-EDITOR-LAYOUT-TAGS",
+      "kind": "NEW_TAG_PROPOSED",
+      "layer": 1,
+      "element": "EDITOR_DOCK_SET, EDITOR_SIDES_SWAPPED, EDITOR_FOCUS_SET, EDITOR_COLUMN_RESIZED (editor); DIFF_READ (server)",
+      "source": "spec r6 §5.1 (2)–(5); D48 (dots from the real diff); roadmap r6 R5, R7–R10",
+      "rationale": "Each is a distinct change a person makes or the server computes; none had a tag, so sprints 398–400 closed with no signal at all.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-09, sprint 404; grounds: project — spec r6 §5.1, D48; SDD — BOOTSTRAP step 2 (one tag per observability point); practice — n/a"
+    },
+    {
+      "id": "P-0.30-KEY-REFUSED-NO-SPLIT",
+      "kind": "PAYLOAD_FIELD_PROPOSED",
+      "layer": 2,
+      "element": "EDITOR_KEY_REFUSED.reason gains no_split",
+      "source": "roadmap r8 E1; D49 (c); spec r6 §4 (\"no splitting in this view\")",
+      "rationale": "⌘D and ⌘⇧D split the window outside the editor; inside it they are refused, and the refusal must say why in the trace, as ⌘⇧E's at a picker does.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-09, sprint 417; grounds: project — D49 (c), spec r6 §4; SDD — BOOTSTRAP step 8 (an incident carries its diagnostic); practice — n/a"
+    },
+    {
+      "id": "P-0.31-DIFF-READ-HUNKS",
+      "kind": "PAYLOAD_FIELD_PROPOSED",
+      "layer": 2,
+      "element": "DIFF_READ gains optional hunks",
+      "source": "roadmap r8 E2; review of r7, finding 2; spec r6 §5 (\"each hunk vs main\"; \"+2 −1 vs main\"); frame 24a",
+      "rationale": "The editor draws each hunk inline, counts +N −M in the status line and lists hunks in CHANGES IN THIS FILE; the server's per-file read must say how many it found.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-09, sprint 418; grounds: project — roadmap r8 E2, 24a; SDD — BOOTSTRAP step 3 (payload carries what a consumer acts on); practice — n/a"
+    },
+    {
+      "id": "P-0.32-EDITOR-DRAWN-INSPECTOR",
+      "kind": "PAYLOAD_FIELD_PROPOSED",
+      "layer": 2,
+      "element": "EDITOR_DRAWN gains outline_rows, hunks, activity_rows, history_rows",
+      "source": "roadmap r8 E6; spec r6 §5.0; frame 24a",
+      "rationale": "Each inspector section the editor draws needs its drawn counterpart in the view tag and the pixel anchor, so the trace and the screen can be checked against the record (dual contract).",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-09, sprint 422; grounds: project — 24a's inspector; SDD — BOOTSTRAP step 9 (dual-contract audit); practice — n/a"
+    },
+    {
+      "id": "P-0.33-EDITOR-DRAWN-BUFFER",
+      "kind": "PAYLOAD_FIELD_PROPOSED",
+      "layer": 2,
+      "element": "EDITOR_DRAWN gains mode, read_only, unsaved",
+      "source": "roadmap r8 E4; spec r6 §5 \"Code\" (the status line); frame 24a",
+      "rationale": "The status line's mode and the buffer's editable and unsaved states are drawn; each needs its counterpart in the view tag and the pixel anchor so the screen can be checked against the record.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-09, sprint 424; grounds: project — 24a's status line, roadmap r8 E4; SDD — BOOTSTRAP step 9 (dual-contract audit); practice — n/a"
+    },
+    {
+      "id": "P-0.33-BINDING-REQUIRED",
+      "kind": "INVARIANT_PROPOSED",
+      "layer": 2,
+      "element": "binding is present on every EDITOR_OPENED and EDITOR_DRAWN",
+      "source": "v0.29 note (optional until the binding setting exists); sprint 423 (the setting)",
+      "rationale": "The setting exists and every record carries the binding; required, the checker refuses a record without it.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-09, sprint 424; grounds: project — sprint 423; SDD — vocabulary as contract (a field always written is required); practice — n/a"
+    },
+    {
+      "id": "P-0.34-KEY-REFUSED-SAVE",
+      "kind": "PAYLOAD_FIELD_PROPOSED",
+      "layer": 2,
+      "element": "EDITOR_KEY_REFUSED.reason gains not_editor and no_file; EDITOR_DRAWN gains conflict",
+      "source": "roadmap r8, the key table (⌘S outside the editor: refused, written; ⌘W with no tab open: refused and written); roadmap r8 E4 (the 409 offer)",
+      "rationale": "Each refusal the key table names needs a reason a reader can act on; the drawn offer needs its view-tag field.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-09, sprint 425; grounds: project — roadmap r8 key table and E4; SDD — BOOTSTRAP step 2 (payload carries what a consumer acts on), step 9 (dual contract); practice — n/a"
+    },
+    {
+      "id": "P-0.34-SAVE-CONFLICT",
+      "kind": "NEW_TAG_PROPOSED",
+      "layer": 1,
+      "element": "EDITOR_SAVE_CONFLICTED; EDITOR_CONFLICT_RESOLVED (choice reload | overwrite)",
+      "source": "roadmap r8 E4: a stale save (409) offers to reload the file or overwrite it",
+      "rationale": "The server's API_REFUSED 409 says a write was refused; nothing said the editor drew the offer or which answer the reader gave.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-09, sprint 425; grounds: project — roadmap r8 E4; SDD — vocabulary as contract (a real event with no tag is a vocabulary gap); practice — n/a"
+    },
+    {
+      "id": "P-0.35-UNDO-ROUTED",
+      "kind": "NEW_TAG_PROPOSED",
+      "layer": 1,
+      "element": "UNDO_ROUTED (direction undo | redo; to buffer | history | page | none)",
+      "source": "roadmap r8 key table (⌘Z, ⌘⇧Z: menu-owned, window-routed); BLACKBOARD 2026-11-09 the undo boundary",
+      "rationale": "The menu's MENU_COMMAND_SENT says Undo was chosen; nothing said whether the buffer, HISTORY or the page took it, which is the boundary the decision defines.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-09, sprint 426; grounds: project — roadmap r8 key table, the undo boundary decision; SDD — a real event with no tag is a vocabulary gap; practice — n/a"
+    },
+    {
+      "id": "P-0.36-JUST-AN-EDITOR",
+      "kind": "PAYLOAD_FIELD_PROPOSED",
+      "layer": 2,
+      "element": "FILE_WRITTEN.written gains off_record; EDITOR_OPENED.binding and EDITOR_DRAWN.binding gain standard; EDITOR_DRAWN.read_only removed",
+      "source": "the Architect, 2026-11-09 (BLACKBOARD user entries): the editor is an editor whether the session is on or off; a normal editor by default, vim and nano optional",
+      "rationale": "A save into a session that is off writes the file without a record entry, and the trace must say so; the default binding is standard; nothing is read-only, so the field would be false forever.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-09, sprint 427; grounds: project — the Architect's rulings; SDD — vocabulary as contract (a field that cannot vary is removed, a new state is named); practice — n/a"
+    },
+    {
+      "id": "P-0.37-FIND-IN-FILE",
+      "kind": "NEW_TAG_PROPOSED",
+      "layer": 1,
+      "element": "EDITOR_FIND_QUERIED (regex, case_sensitive, match_count); EDITOR_REPLACED (scope one | all, count)",
+      "source": "roadmap r10 E6 (FIND / REPLACE: ⌘F, ⌥⌘F; Aa, .*; 1 of N; ↵ all); frame 24a",
+      "rationale": "EDITOR_SEARCH_QUERIED is the workspace search (⌘⇧F) with file counts; a find in the open file and a replace in its buffer had no tags.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-09, sprint 428; grounds: project — roadmap r10 E6, 24a; SDD — a real event with no tag is a vocabulary gap; practice — n/a"
     }
   ]
 }

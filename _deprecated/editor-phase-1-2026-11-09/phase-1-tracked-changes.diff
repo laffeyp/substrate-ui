@@ -1,0 +1,510 @@
+diff --git a/electron/main.ts b/electron/main.ts
+index e67fe42..3dda9d0 100644
+--- a/electron/main.ts
++++ b/electron/main.ts
+@@ -13,7 +13,10 @@
+ // Sprint 079 replaces the hard-coded 8765 with --port 0 + readback.
+ 
+ import { app, BrowserWindow, shell, ipcMain, dialog, screen } from "electron";
+-import { spawn, spawnSync } from "node:child_process";
++import { execFile, spawn, spawnSync } from "node:child_process";
++import { promisify } from "node:util";
++
++const execFileAsync = promisify(execFile);
+ import * as fs from "node:fs";
+ import * as http from "node:http";
+ import * as os from "node:os";
+@@ -910,3 +913,95 @@ ipcMain.handle("native:pick-folder", async (event) => {
+   traceEmit(Signal.NATIVE_DIALOG_CLOSED, { dialog: NativeDialogClosedDialog.PICK_FOLDER, outcome: picked ? NativeDialogClosedOutcome.PICKED : NativeDialogClosedOutcome.CANCELLED }, win ? win.id : null);
+   return picked ? r.filePaths[0] : null;
+ });
++
++// Sprint 391 — directory listing for the editor's file tree. The renderer calls
++// window.native.listDir(workspace, dirPath) and main reads the directory, returning
++// { name, type, size }[] for each entry. The listed path must resolve under the workspace
++// root; anything else returns an empty array. Truncated at 20,000 entries.
++const DIR_CAP = 20_000;
++ipcMain.handle("native:list-dir", async (_event, workspace: string, dirPath: string) => {
++  try {
++    const root = path.resolve(workspace);
++    const target = path.resolve(dirPath);
++    if (!target.startsWith(root + path.sep) && target !== root) return { entries: [], truncated: false };
++    const names = await fs.promises.readdir(target, { withFileTypes: true });
++    const truncated = names.length > DIR_CAP;
++    const slice = truncated ? names.slice(0, DIR_CAP) : names;
++    const entries: { name: string; type: "file" | "directory"; size: number }[] = [];
++    for (const d of slice) {
++      const full = path.join(target, d.name);
++      let size = 0;
++      if (d.isFile()) {
++        try { size = (await fs.promises.stat(full)).size; } catch { /* unreadable */ }
++      }
++      entries.push({ name: d.name, type: d.isDirectory() ? "directory" : "file", size });
++    }
++    return { entries, truncated };
++  } catch {
++    return { entries: [], truncated: false };
++  }
++});
++
++// Sprint 393 — diff vs main for the editor's modified dots. Returns the list of files
++// changed relative to the merge-base of the default branch, using a scratch index so
++// untracked files appear. For workspaces with no git or no main branch, returns [].
++ipcMain.handle("native:diff-vs-main", async (_event, workspace: string) => {
++  try {
++    const root = path.resolve(workspace);
++    const gitDir = path.join(root, ".git");
++    try { await fs.promises.access(gitDir); } catch { return { files: [] }; }
++
++    const git = async (...args: string[]) => {
++      const { stdout } = await execFileAsync("git", args, { cwd: root, maxBuffer: 10 * 1024 * 1024 });
++      return stdout.trim();
++    };
++
++    // Find the default branch: try main, then master, then HEAD's symbolic ref.
++    let defaultBranch = "main";
++    try { await git("rev-parse", "--verify", "main"); } catch {
++      try { await git("rev-parse", "--verify", "master"); defaultBranch = "master"; } catch {
++        try { defaultBranch = await git("symbolic-ref", "--short", "HEAD"); } catch {
++          return { files: [] };
++        }
++      }
++    }
++
++    // Merge-base between the default branch and HEAD.
++    let base: string;
++    try { base = await git("merge-base", defaultBranch, "HEAD"); } catch {
++      // No merge-base (orphan branch, only one commit, or HEAD is the default branch).
++      // Fall back to diffing the entire tree against an empty tree.
++      base = await git("hash-object", "-t", "tree", "/dev/null");
++    }
++
++    // Use a scratch index so untracked files show in the diff without modifying the real index.
++    const tmpDir = path.join(os.tmpdir(), `substrate-diff-${Date.now()}`);
++    await fs.promises.mkdir(tmpDir, { recursive: true });
++    const scratchIndex = path.join(tmpDir, "index");
++    const realIndex = path.join(root, ".git", "index");
++    try { await fs.promises.copyFile(realIndex, scratchIndex); } catch { /* no index yet */ }
++
++    const gitEnv = { ...process.env, GIT_INDEX_FILE: scratchIndex };
++    const gitScratch = async (...args: string[]) => {
++      const { stdout } = await execFileAsync("git", args, { cwd: root, maxBuffer: 10 * 1024 * 1024, env: gitEnv });
++      return stdout.trim();
++    };
++
++    await gitScratch("add", "-A", "--intent-to-add");
++    const nameStatus = await gitScratch("diff", "--name-status", base);
++
++    // Cleanup scratch index.
++    await fs.promises.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
++
++    const files: { path: string; status: string }[] = [];
++    for (const line of nameStatus.split("\n")) {
++      if (!line) continue;
++      const tab = line.indexOf("\t");
++      if (tab === -1) continue;
++      files.push({ path: line.slice(tab + 1), status: line.slice(0, tab) });
++    }
++    return { files };
++  } catch {
++    return { files: [] };
++  }
++});
+diff --git a/electron/menu.ts b/electron/menu.ts
+index 22eade6..8d4d617 100644
+--- a/electron/menu.ts
++++ b/electron/menu.ts
+@@ -107,6 +107,31 @@ function buildTemplate(getWin, newWindow) {
+           label: "Assays",
+           click: () => send(getWin(), "toggle-assays"),
+         },
++        {
++          id: "menu-toggle-editor",
++          label: "Editor",
++          accelerator: "CmdOrCtrl+Shift+E",
++          click: () => send(getWin(), "toggle-editor"),
++        },
++        { type: "separator" },
++        {
++          id: "menu-toggle-editor-left",
++          label: "Files",
++          accelerator: "Alt+CmdOrCtrl+L",
++          click: () => send(getWin(), "toggle-editor-left"),
++        },
++        {
++          id: "menu-toggle-editor-right",
++          label: "Inspector",
++          accelerator: "Alt+CmdOrCtrl+R",
++          click: () => send(getWin(), "toggle-editor-right"),
++        },
++        {
++          id: "menu-toggle-editor-bottom",
++          label: "Transcript",
++          accelerator: "CmdOrCtrl+J",
++          click: () => send(getWin(), "toggle-editor-bottom"),
++        },
+         { type: "separator" },
+         { role: "togglefullscreen" },
+         { type: "separator" },
+diff --git a/electron/preload.ts b/electron/preload.ts
+index 5efbc94..c259387 100644
+--- a/electron/preload.ts
++++ b/electron/preload.ts
+@@ -29,6 +29,7 @@ ipcRenderer.on("menu:close-pane", (_e, p) => dispatchMenu("close-pane", p));
+ ipcRenderer.on("menu:close-window", (_e, p) => dispatchMenu("close-window", p));
+ ipcRenderer.on("menu:toggle-meta", (_e, p) => dispatchMenu("toggle-meta", p));
+ ipcRenderer.on("menu:toggle-assays", (_e, p) => dispatchMenu("toggle-assays", p));
++ipcRenderer.on("menu:toggle-editor", (_e, p) => dispatchMenu("toggle-editor", p));
+ ipcRenderer.on("menu:settings", (_e, p) => dispatchMenu("settings", p));
+ ipcRenderer.on("deep-link", (_e, url) => dispatchDeepLink(url));
+ 
+@@ -64,6 +65,10 @@ contextBridge.exposeInMainWorld("native", {
+   // surface. Returns the picked path or null on cancel.
+   pickFolder: () => ipcRenderer.invoke("native:pick-folder"),
+   openRecordDialog: () => ipcRenderer.invoke("native:open-record"),
++  // Sprint 391 — directory listing for the editor's file tree.
++  listDir: (workspace: string, dirPath: string) => ipcRenderer.invoke("native:list-dir", workspace, dirPath),
++  // Sprint 393 — diff vs main for the editor's modified dots.
++  diffVsMain: (workspace: string) => ipcRenderer.invoke("native:diff-vs-main", workspace),
+   // The window's vocabulary records; main writes them to this launch's trace folder (window-<id>.jsonl).
+   signal: (record) => ipcRenderer.send("native:signal", record),
+ });
+diff --git a/harness/shakeout/run.ts b/harness/shakeout/run.ts
+index 67e6868..5a5701f 100644
+--- a/harness/shakeout/run.ts
++++ b/harness/shakeout/run.ts
+@@ -22,6 +22,8 @@ import { flow as cliVersionPicker } from "./cli_version_picker";
+ import { flow as electronSmoke } from "./electron_smoke";
+ import { flow as electronMenu } from "./electron_menu";
+ import { flow as electronDeeplink } from "./electron_deeplink";
++import { flow as editorToggleSignals } from "./editor_toggle_signals";
++import { flow as editorColumnsSignals } from "./editor_columns_signals";
+ import { TOOL_FLOWS } from "./tools_index";
+ import { join } from "node:path";
+ 
+@@ -49,6 +51,8 @@ const AXIS_C: Flow[] = [
+   electronSmoke,
+   electronMenu,
+   electronDeeplink,
++  editorToggleSignals,
++  editorColumnsSignals,
+ ];
+ const ALL_FLOWS: Flow[] = [
+   ...(AXIS_ONLY.includes("A") ? AXIS_A : []),
+diff --git a/package.json b/package.json
+index e19de5e..919ef26 100644
+--- a/package.json
++++ b/package.json
+@@ -28,7 +28,7 @@
+     "gates:scroll": "npx tsx harness/shakeout/transcript_follow.ts",
+     "gates:tasks": "npx tsx harness/shakeout/tasks_gate.ts",
+     "test:py": "uv run --project ../substrate python -m pytest tests/ -q -p no:cacheprovider",
+-    "gates:electron": "SHAKEOUT_AXIS=C SHAKEOUT_RUNS=1 npx tsx harness/shakeout/run.ts && npx tsx harness/shakeout/lifecycle_gates.ts && npx tsx harness/shakeout/transcript_follow.ts && npx tsx harness/shakeout/resume_ended_session.ts && npx tsx harness/shakeout/driver_chip_on_resume.ts && npx tsx harness/shakeout/resume_after_two_ends.ts && npx tsx harness/shakeout/graph_model_lane_on_resume.ts && npx tsx harness/shakeout/one_top_bar.ts && npx tsx harness/shakeout/workspace_card.ts && npx tsx harness/shakeout/no_default_model.ts && npx tsx harness/shakeout/model_chip_indicator.ts && npx tsx harness/shakeout/tool_output_toggle.ts && npx tsx harness/shakeout/input_bar.ts && npx tsx harness/shakeout/length_tone_rows.ts && npx tsx harness/shakeout/session_start_line.ts && npx tsx harness/shakeout/activity_clock.ts && npx tsx harness/shakeout/naming_sessions.ts && npx tsx harness/shakeout/split_returns_to_panes.ts && npx tsx harness/shakeout/pane_grid.ts && npx tsx harness/shakeout/transcript_root_kept.ts && npx tsx harness/shakeout/new_window.ts && npx tsx harness/shakeout/ws_column_opens_down.ts && npx tsx harness/shakeout/ws_input_caret.ts && npx tsx harness/shakeout/model_down_drills.ts && npx tsx harness/shakeout/left_folds_parent.ts && npx tsx harness/shakeout/left_folds_workspace.ts && npx tsx harness/shakeout/records_workspace_box.ts && npx tsx harness/shakeout/git_workspace_label.ts && npx tsx harness/shakeout/model_half_starts_session.ts && npx tsx harness/shakeout/choose_folder_starts_session.ts && npx tsx harness/shakeout/trace_files.ts && TRACE_PLANT=cap npx tsx harness/shakeout/trace_files.ts && TRACE_PLANT=server-cap npx tsx harness/shakeout/trace_files.ts && npx tsx harness/shakeout/main_signals.ts && npx tsx harness/shakeout/pane_signals.ts && npx tsx harness/shakeout/view_signals.ts && npx tsx harness/shakeout/key_signals.ts && npx tsx harness/shakeout/lens_signals.ts && npx tsx harness/shakeout/session_action_signals.ts && npx tsx harness/shakeout/cli_login_signals.ts && npx tsx harness/shakeout/record_open_signals.ts && npx tsx harness/shakeout/page_signals.ts && npx tsx harness/shakeout/app_view_delegate_lane.ts && npx tsx harness/shakeout/records_keys.ts && npx tsx harness/shakeout/assay_page.ts && npx tsx harness/shakeout/studio_page.ts && npx tsx harness/shakeout/records_box_width.ts && npx tsx harness/shakeout/stream_follows_bottom.ts && npx tsx harness/shakeout/side_graph_scroll.ts && npx tsx harness/shakeout/missing_workspace_named.ts && npx tsx harness/shakeout/controls_mid_session.ts && npx tsx harness/shakeout/slash_menu.ts && npx tsx harness/shakeout/slash_inline_hint.ts && npx tsx harness/shakeout/slash_choice_keys.ts && npx tsx harness/shakeout/slash_tab_complete.ts && npx tsx harness/shakeout/both_session_shapes.ts && npx tsx harness/shakeout/structure_lists_producers.ts && npx tsx harness/shakeout/session_prompt_once_across_restart.ts && npx tsx harness/shakeout/language_lens_bars.ts && npx tsx harness/shakeout/language_lens_views.ts && npx tsx harness/shakeout/language_bar_line.ts && npx tsx harness/shakeout/language_lens_turns.ts && npx tsx harness/shakeout/language_rule_ellipsis.ts && npx tsx harness/shakeout/run_panes.ts && npx tsx harness/shakeout/delegate_pane.ts && npx tsx harness/shakeout/find_counts_transcript.ts && npx tsx harness/shakeout/dialogs.ts && npx tsx harness/shakeout/first_run_footer.ts && npx tsx harness/shakeout/meta_inspector_io_scene.ts && npx tsx harness/shakeout/escape_order.ts && npx tsx harness/shakeout/copy_key.ts && npx tsx harness/shakeout/csp_holds.ts && npx tsx harness/shakeout/menu_commands.ts && npx tsx harness/shakeout/invariant_signals.ts && npx tsx harness/shakeout/trace_reader.ts && npx tsx harness/shakeout/fault_signals.ts && npx tsx harness/shakeout/action_signals.ts && npx tsx harness/shakeout/workspace_files_signals.ts && npx tsx harness/shakeout/turn_attachments_signals.ts",
++    "gates:electron": "SHAKEOUT_AXIS=C SHAKEOUT_RUNS=1 npx tsx harness/shakeout/run.ts && npx tsx harness/shakeout/lifecycle_gates.ts && npx tsx harness/shakeout/transcript_follow.ts && npx tsx harness/shakeout/resume_ended_session.ts && npx tsx harness/shakeout/driver_chip_on_resume.ts && npx tsx harness/shakeout/resume_after_two_ends.ts && npx tsx harness/shakeout/graph_model_lane_on_resume.ts && npx tsx harness/shakeout/one_top_bar.ts && npx tsx harness/shakeout/workspace_card.ts && npx tsx harness/shakeout/no_default_model.ts && npx tsx harness/shakeout/model_chip_indicator.ts && npx tsx harness/shakeout/tool_output_toggle.ts && npx tsx harness/shakeout/input_bar.ts && npx tsx harness/shakeout/length_tone_rows.ts && npx tsx harness/shakeout/session_start_line.ts && npx tsx harness/shakeout/activity_clock.ts && npx tsx harness/shakeout/naming_sessions.ts && npx tsx harness/shakeout/split_returns_to_panes.ts && npx tsx harness/shakeout/pane_grid.ts && npx tsx harness/shakeout/transcript_root_kept.ts && npx tsx harness/shakeout/new_window.ts && npx tsx harness/shakeout/ws_column_opens_down.ts && npx tsx harness/shakeout/ws_input_caret.ts && npx tsx harness/shakeout/model_down_drills.ts && npx tsx harness/shakeout/left_folds_parent.ts && npx tsx harness/shakeout/left_folds_workspace.ts && npx tsx harness/shakeout/records_workspace_box.ts && npx tsx harness/shakeout/git_workspace_label.ts && npx tsx harness/shakeout/model_half_starts_session.ts && npx tsx harness/shakeout/choose_folder_starts_session.ts && npx tsx harness/shakeout/trace_files.ts && TRACE_PLANT=cap npx tsx harness/shakeout/trace_files.ts && TRACE_PLANT=server-cap npx tsx harness/shakeout/trace_files.ts && npx tsx harness/shakeout/main_signals.ts && npx tsx harness/shakeout/pane_signals.ts && npx tsx harness/shakeout/view_signals.ts && npx tsx harness/shakeout/key_signals.ts && npx tsx harness/shakeout/lens_signals.ts && npx tsx harness/shakeout/session_action_signals.ts && npx tsx harness/shakeout/cli_login_signals.ts && npx tsx harness/shakeout/record_open_signals.ts && npx tsx harness/shakeout/page_signals.ts && npx tsx harness/shakeout/app_view_delegate_lane.ts && npx tsx harness/shakeout/records_keys.ts && npx tsx harness/shakeout/assay_page.ts && npx tsx harness/shakeout/studio_page.ts && npx tsx harness/shakeout/records_box_width.ts && npx tsx harness/shakeout/stream_follows_bottom.ts && npx tsx harness/shakeout/side_graph_scroll.ts && npx tsx harness/shakeout/missing_workspace_named.ts && npx tsx harness/shakeout/controls_mid_session.ts && npx tsx harness/shakeout/slash_menu.ts && npx tsx harness/shakeout/slash_inline_hint.ts && npx tsx harness/shakeout/slash_choice_keys.ts && npx tsx harness/shakeout/slash_tab_complete.ts && npx tsx harness/shakeout/both_session_shapes.ts && npx tsx harness/shakeout/structure_lists_producers.ts && npx tsx harness/shakeout/session_prompt_once_across_restart.ts && npx tsx harness/shakeout/language_lens_bars.ts && npx tsx harness/shakeout/language_lens_views.ts && npx tsx harness/shakeout/language_bar_line.ts && npx tsx harness/shakeout/language_lens_turns.ts && npx tsx harness/shakeout/language_rule_ellipsis.ts && npx tsx harness/shakeout/run_panes.ts && npx tsx harness/shakeout/delegate_pane.ts && npx tsx harness/shakeout/find_counts_transcript.ts && npx tsx harness/shakeout/dialogs.ts && npx tsx harness/shakeout/first_run_footer.ts && npx tsx harness/shakeout/meta_inspector_io_scene.ts && npx tsx harness/shakeout/escape_order.ts && npx tsx harness/shakeout/copy_key.ts && npx tsx harness/shakeout/csp_holds.ts && npx tsx harness/shakeout/menu_commands.ts && npx tsx harness/shakeout/invariant_signals.ts && npx tsx harness/shakeout/trace_reader.ts && npx tsx harness/shakeout/fault_signals.ts && npx tsx harness/shakeout/action_signals.ts && npx tsx harness/shakeout/workspace_files_signals.ts && npx tsx harness/shakeout/turn_attachments_signals.ts && npx tsx harness/shakeout/editor_toggle_signals.ts && npx tsx harness/shakeout/editor_columns_signals.ts && npx tsx harness/shakeout/diff_vs_main_ipc.ts && npx tsx harness/shakeout/edge_states.ts && npx tsx harness/shakeout/column_widths.ts && npx tsx harness/shakeout/view_menu_columns.ts && npx tsx harness/shakeout/terminal_dock.ts && npx tsx harness/shakeout/sides_swap.ts && npx tsx harness/shakeout/focus_folds.ts && npx tsx harness/shakeout/existing_keys_in_editor.ts",
+     "test": "npm run test:py && npm run test:unit && npx tsx harness/vm_smoke.ts && SHAKEOUT_RUNS=1 npm run shakeout && npm run gates:electron"
+   },
+   "devDependencies": {
+diff --git a/web/app/App.tsx b/web/app/App.tsx
+index d46971e..191fdb7 100644
+--- a/web/app/App.tsx
++++ b/web/app/App.tsx
+@@ -58,8 +58,9 @@ import { PanesView } from "./PanesView";
+ import { RecordsPage } from "./RecordsPage";
+ import { StudioPage } from "./StudioPage";
+ import { TopBar } from "./TopBar";
++import { EditorShell } from "./editor/EditorShell";
+ import "./window.css";
+-import { Signal, SeqSelectedHow, ToolOutputModeSetCause, TopBarCardSetCard, TopBarCardSetCause, DialogClosedOutcome, KeyRoutedTarget, RecordOpenedHow, ViewChangedCause, PaneBoundBinding, PaneBoundHow, PaneDrawnConnection, PaneDrawnPickerLine, PaneDrawnState, PaneDrawnTurnState, PaneFocusedCause, PaneOpenedCause, PickerFolderArmedSource, PickerFolderDisarmedCause, PickerLineEnteredCause, PickerLineEnteredLine, type SignalPayloads } from "../vm/signals.gen";
++import { Signal, SeqSelectedHow, ToolOutputModeSetCause, TopBarCardSetCard, TopBarCardSetCause, DialogClosedOutcome, KeyRoutedTarget, RecordOpenedHow, ViewChangedCause, PaneBoundBinding, PaneBoundHow, PaneDrawnConnection, PaneDrawnPickerLine, PaneDrawnState, PaneDrawnTurnState, PaneFocusedCause, PaneOpenedCause, PickerFolderArmedSource, PickerFolderDisarmedCause, PickerLineEnteredCause, PickerLineEnteredLine, EditorOpenedBinding, EditorDrawnBinding, EditorDrawnShowing, EditorDrawnLeftTab, EditorColumnFoldedColumn, type SignalPayloads } from "../vm/signals.gen";
+ import type { Activity } from "../reveal/activity";
+ 
+ // UI sprint 132 (kernel K288, session vocabulary § R): the guidance levels the bar offers, each with
+@@ -112,6 +113,16 @@ export interface AppPane extends Cell {
+   /** A run's record this pane shows (UI sprint 182), or a delegate child's session (183). */
+   runRoot?: string;
+   childSid?: string;
++  /** The pane shows the editor view (sprint 389). */
++  editorOpen?: boolean;
++  /** Editor column fold state (sprint 390). */
++  leftFolded?: boolean;
++  rightFolded?: boolean;
++  bottomFolded?: boolean;
++  /** Transcript dock position (sprint 398): bottom (default) or right. */
++  dockPosition?: "bottom" | "right";
++  /** Left and right columns swapped (sprint 399). */
++  sidesSwapped?: boolean;
+ }
+ 
+ type Snapshots = Record<number, Snapshot>;
+@@ -233,6 +244,8 @@ export class App extends React.Component<AppProps, AppState> {
+   private startPanes = new Set<number>();
+   /** Each pane's last PANE_DRAWN payload, so a record is written only when what it draws changed. */
+   private lastDrawn = new Map<number, string>();
++  /** Each pane's last EDITOR_DRAWN payload, same dedup pattern (sprint 389). */
++  private lastEditorDrawn = new Map<number, string>();
+ 
+   private snap(paneId: number): Snapshot | undefined { return this.state.controllerSnapshots[paneId]; }
+   private setPane(paneId: number, patch: Partial<AppPane>): void {
+@@ -682,6 +695,10 @@ export class App extends React.Component<AppProps, AppState> {
+     this.offs.push(onCommand((command) => {
+       if (command === "toggle-meta") this.toggleMeta(ViewChangedCause.MENU);
+       else if (command === "toggle-assays") this.toggleSurface(Surface.Assay, ViewChangedCause.MENU);
++      else if (command === "toggle-editor") this.toggleEditor();
++      else if (command === "toggle-editor-left") { if (this.pane(this.state.focused)?.editorOpen) this.toggleEditorColumn(EditorColumnFoldedColumn.LEFT); }
++      else if (command === "toggle-editor-right") { if (this.pane(this.state.focused)?.editorOpen) this.toggleEditorColumn(EditorColumnFoldedColumn.RIGHT); }
++      else if (command === "toggle-editor-bottom") { if (this.pane(this.state.focused)?.editorOpen) this.toggleEditorColumn(EditorColumnFoldedColumn.BOTTOM); }
+       else if (command === "settings") openSettings();
+       else if (command === "close-pane") this.closePaneNow(this.state.focused);
+       else if (command === "open") this.openKey();
+@@ -746,6 +763,7 @@ export class App extends React.Component<AppProps, AppState> {
+       languageTurns: !!(lens && lens.turns.length),
+       findOpen: find.getSnapshot().open, dialogOpen: dialogOpen(), cardOpen: !!(s.ddFor || s.wsFor),
+       running: !!(fsnap && fsnap.sessionId && fsnap.connection === PaneDrawnConnection.CONNECTED && !fsnap.parkReason && !fsnap.endedReason),
++      editorOpen: !!(fp && fp.editorOpen),
+     });
+     // KEY_ROUTED (sprint 367): the keys the keymap reads, the arrows, Enter, Escape and any ⌘ or Ctrl
+     // chord, with the action they took and where it went: a key with no action pressed in a text box
+@@ -784,6 +802,9 @@ export class App extends React.Component<AppProps, AppState> {
+     else if (action.kind === "toggle-find") toggleFind();
+     else if (action.kind === "settings") openSettings();
+     else if (action.kind === "toggle-assays") this.toggleSurface(Surface.Assay, ViewChangedCause.KEY);
++    else if (action.kind === "toggle-editor-left") this.toggleEditorColumn(EditorColumnFoldedColumn.LEFT);
++    else if (action.kind === "toggle-editor-right") this.toggleEditorColumn(EditorColumnFoldedColumn.RIGHT);
++    else if (action.kind === "toggle-editor-bottom") this.toggleEditorColumn(EditorColumnFoldedColumn.BOTTOM);
+     // Escape is hard by default, the terminal habit: stop now. ⇧Esc is softer: stop after this tool.
+     else if (action.kind === "interrupt") ctlOf(s.focused)?.interruptTurn(action.tier).catch(() => undefined);
+   }
+@@ -832,6 +853,7 @@ export class App extends React.Component<AppProps, AppState> {
+     this.viewCause = null;
+     this.publish();
+     this.notePaneDrawn();
++    this.noteEditorDrawn(prevState);
+     // The template's tweak sync: only when a tweak changed, never against the window's own state.
+     const changed = (k: keyof AppProps) => this.props[k] !== prevProps[k];
+     if (!changed("columns") && !changed("rows") && !changed("view")) return;
+@@ -894,6 +916,11 @@ export class App extends React.Component<AppProps, AppState> {
+           folder_rows: view ? view.wsRows.length : 0, model_rows: view ? view.modelRows.length : 0,
+           driver_shown: this.paneDriver(p),
+         };
++      } else if (p.editorOpen) {
++        payload = {
++          pane_id: p.id, state: PaneDrawnState.EDITOR,
++          ...(snap?.sessionId ? { session_id: snap.sessionId } : {}),
++        };
+       } else {
+         const activity = liveActivity(snap);
+         const drawn = activity ? TURN_OF_ACTIVITY[activity.kind] : PaneDrawnTurnState.IDLE;
+@@ -911,6 +938,30 @@ export class App extends React.Component<AppProps, AppState> {
+     }
+     for (const id of Array.from(this.lastDrawn.keys())) if (!live.has(id)) this.lastDrawn.delete(id);
+   }
++  // EDITOR_DRAWN (sprint 389): the structural state of the editor view, emitted when what it draws
++  // changed. Same dedup as PANE_DRAWN: serialize the payload, skip when unchanged.
++  private noteEditorDrawn(prev: AppState): void {
++    const s = this.state;
++    const live = new Set<number>();
++    for (const p of s.panes) {
++      if (!p.editorOpen) continue;
++      live.add(p.id);
++      const payload: SignalPayloads[Signal.EDITOR_DRAWN] = {
++        tab_count: 0,
++        left_folded: !!p.leftFolded,
++        right_folded: !!p.rightFolded,
++        bottom_folded: !!p.bottomFolded,
++        binding: EditorDrawnBinding.VIM,
++        showing: EditorDrawnShowing.SPINE,
++        left_tab: EditorDrawnLeftTab.FILES,
++      };
++      const key = JSON.stringify(payload);
++      if (this.lastEditorDrawn.get(p.id) === key) continue;
++      this.lastEditorDrawn.set(p.id, key);
++      emitSignal(Signal.EDITOR_DRAWN, payload, { pane_id: p.id });
++    }
++    for (const id of Array.from(this.lastEditorDrawn.keys())) if (!live.has(id)) this.lastEditorDrawn.delete(id);
++  }
+   override componentWillUnmount(): void {
+     for (const off of this.offs.splice(0)) off();
+     this.offTopBarActs?.();
+@@ -928,7 +979,39 @@ export class App extends React.Component<AppProps, AppState> {
+     this.viewCause = cause;
+     this.setState((st) => ({ vs: toggleMeta(st.vs) }));
+   }
+-  // UI sprint 145: what the top bar calls a pane: its session's name when it has one, else its label.
++  // ⌘⇧E (sprint 389). No-op on a pane without a session.
++  private toggleEditor(): void {
++    const s = this.state;
++    const fp = this.pane(s.focused);
++    if (!fp) return;
++    if (!showsBinding(fp, s.controllerSnapshots)) return;
++    const opening = !fp.editorOpen;
++    if (opening) {
++      emitSignal(Signal.EDITOR_OPENED, { binding: EditorOpenedBinding.VIM }, { pane_id: fp.id });
++    } else {
++      emitSignal(Signal.EDITOR_CLOSED, { tab_count: 0 }, { pane_id: fp.id });
++    }
++    this.setPane(fp.id, { editorOpen: opening });
++  }
++  private toggleEditorColumn(column: EditorColumnFoldedColumn): void {
++    const fp = this.pane(this.state.focused);
++    if (!fp || !fp.editorOpen) return;
++    const key = column === EditorColumnFoldedColumn.LEFT ? "leftFolded"
++      : column === EditorColumnFoldedColumn.RIGHT ? "rightFolded" : "bottomFolded";
++    const folded = !fp[key];
++    emitSignal(Signal.EDITOR_COLUMN_FOLDED, { column, folded }, { pane_id: fp.id });
++    this.setPane(fp.id, { [key]: folded });
++  }
++  private toggleDock(): void {
++    const fp = this.pane(this.state.focused);
++    if (!fp || !fp.editorOpen) return;
++    this.setPane(fp.id, { dockPosition: (fp.dockPosition ?? "bottom") === "bottom" ? "right" : "bottom" });
++  }
++  private toggleSides(): void {
++    const fp = this.pane(this.state.focused);
++    if (!fp || !fp.editorOpen) return;
++    this.setPane(fp.id, { sidesSwapped: !fp.sidesSwapped });
++  }
+   private paneTitle(pane: AppPane): string {
+     return this.snap(pane.id)?.sessionName || pane.name;
+   }
+@@ -1102,7 +1185,21 @@ export class App extends React.Component<AppProps, AppState> {
+       <div style={{ height: "100vh", display: "flex", flexDirection: "column", background: "#212327", color: "#b9bec5", fontFamily: "ui-monospace,'SF Mono',Menlo,Consolas,monospace", fontSize: 13, overflow: "hidden" }}>
+         {/* One top bar (UI sprint 136): it shows the focused pane. */}
+         <div style={{ flex: "none", minWidth: 0 }}><TopBar /></div>
+-        {showTerminal && <PanesView />}
++        {showTerminal && fp.editorOpen && (
++          <EditorShell paneId={fp.id} workspacePath={this.snap(fp.id)?.workspacePath ?? null} readOnly={!!(this.snap(fp.id)?.endedReason || this.snap(fp.id)?.viewOnly)} readOnlyReason={this.snap(fp.id)?.endedReason ? "session ended" : this.snap(fp.id)?.viewOnly ? "view only" : null} leftFolded={!!fp.leftFolded} rightFolded={!!fp.rightFolded} bottomFolded={!!fp.bottomFolded} dockPosition={fp.dockPosition ?? "bottom"} sidesSwapped={!!fp.sidesSwapped} onToggleColumn={(col) => this.toggleEditorColumn(col)} onToggleDock={() => this.toggleDock()} onToggleSides={() => this.toggleSides()} bottom={
++            <>
++              <div data-vm-transcript-scroller={String(fp.id)} style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "4px 16px", lineHeight: 2, fontSize: transcriptSize, minWidth: 0 }}>
++                <div data-vm-transcript-mount="terminal" data-pane-id={String(fp.id)}>
++                  <div data-vm-atom-root="terminal" data-pane-id={String(fp.id)}><Transcript paneId={fp.id} view="terminal" /></div>
++                </div>
++              </div>
++              <div style={{ flex: "none" }}><ActivityLine paneId={fp.id} view="panes" /></div>
++              <div style={{ flex: "none" }}><TaskRows paneId={fp.id} view="panes" /></div>
++              <div style={{ flex: "none", padding: "0 16px 8px" }}><InputBar paneId={fp.id} /></div>
++            </>
++          } />
++        )}
++        {showTerminal && !fp.editorOpen && <PanesView />}
+         {showRevealed && (
+           <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
+             <div style={{ flex: 1, display: "flex", minHeight: 0, position: "relative" }}>
+diff --git a/web/app/__tests__/keymap.spec.ts b/web/app/__tests__/keymap.spec.ts
+index 20d7eca..0c441a4 100644
+--- a/web/app/__tests__/keymap.spec.ts
++++ b/web/app/__tests__/keymap.spec.ts
+@@ -8,7 +8,7 @@ import { test } from "node:test";
+ import assert from "node:assert";
+ import { windowKey, type KeyContext, type KeyLike } from "../keymap";
+ 
+-const CTX: KeyContext = { typing: false, targetTyping: false, caretOnly: false, surface: null, revealed: false, pickerFocused: false, languageTurns: false, findOpen: false, dialogOpen: false, cardOpen: false, running: false };
++const CTX: KeyContext = { typing: false, targetTyping: false, caretOnly: false, surface: null, revealed: false, pickerFocused: false, languageTurns: false, findOpen: false, dialogOpen: false, cardOpen: false, running: false, editorOpen: false };
+ const key = (k: string, mods: Partial<KeyLike> = {}): KeyLike => ({ key: k, metaKey: false, ctrlKey: false, shiftKey: false, altKey: false, ...mods });
+ 
+ test("⌘C is the page's copy; Ctrl+C with a caret in a text box interrupts (F336)", () => {
+@@ -41,6 +41,25 @@ test("the ⌘ keys", () => {
+   assert.deepStrictEqual(windowKey(key("3", { metaKey: true }), CTX), { kind: "toggle-assays" });
+ });
+ 
++test("editor column toggles fire only when editorOpen is true", () => {
++  const edCtx = { ...CTX, editorOpen: true };
++  assert.deepStrictEqual(windowKey(key("l", { metaKey: true, altKey: true }), edCtx), { kind: "toggle-editor-left" });
++  assert.deepStrictEqual(windowKey(key("r", { metaKey: true, altKey: true }), edCtx), { kind: "toggle-editor-right" });
++  assert.deepStrictEqual(windowKey(key("j", { metaKey: true }), edCtx), { kind: "toggle-editor-bottom" });
++  assert.strictEqual(windowKey(key("l", { metaKey: true, altKey: true }), CTX), null);
++  assert.strictEqual(windowKey(key("r", { metaKey: true, altKey: true }), CTX), null);
++  assert.strictEqual(windowKey(key("j", { metaKey: true }), CTX), null);
++});
++
++test("existing ⌘ keys fire regardless of editorOpen", () => {
++  const edCtx = { ...CTX, editorOpen: true };
++  assert.deepStrictEqual(windowKey(key("m", { metaKey: true }), edCtx), { kind: "toggle-meta" });
++  assert.deepStrictEqual(windowKey(key("E", { metaKey: true }), edCtx), { kind: "toggle-tools" });
++  assert.deepStrictEqual(windowKey(key("d", { metaKey: true }), edCtx), { kind: "split", dir: "right" });
++  assert.deepStrictEqual(windowKey(key(",", { metaKey: true }), edCtx), { kind: "settings" });
++  assert.deepStrictEqual(windowKey(key("3", { metaKey: true }), edCtx), { kind: "toggle-assays" });
++});
++
+ test("the arrows go to the records list, the picker, or the language lens, by what has them", () => {
+   assert.deepStrictEqual(windowKey(key("ArrowDown"), { ...CTX, surface: "records" }), { kind: "records" });
+   assert.strictEqual(windowKey(key("ArrowDown"), { ...CTX, surface: "records", typing: true }), null);
+diff --git a/web/app/keymap.ts b/web/app/keymap.ts
+index 7cb6438..e6dbf37 100644
+--- a/web/app/keymap.ts
++++ b/web/app/keymap.ts
+@@ -37,12 +37,15 @@ export interface KeyContext {
+   cardOpen: boolean;
+   /** The focused pane's turn is in flight. */
+   running: boolean;
++  /** The focused pane's editor view is open (sprint 390). */
++  editorOpen: boolean;
+ }
+ 
+ export type KeyAction =
+   | { kind: "records" } | { kind: "picker" } | { kind: "language" }
+   | { kind: "toggle-meta" } | { kind: "toggle-tools" } | { kind: "split"; dir: "right" | "down" }
+   | { kind: "toggle-find" } | { kind: "settings" } | { kind: "toggle-assays" }
++  | { kind: "toggle-editor-left" } | { kind: "toggle-editor-right" } | { kind: "toggle-editor-bottom" }
+   | { kind: "close-find" } | { kind: "close-dialog" } | { kind: "close-cards" } | { kind: "close-surface" }
+   | { kind: "interrupt"; tier: TurnInterruptedTier };
+ 
+@@ -68,6 +71,10 @@ export function windowKey(ev: KeyLike, ctx: KeyContext): KeyAction | null {
+   if (ev.metaKey && ev.key === ",") return { kind: "settings" };
+   // D86: ⌘3 opens the assay page, and the same key returns to the panes.
+   if (plainCmd && ev.key === "3") return { kind: "toggle-assays" };
++  // Sprint 390: column toggles while the editor is open.
++  if (ctx.editorOpen && cmd && ev.altKey && !ev.shiftKey && key === "l") return { kind: "toggle-editor-left" };
++  if (ctx.editorOpen && cmd && ev.altKey && !ev.shiftKey && key === "r") return { kind: "toggle-editor-right" };
++  if (ctx.editorOpen && plainCmd && key === "j") return { kind: "toggle-editor-bottom" };
+ 
+   if (ev.key === "Escape") {
+     if (ctx.findOpen) return { kind: "close-find" };
+diff --git a/web/app/state/shell.ts b/web/app/state/shell.ts
+index 8cbc9ac..1598a49 100644
+--- a/web/app/state/shell.ts
++++ b/web/app/state/shell.ts
+@@ -36,7 +36,7 @@ export function mirrorSnapshot(paneId: number, snap: Snapshot): void {
+ }
+ 
+ /** The menu commands the window handles itself. */
+-export type ShellCommand = "toggle-meta" | "toggle-assays" | "settings" | "close-pane" | "open";
++export type ShellCommand = "toggle-meta" | "toggle-assays" | "toggle-editor" | "toggle-editor-left" | "toggle-editor-right" | "toggle-editor-bottom" | "settings" | "close-pane" | "open";
+ 
+ const { listeners, held } = shared.channel;
+ 
+diff --git a/web/reveal.ts b/web/reveal.ts
+index c8385f9..0557c48 100644
+--- a/web/reveal.ts
++++ b/web/reveal.ts
+@@ -97,7 +97,7 @@ function boot(): void {
+   if (nativeBridge?.onMenuCommand) {
+     nativeBridge.onMenuCommand((command, payload) => {
+       // Commands sent before the component mounts wait in the channel for it.
+-      if (command === "toggle-meta" || command === "toggle-assays" || command === "settings" || command === "close-pane" || command === "open") {
++      if (command === "toggle-meta" || command === "toggle-assays" || command === "toggle-editor" || command === "settings" || command === "close-pane" || command === "open") {
+         sendCommand(command);
+       } else if (command === "open-record") {
+         const rec = payload as { path?: string } | null;
+diff --git a/web/vm/signals/unemitted.json b/web/vm/signals/unemitted.json
+index 635b4d4..4388334 100644
+--- a/web/vm/signals/unemitted.json
++++ b/web/vm/signals/unemitted.json
+@@ -1,4 +1,17 @@
+ {
+   "_comment": "Declared tags with no emit site yet (sprint 355). npm run signals fails on a declared tag that is neither emitted nor listed here, and on a listed tag that is emitted: the list only shrinks. INVARIANT_BROKEN is emitted by the runtime checker (plan 2026-11-05-sdd-signals item 5); every other tag by its area's sprint in item 4. Item 4 closed when only INVARIANT_BROKEN was left; sprint 373 gave it its emit site (electron/invariants.ts), and the list is empty.",
+-  "tags": []
++  "tags": [
++    "EDITOR_FILE_OPENED",
++    "EDITOR_FILE_SAVED",
++    "EDITOR_FILE_CLOSED",
++    "EDITOR_FOLLOW_MARKED",
++    "EDITOR_FOLLOW_CONFIRMED",
++    "EDITOR_FOLLOW_WITHDRAWN",
++    "EDITOR_HUNK_DRAWN",
++    "EDITOR_CHIP_ADDED",
++    "EDITOR_SEARCH_QUERIED",
++    "EDITOR_QUICK_OPENED",
++    "EDITOR_INSPECTOR_SWAPPED",
++    "EDITOR_KEY_REFUSED"
++  ]
+ }

@@ -18,6 +18,8 @@ export interface FooterInput {
   title: string | null;
   /** The records, assays or studio page is open over the panes. */
   surfaceOpen: boolean;
+  /** The editor view is open (sprint 409; frame 24a's footer). */
+  editorOpen?: boolean;
   /** The design tool's simulateRateLimit scenario: the template's status line, ahead of every other. */
   rateLimited?: boolean;
   /** The focused pane's controller snapshot; null before its first. */
@@ -45,6 +47,6 @@ export function footerText(input: FooterInput): FooterText {
     status,
     statusColor,
     record: input.unbound ? "unbound — pick a workspace" : input.title ? "session " + input.title : "",
-    hint: input.surfaceOpen ? "esc back to session" : "⌘M toggles meta",
+    hint: input.surfaceOpen ? "esc back to session" : input.editorOpen ? "esc or ⌘⇧E back to the pane" : "⌘M toggles meta",
   };
 }

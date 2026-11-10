@@ -7,6 +7,7 @@
 /* eslint-disable no-restricted-syntax */
 export const EnvelopeKind = {
   BackgroundTaskEnded: "BackgroundTaskEnded",
+  FileWritten: "FileWritten",
   FinalAnswer: "FinalAnswer",
   HarnessToolCall: "HarnessToolCall",
   HarnessToolResult: "HarnessToolResult",

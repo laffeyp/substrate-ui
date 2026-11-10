@@ -12,9 +12,14 @@
 // work its picker without a click in its path box; in the language lens they walk turns and lanes;
 // then the ⌘ keys; then Escape, which closes the innermost open thing or interrupts a running turn
 // (⇧Esc softly: stop after this tool); then Ctrl+C.
+//
+// Sprint 406 (roadmap 2026-11-09-code-editor r6, R1): ⌘⇧E goes to the editor view and back, and in the
+// editor Escape returns to the pane once nothing inside it is open, before any interrupt (spec r6 §4,
+// D73 (c), frame 24a's footer "esc or ⌘⇧E back to the pane").
 
 import { TurnInterruptedTier } from "../vm/signals.gen";
-export interface KeyLike { key: string; metaKey: boolean; ctrlKey: boolean; shiftKey: boolean; altKey: boolean; }
+/** `code`, the physical key: with ⌥ held, macOS gives `key` a symbol (⌥L is "¬"), so ⌥ chords read the code. */
+export interface KeyLike { key: string; code?: string; metaKey: boolean; ctrlKey: boolean; shiftKey: boolean; altKey: boolean; }
 
 export interface KeyContext {
   /** The focused element is a text box. */
@@ -27,6 +32,12 @@ export interface KeyContext {
   surface: "records" | "assay" | "studio" | null;
   /** The meta view is open. */
   revealed: boolean;
+  /** The editor view is open, with no page over it. */
+  editor: boolean;
+  /** The editor's code has the focus with vim bound: Escape is vim's (BLACKBOARD 2026-11-09, esc stays in vim). */
+  vimCode?: boolean;
+  /** In the editor, the focus is in the substrate terminal (its input or transcript): ⌘F is the transcript's. */
+  editorTerminal?: boolean;
   /** The focused pane has no session: its picker takes the arrows. */
   pickerFocused: boolean;
   /** The meta view shows the language lens and the lens has turns. */
@@ -43,6 +54,10 @@ export type KeyAction =
   | { kind: "records" } | { kind: "picker" } | { kind: "language" }
   | { kind: "toggle-meta" } | { kind: "toggle-tools" } | { kind: "split"; dir: "right" | "down" }
   | { kind: "toggle-find" } | { kind: "settings" } | { kind: "toggle-assays" }
+  | { kind: "toggle-editor" } | { kind: "close-editor" }
+  | { kind: "editor-find"; field: "query" | "replace" }
+  | { kind: "fold-editor"; column: "left" | "right" | "bottom" }
+  | { kind: "refuse-split" }
   | { kind: "close-find" } | { kind: "close-dialog" } | { kind: "close-cards" } | { kind: "close-surface" }
   | { kind: "interrupt"; tier: TurnInterruptedTier };
 
@@ -63,7 +78,18 @@ export function windowKey(ev: KeyLike, ctx: KeyContext): KeyAction | null {
   // ⌘M: the menu's Minimize gives up the key (electron/menu.ts).
   if (plainCmd && key === "m") return { kind: "toggle-meta" };
   if (plainCmd && key === "e") return { kind: "toggle-tools" };
-  if (ev.metaKey && key === "d") return { kind: "split", dir: ev.shiftKey ? "down" : "right" };
+  // ⌘⇧E: the editor view, from anywhere; the same key returns to the pane (D86).
+  if (cmd && ev.shiftKey && !ev.altKey && key === "e") return { kind: "toggle-editor" };
+  // Sprint 415 (R6; spec r6 §5.1 (1)): in the editor, one key each folds or unfolds a column: ⌥⌘L the
+  // files, ⌥⌘R the inspector, ⌘J the substrate terminal (BLACKBOARD 2026-11-09, the column keys).
+  if (ctx.editor && cmd && ev.altKey && !ev.shiftKey && ev.code === "KeyL") return { kind: "fold-editor", column: "left" };
+  if (ctx.editor && cmd && ev.altKey && !ev.shiftKey && ev.code === "KeyR") return { kind: "fold-editor", column: "right" };
+  if (ctx.editor && plainCmd && key === "j") return { kind: "fold-editor", column: "bottom" };
+  // Sprint 417 (roadmap r8, E1): the editor does not split (D49 (c), spec r6 §4); ⌘D and ⌘⇧D are refused there.
+  if (ev.metaKey && key === "d") return ctx.editor ? { kind: "refuse-split" } : { kind: "split", dir: ev.shiftKey ? "down" : "right" };
+  // Sprint 428 (roadmap r10 key table): in the editor, ⌘F finds in the open file and ⌥⌘F replaces there,
+  // in the inspector's FIND / REPLACE; with the focus in the terminal, ⌘F is the transcript's find.
+  if (ctx.editor && !ctx.editorTerminal && cmd && !ev.shiftKey && ev.code === "KeyF") return { kind: "editor-find", field: ev.altKey ? "replace" : "query" };
   if (ev.metaKey && key === "f") return { kind: "toggle-find" };
   if (ev.metaKey && ev.key === ",") return { kind: "settings" };
   // D86: ⌘3 opens the assay page, and the same key returns to the panes.
@@ -74,6 +100,8 @@ export function windowKey(ev: KeyLike, ctx: KeyContext): KeyAction | null {
     if (ctx.dialogOpen) return { kind: "close-dialog" };
     if (ctx.cardOpen) return { kind: "close-cards" };
     if (ctx.surface) return { kind: "close-surface" };
+    if (ctx.editor && ctx.vimCode) return null;
+    if (ctx.editor) return { kind: "close-editor" };
     return ctx.running ? { kind: "interrupt", tier: ev.shiftKey ? TurnInterruptedTier.SOFT : TurnInterruptedTier.HARD } : null;
   }
   if (ev.ctrlKey && !ev.metaKey && key === "c" && ctx.typing && ctx.caretOnly) return { kind: "interrupt", tier: TurnInterruptedTier.HARD };

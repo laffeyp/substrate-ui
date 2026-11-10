@@ -9,7 +9,7 @@
 import * as React from "react";
 import { useSyncExternalStore } from "react";
 import { closeDialog, dialogs } from "./state/dialogs";
-import { fontSize, pickTheme, settings, stepFont, THEMES } from "./state/settings";
+import { BINDINGS as EDITOR_BINDINGS, fontSize, pickBinding, pickTheme, settings, stepFont, THEMES } from "./state/settings";
 import { DialogClosedOutcome, PaneDrawnConnection } from "../vm/signals.gen";
 
 interface VmLike {
@@ -59,6 +59,14 @@ function SettingsDialog({ defaultFontSize }: { defaultFontSize: number }): React
           <span onClick={() => stepFont(-1, defaultFontSize)} style={stepper}>−</span>
           <span style={{ color: "#e2e5e9" }}>{fontSize(defaultFontSize) + "px"}</span>
           <span onClick={() => stepFont(1, defaultFontSize)} style={stepper}>+</span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <span style={label}>editor keys</span>
+          <span style={{ display: "flex", border: "1px solid rgba(255,255,255,.09)", borderRadius: 5, overflow: "hidden" }}>
+            {EDITOR_BINDINGS.map((b) => (
+              <span key={b} data-setting-binding={b} data-lit={st.binding === b ? "1" : "0"} onClick={() => pickBinding(b)} style={{ padding: "3px 12px", cursor: "pointer", color: st.binding === b ? "#e2e5e9" : "#62676f", background: st.binding === b ? "#2e3138" : "transparent" }}>{b}</span>
+            ))}
+          </span>
         </div>
         <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
           <span style={{ ...label, paddingTop: 2 }}>bindings</span>

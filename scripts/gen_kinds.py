@@ -76,6 +76,11 @@ def session_kinds() -> set[str]:
             kinds.update(getattr(v.subscription, "kinds", ()) or ())
     # The run table writes a run's start into its caller's record (K330); nothing registers it.
     kinds.add(TOPOLOGY_RUN_STARTED)
+    # UI sprint 420: a file a view wrote, appended by SessionRegistry.append_event (K340); nothing
+    # registers it either. The editor's HISTORY reads hand edits by this name.
+    from substrate.topologies.session.vocabulary import FILE_WRITTEN
+
+    kinds.add(FILE_WRITTEN)
     kinds.update(t.__name__ for t in INJECTED_EVENT_KINDS)
     kinds.update(api.LIFECYCLE_KINDS)
     # K260/U119: what a session record can end a turn with, and what older records carry.

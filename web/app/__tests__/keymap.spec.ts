@@ -8,7 +8,7 @@ import { test } from "node:test";
 import assert from "node:assert";
 import { windowKey, type KeyContext, type KeyLike } from "../keymap";
 
-const CTX: KeyContext = { typing: false, targetTyping: false, caretOnly: false, surface: null, revealed: false, pickerFocused: false, languageTurns: false, findOpen: false, dialogOpen: false, cardOpen: false, running: false };
+const CTX: KeyContext = { typing: false, targetTyping: false, caretOnly: false, surface: null, revealed: false, editor: false, pickerFocused: false, languageTurns: false, findOpen: false, dialogOpen: false, cardOpen: false, running: false };
 const key = (k: string, mods: Partial<KeyLike> = {}): KeyLike => ({ key: k, metaKey: false, ctrlKey: false, shiftKey: false, altKey: false, ...mods });
 
 test("⌘C is the page's copy; Ctrl+C with a caret in a text box interrupts (F336)", () => {
@@ -50,4 +50,47 @@ test("the arrows go to the records list, the picker, or the language lens, by wh
   assert.deepStrictEqual(windowKey(key("Enter"), { ...CTX, revealed: true, languageTurns: true }), { kind: "language" });
   assert.strictEqual(windowKey(key("Enter"), { ...CTX, revealed: true, languageTurns: true, targetTyping: true }), null);
   assert.strictEqual(windowKey(key("Escape"), { ...CTX, revealed: true, languageTurns: true }), null);
+});
+
+// Sprint 406: the editor view's keys (spec r6 §4, D73 (c), frame 24a's footer).
+test("⌘⇧E toggles the editor; Escape in the editor returns to the pane after what is open inside it", () => {
+  assert.deepStrictEqual(windowKey(key("E", { metaKey: true, shiftKey: true }), CTX), { kind: "toggle-editor" });
+  assert.deepStrictEqual(windowKey(key("e", { metaKey: true, shiftKey: true }), { ...CTX, editor: true, typing: true }), { kind: "toggle-editor" });
+  assert.strictEqual(windowKey(key("E", { metaKey: true, shiftKey: true, altKey: true }), CTX), null);
+  assert.strictEqual(windowKey(key("E", { metaKey: true, shiftKey: true, ctrlKey: true }), CTX), null);
+  assert.deepStrictEqual(windowKey(key("e", { metaKey: true }), { ...CTX, editor: true }), { kind: "toggle-tools" });
+  const ed = { ...CTX, editor: true, running: true };
+  assert.deepStrictEqual(windowKey(key("Escape"), ed), { kind: "close-editor" });
+  assert.deepStrictEqual(windowKey(key("Escape"), { ...ed, typing: true }), { kind: "close-editor" });
+  // Sprint 428: ⌘F and ⌥⌘F find and replace in the open file; in the terminal ⌘F is the transcript's find.
+  assert.deepStrictEqual(windowKey({ key: "f", code: "KeyF", metaKey: true, ctrlKey: false, shiftKey: false, altKey: false }, ed), { kind: "editor-find", field: "query" });
+  assert.deepStrictEqual(windowKey({ key: "ƒ", code: "KeyF", metaKey: true, ctrlKey: false, shiftKey: false, altKey: true }, ed), { kind: "editor-find", field: "replace" });
+  assert.deepStrictEqual(windowKey({ key: "f", code: "KeyF", metaKey: true, ctrlKey: false, shiftKey: false, altKey: false }, { ...ed, editorTerminal: true }), { kind: "toggle-find" });
+  // Sprint 423: with vim bound and the code focused, Escape is vim's; a find or dialog still closes first.
+  assert.strictEqual(windowKey(key("Escape"), { ...ed, vimCode: true }), null);
+  assert.deepStrictEqual(windowKey(key("Escape"), { ...ed, vimCode: true, findOpen: true }), { kind: "close-find" });
+  assert.deepStrictEqual(windowKey(key("Escape"), { ...ed, findOpen: true }), { kind: "close-find" });
+  assert.deepStrictEqual(windowKey(key("Escape"), { ...ed, dialogOpen: true }), { kind: "close-dialog" });
+  assert.deepStrictEqual(windowKey(key("Escape"), { ...ed, cardOpen: true }), { kind: "close-cards" });
+  assert.deepStrictEqual(windowKey(key("Escape"), { ...CTX, surface: "assay", running: true }), { kind: "close-surface" });
+  assert.deepStrictEqual(windowKey(key("Escape"), { ...CTX, running: true }), { kind: "interrupt", tier: "hard" });
+});
+
+// Sprint 415: the column keys, in the editor only; ⌥ chords read the physical key.
+test("⌥⌘L, ⌥⌘R and ⌘J fold the editor's columns, and do nothing outside it", () => {
+  const ed = { ...CTX, editor: true };
+  assert.deepStrictEqual(windowKey({ ...key("¬", { metaKey: true, altKey: true }), code: "KeyL" }, ed), { kind: "fold-editor", column: "left" });
+  assert.deepStrictEqual(windowKey({ ...key("®", { metaKey: true, altKey: true }), code: "KeyR" }, ed), { kind: "fold-editor", column: "right" });
+  assert.deepStrictEqual(windowKey(key("j", { metaKey: true }), ed), { kind: "fold-editor", column: "bottom" });
+  assert.deepStrictEqual(windowKey(key("j", { metaKey: true }), { ...ed, typing: true }), { kind: "fold-editor", column: "bottom" });
+  assert.strictEqual(windowKey({ ...key("¬", { metaKey: true, altKey: true }), code: "KeyL" }, CTX), null);
+  assert.strictEqual(windowKey(key("j", { metaKey: true }), CTX), null);
+});
+
+// Sprint 417: the editor does not split (D49 (c)); ⌘D and ⌘⇧D are refused there and split elsewhere.
+test("⌘D and ⌘⇧D are refused in the editor and split outside it", () => {
+  const ed = { ...CTX, editor: true };
+  assert.deepStrictEqual(windowKey(key("d", { metaKey: true }), ed), { kind: "refuse-split" });
+  assert.deepStrictEqual(windowKey(key("D", { metaKey: true, shiftKey: true }), ed), { kind: "refuse-split" });
+  assert.deepStrictEqual(windowKey(key("d", { metaKey: true }), CTX), { kind: "split", dir: "right" });
 });

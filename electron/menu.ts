@@ -13,7 +13,7 @@
 // deviations kept (⌘M toggles meta, not Minimize).
 //
 // One owner per key. The renderer's keydown owns ⌘M, ⌘, ⌘D, ⌘E, ⌘F and ⌘3;
-// the menu owns ⌘N, ⌘O, ⌘W, ⇧⌘W and ⌃⌘F. Meta, Assays and Settings… carry no
+// the menu owns ⌘N, ⌘O, ⌘S, ⌘W, ⇧⌘W, ⌘Z, ⇧⌘Z and ⌃⌘F. Meta, Assays and Settings… carry no
 // accelerator: on macOS Electron cannot show a key without registering
 // it (registerAccelerator is Linux/Windows only), and a registered one
 // would compete with the renderer's handler for the same press.
@@ -72,6 +72,14 @@ function buildTemplate(getWin, newWindow) {
           // this dialog, as before (native:open-record in main.ts).
           click: () => send(getWin(), "open"),
         },
+        {
+          // Sprint 425 (roadmap r8 E4, the key table): saves the editor's open file; the window refuses it,
+          // and writes the refusal, outside the editor.
+          id: "menu-save",
+          label: "Save",
+          accelerator: "CmdOrCtrl+S",
+          click: () => send(getWin(), "save"),
+        },
         { type: "separator" },
         {
           // Sprint 085 followup — Cmd-W closes the focused PANE, not
@@ -92,7 +100,26 @@ function buildTemplate(getWin, newWindow) {
         },
       ],
     },
-    { role: "editMenu" },
+    // Sprint 426 (roadmap r8, the key table): Undo and Redo send to the window, which routes them: in the
+    // editor, the buffer's undo while it has unsaved changes, then HISTORY's step back; elsewhere the page's
+    // undo. The rest is what the editMenu role built on macOS (read from the running app, sprint 426).
+    {
+      label: "Edit",
+      submenu: [
+        { id: "menu-undo", label: "Undo", accelerator: "CmdOrCtrl+Z", click: () => send(getWin(), "undo") },
+        { id: "menu-redo", label: "Redo", accelerator: "Shift+CmdOrCtrl+Z", click: () => send(getWin(), "redo") },
+        { type: "separator" },
+        { role: "cut" },
+        { role: "copy" },
+        { role: "paste" },
+        { role: "pasteAndMatchStyle" },
+        { role: "delete" },
+        { role: "selectAll" },
+        { type: "separator" },
+        { label: "Substitutions", submenu: [{ role: "showSubstitutions" }, { type: "separator" }, { role: "toggleSmartQuotes" }, { role: "toggleSmartDashes" }, { role: "toggleTextReplacement" }] },
+        { label: "Speech", submenu: [{ role: "startSpeaking" }, { role: "stopSpeaking" }] },
+      ],
+    },
     {
       label: "View",
       submenu: [
@@ -107,6 +134,17 @@ function buildTemplate(getWin, newWindow) {
           label: "Assays",
           click: () => send(getWin(), "toggle-assays"),
         },
+        // The editor view (sprints 407, 416; spec r6 §4, §5.1; D63): ⌘⇧E belongs to the renderer's
+        // keydown, so the item carries no accelerator (the rule above). The three layout items act
+        // while the editor is open.
+        {
+          id: "menu-toggle-editor",
+          label: "Editor",
+          click: () => send(getWin(), "toggle-editor"),
+        },
+        { id: "menu-editor-dock", label: "Dock Terminal Right", click: () => send(getWin(), "editor-dock") },
+        { id: "menu-editor-swap", label: "Swap Sides", click: () => send(getWin(), "editor-swap") },
+        { id: "menu-editor-focus", label: "Focus", click: () => send(getWin(), "editor-focus") },
         { type: "separator" },
         { role: "togglefullscreen" },
         { type: "separator" },

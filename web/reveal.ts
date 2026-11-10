@@ -97,7 +97,7 @@ function boot(): void {
   if (nativeBridge?.onMenuCommand) {
     nativeBridge.onMenuCommand((command, payload) => {
       // Commands sent before the component mounts wait in the channel for it.
-      if (command === "toggle-meta" || command === "toggle-assays" || command === "settings" || command === "close-pane" || command === "open") {
+      if (command === "toggle-meta" || command === "toggle-assays" || command === "toggle-editor" || command === "editor-dock" || command === "editor-swap" || command === "editor-focus" || command === "settings" || command === "close-pane" || command === "open" || command === "save" || command === "undo" || command === "redo") {
         sendCommand(command);
       } else if (command === "open-record") {
         const rec = payload as { path?: string } | null;

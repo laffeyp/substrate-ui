@@ -14,7 +14,8 @@ import { barKey, catalogFor, inputBar, paneInput, pickRow, rowsFor, setText } fr
 import { shell } from "./state/shell";
 import "./hover.css";
 
-export function InputBar({ paneId }: { paneId: number }): React.ReactElement {
+/** `compact`: the editor's sill (sprint 415; frame 16c, 28 px tall) draws the same bar with less padding. */
+export function InputBar({ paneId, compact = false }: { paneId: number; compact?: boolean }): React.ReactElement {
   useSyncExternalStore(inputBar.subscribe, inputBar.getSnapshot, inputBar.getSnapshot);
   // The catalog's current choices and the placeholder read the pane's controller snapshot.
   const snaps = useSyncExternalStore(shell.subscribe, shell.getSnapshot, shell.getSnapshot);
@@ -40,7 +41,7 @@ export function InputBar({ paneId }: { paneId: number }): React.ReactElement {
         </div>
       ) : null}
       {/* UI sprint 141: the one input bar. */}
-      <div style={{ display: "flex", gap: 12, alignItems: "flex-start", borderRadius: rows.length ? "0 0 6px 6px" : "6px", padding: "11px 16px", background: "#1a1c20" }}>
+      <div style={{ display: "flex", gap: 12, alignItems: "flex-start", borderRadius: rows.length ? "0 0 6px 6px" : "6px", padding: compact ? "4px 12px" : "11px 16px", background: "#1a1c20" }}>
         <span style={{ color: "#82a5c8", lineHeight: 1.4 }}>›</span>
         <div style={{ position: "relative", flex: 1, display: "flex", minWidth: 0 }}>
           {/* UI sprints 163, 166: the slash hint, in one column (in ch of the bar's font) behind the textarea. */}

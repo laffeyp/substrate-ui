@@ -12,6 +12,7 @@
 // sent lines, the legacy start lines, a driver menu flag) are not carried over.
 
 import * as React from "react";
+import { flushSync } from "react-dom";
 import { Surface, GraphMode } from "../vm/kinds";
 import type { PaneRegistry } from "../vm/pane_registry";
 import type { SessionController } from "../vm/session_controller";
@@ -24,6 +25,7 @@ import { liveActivity } from "../reveal/activity";
 import { fontSize, loadSettings, settings } from "./state/settings";
 import { closeDialog, dialogOpen, openSettings } from "./state/dialogs";
 import { chrome } from "./state/chrome";
+import { editor as editorStore } from "./state/editor";
 import { firstRun } from "./state/first_run";
 import { setTopBarActions, topBar, type TopBarActions, type TopBarState } from "./state/top_bar";
 import { workspaceCard } from "./derive/workspace_card";
@@ -45,9 +47,11 @@ import { ARROWS, windowKey, type KeyAction } from "./keymap";
 import { findText, streamRows } from "./derive/stream";
 import { onCommand, shell } from "./state/shell";
 import { emit as emitSignal } from "../vm/instrumentation/sdd";
-import { closePage, metaBase, pageOf, show, START, toggleMeta, togglePage, type Page, type ViewState } from "./derive/open_view";
+import { closePage, editorBase, metaBase, pageOf, show, START, toggleEditor, toggleMeta, togglePage, type Page, type ViewState } from "./derive/open_view";
 import { ActivityLine, TaskRows } from "./ActivityLine";
 import { AssayPage } from "./AssayPage";
+import { EditorView, foldColumn, toggleDock, toggleFocus, toggleSwap } from "./editor/EditorView";
+import { closeFile, requestSave, routeUndo } from "./editor/Centre";
 import { Dialogs } from "./Dialogs";
 import { FindBar } from "./FindBar";
 import { FirstRun } from "./FirstRun";
@@ -59,7 +63,7 @@ import { RecordsPage } from "./RecordsPage";
 import { StudioPage } from "./StudioPage";
 import { TopBar } from "./TopBar";
 import "./window.css";
-import { Signal, SeqSelectedHow, ToolOutputModeSetCause, TopBarCardSetCard, TopBarCardSetCause, DialogClosedOutcome, KeyRoutedTarget, RecordOpenedHow, ViewChangedCause, PaneBoundBinding, PaneBoundHow, PaneDrawnConnection, PaneDrawnPickerLine, PaneDrawnState, PaneDrawnTurnState, PaneFocusedCause, PaneOpenedCause, PickerFolderArmedSource, PickerFolderDisarmedCause, PickerLineEnteredCause, PickerLineEnteredLine, type SignalPayloads } from "../vm/signals.gen";
+import { Signal, UndoRoutedDirection, UndoRoutedTo, EditorColumnFoldedCause, EditorDrawnBinding, EditorDrawnMode, EditorOpenedBinding, EditorDrawnDock, EditorDrawnLeftTab, EditorDrawnShowing, EditorKeyRefusedReason, SeqSelectedHow, ToolOutputModeSetCause, TopBarCardSetCard, TopBarCardSetCause, DialogClosedOutcome, KeyRoutedTarget, RecordOpenedHow, ViewChangedCause, PaneBoundBinding, PaneBoundHow, PaneDrawnConnection, PaneDrawnPickerLine, PaneDrawnState, PaneDrawnTurnState, PaneFocusedCause, PaneOpenedCause, PickerFolderArmedSource, PickerFolderDisarmedCause, PickerLineEnteredCause, PickerLineEnteredLine, type SignalPayloads } from "../vm/signals.gen";
 import type { Activity } from "../reveal/activity";
 
 // UI sprint 132 (kernel K288, session vocabulary § R): the guidance levels the bar offers, each with
@@ -177,10 +181,20 @@ const showsBinding = (p: AppPane, snaps: Snapshots): boolean => !p.unbound || !!
 /** The keys KEY_ROUTED leaves out when pressed alone (sprint 367). */
 const MODIFIER_KEYS = ["Meta", "Control", "Alt", "Shift"];
 /** Where a key's action went (KEY_ROUTED); every other action is the window's. */
+/** vim's mode as EDITOR_DRAWN names it: the visual sub-modes are visual (sprint 424, v0.33). */
+function drawnMode(mode: string | null): EditorDrawnMode {
+  if (!mode) return EditorDrawnMode.NONE;
+  if (mode.startsWith("visual")) return EditorDrawnMode.VISUAL;
+  return mode === "insert" ? EditorDrawnMode.INSERT : mode === "replace" ? EditorDrawnMode.REPLACE : EditorDrawnMode.NORMAL;
+}
+
 const KEY_TARGET: Partial<Record<KeyAction["kind"], KeyRoutedTarget>> = {
   records: KeyRoutedTarget.RECORDS,
   picker: KeyRoutedTarget.PICKER,
   language: KeyRoutedTarget.LANGUAGE,
+  "fold-editor": KeyRoutedTarget.EDITOR,
+  "refuse-split": KeyRoutedTarget.EDITOR,
+  "editor-find": KeyRoutedTarget.EDITOR,
 };
 /** The picker line PICKER_LINE_ENTERED names, as the pane's open line. */
 const HALF_OF_LINE: Record<PickerLineEnteredLine, PaneDrawnPickerLine> = {
@@ -233,6 +247,8 @@ export class App extends React.Component<AppProps, AppState> {
   private startPanes = new Set<number>();
   /** Each pane's last PANE_DRAWN payload, so a record is written only when what it draws changed. */
   private lastDrawn = new Map<number, string>();
+  /** The editor view's last EDITOR_DRAWN payload (sprint 407), so a record is written only on a change. */
+  private lastEditorDrawn: string | null = null;
 
   private snap(paneId: number): Snapshot | undefined { return this.state.controllerSnapshots[paneId]; }
   private setPane(paneId: number, patch: Partial<AppPane>): void {
@@ -625,6 +641,12 @@ export class App extends React.Component<AppProps, AppState> {
     loadSettings();
     this.offs.push(settings.subscribe(() => this.forceUpdate()));
     this.offs.push(find.subscribe(() => this.forceUpdate()));
+    // The files tree's row count, for EDITOR_DRAWN (sprint 410).
+    // Sprint 424: App commits with the editor's own components, so every state the view draws (the status
+    // line's mode among them) reaches EDITOR_DRAWN. A plain forceUpdate from a key CodeMirror handles is a
+    // default-priority render that can come after several store changes, while the store's readers render
+    // at once; flushSync renders App in step. Inside App's own componentDidUpdate React cannot flush.
+    this.offs.push(editorStore.subscribe(() => { if (this.committing) this.forceUpdate(); else flushSync(() => this.forceUpdate()); }));
     // Each pane controller's snapshot arrives through web/app/state/shell.ts (sprint 211).
     const applyShell = () => {
       const { snapshots, changedPane } = shell.getSnapshot();
@@ -682,7 +704,23 @@ export class App extends React.Component<AppProps, AppState> {
     this.offs.push(onCommand((command) => {
       if (command === "toggle-meta") this.toggleMeta(ViewChangedCause.MENU);
       else if (command === "toggle-assays") this.toggleSurface(Surface.Assay, ViewChangedCause.MENU);
+      // Sprint 416: View ▸ Editor, and the editor's layout items, which act only while it is open.
+      else if (command === "toggle-editor") this.toggleEditor(ViewChangedCause.MENU, "View > Editor");
+      // Sprint 423: nano's ⌃X leaves the editor for the pane, as Escape does.
+      else if (command === "leave-editor") { if (this.state.vs.view === "editor") { this.viewCause = ViewChangedCause.KEY; this.setState({ vs: show("panes") }); } }
+      else if (command === "editor-dock" && this.state.vs.view === "editor") toggleDock(this.state.focused);
+      else if (command === "editor-swap" && this.state.vs.view === "editor") toggleSwap(this.state.focused);
+      else if (command === "editor-focus" && this.state.vs.view === "editor") toggleFocus(this.state.focused);
       else if (command === "settings") openSettings();
+      // Sprint 419: in the editor ⌘W closes the active tab and never ends the session (roadmap r8 key table).
+      // Sprint 425 (roadmap r8, the key table): ⌘W with no tab open in the editor, and ⌘S, refused and written.
+      else if (command === "close-pane" && this.state.vs.view === "editor") { const a = editorStore.getSnapshot().active; if (a) closeFile(a, this.state.focused); else emitSignal(Signal.EDITOR_KEY_REFUSED, { key: "Meta+w", reason: EditorKeyRefusedReason.NO_FILE }, { pane_id: this.state.focused }); }
+      // Sprint 426: Edit ▸ Undo and Redo, routed (roadmap r8 key table; BLACKBOARD 2026-11-09 the undo boundary).
+      else if (command === "undo" || command === "redo") {
+        const to = this.state.vs.view === "editor" ? routeUndo(command) : document.execCommand(command) ? UndoRoutedTo.PAGE : UndoRoutedTo.NONE;
+        emitSignal(Signal.UNDO_ROUTED, { direction: command === "undo" ? UndoRoutedDirection.UNDO : UndoRoutedDirection.REDO, to }, { pane_id: this.state.focused });
+      }
+      else if (command === "save") { if (this.state.vs.view === "editor") requestSave(this.state.focused); else emitSignal(Signal.EDITOR_KEY_REFUSED, { key: "Meta+s", reason: EditorKeyRefusedReason.NOT_EDITOR }, { pane_id: this.state.focused }); }
       else if (command === "close-pane") this.closePaneNow(this.state.focused);
       else if (command === "open") this.openKey();
     }));
@@ -741,7 +779,9 @@ export class App extends React.Component<AppProps, AppState> {
     const caret = el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement ? el.selectionStart === el.selectionEnd : false;
     const action = windowKey(e, {
       typing: isBox(el), targetTyping: isBox(e.target), caretOnly: isBox(el) && caret,
-      surface: pageOf(s.vs), revealed: metaBase(s.vs),
+      surface: pageOf(s.vs), revealed: metaBase(s.vs), editor: s.vs.view === "editor",
+      vimCode: s.vs.view === "editor" && settings.getSnapshot().binding === "vim" && !!(el instanceof HTMLElement && el.hasAttribute("data-editor-code")),
+      editorTerminal: s.vs.view === "editor" && !!(el instanceof HTMLElement && el.closest('[data-editor-area="bottom"], [data-editor-sill]')),
       pickerFocused: !!(fp && fp.unbound && !(fsnap && fsnap.sessionId)),
       languageTurns: !!(lens && lens.turns.length),
       findOpen: find.getSnapshot().open, dialogOpen: dialogOpen(), cardOpen: !!(s.ddFor || s.wsFor),
@@ -751,9 +791,11 @@ export class App extends React.Component<AppProps, AppState> {
     // chord, with the action they took and where it went: a key with no action pressed in a text box
     // went to the box (its target, as the Enter that runs `/language` has unmounted it by now). A typed
     // character is never written.
+    const name = [e.metaKey && "Meta", e.ctrlKey && "Control", e.altKey && "Alt", e.shiftKey && "Shift", e.key].filter(Boolean).join("+");
     if (ARROWS.includes(e.key) || e.key === "Escape" || ((e.metaKey || e.ctrlKey) && !MODIFIER_KEYS.includes(e.key))) {
-      const name = [e.metaKey && "Meta", e.ctrlKey && "Control", e.altKey && "Alt", e.shiftKey && "Shift", e.key].filter(Boolean).join("+");
-      const target = action ? KEY_TARGET[action.kind] ?? KeyRoutedTarget.WINDOW : isBox(e.target) ? KeyRoutedTarget.BOX : KeyRoutedTarget.NONE;
+      // A key typed in the editor's code reaches the window retargeted to the code's shadow host (sprint 423).
+      const inCode = e.target instanceof HTMLElement && e.target.hasAttribute("data-editor-code");
+      const target = action ? KEY_TARGET[action.kind] ?? KeyRoutedTarget.WINDOW : inCode ? KeyRoutedTarget.EDITOR : isBox(e.target) ? KeyRoutedTarget.BOX : KeyRoutedTarget.NONE;
       const routed: KeyAction["kind"] | "none" = action ? action.kind : "none";
       emitSignal(Signal.KEY_ROUTED, { key: name, action: routed, target });
     }
@@ -777,8 +819,19 @@ export class App extends React.Component<AppProps, AppState> {
     if (action.kind === "close-dialog") { closeDialog(DialogClosedOutcome.ESCAPE); return; }
     if (action.kind === "close-cards") { this.noteCards({ ddFor: null, wsFor: null }, TopBarCardSetCause.ESCAPE); this.setState({ ddFor: null, wsFor: null }); return; }
     if (action.kind === "close-surface") { this.viewCause = ViewChangedCause.CLOSE; this.setState((st) => ({ vs: closePage(st.vs) })); return; }
+    // Sprint 407: Escape in the editor view returns to the panes (frame 24a's footer).
+    if (action.kind === "close-editor") { this.viewCause = ViewChangedCause.CLOSE; this.setState({ vs: show("panes") }); return; }
     e.preventDefault();
     if (action.kind === "toggle-meta") this.toggleMeta(ViewChangedCause.KEY);
+    else if (action.kind === "toggle-editor") this.toggleEditor(ViewChangedCause.KEY, name);
+    else if (action.kind === "refuse-split") emitSignal(Signal.EDITOR_KEY_REFUSED, { key: name, reason: EditorKeyRefusedReason.NO_SPLIT }, { pane_id: s.focused });
+    else if (action.kind === "fold-editor") foldColumn(action.column, !editorStore.getSnapshot().folded[action.column], EditorColumnFoldedCause.KEY, s.focused);
+    // Sprint 428: ⌘F and ⌥⌘F in the editor go to the inspector's FIND / REPLACE, unfolding it if folded.
+    else if (action.kind === "editor-find") {
+      if (editorStore.getSnapshot().folded.right) foldColumn("right", false, EditorColumnFoldedCause.KEY, s.focused);
+      editorStore.set({ findFocus: editorStore.getSnapshot().findFocus + 1 });
+      requestAnimationFrame(() => { const box = document.querySelector<HTMLInputElement>(`[data-find-input="${action.field}"]`); box?.focus(); box?.select(); });
+    }
     else if (action.kind === "toggle-tools") toggleToolOutputMode(ToolOutputModeSetCause.KEY);
     else if (action.kind === "split") this.split(action.dir);
     else if (action.kind === "toggle-find") toggleFind();
@@ -812,7 +865,7 @@ export class App extends React.Component<AppProps, AppState> {
     if (this.panesView) panesStore.set({ view: this.panesView });
     const s = this.state;
     const fp = this.pane(s.focused) ?? s.panes[0];
-    chrome.set({ focusedPane: s.focused, unbound: fp.unbound, title: this.paneTitle(fp), surfaceOpen: !!pageOf(s.vs), rateLimited: this.props.simulateRateLimit ?? false });
+    chrome.set({ focusedPane: s.focused, unbound: fp.unbound, title: this.paneTitle(fp), surfaceOpen: !!pageOf(s.vs), editorOpen: s.vs.view === "editor", rateLimited: this.props.simulateRateLimit ?? false });
     firstRun.set({ forced: this.props.firstRun ?? false });
     if (this.topBarVals && this.topBarActs) {
       topBar.set(this.topBarVals);
@@ -826,10 +879,17 @@ export class App extends React.Component<AppProps, AppState> {
     this.setPane(id, { editing: false });
     if (name) ctlOf(id)?.nameSession(name);
   }
+  /** App's componentDidUpdate is running (sprint 424): a store change from it re-renders without flushSync. */
+  private committing = false;
   override componentDidUpdate(prevProps: AppProps, prevState: AppState): void {
+    this.committing = true;
+    try { this.didUpdate(prevProps, prevState); } finally { this.committing = false; }
+  }
+  private didUpdate(prevProps: AppProps, prevState: AppState): void {
     this.notePanes(prevState);
     if (prevState.vs.view !== this.state.vs.view && this.viewCause) emitSignal(Signal.VIEW_CHANGED, { from: prevState.vs.view, to: this.state.vs.view, cause: this.viewCause });
     this.viewCause = null;
+    this.noteEditor(prevState);
     this.publish();
     this.notePaneDrawn();
     // The template's tweak sync: only when a tweak changed, never against the window's own state.
@@ -914,6 +974,61 @@ export class App extends React.Component<AppProps, AppState> {
   override componentWillUnmount(): void {
     for (const off of this.offs.splice(0)) off();
     this.offTopBarActs?.();
+  }
+
+  // ⌘⇧E (sprint 407; roadmap 2026-11-09-code-editor r6, R1): the editor view on the focused pane's
+  // session, and back. A pane with no session (its picker, or a session not yet open) has no workspace
+  // to show: the key is refused, and the refusal is written so a key that does nothing says why.
+  private toggleEditor(cause: ViewChangedCause, key: string): void {
+    const s = this.state;
+    if (s.vs.view !== "editor" && !this.snap(s.focused)?.sessionId) {
+      emitSignal(Signal.EDITOR_KEY_REFUSED, { key, reason: EditorKeyRefusedReason.NO_SESSION }, { pane_id: s.focused });
+      return;
+    }
+    this.viewCause = cause;
+    this.setState((st) => ({ vs: toggleEditor(st.vs) }));
+  }
+  /** The editor run's records for what this commit changed (sprint 407): EDITOR_CLOSED for the pane
+   *  it leaves (unless the pane itself closed, which PANE_CLOSED ends), EDITOR_OPENED for the pane it
+   *  shows, then EDITOR_DRAWN when what the view draws changed. A focused pane with no session takes
+   *  the window back to the panes. */
+  private noteEditor(prev: AppState): void {
+    const s = this.state;
+    const was = editorBase(prev.vs), is = editorBase(s.vs);
+    const moved = was && is && prev.focused !== s.focused;
+    if (was && (!is || moved) && s.panes.some((p) => p.id === prev.focused)) emitSignal(Signal.EDITOR_CLOSED, { tab_count: editorStore.getSnapshot().tabs.length }, { pane_id: prev.focused });
+    if (is && (!was || moved)) { emitSignal(Signal.EDITOR_OPENED, { binding: settings.getSnapshot().binding as EditorOpenedBinding }, { pane_id: s.focused }); this.lastEditorDrawn = null; }
+    if (is && !this.snap(s.focused)?.sessionId) { this.viewCause = ViewChangedCause.CLOSE; this.setState({ vs: show("panes") }); return; }
+    if (s.vs.view !== "editor") return;
+    const drawn: SignalPayloads[Signal.EDITOR_DRAWN] = {
+      tab_count: editorStore.getSnapshot().tabs.length, left_folded: editorStore.getSnapshot().folded.left, right_folded: editorStore.getSnapshot().folded.right, bottom_folded: editorStore.getSnapshot().folded.bottom,
+      showing: EditorDrawnShowing.SPINE, left_tab: EditorDrawnLeftTab.FILES,
+      binding: settings.getSnapshot().binding as EditorDrawnBinding,
+      // Sprint 424 (v0.33): the buffer's state the status line and the centre draw.
+      mode: drawnMode(editorStore.getSnapshot().mode), unsaved: editorStore.getSnapshot().unsaved.length,
+      // Sprint 425 (v0.34): the stale-save offer drawn for the shown file.
+      conflict: !!editorStore.getSnapshot().conflict && editorStore.getSnapshot().conflict === editorStore.getSnapshot().active,
+      dock: editorStore.getSnapshot().dock === "right" ? EditorDrawnDock.RIGHT : EditorDrawnDock.BOTTOM,
+      sides_swapped: editorStore.getSnapshot().swapped, focus: editorStore.getSnapshot().focus.on, tree_rows: editorStore.getSnapshot().treeRows, modified_dots: editorStore.getSnapshot().modifiedDots,
+      // Sprint 422: what the inspector draws.
+      outline_rows: editorStore.getSnapshot().inspector.outlineRows, hunks: editorStore.getSnapshot().inspector.hunks,
+      activity_rows: editorStore.getSnapshot().inspector.activityRows, history_rows: editorStore.getSnapshot().inspector.historyRows,
+    };
+    const key = JSON.stringify(drawn);
+    if (key === this.lastEditorDrawn) return;
+    this.lastEditorDrawn = key;
+    const rec = emitSignal(Signal.EDITOR_DRAWN, drawn, { pane_id: s.focused });
+    // Sprint 411: the view paints this record, by its proc_seq, into its pixel anchor.
+    editorStore.set({ anchor: {
+      seq: rec.proc_seq, tree_rows: drawn.tree_rows, modified_dots: drawn.modified_dots,
+      left_folded: drawn.left_folded, right_folded: drawn.right_folded, bottom_folded: drawn.bottom_folded,
+      dock_right: drawn.dock === EditorDrawnDock.RIGHT, sides_swapped: drawn.sides_swapped, focus: drawn.focus,
+    }, anchor3: {
+      seq: rec.proc_seq, mode: drawn.mode, binding: drawn.binding, unsaved: drawn.unsaved, conflict: drawn.conflict,
+    }, anchor2: {
+      seq: rec.proc_seq, tab_count: drawn.tab_count, outline_rows: drawn.outline_rows, hunks: drawn.hunks,
+      activity_rows: drawn.activity_rows, history_rows: drawn.history_rows,
+    } });
   }
 
   // ⌘M and View ▸ Meta (UI sprint 147). Into meta is refused while the focused pane is still at its
@@ -1084,6 +1199,8 @@ export class App extends React.Component<AppProps, AppState> {
       // Meta → panes always works; panes → meta waits until the focused pane leaves its picker.
       toggleReveal: () => {
         const s = this.state;
+        // Sprint 409: in the editor the chip reads "⌘⇧E pane" and returns to the panes.
+        if (s.vs.view === "editor") { this.viewCause = ViewChangedCause.BUTTON; this.setState({ vs: show("panes") }); return; }
         if (!metaBase(s.vs)) { const p = this.pane(s.focused); if (p && p.unbound) return; }
         this.viewCause = ViewChangedCause.BUTTON;
         this.setState((st) => ({ vs: toggleMeta(st.vs) }));
@@ -1098,6 +1215,7 @@ export class App extends React.Component<AppProps, AppState> {
     const surf = pageOf(state.vs);
     const showTerminal = state.vs.view === "panes";
     const showRevealed = state.vs.view === "meta";
+    const showEditor = state.vs.view === "editor";
     return (
       <div style={{ height: "100vh", display: "flex", flexDirection: "column", background: "#212327", color: "#b9bec5", fontFamily: "ui-monospace,'SF Mono',Menlo,Consolas,monospace", fontSize: 13, overflow: "hidden" }}>
         {/* One top bar (UI sprint 136): it shows the focused pane. */}
@@ -1121,6 +1239,7 @@ export class App extends React.Component<AppProps, AppState> {
             </div>
           </div>
         )}
+        {showEditor && <EditorView key={fp.id} paneId={fp.id} fontSize={transcriptSize} sessionId={this.snap(fp.id)?.sessionId ?? ""} workspace={this.snap(fp.id)?.workspacePath ?? (fp.ws || null)} shape={fp.shape || null} />}
         {surf === Surface.Records && <div data-app-mount="records" style={{ flex: 1, overflow: "auto", background: "#212327", padding: "22px 22px" }}><RecordsPage /></div>}
         {surf === Surface.Assay && <div data-app-mount="assays" style={{ flex: 1, overflow: "auto", background: "#212327", padding: "20px 40px" }}><AssayPage /></div>}
         {surf === Surface.Studio && <StudioPage />}
@@ -1169,9 +1288,10 @@ export class App extends React.Component<AppProps, AppState> {
       escHint: surf ? "esc — back" : "",
       recordsColor: surf === Surface.Records ? "#e2e5e9" : "#9aa0a8",
       studioColor: surf === Surface.Studio ? "#e2e5e9" : "#9aa0a8",
-      revealLabel: metaBase(state.vs) ? "panes" : "meta",
-      revealColor: metaBase(state.vs) && !surf ? "#212327" : "#9aa0a8",
-      revealBg: metaBase(state.vs) && !surf ? "#82a5c8" : "#3d434c",
+      // Sprint 409: the chip names the way back (spec r6 §4); in the editor, "⌘⇧E pane" on the accent (24a).
+      revealLabel: state.vs.view === "editor" ? "⌘⇧E pane" : metaBase(state.vs) ? "panes" : "meta",
+      revealColor: (metaBase(state.vs) || state.vs.view === "editor") && !surf ? "#212327" : "#9aa0a8",
+      revealBg: (metaBase(state.vs) || state.vs.view === "editor") && !surf ? "#82a5c8" : "#3d434c",
     };
   }
 }

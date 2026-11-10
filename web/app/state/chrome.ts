@@ -16,6 +16,8 @@ export interface ChromeState {
   title: string | null;
   /** The records, assays or studio page is open over the panes. */
   surfaceOpen: boolean;
+  /** The editor view is open with no page over it (sprint 409): the footer names the way back. */
+  editorOpen: boolean;
   /** The design tool's simulateRateLimit scenario (restored in sprint 334): the footer shows the
    *  rate-limited status line of the dc-runtime template (`web/reveal.html` at `d4322e1`). */
   rateLimited: boolean;
@@ -24,4 +26,4 @@ export interface ChromeState {
 // One instance per window, as in shell.ts (sprint 212).
 const KEY = "__substrateChrome";
 const scope = globalThis as unknown as Record<string, ReturnType<typeof createStore<ChromeState>> | undefined>;
-export const chrome = scope[KEY] ?? (scope[KEY] = createStore<ChromeState>({ focusedPane: 1, unbound: true, title: null, surfaceOpen: false, rateLimited: false }));
+export const chrome = scope[KEY] ?? (scope[KEY] = createStore<ChromeState>({ focusedPane: 1, unbound: true, title: null, surfaceOpen: false, editorOpen: false, rateLimited: false }));

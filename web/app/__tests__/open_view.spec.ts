@@ -8,7 +8,7 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import { Surface } from "../../vm/kinds";
-import { closePage, metaBase, pageOf, show, START, toggleMeta, togglePage } from "../derive/open_view";
+import { closePage, editorBase, metaBase, pageOf, show, START, toggleEditor, toggleMeta, togglePage } from "../derive/open_view";
 
 // The pair as App held it: revealed = meta is the base; surface = the open page.
 const pair = (st: typeof START) => ({ revealed: metaBase(st), surface: pageOf(st) });
@@ -35,4 +35,33 @@ test("a split shows panes, the design tool's view prop and /language show meta, 
   assert.deepStrictEqual(pair(show("panes")), { revealed: false, surface: null });
   assert.deepStrictEqual(pair(show("meta")), { revealed: true, surface: null });
   assert.strictEqual(show("meta").view, "meta");
+});
+
+// Sprint 405: the editor is a third base view (spec r6 §4, D86, frame 24h).
+test("⌘⇧E goes straight to the editor from panes, meta or a page, and back to panes from the editor", () => {
+  const ed = toggleEditor(START);
+  assert.deepStrictEqual(ed, { view: "editor", base: "editor" });
+  assert.strictEqual(editorBase(ed), true);
+  assert.strictEqual(metaBase(ed), false);
+  assert.strictEqual(pageOf(ed), null);
+  assert.deepStrictEqual(toggleEditor(ed), START);
+  assert.deepStrictEqual(toggleEditor(toggleMeta(START)), { view: "editor", base: "editor" });
+  assert.deepStrictEqual(toggleEditor(togglePage(START, Surface.Records)), { view: "editor", base: "editor" });
+});
+
+test("a page opens over the editor and closes back to it; ⌘M leaves the editor for meta", () => {
+  const ed = toggleEditor(START);
+  const assays = togglePage(ed, Surface.Assay);
+  assert.deepStrictEqual(assays, { view: Surface.Assay, base: "editor" });
+  assert.strictEqual(editorBase(assays), true);
+  // ⌘⇧E with a page open over the editor shows the editor, not the panes.
+  assert.deepStrictEqual(toggleEditor(assays), { view: "editor", base: "editor" });
+  assert.deepStrictEqual(closePage(assays), ed);
+  assert.deepStrictEqual(togglePage(assays, Surface.Assay), ed);
+  assert.deepStrictEqual(toggleMeta(ed), { view: "meta", base: "meta" });
+});
+
+test("Escape in the editor shows the panes", () => {
+  assert.deepStrictEqual(show("panes"), START);
+  assert.deepStrictEqual(show("editor"), { view: "editor", base: "editor" });
 });

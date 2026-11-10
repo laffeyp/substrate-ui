@@ -124,14 +124,11 @@ def test_a_write_goes_on_the_record_and_then_changes_the_file(
     assert "x = 2" not in json.dumps(recs) and "a.py" not in json.dumps(recs)  # E1
 
 
-def test_writes_the_record_or_the_workspace_refuses_leave_the_file_as_it_was(
+def test_writes_the_workspace_refuses_leave_the_file_as_it_was(
     app: server.App, tmp_path: Path, ws: Path
 ) -> None:
     app.install_registry(tmp_path / "sessions")
     with serving(app) as base:
-        fresh = _session(base, ws, turn=False)
-        status, body = call("PUT", base + f"/api/session/{fresh}/file?path=src/a.py", {"text": "z"})
-        assert status == 409, body  # no record yet
         sid = _session(base, ws)
         status, body = call(
             "PUT",
@@ -147,10 +144,6 @@ def test_writes_the_record_or_the_workspace_refuses_leave_the_file_as_it_was(
             "PUT", base + f"/api/session/{sid}/file?path=no/such/x.txt", {"text": "z"}
         )
         assert status == 404, body
-        status, body = call("POST", base + f"/api/session/{sid}/end", {})
-        assert status == 200, body
-        status, body = call("PUT", base + f"/api/session/{sid}/file?path=src/a.py", {"text": "z"})
-        assert status == 409, body  # ended
     assert (ws / "src" / "a.py").read_text() == "x = 1\n"
     assert (tmp_path / "secret.txt").read_text() == "no"
     assert not [p for p in (ws / "src").iterdir() if p.name.startswith(".substrate-write-")]
@@ -184,3 +177,30 @@ def test_the_watch_writes_its_open_and_its_close(app: server.App, tmp_path: Path
         ]
     assert tags[0] == ("FILES_WATCH_OPENED", {"session_id": sid, "files": 1, "truncated": False})
     assert tags[1][0] == "FILES_WATCH_CLOSED" and tags[1][1]["session_id"] == sid
+
+
+def test_a_session_that_is_off_still_has_its_file_written_off_the_record(
+    app: server.App, tmp_path: Path, ws: Path
+) -> None:
+    """UI sprint 427 (the Architect, 2026-11-09: the editor is an editor whether the session is on
+    or off): a session with no record yet, and an ended one, have the file written; the record
+    takes nothing, and FILE_WRITTEN says `off_record` with no seq."""
+    app.install_registry(tmp_path / "sessions")
+    with serving(app) as base:
+        fresh = _session(base, ws, turn=False)
+        mark = _mark()
+        status, out = call("PUT", base + f"/api/session/{fresh}/file?path=src/a.py", {"text": "y = 1\n"})
+        assert status == 200 and out["written"] == "off_record" and out["seq"] is None, out
+        assert (ws / "src" / "a.py").read_text() == "y = 1\n"
+        sid = _session(base, ws)
+        status, body = call("POST", base + f"/api/session/{sid}/end", {})
+        assert status == 200, body
+        before = len(_file_entries(app, sid))
+        status, out = call("PUT", base + f"/api/session/{sid}/file?path=src/a.py", {"text": "y = 2\n"})
+        assert status == 200 and out["written"] == "off_record", out
+        assert (ws / "src" / "a.py").read_text() == "y = 2\n"
+        assert len(_file_entries(app, sid)) == before, "the ended record takes nothing"
+        recs = [r for r in _since(mark) if r["name"] == "FILE_WRITTEN"]
+    assert [(r["payload"]["written"], r["payload"]["seq"]) for r in recs] == [("off_record", None), ("off_record", None)]
+    assert not [p for p in (ws / "src").iterdir() if p.name.startswith(".substrate-write-")]
+

@@ -294,3 +294,32 @@ test("from the quit on, only the quit's own wait stays: a window's waits end and
   late.at(1_500);
   assert.deepStrictEqual(late.c.see(main("APP_QUIT_REQUESTED", { cause: "menu" })).map((b) => b.rule), ["T4"], "a wait late before the quit breaks");
 });
+
+// Sprint 408: S11, an editor run opens before anything in it (v0.28, kept in v0.29).
+const drawn = { tab_count: 0, left_folded: false, right_folded: false, bottom_folded: false, showing: "spine", left_tab: "files", dock: "bottom", sides_swapped: false, focus: false, tree_rows: 0, modified_dots: 0 };
+test("S11: editor runs that open, draw and close, a refusal at a picker, a pane closed mid-run and a reload break no rule", () => {
+  const c = started();
+  assert.deepStrictEqual(broken(c, [
+    win("PANE_OPENED", { pane_id: 1, cause: "start" }),
+    win("EDITOR_KEY_REFUSED", { key: "Meta+Shift+E", reason: "no_session" }),
+    ...picked().slice(1),
+    win("EDITOR_OPENED", {}), win("EDITOR_DRAWN", drawn), win("EDITOR_CLOSED", { tab_count: 0 }),
+    win("EDITOR_OPENED", {}), win("EDITOR_DRAWN", drawn), win("PANE_CLOSED", { pane_id: 1, had_session: true }),
+    win("PANE_OPENED", { pane_id: 1, cause: "split" }), win("EDITOR_OPENED", {}),
+    win("WINDOW_BOOTED", { vocab_version: "0.29" }, null),
+    win("EDITOR_OPENED", {}), win("EDITOR_CLOSED", { tab_count: 0 }),
+  ]), []);
+});
+
+test("S11: a second open, a close with none open, and an editor record outside a run each break it once", () => {
+  const plants: Rec[][] = [
+    [win("PANE_OPENED", { pane_id: 2, cause: "split" }, 2), win("EDITOR_OPENED", {}, 2), win("EDITOR_OPENED", {}, 2)],
+    [win("PANE_OPENED", { pane_id: 3, cause: "split" }, 3), win("EDITOR_CLOSED", { tab_count: 0 }, 3)],
+    [win("PANE_OPENED", { pane_id: 4, cause: "split" }, 4), win("EDITOR_DRAWN", drawn, 4)],
+  ];
+  for (const recs of plants) {
+    const got = broken(started(), recs);
+    assert.deepStrictEqual(got.map((b) => b.rule), ["S11"], JSON.stringify(recs.at(-1)));
+    assert.deepStrictEqual(got[0].context.recent.at(-1), recs.at(-1));
+  }
+});

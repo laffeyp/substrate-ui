@@ -26,9 +26,16 @@ const deepLinkListeners = new Set<any>();
 ipcRenderer.on("menu:open-record", (_e, p) => dispatchMenu("open-record", p));
 ipcRenderer.on("menu:open", (_e, p) => dispatchMenu("open", p));
 ipcRenderer.on("menu:close-pane", (_e, p) => dispatchMenu("close-pane", p));
+ipcRenderer.on("menu:save", (_e, p) => dispatchMenu("save", p));
+ipcRenderer.on("menu:undo", (_e, p) => dispatchMenu("undo", p));
+ipcRenderer.on("menu:redo", (_e, p) => dispatchMenu("redo", p));
 ipcRenderer.on("menu:close-window", (_e, p) => dispatchMenu("close-window", p));
 ipcRenderer.on("menu:toggle-meta", (_e, p) => dispatchMenu("toggle-meta", p));
 ipcRenderer.on("menu:toggle-assays", (_e, p) => dispatchMenu("toggle-assays", p));
+ipcRenderer.on("menu:toggle-editor", (_e, p) => dispatchMenu("toggle-editor", p));
+ipcRenderer.on("menu:editor-dock", (_e, p) => dispatchMenu("editor-dock", p));
+ipcRenderer.on("menu:editor-swap", (_e, p) => dispatchMenu("editor-swap", p));
+ipcRenderer.on("menu:editor-focus", (_e, p) => dispatchMenu("editor-focus", p));
 ipcRenderer.on("menu:settings", (_e, p) => dispatchMenu("settings", p));
 ipcRenderer.on("deep-link", (_e, url) => dispatchDeepLink(url));
 

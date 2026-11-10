@@ -38,3 +38,10 @@ test("a page over the panes changes the hint", () => {
   assert.strictEqual(footerText({ ...base, surfaceOpen: true }).hint, "esc back to session");
   assert.strictEqual(footerText({ ...base, title: null }).record, "");
 });
+
+// Sprint 409: the editor view names the way back (frame 24a's footer).
+test("the editor view's hint names esc and ⌘⇧E; a page over it keeps the page's hint", () => {
+  assert.strictEqual(footerText({ ...base, editorOpen: true }).hint, "esc or ⌘⇧E back to the pane");
+  assert.strictEqual(footerText({ ...base, editorOpen: true, surfaceOpen: true }).hint, "esc back to session");
+  assert.strictEqual(footerText(base).hint, "⌘M toggles meta");
+});

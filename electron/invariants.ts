@@ -19,6 +19,10 @@
 //       before it (the records page attaches another session into a pane that holds one); every
 //       later transcript row record of the pane that names a session names that one.
 //   S6  SESSION_OPEN_ACKED comes after the pane's SESSION_OPEN_REQUESTED.
+//   S11 a pane's EDITOR_OPENED opens its editor run, and every other editor record of the pane comes
+//       inside an open run (sprint 408): a second open, a close with none open, or an editor tag
+//       outside a run breaks it. EDITOR_KEY_REFUSED is exempt (a refusal at a picker has no run).
+//       PANE_CLOSED ends the run; a window's WINDOW_BOOTED (a reload) ends every run of that window.
 //   S8  a pane's TURN_SUBMITTED names the session its last ack or attach named (a turn that
 //       resumes an ended session reopens the stream and writes no new attach).
 //   E8  a TRANSCRIPT_SCROLLED that follows the bottom, unpinned, is at the bottom.
@@ -88,6 +92,8 @@ interface PaneState {
   awaitingBind: boolean;
   openRequested: boolean;
   session: unknown;
+  /** An editor run is open in the pane (S11). */
+  editor: boolean;
 }
 
 /** The window's failure classes for a refusal the server did not make: no answer, or an answer it
@@ -205,6 +211,10 @@ export function createChecker(now: () => number = () => performance.now()): { se
       }
     }
 
+    // A reload ends the window's editor runs (S11).
+    if (r.process === "window" && r.name === Signal.WINDOW_BOOTED) {
+      for (const [k, st] of panes) if (k.startsWith(`${r.window_id}:`)) st.editor = false;
+    }
     const paneId = paneOf(r);
     if (r.process !== "window" || paneId === null) return out;
     const key = `${r.window_id}:${paneId}`;
@@ -215,8 +225,18 @@ export function createChecker(now: () => number = () => performance.now()): { se
     }
     let st = panes.get(key);
     if (!st) {
-      st = { armed: false, lastLine: null, awaitingBind: false, openRequested: false, session: null };
+      st = { armed: false, lastLine: null, awaitingBind: false, openRequested: false, session: null, editor: false };
       panes.set(key, st);
+    }
+
+    if (r.name === Signal.EDITOR_OPENED) {
+      if (st.editor) broke("S11", { pane_id: paneId, editor_open: true, by: r.name });
+      st.editor = true;
+    } else if (r.name === Signal.EDITOR_CLOSED) {
+      if (!st.editor) broke("S11", { pane_id: paneId, editor_open: false, by: r.name });
+      st.editor = false;
+    } else if (r.name.startsWith("EDITOR_") && r.name !== Signal.EDITOR_KEY_REFUSED && !st.editor) {
+      broke("S11", { pane_id: paneId, editor_open: false, by: r.name });
     }
 
     switch (r.name) {

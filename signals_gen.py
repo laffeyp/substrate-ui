@@ -5,7 +5,7 @@ Regenerate: python3 scripts/gen_signals.py. tests/test_signals_generated.py fail
 
 from enum import StrEnum
 
-VOCAB_VERSION = "0.27"
+VOCAB_VERSION = "0.37"
 
 
 class Signal(StrEnum):
@@ -66,6 +66,7 @@ class Signal(StrEnum):
     WINDOW_BOOTED = "WINDOW_BOOTED"
     VIEW_CHANGED = "VIEW_CHANGED"
     KEY_ROUTED = "KEY_ROUTED"
+    UNDO_ROUTED = "UNDO_ROUTED"
     DIALOG_OPENED = "DIALOG_OPENED"
     DIALOG_CLOSED = "DIALOG_CLOSED"
     PANE_OPENED = "PANE_OPENED"
@@ -122,6 +123,31 @@ class Signal(StrEnum):
     FILE_WRITTEN = "FILE_WRITTEN"
     FILES_WATCH_OPENED = "FILES_WATCH_OPENED"
     FILES_WATCH_CLOSED = "FILES_WATCH_CLOSED"
+    EDITOR_OPENED = "EDITOR_OPENED"
+    EDITOR_CLOSED = "EDITOR_CLOSED"
+    EDITOR_FILE_OPENED = "EDITOR_FILE_OPENED"
+    EDITOR_FILE_SAVED = "EDITOR_FILE_SAVED"
+    EDITOR_SAVE_CONFLICTED = "EDITOR_SAVE_CONFLICTED"
+    EDITOR_CONFLICT_RESOLVED = "EDITOR_CONFLICT_RESOLVED"
+    EDITOR_FILE_CLOSED = "EDITOR_FILE_CLOSED"
+    EDITOR_COLUMN_FOLDED = "EDITOR_COLUMN_FOLDED"
+    EDITOR_FOLLOW_MARKED = "EDITOR_FOLLOW_MARKED"
+    EDITOR_FOLLOW_CONFIRMED = "EDITOR_FOLLOW_CONFIRMED"
+    EDITOR_FOLLOW_WITHDRAWN = "EDITOR_FOLLOW_WITHDRAWN"
+    EDITOR_HUNK_DRAWN = "EDITOR_HUNK_DRAWN"
+    EDITOR_CHIP_ADDED = "EDITOR_CHIP_ADDED"
+    EDITOR_SEARCH_QUERIED = "EDITOR_SEARCH_QUERIED"
+    EDITOR_FIND_QUERIED = "EDITOR_FIND_QUERIED"
+    EDITOR_REPLACED = "EDITOR_REPLACED"
+    EDITOR_QUICK_OPENED = "EDITOR_QUICK_OPENED"
+    EDITOR_INSPECTOR_SWAPPED = "EDITOR_INSPECTOR_SWAPPED"
+    EDITOR_KEY_REFUSED = "EDITOR_KEY_REFUSED"
+    EDITOR_DRAWN = "EDITOR_DRAWN"
+    EDITOR_DOCK_SET = "EDITOR_DOCK_SET"
+    EDITOR_SIDES_SWAPPED = "EDITOR_SIDES_SWAPPED"
+    EDITOR_FOCUS_SET = "EDITOR_FOCUS_SET"
+    EDITOR_COLUMN_RESIZED = "EDITOR_COLUMN_RESIZED"
+    DIFF_READ = "DIFF_READ"
 
 
 class TurnInterruptedTier(StrEnum):
@@ -212,6 +238,19 @@ class KeyRoutedTarget(StrEnum):
     LANGUAGE = "language"
     WINDOW = "window"
     BOX = "box"
+    EDITOR = "editor"
+    NONE = "none"
+
+
+class UndoRoutedDirection(StrEnum):
+    UNDO = "undo"
+    REDO = "redo"
+
+
+class UndoRoutedTo(StrEnum):
+    BUFFER = "buffer"
+    HISTORY = "history"
+    PAGE = "page"
     NONE = "none"
 
 
@@ -516,3 +555,125 @@ class FileReadEncoding(StrEnum):
 class FileWrittenWritten(StrEnum):
     AT_REST = "at_rest"
     LIVE = "live"
+    OFF_RECORD = "off_record"
+
+
+class EditorOpenedBinding(StrEnum):
+    STANDARD = "standard"
+    VIM = "vim"
+    NANO = "nano"
+
+
+class EditorFileOpenedHow(StrEnum):
+    TREE = "tree"
+    QUICK_OPEN = "quick_open"
+    FOLLOW = "follow"
+    SEARCH = "search"
+    DEEP_LINK = "deep_link"
+
+
+class EditorFileSavedCommand(StrEnum):
+    VIM_W = "vim_w"
+    NANO_SAVE = "nano_save"
+    MENU_S = "menu_s"
+
+
+class EditorConflictResolvedChoice(StrEnum):
+    RELOAD = "reload"
+    OVERWRITE = "overwrite"
+
+
+class EditorColumnFoldedColumn(StrEnum):
+    LEFT = "left"
+    RIGHT = "right"
+    BOTTOM = "bottom"
+
+
+class EditorColumnFoldedCause(StrEnum):
+    KEY = "key"
+    MENU = "menu"
+    RAIL = "rail"
+    FOCUS = "focus"
+
+
+class EditorHunkDrawnAuthor(StrEnum):
+    SESSION = "session"
+    HAND = "hand"
+    UNATTRIBUTED = "unattributed"
+
+
+class EditorChipAddedKind(StrEnum):
+    FILE = "file"
+    FOLDER = "folder"
+    RANGE = "range"
+
+
+class EditorReplacedScope(StrEnum):
+    ONE = "one"
+    ALL = "all"
+
+
+class EditorInspectorSwappedShowing(StrEnum):
+    SPINE = "spine"
+    LENSES = "lenses"
+
+
+class EditorKeyRefusedReason(StrEnum):
+    NO_SESSION = "no_session"
+    NO_SPLIT = "no_split"
+    ENDED_SESSION = "ended_session"
+    VIEW_ONLY = "view_only"
+    BINARY_FILE = "binary_file"
+    OVER_CAP = "over_cap"
+    NO_GIT = "no_git"
+    NOT_EDITOR = "not_editor"
+    NO_FILE = "no_file"
+
+
+class EditorDrawnBinding(StrEnum):
+    STANDARD = "standard"
+    VIM = "vim"
+    NANO = "nano"
+
+
+class EditorDrawnShowing(StrEnum):
+    SPINE = "spine"
+    LENSES = "lenses"
+
+
+class EditorDrawnLeftTab(StrEnum):
+    FILES = "files"
+    SEARCH = "search"
+    OPEN = "open"
+    ACTIVITY = "activity"
+
+
+class EditorDrawnDock(StrEnum):
+    BOTTOM = "bottom"
+    RIGHT = "right"
+
+
+class EditorDrawnMode(StrEnum):
+    NORMAL = "normal"
+    INSERT = "insert"
+    VISUAL = "visual"
+    REPLACE = "replace"
+    NONE = "none"
+
+
+class EditorDockSetDock(StrEnum):
+    BOTTOM = "bottom"
+    RIGHT = "right"
+
+
+class EditorColumnResizedColumn(StrEnum):
+    LEFT = "left"
+    RIGHT = "right"
+    BOTTOM = "bottom"
+
+
+class DiffReadBase(StrEnum):
+    MAIN = "main"
+    DEFAULT_BRANCH = "default_branch"
+    FIRST_COMMIT = "first_commit"
+    NONE = "none"

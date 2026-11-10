@@ -988,3 +988,41 @@ The clean build that followed was reported as "every suite has run". It had not:
 1. A build runs as one logged command per runbook step and per gate, never one chained command, so one failure leaves the rest measured.
 2. A packaged gate run proves it ran the bundle: every launch writes `packaged: true` and the build's commit, and a sample is read.
 3. A quote of a source is read from the source in the same turn, or it is not put in quotation marks.
+
+---
+
+### 2026-11-09 — Stale research framework applied to a finished design
+
+**What happened.** The editor-level research (`2026-11-04-editor-level/`, rounds 1–11) defined fifteen questions each editor view had to answer before sprint cards. The design spec (98 decisions, sections 0/4/5/5.0/5.1/8) was written after that research and answered most of those questions. The code editor roadmap (round 3) inherited the fifteen-question rule without checking whether the design spec had already settled them. A research document was written answering all fifteen questions — re-deriving what the design spec already stated. The document was wrong and deleted. The roadmap's document sequence is also wrong: it prescribes five pre-build documents (research, vocabulary, requirements, breakdown, sprint cards) when the design spec already serves as the requirements.
+
+**What got in the way.**
+- **A rule inherited past its shelf life.** The fifteen-question rule was correct on 2026-11-04 when no design existed. By 2026-11-09, the design spec existed. The roadmap copied the rule forward without re-evaluating it. The research document followed the roadmap's instruction mechanically.
+- **No check for "is this already answered?"** Each of the fifteen questions should have been tested against the design spec before being included. Most were already answered. The document re-answered them, producing redundancy framed as discovery.
+- **The document sequence assumed pre-design conditions.** A separate requirements document "traced to design spec sections" is the design spec restated. The roadmap prescribed it because the research framework assumed requirements had not been written yet.
+
+**What the kit could say.**
+1. A rule from an earlier document applies only if the condition it addressed still holds. When the design spec settles a question, that question is closed — not re-asked in a later document.
+2. Before writing a document the roadmap prescribes, check whether another document already contains the answer. Redundancy framed as process is still redundancy.
+3. The `2026-11-04-editor-level/` research is now superseded. Its output was the design spec. All eleven rounds moved to `superseded/`.
+
+---
+
+### 2026-11-09 — The editor redone from the design: what the kit's steps caught that green gates did not
+
+**What happened.** The first editor attempt (sprints 389–402) was set aside in `_deprecated/editor-phase-1-2026-11-09/` and Phase 1 restarted from the design (roadmap r6). Sprints 403–409 ran: the sheet's frames rendered into the repository, vocabulary v0.29, the editor as an open view, ⌘⇧E and Escape, the four areas at frame 24a's measured sizes, the runtime check for S11, and the chip and footer that name the way back. Each behaviour card ran its gate from source and on a fresh bundle.
+
+**What worked.**
+- **Reading the frames before the vocabulary.** Frame 24h and `open_view.ts`'s own header showed the editor is a window view; v0.28's `PANE_DRAWN.state=editor` was written without them and is retired in v0.29.
+- **Measuring the frame instead of eyeballing it.** Sampling 24a's PNG gave the sizes and surfaces (210/300/176 px, `#1a1c20`, `#2d2f33`), and the first screenshot matched at 1512.
+- **The 504 px screenshot.** The structural gate passed while the centre measured 0 px and the prompt was gone. Only the perceptual track saw it; the gate now fails on it.
+- **The Rubber Duck Pass against the vocabulary.** It found S10 and S11 declared in v0.28 with no checker code; sprint 408 added S11 and confirmed the rule is inside the packaged `app.asar`.
+
+**What got in the way.**
+- **A gate's own bugs read as failures.** Two of three first runs failed on the gate (tsx's `__name` in `app.evaluate`; a miscounted key press), not the app. Each was diagnosed from its message before rerunning.
+- **A card's assertion written before measuring.** Card 403 asserted PNG heights one pixel short.
+- **The two-file rule against a store-routed change.** The footer hint needed five files; logged.
+
+**What the kit could say.**
+1. For UI work, the design frames are rendered into the repository before the vocabulary session, and the session reads them; a vocabulary for a view written from prose alone models it wrongly.
+2. Every UI card's gate takes a screenshot at the window's minimum width and asserts that the prompt and the main area survive it.
+3. A vocabulary's ordering rules each name the card that implements their check; a rule with no checker code is a gap the Rubber Duck Pass looks for.

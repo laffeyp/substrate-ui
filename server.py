@@ -45,13 +45,14 @@ import socketserver
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from typing import Any, cast
 from urllib.parse import parse_qs, unquote, urlparse
 
 import msgspec
 from signals_gen import (
     ApiRefusedArea,
+    DiffReadBase,
     FileReadEncoding,
     FileWrittenWritten,
     Signal,
@@ -450,7 +451,7 @@ def _interrupt_then_end(
 # Most specific first; a path no route serves is "unrouted".
 _AREA_RULES: tuple[tuple[str, ApiRefusedArea], ...] = (
     (r"/api/session/[^/]+/(turn|interrupt)", ApiRefusedArea.TURN),
-    (r"/api/session/[^/]+/(files|file)(/watch)?", ApiRefusedArea.FILES),
+    (r"/api/session/[^/]+/(files|file|diff)(/watch)?", ApiRefusedArea.FILES),
     (r"/api/session/[^/]+/children", ApiRefusedArea.CHILDREN),
     (r"/api/session/[^/]+/language(/.*)?", ApiRefusedArea.LANGUAGE),
     (r"/api/session/[^/]+/mcp", ApiRefusedArea.MCP),
@@ -1951,6 +1952,110 @@ def _workspace_list(root: Path, rel: str) -> dict[str, object]:
     entries.sort(key=lambda e: (e["kind"] != "dir", str(e["name"]).lower(), str(e["name"])))
     base = root.resolve(strict=True)
     return {"dir": str(target.relative_to(base)) if target != base else "", "entries": entries}
+
+
+# The empty tree's object id (git hash-object -t tree /dev/null): the base of a repository with no commit.
+_EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+
+
+def _git_out(root: Path, *args: str, env: dict[str, str] | None = None) -> str | None:
+    """`git -C root args…` stdout, or None when git fails or is missing."""
+    try:
+        proc = subprocess.run(  # noqa: S603 — git with fixed arguments, in the session's workspace
+            ["git", "-C", str(root), *args],  # noqa: S607 — git from PATH, as the kernel's workspace.py runs it
+            capture_output=True,
+            text=True,
+            timeout=30,
+            env=env,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return proc.stdout if proc.returncode == 0 else None
+
+
+def _workspace_diff(root: Path) -> dict[str, object]:
+    """What changed in a session's workspace against main (UI sprint 412; design spec r6 §5: "each hunk
+    vs main"; D48: modified dots from the real diff). The base is main's merge-base with HEAD; with no
+    `main`, the default branch (`origin/HEAD`); with neither, the repository's first commit (the empty
+    tree when it has none); `none` when the workspace is not in a git repository. New files count:
+    they are marked intent-to-add in a scratch copy of the index (`GIT_INDEX_FILE`), so the
+    workspace's own index is never written, as the kernel's `worktree_diff` does. Paths are relative to
+    the workspace; ignored files are left out. Each file is `{path, status}`, status `A`, `M` or `D`."""
+    base_kind, base = _diff_base(root)
+    if base is None:
+        return {"base": base_kind, "files": []}
+    with _scratch_index(root) as env:
+        out = _git_out(root, "diff", "--name-status", "--no-renames", "--relative", base, env=env) or ""
+    files = []
+    for line in out.splitlines():
+        status, _, path = line.partition("\t")
+        if path:
+            files.append({"path": path, "status": status[:1]})
+    return {"base": base_kind, "files": files}
+
+
+def _diff_base(root: Path) -> tuple[DiffReadBase, str | None]:
+    """The base `_workspace_diff` and `_workspace_hunks` compare against, and its kind; (NONE, None)
+    outside a git work tree."""
+    if _git_out(root, "rev-parse", "--is-inside-work-tree") is None:
+        return DiffReadBase.NONE, None
+    base_kind = DiffReadBase.FIRST_COMMIT
+    base: str | None = None
+    if _git_out(root, "rev-parse", "--verify", "--quiet", "refs/heads/main") is not None:
+        base_kind, base = DiffReadBase.MAIN, (_git_out(root, "merge-base", "main", "HEAD") or "").strip() or None
+    else:
+        default = (_git_out(root, "symbolic-ref", "--quiet", "refs/remotes/origin/HEAD") or "").strip()
+        if default:
+            base_kind, base = DiffReadBase.DEFAULT_BRANCH, (_git_out(root, "merge-base", default, "HEAD") or "").strip() or None
+    if base is None:
+        roots = (_git_out(root, "rev-list", "--max-parents=0", "HEAD") or "").split()
+        base_kind, base = DiffReadBase.FIRST_COMMIT, (roots[-1] if roots else _EMPTY_TREE)
+    return base_kind, base
+
+
+@contextlib.contextmanager
+def _scratch_index(root: Path) -> Iterator[dict[str, str]]:
+    """An environment whose GIT_INDEX_FILE is a scratch copy of the workspace's index with every new
+    file marked intent-to-add, so a diff counts new files and the workspace's own index is untouched."""
+    index = (_git_out(root, "rev-parse", "--git-path", "index") or "").strip()
+    index_path = Path(index) if Path(index).is_absolute() else root / index
+    with tempfile.TemporaryDirectory(prefix="substrate-ui-diff-") as tmp:
+        scratch = Path(tmp) / "index"
+        if index_path.is_file():
+            shutil.copyfile(index_path, scratch)
+        env = {**os.environ, "GIT_INDEX_FILE": str(scratch)}
+        _git_out(root, "add", "-A", "--intent-to-add", ".", env=env)
+        yield env
+
+
+_HUNK_HEADER = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
+
+
+def _workspace_hunks(root: Path, rel: str) -> dict[str, object]:
+    """One file's changes against the base `_workspace_diff` uses (UI sprint 418; roadmap
+    2026-11-09-code-editor r8, E2): `git diff -U0` with the same scratch index, so a new file reads as
+    all added. Each hunk: `old_start`, `old_count`, `new_start`, `new_count` (git's ranges, a count of 0
+    for a pure insertion or removal) and `lines`, each `-text` or `+text`. Outside a git work tree the
+    base is `none` and there are no hunks. The path is held to the workspace (`_workspace_target`)."""
+    target = _workspace_target(root, rel)
+    base_kind, base = _diff_base(root)
+    if base is None:
+        return {"base": base_kind, "path": rel, "hunks": []}
+    with _scratch_index(root) as env:
+        out = _git_out(root, "diff", "-U0", "--no-color", "--no-ext-diff", "--no-renames", "--relative", base, "--", str(target.relative_to(root.resolve())), env=env) or ""
+    hunks: list[dict[str, object]] = []
+    for line in out.splitlines():
+        m = _HUNK_HEADER.match(line)
+        if m:
+            hunks.append({
+                "old_start": int(m.group(1)), "old_count": int(m.group(2) if m.group(2) is not None else 1),
+                "new_start": int(m.group(3)), "new_count": int(m.group(4) if m.group(4) is not None else 1),
+                "lines": [],
+            })
+        elif hunks and line[:1] in ("-", "+") and not line.startswith(("--- ", "+++ ")):
+            cast(list[str], hunks[-1]["lines"]).append(line)
+    return {"base": base_kind, "path": rel, "hunks": hunks}
 
 
 def _line_endings(text: str) -> str | None:
@@ -3687,12 +3792,41 @@ class Handler(BaseHTTPRequestHandler):
         except (FileNotFoundError, NotADirectoryError) as exc:
             self._error(404, str(exc))
 
+    def _session_diff(self, session_id: str, q: dict[str, list[str]]) -> None:
+        """UI sprint 412: GET /api/session/<id>/diff, the workspace's changes against main
+        (`_workspace_diff`), written as DIFF_READ with its base and file count. UI sprint 418:
+        `?path=<rel>` reads that file's hunks (`_workspace_hunks`), DIFF_READ carrying their count."""
+        root = self._session_workspace_root(session_id)
+        if root is None:
+            return
+        rel = q.get("path", [""])[0]
+        if rel:
+            try:
+                one = _workspace_hunks(root, rel)
+            except WorkspaceEscapeError as exc:
+                self._error(400, str(exc))
+                return
+            TRACE.emit(
+                Signal.DIFF_READ,
+                {"session_id": session_id, "base": one["base"], "files": 1 if one["hunks"] else 0, "hunks": len(cast(list[Any], one["hunks"]))},
+            )
+            self._json(one)
+            return
+        diff = _workspace_diff(root)
+        TRACE.emit(
+            Signal.DIFF_READ,
+            {"session_id": session_id, "base": diff["base"], "files": len(cast(list[Any], diff["files"]))},
+        )
+        self._json(diff)
+
     def _session_file_write(self, session_id: str, q: dict[str, list[str]]) -> None:
         """UI sprint 387: PUT /api/session/<id>/file?path=<rel>, body `{"text": str, "base_sha256":
         str?, "view": str?}`. The new text goes to a temporary file beside the target; the edit goes
         on the session's record as FileWritten (SessionRegistry.append_event, kernel K340); then the
-        temporary file replaces the target. A record that refuses the edit (no record yet, an ended
-        session) leaves the file as it was: 409. `base_sha256`, the hash the read returned, makes a
+        temporary file replaces the target. A session whose record cannot take the edit (no record
+        yet, an ended session) still has its file written, off the record (`written: "off_record"`,
+        seq null): the editor is an editor whether the session is on or off (the Architect,
+        2026-11-09; UI sprint 427). `base_sha256`, the hash the read returned, makes a
         write to a file changed since then a 409 (optimistic concurrency, as HTTP's If-Match). A
         path outside the workspace is 400; a folder that does not exist, 404."""
         from substrate.topologies.session import FileWritten
@@ -3733,10 +3867,14 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 with os.fdopen(fd, "wb") as fh:
                     fh.write(new_bytes)
-                written = registry.append_event(
-                    session_id,
-                    FileWritten(path=rel_path, old_text=old_text, new_text=text, view=view),
-                )
+                try:
+                    written = registry.append_event(
+                        session_id,
+                        FileWritten(path=rel_path, old_text=old_text, new_text=text, view=view),
+                    )
+                except api.RecordNotAtRestError:
+                    # The session is off (ended, or no record yet): the file is written all the same.
+                    written = {"written": "off_record", "seq": None}
                 os.replace(tmp, target)
             except BaseException:
                 with contextlib.suppress(FileNotFoundError):
@@ -3753,9 +3891,6 @@ class Handler(BaseHTTPRequestHandler):
             return
         except FileNotFoundError as exc:
             self._error(404, str(exc))
-            return
-        except api.RecordNotAtRestError as exc:
-            self._error(409, f"the edit cannot go on the record, so the file is unchanged: {exc}")
             return
         except TimeoutError as exc:
             self._error(503, f"the record was busy, so the file is unchanged: {exc}")
@@ -4930,6 +5065,10 @@ class Handler(BaseHTTPRequestHandler):
             m_watch = re.fullmatch(r"/api/session/([^/]+)/files/watch", path)
             if m_watch:  # UI sprint 349, editor shared work 0(c)
                 self._session_files_watch(m_watch.group(1))
+                return
+            m_diff = re.fullmatch(r"/api/session/([^/]+)/diff", path)
+            if m_diff:  # UI sprint 412: the workspace's changes against main
+                self._session_diff(m_diff.group(1), parse_qs(urlparse(self.path).query))
                 return
             m_files = re.fullmatch(r"/api/session/([^/]+)/(files|file)", path)
             if m_files:  # UI sprint 348, editor shared work 0(c)

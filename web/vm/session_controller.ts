@@ -95,6 +95,8 @@ const KIND_DISPOSITION: Record<EnvelopeKindValue, "rendered" | "ignored"> = {
   [EnvelopeKind.PredicateQuarantined]: "rendered",
   [EnvelopeKind.ProducerEmittedInvalidEvent]: "rendered",
   // ProducerFailed: a model failure reaches the user as Returned{reason: model_error, detail}.
+  // UI sprint 422: a hand write (K340) is drawn in the editor inspector's HISTORY, not the transcript.
+  [EnvelopeKind.FileWritten]: "ignored",
   [EnvelopeKind.ProducerFailed]: "ignored",
   // ProducerCancelled: an interrupt reaches the user as Returned{reason: interrupted}.
   [EnvelopeKind.ProducerCancelled]: "ignored",

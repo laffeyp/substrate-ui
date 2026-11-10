@@ -193,3 +193,12 @@ export async function observedSignals(win: Page): Promise<EmittedRecord[]> {
 export async function settled(win: Page): Promise<void> {
   await win.evaluate("new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r(null))))");
 }
+
+/** Choose the editor's key binding in the settings dialog (⌘,), as a person does (sprint 427: standard
+ *  is the default; vim and nano are options), and wait for the code to take it. */
+export async function chooseBinding(win: Page, binding: "standard" | "vim" | "nano"): Promise<void> {
+  await win.keyboard.press("Meta+,");
+  await win.locator(`[data-setting-binding="${binding}"]`).first().click();
+  await win.keyboard.press("Escape");
+  await win.waitForFunction((b) => document.querySelector("[data-editor-code]")?.getAttribute("data-binding") === b, binding, { timeout: 10_000 });
+}
