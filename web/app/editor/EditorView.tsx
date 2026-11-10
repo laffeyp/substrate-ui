@@ -18,7 +18,8 @@ import { InputBar } from "../InputBar";
 import { paneInput, setText } from "../state/input_bar";
 import { setFindScope } from "../state/find";
 import { FileTree } from "./FileTree";
-import { SearchTab } from "./Search";
+import { openSearch, SearchTab } from "./Search";
+import { ActivityTab, OpenTab } from "./LeftTabs";
 import { Centre } from "./Centre";
 import { ANCHOR_CELL, ANCHOR_ONE, ANCHOR_ZERO, encodeAnchor, encodeAnchor2, encodeAnchor3 } from "../derive/anchor";
 import { Inspector } from "./Inspector";
@@ -239,20 +240,27 @@ export function EditorView({ paneId, fontSize, sessionId, workspace, shape }: { 
     el.addEventListener("pointerup", up);
   };
 
-  // The left column's tabs (sprint 434; roadmap r10 E8; 24j): files and search. Both stay mounted, so the
-  // tree keeps its open folders and the search its results while the other is shown.
+  // The left column's tabs (sprints 434, 440; roadmap r10 E8; 24j; spec r6 §5.1): files, search, open and
+  // activity. Files and search stay mounted, so the tree keeps its open folders and the search its results
+  // while another is shown; open and activity read the store and the record each time they draw.
   const tab = ed.leftTab;
   const tabStyle = (lit: boolean): React.CSSProperties => ({ padding: "1px 5px", borderRadius: 4, fontSize: 10.5, whiteSpace: "nowrap", cursor: "pointer", ...(lit ? { background: SELECT, color: "#d7dade" } : { color: "#62676f" }) });
-  const filesColumn = (start: boolean) => folded.left ? <Rail column="left" label={tab === "search" ? "SEARCH" : "FILES"} start={start} paneId={paneId} /> : (
+  const filesColumn = (start: boolean) => folded.left ? <Rail column="left" label={tab.toUpperCase()} start={start} paneId={paneId} /> : (
     <div data-editor-area="left" data-left-tab={tab} style={{ flex: `0 1 ${sizes.left}px`, minWidth: 0, overflow: "hidden", display: "flex", flexDirection: "column", background: SUNK, [start ? "borderRight" : "borderLeft"]: DIVIDER, minHeight: 0 }}>
-      <div style={{ height: EDITOR_SIZES.tabRow, flex: "none", display: "flex", alignItems: "center", padding: "0 6px", gap: 2 }}>
+      <div style={{ height: EDITOR_SIZES.tabRow, flex: "none", display: "flex", alignItems: "center", padding: "0 6px", gap: 0, borderBottom: "1px solid rgba(255,255,255,.055)", whiteSpace: "nowrap", minWidth: 0 }}>
         <span data-editor-left-tab="files" data-on={tab === "files" ? "1" : "0"} onClick={() => editor.set({ leftTab: "files" })} style={tabStyle(tab === "files")}>files</span>
         <span data-editor-left-tab="search" data-on={tab === "search" ? "1" : "0"} title="search the workspace (⌘⇧F)" onClick={() => editor.set({ leftTab: "search" })} style={tabStyle(tab === "search")}>search</span>
+        <span data-editor-left-tab="open" data-on={tab === "open" ? "1" : "0"} title="the files open in the editor" onClick={() => editor.set({ leftTab: "open" })} style={tabStyle(tab === "open")}>open</span>
+        <span data-editor-left-tab="activity" data-on={tab === "activity" ? "1" : "0"} title="every file the session touched, newest first" onClick={() => editor.set({ leftTab: "activity" })} style={tabStyle(tab === "activity")}>activity</span>
         <span style={{ flex: 1 }} />
-        <span data-editor-fold="left" title={`fold the ${tab === "search" ? "search" : "files"} (⌥⌘L)`} onClick={() => foldColumn("left", true, EditorColumnFoldedCause.RAIL, paneId)} style={GLYPH}>{start ? "◂" : "▸"}</span>
+        <span data-editor-fold="left" title={`fold the ${tab} (⌥⌘L)`} onClick={() => foldColumn("left", true, EditorColumnFoldedCause.RAIL, paneId)} style={{ ...GLYPH, padding: "0 0 0 4px" }}>{start ? "◂" : "▸"}</span>
       </div>
+      {/* 24a and 24j: the workspace search's key above the tree; a click opens the search tab (roadmap r10 E8). */}
+      {tab === "files" && <div data-editor-search-box="1" onClick={() => openSearch(paneId)} style={{ flex: "none", margin: "6px 10px 0", padding: "4px 8px", borderRadius: 4, background: "#212327", color: "#4a4e55", fontSize: 10.5, cursor: "pointer", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>⌘⇧F search workspace</div>}
       <div data-editor-tree="1" style={{ flex: 1, overflow: "auto", minHeight: 0, display: tab === "files" ? undefined : "none" }}><FileTree key={sessionId} sessionId={sessionId} paneId={paneId} /></div>
       <div style={{ flex: 1, minHeight: 0, minWidth: 0, flexDirection: "column", display: tab === "search" ? "flex" : "none" }}><SearchTab key={sessionId} sessionId={sessionId} paneId={paneId} /></div>
+      {tab === "open" && <OpenTab />}
+      {tab === "activity" && <ActivityTab paneId={paneId} workspace={workspace} />}
       {tab === "search"
         ? <div data-editor-search-keys="1" style={{ flex: "none", padding: "6px 12px 8px", borderTop: DIVIDER, fontSize: 10, color: "#4a4e55", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>⌘⇧F · ↵ next · ⌘⇧↵ replace all</div>
         : <div data-editor-workspace="1" title={workspace || ""} style={{ flex: "none", padding: "6px 12px 8px", borderTop: DIVIDER, fontSize: 10.5, color: "#62676f", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{workspaceFoot(workspace, shape)}</div>}

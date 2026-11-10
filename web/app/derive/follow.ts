@@ -37,7 +37,7 @@ type Args = Record<string, unknown>;
 const str = (v: unknown): string | null => (typeof v === "string" && v ? v : null);
 
 /** The files a harness call changes, or null when it is not a file edit. */
-function harnessFiles(tool: string, args: Args): { path: string | null; search: string | null }[] | null {
+export function harnessFiles(tool: string, args: Args): { path: string | null; search: string | null }[] | null {
   const name = tool.replace(/^.*(?:__|-|\.)(?=(edit_file|write_file)$)/, "");
   if (name === "edit_file") return [{ path: str(args.path), search: str(args.search) }];
   if (name === "write_file") return [{ path: str(args.path), search: null }];

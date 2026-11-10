@@ -1322,6 +1322,16 @@
       "rationale": "The open file's find gains VS Code's Match Whole Word, Find in Selection and Preserve Case. The walk's skipped folders are counted, not dropped in silence.",
       "ratified": true,
       "ratified_by": "agent-resolved 2026-11-10, sprint 438; grounds: project — the research r2; SDD — BOOTSTRAP step 9; practice — VS Code codebasics and src/vs/base/common/search.ts"
+    },
+    {
+      "id": "P-0.46-OPEN-HOW",
+      "kind": "ENUM_VALUE_PROPOSED",
+      "layer": 2,
+      "element": "EDITOR_FILE_OPENED.how gains open_tab and activity",
+      "source": "roadmap r10 E8",
+      "rationale": "The roadmap's E8 names the two; the activity tab opens files.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-10, sprint 440; grounds: project — roadmap r10 E8; SDD — BOOTSTRAP step 9; practice — n/a"
     }
   ]
 }

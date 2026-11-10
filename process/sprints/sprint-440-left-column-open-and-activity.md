@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 440
-status: pending
+status: closed
 phase: code editor (roadmap r10), E8 part 2
 pass_kind: functional
 ---
@@ -13,8 +13,9 @@ pass_kind: functional
 
 The left column's tab row gains `open` and `activity` (design spec r6 §5.1; roadmap r10 E8), after `files` and `search`.
 
-- **open** — the files open in the editor, in tab order, the shown one lit, each with the unsaved dot its tab draws; a click shows that tab (EDITOR_FILE_OPENED is not written: the tab is already open).
+- **open** — the files open in the editor, in tab order, the shown one lit, each with an accent dot while its buffer has unsaved changes (24j's dot); a click shows that tab (EDITOR_FILE_OPENED is not written: the tab is already open).
 - **activity** — every workspace file the session's calls touched (the kernel's ToolCall and the harness drivers' HarnessToolCall, read or write, as the inspector's ACTIVITY reads them for one file, `derive/inspector.ts`), and each FileWritten by hand, newest first, one row per file with its last call's turn, seq and gist; a click opens the file (EDITOR_FILE_OPENED how=activity).
+- The files tab gets 24a's and 24j's `⌘⇧F search workspace` box above the tree (roadmap r10 E8, not built in sprint 434); a click opens the search tab. The tab row takes 24j's spacing (no gap between tabs; ◂ padded on the left only), so the four tabs and ◂ fit 210 px.
 - EDITOR_FILE_OPENED.how gains `open_tab` (reserved for an open from the open tab when its file is not open, which cannot happen today) and `activity`; EDITOR_DRAWN.left_tab already names `open` and `activity`, and the anchor's third row carries them.
 
 ## context_files

@@ -67,7 +67,7 @@ export function relPath(arg: unknown, workspace: string | null): string | null {
 }
 
 /** Turn index of each seq: the last UserMessage before it. */
-function turnOf(envs: readonly RecordEnvelope[]): (seq: number) => number | null {
+export function turnOf(envs: readonly RecordEnvelope[]): (seq: number) => number | null {
   const marks = envs.filter((e) => e.kind === EnvelopeKind.UserMessage).map((e) => ({ seq: e.seq, turn: Number(e.payload.turn_index) }));
   return (seq) => { let t: number | null = null; for (const m of marks) { if (m.seq <= seq) t = m.turn; else break; } return t; };
 }

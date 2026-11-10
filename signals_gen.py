@@ -5,7 +5,7 @@ Regenerate: python3 scripts/gen_signals.py. tests/test_signals_generated.py fail
 
 from enum import StrEnum
 
-VOCAB_VERSION = "0.45"
+VOCAB_VERSION = "0.46"
 
 
 class Signal(StrEnum):
@@ -577,6 +577,8 @@ class EditorFileOpenedHow(StrEnum):
     FOLLOW = "follow"
     SEARCH = "search"
     DEEP_LINK = "deep_link"
+    OPEN_TAB = "open_tab"
+    ACTIVITY = "activity"
 
 
 class EditorFileSavedCommand(StrEnum):

@@ -44,7 +44,7 @@ export interface EditorState {
   /** Sprint 434 (roadmap r10 E8; 24j): the left column's tab; the workspace search's query as typed, kept
    *  while the editor is open (sprint 435: whole word, the include and exclude globs, the globs shown); bumped by ⌘⇧F to focus the query; a line to bring the caret to when its
    *  file is shown (n tells one jump from the next to the same line). */
-  leftTab: "files" | "search";
+  leftTab: "files" | "search" | "open" | "activity";
   search: { query: string; replace: string; caseSensitive: boolean; regexp: boolean; word: boolean; include: string; exclude: string; details: boolean };
   searchFocus: number;
   /** Bumped by ⌥⌘F in the tree (sprint 437): the tree's find by name opens, its field focused. */
