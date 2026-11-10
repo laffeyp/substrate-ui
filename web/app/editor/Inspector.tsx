@@ -106,6 +106,7 @@ export function Inspector({ paneId, workspace }: { paneId: number; workspace: st
   const paneSnap = React.useSyncExternalStore(shell.subscribe, shell.getSnapshot, shell.getSnapshot).snapshots[paneId];
   const envs = paneSnap?.rawEnvelopes ?? [];
   const sessionId = paneSnap?.sessionId ?? null;
+  const [openRow, setOpenRow] = React.useState<number | null>(null);
   const file = st.file && st.file.path === st.active ? st.file : null;
   const path = file?.path ?? null;
   const activity = React.useMemo(() => (path ? fileActivity(envs, path, workspace) : []), [envs, path, workspace]);
@@ -174,12 +175,20 @@ export function Inspector({ paneId, workspace }: { paneId: number; workspace: st
       <Folding name="activity" meta="this file in the record">
         {activity.length === 0 && <div style={{ padding: "2px 14px", color: DIM, fontSize: 10.5 }}>no calls on this file</div>}
         {activity.map((r) => (
-          <div key={r.seq} data-activity-row={r.seq} style={{ display: "flex", gap: 8, padding: "2px 14px", fontSize: 10.5, whiteSpace: "nowrap", overflow: "hidden" }}>
-            <span style={{ color: FAINT, flex: "none" }}>{r.turn !== null ? `t${r.turn}` : ""}</span>
-            <span style={{ color: DIM, flex: "none", width: 30 }}>{r.seq}</span>
-            <span style={{ color: MID, overflow: "hidden", textOverflow: "ellipsis" }}>{r.gist}</span>
-            <span data-activity-open={r.seq} title={`seq ${r.seq} in meta (⌘M)`} onClick={() => openSeq(r.seq, paneId, sessionId)} style={{ marginLeft: "auto", color: FAINT, flex: "none", cursor: "pointer" }}>◂</span>
-          </div>
+          <React.Fragment key={r.seq}>
+            <div data-activity-row={r.seq} style={{ display: "flex", gap: 8, padding: "2px 14px", fontSize: 10.5, whiteSpace: "nowrap", overflow: "hidden" }}>
+              <span style={{ color: FAINT, flex: "none" }}>{r.turn !== null ? `t${r.turn}` : ""}</span>
+              <span style={{ color: DIM, flex: "none", width: 30 }}>{r.seq}</span>
+              <span style={{ color: MID, overflow: "hidden", textOverflow: "ellipsis" }}>{r.gist}</span>
+              <span data-activity-open={r.seq} onClick={() => setOpenRow(openRow === r.seq ? null : r.seq)} style={{ marginLeft: "auto", color: FAINT, flex: "none", cursor: "pointer" }}>{openRow === r.seq ? "▾" : "◂"}</span>
+            </div>
+            {openRow === r.seq && (
+              <div data-activity-payload={r.seq} style={{ margin: "2px 14px 6px" }}>
+                <pre style={{ margin: 0, padding: "6px 9px", background: CARD, borderRadius: 4, fontFamily: "inherit", fontSize: 10.5, color: MID, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{JSON.stringify(envs.find((e) => e.seq === r.seq)?.payload ?? null, null, 2)}</pre>
+                <div style={{ textAlign: "right" }}><span data-activity-meta={r.seq} title={`seq ${r.seq} in meta (⌘M)`} onClick={() => openSeq(r.seq, paneId, sessionId)} style={{ color: DIM, fontSize: 10, cursor: "pointer" }}>meta ›</span></div>
+              </div>
+            )}
+          </React.Fragment>
         ))}
         <div style={{ height: 4 }} />
       </Folding>

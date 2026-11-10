@@ -102,9 +102,16 @@ async function main(): Promise<void> {
     await win.keyboard.press("Meta+m");
     await until(win, "back to the inspector", () => column(win), (c) => c.showing === "inspector" && Math.abs(c.width - 300) <= 2);
 
-    // ◂ on the edit's ACTIVITY row: the meta pane, the stream lens, the seq lit and inspected.
+    // The arrow on the edit's ACTIVITY row: the call's payload under the row, as the record holds it; the
+    // inspector stays.
     await win.locator(`[data-activity-open="${editSeq}"]`).first().click();
-    const opened = await until(win, "◂ opened the seq", () => column(win), (c) => c.showing === "meta" && c.inspected === String(editSeq) && c.inView);
+    const shownPayload = await until(win, "the call's payload", () => win.evaluate(`(() => { var e = document.querySelector('[data-activity-payload="${editSeq}"] pre'); return e ? e.textContent : null; })()`) as Promise<string | null>, (t) => t !== null);
+    const editCall = envs.find((e) => e.seq === editSeq)!;
+    if (JSON.stringify(JSON.parse(shownPayload!)) !== JSON.stringify(editCall.payload)) throw new Error(`the payload shown is not the record's: ${shownPayload}`);
+    if ((await column(win)).showing !== "inspector") throw new Error("the arrow left the inspector");
+    // Its "meta ›" link: the meta pane, the stream lens, the seq lit, inspected and in view.
+    await win.locator(`[data-activity-meta="${editSeq}"]`).first().click();
+    const opened = await until(win, "meta › opened the seq", () => column(win), (c) => c.showing === "meta" && c.inspected === String(editSeq) && c.inView);
     if (!opened.footer.includes(`seq ${editSeq} selected`)) throw new Error(`the footer reads ${opened.footer}`);
     await win.locator('[data-editor-area="right"]').first().screenshot({ path: join(shots, "meta-pane-column.png") });
     // Folded, the rail says META; ⌘M unfolds the column.
