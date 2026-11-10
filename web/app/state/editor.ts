@@ -43,6 +43,10 @@ export interface EditorState {
   findFocus: number;
   /** Sprint 430: the right column shows the inspector, or the meta pane opened in the editor with ⌘M. */
   showing: "inspector" | "meta";
+  /** Sprint 431 (E7; D93): the session's edits marked and not yet resolved (their calls' seqs, files and
+   *  the text each replaces), and the last that landed ok, for the centre to bring into view. */
+  follow: { seq: number; path: string; search: string | null }[];
+  followLanded: { path: string; seq: number } | null;
   /** The centre's caret line, 1-based (sprint 422): OUTLINE lights the symbol around it. */
   caretLine: number;
   /** What the inspector draws (sprint 422): its outline, hunk, activity and history rows. */
@@ -58,4 +62,4 @@ export interface EditorState {
 
 const KEY = "__substrateEditor";
 const scope = globalThis as unknown as Record<string, ReturnType<typeof createStore<EditorState>> | undefined>;
-export const editor = scope[KEY] ?? (scope[KEY] = createStore<EditorState>({ treeRows: 0, modifiedDots: 0, folded: { left: false, right: false, bottom: false }, tabs: [], active: null, file: null, hunks: [], outline: [], caretLine: 1, unsaved: [], mode: null, caretCol: 1, vsBase: null, nanoHelp: false, anchor3: null, conflict: null, find: { search: "", caseSensitive: false, regexp: false, replace: "" }, findCount: { total: 0, current: 0 }, findFocus: 0, showing: "inspector", inspector: { outlineRows: 0, hunks: 0, activityRows: 0, historyRows: 0 }, anchor2: null, dock: "bottom", swapped: false, focus: { on: false, before: null }, anchor: null }));
+export const editor = scope[KEY] ?? (scope[KEY] = createStore<EditorState>({ treeRows: 0, modifiedDots: 0, folded: { left: false, right: false, bottom: false }, tabs: [], active: null, file: null, hunks: [], outline: [], caretLine: 1, unsaved: [], mode: null, caretCol: 1, vsBase: null, nanoHelp: false, anchor3: null, conflict: null, find: { search: "", caseSensitive: false, regexp: false, replace: "" }, findCount: { total: 0, current: 0 }, findFocus: 0, showing: "inspector", follow: [], followLanded: null, inspector: { outlineRows: 0, hunks: 0, activityRows: 0, historyRows: 0 }, anchor2: null, dock: "bottom", swapped: false, focus: { on: false, before: null }, anchor: null }));

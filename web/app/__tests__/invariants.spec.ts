@@ -323,3 +323,30 @@ test("S11: a second open, a close with none open, and an editor record outside a
     assert.deepStrictEqual(got[0].context.recent.at(-1), recs.at(-1));
   }
 });
+
+// Sprint 431: S10, a follow mark is resolved once, by the call's seq (v0.40).
+test("S10: marks confirmed and withdrawn, and a mark dropped when the run ends, break no rule", () => {
+  const c = started();
+  assert.deepStrictEqual(broken(c, [
+    win("PANE_OPENED", { pane_id: 1, cause: "start" }), ...picked().slice(1),
+    win("EDITOR_OPENED", {}),
+    win("EDITOR_FOLLOW_MARKED", { seq: 21 }), win("EDITOR_FOLLOW_MARKED", { seq: 25 }),
+    win("EDITOR_FOLLOW_CONFIRMED", { seq: 21, result_seq: 23, conflict: false }),
+    win("EDITOR_FOLLOW_WITHDRAWN", { seq: 25, result_seq: 27 }),
+    win("EDITOR_FOLLOW_MARKED", { seq: 31 }), win("EDITOR_CLOSED", { tab_count: 1 }),
+    win("EDITOR_OPENED", {}), win("EDITOR_FOLLOW_MARKED", { seq: 31 }), win("EDITOR_FOLLOW_CONFIRMED", { seq: 31, result_seq: 33, conflict: true }),
+  ]), []);
+});
+
+test("S10: a second mark, a resolution with no mark, and a resolution after the run dropped its mark each break it once", () => {
+  const open = (pane: number): Rec[] => [win("PANE_OPENED", { pane_id: pane, cause: "split" }, pane), win("EDITOR_OPENED", {}, pane)];
+  const plants: Rec[][] = [
+    [...open(2), win("EDITOR_FOLLOW_MARKED", { seq: 9 }, 2), win("EDITOR_FOLLOW_MARKED", { seq: 9 }, 2)],
+    [...open(3), win("EDITOR_FOLLOW_CONFIRMED", { seq: 9, result_seq: 11, conflict: false }, 3)],
+    [...open(4), win("EDITOR_FOLLOW_MARKED", { seq: 9 }, 4), win("EDITOR_CLOSED", { tab_count: 0 }, 4), win("EDITOR_OPENED", {}, 4), win("EDITOR_FOLLOW_WITHDRAWN", { seq: 9, result_seq: 11 }, 4)],
+  ];
+  for (const recs of plants) {
+    const got = broken(started(), recs);
+    assert.deepStrictEqual(got.map((b) => b.rule), ["S10"], JSON.stringify(recs.at(-1)));
+  }
+});

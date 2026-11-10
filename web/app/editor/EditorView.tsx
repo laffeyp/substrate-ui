@@ -25,6 +25,7 @@ import { MetaView } from "../MetaView";
 import { GraphMode } from "../../vm/kinds";
 import { selectSeqFromEditor, setMode } from "../state/meta";
 import { stopFollowing } from "../../reveal/follow_bottom";
+import { followItems } from "../derive/follow";
 import { editor } from "../state/editor";
 import { clampSize, loadSizes, saveSizes, type EditorSizes } from "./sizes";
 import { emit as emitSignal } from "../../vm/instrumentation/sdd";
@@ -71,6 +72,40 @@ export function toggleMetaPane(paneId: number, to?: "inspector" | "meta"): void 
   if (showing === st.showing) return;
   editor.set({ showing });
   emitSignal(Signal.EDITOR_INSPECTOR_SWAPPED, { showing: showing === "meta" ? EditorInspectorSwappedShowing.LENSES : EditorInspectorSwappedShowing.SPINE }, { pane_id: paneId });
+}
+
+/** Following the session (sprint 431; roadmap r10 E7; D93): while the editor is open in the pane, each
+ *  edit_file or write_file call on a workspace file after the editor opened is marked at its call and
+ *  confirmed or withdrawn at its result (S10). The view never moves to another file (the person's focus
+ *  wins): the centre marks and scrolls only the file it shows; the tree marks the others. Mounted with the
+ *  editor view, so no editor record is written outside its run (S11); its marks go with it. */
+function Follow({ paneId, workspace }: { paneId: number; workspace: string | null }): null {
+  const envs = React.useSyncExternalStore(shell.subscribe, shell.getSnapshot, shell.getSnapshot).snapshots[paneId]?.rawEnvelopes ?? [];
+  const since = React.useRef<number | null>(null);
+  if (since.current === null) since.current = envs.length ? envs[envs.length - 1].seq : -1;
+  const marked = React.useRef(new Set<number>()), resolved = React.useRef(new Set<number>());
+  React.useEffect(() => {
+    let follow = editor.getSnapshot().follow, changed = false;
+    for (const it of followItems(envs, workspace, since.current ?? -1)) {
+      if (!marked.current.has(it.callSeq)) {
+        marked.current.add(it.callSeq);
+        emitSignal(Signal.EDITOR_FOLLOW_MARKED, { seq: it.callSeq }, { pane_id: paneId });
+        follow = [...follow, { seq: it.callSeq, path: it.path, search: it.search }]; changed = true;
+      }
+      if (it.resultSeq !== null && !resolved.current.has(it.callSeq)) {
+        resolved.current.add(it.callSeq);
+        follow = follow.filter((f) => f.seq !== it.callSeq); changed = true;
+        if (it.ok) {
+          const conflict = editor.getSnapshot().unsaved.includes(it.path);
+          emitSignal(Signal.EDITOR_FOLLOW_CONFIRMED, { seq: it.callSeq, result_seq: it.resultSeq, conflict }, { pane_id: paneId });
+          editor.set({ followLanded: { path: it.path, seq: it.callSeq } });
+        } else emitSignal(Signal.EDITOR_FOLLOW_WITHDRAWN, { seq: it.callSeq, result_seq: it.resultSeq }, { pane_id: paneId });
+      }
+    }
+    if (changed) editor.set({ follow });
+  }, [envs, workspace, paneId]);
+  React.useEffect(() => () => editor.set({ follow: [], followLanded: null }), []);
+  return null;
 }
 
 /** ACTIVITY's ◂: the meta pane in the editor, its stream lens, the call's seq lit. */
@@ -275,6 +310,7 @@ export function EditorView({ paneId, fontSize, sessionId, workspace, shape }: { 
   return (
     <div ref={viewRef} data-editor-view="1" data-pane-id={String(paneId)} data-editor-swapped={swapped ? "1" : "0"} style={{ flex: 1, display: "flex", minHeight: 0, minWidth: 0, background: GROUND, position: "relative" }}>
       <AnchorStrip />
+      <Follow paneId={paneId} workspace={workspace} />
       {startCol}
       {!folded[startKey] && <Handle column={startKey} across={false} onGrab={grab} />}
       <div style={{ flex: "1 1 0", display: "flex", flexDirection: "column", minWidth: EDITOR_SIZES.centreMin, minHeight: 0 }}>

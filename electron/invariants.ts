@@ -23,6 +23,9 @@
 //       inside an open run (sprint 408): a second open, a close with none open, or an editor tag
 //       outside a run breaks it. EDITOR_KEY_REFUSED is exempt (a refusal at a picker has no run).
 //       PANE_CLOSED ends the run; a window's WINDOW_BOOTED (a reload) ends every run of that window.
+//   S10 a pane's EDITOR_FOLLOW_MARKED for a call's seq is resolved by exactly one EDITOR_FOLLOW_CONFIRMED or
+//       EDITOR_FOLLOW_WITHDRAWN with that seq (v0.40, sprint 431): a second mark, or a resolution with no
+//       mark open, breaks it; the marks open when the editor run ends are dropped with it (S11).
 //   S8  a pane's TURN_SUBMITTED names the session its last ack or attach named (a turn that
 //       resumes an ended session reopens the stream and writes no new attach).
 //   E8  a TRANSCRIPT_SCROLLED that follows the bottom, unpinned, is at the bottom.
@@ -94,6 +97,8 @@ interface PaneState {
   session: unknown;
   /** An editor run is open in the pane (S11). */
   editor: boolean;
+  /** The calls' seqs marked by EDITOR_FOLLOW_MARKED and not yet resolved (S10). */
+  marks: Set<number>;
 }
 
 /** The window's failure classes for a refusal the server did not make: no answer, or an answer it
@@ -211,9 +216,9 @@ export function createChecker(now: () => number = () => performance.now()): { se
       }
     }
 
-    // A reload ends the window's editor runs (S11).
+    // A reload ends the window's editor runs (S11), and drops their follow marks (S10).
     if (r.process === "window" && r.name === Signal.WINDOW_BOOTED) {
-      for (const [k, st] of panes) if (k.startsWith(`${r.window_id}:`)) st.editor = false;
+      for (const [k, st] of panes) if (k.startsWith(`${r.window_id}:`)) { st.editor = false; st.marks.clear(); }
     }
     const paneId = paneOf(r);
     if (r.process !== "window" || paneId === null) return out;
@@ -225,7 +230,7 @@ export function createChecker(now: () => number = () => performance.now()): { se
     }
     let st = panes.get(key);
     if (!st) {
-      st = { armed: false, lastLine: null, awaitingBind: false, openRequested: false, session: null, editor: false };
+      st = { armed: false, lastLine: null, awaitingBind: false, openRequested: false, session: null, editor: false, marks: new Set<number>() };
       panes.set(key, st);
     }
 
@@ -235,8 +240,19 @@ export function createChecker(now: () => number = () => performance.now()): { se
     } else if (r.name === Signal.EDITOR_CLOSED) {
       if (!st.editor) broke("S11", { pane_id: paneId, editor_open: false, by: r.name });
       st.editor = false;
+      st.marks.clear();
     } else if (r.name.startsWith("EDITOR_") && r.name !== Signal.EDITOR_KEY_REFUSED && !st.editor) {
       broke("S11", { pane_id: paneId, editor_open: false, by: r.name });
+    }
+    // S10: a mark is resolved once, by the call's seq.
+    if (r.name === Signal.EDITOR_FOLLOW_MARKED) {
+      const seq = Number(p.seq);
+      if (st.marks.has(seq)) broke("S10", { pane_id: paneId, seq, marked: true, by: r.name });
+      st.marks.add(seq);
+    } else if (r.name === Signal.EDITOR_FOLLOW_CONFIRMED || r.name === Signal.EDITOR_FOLLOW_WITHDRAWN) {
+      const seq = Number(p.seq);
+      if (!st.marks.has(seq)) broke("S10", { pane_id: paneId, seq, marked: false, by: r.name });
+      st.marks.delete(seq);
     }
 
     switch (r.name) {

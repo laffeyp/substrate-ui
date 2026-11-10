@@ -133,16 +133,17 @@ export function decodeAnchor2(bits: readonly number[]): Anchor2 | { error: strin
 // (vocabulary v0.33): the vim mode, the binding, read-only, and the count of unsaved buffers. Sprint 425
 // (v0.34) adds the stale-save offer's bit; the layout changed, so the magic did (0xB6 to 0xB7). Sprint 427
 // (v0.36): the binding takes two bits (standard, vim, nano) and the read-only bit goes (0xB8). Sprint 430
-// (v0.38): the meta pane open in the editor's right column takes a bit (0xB9).
-export const ANCHOR3_MAGIC = 0xb9;
+// (v0.38): the meta pane open in the editor's right column takes a bit (0xB9). Sprint 431 (v0.40): the
+// session's edits marked and not yet resolved take four bits, 15 meaning 15 or more (0xBA).
+export const ANCHOR3_MAGIC = 0xba;
 export const ANCHOR3_BINDINGS = ["standard", "vim", "nano"] as const;
 export const ANCHOR3_MODES = ["none", "normal", "insert", "visual", "replace"] as const;
-export interface Anchor3 { seq: number; mode: typeof ANCHOR3_MODES[number]; binding: typeof ANCHOR3_BINDINGS[number]; unsaved: number; conflict: boolean; meta: boolean }
-const FIELDS3: [string, number][] = [["magic", 8], ["seq", 20], ["mode", 3], ["binding", 2], ["unsaved", 8], ["conflict", 1], ["meta", 1], ["check", 8]];
+export interface Anchor3 { seq: number; mode: typeof ANCHOR3_MODES[number]; binding: typeof ANCHOR3_BINDINGS[number]; unsaved: number; conflict: boolean; meta: boolean; follow_marks: number }
+const FIELDS3: [string, number][] = [["magic", 8], ["seq", 20], ["mode", 3], ["binding", 2], ["unsaved", 8], ["conflict", 1], ["meta", 1], ["follow_marks", 4], ["check", 8]];
 export const ANCHOR3_CELLS = 2 + FIELDS3.reduce((n, [, width]) => n + width, 0);
 
 function values3(a: Anchor3): Record<string, number> {
-  return { seq: a.seq, mode: ANCHOR3_MODES.indexOf(a.mode), binding: ANCHOR3_BINDINGS.indexOf(a.binding), unsaved: a.unsaved, conflict: a.conflict ? 1 : 0, meta: a.meta ? 1 : 0 };
+  return { seq: a.seq, mode: ANCHOR3_MODES.indexOf(a.mode), binding: ANCHOR3_BINDINGS.indexOf(a.binding), unsaved: a.unsaved, conflict: a.conflict ? 1 : 0, meta: a.meta ? 1 : 0, follow_marks: a.follow_marks };
 }
 function crc3(v: Record<string, number>): number {
   let crc = 0;
@@ -173,5 +174,5 @@ export function decodeAnchor3(bits: readonly number[]): Anchor3 | { error: strin
   if (v.check !== crc3(v)) return { error: `checksum ${v.check}, expected ${crc3(v)}` };
   if (v.mode >= ANCHOR3_MODES.length) return { error: `mode ${v.mode} names no mode` };
   if (v.binding >= ANCHOR3_BINDINGS.length) return { error: `binding ${v.binding} names no binding` };
-  return { seq: v.seq, mode: ANCHOR3_MODES[v.mode], binding: ANCHOR3_BINDINGS[v.binding], unsaved: v.unsaved, conflict: !!v.conflict, meta: !!v.meta };
+  return { seq: v.seq, mode: ANCHOR3_MODES[v.mode], binding: ANCHOR3_BINDINGS[v.binding], unsaved: v.unsaved, conflict: !!v.conflict, meta: !!v.meta, follow_marks: v.follow_marks };
 }

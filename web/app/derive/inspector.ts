@@ -72,8 +72,10 @@ function turnOf(envs: readonly RecordEnvelope[]): (seq: number) => number | null
   return (seq) => { let t: number | null = null; for (const m of marks) { if (m.seq <= seq) t = m.turn; else break; } return t; };
 }
 
-function resultOf(envs: readonly RecordEnvelope[], callId: unknown): RecordEnvelope | undefined {
-  return envs.find((e) => e.kind === EnvelopeKind.ToolResult && e.payload.call_id === callId);
+/** A call's result: the first ToolResult after it with its call_id. The kernel numbers call ids per turn
+ *  (`c1`, `c2`, …), so the same id comes back in every turn (sprint 431, found by editor_follow). */
+export function resultOf(envs: readonly RecordEnvelope[], call: RecordEnvelope): RecordEnvelope | undefined {
+  return envs.find((e) => e.kind === EnvelopeKind.ToolResult && e.seq > call.seq && e.payload.call_id === call.payload.call_id);
 }
 
 export function fileActivity(envs: readonly RecordEnvelope[], path: string, workspace: string | null): ActivityRow[] {
@@ -84,7 +86,7 @@ export function fileActivity(envs: readonly RecordEnvelope[], path: string, work
     if (e.kind !== EnvelopeKind.ToolCall) continue;
     const tool = String(e.payload.tool);
     const args = (e.payload.args as unknown[]) ?? [];
-    const res = resultOf(envs, e.payload.call_id);
+    const res = resultOf(envs, e);
     let gist: string | null = null;
     if (FILE_TOOLS.has(tool)) {
       if (relPath(args[0], workspace) !== path) continue;
@@ -247,7 +249,7 @@ function walk(envs: readonly RecordEnvelope[], path: string, workspace: string |
     const tool = String(e.payload.tool);
     const args = (e.payload.args as unknown[]) ?? [];
     if (!FILE_TOOLS.has(tool) || relPath(args[0], workspace) !== path) continue;
-    const res = resultOf(envs, e.payload.call_id);
+    const res = resultOf(envs, e);
     if (!res || res.payload.ok === false) continue;
     if (tool === "read_file") { const r = readResult(String(res.payload.output ?? "")); if (r.text !== null) meet(r.text, e.seq); continue; }
     let after: string | null;

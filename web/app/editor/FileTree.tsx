@@ -87,6 +87,8 @@ export function FileTree({ sessionId, paneId }: { sessionId: string; paneId: num
     if (now) read(rel);
   };
 
+  // Sprint 431 (E7): a file with a session edit in flight is marked in the accent until its result.
+  const following = new Set(React.useSyncExternalStore(editor.subscribe, editor.getSnapshot, editor.getSnapshot).follow.map((f) => f.path));
   return (
     <div data-editor-tree-rows={String(drawn)} style={{ paddingTop: 6 }}>
       {rows.map((r) => (
@@ -97,11 +99,12 @@ export function FileTree({ sessionId, paneId }: { sessionId: string; paneId: num
           data-tree-depth={String(r.depth)}
           onClick={r.kind === "dir" ? () => toggle(r.rel) : r.kind === "error" ? undefined : () => openFile(r.rel, paneId)}
           data-tree-active={r.rel === editor.getSnapshot().active ? "1" : "0"}
+          data-follow-mark={following.has(r.rel) ? "1" : undefined}
           title={r.rel}
           style={{
             height: TREE_ROW, lineHeight: `${TREE_ROW}px`, fontSize: 12, paddingLeft: TREE_LEFT + TREE_INDENT * r.depth, paddingRight: 8,
             whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-            color: r.kind === "error" ? "#c26058" : r.kind === "dir" ? "#b9bec5" : "#9aa0a8",
+            color: r.kind === "error" ? "#c26058" : following.has(r.rel) ? "#82a5c8" : r.kind === "dir" ? "#b9bec5" : "#9aa0a8",
             cursor: r.kind === "error" ? "default" : "pointer",
             background: r.rel === editor.getSnapshot().active ? "#2e3138" : undefined,
           }}

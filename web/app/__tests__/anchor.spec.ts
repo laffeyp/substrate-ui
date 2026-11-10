@@ -44,7 +44,7 @@ test("the second row survives encode and decode, and any one flipped cell decode
 // Sprint 424: the third row.
 import { ANCHOR3_CELLS, decodeAnchor3, encodeAnchor3 } from "../derive/anchor";
 test("the third row survives encode and decode, and any one flipped cell decodes to an error", () => {
-  const a3 = { seq: 812345, mode: "insert" as const, binding: "nano" as const, unsaved: 2, conflict: true, meta: true };
+  const a3 = { seq: 812345, mode: "insert" as const, binding: "nano" as const, unsaved: 2, conflict: true, meta: true, follow_marks: 3 };
   const bits = encodeAnchor3(a3);
   assert.strictEqual(bits.length, ANCHOR3_CELLS);
   assert.deepStrictEqual(decodeAnchor3(bits), a3);

@@ -83,6 +83,8 @@ const THEME = EditorView.theme({
   // Sprint 428: find matches in the accent, the current one stronger (D7: the one UI accent).
   ".cm-find-match": { backgroundColor: "rgba(130,165,200,.22)", borderRadius: "2px" },
   ".cm-find-current": { backgroundColor: "rgba(130,165,200,.5)" },
+  // Sprint 431: a session edit in flight, its lines edged in the accent.
+  ".cm-follow": { boxShadow: `inset 2px 0 0 ${ACCENT}`, backgroundColor: "rgba(130,165,200,.08)" },
   // vim's block cursor in the one UI accent (D7); the package draws it pink, which here reads as a removal.
   ".cm-fat-cursor": { background: `${ACCENT} !important`, color: `${GROUND} !important` },
   "&:not(.cm-focused) .cm-fat-cursor": { background: "none !important", outline: `solid 1px ${ACCENT} !important`, color: "transparent !important" },
@@ -181,6 +183,41 @@ export const find = {
   replace: (all: boolean) => activeFind?.replace(all),
   focusCode: () => activeFind?.focusCode(),
 };
+
+/** Following the session (sprint 431; D93): the lines an edit in flight will replace, edged in the accent;
+ *  a write_file call marks the whole file. Set from the editor store's marks for the file shown. */
+const setFollowMarks = StateEffect.define<{ from: number; to: number }[]>();
+const FOLLOW_LINE = Decoration.line({ class: "cm-follow", attributes: { "data-follow-line": "1" } });
+const followField = StateField.define<DecorationSet>({
+  create: () => Decoration.none,
+  update(v, tr) {
+    for (const e of tr.effects) if (e.is(setFollowMarks)) {
+      const b = new RangeSetBuilder<Decoration>();
+      for (const r of e.value) for (let n = tr.state.doc.lineAt(r.from).number; n <= tr.state.doc.lineAt(r.to).number; n++) b.add(tr.state.doc.line(n).from, tr.state.doc.line(n).from, FOLLOW_LINE);
+      return b.finish();
+    }
+    return v.map(tr.changes);
+  },
+  provide: (f) => EditorView.decorations.from(f),
+});
+/** The ranges a file's marks cover in a buffer: edit_file's search text where it stands, write_file all. */
+function followRanges(doc: { toString(): string; length: number }, marks: readonly { search: string | null }[]): { from: number; to: number }[] {
+  const text = doc.toString(), out: { from: number; to: number }[] = [];
+  for (const m of marks) {
+    if (m.search === null) { out.push({ from: 0, to: doc.length }); continue; }
+    const at = m.search ? text.indexOf(m.search) : -1;
+    if (at >= 0) out.push({ from: at, to: at + m.search.length });
+  }
+  return out;
+}
+/** The first line two texts differ at, 1-based; null when they are the same. */
+function firstChange(a: string, b: string): number | null {
+  if (a === b) return null;
+  const x = a.split("\n"), y = b.split("\n");
+  let i = 0;
+  while (i < x.length && i < y.length && x[i] === y[i]) i++;
+  return i + 1;
+}
 
 /** CodeMirror keeps "\n" in its buffer; the file's own line ends come back on save. */
 const normal = (text: string) => text.replace(/\r\n?/g, "\n");
@@ -308,6 +345,8 @@ export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionI
   now.current = { binding };
   const outlineTimer = React.useRef<number | null>(null);
   const recount = React.useRef(false);
+  /** The followed edit whose landing the view last brought into view (sprint 431). */
+  const shownLanded = React.useRef<number | null>(null);
   /** The command whose save met the stale file, for an overwrite; a reload reads the file again. */
   const conflictCommand = React.useRef<EditorFileSavedCommand>(EditorFileSavedCommand.MENU_S);
   const [reloads, setReloads] = React.useState(0);
@@ -399,6 +438,7 @@ export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionI
       }
       const kept = shown.current !== rel && unsaved(rel) ? BUFFERS.get(key(rel)) : undefined;
       let placed: EditorState;
+      let landedLine: number | null = null;
       if (kept) {
         BUFFERS.delete(key(rel));
         placed = kept;
@@ -408,7 +448,13 @@ export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionI
         // landing on the record does not move the reader's place. Another file opens at its first line.
         const prev = shown.current === rel && view.current ? view.current.state : null;
         const keep = prev ? Math.min(prev.doc.lineAt(prev.selection.main.head).number, file.text.split("\n").length) : 1;
-        const state = EditorState.create({ doc: file.text, extensions: [...configured(), lineNumbers(), hunkExtension(diff.hunks), language(rel), syntaxHighlighting(HIGHLIGHT), THEME, search(), findMarks, listener] });
+        // Sprint 431: a followed edit that just landed on this file brings its first changed line into view.
+        const landed = editor.getSnapshot().followLanded;
+        if (prev && landed && landed.path === rel && landed.seq !== shownLanded.current) {
+          shownLanded.current = landed.seq;
+          landedLine = firstChange(prev.doc.toString(), normal(file.text));
+        }
+        const state = EditorState.create({ doc: file.text, extensions: [...configured(), lineNumbers(), hunkExtension(diff.hunks), language(rel), syntaxHighlighting(HIGHLIGHT), THEME, search(), findMarks, followField, listener] });
         placed = keep > 1 ? state.update({ selection: { anchor: state.doc.line(keep).from } }).state : state;
         markUnsaved(rel, false);
       }
@@ -418,11 +464,22 @@ export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionI
       // A kept buffer takes the binding of now; every buffer takes the find's query (sprint 428).
       view.current.dispatch({ effects: [CONF.binding.reconfigure(bindingExtension(now.current.binding, HOOKS)), setSearchQuery.of(new SearchQuery(editor.getSnapshot().find))] });
       editor.set({ findCount: findCount(view.current.state) });
+      if (landedLine !== null) view.current.dispatch({ effects: EditorView.scrollIntoView(view.current.state.doc.line(Math.min(landedLine, view.current.state.doc.lines)).from, { y: "center" }) });
       const head = placed.selection.main.head, line = placed.doc.lineAt(head);
       editor.set({ outline: outlineOf(placed), caretLine: line.number, caretCol: head - line.from + 1, vsBase: against(rel, placed.doc.toString()) });
     }).catch(() => undefined);
     return () => { live = false; };
   }, [st.active, sessionId, writes, reloads]);
+  // Sprint 431 (E7; D93): the session's edits in flight on the file shown, marked where they will land and
+  // brought into view; the marks go when the edit resolves.
+  const followHere = st.follow.filter((f) => f.path === st.active);
+  const followKey = JSON.stringify(followHere.map((f) => f.seq));
+  React.useEffect(() => {
+    const v = view.current;
+    if (!v || shown.current !== st.active) return;
+    const ranges = followRanges(v.state.doc, followHere);
+    v.dispatch({ effects: [setFollowMarks.of(ranges), ...(ranges.length ? [EditorView.scrollIntoView(ranges[0].from, { y: "center" })] : [])] });
+  }, [followKey, st.active]);
   // The binding chosen in settings applies to the buffer shown at once.
   React.useEffect(() => {
     view.current?.dispatch({ effects: CONF.binding.reconfigure(bindingExtension(binding, HOOKS)) });

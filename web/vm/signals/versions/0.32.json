@@ -1,9 +1,9 @@
 {
-  "vocabulary_version": "0.39",
+  "vocabulary_version": "0.40",
   "locked": true,
   "locked_at": "2026-11-09",
-  "locked_by": "agent-resolved 2026-11-09 (BLACKBOARD), sprint 430: notes only, after the Architect's ruling (⌘M opens the meta pane inside the editor)",
-  "supersedes": "0.38",
+  "locked_by": "agent-resolved 2026-11-10 (BLACKBOARD), sprint 431: P-0.40-FOLLOW-PAIRS, P-0.40-FOLLOW-DRAWN",
+  "supersedes": "0.39",
   "tag_count": 140,
   "categories": [
     "session",
@@ -2062,7 +2062,7 @@
         "seq"
       ],
       "optional_payload": [],
-      "note": "The editor marked an incoming session edit at the tool-call event. seq is the call's sequence number on the session record. The mark is confirmed at EDITOR_FOLLOW_CONFIRMED or withdrawn at EDITOR_FOLLOW_WITHDRAWN.",
+      "note": "The editor, open in the pane, marked a session edit at its call (roadmap r10 E7; D93): a ToolCall to edit_file or write_file on a file of the session's workspace. seq is the call's seq on the session record. On the file shown, the lines the call replaces are marked and scrolled into view; on another file, its row in the tree is marked; the view stays (the person's focus wins). Resolved by one EDITOR_FOLLOW_CONFIRMED or EDITOR_FOLLOW_WITHDRAWN with the same seq (S10).",
       "emit_site": "web/app/editor/",
       "field_types": {
         "seq": "int (sequence number of the ToolCall or HarnessToolCall on the session record)"
@@ -2074,14 +2074,16 @@
       "stratum": "event",
       "payload": [
         "seq",
+        "result_seq",
         "conflict"
       ],
       "optional_payload": [],
-      "note": "The editor confirmed a followed edit: the tool result arrived and the file was updated. conflict is true when the buffer had unsaved changes at the time of confirmation.",
+      "note": "The followed edit's result arrived ok: the file is read again; on the file shown, its first changed line is brought into view. v0.40: seq is the call's (it was the result's, which left S10 unpairable); result_seq added.",
       "emit_site": "web/app/editor/",
       "field_types": {
-        "seq": "int (sequence number of the ToolResult or HarnessToolResult)",
-        "conflict": "bool"
+        "seq": "int (the call's seq, as EDITOR_FOLLOW_MARKED)",
+        "result_seq": "int (the ToolResult's seq)",
+        "conflict": "bool (the buffer of the file had unsaved changes: it is kept, and the next save is refused as stale and offers reload or overwrite)"
       }
     },
     {
@@ -2089,13 +2091,15 @@
       "category": "editor",
       "stratum": "event",
       "payload": [
-        "seq"
+        "seq",
+        "result_seq"
       ],
       "optional_payload": [],
-      "note": "The editor withdrew a follow mark because the tool call failed. seq is the result's sequence number.",
+      "note": "The followed edit failed (its ToolResult ok false): the mark is removed and the file is unchanged. v0.40: seq is the call's; result_seq added.",
       "emit_site": "web/app/editor/",
       "field_types": {
-        "seq": "int (sequence number of the failing result)"
+        "seq": "int (the call's seq, as EDITOR_FOLLOW_MARKED)",
+        "result_seq": "int (the failing ToolResult's seq)"
       }
     },
     {
@@ -2243,10 +2247,11 @@
         "binding",
         "mode",
         "unsaved",
-        "conflict"
+        "conflict",
+        "follow_marks"
       ],
       "optional_payload": [],
-      "note": "The editor view rendered its structural state. The view-category tag for the editor: pairs with EDITOR_OPENED, EDITOR_FILE_OPENED, EDITOR_COLUMN_FOLDED, EDITOR_FOLLOW_MARKED, EDITOR_CHIP_ADDED, EDITOR_SEARCH_QUERIED, EDITOR_INSPECTOR_SWAPPED, and the column/tab changes. Written from the commit when any field differs from the editor's last record. v0.29: dock, sides_swapped and focus draw R7–R9; tree_rows pairs with FILES_LISTED, modified_dots with DIFF_READ. v0.32: the inspector's drawn counts (spec r6 §5.0; frame 24a), 0 with no file open. v0.33: binding required; mode, read_only and unsaved draw the status line and the buffer's state (sprint 424); the anchor's third row carries them. v0.34: conflict; the anchor's third row carries it (magic 0xB7). v0.36: binding standard, the default (a normal editor; vim and nano are options, the Architect 2026-11-09). read_only removed (v0.36): no file is read-only. v0.38: showing follows the right column (spine: the inspector; lenses: the meta pane open in the editor, ⌘M); the anchor's third row carries it (magic 0xB9).",
+      "note": "The editor view rendered its structural state. The view-category tag for the editor: pairs with EDITOR_OPENED, EDITOR_FILE_OPENED, EDITOR_COLUMN_FOLDED, EDITOR_FOLLOW_MARKED, EDITOR_CHIP_ADDED, EDITOR_SEARCH_QUERIED, EDITOR_INSPECTOR_SWAPPED, and the column/tab changes. Written from the commit when any field differs from the editor's last record. v0.29: dock, sides_swapped and focus draw R7–R9; tree_rows pairs with FILES_LISTED, modified_dots with DIFF_READ. v0.32: the inspector's drawn counts (spec r6 §5.0; frame 24a), 0 with no file open. v0.33: binding required; mode, read_only and unsaved draw the status line and the buffer's state (sprint 424); the anchor's third row carries them. v0.34: conflict; the anchor's third row carries it (magic 0xB7). v0.36: binding standard, the default (a normal editor; vim and nano are options, the Architect 2026-11-09). read_only removed (v0.36): no file is read-only. v0.38: showing follows the right column (spine: the inspector; lenses: the meta pane open in the editor, ⌘M); the anchor's third row carries it (magic 0xB9). v0.40: follow_marks; the anchor's third row carries it (magic 0xBA).",
       "emit_site": "web/app/editor/",
       "field_types": {
         "tab_count": "int (open file tabs)",
@@ -2267,7 +2272,8 @@
         "history_rows": "int (HISTORY rows: the file's edits, by the session and by hand)",
         "mode": "enum normal | insert | visual | replace | none (the vim mode the status line shows; none under nano or with no file open)",
         "unsaved": "int (open files whose buffers differ from the file as read)",
-        "conflict": "bool (the shown file's save was refused as stale and the reload-or-overwrite offer is drawn)"
+        "conflict": "bool (the shown file's save was refused as stale and the reload-or-overwrite offer is drawn)",
+        "follow_marks": "int (session edits marked and not yet resolved: EDITOR_FOLLOW_MARKED without its CONFIRMED or WITHDRAWN)"
       }
     },
     {
@@ -2723,7 +2729,7 @@
       {
         "id": "S10",
         "kind": "pairing_ordering",
-        "statement": "EDITOR_FOLLOW_MARKED precedes exactly one EDITOR_FOLLOW_CONFIRMED or EDITOR_FOLLOW_WITHDRAWN for the same pane and seq."
+        "statement": "EDITOR_FOLLOW_MARKED precedes exactly one EDITOR_FOLLOW_CONFIRMED or EDITOR_FOLLOW_WITHDRAWN for the same pane and seq (the call's seq, v0.40). A mark open when the pane's editor run ends (EDITOR_CLOSED, PANE_CLOSED, a reload) is dropped with the run: no editor record follows a run's end (S11). Checked in electron/invariants.ts from sprint 431."
       },
       {
         "id": "S11",
@@ -3029,8 +3035,8 @@
     ]
   },
   "version_meta": {
-    "version_id": "0.39",
-    "prior_version": "0.38",
-    "migration_proposals": "none: notes only"
+    "version_id": "0.40",
+    "prior_version": "0.39",
+    "migration_proposals": "../proposals.json (P-0.40-*)"
   }
 }

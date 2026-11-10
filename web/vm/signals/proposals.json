@@ -1222,6 +1222,26 @@
       "rationale": "A seq lit from the editor's ACTIVITY is a distinct way in; consumers of SEQ_SELECTED tell the editor's jump from meta's clicks.",
       "ratified": true,
       "ratified_by": "agent-resolved 2026-11-09, sprint 430; grounds: project — roadmap r10 E5; SDD — BOOTSTRAP step 2; practice — n/a"
+    },
+    {
+      "id": "P-0.40-FOLLOW-PAIRS",
+      "kind": "INVARIANT_PROPOSED",
+      "layer": 5,
+      "element": "EDITOR_FOLLOW_CONFIRMED and EDITOR_FOLLOW_WITHDRAWN carry the call's seq as seq and the result's as result_seq; S10 pairs by pane and the call's seq; a mark open at the run's end is dropped with it",
+      "source": "roadmap r10 E7 (\"the three follow tags carry the call's seq (and the result's where there is one), and rule S10 gets its checker\")",
+      "rationale": "S10 named the same seq for a mark and its resolution while the tags carried different seqs, so no checker could pair them.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-10, sprint 431; grounds: project — roadmap r10 E7; SDD — an invariant a checker cannot evaluate is not a contract; practice — n/a"
+    },
+    {
+      "id": "P-0.40-FOLLOW-DRAWN",
+      "kind": "PAYLOAD_FIELD_PROPOSED",
+      "layer": 2,
+      "element": "EDITOR_DRAWN gains follow_marks",
+      "source": "roadmap r10 E7; D93",
+      "rationale": "The marks the editor draws for session edits in flight need their counterpart in the view tag and the pixel anchor.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-10, sprint 431; grounds: project — D93; SDD — BOOTSTRAP step 9; practice — n/a"
     }
   ]
 }

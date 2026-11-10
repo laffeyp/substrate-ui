@@ -1008,6 +1008,8 @@ export class App extends React.Component<AppProps, AppState> {
       mode: drawnMode(editorStore.getSnapshot().mode), unsaved: editorStore.getSnapshot().unsaved.length,
       // Sprint 425 (v0.34): the stale-save offer drawn for the shown file.
       conflict: !!editorStore.getSnapshot().conflict && editorStore.getSnapshot().conflict === editorStore.getSnapshot().active,
+      // Sprint 431 (v0.40): the session's edits marked and not yet resolved.
+      follow_marks: editorStore.getSnapshot().follow.length,
       dock: editorStore.getSnapshot().dock === "right" ? EditorDrawnDock.RIGHT : EditorDrawnDock.BOTTOM,
       sides_swapped: editorStore.getSnapshot().swapped, focus: editorStore.getSnapshot().focus.on, tree_rows: editorStore.getSnapshot().treeRows, modified_dots: editorStore.getSnapshot().modifiedDots,
       // Sprint 422: what the inspector draws.
@@ -1024,7 +1026,7 @@ export class App extends React.Component<AppProps, AppState> {
       left_folded: drawn.left_folded, right_folded: drawn.right_folded, bottom_folded: drawn.bottom_folded,
       dock_right: drawn.dock === EditorDrawnDock.RIGHT, sides_swapped: drawn.sides_swapped, focus: drawn.focus,
     }, anchor3: {
-      seq: rec.proc_seq, mode: drawn.mode, binding: drawn.binding, unsaved: drawn.unsaved, conflict: drawn.conflict, meta: drawn.showing === EditorDrawnShowing.LENSES,
+      seq: rec.proc_seq, mode: drawn.mode, binding: drawn.binding, unsaved: drawn.unsaved, conflict: drawn.conflict, meta: drawn.showing === EditorDrawnShowing.LENSES, follow_marks: Math.min(15, drawn.follow_marks),
     }, anchor2: {
       seq: rec.proc_seq, tab_count: drawn.tab_count, outline_rows: drawn.outline_rows, hunks: drawn.hunks,
       activity_rows: drawn.activity_rows, history_rows: drawn.history_rows,
