@@ -34,6 +34,7 @@ ipcRenderer.on("menu:toggle-meta", (_e, p) => dispatchMenu("toggle-meta", p));
 ipcRenderer.on("menu:toggle-assays", (_e, p) => dispatchMenu("toggle-assays", p));
 ipcRenderer.on("menu:toggle-editor", (_e, p) => dispatchMenu("toggle-editor", p));
 ipcRenderer.on("menu:editor-dock", (_e, p) => dispatchMenu("editor-dock", p));
+ipcRenderer.on("menu:quick-open", (_e, p) => dispatchMenu("quick-open", p));
 ipcRenderer.on("menu:editor-swap", (_e, p) => dispatchMenu("editor-swap", p));
 ipcRenderer.on("menu:editor-focus", (_e, p) => dispatchMenu("editor-focus", p));
 ipcRenderer.on("menu:settings", (_e, p) => dispatchMenu("settings", p));

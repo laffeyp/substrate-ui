@@ -20,6 +20,7 @@ import { setFindScope } from "../state/find";
 import { FileTree } from "./FileTree";
 import { openSearch, SearchTab } from "./Search";
 import { ActivityTab, OpenTab } from "./LeftTabs";
+import { QuickOpen } from "./QuickOpen";
 import { Centre } from "./Centre";
 import { ANCHOR_CELL, ANCHOR_ONE, ANCHOR_ZERO, encodeAnchor, encodeAnchor2, encodeAnchor3 } from "../derive/anchor";
 import { Inspector } from "./Inspector";
@@ -334,7 +335,8 @@ export function EditorView({ paneId, fontSize, sessionId, workspace, shape }: { 
       <Follow paneId={paneId} workspace={workspace} />
       {startCol}
       {!folded[startKey] && <Handle column={startKey} across={false} onGrab={grab} />}
-      <div style={{ flex: "1 1 0", display: "flex", flexDirection: "column", minWidth: EDITOR_SIZES.centreMin, minHeight: 0 }}>
+      <div data-editor-centre-column="1" style={{ flex: "1 1 0", display: "flex", flexDirection: "column", minWidth: EDITOR_SIZES.centreMin, minHeight: 0, position: "relative" }}>
+        <QuickOpen sessionId={sessionId} paneId={paneId} />
         <Centre paneId={paneId} sessionId={sessionId} tabRow={EDITOR_SIZES.tabRow} />
         {dock === "bottom" && !folded.bottom && <Handle column="bottom" across onGrab={grab} />}
         {folded.bottom ? sill : dock === "bottom" ? terminal : null}

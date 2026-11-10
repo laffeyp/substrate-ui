@@ -1,7 +1,6 @@
 {
   "_comment": "Declared tags with no emit site yet (sprint 355). npm run signals fails on a declared tag that is neither emitted nor listed here, and on a listed tag that is emitted: the list only shrinks. INVARIANT_BROKEN is emitted by the runtime checker (plan 2026-11-05-sdd-signals item 5); every other tag by its area's sprint in item 4. Item 4 closed when only INVARIANT_BROKEN was left; sprint 373 gave it its emit site (electron/invariants.ts), and the list is empty.",
   "tags": [
-    "EDITOR_CHIP_ADDED",
-    "EDITOR_QUICK_OPENED"
+    "EDITOR_CHIP_ADDED"
   ]
 }

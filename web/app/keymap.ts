@@ -57,7 +57,7 @@ export type KeyAction =
   | { kind: "toggle-meta" } | { kind: "toggle-tools" } | { kind: "split"; dir: "right" | "down" }
   | { kind: "toggle-find" } | { kind: "settings" } | { kind: "toggle-assays" }
   | { kind: "toggle-editor" } | { kind: "close-editor" }
-  | { kind: "editor-find"; field: "query" | "replace" } | { kind: "editor-search" } | { kind: "tree-find" }
+  | { kind: "editor-find"; field: "query" | "replace" } | { kind: "editor-search" } | { kind: "tree-find" } | { kind: "quick-open" }
   | { kind: "fold-editor"; column: "left" | "right" | "bottom" }
   | { kind: "refuse-split" }
   | { kind: "close-find" } | { kind: "close-dialog" } | { kind: "close-cards" } | { kind: "close-surface" }
@@ -94,6 +94,8 @@ export function windowKey(ev: KeyLike, ctx: KeyContext): KeyAction | null {
   // Sprint 437: ⌥⌘F with the tree focused finds in the tree by name; elsewhere it is replace in the file
   // (VS Code splits the key by focus the same way).
   if (ctx.editor && ctx.editorTree && cmd && ev.altKey && !ev.shiftKey && ev.code === "KeyF") return { kind: "tree-find" };
+  // Sprint 441 (roadmap r10 E9): ⌘P in the editor is quick open.
+  if (ctx.editor && plainCmd && key === "p") return { kind: "quick-open" };
   // Sprint 434 (roadmap r10 E8): ⌘⇧F in the editor is the workspace search in the left column.
   if (ctx.editor && cmd && ev.shiftKey && !ev.altKey && ev.code === "KeyF") return { kind: "editor-search" };
   if (ctx.editor && !ctx.editorTerminal && cmd && !ev.shiftKey && ev.code === "KeyF") return { kind: "editor-find", field: ev.altKey ? "replace" : "query" };

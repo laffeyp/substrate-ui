@@ -156,6 +156,12 @@ function buildTemplate(getWin, newWindow) {
         { role: "toggleDevTools" },
       ],
     },
+    // Go (sprint 441; roadmap r10 E9 and its key table): Quick Open acts in the editor. ⌘P belongs to the
+    // renderer's keydown, so the item carries no accelerator (the rule above).
+    {
+      label: "Go",
+      submenu: [{ id: "menu-quick-open", label: "Quick Open", click: () => send(getWin(), "quick-open") }],
+    },
     // The Window menu without Minimize's ⌘M: ⌘M toggles meta and panes (renderer keydown).
     // Minimize stays here, by click.
     {

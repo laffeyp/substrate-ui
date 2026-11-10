@@ -52,6 +52,7 @@ import { ActivityLine, TaskRows } from "./ActivityLine";
 import { AssayPage } from "./AssayPage";
 import { EditorView, foldColumn, toggleDock, toggleFocus, toggleMetaPane, toggleSwap } from "./editor/EditorView";
 import { openSearch } from "./editor/Search";
+import { openQuick } from "./editor/QuickOpen";
 import { closeFile, requestSave, routeUndo } from "./editor/Centre";
 import { Dialogs } from "./Dialogs";
 import { FindBar } from "./FindBar";
@@ -198,6 +199,7 @@ const KEY_TARGET: Partial<Record<KeyAction["kind"], KeyRoutedTarget>> = {
   "editor-find": KeyRoutedTarget.EDITOR,
   "editor-search": KeyRoutedTarget.EDITOR,
   "tree-find": KeyRoutedTarget.EDITOR,
+  "quick-open": KeyRoutedTarget.EDITOR,
 };
 /** The picker line PICKER_LINE_ENTERED names, as the pane's open line. */
 const HALF_OF_LINE: Record<PickerLineEnteredLine, PaneDrawnPickerLine> = {
@@ -712,6 +714,8 @@ export class App extends React.Component<AppProps, AppState> {
       // Sprint 423: nano's ⌃X leaves the editor for the pane, as Escape does.
       else if (command === "leave-editor") { if (this.state.vs.view === "editor") { this.viewCause = ViewChangedCause.KEY; this.setState({ vs: show("panes") }); } }
       else if (command === "editor-dock" && this.state.vs.view === "editor") toggleDock(this.state.focused);
+      // Sprint 441: Go ▸ Quick Open, in the editor.
+      else if (command === "quick-open" && this.state.vs.view === "editor") openQuick();
       else if (command === "editor-swap" && this.state.vs.view === "editor") toggleSwap(this.state.focused);
       else if (command === "editor-focus" && this.state.vs.view === "editor") toggleFocus(this.state.focused);
       else if (command === "settings") openSettings();
@@ -838,6 +842,8 @@ export class App extends React.Component<AppProps, AppState> {
     }
     // Sprint 434 (roadmap r10 E8): ⌘⇧F in the editor opens the left column's search, unfolding it if folded.
     else if (action.kind === "editor-search") openSearch(s.focused);
+    // Sprint 441: ⌘P in the editor opens quick open.
+    else if (action.kind === "quick-open") openQuick();
     // Sprint 437: ⌥⌘F in the tree opens its find by name.
     else if (action.kind === "tree-find") {
       if (editorStore.getSnapshot().folded.left) foldColumn("left", false, EditorColumnFoldedCause.KEY, s.focused);

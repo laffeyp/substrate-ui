@@ -1332,6 +1332,16 @@
       "rationale": "The roadmap's E8 names the two; the activity tab opens files.",
       "ratified": true,
       "ratified_by": "agent-resolved 2026-11-10, sprint 440; grounds: project — roadmap r10 E8; SDD — BOOTSTRAP step 9; practice — n/a"
+    },
+    {
+      "id": "P-0.47-FILES-LISTED-ALL",
+      "kind": "TAG_PROPOSED",
+      "layer": 1,
+      "element": "FILES_LISTED_ALL (server)",
+      "source": "roadmap r10 E9; research r2",
+      "rationale": "Quick open's file list is a server read like FILES_LISTED and FILES_FOUND, from the search's walk in place of git ls-files.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-10, sprint 441; grounds: project — roadmap r10 E9, research r2; SDD — BOOTSTRAP step 9; practice — n/a"
     }
   ]
 }

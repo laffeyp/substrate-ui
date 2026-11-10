@@ -452,7 +452,7 @@ def _interrupt_then_end(
 # Most specific first; a path no route serves is "unrouted".
 _AREA_RULES: tuple[tuple[str, ApiRefusedArea], ...] = (
     (r"/api/session/[^/]+/(turn|interrupt)", ApiRefusedArea.TURN),
-    (r"/api/session/[^/]+/(files|file|diff|search|search/replace|files/find)(/watch)?", ApiRefusedArea.FILES),
+    (r"/api/session/[^/]+/(files|file|diff|search|search/replace|files/find|files/list)(/watch)?", ApiRefusedArea.FILES),
     (r"/api/session/[^/]+/children", ApiRefusedArea.CHILDREN),
     (r"/api/session/[^/]+/language(/.*)?", ApiRefusedArea.LANGUAGE),
     (r"/api/session/[^/]+/mcp", ApiRefusedArea.MCP),
@@ -4255,6 +4255,21 @@ class Handler(BaseHTTPRequestHandler):
         )
         self._json(out)
 
+    def _session_files_list(self, session_id: str) -> None:
+        """UI sprint 441: GET /api/session/<id>/files/list, every file of the workspace the search's walk
+        reaches (`_workspace_files`: ignore files applied in or out of a git repository, VS Code's skipped
+        names and folders), for quick open; written as FILES_LISTED_ALL with its counts and no path (E1)."""
+        root = self._session_workspace_root(session_id)
+        if root is None:
+            return
+        unreadable: list[str] = []
+        files, truncated = _workspace_files(root, unreadable=unreadable)
+        TRACE.emit(
+            Signal.FILES_LISTED_ALL,
+            {"session_id": session_id, "files": len(files), "truncated": truncated, "unreadable": len(unreadable)},
+        )
+        self._json({"files": files, "truncated": truncated, "unreadable": len(unreadable)})
+
     def _session_find_names(self, session_id: str, q: dict[str, list[str]]) -> None:
         """UI sprint 437: GET /api/session/<id>/files/find?q=<name>&fuzzy=1, the files and folders whose name
         matches (`_workspace_find_names`), written as FILES_FOUND with its counts and no name or path (E1)."""
@@ -5554,6 +5569,10 @@ class Handler(BaseHTTPRequestHandler):
             m_diff = re.fullmatch(r"/api/session/([^/]+)/diff", path)
             if m_diff:  # UI sprint 412: the workspace's changes against main
                 self._session_diff(m_diff.group(1), parse_qs(urlparse(self.path).query))
+                return
+            m_all = re.fullmatch(r"/api/session/([^/]+)/files/list", path)
+            if m_all:  # UI sprint 441: quick open's file list
+                self._session_files_list(m_all.group(1))
                 return
             m_find = re.fullmatch(r"/api/session/([^/]+)/files/find", path)
             if m_find:  # UI sprint 437: the tree's find by name

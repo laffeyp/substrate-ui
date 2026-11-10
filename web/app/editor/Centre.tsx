@@ -289,11 +289,13 @@ export function outlineOf(state: EditorState): { kind: string; name: string; lin
 }
 
 /** Open a file in a tab, or show its tab (sprint 419); with `line` (sprint 434, a search result), the caret
- *  goes to that line once the file is shown. */
-export function openFile(rel: string, paneId: number, how: EditorFileOpenedHow = EditorFileOpenedHow.TREE, line?: number): void {
+ *  goes to that line once the file is shown. Sprint 441: `show` false adds the tab and keeps the shown one
+ *  (quick open's ⌘↵); every open goes to the front of the recent list. */
+export function openFile(rel: string, paneId: number, how: EditorFileOpenedHow = EditorFileOpenedHow.TREE, line?: number, show = true): void {
   const st = editor.getSnapshot();
   const tabs = st.tabs.includes(rel) ? st.tabs : [...st.tabs, rel];
-  editor.set({ tabs, active: rel, ...(line ? { jump: { path: rel, line, n: (st.jump?.n ?? 0) + 1 } } : {}) });
+  const recent = [rel, ...st.recent.filter((p) => p !== rel)].slice(0, 20);
+  editor.set({ tabs, recent, active: show || !st.active ? rel : st.active, ...(line && show ? { jump: { path: rel, line, n: (st.jump?.n ?? 0) + 1 } } : {}) });
   if (!st.tabs.includes(rel)) emitSignal(Signal.EDITOR_FILE_OPENED, { how, tab_count: tabs.length }, { pane_id: paneId });
 }
 
@@ -591,6 +593,8 @@ export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionI
       const head = placed.selection.main.head, line = placed.doc.lineAt(head);
       editor.set({ outline: outlineOf(placed), caretLine: line.number, caretCol: head - line.from + 1, vsBase: against(rel, placed.doc.toString()) });
       takeJump();
+      // Sprint 441: quick open's ↵ gives the code the focus once the file is placed.
+      if (editor.getSnapshot().focusOnOpen === rel) { editor.set({ focusOnOpen: null }); view.current.focus(); }
     }).catch(() => undefined);
     return () => { live = false; };
   }, [st.active, sessionId, writes, reloads]);
