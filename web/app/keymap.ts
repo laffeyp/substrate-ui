@@ -38,6 +38,8 @@ export interface KeyContext {
   vimCode?: boolean;
   /** In the editor, the focus is in the substrate terminal (its input or transcript): ⌘F is the transcript's. */
   editorTerminal?: boolean;
+  /** Sprint 437: the focus is in the editor's files tree. */
+  editorTree?: boolean;
   /** The focused pane has no session: its picker takes the arrows. */
   pickerFocused: boolean;
   /** The meta view shows the language lens and the lens has turns. */
@@ -55,7 +57,7 @@ export type KeyAction =
   | { kind: "toggle-meta" } | { kind: "toggle-tools" } | { kind: "split"; dir: "right" | "down" }
   | { kind: "toggle-find" } | { kind: "settings" } | { kind: "toggle-assays" }
   | { kind: "toggle-editor" } | { kind: "close-editor" }
-  | { kind: "editor-find"; field: "query" | "replace" } | { kind: "editor-search" }
+  | { kind: "editor-find"; field: "query" | "replace" } | { kind: "editor-search" } | { kind: "tree-find" }
   | { kind: "fold-editor"; column: "left" | "right" | "bottom" }
   | { kind: "refuse-split" }
   | { kind: "close-find" } | { kind: "close-dialog" } | { kind: "close-cards" } | { kind: "close-surface" }
@@ -89,6 +91,9 @@ export function windowKey(ev: KeyLike, ctx: KeyContext): KeyAction | null {
   if (ev.metaKey && key === "d") return ctx.editor ? { kind: "refuse-split" } : { kind: "split", dir: ev.shiftKey ? "down" : "right" };
   // Sprint 428 (roadmap r10 key table): in the editor, ⌘F finds in the open file and ⌥⌘F replaces there,
   // in the inspector's FIND / REPLACE; with the focus in the terminal, ⌘F is the transcript's find.
+  // Sprint 437: ⌥⌘F with the tree focused finds in the tree by name; elsewhere it is replace in the file
+  // (VS Code splits the key by focus the same way).
+  if (ctx.editor && ctx.editorTree && cmd && ev.altKey && !ev.shiftKey && ev.code === "KeyF") return { kind: "tree-find" };
   // Sprint 434 (roadmap r10 E8): ⌘⇧F in the editor is the workspace search in the left column.
   if (ctx.editor && cmd && ev.shiftKey && !ev.altKey && ev.code === "KeyF") return { kind: "editor-search" };
   if (ctx.editor && !ctx.editorTerminal && cmd && !ev.shiftKey && ev.code === "KeyF") return { kind: "editor-find", field: ev.altKey ? "replace" : "query" };

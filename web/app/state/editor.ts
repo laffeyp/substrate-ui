@@ -37,7 +37,7 @@ export interface EditorState {
   conflict: string | null;
   /** Sprint 428, FIND / REPLACE: the query as typed, kept across files; the buffer's matches and the
    *  one the selection is on (1-based; 0 when it is on none). */
-  find: { search: string; caseSensitive: boolean; regexp: boolean; replace: string };
+  find: { search: string; caseSensitive: boolean; regexp: boolean; replace: string; wholeWord: boolean; preserveCase: boolean; inSelection: boolean };
   findCount: { total: number; current: number };
   /** Bumped by ⌘F and ⌥⌘F: the FIND / REPLACE section opens if folded. */
   findFocus: number;
@@ -47,6 +47,8 @@ export interface EditorState {
   leftTab: "files" | "search";
   search: { query: string; replace: string; caseSensitive: boolean; regexp: boolean; word: boolean; include: string; exclude: string; details: boolean };
   searchFocus: number;
+  /** Bumped by ⌥⌘F in the tree (sprint 437): the tree's find by name opens, its field focused. */
+  treeFindFocus: number;
   jump: { path: string; line: number; n: number } | null;
   /** Sprint 430: the right column shows the inspector, or the meta pane opened in the editor with ⌘M. */
   showing: "inspector" | "meta";
@@ -69,4 +71,4 @@ export interface EditorState {
 
 const KEY = "__substrateEditor";
 const scope = globalThis as unknown as Record<string, ReturnType<typeof createStore<EditorState>> | undefined>;
-export const editor = scope[KEY] ?? (scope[KEY] = createStore<EditorState>({ treeRows: 0, modifiedDots: 0, folded: { left: false, right: false, bottom: false }, tabs: [], active: null, file: null, hunks: [], outline: [], caretLine: 1, unsaved: [], mode: null, caretCol: 1, vsBase: null, nanoHelp: false, anchor3: null, conflict: null, find: { search: "", caseSensitive: false, regexp: false, replace: "" }, findCount: { total: 0, current: 0 }, findFocus: 0, showing: "inspector", leftTab: "files", search: { query: "", replace: "", caseSensitive: false, regexp: false, word: false, include: "", exclude: "", details: false }, searchFocus: 0, jump: null, follow: [], followLanded: null, inspector: { outlineRows: 0, hunks: 0, activityRows: 0, historyRows: 0 }, anchor2: null, dock: "bottom", swapped: false, focus: { on: false, before: null }, anchor: null }));
+export const editor = scope[KEY] ?? (scope[KEY] = createStore<EditorState>({ treeRows: 0, modifiedDots: 0, folded: { left: false, right: false, bottom: false }, tabs: [], active: null, file: null, hunks: [], outline: [], caretLine: 1, unsaved: [], mode: null, caretCol: 1, vsBase: null, nanoHelp: false, anchor3: null, conflict: null, find: { search: "", caseSensitive: false, regexp: false, replace: "", wholeWord: false, preserveCase: false, inSelection: false }, findCount: { total: 0, current: 0 }, findFocus: 0, showing: "inspector", leftTab: "files", search: { query: "", replace: "", caseSensitive: false, regexp: false, word: false, include: "", exclude: "", details: false }, searchFocus: 0, treeFindFocus: 0, jump: null, follow: [], followLanded: null, inspector: { outlineRows: 0, hunks: 0, activityRows: 0, historyRows: 0 }, anchor2: null, dock: "bottom", swapped: false, focus: { on: false, before: null }, anchor: null }));

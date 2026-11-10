@@ -40,6 +40,7 @@ def _since(mark: int) -> list[dict[str, Any]]:
         ("/api/session/s_1/files", "files"),
         ("/api/session/s_1/file", "files"),
         ("/api/session/s_1/search", "files"),
+        ("/api/session/s_1/files/find", "files"),
         ("/api/session/s_1/children", "children"),
         ("/api/session/s_1/language", "language"),
         ("/api/session/s_1/mcp", "mcp"),

@@ -452,7 +452,7 @@ def _interrupt_then_end(
 # Most specific first; a path no route serves is "unrouted".
 _AREA_RULES: tuple[tuple[str, ApiRefusedArea], ...] = (
     (r"/api/session/[^/]+/(turn|interrupt)", ApiRefusedArea.TURN),
-    (r"/api/session/[^/]+/(files|file|diff|search|search/replace)(/watch)?", ApiRefusedArea.FILES),
+    (r"/api/session/[^/]+/(files|file|diff|search|search/replace|files/find)(/watch)?", ApiRefusedArea.FILES),
     (r"/api/session/[^/]+/children", ApiRefusedArea.CHILDREN),
     (r"/api/session/[^/]+/language(/.*)?", ApiRefusedArea.LANGUAGE),
     (r"/api/session/[^/]+/mcp", ApiRefusedArea.MCP),
@@ -2186,9 +2186,10 @@ def _globs(spec: str) -> list[_Glob]:
     return out
 
 
-def _workspace_files(root: Path, include: str = "", exclude: str = "") -> tuple[list[str], bool]:
+def _workspace_files(root: Path, include: str = "", exclude: str = "", unreadable: list[str] | None = None) -> tuple[list[str], bool]:
     """The workspace's searchable files, relative and /-separated, in path order, and whether the walk
-    stopped at WORKSPACE_WALK_MAX_FILES. An include glob keeps a file when it or one of its folders matches."""
+    stopped at WORKSPACE_WALK_MAX_FILES. An include glob keeps a file when it or one of its folders matches.
+    A folder the walk cannot read is added to `unreadable` (its relative path) and skipped."""
     base = root.resolve(strict=True)
     inc, exc = _globs(include), _globs(exclude)
     found: list[str] = []
@@ -2206,6 +2207,8 @@ def _workspace_files(root: Path, include: str = "", exclude: str = "") -> tuple[
         try:
             entries = sorted(os.scandir(folder), key=lambda e: e.name)
         except OSError:
+            if unreadable is not None:
+                unreadable.append(rel_dir)
             return
         for entry in entries:
             if cut:
@@ -2285,9 +2288,10 @@ def _workspace_search(
     the walked files read from them."""
     buffers = buffers or {}
     if not query:
-        return {"files": [], "lines": 0, "matches": 0, "truncated": False, "buffers": 0}
+        return {"files": [], "lines": 0, "matches": 0, "truncated": False, "buffers": 0, "unreadable": 0}
     rx = _search_regex(query, regex=regex, case=case, word=word)
-    paths, truncated = _workspace_files(root, include, exclude)
+    unreadable: list[str] = []
+    paths, truncated = _workspace_files(root, include, exclude, unreadable)
     base = root.resolve(strict=True)
     files: list[dict[str, object]] = []
     count = matches = from_buffers = 0
@@ -2313,7 +2317,41 @@ def _workspace_search(
             files.append({"path": rel, "lines": hits})
         if count == WORKSPACE_SEARCH_MAX_LINES and truncated:
             break
-    return {"files": files, "lines": count, "matches": matches, "truncated": truncated, "buffers": from_buffers}
+    return {"files": files, "lines": count, "matches": matches, "truncated": truncated, "buffers": from_buffers, "unreadable": len(unreadable)}
+
+
+# UI sprint 437: the tree's find by name, as VS Code's ExplorerFindProvider (explorerViewer.ts): files whose
+# name matches, at most 512, and folders whose name matches, both from the same walk as the search (so ignored
+# files are not found), case ignored; fuzzy reads `abc` as `*a*b*c*`, else `*abc*`.
+WORKSPACE_FIND_MAX_FILES = 512
+
+
+def _name_regex(query: str, *, fuzzy: bool) -> re.Pattern[str]:
+    q = query.lower()
+    return re.compile(".*".join(re.escape(c) for c in q) if fuzzy else re.escape(q))
+
+
+def _workspace_find_names(root: Path, query: str, *, fuzzy: bool) -> dict[str, object]:
+    """The files and folders whose name matches `query` (UI sprint 437), relative and in path order;
+    `truncated` when more than WORKSPACE_FIND_MAX_FILES files matched or the walk was cut."""
+    if not query:
+        return {"files": [], "folders": [], "truncated": False, "unreadable": 0}
+    rx = _name_regex(query, fuzzy=fuzzy)
+    unreadable: list[str] = []
+    paths, truncated = _workspace_files(root, unreadable=unreadable)
+    files: list[str] = []
+    folders: set[str] = set()
+    for rel in paths:
+        parts = rel.split("/")
+        for n in range(1, len(parts)):
+            if rx.search(parts[n - 1].lower()):
+                folders.add("/".join(parts[:n]))
+        if rx.search(parts[-1].lower()):
+            if len(files) == WORKSPACE_FIND_MAX_FILES:
+                truncated = True
+            else:
+                files.append(rel)
+    return {"files": files, "folders": sorted(folders), "truncated": truncated, "unreadable": len(unreadable)}
 
 
 def _expand_replacement(template: str, m: re.Match[str]) -> str:
@@ -4213,7 +4251,21 @@ class Handler(BaseHTTPRequestHandler):
             return
         TRACE.emit(
             Signal.FILES_SEARCHED,
-            {"session_id": session_id, "regex": regex, "word": word, "files": len(cast(list[Any], out["files"])), "lines": out["lines"], "matches": out["matches"], "truncated": out["truncated"], "buffers": out["buffers"]},
+            {"session_id": session_id, "regex": regex, "word": word, "files": len(cast(list[Any], out["files"])), "lines": out["lines"], "matches": out["matches"], "truncated": out["truncated"], "buffers": out["buffers"], "unreadable": out["unreadable"]},
+        )
+        self._json(out)
+
+    def _session_find_names(self, session_id: str, q: dict[str, list[str]]) -> None:
+        """UI sprint 437: GET /api/session/<id>/files/find?q=<name>&fuzzy=1, the files and folders whose name
+        matches (`_workspace_find_names`), written as FILES_FOUND with its counts and no name or path (E1)."""
+        root = self._session_workspace_root(session_id)
+        if root is None:
+            return
+        fuzzy = q.get("fuzzy", ["0"])[0] == "1"
+        out = _workspace_find_names(root, q.get("q", [""])[0], fuzzy=fuzzy)
+        TRACE.emit(
+            Signal.FILES_FOUND,
+            {"session_id": session_id, "fuzzy": fuzzy, "files": len(cast(list[Any], out["files"])), "folders": len(cast(list[Any], out["folders"])), "truncated": out["truncated"], "unreadable": out["unreadable"]},
         )
         self._json(out)
 
@@ -5502,6 +5554,10 @@ class Handler(BaseHTTPRequestHandler):
             m_diff = re.fullmatch(r"/api/session/([^/]+)/diff", path)
             if m_diff:  # UI sprint 412: the workspace's changes against main
                 self._session_diff(m_diff.group(1), parse_qs(urlparse(self.path).query))
+                return
+            m_find = re.fullmatch(r"/api/session/([^/]+)/files/find", path)
+            if m_find:  # UI sprint 437: the tree's find by name
+                self._session_find_names(m_find.group(1), parse_qs(urlparse(self.path).query))
                 return
             m_search = re.fullmatch(r"/api/session/([^/]+)/search", path)
             if m_search:  # UI sprint 434: the workspace search (frame 24j)

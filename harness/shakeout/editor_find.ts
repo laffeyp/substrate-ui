@@ -10,6 +10,9 @@
 //            transcript's find instead;
 //   signals — EDITOR_FIND_QUERIED per settled query with the truth's count; EDITOR_REPLACED one 1 then
 //            all with the rest; KEY_ROUTED Meta+f → editor-find.
+//   sprint 438 — ab counts whole words only; sel holds the count and a replace to lines 4–5, the scope
+//            drawn; AB writes each replacement in its match's case; the signals carry whole_word,
+//            in_selection and preserve_case.
 // The inspector is screenshotted beside 24a. SHAKEOUT_APP=<Substrate.app> runs the bundle.
 
 import { execFileSync } from "node:child_process";
@@ -116,6 +119,37 @@ async function main(): Promise<void> {
     await menu(app, "menu-save");
     await until(win, "the disk after ⌘S", async () => readFileSync(join(ws, "src/cart.ts"), "utf8"), (t) => t === all + "\n" || t === all);
 
+    // Sprint 438: ab (whole word), sel (in the selection), AB (preserve case).
+    await win.locator('[data-find-toggle="case"]').first().click(); // Aa off
+    await win.locator('[data-find-toggle="word"]').first().click();
+    await win.locator('[data-find-input="query"]').first().fill("price");
+    const n5 = count(all, /\bprice\b/gi);
+    await until(win, "ab", () => drawn(win), (d) => d.marks === n5 && d.label.endsWith(`of ${n5}`));
+    await win.locator("[data-editor-code] .cm-line", { hasText: "// price list" }).first().click();
+    await win.keyboard.press("Meta+ArrowLeft");
+    await win.keyboard.press("Shift+ArrowDown");
+    await win.keyboard.press("Shift+Meta+ArrowRight");
+    await win.locator('[data-find-toggle="selection"]').first().click();
+    const scoped = all.split("\n").slice(3, 5).join("\n");
+    const n6 = count(scoped, /\bprice\b/gi);
+    await until(win, "sel", () => drawn(win), (d) => d.marks === n6 && d.label.endsWith(`of ${n6}`));
+    if (!(await win.evaluate(`!!document.querySelector("[data-editor-code]").shadowRoot.querySelector("[data-find-scope]")`))) throw new Error("the scope is not drawn");
+    await win.locator('[data-find-input="replace"]').first().fill("cost");
+    await win.locator('[data-find-replace="all"]').first().click();
+    const lines = all.split("\n");
+    const inSel = lines.map((l, k) => (k === 3 || k === 4 ? l.replace(/\bprice\b/gi, "cost") : l)).join("\n");
+    await until(win, "the replace held to the selection", () => buffer(win), (t) => t === inSel);
+    await win.locator('[data-find-toggle="selection"]').first().click();
+    await win.locator('[data-find-input="query"]').first().fill("cost");
+    const n7 = count(inSel, /\bcost\b/gi);
+    await until(win, "cost, ab", () => drawn(win), (d) => d.marks === n7);
+    await win.locator('[data-find-toggle="preserve"]').first().click();
+    await win.locator('[data-find-input="replace"]').first().fill("amount");
+    await win.locator('[data-find-replace="all"]').first().click();
+    const kept = inSel.replace(/\bcost\b/gi, (m) => (m[0] === "C" ? "Amount" : "amount"));
+    await until(win, "preserve case", () => buffer(win), (t) => t === kept);
+    await win.locator('[data-editor-area="right"]').first().screenshot({ path: join(shots, "inspector-438.png") });
+
     // ⌘F with the focus in the terminal: the transcript's find.
     await win.locator('[data-editor-area="bottom"] textarea[data-input-bar], [data-editor-sill] textarea[data-input-bar]').first().click();
     await win.keyboard.press("Meta+f");
@@ -128,14 +162,18 @@ async function main(): Promise<void> {
     const queried = recs.filter((r) => r.name === "EDITOR_FIND_QUERIED").map((r) => `${String(r.payload.case_sensitive)}/${String(r.payload.regex)}:${String(r.payload.match_count)}`);
     for (const want of [`false/false:${n1}`, `true/false:${n2}`, `false/true:${n3}`, `true/false:${n4}`]) if (!queried.includes(want)) throw new Error(`EDITOR_FIND_QUERIED lacks ${want}: ${JSON.stringify(queried)}`);
     const replaced = recs.filter((r) => r.name === "EDITOR_REPLACED").map((r) => `${String(r.payload.scope)}:${String(r.payload.count)}`);
-    if (JSON.stringify(replaced) !== JSON.stringify(["one:1", `all:${n4 - 1}`])) throw new Error(`EDITOR_REPLACED ${JSON.stringify(replaced)}`);
+    if (JSON.stringify(replaced) !== JSON.stringify(["one:1", `all:${n4 - 1}`, `all:${n6}`, `all:${n7}`])) throw new Error(`EDITOR_REPLACED ${JSON.stringify(replaced)}`);
+    const preserved = recs.filter((r) => r.name === "EDITOR_REPLACED").map((r) => String(r.payload.preserve_case));
+    if (JSON.stringify(preserved) !== JSON.stringify(["false", "false", "false", "true"])) throw new Error(`EDITOR_REPLACED preserve_case ${JSON.stringify(preserved)}`);
+    const options = recs.filter((r) => r.name === "EDITOR_FIND_QUERIED").map((r) => `${String(r.payload.whole_word)}/${String(r.payload.in_selection)}:${String(r.payload.match_count)}`);
+    for (const want of [`true/false:${n5}`, `true/true:${n6}`, `true/false:${n7}`]) if (!options.includes(want)) throw new Error(`EDITOR_FIND_QUERIED lacks ${want}: ${JSON.stringify(options)}`);
     const routed = recs.filter((r) => r.name === "KEY_ROUTED" && r.payload.action === "editor-find").length;
     if (routed !== 2) throw new Error(`KEY_ROUTED editor-find ${routed}`);
     const traces = join(launch.state, "electron", "logs", "traces");
     const boot = readdirSync(traces).sort().pop()!;
     const booted = readFileSync(join(traces, boot, "main.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as { name: string; payload: Record<string, unknown> }).find((r) => r.name === "APP_BOOTED")!.payload;
     if (packaged && booted.packaged !== true) throw new Error(`APP_BOOTED packaged ${String(booted.packaged)}`);
-    console.log(`editor_find: ok — ⌘F to the field; price ${n1} (1 of ${n1}, ↵ 2, ⇧↵ 1), Aa ${n2}, .* ${n3} = JS regex on the buffer; Price ${n4}: ↵ replaced 1, all the rest = String.replace; saved to disk; ⌘F in the terminal opened the transcript's find; EDITOR_FIND_QUERIED ${queried.join(", ")}; EDITOR_REPLACED ${replaced.join(", ")}; packaged=${String(booted.packaged)}; screenshots ${shots}`);
+    console.log(`editor_find: ok — ab ${n5}, sel ${n6} (replace held to it), AB cost→amount/Cost→Amount; ⌘F to the field; price ${n1} (1 of ${n1}, ↵ 2, ⇧↵ 1), Aa ${n2}, .* ${n3} = JS regex on the buffer; Price ${n4}: ↵ replaced 1, all the rest = String.replace; saved to disk; ⌘F in the terminal opened the transcript's find; EDITOR_FIND_QUERIED ${queried.join(", ")}; EDITOR_REPLACED ${replaced.join(", ")}; packaged=${String(booted.packaged)}; screenshots ${shots}`);
     status = 0;
   } catch (e) {
     console.error(`editor_find: FAIL — ${(e as Error).message}`);

@@ -1302,6 +1302,26 @@
       "rationale": "A replace across files is undone in one step, as VS Code's bulk edit records one undo element over every file.",
       "ratified": true,
       "ratified_by": "agent-resolved 2026-11-10, sprint 436; grounds: project — the research r2; SDD — BOOTSTRAP step 9; practice — VS Code bulkTextEdits.ts MultiModelEditStackElement"
+    },
+    {
+      "id": "P-0.44-TREE-FIND",
+      "kind": "TAG_PROPOSED",
+      "layer": 1,
+      "element": "FILES_FOUND (server), EDITOR_TREE_FOUND (editor)",
+      "source": "RESEARCH-2026-11-10-editor-search-r2",
+      "rationale": "The tree's find by name, as VS Code's ExplorerFindProvider: the server finds names over the whole workspace and the tree filters or highlights; each side has its tag.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-10, sprint 437; grounds: project — the research r2; SDD — BOOTSTRAP step 9; practice — VS Code explorerViewer.ts"
+    },
+    {
+      "id": "P-0.45-FIND-OPTIONS",
+      "kind": "PAYLOAD_FIELD_PROPOSED",
+      "layer": 2,
+      "element": "EDITOR_FIND_QUERIED gains whole_word, in_selection; EDITOR_REPLACED gains preserve_case; FILES_FOUND and FILES_SEARCHED gain unreadable",
+      "source": "RESEARCH-2026-11-10-editor-search-r2",
+      "rationale": "The open file's find gains VS Code's Match Whole Word, Find in Selection and Preserve Case. The walk's skipped folders are counted, not dropped in silence.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-10, sprint 438; grounds: project — the research r2; SDD — BOOTSTRAP step 9; practice — VS Code codebasics and src/vs/base/common/search.ts"
     }
   ]
 }

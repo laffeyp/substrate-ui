@@ -64,7 +64,9 @@ function when(modified: number): string {
   return day(d) === day(y) ? "yesterday" : d.toISOString().slice(0, 10);
 }
 
-/** FIND / REPLACE (sprint 428; 24a): the query and its count, Aa and .*, the replacement with ↵ and all.
+/** FIND / REPLACE (sprint 428; 24a): the query and its count, Aa and .*, the replacement with ↵ and all. Sprint
+ *  438 (research r2, VS Code's find): ab (whole word) and sel (find in the selection) on the query, AB (preserve
+ *  case) on the replacement.
  *  ↵ in the query goes to the next match, ⇧↵ the previous; ↵ in the replacement replaces one; Escape
  *  returns to the code. */
 function FindSection(): React.ReactElement {
@@ -86,12 +88,15 @@ function FindSection(): React.ReactElement {
         <span style={{ marginLeft: "auto", display: "flex", gap: 7, color: DIM, flex: "none" }}>
           <span data-find-count="1">{label}</span>
           <span data-find-toggle="case" data-on={spec.caseSensitive ? "1" : "0"} title="match case" onClick={() => set({ caseSensitive: !spec.caseSensitive }, "toggle")} style={toggle(spec.caseSensitive)}>Aa</span>
+          <span data-find-toggle="word" data-on={spec.wholeWord ? "1" : "0"} title="match whole word" onClick={() => set({ wholeWord: !spec.wholeWord }, "toggle")} style={{ ...toggle(spec.wholeWord), textDecoration: "underline" }}>ab</span>
           <span data-find-toggle="regexp" data-on={spec.regexp ? "1" : "0"} title="regular expression" onClick={() => set({ regexp: !spec.regexp }, "toggle")} style={toggle(spec.regexp)}>.*</span>
+          <span data-find-toggle="selection" data-on={spec.inSelection ? "1" : "0"} title="find in selection" onClick={() => set({ inSelection: !spec.inSelection }, "toggle")} style={toggle(spec.inSelection)}>sel</span>
         </span>
       </div>
       <div style={box}>
         <input data-find-input="replace" value={spec.replace} placeholder="replace" spellCheck={false} onChange={(e) => set({ replace: e.target.value }, "replace")} onKeyDown={keys(() => find.replace(false))} style={{ ...field, color: spec.replace ? BRIGHT : FAINT }} />
         <span style={{ marginLeft: "auto", display: "flex", gap: 7, color: DIM, flex: "none" }}>
+          <span data-find-toggle="preserve" data-on={spec.preserveCase ? "1" : "0"} title="preserve case" onClick={() => set({ preserveCase: !spec.preserveCase }, "replace")} style={toggle(spec.preserveCase)}>AB</span>
           <span data-find-replace="one" title="replace this match (↵)" onClick={() => find.replace(false)} style={{ cursor: "pointer" }}>↵</span>
           <span data-find-replace="all" title="replace every match" onClick={() => find.replace(true)} style={{ cursor: "pointer" }}>all</span>
         </span>

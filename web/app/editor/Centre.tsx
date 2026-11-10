@@ -25,6 +25,7 @@ import { html } from "@codemirror/lang-html";
 import { css } from "@codemirror/lang-css";
 import { markdown } from "@codemirror/lang-markdown";
 import { shell as shellMode } from "@codemirror/legacy-modes/mode/shell";
+import { preserveCase } from "../derive/preserve_case";
 import { editor } from "../state/editor";
 import { emit as emitSignal } from "../../vm/instrumentation/sdd";
 import { EditorConflictResolvedChoice, EditorFileOpenedHow, EditorFileSavedCommand, EditorKeyRefusedReason, EditorReplacedScope, Signal, UndoRoutedTo } from "../../vm/signals.gen";
@@ -82,6 +83,7 @@ const THEME = EditorView.theme({
   "&.cm-focused": { outline: "none" },
   // Sprint 428: find matches in the accent, the current one stronger (D7: the one UI accent).
   ".cm-find-match": { backgroundColor: "rgba(130,165,200,.22)", borderRadius: "2px" },
+  ".cm-find-scope": { backgroundColor: "rgba(130,165,200,.07)" },
   ".cm-find-current": { backgroundColor: "rgba(130,165,200,.5)" },
   // Sprint 431: a session edit in flight, its lines edged in the accent.
   ".cm-follow": { boxShadow: `inset 2px 0 0 ${ACCENT}`, backgroundColor: "rgba(130,165,200,.08)" },
@@ -172,7 +174,36 @@ function findCount(state: EditorState): { total: number; current: number } {
   const ms = findMatches(state), sel = state.selection.main;
   return { total: ms.length, current: ms.findIndex((m) => m.from === sel.from && m.to === sel.to) + 1 };
 }
-export interface FindSpec { search: string; caseSensitive: boolean; regexp: boolean; replace: string }
+export interface FindSpec { search: string; caseSensitive: boolean; regexp: boolean; replace: string; wholeWord: boolean; preserveCase: boolean; inSelection: boolean }
+
+/** Sprint 438 (research RESEARCH-2026-11-10-editor-search-r2; VS Code's Find in Selection): the range the find
+ *  is held to, taken from the selection when `sel` is switched on (the caret's line when nothing is
+ *  selected), moved with each edit, and drawn faintly. The query's `test` reads it, so CodeMirror's counts,
+ *  steps and replaces all keep to it. */
+const setFindScope = StateEffect.define<{ from: number; to: number } | null>();
+const SCOPE = Decoration.mark({ class: "cm-find-scope", attributes: { "data-find-scope": "1" } });
+const scopeField = StateField.define<{ from: number; to: number } | null>({
+  create: () => null,
+  update(v, tr) {
+    for (const e of tr.effects) if (e.is(setFindScope)) return e.value;
+    return v && tr.docChanged ? { from: tr.changes.mapPos(v.from, 1), to: tr.changes.mapPos(v.to, -1) } : v;
+  },
+  provide: (f) => EditorView.decorations.from(f, (sc) => (sc && sc.to > sc.from ? Decoration.set([SCOPE.range(sc.from, sc.to)]) : Decoration.none)),
+});
+/** The find spec as CodeMirror's query: whole word, and the scope as its test. */
+function queryOf(spec: FindSpec): SearchQuery {
+  return new SearchQuery({
+    search: spec.search, caseSensitive: spec.caseSensitive, regexp: spec.regexp, wholeWord: spec.wholeWord, replace: spec.replace,
+    test: (_m, st, from, to) => { const sc = st.field(scopeField, false); return !sc || (from >= sc.from && to <= sc.to); },
+  });
+}
+/** A match's replacement as CodeMirror writes it (`\n`, `\t`, `\\` read; with .*, `$&`, `$1`, `$$`), then
+ *  in the match's case (VS Code's preserve-case rule, derive/preserve_case.ts). */
+function caseReplacement(spec: FindSpec, matched: string, match: RegExpExecArray | undefined): string {
+  let text = spec.replace.replace(/\\([nrt\\])/g, (_a, c: string) => (c === "n" ? "\n" : c === "r" ? "\r" : c === "t" ? "\t" : "\\"));
+  if (spec.regexp && match) text = text.replace(/\$([$&]|\d+)/g, (all, i: string) => (i === "$" ? "$" : i === "&" ? match[0] : match[Number(i)] ?? all));
+  return preserveCase(matched, text);
+}
 /** The mounted centre's find, for the inspector's section. */
 /** How the spec changed: the query typed, Aa or .* switched, or the replacement typed (not a new find). */
 export type FindChange = "typed" | "toggle" | "replace";
@@ -537,7 +568,7 @@ export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionI
           shownLanded.current = landed.seq;
           landedLine = firstChange(prev.doc.toString(), normal(file.text));
         }
-        const state = EditorState.create({ doc: file.text, extensions: [...configured(), lineNumbers(), hunkExtension(diff.hunks), language(rel), syntaxHighlighting(HIGHLIGHT), THEME, search(), findMarks, followField, listener] });
+        const state = EditorState.create({ doc: file.text, extensions: [...configured(), lineNumbers(), hunkExtension(diff.hunks), language(rel), syntaxHighlighting(HIGHLIGHT), THEME, search(), findMarks, scopeField, followField, listener] });
         placed = keep > 1 ? state.update({ selection: { anchor: state.doc.line(keep).from } }).state : state;
         markUnsaved(rel, false);
       }
@@ -545,7 +576,7 @@ export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionI
       if (!view.current) view.current = new EditorView({ state: placed, parent: root, root });
       else view.current.setState(placed);
       // A kept buffer takes the binding of now; every buffer takes the find's query (sprint 428).
-      view.current.dispatch({ effects: [CONF.binding.reconfigure(bindingExtension(now.current.binding, HOOKS)), setSearchQuery.of(new SearchQuery(editor.getSnapshot().find))] });
+      view.current.dispatch({ effects: [CONF.binding.reconfigure(bindingExtension(now.current.binding, HOOKS)), setSearchQuery.of(queryOf(editor.getSnapshot().find))] });
       editor.set({ findCount: findCount(view.current.state) });
       if (landedLine !== null) view.current.dispatch({ effects: EditorView.scrollIntoView(view.current.state.doc.line(Math.min(landedLine, view.current.state.doc.lines)).from, { y: "center" }) });
       const head = placed.selection.main.head, line = placed.doc.lineAt(head);
@@ -634,14 +665,20 @@ export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionI
     const spec = pendingFind.current;
     pendingFind.current = null;
     if (!spec || !spec.search || !view.current) return;
-    emitSignal(Signal.EDITOR_FIND_QUERIED, { regex: spec.regexp, case_sensitive: spec.caseSensitive, match_count: findMatches(view.current.state).length }, { pane_id: paneId });
+    emitSignal(Signal.EDITOR_FIND_QUERIED, { regex: spec.regexp, case_sensitive: spec.caseSensitive, whole_word: spec.wholeWord, in_selection: spec.inSelection, match_count: findMatches(view.current.state).length }, { pane_id: paneId });
   };
   const findImpl = {
     set(spec: FindSpec, how: FindChange) {
       const v = view.current;
       if (!v) return;
       if (how === "toggle") flushFind();
-      v.dispatch({ effects: setSearchQuery.of(new SearchQuery(spec)) });
+      // sel switched on takes the selection as the scope (the caret's line when it is empty); off drops it.
+      const has = !!v.state.field(scopeField, false);
+      if (spec.inSelection && !has) {
+        const sel = v.state.selection.main, line = v.state.doc.lineAt(sel.head);
+        v.dispatch({ effects: setFindScope.of(sel.empty ? { from: line.from, to: line.to } : { from: sel.from, to: sel.to }) });
+      } else if (!spec.inSelection && has) v.dispatch({ effects: setFindScope.of(null) });
+      v.dispatch({ effects: setSearchQuery.of(queryOf(spec)) });
       if (how === "replace") return;
       const ms = findMatches(v.state), at = v.state.selection.main.from;
       const first = ms.find((m) => m.from >= at) ?? ms[0];
@@ -669,9 +706,22 @@ export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionI
       const onMatch = findMatches(v.state).some((m) => m.from === sel.from && m.to === sel.to);
       // replaceNext replaces the selected match, or selects the next one first.
       if (!all && !onMatch) { this.step(false); return; }
+      // Sprint 438, preserve case: the centre writes each replacement in its match's case.
+      const spec = editor.getSnapshot().find;
+      if (spec.preserveCase) {
+        const q = getSearchQuery(v.state), found: { from: number; to: number; match?: RegExpExecArray }[] = [];
+        const cursor = q.getCursor(v.state);
+        for (let r = cursor.next(); !r.done; r = cursor.next()) if (r.value.to > r.value.from) found.push(r.value as { from: number; to: number; match?: RegExpExecArray });
+        const pick = all ? found : found.filter((m) => m.from === sel.from && m.to === sel.to);
+        if (!pick.length) return;
+        v.dispatch({ changes: pick.map((m) => ({ from: m.from, to: m.to, insert: caseReplacement(spec, v.state.sliceDoc(m.from, m.to), m.match) })), userEvent: all ? "input.replace.all" : "input.replace" });
+        if (!all) this.step(false);
+        emitSignal(Signal.EDITOR_REPLACED, { scope: all ? EditorReplacedScope.ALL : EditorReplacedScope.ONE, count: pick.length, preserve_case: true }, { pane_id: paneId });
+        return;
+      }
       if (all ? replaceAll(v) : replaceNext(v)) {
         const count = all ? before : 1;
-        if (v.state.doc !== doc) emitSignal(Signal.EDITOR_REPLACED, { scope: all ? EditorReplacedScope.ALL : EditorReplacedScope.ONE, count }, { pane_id: paneId });
+        if (v.state.doc !== doc) emitSignal(Signal.EDITOR_REPLACED, { scope: all ? EditorReplacedScope.ALL : EditorReplacedScope.ONE, count, preserve_case: false }, { pane_id: paneId });
       }
     },
     focusCode() { view.current?.focus(); },

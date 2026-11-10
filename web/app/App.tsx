@@ -197,6 +197,7 @@ const KEY_TARGET: Partial<Record<KeyAction["kind"], KeyRoutedTarget>> = {
   "refuse-split": KeyRoutedTarget.EDITOR,
   "editor-find": KeyRoutedTarget.EDITOR,
   "editor-search": KeyRoutedTarget.EDITOR,
+  "tree-find": KeyRoutedTarget.EDITOR,
 };
 /** The picker line PICKER_LINE_ENTERED names, as the pane's open line. */
 const HALF_OF_LINE: Record<PickerLineEnteredLine, PaneDrawnPickerLine> = {
@@ -784,6 +785,7 @@ export class App extends React.Component<AppProps, AppState> {
       surface: pageOf(s.vs), revealed: metaBase(s.vs), editor: s.vs.view === "editor",
       vimCode: s.vs.view === "editor" && settings.getSnapshot().binding === "vim" && !!(el instanceof HTMLElement && el.hasAttribute("data-editor-code")),
       editorTerminal: s.vs.view === "editor" && !!(el instanceof HTMLElement && el.closest('[data-editor-area="bottom"], [data-editor-sill]')),
+      editorTree: s.vs.view === "editor" && !!(el instanceof HTMLElement && el.closest("[data-editor-tree]")),
       pickerFocused: !!(fp && fp.unbound && !(fsnap && fsnap.sessionId)),
       languageTurns: !!(lens && lens.turns.length),
       findOpen: find.getSnapshot().open, dialogOpen: dialogOpen(), cardOpen: !!(s.ddFor || s.wsFor),
@@ -836,6 +838,11 @@ export class App extends React.Component<AppProps, AppState> {
     }
     // Sprint 434 (roadmap r10 E8): ⌘⇧F in the editor opens the left column's search, unfolding it if folded.
     else if (action.kind === "editor-search") openSearch(s.focused);
+    // Sprint 437: ⌥⌘F in the tree opens its find by name.
+    else if (action.kind === "tree-find") {
+      if (editorStore.getSnapshot().folded.left) foldColumn("left", false, EditorColumnFoldedCause.KEY, s.focused);
+      editorStore.set({ leftTab: "files", treeFindFocus: editorStore.getSnapshot().treeFindFocus + 1 });
+    }
     else if (action.kind === "toggle-tools") toggleToolOutputMode(ToolOutputModeSetCause.KEY);
     else if (action.kind === "split") this.split(action.dir);
     else if (action.kind === "toggle-find") toggleFind();

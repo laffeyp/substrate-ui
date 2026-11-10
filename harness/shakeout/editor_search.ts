@@ -200,6 +200,8 @@ async function main(): Promise<void> {
     for (const q of queried) if (!searched.includes(q)) throw new Error(`no FILES_SEARCHED for ${q}: ${JSON.stringify(searched)}`);
     const prepared = server.filter((r) => r.name === "FILES_REPLACE_PREPARED").map((r) => `${String(r.payload.scope)}:${String(r.payload.files)}:${String(r.payload.replaced)}`);
     if (!same(prepared, ["one:1:1", "file:1:2", "all:1:2"])) throw new Error(`FILES_REPLACE_PREPARED ${JSON.stringify(prepared)}`);
+    const unread = server.filter((r) => r.name === "FILES_SEARCHED" && Number(r.payload.unreadable) !== 0).length;
+    if (unread) throw new Error(`FILES_SEARCHED reported unreadable folders ${unread} times`);
     const allTraces = readdirSync(join(traces, boot)).map((f) => readFileSync(join(traces, boot, f), "utf8")).join("\n");
     for (const secret of ["priceCents", "amountCents", "\\\\s\\\\d"]) if (allTraces.includes(secret)) throw new Error(`the query ${secret} is in the trace`);
     const booted = readFileSync(join(traces, boot, "main.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as { name: string; payload: Record<string, unknown> }).find((r) => r.name === "APP_BOOTED")!.payload;

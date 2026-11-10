@@ -72,6 +72,8 @@ test("⌘⇧E toggles the editor; Escape in the editor returns to the pane after
   assert.deepStrictEqual(windowKey({ key: "F", code: "KeyF", metaKey: true, ctrlKey: false, shiftKey: true, altKey: false }, ed), { kind: "editor-search" });
   assert.deepStrictEqual(windowKey({ key: "F", code: "KeyF", metaKey: true, ctrlKey: false, shiftKey: true, altKey: false }, { ...ed, editorTerminal: true }), { kind: "editor-search" });
   assert.deepStrictEqual(windowKey({ key: "F", code: "KeyF", metaKey: true, ctrlKey: false, shiftKey: true, altKey: false }, CTX), { kind: "toggle-find" });
+  // Sprint 437: ⌥⌘F in the tree finds by name; elsewhere in the editor it replaces in the file.
+  assert.deepStrictEqual(windowKey({ key: "ƒ", code: "KeyF", metaKey: true, ctrlKey: false, shiftKey: false, altKey: true }, { ...ed, editorTree: true }), { kind: "tree-find" });
   // Sprint 423: with vim bound and the code focused, Escape is vim's; a find or dialog still closes first.
   assert.strictEqual(windowKey(key("Escape"), { ...ed, vimCode: true }), null);
   assert.deepStrictEqual(windowKey(key("Escape"), { ...ed, vimCode: true, findOpen: true }), { kind: "close-find" });
