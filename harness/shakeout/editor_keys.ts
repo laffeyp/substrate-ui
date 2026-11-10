@@ -3,7 +3,8 @@
 // The window's keys inside the editor (sprint 417; roadmap 2026-11-09-code-editor r8, E1; D49 (c),
 // spec r6 §4, D86). Real key presses on the running window: ⌘D and ⌘⇧D are refused (the editor does
 // not split), ⌘, opens settings over the editor and Escape closes them back to it, ⌘3 opens the assay
-// page and Escape returns to the editor, ⌘M goes to meta. These agree:
+// page and Escape returns to the editor, ⌘M opens the meta pane inside the editor and ⌘M closes it
+// (sprint 430: the Architect, 2026-11-09). These agree:
 //   DOM    — the editor still shown after each refusal, one pane, the dialog and page over the editor;
 //   pixels — the anchor decodes after the refusals and names an EDITOR_DRAWN (lib/editor_pixels.ts);
 //   signals (after close) — EDITOR_KEY_REFUSED for Meta+d and Meta+Shift+D with reason no_split, no
@@ -63,7 +64,10 @@ async function main(): Promise<void> {
     await win.keyboard.press("Escape");
     await win.locator("[data-editor-view]").first().waitFor({ state: "visible", timeout: 10_000 });
     await win.keyboard.press("Meta+m");
-    await win.locator("[data-editor-view]").first().waitFor({ state: "detached", timeout: 10_000 });
+    await win.waitForFunction(() => document.querySelector('[data-editor-area="right"]')?.getAttribute("data-showing") === "meta" && !!document.querySelector('[data-editor-area="right"] [data-meta-view]'), undefined, { timeout: 10_000 });
+    if (!(await shown(win, "[data-editor-view]"))) throw new Error("⌘M left the editor");
+    await win.keyboard.press("Meta+m");
+    await win.waitForFunction(() => document.querySelector('[data-editor-area="right"]')?.getAttribute("data-showing") === "inspector", undefined, { timeout: 10_000 });
 
     await app.close();
     const recs = windowRecords(launch);
@@ -74,7 +78,9 @@ async function main(): Promise<void> {
     const dialogs = recs.filter((r) => r.name.startsWith("DIALOG_")).map((r) => r.name);
     if (JSON.stringify(dialogs) !== JSON.stringify(["DIALOG_OPENED", "DIALOG_CLOSED"])) throw new Error(`dialog records: ${JSON.stringify(dialogs)}`);
     const views = recs.filter((r) => r.name === "VIEW_CHANGED").map((r) => `${String(r.payload.cause)} ${String(r.payload.from)}→${String(r.payload.to)}`);
-    const wantViews = ["key panes→editor", "key editor→assay", "close assay→editor", "key editor→meta"];
+    const wantViews = ["key panes→editor", "key editor→assay", "close assay→editor"];
+    const metaPane = recs.filter((r) => r.name === "EDITOR_INSPECTOR_SWAPPED").map((r) => String(r.payload.showing));
+    if (JSON.stringify(metaPane) !== JSON.stringify(["lenses", "spine"])) throw new Error(`EDITOR_INSPECTOR_SWAPPED: ${JSON.stringify(metaPane)}`);
     if (JSON.stringify(views) !== JSON.stringify(wantViews)) throw new Error(`VIEW_CHANGED: ${views.join("; ")}`);
     const anchor = px.anchor;
     const rec = recs.find((r) => r.proc_seq === anchor.seq);

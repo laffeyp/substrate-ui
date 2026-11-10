@@ -20,7 +20,7 @@ export interface FooterInput {
   surfaceOpen: boolean;
   /** The editor view is open (sprint 409; frame 24a's footer). */
   editorOpen?: boolean;
-  /** Sprint 430 (24b): the seq lit in the editor's record column; null or absent when none. */
+  /** Sprint 430 (24b): the seq lit in the meta pane open in the editor; null or absent when none. */
   recordSeq?: number | null;
   /** The design tool's simulateRateLimit scenario: the template's status line, ahead of every other. */
   rateLimited?: boolean;
@@ -50,6 +50,6 @@ export function footerText(input: FooterInput): FooterText {
     statusColor,
     record: (input.unbound ? "unbound — pick a workspace" : input.title ? "session " + input.title : "")
       + (input.editorOpen && !input.surfaceOpen && input.recordSeq != null ? ` · seq ${input.recordSeq} selected` : ""),
-    hint: input.surfaceOpen ? "esc back to session" : input.editorOpen ? "esc or ⌘⇧E back to the pane · ⌃⇧` inspector ⇄ record" : "⌘M toggles meta",
+    hint: input.surfaceOpen ? "esc back to session" : input.editorOpen ? "esc or ⌘⇧E back to the pane · ⌘M meta" : "⌘M toggles meta",
   };
 }

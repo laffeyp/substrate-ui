@@ -41,8 +41,8 @@ export interface EditorState {
   findCount: { total: number; current: number };
   /** Bumped by ⌘F and ⌥⌘F: the FIND / REPLACE section opens if folded. */
   findFocus: number;
-  /** Sprint 430 (roadmap r10 E5; 24b): the right column shows the inspector or the session's record. */
-  showing: "inspector" | "record";
+  /** Sprint 430: the right column shows the inspector, or the meta pane opened in the editor with ⌘M. */
+  showing: "inspector" | "meta";
   /** The centre's caret line, 1-based (sprint 422): OUTLINE lights the symbol around it. */
   caretLine: number;
   /** What the inspector draws (sprint 422): its outline, hunk, activity and history rows. */

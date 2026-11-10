@@ -1,9 +1,9 @@
 {
-  "vocabulary_version": "0.38",
+  "vocabulary_version": "0.39",
   "locked": true,
   "locked_at": "2026-11-09",
-  "locked_by": "agent-resolved 2026-11-09 (BLACKBOARD), sprint 430: P-0.38-RECORD-COLUMN",
-  "supersedes": "0.37",
+  "locked_by": "agent-resolved 2026-11-09 (BLACKBOARD), sprint 430: notes only, after the Architect's ruling (⌘M opens the meta pane inside the editor)",
+  "supersedes": "0.38",
   "tag_count": 140,
   "categories": [
     "session",
@@ -1691,7 +1691,7 @@
         "how"
       ],
       "optional_payload": [],
-      "note": "Meta lit a record seq to inspect, or cleared it. Written when the lit seq changes. editor_activity (v0.38): ACTIVITY's ◂ in the editor's inspector opened the record column on that seq.",
+      "note": "Meta lit a record seq to inspect, or cleared it. Written when the lit seq changes. editor_activity (v0.38): ACTIVITY's ◂ in the editor's inspector opened the meta pane inside the editor on that seq.",
       "emit_site": "web/app/state/meta.ts pickSeq, selectSeq",
       "field_types": {
         "seq": "int or null (the record seq lit; null when the click cleared it)",
@@ -2198,7 +2198,7 @@
         "showing"
       ],
       "optional_payload": [],
-      "note": "⌃⇧` swapped the inspector column for the record's five lenses or back. Emitted from sprint 430: the ⌃⇧` key or a column chip; the column's width is 300 px for the inspector and 400 px for the record (roadmap r10 E5).",
+      "note": "⌘M (or View ▸ Meta) in the editor opened the meta pane inside the editor view, in the right column in place of the inspector (showing lenses), or closed it (showing spine); the editor stays the view (no VIEW_CHANGED). The Architect, 2026-11-09: \"It's command M. It's the meta pane\"; no chip. Emitted from sprint 430; the meta pane is 400 px, the inspector its column's width.",
       "emit_site": "web/app/editor/",
       "field_types": {
         "showing": "enum spine | lenses"
@@ -2246,7 +2246,7 @@
         "conflict"
       ],
       "optional_payload": [],
-      "note": "The editor view rendered its structural state. The view-category tag for the editor: pairs with EDITOR_OPENED, EDITOR_FILE_OPENED, EDITOR_COLUMN_FOLDED, EDITOR_FOLLOW_MARKED, EDITOR_CHIP_ADDED, EDITOR_SEARCH_QUERIED, EDITOR_INSPECTOR_SWAPPED, and the column/tab changes. Written from the commit when any field differs from the editor's last record. v0.29: dock, sides_swapped and focus draw R7–R9; tree_rows pairs with FILES_LISTED, modified_dots with DIFF_READ. v0.32: the inspector's drawn counts (spec r6 §5.0; frame 24a), 0 with no file open. v0.33: binding required; mode, read_only and unsaved draw the status line and the buffer's state (sprint 424); the anchor's third row carries them. v0.34: conflict; the anchor's third row carries it (magic 0xB7). v0.36: binding standard, the default (a normal editor; vim and nano are options, the Architect 2026-11-09). read_only removed (v0.36): no file is read-only. v0.38: showing follows the right column (spine: the inspector; lenses: the record); the anchor's third row carries it (magic 0xB9).",
+      "note": "The editor view rendered its structural state. The view-category tag for the editor: pairs with EDITOR_OPENED, EDITOR_FILE_OPENED, EDITOR_COLUMN_FOLDED, EDITOR_FOLLOW_MARKED, EDITOR_CHIP_ADDED, EDITOR_SEARCH_QUERIED, EDITOR_INSPECTOR_SWAPPED, and the column/tab changes. Written from the commit when any field differs from the editor's last record. v0.29: dock, sides_swapped and focus draw R7–R9; tree_rows pairs with FILES_LISTED, modified_dots with DIFF_READ. v0.32: the inspector's drawn counts (spec r6 §5.0; frame 24a), 0 with no file open. v0.33: binding required; mode, read_only and unsaved draw the status line and the buffer's state (sprint 424); the anchor's third row carries them. v0.34: conflict; the anchor's third row carries it (magic 0xB7). v0.36: binding standard, the default (a normal editor; vim and nano are options, the Architect 2026-11-09). read_only removed (v0.36): no file is read-only. v0.38: showing follows the right column (spine: the inspector; lenses: the meta pane open in the editor, ⌘M); the anchor's third row carries it (magic 0xB9).",
       "emit_site": "web/app/editor/",
       "field_types": {
         "tab_count": "int (open file tabs)",
@@ -3029,8 +3029,8 @@
     ]
   },
   "version_meta": {
-    "version_id": "0.38",
-    "prior_version": "0.37",
-    "migration_proposals": "../proposals.json (P-0.38-*)"
+    "version_id": "0.39",
+    "prior_version": "0.38",
+    "migration_proposals": "none: notes only"
   }
 }

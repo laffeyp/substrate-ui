@@ -19,7 +19,7 @@ export function Footer(): React.ReactElement {
   const snap = snaps.snapshots[ch.focusedPane] ?? null;
   const showing = useSyncExternalStore(editor.subscribe, editor.getSnapshot, editor.getSnapshot).showing;
   const sel = useSyncExternalStore(meta.subscribe, meta.getSnapshot, meta.getSnapshot).sel;
-  const text = footerText({ unbound: ch.unbound, title: ch.title, surfaceOpen: ch.surfaceOpen, editorOpen: ch.editorOpen, recordSeq: showing === "record" ? sel : null, rateLimited: ch.rateLimited, snapshot: snap });
+  const text = footerText({ unbound: ch.unbound, title: ch.title, surfaceOpen: ch.surfaceOpen, editorOpen: ch.editorOpen, recordSeq: showing === "meta" ? sel : null, rateLimited: ch.rateLimited, snapshot: snap });
   return (
     <div data-footer="1" style={{ display: "flex", gap: 16, padding: "7px 16px", background: "#2a2d33", fontSize: 11, color: "#62676f", flex: "none" }}>
       <span data-footer-status="1" style={{ color: text.statusColor }}>{text.status}</span>

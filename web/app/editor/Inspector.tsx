@@ -178,7 +178,7 @@ export function Inspector({ paneId, workspace }: { paneId: number; workspace: st
             <span style={{ color: FAINT, flex: "none" }}>{r.turn !== null ? `t${r.turn}` : ""}</span>
             <span style={{ color: DIM, flex: "none", width: 30 }}>{r.seq}</span>
             <span style={{ color: MID, overflow: "hidden", textOverflow: "ellipsis" }}>{r.gist}</span>
-            <span data-activity-open={r.seq} title={`seq ${r.seq} in the record (⌃⇧\`)`} onClick={() => openSeq(r.seq, paneId, sessionId)} style={{ marginLeft: "auto", color: FAINT, flex: "none", cursor: "pointer" }}>◂</span>
+            <span data-activity-open={r.seq} title={`seq ${r.seq} in meta (⌘M)`} onClick={() => openSeq(r.seq, paneId, sessionId)} style={{ marginLeft: "auto", color: FAINT, flex: "none", cursor: "pointer" }}>◂</span>
           </div>
         ))}
         <div style={{ height: 4 }} />

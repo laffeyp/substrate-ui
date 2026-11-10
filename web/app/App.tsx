@@ -50,7 +50,7 @@ import { emit as emitSignal } from "../vm/instrumentation/sdd";
 import { closePage, editorBase, metaBase, pageOf, show, START, toggleEditor, toggleMeta, togglePage, type Page, type ViewState } from "./derive/open_view";
 import { ActivityLine, TaskRows } from "./ActivityLine";
 import { AssayPage } from "./AssayPage";
-import { EditorView, foldColumn, swapRecord, toggleDock, toggleFocus, toggleSwap } from "./editor/EditorView";
+import { EditorView, foldColumn, toggleDock, toggleFocus, toggleMetaPane, toggleSwap } from "./editor/EditorView";
 import { closeFile, requestSave, routeUndo } from "./editor/Centre";
 import { Dialogs } from "./Dialogs";
 import { FindBar } from "./FindBar";
@@ -195,7 +195,6 @@ const KEY_TARGET: Partial<Record<KeyAction["kind"], KeyRoutedTarget>> = {
   "fold-editor": KeyRoutedTarget.EDITOR,
   "refuse-split": KeyRoutedTarget.EDITOR,
   "editor-find": KeyRoutedTarget.EDITOR,
-  "swap-record": KeyRoutedTarget.EDITOR,
 };
 /** The picker line PICKER_LINE_ENTERED names, as the pane's open line. */
 const HALF_OF_LINE: Record<PickerLineEnteredLine, PaneDrawnPickerLine> = {
@@ -827,7 +826,6 @@ export class App extends React.Component<AppProps, AppState> {
     else if (action.kind === "toggle-editor") this.toggleEditor(ViewChangedCause.KEY, name);
     else if (action.kind === "refuse-split") emitSignal(Signal.EDITOR_KEY_REFUSED, { key: name, reason: EditorKeyRefusedReason.NO_SPLIT }, { pane_id: s.focused });
     else if (action.kind === "fold-editor") foldColumn(action.column, !editorStore.getSnapshot().folded[action.column], EditorColumnFoldedCause.KEY, s.focused);
-    else if (action.kind === "swap-record") swapRecord(s.focused);
     // Sprint 428: ⌘F and ⌥⌘F in the editor go to the inspector's FIND / REPLACE, unfolding it if folded.
     else if (action.kind === "editor-find") {
       if (editorStore.getSnapshot().folded.right) foldColumn("right", false, EditorColumnFoldedCause.KEY, s.focused);
@@ -1004,7 +1002,7 @@ export class App extends React.Component<AppProps, AppState> {
     if (s.vs.view !== "editor") return;
     const drawn: SignalPayloads[Signal.EDITOR_DRAWN] = {
       tab_count: editorStore.getSnapshot().tabs.length, left_folded: editorStore.getSnapshot().folded.left, right_folded: editorStore.getSnapshot().folded.right, bottom_folded: editorStore.getSnapshot().folded.bottom,
-      showing: editorStore.getSnapshot().showing === "record" ? EditorDrawnShowing.LENSES : EditorDrawnShowing.SPINE, left_tab: EditorDrawnLeftTab.FILES,
+      showing: editorStore.getSnapshot().showing === "meta" ? EditorDrawnShowing.LENSES : EditorDrawnShowing.SPINE, left_tab: EditorDrawnLeftTab.FILES,
       binding: settings.getSnapshot().binding as EditorDrawnBinding,
       // Sprint 424 (v0.33): the buffer's state the status line and the centre draw.
       mode: drawnMode(editorStore.getSnapshot().mode), unsaved: editorStore.getSnapshot().unsaved.length,
@@ -1026,7 +1024,7 @@ export class App extends React.Component<AppProps, AppState> {
       left_folded: drawn.left_folded, right_folded: drawn.right_folded, bottom_folded: drawn.bottom_folded,
       dock_right: drawn.dock === EditorDrawnDock.RIGHT, sides_swapped: drawn.sides_swapped, focus: drawn.focus,
     }, anchor3: {
-      seq: rec.proc_seq, mode: drawn.mode, binding: drawn.binding, unsaved: drawn.unsaved, conflict: drawn.conflict, record: drawn.showing === EditorDrawnShowing.LENSES,
+      seq: rec.proc_seq, mode: drawn.mode, binding: drawn.binding, unsaved: drawn.unsaved, conflict: drawn.conflict, meta: drawn.showing === EditorDrawnShowing.LENSES,
     }, anchor2: {
       seq: rec.proc_seq, tab_count: drawn.tab_count, outline_rows: drawn.outline_rows, hunks: drawn.hunks,
       activity_rows: drawn.activity_rows, history_rows: drawn.history_rows,
@@ -1037,6 +1035,8 @@ export class App extends React.Component<AppProps, AppState> {
   // picker with no session; back to the panes always works.
   private toggleMeta(cause: ViewChangedCause): void {
     const s = this.state;
+    // Sprint 430 (the Architect, 2026-11-09): in the editor, the meta pane opens inside the editor view.
+    if (s.vs.view === "editor") { toggleMetaPane(s.focused); return; }
     if (!metaBase(s.vs)) {
       const fp = this.pane(s.focused);
       const fs = this.snap(s.focused);
