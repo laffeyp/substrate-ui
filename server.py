@@ -4265,7 +4265,7 @@ class Handler(BaseHTTPRequestHandler):
         out = _workspace_find_names(root, q.get("q", [""])[0], fuzzy=fuzzy)
         TRACE.emit(
             Signal.FILES_FOUND,
-            {"session_id": session_id, "fuzzy": fuzzy, "files": len(cast(list[Any], out["files"])), "folders": len(cast(list[Any], out["folders"])), "truncated": out["truncated"], "unreadable": out["unreadable"]},
+            {"session_id": session_id, "fuzzy": fuzzy, "name_length": len(q.get("q", [""])[0]), "files": len(cast(list[Any], out["files"])), "folders": len(cast(list[Any], out["folders"])), "truncated": out["truncated"], "unreadable": out["unreadable"]},
         )
         self._json(out)
 

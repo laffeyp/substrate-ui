@@ -2428,13 +2428,14 @@
       "payload": [
         "session_id",
         "fuzzy",
+        "name_length",
         "files",
         "folders",
         "truncated",
         "unreadable"
       ],
       "optional_payload": [],
-      "note": "The server found the workspace's files and folders by name for the tree's find (GET …/files/find), from the search's own walk (ignored files are not found), case ignored; fuzzy reads abc as *a*b*c*. files at most 512; truncated when more matched or the walk was cut. No name or path in the trace (E1). v0.45: unreadable.",
+      "note": "The server found the workspace's files and folders by name for the tree's find (GET …/files/find), from the search's own walk (ignored files are not found), case ignored; fuzzy reads abc as *a*b*c*. files at most 512; truncated when more matched or the walk was cut. No name or path in the trace (E1). v0.45: unreadable. v0.45: name_length.",
       "emit_site": "server.py Handler._session_find_names",
       "field_types": {
         "session_id": "string (kernel session id)",
@@ -2442,7 +2443,8 @@
         "files": "int",
         "folders": "int",
         "truncated": "bool",
-        "unreadable": "int (folders the walk could not read and skipped)"
+        "unreadable": "int (folders the walk could not read and skipped)",
+        "name_length": "int (characters in the name the server was asked for; the name itself stays out, E1)"
       }
     },
     {

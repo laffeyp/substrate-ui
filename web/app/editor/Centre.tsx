@@ -330,6 +330,12 @@ const BASES = new Map<string, { name: string; text: string }>();
 /** The SHA-256 each file had when its buffer read it (sprint 425): a save sends it, and a file changed on
  *  disk since is refused as stale (409). */
 const SHAS = new Map<string, string>();
+/** Each file's writes from this window, started or finished (sprint 438): a read of the file applies only if
+ *  none began or ended while it was out. A read answered before a save and landing after it would put back
+ *  the text and hash the save replaced, and the next save would be refused as stale (BLACKBOARD 2026-11-10,
+ *  the full gate run: save C refused against save A's hash). The write's own FileWritten brings a new read. */
+const WRITES = new Map<string, number>();
+const wrote = (k: string) => WRITES.set(k, (WRITES.get(k) ?? 0) + 1);
 /** The mounted centre's save, for the menu's ⌘S and the bindings' `:w` and ⌃O. */
 let activeSave: ((command: EditorFileSavedCommand) => void) | null = null;
 const HOOKS: BindingHooks = {
@@ -424,10 +430,12 @@ export async function writeBuffer(sessionId: string, rel: string, text: string):
   const k = bufferKey(sessionId, rel);
   putBuffer(sessionId, rel, text);
   const end = ENDS.get(k) ?? "\n";
+  wrote(k);
   const r = await fetch(`/api/session/${encodeURIComponent(sessionId)}/file?path=${encodeURIComponent(rel)}`, {
     method: "PUT", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ text: end === "\n" ? text : text.replace(/\n/g, end), view: "editor", base_sha256: SHAS.get(k) }),
   }).catch(() => null);
+  wrote(k);
   if (r?.ok) {
     DISK.set(k, text);
     SHAS.set(k, ((await r.json()) as { sha256: string }).sha256);
@@ -521,11 +529,12 @@ export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionI
     if (!rel) { setFacts(null); return; }
     let live = true;
     const q = encodeURIComponent(rel), sid = encodeURIComponent(sessionId);
+    const writesAtRead = WRITES.get(key(rel)) ?? 0;
     Promise.all([
       fetch(`/api/session/${sid}/file?path=${q}`).then((r) => r.json() as Promise<FileFacts>),
       fetch(`/api/session/${sid}/diff?path=${q}`).then((r) => (r.ok ? (r.json() as Promise<{ hunks: Hunk[]; base: string }>) : { hunks: [], base: "none" })),
     ]).then(([file, diff]) => {
-      if (!live) return;
+      if (!live || (WRITES.get(key(rel)) ?? 0) !== writesAtRead) return;
       setFacts({ path: rel, file });
       editor.set({ file: { path: rel, size: file.size, modified: file.modified, encoding: file.encoding, lineEndings: file.line_endings, text: file.text }, hunks: diff.hunks });
       if (file.text === null || !host.current) return;
@@ -611,7 +620,8 @@ export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionI
     const sent = v.state.doc.toString();
     const end = ENDS.get(key(rel)) ?? "\n";
     const body = { text: end === "\n" ? sent : sent.replace(/\n/g, end), view: step ? HISTORY_VIEW : "editor", ...(overwrite ? {} : { base_sha256: SHAS.get(key(rel)) }) };
-    const r = await fetch(`/api/session/${encodeURIComponent(sessionId)}/file?path=${encodeURIComponent(rel)}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    wrote(key(rel));
+    const r = await fetch(`/api/session/${encodeURIComponent(sessionId)}/file?path=${encodeURIComponent(rel)}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).finally(() => wrote(key(rel)));
     if (r.ok) {
       const out = (await r.json()) as { sha256: string };
       DISK.set(key(rel), sent);

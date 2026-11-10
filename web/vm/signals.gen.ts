@@ -846,7 +846,7 @@ export interface SignalPayloads {
   [Signal.EDITOR_FOCUS_SET]: { on: boolean };
   [Signal.EDITOR_COLUMN_RESIZED]: { column: EditorColumnResizedColumn; size: number };
   [Signal.DIFF_READ]: { session_id: string; base: DiffReadBase; files: number; hunks?: number };
-  [Signal.FILES_FOUND]: { session_id: string; fuzzy: boolean; files: number; folders: number; truncated: boolean; unreadable: number };
+  [Signal.FILES_FOUND]: { session_id: string; fuzzy: boolean; name_length: number; files: number; folders: number; truncated: boolean; unreadable: number };
   [Signal.FILES_SEARCHED]: { session_id: string; regex: boolean; word: boolean; files: number; lines: number; matches: number; truncated: boolean; buffers: number; unreadable: number };
   [Signal.FILES_REPLACE_PREPARED]: { session_id: string; scope: FilesReplacePreparedScope; files: number; replaced: number };
 }

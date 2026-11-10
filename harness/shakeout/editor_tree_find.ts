@@ -104,6 +104,7 @@ async function main(): Promise<void> {
     const boot = readdirSync(traces).sort().pop()!;
     const server = readFileSync(join(traces, boot, "server.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as { name: string; payload: Record<string, unknown> });
     const serverFound = server.filter((r) => r.name === "FILES_FOUND").map((r) => `${String(r.payload.fuzzy)}:${String(r.payload.files)}:${String(r.payload.folders)}`);
+    if (!server.some((r) => r.name === "FILES_FOUND" && Number(r.payload.name_length) === 4)) throw new Error("no FILES_FOUND for a name of 4 characters (cart)");
     for (const want of ["true:1:1", "true:1:0", "false:0:0"]) if (!serverFound.includes(want)) throw new Error(`FILES_FOUND lacks ${want}: ${JSON.stringify(serverFound)}`);
     const unread = server.filter((r) => r.name === "FILES_FOUND" && Number(r.payload.unreadable) !== 0).length;
     if (unread) throw new Error(`FILES_FOUND reported unreadable folders ${unread} times`);

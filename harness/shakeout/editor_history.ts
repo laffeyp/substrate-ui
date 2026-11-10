@@ -14,7 +14,7 @@
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { _electron as electron, type ElectronApplication, type Page } from "playwright";
+import { _electron as electron, type ElectronApplication, type Page, type Route } from "playwright";
 import { bindPaneAsUser, launchArgs, settled, waitForApp, windowRecords } from "./lib/electron";
 
 const REPO_ROOT = join(__dirname, "..", "..");
@@ -62,7 +62,26 @@ async function main(): Promise<void> {
     await win.locator('[data-tree-row="src"]').first().click();
     await win.locator('[data-tree-row="src/cart.ts"]').first().click();
 
-    // Three saves by hand.
+    // Three saves by hand, in the order a loaded machine produced (sprint 438; BLACKBOARD 2026-11-10): after a
+    // save its FileWritten reaches the page, which reads the file again; the server answers that read at once,
+    // but the answer reaches the page only 10 ms after the next save's reply, before the next keys. The stale
+    // read must not put back the text and hash the newer save replaced. A last hold is let go after a second.
+    let releases: (() => void)[] = [];
+    const holdRead = async (route: Route) => {
+      if (route.request().method() === "PUT") {
+        const answer = await route.fetch();
+        await route.fulfill({ response: answer });
+        const held = releases; releases = [];
+        setTimeout(() => { for (const go of held) go(); }, 10);
+        return;
+      }
+      const answer = await route.fetch();
+      await new Promise<void>((go) => { releases.push(go); setTimeout(go, 1000); });
+      await route.fulfill({ response: answer }).catch(() => undefined);
+    };
+    const fileWrittenOnPage = () => win.evaluate(() => ((window as unknown as { __vm: { get(n: number): { snapshot(): { rawEnvelopes?: { kind: string }[] } } } }).__vm.get(1).snapshot().rawEnvelopes ?? []).filter((e) => e.kind === "FileWritten").length);
+    await win.route("**/api/session/*/diff?path=*", holdRead);
+    await win.route("**/api/session/*/file?path=*", holdRead);
     const texts = [T0];
     for (const mark of ["A ", "B ", "C "]) {
       await win.locator("[data-editor-code] .cm-line").first().click();
@@ -72,7 +91,10 @@ async function main(): Promise<void> {
       const want = mark + texts[texts.length - 1];
       texts.push(want);
       await until(win, `the disk after saving ${mark.trim()}`, disk, (t) => t === want);
+      await until(win, `the FileWritten of ${mark.trim()} on the page`, fileWrittenOnPage, (n) => n === texts.length - 1);
     }
+    await win.unroute("**/api/session/*/diff?path=*", holdRead);
+    await win.unroute("**/api/session/*/file?path=*", holdRead);
     const saved = await until(win, "HISTORY after three saves", () => historyDrawn(win), (h) => h.rows.length === 4 && h.lit === h.rows[0]);
     const [r3, r2, r1] = saved.rows;
     if (saved.footer !== "⌘Z steps back · ⌘⇧Z forward") throw new Error(`the footer reads ${JSON.stringify(saved.footer)}`);
