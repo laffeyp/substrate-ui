@@ -5,7 +5,7 @@ Regenerate: python3 scripts/gen_signals.py. tests/test_signals_generated.py fail
 
 from enum import StrEnum
 
-VOCAB_VERSION = "0.40"
+VOCAB_VERSION = "0.41"
 
 
 class Signal(StrEnum):
@@ -148,6 +148,7 @@ class Signal(StrEnum):
     EDITOR_FOCUS_SET = "EDITOR_FOCUS_SET"
     EDITOR_COLUMN_RESIZED = "EDITOR_COLUMN_RESIZED"
     DIFF_READ = "DIFF_READ"
+    FILES_SEARCHED = "FILES_SEARCHED"
 
 
 class TurnInterruptedTier(StrEnum):

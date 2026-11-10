@@ -451,7 +451,7 @@ def _interrupt_then_end(
 # Most specific first; a path no route serves is "unrouted".
 _AREA_RULES: tuple[tuple[str, ApiRefusedArea], ...] = (
     (r"/api/session/[^/]+/(turn|interrupt)", ApiRefusedArea.TURN),
-    (r"/api/session/[^/]+/(files|file|diff)(/watch)?", ApiRefusedArea.FILES),
+    (r"/api/session/[^/]+/(files|file|diff|search)(/watch)?", ApiRefusedArea.FILES),
     (r"/api/session/[^/]+/children", ApiRefusedArea.CHILDREN),
     (r"/api/session/[^/]+/language(/.*)?", ApiRefusedArea.LANGUAGE),
     (r"/api/session/[^/]+/mcp", ApiRefusedArea.MCP),
@@ -2056,6 +2056,62 @@ def _workspace_hunks(root: Path, rel: str) -> dict[str, object]:
         elif hunks and line[:1] in ("-", "+") and not line.startswith(("--- ", "+++ ")):
             cast(list[str], hunks[-1]["lines"]).append(line)
     return {"base": base_kind, "path": rel, "hunks": hunks}
+
+
+# UI sprint 434 (roadmap 2026-11-09-code-editor r10, E8; frame 24j): the workspace search's caps. A line
+# longer than the text cap is cut there; past the line cap the result is marked truncated.
+WORKSPACE_SEARCH_MAX_LINES = 2000
+WORKSPACE_SEARCH_MAX_TEXT = 1000
+
+
+class SearchQueryError(ValueError):
+    """git grep refused the query (a pattern that does not compile)."""
+
+
+def _workspace_search(root: Path, query: str, *, regex: bool, case: bool) -> dict[str, object]:
+    """The workspace's lines that match `query` (UI sprint 434; roadmap r10 E8): `git grep` in a work
+    tree with `--untracked` (tracked and untracked files, ignored ones left out), and `git grep
+    --no-index` outside one. Binary files are skipped (`-I`). `regex` reads the query as an extended
+    regular expression (`-E`), else as a fixed string (`-F`); `case` false matches either case (`-i`).
+    Paths are relative to the workspace, in git's order. Each file is `{path, lines: [{line, text}]}`.
+    git grep exits 1 when nothing matches; any other failure is a SearchQueryError with git's message."""
+    base = root.resolve(strict=True)
+    if not query:
+        return {"files": [], "lines": 0, "truncated": False}
+    inside = (_git_out(base, "rev-parse", "--is-inside-work-tree") or "").strip() == "true"
+    args = ["grep", "-n", "-I", "-z", "--no-color", "--untracked" if inside else "--no-index", "-E" if regex else "-F"]
+    if not case:
+        args.append("-i")
+    try:
+        proc = subprocess.run(  # noqa: S603 — git with fixed arguments; the query is passed after -e
+            ["git", "-C", str(base), *args, "-e", query, "--"],  # noqa: S607 — git from PATH, as _git_out
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=30,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise SearchQueryError(str(exc)) from exc
+    if proc.returncode not in (0, 1):
+        raise SearchQueryError(proc.stderr.strip() or f"git grep exited {proc.returncode}")
+    files: list[dict[str, object]] = []
+    count = 0
+    truncated = False
+    for row in proc.stdout.splitlines():
+        parts = row.split("\x00", 2)
+        if len(parts) != 3 or not parts[1].isdigit():
+            continue
+        if count == WORKSPACE_SEARCH_MAX_LINES:
+            truncated = True
+            break
+        path, line, text = parts
+        if not files or files[-1]["path"] != path:
+            files.append({"path": path, "lines": []})
+        cast(list[dict[str, object]], files[-1]["lines"]).append({"line": int(line), "text": text[:WORKSPACE_SEARCH_MAX_TEXT]})
+        count += 1
+    return {"files": files, "lines": count, "truncated": truncated}
 
 
 def _line_endings(text: str) -> str | None:
@@ -3819,6 +3875,25 @@ class Handler(BaseHTTPRequestHandler):
         )
         self._json(diff)
 
+    def _session_search(self, session_id: str, q: dict[str, list[str]]) -> None:
+        """UI sprint 434: GET /api/session/<id>/search?q=<query>&regex=1&case=1, the workspace's
+        matching lines (`_workspace_search`), written as FILES_SEARCHED with its counts and no query
+        or path (E1). A query git grep refuses is a 400 with git's message."""
+        root = self._session_workspace_root(session_id)
+        if root is None:
+            return
+        regex = q.get("regex", ["0"])[0] == "1"
+        try:
+            out = _workspace_search(root, q.get("q", [""])[0], regex=regex, case=q.get("case", ["0"])[0] == "1")
+        except SearchQueryError as exc:
+            self._error(400, str(exc))
+            return
+        TRACE.emit(
+            Signal.FILES_SEARCHED,
+            {"session_id": session_id, "regex": regex, "files": len(cast(list[Any], out["files"])), "lines": out["lines"], "truncated": out["truncated"]},
+        )
+        self._json(out)
+
     def _session_file_write(self, session_id: str, q: dict[str, list[str]]) -> None:
         """UI sprint 387: PUT /api/session/<id>/file?path=<rel>, body `{"text": str, "base_sha256":
         str?, "view": str?}`. The new text goes to a temporary file beside the target; the edit goes
@@ -5069,6 +5144,10 @@ class Handler(BaseHTTPRequestHandler):
             m_diff = re.fullmatch(r"/api/session/([^/]+)/diff", path)
             if m_diff:  # UI sprint 412: the workspace's changes against main
                 self._session_diff(m_diff.group(1), parse_qs(urlparse(self.path).query))
+                return
+            m_search = re.fullmatch(r"/api/session/([^/]+)/search", path)
+            if m_search:  # UI sprint 434: the workspace search (frame 24j)
+                self._session_search(m_search.group(1), parse_qs(urlparse(self.path).query))
                 return
             m_files = re.fullmatch(r"/api/session/([^/]+)/(files|file)", path)
             if m_files:  # UI sprint 348, editor shared work 0(c)

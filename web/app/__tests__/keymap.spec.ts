@@ -68,6 +68,10 @@ test("⌘⇧E toggles the editor; Escape in the editor returns to the pane after
   assert.deepStrictEqual(windowKey({ key: "f", code: "KeyF", metaKey: true, ctrlKey: false, shiftKey: false, altKey: false }, ed), { kind: "editor-find", field: "query" });
   assert.deepStrictEqual(windowKey({ key: "ƒ", code: "KeyF", metaKey: true, ctrlKey: false, shiftKey: false, altKey: true }, ed), { kind: "editor-find", field: "replace" });
   assert.deepStrictEqual(windowKey({ key: "f", code: "KeyF", metaKey: true, ctrlKey: false, shiftKey: false, altKey: false }, { ...ed, editorTerminal: true }), { kind: "toggle-find" });
+  // Sprint 434: ⌘⇧F in the editor is the workspace search, from the terminal too; outside it, the find bar.
+  assert.deepStrictEqual(windowKey({ key: "F", code: "KeyF", metaKey: true, ctrlKey: false, shiftKey: true, altKey: false }, ed), { kind: "editor-search" });
+  assert.deepStrictEqual(windowKey({ key: "F", code: "KeyF", metaKey: true, ctrlKey: false, shiftKey: true, altKey: false }, { ...ed, editorTerminal: true }), { kind: "editor-search" });
+  assert.deepStrictEqual(windowKey({ key: "F", code: "KeyF", metaKey: true, ctrlKey: false, shiftKey: true, altKey: false }, CTX), { kind: "toggle-find" });
   // Sprint 423: with vim bound and the code focused, Escape is vim's; a find or dialog still closes first.
   assert.strictEqual(windowKey(key("Escape"), { ...ed, vimCode: true }), null);
   assert.deepStrictEqual(windowKey(key("Escape"), { ...ed, vimCode: true, findOpen: true }), { kind: "close-find" });

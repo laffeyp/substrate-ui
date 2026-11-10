@@ -1242,6 +1242,26 @@
       "rationale": "The marks the editor draws for session edits in flight need their counterpart in the view tag and the pixel anchor.",
       "ratified": true,
       "ratified_by": "agent-resolved 2026-11-10, sprint 431; grounds: project — D93; SDD — BOOTSTRAP step 9; practice — n/a"
+    },
+    {
+      "id": "P-0.41-FILES-SEARCHED",
+      "kind": "TAG_PROPOSED",
+      "layer": 1,
+      "element": "FILES_SEARCHED (server)",
+      "source": "roadmap r10 E8; frame 24j",
+      "rationale": "The workspace search is a server read like FILES_LISTED, FILE_READ and DIFF_READ; the editor's EDITOR_SEARCH_QUERIED needs its server-side counterpart.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-10, sprint 434; grounds: project — roadmap r10 E8; SDD — BOOTSTRAP step 9; practice — n/a"
+    },
+    {
+      "id": "P-0.41-LEFT-TAB-ANCHOR",
+      "kind": "PAYLOAD_FIELD_PROPOSED",
+      "layer": 2,
+      "element": "EDITOR_DRAWN.left_tab live; the anchor's third row gains left_tab",
+      "source": "roadmap r10 E8",
+      "rationale": "left_tab was written as files always; with the search tab it follows the drawn tab, and the pixel anchor carries it as it carries every live drawn field.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-10, sprint 434; grounds: project — roadmap r10 E8; SDD — BOOTSTRAP step 9; practice — n/a"
     }
   ]
 }

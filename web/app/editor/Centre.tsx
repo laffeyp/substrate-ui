@@ -257,11 +257,13 @@ export function outlineOf(state: EditorState): { kind: string; name: string; lin
   return out;
 }
 
-export function openFile(rel: string, paneId: number): void {
+/** Open a file in a tab, or show its tab (sprint 419); with `line` (sprint 434, a search result), the caret
+ *  goes to that line once the file is shown. */
+export function openFile(rel: string, paneId: number, how: EditorFileOpenedHow = EditorFileOpenedHow.TREE, line?: number): void {
   const st = editor.getSnapshot();
   const tabs = st.tabs.includes(rel) ? st.tabs : [...st.tabs, rel];
-  editor.set({ tabs, active: rel });
-  if (!st.tabs.includes(rel)) emitSignal(Signal.EDITOR_FILE_OPENED, { how: EditorFileOpenedHow.TREE, tab_count: tabs.length }, { pane_id: paneId });
+  editor.set({ tabs, active: rel, ...(line ? { jump: { path: rel, line, n: (st.jump?.n ?? 0) + 1 } } : {}) });
+  if (!st.tabs.includes(rel)) emitSignal(Signal.EDITOR_FILE_OPENED, { how, tab_count: tabs.length }, { pane_id: paneId });
 }
 
 export function closeFile(rel: string, paneId: number): void {
@@ -350,6 +352,15 @@ export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionI
   /** The command whose save met the stale file, for an overwrite; a reload reads the file again. */
   const conflictCommand = React.useRef<EditorFileSavedCommand>(EditorFileSavedCommand.MENU_S);
   const [reloads, setReloads] = React.useState(0);
+  /** The last jump the view took (sprint 434), so a read again of the file does not take it twice. */
+  const jumped = React.useRef(0);
+  const takeJump = () => {
+    const j = editor.getSnapshot().jump, v = view.current;
+    if (!j || j.n === jumped.current || !v || shown.current !== j.path) return;
+    jumped.current = j.n;
+    const at = v.state.doc.line(Math.min(j.line, v.state.doc.lines)).from;
+    v.dispatch({ selection: { anchor: at }, effects: EditorView.scrollIntoView(at, { y: "center" }) });
+  };
   const [facts, setFacts] = React.useState<{ path: string; file: FileFacts } | null>(null);
   // The record's tool results and hand writes: when one lands, the open file is read again (sprint 422),
   // so the centre and the inspector never describe a file the session has since changed.
@@ -467,6 +478,7 @@ export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionI
       if (landedLine !== null) view.current.dispatch({ effects: EditorView.scrollIntoView(view.current.state.doc.line(Math.min(landedLine, view.current.state.doc.lines)).from, { y: "center" }) });
       const head = placed.selection.main.head, line = placed.doc.lineAt(head);
       editor.set({ outline: outlineOf(placed), caretLine: line.number, caretCol: head - line.from + 1, vsBase: against(rel, placed.doc.toString()) });
+      takeJump();
     }).catch(() => undefined);
     return () => { live = false; };
   }, [st.active, sessionId, writes, reloads]);
@@ -480,6 +492,8 @@ export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionI
     const ranges = followRanges(v.state.doc, followHere);
     v.dispatch({ effects: [setFollowMarks.of(ranges), ...(ranges.length ? [EditorView.scrollIntoView(ranges[0].from, { y: "center" })] : [])] });
   }, [followKey, st.active]);
+  // Sprint 434: a search result on the file already shown moves the caret at once.
+  React.useEffect(takeJump, [st.jump?.n]);
   // The binding chosen in settings applies to the buffer shown at once.
   React.useEffect(() => {
     view.current?.dispatch({ effects: CONF.binding.reconfigure(bindingExtension(binding, HOOKS)) });

@@ -18,6 +18,7 @@ import { InputBar } from "../InputBar";
 import { paneInput, setText } from "../state/input_bar";
 import { setFindScope } from "../state/find";
 import { FileTree } from "./FileTree";
+import { SearchTab } from "./Search";
 import { Centre } from "./Centre";
 import { ANCHOR_CELL, ANCHOR_ONE, ANCHOR_ZERO, encodeAnchor, encodeAnchor2, encodeAnchor3 } from "../derive/anchor";
 import { Inspector } from "./Inspector";
@@ -238,15 +239,23 @@ export function EditorView({ paneId, fontSize, sessionId, workspace, shape }: { 
     el.addEventListener("pointerup", up);
   };
 
-  const filesColumn = (start: boolean) => folded.left ? <Rail column="left" label="FILES" start={start} paneId={paneId} /> : (
-    <div data-editor-area="left" style={{ flex: `0 1 ${sizes.left}px`, minWidth: 0, overflow: "hidden", display: "flex", flexDirection: "column", background: SUNK, [start ? "borderRight" : "borderLeft"]: DIVIDER, minHeight: 0 }}>
-      <div style={{ height: EDITOR_SIZES.tabRow, flex: "none", display: "flex", alignItems: "center", padding: "0 6px", gap: 4 }}>
-        <span data-editor-left-tab="files" style={{ background: SELECT, color: "#d7dade", borderRadius: 3, padding: "1px 6px", fontSize: 11, whiteSpace: "nowrap" }}>files</span>
+  // The left column's tabs (sprint 434; roadmap r10 E8; 24j): files and search. Both stay mounted, so the
+  // tree keeps its open folders and the search its results while the other is shown.
+  const tab = ed.leftTab;
+  const tabStyle = (lit: boolean): React.CSSProperties => ({ padding: "1px 5px", borderRadius: 4, fontSize: 10.5, whiteSpace: "nowrap", cursor: "pointer", ...(lit ? { background: SELECT, color: "#d7dade" } : { color: "#62676f" }) });
+  const filesColumn = (start: boolean) => folded.left ? <Rail column="left" label={tab === "search" ? "SEARCH" : "FILES"} start={start} paneId={paneId} /> : (
+    <div data-editor-area="left" data-left-tab={tab} style={{ flex: `0 1 ${sizes.left}px`, minWidth: 0, overflow: "hidden", display: "flex", flexDirection: "column", background: SUNK, [start ? "borderRight" : "borderLeft"]: DIVIDER, minHeight: 0 }}>
+      <div style={{ height: EDITOR_SIZES.tabRow, flex: "none", display: "flex", alignItems: "center", padding: "0 6px", gap: 2 }}>
+        <span data-editor-left-tab="files" data-on={tab === "files" ? "1" : "0"} onClick={() => editor.set({ leftTab: "files" })} style={tabStyle(tab === "files")}>files</span>
+        <span data-editor-left-tab="search" data-on={tab === "search" ? "1" : "0"} title="search the workspace (⌘⇧F)" onClick={() => editor.set({ leftTab: "search" })} style={tabStyle(tab === "search")}>search</span>
         <span style={{ flex: 1 }} />
-        <span data-editor-fold="left" title="fold the files (⌥⌘L)" onClick={() => foldColumn("left", true, EditorColumnFoldedCause.RAIL, paneId)} style={GLYPH}>{start ? "◂" : "▸"}</span>
+        <span data-editor-fold="left" title={`fold the ${tab === "search" ? "search" : "files"} (⌥⌘L)`} onClick={() => foldColumn("left", true, EditorColumnFoldedCause.RAIL, paneId)} style={GLYPH}>{start ? "◂" : "▸"}</span>
       </div>
-      <div data-editor-tree="1" style={{ flex: 1, overflow: "auto", minHeight: 0 }}><FileTree key={sessionId} sessionId={sessionId} paneId={paneId} /></div>
-      <div data-editor-workspace="1" title={workspace || ""} style={{ flex: "none", padding: "6px 12px 8px", borderTop: DIVIDER, fontSize: 10.5, color: "#62676f", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{workspaceFoot(workspace, shape)}</div>
+      <div data-editor-tree="1" style={{ flex: 1, overflow: "auto", minHeight: 0, display: tab === "files" ? undefined : "none" }}><FileTree key={sessionId} sessionId={sessionId} paneId={paneId} /></div>
+      <div style={{ flex: 1, minHeight: 0, minWidth: 0, flexDirection: "column", display: tab === "search" ? "flex" : "none" }}><SearchTab key={sessionId} sessionId={sessionId} paneId={paneId} /></div>
+      {tab === "search"
+        ? <div data-editor-search-keys="1" style={{ flex: "none", padding: "6px 12px 8px", borderTop: DIVIDER, fontSize: 10, color: "#4a4e55", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>⌘⇧F · ↵ next · ⌘⇧↵ replace all</div>
+        : <div data-editor-workspace="1" title={workspace || ""} style={{ flex: "none", padding: "6px 12px 8px", borderTop: DIVIDER, fontSize: 10.5, color: "#62676f", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{workspaceFoot(workspace, shape)}</div>}
     </div>
   );
   // The right column (sprint 430): the inspector (its width the column's, 300 px at first), or, with ⌘M, the

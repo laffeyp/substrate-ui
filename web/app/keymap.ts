@@ -55,7 +55,7 @@ export type KeyAction =
   | { kind: "toggle-meta" } | { kind: "toggle-tools" } | { kind: "split"; dir: "right" | "down" }
   | { kind: "toggle-find" } | { kind: "settings" } | { kind: "toggle-assays" }
   | { kind: "toggle-editor" } | { kind: "close-editor" }
-  | { kind: "editor-find"; field: "query" | "replace" }
+  | { kind: "editor-find"; field: "query" | "replace" } | { kind: "editor-search" }
   | { kind: "fold-editor"; column: "left" | "right" | "bottom" }
   | { kind: "refuse-split" }
   | { kind: "close-find" } | { kind: "close-dialog" } | { kind: "close-cards" } | { kind: "close-surface" }
@@ -89,6 +89,8 @@ export function windowKey(ev: KeyLike, ctx: KeyContext): KeyAction | null {
   if (ev.metaKey && key === "d") return ctx.editor ? { kind: "refuse-split" } : { kind: "split", dir: ev.shiftKey ? "down" : "right" };
   // Sprint 428 (roadmap r10 key table): in the editor, ⌘F finds in the open file and ⌥⌘F replaces there,
   // in the inspector's FIND / REPLACE; with the focus in the terminal, ⌘F is the transcript's find.
+  // Sprint 434 (roadmap r10 E8): ⌘⇧F in the editor is the workspace search in the left column.
+  if (ctx.editor && cmd && ev.shiftKey && !ev.altKey && ev.code === "KeyF") return { kind: "editor-search" };
   if (ctx.editor && !ctx.editorTerminal && cmd && !ev.shiftKey && ev.code === "KeyF") return { kind: "editor-find", field: ev.altKey ? "replace" : "query" };
   if (ev.metaKey && key === "f") return { kind: "toggle-find" };
   if (ev.metaKey && ev.key === ",") return { kind: "settings" };
