@@ -74,8 +74,9 @@ export function toggleMetaPane(paneId: number, to?: "inspector" | "meta"): void 
   emitSignal(Signal.EDITOR_INSPECTOR_SWAPPED, { showing: showing === "meta" ? EditorInspectorSwappedShowing.LENSES : EditorInspectorSwappedShowing.SPINE }, { pane_id: paneId });
 }
 
-/** Following the session (sprint 431; roadmap r10 E7; D93): while the editor is open in the pane, each
- *  edit_file or write_file call on a workspace file after the editor opened is marked at its call and
+/** Following the session (sprints 431, 432; roadmap r10 E7; D93): while the editor is open in the pane, each
+ *  file-editing call on workspace files after the editor opened (the kernel's, and the harness drivers':
+ *  derive/follow.ts) is marked at its call and
  *  confirmed or withdrawn at its result (S10). The view never moves to another file (the person's focus
  *  wins): the centre marks and scrolls only the file it shows; the tree marks the others. Mounted with the
  *  editor view, so no editor record is written outside its run (S11); its marks go with it. */
@@ -90,15 +91,18 @@ function Follow({ paneId, workspace }: { paneId: number; workspace: string | nul
       if (!marked.current.has(it.callSeq)) {
         marked.current.add(it.callSeq);
         emitSignal(Signal.EDITOR_FOLLOW_MARKED, { seq: it.callSeq }, { pane_id: paneId });
-        follow = [...follow, { seq: it.callSeq, path: it.path, search: it.search }]; changed = true;
+        follow = [...follow, ...it.files.map((f) => ({ seq: it.callSeq, path: f.path, search: f.search }))]; changed = true;
       }
       if (it.resultSeq !== null && !resolved.current.has(it.callSeq)) {
         resolved.current.add(it.callSeq);
         follow = follow.filter((f) => f.seq !== it.callSeq); changed = true;
         if (it.ok) {
-          const conflict = editor.getSnapshot().unsaved.includes(it.path);
+          const unsaved = editor.getSnapshot().unsaved;
+          const conflict = it.files.some((f) => unsaved.includes(f.path));
           emitSignal(Signal.EDITOR_FOLLOW_CONFIRMED, { seq: it.callSeq, result_seq: it.resultSeq, conflict }, { pane_id: paneId });
-          editor.set({ followLanded: { path: it.path, seq: it.callSeq } });
+          // The file shown, when the call changed it, is the one whose landing the centre brings into view.
+          const shownFile = it.files.find((f) => f.path === editor.getSnapshot().active) ?? it.files[0];
+          editor.set({ followLanded: { path: shownFile.path, seq: it.callSeq } });
         } else emitSignal(Signal.EDITOR_FOLLOW_WITHDRAWN, { seq: it.callSeq, result_seq: it.resultSeq }, { pane_id: paneId });
       }
     }
