@@ -9,6 +9,8 @@
 //   exact words; .* reads `priceCents:\s\d+` (\s and \d); `…` shows the globs, and excluding `tests` drops
 //   the test file;
 //   ↵ opens the first match at its line, ↵ again the next; a click on another file's match opens it;
+//   sprint 436: an unsaved edit in cart.ts is in the rows while the disk is unchanged; the one-match replace
+//   works from that buffer and saves it; after the rest, "undo" takes the last replace back in one step;
 //   a row's ↵ replaces that one match; a file's ↵ replaces in that file; ⌘⇧↵ replaces the rest; the disk
 //   after each; the record's FileWritten in that order; the search then finds nothing, and the words that
 //   are not whole (priceCentsTotal) are untouched; the shown buffer reads the new text;
@@ -133,22 +135,38 @@ async function main(): Promise<void> {
     await win.locator('[data-search-line="src/lib/menu.ts:2"]').first().click();
     await until(win, "the clicked match opened", () => snap(win), (s) => s.active === "src/lib/menu.ts" && s.caretLine === 2);
 
-    // Replace one match, then one file, then the rest.
+    // Sprint 436: an unsaved edit in cart.ts is searched in place of the disk.
+    await win.locator('[data-editor-tab="src/lib/cart.ts"]').first().click();
+    await until(win, "cart.ts shown", () => lines(win), (l) => l[0] === "export class Cart {");
+    await win.locator("[data-editor-code] .cm-line", { hasText: "export class Cart" }).first().click();
+    await win.keyboard.press("Meta+ArrowLeft");
+    await win.keyboard.type("/* priceCents */ ");
+    await until(win, "the rows with the unsaved edit", () => rows(win), (r) => same(r, ["src/lib/cart.ts:1", ...exact]));
+    if (disk("src/lib/cart.ts").includes("/*")) throw new Error("the unsaved edit reached the disk before a save");
+
+    // Replace one match (from the buffer, which is then saved), then one file, then the rest.
     await win.locator('[data-search-input="replace"]').first().fill("amountCents");
     await win.locator('[data-search-match="src/lib/cart.ts:4:0"]').first().hover();
     await win.locator('[data-search-replace-one="src/lib/cart.ts:4:0"]').first().click();
-    await until(win, "cart.ts after one", () => disk("src/lib/cart.ts"), (t) => t.includes("return item.amountCents") && t.includes("  priceCents: number;"));
-    await until(win, "the rows after one", () => rows(win), (r) => same(r, ["src/lib/cart.ts:2", "src/lib/menu.ts:2", "src/lib/menu.ts:3"]));
+    await until(win, "cart.ts after one", () => disk("src/lib/cart.ts"), (t) => t.includes("return item.amountCents") && t.includes("  priceCents: number;") && t.startsWith("/* priceCents */ export class Cart {"));
+    await until(win, "the buffer saved by the replace", () => win.evaluate(`globalThis.__substrateEditor.getSnapshot().unsaved`) as Promise<string[]>, (u) => u.length === 0);
+    await until(win, "the rows after one", () => rows(win), (r) => same(r, ["src/lib/cart.ts:1", "src/lib/cart.ts:2", "src/lib/menu.ts:2", "src/lib/menu.ts:3"]));
     await win.locator('[data-search-file="src/lib/menu.ts"] > div').first().hover();
     await win.locator('[data-search-replace-file="src/lib/menu.ts"]').first().click();
     await until(win, "menu.ts after its file", () => disk("src/lib/menu.ts"), (t) => !t.includes("priceCents") && t.split("amountCents").length === 3);
-    await until(win, "the rows after the file", () => rows(win), (r) => same(r, ["src/lib/cart.ts:2"]));
+    await until(win, "the rows after the file", () => rows(win), (r) => same(r, ["src/lib/cart.ts:1", "src/lib/cart.ts:2"]));
     await win.locator('[data-search-input="replace"]').first().focus();
     await win.keyboard.press("Meta+Shift+Enter");
     await until(win, "the search after replace all", () => summary(win), (t) => t === "no matches");
     if (disk("src/lib/cart.ts").includes("priceCents")) throw new Error(`cart.ts after replace all: ${disk("src/lib/cart.ts")}`);
     if (!disk("src/lib/tax.ts").includes("priceCentsTotal") || !disk("src/lib/promo.ts").includes("promoPriceCents") || !disk("tests/cart.test.ts").includes("PriceCents")) throw new Error("replace all changed a match that is not a whole word in the exact case");
     await until(win, "the shown buffer after the replaces", () => lines(win), (l) => l.some((x) => x.includes("amountCents")) && !l.some((x) => x.includes("priceCents")));
+    // Undo the last replace in one step.
+    await win.locator("[data-search-undo]").first().click();
+    await until(win, "the rows after undo", () => rows(win), (r) => same(r, ["src/lib/cart.ts:1", "src/lib/cart.ts:2"]));
+    await until(win, "cart.ts after undo", () => disk("src/lib/cart.ts"), (t) => t.startsWith("/* priceCents */ export class Cart {") && t.includes("  priceCents: number;") && t.includes("return item.amountCents"));
+    await until(win, "the shown buffer after undo", () => lines(win), (l) => l[0] === "/* priceCents */ export class Cart {");
+    if (await win.locator("[data-search-undo]").count()) throw new Error("undo still offered after it ran");
 
     // The files tab.
     await win.locator('[data-editor-left-tab="files"]').first().click();
@@ -159,7 +177,7 @@ async function main(): Promise<void> {
     await app.close();
     const envs = readdirSync(record).filter((f) => f.startsWith("events-")).sort().flatMap((f) => readFileSync(join(record, f), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as { kind: string; payload: Record<string, unknown> }));
     const written = envs.filter((e) => e.kind === "FileWritten").map((e) => String(e.payload.path));
-    if (!same(written, ["src/lib/cart.ts", "src/lib/menu.ts", "src/lib/cart.ts"])) throw new Error(`the record's FileWritten: ${JSON.stringify(written)}`);
+    if (!same(written, ["src/lib/cart.ts", "src/lib/menu.ts", "src/lib/cart.ts", "src/lib/cart.ts"])) throw new Error(`the record's FileWritten: ${JSON.stringify(written)}`);
 
     const recs = windowRecords(launch);
     const drawnTabs = recs.filter((r) => r.name === "EDITOR_DRAWN").map((r) => String(r.payload.left_tab)).filter((t, i, a) => t !== a[i - 1]);
@@ -167,23 +185,26 @@ async function main(): Promise<void> {
     const named = recs.find((r) => r.proc_seq === row3.seq);
     if (!named || named.name !== "EDITOR_DRAWN" || named.payload.left_tab !== "search") throw new Error(`the third row names seq ${row3.seq}: ${named ? `${named.name} ${JSON.stringify(named.payload)}` : "missing"}`);
     const queried = recs.filter((r) => r.name === "EDITOR_SEARCH_QUERIED").map((r) => `${String(r.payload.regex)}:${String(r.payload.word)}:${String(r.payload.result_file_count)}:${String(r.payload.result_match_count)}`);
-    for (const want of ["false:false:5:7", "false:false:3:5", "false:true:2:4", "true:false:1:2", "false:false:4:6", "false:true:0:0"]) if (!queried.includes(want)) throw new Error(`EDITOR_SEARCH_QUERIED lacks ${want}: ${JSON.stringify(queried)}`);
-    const replaced = recs.filter((r) => r.name === "EDITOR_SEARCH_REPLACED").map((r) => `${String(r.payload.scope)}:${String(r.payload.files)}:${String(r.payload.count)}:${String(r.payload.refused)}`);
-    if (!same(replaced, ["one:1:1:0", "file:1:2:0", "all:1:1:0"])) throw new Error(`EDITOR_SEARCH_REPLACED ${JSON.stringify(replaced)}`);
+    for (const want of ["false:false:5:7", "false:false:3:5", "false:true:2:4", "true:false:1:2", "false:false:4:6", "false:true:2:5", "false:true:0:0", "false:true:1:2"]) if (!queried.includes(want)) throw new Error(`EDITOR_SEARCH_QUERIED lacks ${want}: ${JSON.stringify(queried)}`);
+    const replaced = recs.filter((r) => r.name === "EDITOR_SEARCH_REPLACED").map((r) => `${String(r.payload.scope)}:${String(r.payload.files)}:${String(r.payload.count)}:${String(r.payload.refused)}:${String(r.payload.buffers)}`);
+    if (!same(replaced, ["one:1:1:0:1", "file:1:2:0:0", "all:1:2:0:0"])) throw new Error(`EDITOR_SEARCH_REPLACED ${JSON.stringify(replaced)}`);
+    const undone = recs.filter((r) => r.name === "EDITOR_SEARCH_REPLACE_UNDONE").map((r) => `${String(r.payload.files)}:${String(r.payload.refused)}`);
+    if (!same(undone, ["1:0"])) throw new Error(`EDITOR_SEARCH_REPLACE_UNDONE ${JSON.stringify(undone)}`);
     const opened = recs.filter((r) => r.name === "EDITOR_FILE_OPENED").map((r) => String(r.payload.how));
     if (opened.length !== 2 || opened.some((h) => h !== "search")) throw new Error(`EDITOR_FILE_OPENED ${JSON.stringify(opened)}`);
     const traces = join(launch.state, "electron", "logs", "traces");
     const boot = readdirSync(traces).sort().pop()!;
     const server = readFileSync(join(traces, boot, "server.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as { name: string; payload: Record<string, unknown> });
     const searched = server.filter((r) => r.name === "FILES_SEARCHED").map((r) => `${String(r.payload.regex)}:${String(r.payload.word)}:${String(r.payload.files)}:${String(r.payload.matches)}`);
+    if (!server.some((r) => r.name === "FILES_SEARCHED" && Number(r.payload.buffers) === 1)) throw new Error("no FILES_SEARCHED read the unsaved buffer");
     for (const q of queried) if (!searched.includes(q)) throw new Error(`no FILES_SEARCHED for ${q}: ${JSON.stringify(searched)}`);
     const prepared = server.filter((r) => r.name === "FILES_REPLACE_PREPARED").map((r) => `${String(r.payload.scope)}:${String(r.payload.files)}:${String(r.payload.replaced)}`);
-    if (!same(prepared, ["one:1:1", "file:1:2", "all:1:1"])) throw new Error(`FILES_REPLACE_PREPARED ${JSON.stringify(prepared)}`);
+    if (!same(prepared, ["one:1:1", "file:1:2", "all:1:2"])) throw new Error(`FILES_REPLACE_PREPARED ${JSON.stringify(prepared)}`);
     const allTraces = readdirSync(join(traces, boot)).map((f) => readFileSync(join(traces, boot, f), "utf8")).join("\n");
     for (const secret of ["priceCents", "amountCents", "\\\\s\\\\d"]) if (allTraces.includes(secret)) throw new Error(`the query ${secret} is in the trace`);
     const booted = readFileSync(join(traces, boot, "main.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as { name: string; payload: Record<string, unknown> }).find((r) => r.name === "APP_BOOTED")!.payload;
     if (packaged && booted.packaged !== true) throw new Error(`APP_BOOTED packaged ${String(booted.packaged)}`);
-    console.log(`editor_search: ok — ⌘⇧F; folded 7 rows in 5 files, 7 lit, build/ ignored; Aa 5, ab 4; .* \\s\\d 2; exclude tests 6; ↵ cart.ts:2 then :4; click menu.ts:2; replace one, file, all → FileWritten ${written.join(", ")}; priceCentsTotal, promoPriceCents, PriceCents kept; left_tab ${drawnTabs.join("→")}; anchor row 3 search at seq ${row3.seq}; EDITOR_SEARCH_QUERIED ${queried.length}, FILES_SEARCHED ${searched.length}; replaced ${replaced.join(", ")}; no query in the trace; packaged=${String(booted.packaged)}; screenshot ${shot}`);
+    console.log(`editor_search: ok — ⌘⇧F; folded 7 rows in 5 files, 7 lit, build/ ignored; Aa 5, ab 4; .* \\s\\d 2; exclude tests 6; ↵ cart.ts:2 then :4; click menu.ts:2; unsaved edit searched; replace one (from the buffer, saved), file, all, undo → FileWritten ${written.join(", ")}; priceCentsTotal, promoPriceCents, PriceCents kept; left_tab ${drawnTabs.join("→")}; anchor row 3 search at seq ${row3.seq}; EDITOR_SEARCH_QUERIED ${queried.length}, FILES_SEARCHED ${searched.length}; replaced ${replaced.join(", ")}; no query in the trace; packaged=${String(booted.packaged)}; screenshot ${shot}`);
     status = 0;
   } catch (e) {
     console.error(`editor_search: FAIL — ${(e as Error).message}`);

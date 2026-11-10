@@ -9,13 +9,17 @@
 // one file (a file's ↵), or every match (⌘⇧↵ or "all") — is worked out by the server (POST …/search/replace,
 // FILES_REPLACE_PREPARED) and written by the page through PUT …/file with the hash each file was read at (one
 // FileWritten each; a file changed since is refused, 409); then EDITOR_SEARCH_REPLACED, and the search again.
+// Sprint 436: the editor's unsaved buffers go with each search and replace, and are searched in place of the
+// files on disk (VS Code's getOpenEditorResults); a replace changes such a buffer and saves it from there. The
+// last replace can be undone in one step ("undo replace"): each file written back to its text before it, a
+// buffer put back unsaved, as VS Code's one undo element over every file (EDITOR_SEARCH_REPLACE_UNDONE).
 
 import * as React from "react";
 import { editor } from "../state/editor";
-import { searchQuery, searchRows, type SearchResult } from "../derive/search";
+import { searchRows, type SearchResult } from "../derive/search";
 import { emit as emitSignal } from "../../vm/instrumentation/sdd";
 import { EditorColumnFoldedCause, EditorFileOpenedHow, EditorSearchReplacedScope, Signal } from "../../vm/signals.gen";
-import { openFile } from "./Centre";
+import { onBufferEdit, openFile, putBuffer, unsavedBuffers, writeBuffer } from "./Centre";
 import { foldColumn } from "./EditorView";
 
 const CARD = "#212327";
@@ -35,6 +39,9 @@ export function openSearch(paneId: number): void {
 }
 
 type Target = { path: string; line?: number; index?: number };
+/** What the last replace changed, for its one undo: each file's text before it, whether it was a buffer, and
+ *  the hash the write returned (the undo's conflict check). */
+type Done = { files: { path: string; before: string; buffer: boolean; sha: string | null }[]; count: number };
 
 export function SearchTab({ sessionId, paneId }: { sessionId: string; paneId: number }): React.ReactElement {
   const st = React.useSyncExternalStore(editor.subscribe, editor.getSnapshot, editor.getSnapshot);
@@ -44,6 +51,7 @@ export function SearchTab({ sessionId, paneId }: { sessionId: string; paneId: nu
   const [at, setAt] = React.useState(-1);
   const [shut, setShut] = React.useState<Set<string>>(new Set());
   const [busy, setBusy] = React.useState(false);
+  const [done, setDone] = React.useState<Done | null>(null);
   const queryBox = React.useRef<HTMLInputElement>(null);
   const asked = React.useRef(0);
   const sid = encodeURIComponent(sessionId);
@@ -53,7 +61,8 @@ export function SearchTab({ sessionId, paneId }: { sessionId: string; paneId: nu
     const now = editor.getSnapshot().search;
     const n = ++asked.current;
     if (!now.query) { setResult(null); setError(null); setAt(-1); return; }
-    const r = await fetch(`/api/session/${sid}/search?${searchQuery(now)}`).catch(() => null);
+    const body = { q: now.query, regex: now.regexp, case: now.caseSensitive, word: now.word, include: now.include, exclude: now.exclude, buffers: unsavedBuffers(sessionId) };
+    const r = await fetch(`/api/session/${sid}/search`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).catch(() => null);
     if (n !== asked.current || !r) return;
     if (!r.ok) { setResult(null); setAt(-1); setError(((await r.json().catch(() => ({}))) as { error?: string }).error || `search refused (${r.status})`); return; }
     const out = (await r.json()) as SearchResult;
@@ -62,12 +71,18 @@ export function SearchTab({ sessionId, paneId }: { sessionId: string; paneId: nu
     setResult(out);
     setAt(-1);
     emitSignal(Signal.EDITOR_SEARCH_QUERIED, { regex: now.regexp, word: now.word, result_file_count: out.files.length, result_match_count: out.matches }, { pane_id: paneId });
-  }, [sid, paneId]);
+  }, [sid, sessionId, paneId]);
 
   React.useEffect(() => {
     const t = window.setTimeout(() => void run(), SETTLE_MS);
     return () => window.clearTimeout(t);
   }, [spec.query, spec.caseSensitive, spec.regexp, spec.word, spec.include, spec.exclude, run]);
+  // Sprint 436: an edit to the shown buffer runs the search again once typing pauses.
+  React.useEffect(() => {
+    let t: number | undefined;
+    const off = onBufferEdit(() => { window.clearTimeout(t); t = window.setTimeout(() => void run(), SETTLE_MS); });
+    return () => { off(); window.clearTimeout(t); };
+  }, [run]);
   React.useEffect(() => {
     if (!st.searchFocus) return;
     requestAnimationFrame(() => { queryBox.current?.focus(); queryBox.current?.select(); });
@@ -87,15 +102,38 @@ export function SearchTab({ sessionId, paneId }: { sessionId: string; paneId: nu
     if (!result || busy || !now.query) return;
     setBusy(true);
     const scope = target?.index !== undefined ? EditorSearchReplacedScope.ONE : target ? EditorSearchReplacedScope.FILE : EditorSearchReplacedScope.ALL;
-    const body = { q: now.query, regex: now.regexp, case: now.caseSensitive, word: now.word, include: now.include, exclude: now.exclude, replace: now.replace, ...target };
+    const body = { q: now.query, regex: now.regexp, case: now.caseSensitive, word: now.word, include: now.include, exclude: now.exclude, replace: now.replace, buffers: unsavedBuffers(sessionId), ...target };
     const r = await fetch(`/api/session/${sid}/search/replace`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).catch(() => null);
-    const planned = r?.ok ? ((await r.json()) as { files: { path: string; text: string; sha256: string; replaced: number }[] }).files : [];
-    let files = 0, count = 0, refused = 0;
+    const planned = r?.ok ? ((await r.json()) as { files: { path: string; text: string; before: string; sha256: string; replaced: number; buffer: boolean }[] }).files : [];
+    let files = 0, count = 0, refused = 0, buffers = 0;
+    const undo: Done = { files: [], count: 0 };
     for (const f of planned) {
+      if (f.buffer) {
+        const status = await writeBuffer(sessionId, f.path, f.text);
+        if (status >= 200 && status < 300) { files++; buffers++; count += f.replaced; undo.files.push({ path: f.path, before: f.before, buffer: true, sha: null }); } else if (status === 409) refused++;
+        continue;
+      }
       const wrote = await fetch(`/api/session/${sid}/file?path=${encodeURIComponent(f.path)}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: f.text, view: "editor", base_sha256: f.sha256 }) }).catch(() => null);
-      if (wrote?.ok) { files++; count += f.replaced; } else if (wrote?.status === 409) refused++;
+      if (wrote?.ok) { files++; count += f.replaced; undo.files.push({ path: f.path, before: f.before, buffer: false, sha: ((await wrote.json()) as { sha256: string }).sha256 }); } else if (wrote?.status === 409) refused++;
     }
-    emitSignal(Signal.EDITOR_SEARCH_REPLACED, { scope, files, count, refused }, { pane_id: paneId });
+    undo.count = count;
+    setDone(undo.files.length ? undo : null);
+    emitSignal(Signal.EDITOR_SEARCH_REPLACED, { scope, files, count, refused, buffers }, { pane_id: paneId });
+    setBusy(false);
+    await run();
+  };
+  /** The last replace undone in one step: a buffer put back (left unsaved), any other file written back. */
+  const undoReplace = async () => {
+    if (!done || busy) return;
+    setBusy(true);
+    let files = 0, refused = 0;
+    for (const f of done.files) {
+      if (f.buffer && putBuffer(sessionId, f.path, f.before)) { files++; continue; }
+      const wrote = await fetch(`/api/session/${sid}/file?path=${encodeURIComponent(f.path)}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: f.before, view: "editor", ...(f.sha ? { base_sha256: f.sha } : {}) }) }).catch(() => null);
+      if (wrote?.ok) files++; else if (wrote?.status === 409) refused++;
+    }
+    setDone(null);
+    emitSignal(Signal.EDITOR_SEARCH_REPLACE_UNDONE, { files, refused }, { pane_id: paneId });
     setBusy(false);
     await run();
   };
@@ -134,6 +172,7 @@ export function SearchTab({ sessionId, paneId }: { sessionId: string; paneId: nu
       )}
       <div style={{ display: "flex", alignItems: "baseline", gap: 6, padding: "0 12px 6px", fontSize: 10 }}>
         <span data-search-summary="1" style={{ flex: 1, minWidth: 0, color: error ? "#c88282" : DIM, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{summary}</span>
+        {done && <span data-search-undo="1" title={`undo the last replace: ${done.count} in ${done.files.length} file${done.files.length === 1 ? "" : "s"}`} onClick={() => void undoReplace()} style={{ ...glyph(busy), color: busy ? FAINT : TEXT }}>undo</span>}
         <span data-search-details="1" data-on={spec.details ? "1" : "0"} title="files to include and exclude" onClick={() => set({ details: !spec.details })} style={{ ...glyph(), color: spec.details || spec.include || spec.exclude ? TEXT : DIM }}>…</span>
       </div>
       <div data-search-results="1" style={{ flex: 1, overflow: "auto", minHeight: 0 }}>

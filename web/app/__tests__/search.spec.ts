@@ -4,7 +4,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { searchQuery, searchRows } from "../derive/search";
+import { searchRows } from "../derive/search";
 
 test("one row per match, at the server's ranges, the indent dropped", () => {
   const result = { files: [{ path: "a.ts", lines: [{ line: 3, text: "    x = total + total;", ranges: [[8, 13], [16, 21]] as [number, number][] }] }], lines: 1, matches: 2, truncated: false };
@@ -17,10 +17,4 @@ test("a match far along a line is shown with the text just before it", () => {
   const text = "a".repeat(80) + "needle";
   const [row] = searchRows({ files: [{ path: "b.ts", lines: [{ line: 1, text, ranges: [[80, 86]] }] }], lines: 1, matches: 1, truncated: false });
   assert.ok(row.text.startsWith("…") && row.text.slice(row.from, row.to) === "needle" && row.from === 21);
-});
-
-test("the query names every option, and the globs only when given", () => {
-  const spec = { query: "a b", caseSensitive: true, regexp: false, word: true, include: "", exclude: " " };
-  assert.equal(searchQuery(spec), "q=a+b&regex=0&case=1&word=1");
-  assert.equal(searchQuery({ ...spec, include: "src, *.md" }), "q=a+b&regex=0&case=1&word=1&include=src%2C+*.md");
 });

@@ -335,6 +335,77 @@ function lineEnd(text: string): "\n" | "\r\n" {
 }
 const ENDS = new Map<string, "\n" | "\r\n">();
 
+/** Told, once the update is done, that the shown buffer changed (sprint 436): the workspace search runs again
+ *  over the new text. Not the editor store: a store change renders App at once (flushSync), and a render inside
+ *  CodeMirror's update broke HISTORY's steps. */
+const EDIT_LISTENERS = new Set<() => void>();
+let editNoted = false;
+export function onBufferEdit(fn: () => void): () => void {
+  EDIT_LISTENERS.add(fn);
+  return () => { EDIT_LISTENERS.delete(fn); };
+}
+
+/** The mounted centre's shown buffer (sprint 436), for the workspace search: its path, its text, and a change
+ *  of its whole text as one edit, so its own undo can take a replace back. */
+let activeBuffer: { path(): string | null; text(): string | null; put(text: string): void } | null = null;
+const bufferKey = (sessionId: string, rel: string) => `${sessionId}\n${rel}`;
+/** The one change that turns `from` into `to`: the span between their shared head and tail, so the caret and
+ *  the marks outside it stay where they were. */
+function changeTo(from: string, to: string): { from: number; to: number; insert: string } {
+  let head = 0;
+  while (head < from.length && head < to.length && from[head] === to[head]) head++;
+  let tail = 0;
+  while (tail < from.length - head && tail < to.length - head && from[from.length - 1 - tail] === to[to.length - 1 - tail]) tail++;
+  return { from: head, to: from.length - tail, insert: to.slice(head, to.length - tail) };
+}
+const setUnsaved = (rel: string, on: boolean) => {
+  const list = editor.getSnapshot().unsaved;
+  if (on !== list.includes(rel)) editor.set({ unsaved: on ? [...list, rel] : list.filter((x) => x !== rel) });
+};
+
+/** The editor's unsaved text by workspace path (sprint 436): the buffer shown and the buffers kept. The
+ *  workspace search reads these in place of the files on disk, as VS Code searches an open editor's text. */
+export function unsavedBuffers(sessionId: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const rel of editor.getSnapshot().unsaved) {
+    const text = activeBuffer?.path() === rel ? activeBuffer.text() : BUFFERS.get(bufferKey(sessionId, rel))?.doc.toString();
+    if (typeof text === "string") out[rel] = text;
+  }
+  return out;
+}
+
+/** A new text into the buffer of `rel`, left unsaved (sprint 436): the buffer shown takes it as one edit; a
+ *  kept buffer likewise. False when the file has no buffer. */
+export function putBuffer(sessionId: string, rel: string, text: string): boolean {
+  const k = bufferKey(sessionId, rel);
+  if (activeBuffer?.path() === rel) { activeBuffer.put(text); return true; }
+  const kept = BUFFERS.get(k);
+  if (!kept) return false;
+  BUFFERS.set(k, kept.update({ changes: changeTo(kept.doc.toString(), text) }).state);
+  setUnsaved(rel, text !== DISK.get(k));
+  return true;
+}
+
+/** A replace's new text into the buffer of `rel`, then saved from it (sprint 436; VS Code's replaceService.ts
+ *  edits the open text and saves it): PUT …/file with the file's own line ends and the hash the buffer read.
+ *  The HTTP status, 0 when the request failed. */
+export async function writeBuffer(sessionId: string, rel: string, text: string): Promise<number> {
+  const k = bufferKey(sessionId, rel);
+  putBuffer(sessionId, rel, text);
+  const end = ENDS.get(k) ?? "\n";
+  const r = await fetch(`/api/session/${encodeURIComponent(sessionId)}/file?path=${encodeURIComponent(rel)}`, {
+    method: "PUT", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text: end === "\n" ? text : text.replace(/\n/g, end), view: "editor", base_sha256: SHAS.get(k) }),
+  }).catch(() => null);
+  if (r?.ok) {
+    DISK.set(k, text);
+    SHAS.set(k, ((await r.json()) as { sha256: string }).sha256);
+    const now = activeBuffer?.path() === rel ? activeBuffer.text() : BUFFERS.get(k)?.doc.toString();
+    setUnsaved(rel, now !== text);
+  }
+  return r?.status ?? 0;
+}
+
 export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionId: string; tabRow: number }): React.ReactElement {
   const st = React.useSyncExternalStore(editor.subscribe, editor.getSnapshot, editor.getSnapshot);
   const binding = React.useSyncExternalStore(settings.subscribe, settings.getSnapshot, settings.getSnapshot).binding;
@@ -391,6 +462,7 @@ export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionI
     if (!up.docChanged || !shown.current) return;
     const rel = shown.current, base = DISK.get(key(rel)) ?? "";
     markUnsaved(rel, up.state.doc.length !== base.length || up.state.doc.toString() !== base);
+    if (!editNoted) { editNoted = true; queueMicrotask(() => { editNoted = false; for (const fn of EDIT_LISTENERS) fn(); }); }
     // The marks and the status line's count follow the buffer against the base before the next paint: once
     // the update is done (a dispatch inside an update is refused), in one microtask per run of changes. The
     // diff skips the shared head and tail, so it costs a pass over the text.
@@ -608,7 +680,12 @@ export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionI
     activeSave = (command) => { void save(command); };
     activeUndo = undoRedo;
     activeFind = findImpl;
-    return () => { activeSave = null; activeUndo = null; activeFind = null; };
+    activeBuffer = {
+      path: () => shown.current,
+      text: () => view.current?.state.doc.toString() ?? null,
+      put: (text) => { const v = view.current; if (v && v.state.doc.toString() !== text) v.dispatch({ changes: changeTo(v.state.doc.toString(), text) }); },
+    };
+    return () => { activeSave = null; activeUndo = null; activeFind = null; activeBuffer = null; };
   });
   React.useEffect(() => () => {
     // Leaving the editor: the buffer on screen, if unsaved, is kept for its tab.

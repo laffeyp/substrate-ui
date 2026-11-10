@@ -2274,20 +2274,26 @@ def _lines(text: str) -> list[tuple[str, str]]:
 
 
 def _workspace_search(
-    root: Path, query: str, *, regex: bool, case: bool, word: bool = False, include: str = "", exclude: str = ""
+    root: Path, query: str, *, regex: bool, case: bool, word: bool = False, include: str = "", exclude: str = "",
+    buffers: dict[str, str] | None = None,
 ) -> dict[str, object]:
     """The workspace's matches (UI sprint 435). Each file is `{path, lines: [{line, text, ranges}]}`, ranges
     the [start, end) of each match in UTF-16 units; `lines` and `matches` count them; `truncated` marks a
-    result cut at WORKSPACE_SEARCH_MAX_LINES or a walk cut at WORKSPACE_WALK_MAX_FILES."""
+    result cut at WORKSPACE_SEARCH_MAX_LINES or a walk cut at WORKSPACE_WALK_MAX_FILES. UI sprint 436:
+    `buffers`, the editor's unsaved text by path, is searched in place of the file on disk, as VS Code
+    searches an open editor's text (searchService.ts `getOpenEditorResults`); `buffers` in the result counts
+    the walked files read from them."""
+    buffers = buffers or {}
     if not query:
-        return {"files": [], "lines": 0, "matches": 0, "truncated": False}
+        return {"files": [], "lines": 0, "matches": 0, "truncated": False, "buffers": 0}
     rx = _search_regex(query, regex=regex, case=case, word=word)
     paths, truncated = _workspace_files(root, include, exclude)
     base = root.resolve(strict=True)
     files: list[dict[str, object]] = []
-    count = matches = 0
+    count = matches = from_buffers = 0
     for rel in paths:
-        got = _read_text(base / rel)
+        got = (buffers[rel], "") if rel in buffers else _read_text(base / rel)
+        from_buffers += rel in buffers
         if got is None:
             continue
         hits: list[dict[str, object]] = []
@@ -2307,7 +2313,7 @@ def _workspace_search(
             files.append({"path": rel, "lines": hits})
         if count == WORKSPACE_SEARCH_MAX_LINES and truncated:
             break
-    return {"files": files, "lines": count, "matches": matches, "truncated": truncated}
+    return {"files": files, "lines": count, "matches": matches, "truncated": truncated, "buffers": from_buffers}
 
 
 def _expand_replacement(template: str, m: re.Match[str]) -> str:
@@ -2376,11 +2382,14 @@ def _replaced(text: str, rx: re.Pattern[str], replacement: str, *, regex: bool, 
 
 def _workspace_replace(
     root: Path, query: str, replacement: str, *, regex: bool, case: bool, word: bool = False, include: str = "", exclude: str = "",
-    path: str | None = None, line: int | None = None, index: int | None = None,
+    path: str | None = None, line: int | None = None, index: int | None = None, buffers: dict[str, str] | None = None,
 ) -> dict[str, object]:
     """The new text of each file a replace changes (UI sprint 435), not written: every file the search
-    finds, the one `path`, or one match (`path`, `line`, `index`). Each file is `{path, text, sha256,
-    replaced}`, sha256 the hash of the text as read, for the write's conflict check."""
+    finds, the one `path`, or one match (`path`, `line`, `index`). Each file is `{path, text, before,
+    sha256, replaced, buffer}`: before, the text replaced in (UI sprint 436, for the replace's one undo);
+    sha256 the hash of the file on disk, for the write's conflict check; buffer true when the text came
+    from the editor's unsaved buffer (`buffers`), which the page then changes and saves."""
+    buffers = buffers or {}
     rx = _search_regex(query, regex=regex, case=case, word=word)
     base = root.resolve(strict=True)
     if path is not None:
@@ -2391,14 +2400,21 @@ def _workspace_replace(
     files: list[dict[str, object]] = []
     total = 0
     for rel in paths:
-        got = _read_text(base / rel)
+        disk = _read_text(base / rel)
+        got = (buffers[rel], disk[1] if disk else "") if rel in buffers else disk
         if got is None:
             continue
         text, n = _replaced(got[0], rx, replacement, regex=regex, line=line, index=index)
         if n:
-            files.append({"path": rel, "text": text, "sha256": got[1], "replaced": n})
+            files.append({"path": rel, "text": text, "before": got[0], "sha256": got[1], "replaced": n, "buffer": rel in buffers})
             total += n
     return {"files": files, "replaced": total}
+
+
+def _buffers(body: dict[str, Any]) -> dict[str, str]:
+    """A request body's `buffers`: the editor's unsaved text by workspace path, strings only."""
+    raw = body.get("buffers")
+    return {str(k): v for k, v in raw.items() if isinstance(v, str)} if isinstance(raw, dict) else {}
 
 
 def _line_endings(text: str) -> str | None:
@@ -3313,6 +3329,16 @@ class Handler(BaseHTTPRequestHandler):
                 session_id = path[len("/api/session/") : -len("/interrupt")]
                 self._session_interrupt(session_id)
                 return
+            m_search = re.fullmatch(r"/api/session/([^/]+)/search", path)
+            if m_search:  # UI sprint 436: the search with the editor's unsaved buffers in its body
+                try:
+                    body = self._read_json_body()
+                except (BodyTooLarge, ValueError) as exc:
+                    self._error(400, str(exc))
+                    return
+                args = {k: ["1" if v is True else "0" if v is False else str(v)] for k, v in body.items() if k in ("q", "regex", "case", "word", "include", "exclude")}
+                self._session_search(m_search.group(1), args, _buffers(body))
+                return
             m_replace = re.fullmatch(r"/api/session/([^/]+)/search/replace", path)
             if m_replace:  # UI sprint 435: a replace's new texts, for the page to write through PUT …/file
                 self._session_search_replace(m_replace.group(1))
@@ -4166,7 +4192,7 @@ class Handler(BaseHTTPRequestHandler):
         )
         self._json(diff)
 
-    def _session_search(self, session_id: str, q: dict[str, list[str]]) -> None:
+    def _session_search(self, session_id: str, q: dict[str, list[str]], buffers: dict[str, str] | None = None) -> None:
         """UI sprint 434: GET /api/session/<id>/search?q=<query>&regex=1&case=1, the workspace's
         matching lines (`_workspace_search`), written as FILES_SEARCHED with its counts and no query
         or path (E1). A query git grep refuses is a 400 with git's message."""
@@ -4180,14 +4206,14 @@ class Handler(BaseHTTPRequestHandler):
         try:
             out = _workspace_search(
                 root, q.get("q", [""])[0], regex=regex, case=flag("case"), word=word,
-                include=q.get("include", [""])[0], exclude=q.get("exclude", [""])[0],
+                include=q.get("include", [""])[0], exclude=q.get("exclude", [""])[0], buffers=buffers,
             )
         except SearchQueryError as exc:
             self._error(400, str(exc))
             return
         TRACE.emit(
             Signal.FILES_SEARCHED,
-            {"session_id": session_id, "regex": regex, "word": word, "files": len(cast(list[Any], out["files"])), "lines": out["lines"], "matches": out["matches"], "truncated": out["truncated"]},
+            {"session_id": session_id, "regex": regex, "word": word, "files": len(cast(list[Any], out["files"])), "lines": out["lines"], "matches": out["matches"], "truncated": out["truncated"], "buffers": out["buffers"]},
         )
         self._json(out)
 
@@ -4208,6 +4234,7 @@ class Handler(BaseHTTPRequestHandler):
                 include=str(body.get("include") or ""), exclude=str(body.get("exclude") or ""),
                 path=str(body["path"]) if body.get("path") else None,
                 line=line if isinstance(line, int) else None, index=index if isinstance(index, int) else None,
+                buffers=_buffers(body),
             )
         except BodyTooLarge as exc:
             self._error(413, str(exc))

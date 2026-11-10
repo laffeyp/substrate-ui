@@ -12,14 +12,6 @@ export interface SearchResult { files: SearchFile[]; lines: number; matches: num
 /** One match: its file, line, its index among the line's matches, and the line's text with it. */
 export interface SearchRow { path: string; line: number; index: number; text: string; from: number; to: number }
 
-/** The search's query string (GET …/search). */
-export function searchQuery(spec: SearchSpec): string {
-  const q = new URLSearchParams({ q: spec.query, regex: spec.regexp ? "1" : "0", case: spec.caseSensitive ? "1" : "0", word: spec.word ? "1" : "0" });
-  if (spec.include.trim()) q.set("include", spec.include);
-  if (spec.exclude.trim()) q.set("exclude", spec.exclude);
-  return q.toString();
-}
-
 /** Where a row's text begins on screen: the indent dropped, and a long run before the match cut to the
  *  `LEAD` characters before it behind an ellipsis, so the match is in view in a narrow column. */
 const LEAD = 20;

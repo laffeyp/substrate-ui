@@ -1282,6 +1282,26 @@
       "rationale": "Replace one match, in one file, or all, worked out on the server with the search's own engine and written by the page through the file API; each side of it needs its tag.",
       "ratified": true,
       "ratified_by": "agent-resolved 2026-11-10, sprint 435; grounds: project — the research r2; SDD — BOOTSTRAP step 9; practice — VS Code's replaceService.ts"
+    },
+    {
+      "id": "P-0.43-SEARCH-BUFFERS",
+      "kind": "PAYLOAD_FIELD_PROPOSED",
+      "layer": 2,
+      "element": "FILES_SEARCHED and EDITOR_SEARCH_REPLACED gain buffers",
+      "source": "RESEARCH-2026-11-10-editor-search-r2",
+      "rationale": "The search reads the editor's unsaved text in place of the disk, and a replace changes and saves those buffers, as VS Code's searchService.ts and replaceService.ts do; the count says how many.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-10, sprint 436; grounds: project — the research r2; SDD — BOOTSTRAP step 9; practice — VS Code getOpenEditorResults"
+    },
+    {
+      "id": "P-0.43-REPLACE-UNDONE",
+      "kind": "TAG_PROPOSED",
+      "layer": 1,
+      "element": "EDITOR_SEARCH_REPLACE_UNDONE (editor)",
+      "source": "RESEARCH-2026-11-10-editor-search-r2",
+      "rationale": "A replace across files is undone in one step, as VS Code's bulk edit records one undo element over every file.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-10, sprint 436; grounds: project — the research r2; SDD — BOOTSTRAP step 9; practice — VS Code bulkTextEdits.ts MultiModelEditStackElement"
     }
   ]
 }
