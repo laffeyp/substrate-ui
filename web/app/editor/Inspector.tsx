@@ -17,6 +17,7 @@ import { authorLabel, fileActivity, fileHistoryState, fileType, hunkAuthor, litR
 import { emit as emitSignal } from "../../vm/instrumentation/sdd";
 import { EditorHunkDrawnAuthor, Signal } from "../../vm/signals.gen";
 import { find, setHistoryStep, type FindChange } from "./Centre";
+import { openSeq } from "./EditorView";
 
 // Frame 24a's values, from the sheet of record (Substrate Shell Directions v11).
 const CARD = "#212327";
@@ -102,7 +103,9 @@ function FindSection(): React.ReactElement {
 
 export function Inspector({ paneId, workspace }: { paneId: number; workspace: string | null }): React.ReactElement | null {
   const st = React.useSyncExternalStore(editor.subscribe, editor.getSnapshot, editor.getSnapshot);
-  const envs = React.useSyncExternalStore(shell.subscribe, shell.getSnapshot, shell.getSnapshot).snapshots[paneId]?.rawEnvelopes ?? [];
+  const paneSnap = React.useSyncExternalStore(shell.subscribe, shell.getSnapshot, shell.getSnapshot).snapshots[paneId];
+  const envs = paneSnap?.rawEnvelopes ?? [];
+  const sessionId = paneSnap?.sessionId ?? null;
   const file = st.file && st.file.path === st.active ? st.file : null;
   const path = file?.path ?? null;
   const activity = React.useMemo(() => (path ? fileActivity(envs, path, workspace) : []), [envs, path, workspace]);
@@ -175,6 +178,7 @@ export function Inspector({ paneId, workspace }: { paneId: number; workspace: st
             <span style={{ color: FAINT, flex: "none" }}>{r.turn !== null ? `t${r.turn}` : ""}</span>
             <span style={{ color: DIM, flex: "none", width: 30 }}>{r.seq}</span>
             <span style={{ color: MID, overflow: "hidden", textOverflow: "ellipsis" }}>{r.gist}</span>
+            <span data-activity-open={r.seq} title={`seq ${r.seq} in the record (⌃⇧\`)`} onClick={() => openSeq(r.seq, paneId, sessionId)} style={{ marginLeft: "auto", color: FAINT, flex: "none", cursor: "pointer" }}>◂</span>
           </div>
         ))}
         <div style={{ height: 4 }} />

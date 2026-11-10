@@ -62,6 +62,8 @@ test("⌘⇧E toggles the editor; Escape in the editor returns to the pane after
   const ed = { ...CTX, editor: true, running: true };
   assert.deepStrictEqual(windowKey(key("Escape"), ed), { kind: "close-editor" });
   assert.deepStrictEqual(windowKey(key("Escape"), { ...ed, typing: true }), { kind: "close-editor" });
+  // Sprint 430: ⌃⇧` swaps the right column; outside the editor it does nothing here.
+  assert.deepStrictEqual(windowKey({ key: "~", code: "Backquote", metaKey: false, ctrlKey: true, shiftKey: true, altKey: false }, ed), { kind: "swap-record" });
   // Sprint 428: ⌘F and ⌥⌘F find and replace in the open file; in the terminal ⌘F is the transcript's find.
   assert.deepStrictEqual(windowKey({ key: "f", code: "KeyF", metaKey: true, ctrlKey: false, shiftKey: false, altKey: false }, ed), { kind: "editor-find", field: "query" });
   assert.deepStrictEqual(windowKey({ key: "ƒ", code: "KeyF", metaKey: true, ctrlKey: false, shiftKey: false, altKey: true }, ed), { kind: "editor-find", field: "replace" });

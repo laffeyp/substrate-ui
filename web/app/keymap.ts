@@ -56,6 +56,7 @@ export type KeyAction =
   | { kind: "toggle-find" } | { kind: "settings" } | { kind: "toggle-assays" }
   | { kind: "toggle-editor" } | { kind: "close-editor" }
   | { kind: "editor-find"; field: "query" | "replace" }
+  | { kind: "swap-record" }
   | { kind: "fold-editor"; column: "left" | "right" | "bottom" }
   | { kind: "refuse-split" }
   | { kind: "close-find" } | { kind: "close-dialog" } | { kind: "close-cards" } | { kind: "close-surface" }
@@ -89,6 +90,8 @@ export function windowKey(ev: KeyLike, ctx: KeyContext): KeyAction | null {
   if (ev.metaKey && key === "d") return ctx.editor ? { kind: "refuse-split" } : { kind: "split", dir: ev.shiftKey ? "down" : "right" };
   // Sprint 428 (roadmap r10 key table): in the editor, ⌘F finds in the open file and ⌥⌘F replaces there,
   // in the inspector's FIND / REPLACE; with the focus in the terminal, ⌘F is the transcript's find.
+  // Sprint 430 (roadmap r10 E5; spec r6 §4): ⌃⇧` swaps the editor's right column, the inspector and the record.
+  if (ctx.editor && ev.ctrlKey && ev.shiftKey && !ev.metaKey && !ev.altKey && ev.code === "Backquote") return { kind: "swap-record" };
   if (ctx.editor && !ctx.editorTerminal && cmd && !ev.shiftKey && ev.code === "KeyF") return { kind: "editor-find", field: ev.altKey ? "replace" : "query" };
   if (ev.metaKey && key === "f") return { kind: "toggle-find" };
   if (ev.metaKey && ev.key === ",") return { kind: "settings" };

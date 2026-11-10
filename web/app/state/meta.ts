@@ -86,6 +86,11 @@ export function pickSeq(seq: number, paneId: number, how: SeqSelectedHow.STREAM_
   setSel(meta.getSnapshot().sel === seq ? null : seq, paneId, how);
 }
 
+/** Sprint 430: ACTIVITY's ◂ in the editor's inspector lights the call's seq in the record column. */
+export function selectSeqFromEditor(seq: number, paneId: number): void {
+  setSel(seq, paneId, SeqSelectedHow.EDITOR_ACTIVITY);
+}
+
 /** A click on a language row lights its turn's seq, lit or not; so do the language keys and `/language`. */
 export function selectSeq(seq: number | null, paneId: number, how: SeqSelectedHow.LANGUAGE_ROW | SeqSelectedHow.LANGUAGE_KEY | SeqSelectedHow.LANGUAGE_OPEN): void {
   setSel(seq, paneId, how);

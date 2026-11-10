@@ -9,12 +9,20 @@
 import { STICK_PX } from "./scroll_stick";
 
 const attached = new WeakSet<HTMLElement>();
+const stops = new WeakMap<HTMLElement, () => void>();
+
+/** Sprint 430: stop following now, as a scroll up does; for a jump to a row (the editor's ACTIVITY ◂),
+ *  where the scroll event that would say so comes a frame later than the rows the jump draws. */
+export function stopFollowing(scroller: HTMLElement): void {
+  stops.get(scroller)?.();
+}
 
 export function followBottom(scroller: HTMLElement): void {
   if (attached.has(scroller)) return;
   attached.add(scroller);
   let following = true;
   let own = -1; // the scrollTop this module last wrote, so its scroll event is not the user's
+  stops.set(scroller, () => { following = false; });
   const toBottom = () => {
     if (!following || scroller.clientHeight === 0) return;
     scroller.scrollTop = scroller.scrollHeight;

@@ -10,12 +10,16 @@ import { useSyncExternalStore } from "react";
 import { footerText } from "./derive/footer";
 import { chrome } from "./state/chrome";
 import { shell } from "./state/shell";
+import { editor } from "./state/editor";
+import { meta } from "./state/meta";
 
 export function Footer(): React.ReactElement {
   const ch = useSyncExternalStore(chrome.subscribe, chrome.getSnapshot, chrome.getSnapshot);
   const snaps = useSyncExternalStore(shell.subscribe, shell.getSnapshot, shell.getSnapshot);
   const snap = snaps.snapshots[ch.focusedPane] ?? null;
-  const text = footerText({ unbound: ch.unbound, title: ch.title, surfaceOpen: ch.surfaceOpen, editorOpen: ch.editorOpen, rateLimited: ch.rateLimited, snapshot: snap });
+  const showing = useSyncExternalStore(editor.subscribe, editor.getSnapshot, editor.getSnapshot).showing;
+  const sel = useSyncExternalStore(meta.subscribe, meta.getSnapshot, meta.getSnapshot).sel;
+  const text = footerText({ unbound: ch.unbound, title: ch.title, surfaceOpen: ch.surfaceOpen, editorOpen: ch.editorOpen, recordSeq: showing === "record" ? sel : null, rateLimited: ch.rateLimited, snapshot: snap });
   return (
     <div data-footer="1" style={{ display: "flex", gap: 16, padding: "7px 16px", background: "#2a2d33", fontSize: 11, color: "#62676f", flex: "none" }}>
       <span data-footer-status="1" style={{ color: text.statusColor }}>{text.status}</span>

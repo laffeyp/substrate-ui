@@ -21,10 +21,14 @@ import { FileTree } from "./FileTree";
 import { Centre } from "./Centre";
 import { ANCHOR_CELL, ANCHOR_ONE, ANCHOR_ZERO, encodeAnchor, encodeAnchor2, encodeAnchor3 } from "../derive/anchor";
 import { Inspector } from "./Inspector";
+import { MetaView } from "../MetaView";
+import { GraphMode } from "../../vm/kinds";
+import { selectSeqFromEditor, setMode } from "../state/meta";
+import { stopFollowing } from "../../reveal/follow_bottom";
 import { editor } from "../state/editor";
 import { clampSize, loadSizes, saveSizes, type EditorSizes } from "./sizes";
 import { emit as emitSignal } from "../../vm/instrumentation/sdd";
-import { EditorColumnFoldedCause, EditorColumnFoldedColumn, EditorColumnResizedColumn, EditorDockSetDock, Signal } from "../../vm/signals.gen";
+import { EditorColumnFoldedCause, EditorColumnFoldedColumn, EditorColumnResizedColumn, EditorDockSetDock, EditorInspectorSwappedShowing, Signal } from "../../vm/signals.gen";
 import { shell } from "../state/shell";
 
 export type Column = "left" | "right" | "bottom";
@@ -59,6 +63,32 @@ export function toggleSwap(paneId: number): void {
 
 /** View ▸ Focus (sprint 416; spec r6 §5.1 (4), frame 16c): everything folds but the prompt; again, the
  *  folds focus made are undone and the layout before it returns (BLACKBOARD 2026-11-09, focus). */
+/** ⌃⇧` or a column chip (sprint 430; roadmap r10 E5; 24b): the right column swaps the inspector for the
+ *  session's record, or back; unfolded if it was folded. */
+export function swapRecord(paneId: number, to?: "inspector" | "record"): void {
+  const st = editor.getSnapshot();
+  const showing = to ?? (st.showing === "inspector" ? "record" : "inspector");
+  if (st.folded.right) foldColumn("right", false, EditorColumnFoldedCause.KEY, paneId);
+  if (showing === st.showing) return;
+  editor.set({ showing });
+  emitSignal(Signal.EDITOR_INSPECTOR_SWAPPED, { showing: showing === "record" ? EditorInspectorSwappedShowing.LENSES : EditorInspectorSwappedShowing.SPINE }, { pane_id: paneId });
+}
+
+/** ACTIVITY's ◂: the record column, the stream lens, the call's seq lit. */
+export function openSeq(seq: number, paneId: number, sessionId: string | null): void {
+  swapRecord(paneId, "record");
+  setMode(GraphMode.Stream, paneId, sessionId);
+  selectSeqFromEditor(seq, paneId);
+  // The lit row and its inspector into view, once the lens has drawn them (24b shows the selection).
+  const reveal = (tries: number) => requestAnimationFrame(() => {
+    const row = document.querySelector(`[data-editor-area="right"] [data-stream-inspector="${seq}"]`);
+    const scroller = row?.closest<HTMLElement>("[data-stream-scroll]");
+    if (row && scroller) { stopFollowing(scroller); row.scrollIntoView({ block: "center" }); }
+    else if (tries > 0) reveal(tries - 1);
+  });
+  reveal(10);
+}
+
 export function toggleFocus(paneId: number): void {
   const st = editor.getSnapshot();
   const cols: Column[] = ["left", "right", "bottom"];
@@ -179,10 +209,27 @@ export function EditorView({ paneId, fontSize, sessionId, workspace, shape }: { 
       <div data-editor-workspace="1" title={workspace || ""} style={{ flex: "none", padding: "6px 12px 8px", borderTop: DIVIDER, fontSize: 10.5, color: "#62676f", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{workspaceFoot(workspace, shape)}</div>
     </div>
   );
-  const inspectorColumn = (start: boolean) => folded.right ? <Rail column="right" label="INSPECTOR" start={start} paneId={paneId} /> : (
-    <div data-editor-area="right" style={{ flex: `0 1 ${sizes.right}px`, minWidth: 0, overflow: "hidden", display: "flex", flexDirection: "column", background: SUNK, [start ? "borderRight" : "borderLeft"]: DIVIDER, minHeight: 0 }}>
-      <div style={{ height: EDITOR_SIZES.tabRow, flex: "none", display: "flex", alignItems: "center", padding: "0 14px", gap: 8, borderBottom: "1px solid rgba(255,255,255,.055)", whiteSpace: "nowrap" }}><span style={{ fontSize: 9.5, letterSpacing: ".12em", color: "#9aa0a8" }}>INSPECTOR</span>{ed.active ? <span data-inspector-file="1" style={{ fontSize: 10.5, color: "#62676f", overflow: "hidden", textOverflow: "ellipsis" }}>{ed.active.slice(ed.active.lastIndexOf("/") + 1)}</span> : null}<span style={{ flex: 1 }} /><span data-editor-fold="right" title="fold the inspector (⌥⌘R)" onClick={() => foldColumn("right", true, EditorColumnFoldedCause.RAIL, paneId)} style={GLYPH}>{start ? "◂" : "▸"}</span></div>
-      <Inspector paneId={paneId} workspace={workspace} />
+  // The right column (sprint 430; 24a, 24b): the inspector (its width the column's, 300 px at first), or the
+  // session's record in the five lenses at 400 px; each header's chip names ⌃⇧` and swaps them.
+  const record = ed.showing === "record";
+  const events = snap?.rawEnvelopes?.length ?? 0;
+  const chip = (lit: boolean): React.CSSProperties => ({ fontSize: 10.5, borderRadius: 4, padding: "1px 7px", flex: "none", cursor: "pointer", ...(lit ? { color: "#212327", background: "#82a5c8", fontWeight: 600 } : { color: "#9aa0a8", background: SELECT }) });
+  const inspectorColumn = (start: boolean) => folded.right ? <Rail column="right" label={record ? "RECORD" : "INSPECTOR"} start={start} paneId={paneId} /> : (
+    <div data-editor-area="right" data-showing={ed.showing} style={{ flex: record ? "0 1 400px" : `0 1 ${sizes.right}px`, minWidth: 0, overflow: "hidden", display: "flex", flexDirection: "column", background: SUNK, [start ? "borderRight" : "borderLeft"]: DIVIDER, minHeight: 0, position: "relative" }}>
+      <div style={{ height: EDITOR_SIZES.tabRow, flex: "none", display: "flex", alignItems: "center", padding: "0 14px", gap: 8, borderBottom: "1px solid rgba(255,255,255,.055)", whiteSpace: "nowrap" }}>
+        {record ? <>
+          <span style={{ fontSize: 9.5, letterSpacing: ".12em", color: "#9aa0a8" }}>RECORD</span>
+          <span data-record-name="1" title={sessionId} style={{ fontSize: 10.5, color: "#62676f", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>{snap?.sessionName || sessionId.replace(/^s_/, "").slice(0, 7)}</span>
+          <span data-record-head="1" style={{ fontSize: 10.5, color: "#62676f", flex: "none" }}>· {events} events</span>
+        </> : <>
+          <span style={{ fontSize: 9.5, letterSpacing: ".12em", color: "#9aa0a8" }}>INSPECTOR</span>
+          {ed.active ? <span data-inspector-file="1" style={{ fontSize: 10.5, color: "#62676f", overflow: "hidden", textOverflow: "ellipsis" }}>{ed.active.slice(ed.active.lastIndexOf("/") + 1)}</span> : null}
+        </>}
+        <span style={{ flex: 1 }} />
+        <span data-editor-swap={record ? "inspector" : "record"} title="⌃⇧` swaps the inspector and the record" onClick={() => swapRecord(paneId)} style={chip(record)}>⌃⇧` {record ? "inspector" : "record"}</span>
+        <span data-editor-fold="right" title={`fold the ${record ? "record" : "inspector"} (⌥⌘R)`} onClick={() => foldColumn("right", true, EditorColumnFoldedCause.RAIL, paneId)} style={GLYPH}>{start ? "◂" : "▸"}</span>
+      </div>
+      {record ? <div style={{ flex: 1, display: "flex", minHeight: 0 }}><MetaView paneId={paneId} gutter={false} /></div> : <Inspector paneId={paneId} workspace={workspace} />}
     </div>
   );
   // The sill (D49 (d); 16c): the input stays; typing a character reopens the history.

@@ -56,7 +56,8 @@ function Lens({ mode, paneId }: { mode: MetaMode; paneId: number }): React.React
   return null;
 }
 
-export function MetaView({ paneId }: { paneId: number }): React.ReactElement {
+/** `gutter`: the meta view's split handle; the editor's record column (sprint 430) has none. */
+export function MetaView({ paneId, gutter = true }: { paneId: number; gutter?: boolean }): React.ReactElement {
   const mt = useSyncExternalStore(meta.subscribe, meta.getSnapshot);
   const side = mt.mode === GraphMode.Stream && mt.dir === GraphDirection.Side;
   const streamEl = useRef<HTMLDivElement | null>(null);
@@ -113,8 +114,8 @@ export function MetaView({ paneId }: { paneId: number }): React.ReactElement {
           <Lens mode={mt.mode} paneId={paneId} />
         </div>
       </div>
-      <div data-meta-gutter="1" onMouseDown={(ev) => { ev.preventDefault(); dragging.current = true; }} title="drag — more transcript or more machinery"
-        style={{ position: "absolute", top: 0, bottom: 0, left: (mt.split / (mt.split + 1) * 100).toFixed(2) + "%", width: 11, transform: "translateX(-50%)", cursor: "col-resize", zIndex: 15 }} />
+      {gutter && <div data-meta-gutter="1" onMouseDown={(ev) => { ev.preventDefault(); dragging.current = true; }} title="drag — more transcript or more machinery"
+        style={{ position: "absolute", top: 0, bottom: 0, left: (mt.split / (mt.split + 1) * 100).toFixed(2) + "%", width: 11, transform: "translateX(-50%)", cursor: "col-resize", zIndex: 15 }} />}
     </>
   );
 }

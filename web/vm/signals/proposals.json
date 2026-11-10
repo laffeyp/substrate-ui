@@ -1212,6 +1212,16 @@
       "rationale": "EDITOR_SEARCH_QUERIED is the workspace search (⌘⇧F) with file counts; a find in the open file and a replace in its buffer had no tags.",
       "ratified": true,
       "ratified_by": "agent-resolved 2026-11-09, sprint 428; grounds: project — roadmap r10 E6, 24a; SDD — a real event with no tag is a vocabulary gap; practice — n/a"
+    },
+    {
+      "id": "P-0.38-RECORD-COLUMN",
+      "kind": "PAYLOAD_FIELD_PROPOSED",
+      "layer": 2,
+      "element": "SEQ_SELECTED.how gains editor_activity",
+      "source": "roadmap r10 E5 and E6 (ACTIVITY's ◂ opens the seq in the record column); frame 24b",
+      "rationale": "A seq lit from the editor's ACTIVITY is a distinct way in; consumers of SEQ_SELECTED tell the editor's jump from meta's clicks.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-09, sprint 430; grounds: project — roadmap r10 E5; SDD — BOOTSTRAP step 2; practice — n/a"
     }
   ]
 }

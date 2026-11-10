@@ -5,7 +5,7 @@ Regenerate: python3 scripts/gen_signals.py. tests/test_signals_generated.py fail
 
 from enum import StrEnum
 
-VOCAB_VERSION = "0.37"
+VOCAB_VERSION = "0.38"
 
 
 class Signal(StrEnum):
@@ -492,6 +492,7 @@ class SeqSelectedHow(StrEnum):
     LANGUAGE_ROW = "language_row"
     LANGUAGE_KEY = "language_key"
     LANGUAGE_OPEN = "language_open"
+    EDITOR_ACTIVITY = "editor_activity"
 
 
 class LanguageStreamSetStream(StrEnum):
