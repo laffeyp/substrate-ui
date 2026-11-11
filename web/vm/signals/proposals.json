@@ -1245,7 +1245,7 @@
     },
     {
       "id": "P-0.41-FILES-SEARCHED",
-      "kind": "TAG_PROPOSED",
+      "kind": "NEW_TAG_PROPOSED",
       "layer": 1,
       "element": "FILES_SEARCHED (server)",
       "source": "roadmap r10 E8; frame 24j",
@@ -1275,7 +1275,7 @@
     },
     {
       "id": "P-0.42-SEARCH-REPLACE",
-      "kind": "TAG_PROPOSED",
+      "kind": "NEW_TAG_PROPOSED",
       "layer": 1,
       "element": "FILES_REPLACE_PREPARED (server), EDITOR_SEARCH_REPLACED (editor)",
       "source": "RESEARCH-2026-11-10-editor-search-r2",
@@ -1295,7 +1295,7 @@
     },
     {
       "id": "P-0.43-REPLACE-UNDONE",
-      "kind": "TAG_PROPOSED",
+      "kind": "NEW_TAG_PROPOSED",
       "layer": 1,
       "element": "EDITOR_SEARCH_REPLACE_UNDONE (editor)",
       "source": "RESEARCH-2026-11-10-editor-search-r2",
@@ -1305,7 +1305,7 @@
     },
     {
       "id": "P-0.44-TREE-FIND",
-      "kind": "TAG_PROPOSED",
+      "kind": "NEW_TAG_PROPOSED",
       "layer": 1,
       "element": "FILES_FOUND (server), EDITOR_TREE_FOUND (editor)",
       "source": "RESEARCH-2026-11-10-editor-search-r2",
@@ -1325,7 +1325,7 @@
     },
     {
       "id": "P-0.46-OPEN-HOW",
-      "kind": "ENUM_VALUE_PROPOSED",
+      "kind": "PAYLOAD_FIELD_PROPOSED",
       "layer": 2,
       "element": "EDITOR_FILE_OPENED.how gains open_tab and activity",
       "source": "roadmap r10 E8",
@@ -1335,7 +1335,7 @@
     },
     {
       "id": "P-0.47-FILES-LISTED-ALL",
-      "kind": "TAG_PROPOSED",
+      "kind": "NEW_TAG_PROPOSED",
       "layer": 1,
       "element": "FILES_LISTED_ALL (server)",
       "source": "roadmap r10 E9; research r2",
@@ -1355,7 +1355,7 @@
     },
     {
       "id": "P-0.49-CHIPS",
-      "kind": "TAG_PROPOSED",
+      "kind": "NEW_TAG_PROPOSED",
       "layer": 1,
       "element": "INPUT_CHIP_REMOVED (editor); TURN_SUBMITTED gains attachments; EDITOR_CHIP_ADDED emitted",
       "source": "roadmap r11 E10; D94",
@@ -1365,7 +1365,7 @@
     },
     {
       "id": "P-0.50-SAVE-FOR-SEND",
-      "kind": "TAG_PROPOSED",
+      "kind": "NEW_TAG_PROPOSED",
       "layer": 1,
       "element": "EDITOR_SAVED_FOR_SEND (editor) {files, refused}; TURN_SUBMITTED gains saved",
       "source": "BLACKBOARD 2026-11-10 user (save before send); SAVE-BEFORE-SEND-2026-11-10; roadmap r13 E10.0",
@@ -1415,7 +1415,7 @@
     },
     {
       "id": "P-0.55-DRAFT-RESTORED",
-      "kind": "TAG_PROPOSED",
+      "kind": "NEW_TAG_PROPOSED",
       "layer": 1,
       "element": "INPUT_DRAFT_RESTORED (editor) {chips}",
       "source": "ADD-TO-MESSAGE-2026-11-10-r3 (what you see); roadmap r13 E10.2; sprint 451",
@@ -1425,7 +1425,7 @@
     },
     {
       "id": "P-0.56-CHIPS-DRAWN",
-      "kind": "TAG_PROPOSED",
+      "kind": "NEW_TAG_PROPOSED",
       "layer": 1,
       "element": "TRANSCRIPT_CHIPS_DRAWN (transcript) {pane_id, seq, chips, by_reference}",
       "source": "ADD-TO-MESSAGE-2026-11-10-r3 (what you see); roadmap r13 E10.2; sprint 452",
@@ -1455,7 +1455,7 @@
     },
     {
       "id": "P-0.59-CONTEXT-MENU",
-      "kind": "TAG_PROPOSED",
+      "kind": "NEW_TAG_PROPOSED",
       "layer": 1,
       "element": "CONTEXT_MENU_OPENED (window) {source, items}; CONTEXT_MENU_CLOSED (window) {outcome}; EDITOR_CHIP_ADDED.how gains menu",
       "source": "D94 (right-click › Add to message); roadmap r13 E10.4; BLACKBOARD 2026-11-11 (the menu drawn in the page); sprint 457",

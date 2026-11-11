@@ -1042,3 +1042,19 @@ The clean build that followed was reported as "every suite has run". It had not:
 - The editor gates typed single lines. The Architect asked for multi-line edits, and the gates now make them.
 
 **What this says about the next kit version.** A design doc for a behaviour change should list the recorded decisions it supersedes, found by the decision grep, before its card is written. Here that grep ran only because the Architect asked for a re-read of the kit.
+
+### 2026-11-11 — E10.0 to E10.4 closed (sprints 445–458): what a second full read of the kit caught
+
+**What happened.** Sprints 445–458 closed the add-to-message work through drag and right-click. The Architect then asked whether the kit had been read in full. It had not, in that session: only `AGENTS.md` was in context after a compaction. The session read every current file of `../sdd-kit-3/` and compared the recent cards and records with it.
+
+**What worked.**
+- The observation contract and mutant checks held up. In 457 a mutant that hid the open menu from the key map failed the live-model Escape gate; in 458 a mutant without the code's drop refusal failed the drag gate, showing CodeMirror would write the dragged path into the file.
+- Resolve-and-record kept every design choice (the menu drawn in the page, what each source adds, the drag's data types) on the BLACKBOARD with its sources before the code.
+
+**What got in the way.**
+- Cards 445 and 447–458 were each copied from the card before rather than from `templates/SPRINT_CARD.md`, and lost prerequisites, the contract splits, command exit codes, notes and the self-review checklist. No card from 447 on was checked against the checklist before its work. The working agreement now says a card starts from the template; 457 and 458 carry closeout addenda with the sections.
+- Eleven proposals in `proposals.json` used kinds the kit does not define (`TAG_PROPOSED` ×10, `ENUM_VALUE_PROPOSED` ×1); they now use `NEW_TAG_PROPOSED` and `PAYLOAD_FIELD_PROPOSED`.
+- Editing the closed cards in place broke the working agreement's post-close rule; the edit was undone and the sections moved to addenda.
+- No handoff was written before the compaction (`../sdd-kit-3/handoffs/README.md`), and no diary entry since sprint 444, though E10.0–E10.4 was a phase's worth of work.
+
+**What this says about the next kit version.** A card copied from its predecessor drifts one dropped section at a time, and nothing checks it. The kit could name the template as the only source of a new card in AGENTS.md's "What you should never do", and the self-review checklist could be required to appear, ticked, before the first code edit of a sprint.
