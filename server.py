@@ -2532,8 +2532,9 @@ def _workspace_read(root: Path, rel: str, max_bytes: int = WORKSPACE_READ_MAX) -
 
 
 # UI sprint 388, editor shared work 0(e): a turn's attachments (kernel K344, session vocabulary
-# § AC). The kinds the chips carry; file, lines and event resolve to text the model reads, the
-# others are recorded with empty text (a folder by § AC.1; an image until a responder takes images).
+# § AC). The kinds the chips carry. File, lines, folder and image resolve by round 3's rules (sprint 446,
+# `_attachment_text`): content or a reference line; event to the record entry's kind and payload; the
+# others are recorded with empty text until their views come.
 ATTACHMENT_KINDS = (
     "file",
     "folder",
@@ -2546,26 +2547,122 @@ ATTACHMENT_KINDS = (
 )
 
 
-def _attachment_file_text(workspace: Path, rel: str) -> str:
-    facts = _workspace_read(workspace, rel)
-    if facts["too_large"]:
-        raise ValueError(f"{rel!r} is over {WORKSPACE_READ_MAX} bytes")
-    if facts["encoding"] != "utf-8":
-        raise ValueError(f"{rel!r} is not UTF-8 text")
-    return str(facts["text"])
+# UI sprint 446 (roadmap r13 E10.1; ADD-TO-MESSAGE-2026-11-10-r3 rules 1-8): a message is never refused for
+# what it carries. Content goes inline when it is text and small; anything else goes as its reference, one
+# line saying why, which the model can follow with its own file tools. The two caps keep inlined content,
+# which every later turn sends again, small: 64 KB a file (about 16,000 tokens, under Claude Code's 25,000 a
+# read) and 256 KB a message (a quarter of the 1 MB argument cap the coding harnesses run under).
+ATTACH_FILE_INLINE_MAX = 64 * 1024
+ATTACH_MESSAGE_INLINE_MAX = 256 * 1024
+ATTACH_FOLDER_LIST_MAX = 200
+ATTACH_BINARY_SNIFF = 8 * 1024
+ATTACH_FOLLOW = "read it with your file tools"
 
 
-def _resolve_attachments(raw: object, workspace: Path, record_root: Path) -> tuple[Any, ...]:
-    """The body's `attachments`, each {kind, label, ref, span?}, as kernel `Attachment`s with their
-    text read now from the workspace or the record. ValueError (and the workspace read's
-    WorkspaceEscapeError, FileNotFoundError, NotADirectoryError) names the first one that fails."""
+def _human_size(n: int) -> str:
+    if n < 1024:
+        return f"{n} B"
+    if n < 1024 * 1024:
+        return f"{n / 1024:.1f} KB"
+    return f"{n / (1024 * 1024):.1f} MB"
+
+
+def _decode_any(data: bytes) -> tuple[str, str] | None:
+    """`data` as text with its encoding's name, or None for binary (round 3 rule 3, after ripgrep's guide):
+    a byte-order mark names the encoding; without one, a NUL byte in the first 8 KB is binary; otherwise
+    UTF-8, and bytes that are not UTF-8 decode one for one as Latin-1, which reads every byte."""
+    if data.startswith(b"\xef\xbb\xbf"):
+        return data[3:].decode("utf-8", errors="replace"), "UTF-8"
+    if data.startswith((b"\xff\xfe", b"\xfe\xff")):
+        try:
+            return data.decode("utf-16"), "UTF-16"
+        except UnicodeDecodeError:
+            pass
+    if b"\x00" in data[:ATTACH_BINARY_SNIFF]:
+        return None
+    try:
+        return data.decode("utf-8"), "UTF-8"
+    except UnicodeDecodeError:
+        return data.decode("latin-1"), "Latin-1"
+
+
+def _line_count(text: str) -> int:
+    return text.count("\n") + (1 if text and not text.endswith("\n") else 0)
+
+
+def _attachment_text(
+    kind: str, ref: str, span: tuple[float, ...], workspace: Path, room: int
+) -> tuple[str, int, bool]:
+    """A file, line-range, folder or image attachment's text: (the text, the bytes it inlines, whether it
+    went as its reference). `room` is what is left of the message's 256 KB. A path outside the workspace
+    raises WorkspaceEscapeError, the one refusal left besides a malformed request."""
+    target = _workspace_target(workspace, ref or ".")
+    lines_note = f", lines {int(span[0])}–{int(span[1])}" if kind == "lines" else ""
+    if kind == "folder":
+        if not target.is_dir():
+            return f"(not found when the message was sent: {ref}/)", 0, True
+        base = workspace.resolve(strict=True)
+        rel_dir = str(target.relative_to(base)) if target != base else ""
+        files, cut = _workspace_files(workspace, include=rel_dir) if rel_dir else _workspace_files(workspace)
+        shown = files[:ATTACH_FOLDER_LIST_MAX]
+        files_n = lambda n: f"{n:,} file{'' if n == 1 else 's'}"  # noqa: E731
+        head = f"({rel_dir or '.'}/, {files_n(len(files))}{', the walk stopped there' if cut else ''})"
+        body = "\n".join([head, *shown] + ([f"(and {files_n(len(files) - len(shown))} more)"] if len(files) > len(shown) else []))
+        size = len(body.encode("utf-8"))
+        if size > room:
+            return f"(not inlined: a listing of {files_n(len(files))}, past the 256 KB a message inlines; {rel_dir or '.'}/; list it with your file tools)", 0, True
+        return body, size, False
+    if not target.is_file():
+        return f"(not found when the message was sent: {ref}{lines_note})", 0, True
+    size = target.stat().st_size
+    if kind == "image":
+        return f"(not inlined: an image, {_human_size(size)}; {ref}; {ATTACH_FOLLOW})", 0, True
+    with target.open("rb") as fh:
+        sniff = fh.read(ATTACH_BINARY_SNIFF)
+    utf16 = sniff.startswith((b"\xff\xfe", b"\xfe\xff"))
+    binary = f"(not inlined: {_human_size(size)}, binary; {ref}; {ATTACH_FOLLOW})"
+    if not utf16 and not sniff.startswith(b"\xef\xbb\xbf") and b"\x00" in sniff:
+        return binary, 0, True
+    follow = "read them with your file tools" if kind == "lines" else ATTACH_FOLLOW
+    if size > WORKSPACE_READ_MAX:
+        # Past the read cap: too big to inline whatever it holds; its lines counted by their LF bytes where
+        # the encoding has one-byte LFs (not UTF-16).
+        count = ""
+        if not utf16:
+            with target.open("rb") as fh:
+                n = sum(chunk.count(b"\n") for chunk in iter(lambda: fh.read(1 << 20), b""))
+            count = f", {n:,} lines"
+        return f"(not inlined: {_human_size(size)}{count}, over the 64 KB a file goes inline; {ref}{lines_note}; {follow})", 0, True
+    decoded = _decode_any(target.read_bytes())
+    if decoded is None:
+        return binary, 0, True
+    text, encoding = decoded
+    if kind == "lines":
+        text = "".join(text.splitlines(keepends=True)[int(span[0]) - 1 : int(span[1])])
+    used = len(text.encode("utf-8"))
+    what = f"{_human_size(used)}, {_line_count(text):,} lines"
+    if used > ATTACH_FILE_INLINE_MAX:
+        return f"(not inlined: {what}, over the 64 KB a file goes inline; {ref}{lines_note}; {follow})", 0, True
+    if used > room:
+        return f"(not inlined: {what}, past the 256 KB a message inlines; {ref}{lines_note}; {follow})", 0, True
+    enc = "" if encoding == "UTF-8" else f", {encoding}"
+    return f"({ref}{lines_note}{enc})\n{text}", used, False
+
+
+def _resolve_attachments(raw: object, workspace: Path, record_root: Path) -> tuple[tuple[Any, ...], int]:
+    """The body's `attachments`, each {kind, label, ref, span?}, as kernel `Attachment`s with their text
+    read now (UI sprint 446: by round 3's rules, through `_attachment_text`), and how many went as their
+    reference. ValueError names a malformed one, and WorkspaceEscapeError a path outside the workspace;
+    nothing else refuses a message."""
     from substrate.topologies.session.vocabulary import Attachment
 
     if raw is None:
-        return ()
+        return (), 0
     if not isinstance(raw, list):
         raise ValueError("attachments must be a list or absent")
     out: list[Any] = []
+    room = ATTACH_MESSAGE_INLINE_MAX
+    by_reference = 0
     for i, item in enumerate(raw):
         if not isinstance(item, dict):
             raise ValueError(f"attachments[{i}] must be an object")
@@ -2583,17 +2680,17 @@ def _resolve_attachments(raw: object, workspace: Path, record_root: Path) -> tup
         ):
             raise ValueError(f"attachments[{i}].span must be a list of numbers")
         span = tuple(float(x) for x in span_raw)
+        if kind == "lines" and (len(span) != 2 or not all(x == int(x) for x in span) or not 1 <= span[0] <= span[1]):
+            raise ValueError(f"attachments[{i}].span must be [first, last] lines, from 1")
         text = ""
-        if kind == "file":
-            text = _attachment_file_text(workspace, ref)
-        elif kind == "lines":
-            if len(span) != 2 or not all(x == int(x) for x in span) or not 1 <= span[0] <= span[1]:
-                raise ValueError(f"attachments[{i}].span must be [first, last] lines, from 1")
-            lines = _attachment_file_text(workspace, ref).splitlines(keepends=True)
-            text = "".join(lines[int(span[0]) - 1 : int(span[1])])
-        elif kind == "folder":
-            if not _workspace_target(workspace, ref or ".").is_dir():
-                raise NotADirectoryError(f"{ref!r} is not a directory")
+        if kind in ("file", "lines", "folder", "image"):
+            try:
+                text, used, referred = _attachment_text(kind, ref, span, workspace, room)
+            except OSError as exc:
+                # A file the server cannot open (permission, a vanished folder) still goes, as its reference.
+                text, used, referred = f"(not inlined: it could not be read, {exc.strerror or type(exc).__name__}; {ref}; {ATTACH_FOLLOW})", 0, True
+            room -= used
+            by_reference += int(referred)
         elif kind == "event":
             m = re.fullmatch(r"seq:(\d+)", ref)
             if m is None:
@@ -2606,7 +2703,7 @@ def _resolve_attachments(raw: object, workspace: Path, record_root: Path) -> tup
                 {"kind": entry.get("kind"), "payload": entry.get("payload")}, ensure_ascii=False
             )
         out.append(Attachment(kind=kind, label=label, ref=ref, span=span, text=text))
-    return tuple(out)
+    return tuple(out), by_reference
 
 
 # UI sprint 349, editor shared work 0(c): watching a workspace. A snapshot maps each file's path
@@ -3906,9 +4003,10 @@ class Handler(BaseHTTPRequestHandler):
                 self._error(400, "a driver command starts with /")
                 return
             slash_source = "driver"
-        # UI sprint 388: attachments, resolved now so a bad one is a 400 before the turn queues.
+        # UI sprint 388: attachments, resolved now so a bad one is a 400 before the turn queues; since sprint
+        # 446 only a malformed one or a path outside the workspace is bad.
         try:
-            attachments = _resolve_attachments(
+            attachments, by_reference = _resolve_attachments(
                 body.get("attachments"), Path(manifest.workspace), Path(manifest.record_root)
             )
         except (ValueError, OSError) as exc:
@@ -3953,6 +4051,7 @@ class Handler(BaseHTTPRequestHandler):
                     "session_id": session_id,
                     "turn_index": next_turn_index,
                     "attachments": len(attachments),
+                    "by_reference": by_reference,
                 },
             )
             # Sprint 217e: prefix a context slice to assembled_prompt when the

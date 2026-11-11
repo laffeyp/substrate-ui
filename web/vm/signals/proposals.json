@@ -1372,6 +1372,16 @@
       "rationale": "A turn now saves the session's unsaved buffers before it is posted; the saves and their refusals need a tag, and the turn the count it waited for.",
       "ratified": true,
       "ratified_by": "agent-resolved 2026-11-10, sprint 444; grounds: project — the Architect's ruling of 2026-11-10, roadmap r13 E10.0; SDD — hard rule 2, BOOTSTRAP step 9; practice — n/a"
+    },
+    {
+      "id": "P-0.51-BY-REFERENCE",
+      "kind": "PAYLOAD_FIELD_PROPOSED",
+      "layer": 2,
+      "element": "TURN_ACCEPTED gains by_reference",
+      "source": "ADD-TO-MESSAGE-2026-11-10-r3 rules 2-8; roadmap r13 E10.1; BLACKBOARD 2026-11-10 user (never refuse)",
+      "rationale": "An attachment now goes as content or as its reference; the turn's record of acceptance says how many went by reference.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-10, sprint 446; grounds: project — round 3 rules 2-8, roadmap r13 E10.1; SDD — hard rule 2; practice — n/a"
     }
   ]
 }

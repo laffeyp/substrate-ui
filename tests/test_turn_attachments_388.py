@@ -5,7 +5,11 @@
 POST /api/session/<id>/turn takes `attachments`, each {kind, label, ref, span?}, and puts them on
 the turn's UserMessage with their text read at that moment: a file's text, a line range, a record
 event's kind and payload; a folder and an image carry none. TURN_ACCEPTED counts them (vocabulary
-v0.27) with no path or text (E1). A bad attachment is a 400 before the turn queues."""
+v0.27) with no path or text (E1). A bad attachment is a 400 before the turn queues.
+
+Sprint 446 (roadmap r13 E10.1): each text now opens with its workspace path, a folder is its listing, and
+a missing, binary or non-UTF-8 file goes as its reference line instead of a 400
+(`test_turn_attachments_446.py`)."""
 
 from __future__ import annotations
 
@@ -88,13 +92,14 @@ def test_attachments_reach_the_record_with_their_text(
     assert [(a["kind"], a["label"], a["ref"]) for a in got] == [
         (a["kind"], a["label"], a["ref"]) for a in attachments
     ]
-    assert got[0]["text"] == "one\ntwo\nthree\nfour\n"
-    assert got[1]["text"] == "two\nthree\n" and got[1]["span"] == [2.0, 3.0]
-    assert "text" not in got[2] and "text" not in got[4]  # empty, omitted by omit_defaults
+    assert got[0]["text"] == "(src/cart.py)\none\ntwo\nthree\nfour\n"
+    assert got[1]["text"] == "(src/cart.py, lines 2–3)\ntwo\nthree\n" and got[1]["span"] == [2.0, 3.0]
+    assert got[2]["text"] == "(src/, 1 file)\nsrc/cart.py"
+    assert got[4]["text"] == "(not found when the message was sent: shot.png)"
     event = json.loads(got[3]["text"])
     assert event["kind"] == "UserMessage" and event["payload"]["text"] == first["text"]
     accepted = [r["payload"] for r in recs if r["name"] == "TURN_ACCEPTED"]
-    assert accepted == [{"session_id": sid, "turn_index": 1, "attachments": 5}]
+    assert accepted == [{"session_id": sid, "turn_index": 1, "attachments": 5, "by_reference": 1}]
     assert "cart.py" not in json.dumps(recs) and "three" not in json.dumps(recs)  # E1
 
 
@@ -104,10 +109,7 @@ def test_attachments_reach_the_record_with_their_text(
         ({"kind": "sound", "label": "x", "ref": "x"}, "kind must be one of"),
         ({"kind": "file", "label": "", "ref": "src/cart.py"}, "label"),
         ({"kind": "file", "label": "s", "ref": "../secret.txt"}, "outside the workspace"),
-        ({"kind": "file", "label": "m", "ref": "src/missing.py"}, "not a file"),
-        ({"kind": "file", "label": "b", "ref": "blob.bin"}, "not UTF-8"),
         ({"kind": "lines", "label": "l", "ref": "src/cart.py", "span": [3, 2]}, "span"),
-        ({"kind": "folder", "label": "f", "ref": "src/cart.py"}, "not a directory"),
         ({"kind": "event", "label": "e", "ref": "seq:9999"}, "no event at seq 9999"),
         ({"kind": "event", "label": "e", "ref": "7"}, "seq:<n>"),
     ],

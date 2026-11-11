@@ -99,7 +99,7 @@ def test_create_turn_refusal_and_fault(
     created = [p for n, p in recs if n == "SESSION_CREATED"]
     assert created == [{"session_id": sid, "driver": "deterministic", "workspace_shape": "isolate"}]
     assert [p for n, p in recs if n == "TURN_ACCEPTED"] == [
-        {"session_id": sid, "turn_index": 0, "attachments": 0}
+        {"session_id": sid, "turn_index": 0, "attachments": 0, "by_reference": 0}
     ]
     refused = [p for n, p in recs if n == "API_REFUSED"]
     assert [(p["area"], p["status"]) for p in refused] == [

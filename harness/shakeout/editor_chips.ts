@@ -6,7 +6,7 @@
 //   path on hover; ⌥-click on cart.ts again adds nothing;
 //   ⌫ at the start of the empty draft removes tests/; × removes cart.ts;
 //   cart.ts added again and a message sent: the record's UserMessage carries the attachment {kind file, label
-//   cart.ts, ref src/lib/cart.ts} with the file's text; the bar has no chip after;
+//   cart.ts, ref src/lib/cart.ts} with its path line and the file's text (sprint 446); the bar has no chip after;
 //   signals — EDITOR_CHIP_ADDED file, folder, file; INPUT_CHIP_REMOVED folder by backspace, file by x;
 //   TURN_SUBMITTED and TURN_ACCEPTED count 1 attachment for the message.
 // SHAKEOUT_APP=<Substrate.app> runs the bundle.
@@ -91,7 +91,7 @@ async function main(): Promise<void> {
     const envs = readdirSync(record).filter((f) => f.startsWith("events-")).sort().flatMap((f) => readFileSync(join(record, f), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as { kind: string; payload: Record<string, unknown> }));
     const asked = envs.filter((e) => e.kind === "UserMessage").pop()!;
     const att = (asked.payload.attachments as { kind: string; label: string; ref: string; text: string }[] | undefined) ?? [];
-    if (att.length !== 1 || att[0].kind !== "file" || att[0].label !== "cart.ts" || att[0].ref !== "src/lib/cart.ts" || att[0].text !== CART) throw new Error(`the UserMessage's attachments: ${JSON.stringify(att)}`);
+    if (att.length !== 1 || att[0].kind !== "file" || att[0].label !== "cart.ts" || att[0].ref !== "src/lib/cart.ts" || att[0].text !== "(src/lib/cart.ts)\n" + CART) throw new Error(`the UserMessage's attachments: ${JSON.stringify(att)}`);
 
     const recs = windowRecords(launch);
     const added = recs.filter((r) => r.name === "EDITOR_CHIP_ADDED").map((r) => String(r.payload.kind));
@@ -103,8 +103,8 @@ async function main(): Promise<void> {
     const traces = join(launch.state, "electron", "logs", "traces");
     const boot = readdirSync(traces).sort().pop()!;
     const server = readFileSync(join(traces, boot, "server.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as { name: string; payload: Record<string, unknown> });
-    const accepted = server.filter((r) => r.name === "TURN_ACCEPTED").map((r) => Number(r.payload.attachments));
-    if (!same(accepted, [0, 1])) throw new Error(`TURN_ACCEPTED.attachments ${JSON.stringify(accepted)}`);
+    const accepted = server.filter((r) => r.name === "TURN_ACCEPTED").map((r) => [Number(r.payload.attachments), Number(r.payload.by_reference)]);
+    if (!same(accepted, [[0, 0], [1, 0]])) throw new Error(`TURN_ACCEPTED attachments, by_reference ${JSON.stringify(accepted)}`);
     const booted = readFileSync(join(traces, boot, "main.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as { name: string; payload: Record<string, unknown> }).find((r) => r.name === "APP_BOOTED")!.payload;
     if (packaged && booted.packaged !== true) throw new Error(`APP_BOOTED packaged ${String(booted.packaged)}`);
     console.log(`editor_chips: ok — ⌥-click: cart.ts and tests/ with their paths on hover, cart.ts twice still two; ⌫ removed tests/, × cart.ts; cart.ts sent with a message: the UserMessage's attachment holds the file's text; EDITOR_CHIP_ADDED file, folder, file; INPUT_CHIP_REMOVED folder:backspace, file:x; TURN_SUBMITTED and TURN_ACCEPTED 0 then 1; packaged=${String(booted.packaged)}; screenshot ${shot}`);

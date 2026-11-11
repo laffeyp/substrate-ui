@@ -8,7 +8,8 @@
 // server.jsonl must hold TURN_ACCEPTED for turn 1 with attachments 3, and API_REFUSED (area turn,
 // status 400) with no TURN_ACCEPTED after it; the record's UserMessage at turn 1 must carry the three
 // attachments with the file's text, the two lines, and the event's kind; no path or text reaches the
-// trace (E1).
+// trace (E1). Sprint 446: each text opens with its workspace path; a missing file goes as its reference, and
+// TURN_ACCEPTED counts it in by_reference.
 
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -52,6 +53,8 @@ async function main(): Promise<void> {
       { kind: "file", label: "attached.txt", ref: "attached.txt" },
       { kind: "lines", label: "attached.txt 2–3", ref: "attached.txt", span: [2, 3] },
       { kind: "event", label: "turn 0", ref: `seq:${first.seq}` },
+      // Sprint 446: a file that is not there goes as its reference, and the message still goes.
+      { kind: "file", label: "gone.txt", ref: "gone.txt" },
     ];
     const turn = await call(win, "POST", `${s}/turn`, { text: "look at these", attachments });
     if (turn.status !== 200) throw new Error(`the turn with attachments: ${turn.status} ${JSON.stringify(turn.data)}`);
@@ -63,19 +66,19 @@ async function main(): Promise<void> {
     const boot = readdirSync(traces).sort().pop()!;
     const recs = readFileSync(join(traces, boot, "server.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as Rec)
       .filter((r) => (r.name === "TURN_ACCEPTED" && r.payload.session_id === sid) || (r.name === "API_REFUSED" && r.payload.area === "turn"));
-    const shape = recs.map((r) => [r.name, r.payload.turn_index ?? r.payload.status, r.payload.attachments ?? null]);
-    const want = [["TURN_ACCEPTED", 0, 0], ["TURN_ACCEPTED", 1, 3], ["API_REFUSED", 400, null]];
+    const shape = recs.map((r) => [r.name, r.payload.turn_index ?? r.payload.status, r.payload.attachments ?? null, r.payload.by_reference ?? null]);
+    const want = [["TURN_ACCEPTED", 0, 0, 0], ["TURN_ACCEPTED", 1, 4, 1], ["API_REFUSED", 400, null, null]];
     if (JSON.stringify(shape) !== JSON.stringify(want)) throw new Error(`server.jsonl's turn records: ${JSON.stringify(shape)}, expected ${JSON.stringify(want)}`);
     const all = readFileSync(join(traces, boot, "server.jsonl"), "utf8");
-    if (all.includes("attached.txt") || all.includes("gamma")) throw new Error("a path or text reached the trace (E1)");
+    if (all.includes("attached.txt") || all.includes("gamma") || all.includes("gone.txt")) throw new Error("a path or text reached the trace (E1)");
 
     const messages = recordEntries(root).filter((e) => e.kind === "UserMessage");
     const got = messages[1]?.payload?.attachments ?? [];
     const texts = got.map((a: { text?: string }) => a.text ?? "");
-    if (messages.length !== 2 || got.length !== 3 || texts[0] !== "alpha\nbeta\ngamma\n" || texts[1] !== "beta\ngamma\n" || JSON.parse(texts[2]).kind !== "UserMessage") {
+    if (messages.length !== 2 || got.length !== 4 || texts[3] !== "(not found when the message was sent: gone.txt)" || texts[0] !== "(attached.txt)\nalpha\nbeta\ngamma\n" || texts[1] !== "(attached.txt, lines 2–3)\nbeta\ngamma\n" || JSON.parse(texts[2]).kind !== "UserMessage") {
       throw new Error(`the record's UserMessages: ${JSON.stringify(messages.map((m) => m.payload))}`);
     }
-    console.log(`turn_attachments_signals: ok — TURN_ACCEPTED counts 3 attachments, the record's UserMessage at turn 1 carries the file, the two lines and the event with their text, an attachment outside the workspace is refused 400, no path or text in server.jsonl`);
+    console.log(`turn_attachments_signals: ok — TURN_ACCEPTED counts 4 attachments, 1 by reference; the record's UserMessage at turn 1 carries the file, the two lines and the event with their text, and the missing file's not-found line; an attachment outside the workspace is refused 400, no path or text in server.jsonl`);
     code = 0;
   } catch (e) {
     console.error(`turn_attachments_signals: FAIL — ${(e as Error).message}`);
