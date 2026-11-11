@@ -9,15 +9,33 @@ import * as React from "react";
 import { editor } from "../state/editor";
 import { settings } from "../state/settings";
 import { modeLabel } from "../derive/status_line";
+import { BYTES_FORMS } from "../derive/bytes";
+import { formOf, pickBytesForm } from "./BytesView";
 
 /** The nano keys this build has; ⌃W comes with FIND. */
 const NANO_KEYS = "^O save · ^K cut · ^U paste · ^X leave · ^G close this";
 
-export function StatusLine(): React.ReactElement | null {
+export function StatusLine({ paneId }: { paneId?: number } = {}): React.ReactElement | null {
   const st = React.useSyncExternalStore(editor.subscribe, editor.getSnapshot, editor.getSnapshot);
   const binding = React.useSyncExternalStore(settings.subscribe, settings.getSnapshot, settings.getSnapshot).binding;
-  if (!st.active || !st.file || st.file.path !== st.active || st.file.text === null) return null;
+  if (!st.active || !st.file || st.file.path !== st.active) return null;
   const name = st.active.slice(st.active.lastIndexOf("/") + 1);
+  // Sprint 463 (roadmap r13 E14): a file shown as its bytes: its size, and the four forms to pick from.
+  if (st.file.text === null && st.file.encoding === "binary") {
+    const form = formOf(st.active), size = st.file.size, path = st.active;
+    return (
+      <div data-status-line="1" data-status-bytes="1" style={{ display: "flex", gap: 14, padding: "5px 14px", background: "#1a1c20", fontSize: 10, color: "#62676f", whiteSpace: "nowrap", overflow: "hidden", flex: "none" }}>
+        <span data-status-pos="1">{name} · {size.toLocaleString("en-US")} bytes · read-only</span>
+        <span style={{ marginLeft: "auto", display: "flex", gap: 10 }}>
+          {BYTES_FORMS.map((f) => (
+            <span key={f} data-bytes-form-pick={f} data-on={f === form ? "1" : "0"} onClick={() => pickBytesForm(paneId ?? 0, path, f, size)}
+              style={{ cursor: "pointer", color: f === form ? "#e2e5e9" : "#62676f" }}>{f}</span>
+          ))}
+        </span>
+      </div>
+    );
+  }
+  if (st.file.text === null) return null;
   const mode = binding === "vim" ? modeLabel(st.mode) : null;
   return (
     <div data-status-line="1" style={{ display: "flex", gap: 14, padding: "5px 14px", background: "#1a1c20", fontSize: 10, color: "#62676f", whiteSpace: "nowrap", overflow: "hidden", flex: "none" }}>

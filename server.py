@@ -2633,6 +2633,10 @@ def _workspace_read(root: Path, rel: str, max_bytes: int = WORKSPACE_READ_MAX) -
         "read_only": False,
     }
     if st.st_size > max_bytes:
+        # Sprint 463: a large file that is not text is still named, so the editor opens it as its bytes.
+        with target.open("rb") as fh:
+            if b"\x00" in fh.read(ATTACH_BINARY_SNIFF):
+                out.update(encoding="binary", read_only=True)
         return out
     data = target.read_bytes()
     decoded = _decode_any(data)
@@ -2648,6 +2652,32 @@ def _workspace_read(root: Path, rel: str, max_bytes: int = WORKSPACE_READ_MAX) -
         read_only=encoding != "utf-8",
     )
     return out
+
+
+# Sprint 463 (roadmap r13 E14): the bytes view reads a file in pieces, so no file is too big to open.
+WORKSPACE_BYTES_MAX = 256 * 1024
+
+
+def _workspace_bytes(root: Path, rel: str, offset: int, length: int) -> dict[str, object]:
+    """Up to WORKSPACE_BYTES_MAX bytes of a file from `offset`: the file's size, the count read, and the bytes
+    as base64."""
+    import base64
+
+    target = _workspace_target(root, rel)
+    if not target.is_file():
+        raise FileNotFoundError(f"{rel!r} is not a file in the workspace")
+    if offset < 0 or length < 0:
+        raise ValueError("offset and length must not be negative")
+    size = target.stat().st_size
+    with target.open("rb") as fh:
+        fh.seek(min(offset, size))
+        data = fh.read(min(length, WORKSPACE_BYTES_MAX))
+    return {
+        "size": size,
+        "offset": offset,
+        "length": len(data),
+        "data": base64.b64encode(data).decode("ascii"),
+    }
 
 
 # Sprint 462: the file API's encoding as FILE_READ names it (vocabulary v0.61).
@@ -4555,6 +4585,31 @@ class Handler(BaseHTTPRequestHandler):
             TRACE.emit(Signal.FILES_WATCH_CLOSED, {"session_id": session_id, "change_events": sent})
             return
 
+    def _session_bytes(self, session_id: str, q: dict[str, list[str]]) -> None:
+        """UI sprint 463: GET /api/session/<id>/bytes?path=<rel>&offset=<n>&length=<n>, a slice of a file of the
+        session's workspace for the editor's bytes view (FILE_BYTES_READ)."""
+        root = self._session_workspace_root(session_id)
+        if root is None:
+            return
+        try:
+            offset = int(q.get("offset", ["0"])[0])
+            length = int(q.get("length", [str(WORKSPACE_BYTES_MAX)])[0])
+            out = _workspace_bytes(root, q.get("path", [""])[0], offset, length)
+        except WorkspaceEscapeError as exc:
+            self._error(400, str(exc))
+            return
+        except ValueError as exc:
+            self._error(400, str(exc))
+            return
+        except (FileNotFoundError, NotADirectoryError) as exc:
+            self._error(404, str(exc))
+            return
+        TRACE.emit(
+            Signal.FILE_BYTES_READ,
+            {"session_id": session_id, "offset": offset, "length": out["length"]},
+        )
+        self._json(out)
+
     def _session_files(self, session_id: str, what: str, q: dict[str, list[str]]) -> None:
         """UI sprint 348: GET /api/session/<id>/files?dir=<rel> lists a directory of the session's
         workspace; GET /api/session/<id>/file?path=<rel> reads one file's facts and text. Each path
@@ -6024,6 +6079,10 @@ class Handler(BaseHTTPRequestHandler):
             m_search = re.fullmatch(r"/api/session/([^/]+)/search", path)
             if m_search:  # UI sprint 434: the workspace search (frame 24j)
                 self._session_search(m_search.group(1), parse_qs(urlparse(self.path).query))
+                return
+            m_bytes = re.fullmatch(r"/api/session/([^/]+)/bytes", path)
+            if m_bytes:  # UI sprint 463: a file's bytes, in pieces, for the bytes view
+                self._session_bytes(m_bytes.group(1), parse_qs(urlparse(self.path).query))
                 return
             m_files = re.fullmatch(r"/api/session/([^/]+)/(files|file)", path)
             if m_files:  # UI sprint 348, editor shared work 0(c)

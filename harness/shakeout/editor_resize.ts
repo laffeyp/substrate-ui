@@ -12,7 +12,8 @@
 //            centre for the terminal's top edge;
 //   signal — after close, one EDITOR_COLUMN_RESIZED per drag in window-1.jsonl with that size.
 // Then ⌘⇧E out and back (sprint 447: Escape no longer leaves the editor): the sizes are kept. Then a drag
-// whose pointer capture is lost before its pointerup (sprint 448): it ends where it was, ended capture_lost. SHAKEOUT_APP=<Substrate.app> runs the bundle.
+// whose pointer capture is lost before its pointerup (sprint 448): it ends where it was, ended capture_lost. Sprint 464: the
+// window, shown, is not focused (a gate's window takes no keyboard). SHAKEOUT_APP=<Substrate.app> runs the bundle.
 
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -94,6 +95,9 @@ async function main(): Promise<void> {
   try {
     const win = await app.firstWindow({ timeout: 30_000 });
     await waitForApp(win);
+    // Sprint 464: a gate's window never holds the keyboard; nothing typed or dictated on the machine reaches it.
+    const focus = await app.evaluate(({ BrowserWindow }) => ({ focused: BrowserWindow.getFocusedWindow() !== null, any: BrowserWindow.getAllWindows().some((w) => w.isFocused()), visible: BrowserWindow.getAllWindows().every((w) => w.isVisible()) }));
+    if (focus.focused || focus.any || !focus.visible) throw new Error(`the gate's window: ${JSON.stringify(focus)}`);
     await app.evaluate(({ BrowserWindow }) => { BrowserWindow.getAllWindows()[0].setContentSize(1512, 945); });
     await win.waitForFunction(() => window.innerWidth === 1512, undefined, { timeout: 10_000 });
     await bindPaneAsUser(win, "deterministic", { folder });

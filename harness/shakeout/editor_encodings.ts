@@ -6,7 +6,7 @@
 //   each text file shows "café crème"; INFO's encoding reads "Latin-1 · read-only", "UTF-16 · read-only",
 //   "UTF-8 with BOM · read-only", "UTF-8";
 //   a character typed into latin.txt changes nothing, and ⌘S there is refused; plain.txt takes the character and saves;
-//   img.bin shows its "binary file" line;
+//   img.bin opens as its bytes (sprint 463), not as text;
 //   server.jsonl: FILE_READ encoding latin1, utf16, utf8_bom, utf8, binary among the reads; window-1.jsonl:
 //   EDITOR_KEY_REFUSED Meta+s not_utf8 once, EDITOR_FILE_SAVED once; latin.txt's bytes unchanged on disk.
 // A screenshot of latin.txt with INFO goes to runs/packaged/sprint-462-<stamp>-<source|packaged>/.
@@ -96,7 +96,7 @@ async function main(): Promise<void> {
     await until(win, "plain.txt saved", async () => readFileSync(join(repo, "plain.txt"), "utf8"), (t) => t === `${WORDS}Z\n`);
     // img.bin: its line, as before.
     await open("img.bin");
-    await until(win, "img.bin's line", () => win.locator("[data-editor-unreadable]").count(), (n) => n === 1);
+    await until(win, "img.bin's bytes", () => win.locator('[data-bytes-view="img.bin"]').count(), (n) => n === 1);
     await app.close();
 
     if (!readFileSync(join(repo, "latin.txt")).equals(latin)) throw new Error("latin.txt changed on disk");
@@ -112,7 +112,7 @@ async function main(): Promise<void> {
     for (const e of ["latin1", "utf16", "utf8_bom", "utf8", "binary"]) if (!reads.has(e)) throw new Error(`no FILE_READ ${e}: ${JSON.stringify([...reads])}`);
     const booted = readFileSync(join(traces, boot, "main.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as { name: string; payload: Record<string, unknown> }).find((r) => r.name === "APP_BOOTED")!.payload;
     if (packaged && booted.packaged !== true) throw new Error(`APP_BOOTED packaged ${String(booted.packaged)}`);
-    console.log(`editor_encodings: ok — "${WORDS}" in each: ${JSON.stringify(seen)}; latin.txt took no character and its ⌘S was refused (not_utf8), its bytes unchanged; plain.txt typed and saved; img.bin its binary line; FILE_READ ${JSON.stringify([...reads])}; packaged=${String(booted.packaged)}; screenshots in ${shots}`);
+    console.log(`editor_encodings: ok — "${WORDS}" in each: ${JSON.stringify(seen)}; latin.txt took no character and its ⌘S was refused (not_utf8), its bytes unchanged; plain.txt typed and saved; img.bin as its bytes; FILE_READ ${JSON.stringify([...reads])}; packaged=${String(booted.packaged)}; screenshots in ${shots}`);
     status = 0;
   } catch (e) {
     console.error(`editor_encodings: FAIL — ${(e as Error).message}`);

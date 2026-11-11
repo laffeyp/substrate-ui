@@ -108,8 +108,9 @@ async function main(): Promise<void> {
     await win.locator('[data-tree-row="app.py"]').first().click();
     await win.waitForFunction(() => document.querySelectorAll("[data-editor-tab]").length === 2, undefined, { timeout: 10_000 });
     await win.locator('[data-tree-row="img.bin"]').first().click();
-    await win.locator("[data-editor-unreadable]").first().waitFor({ timeout: 10_000 });
-    const unreadable = await win.locator("[data-editor-unreadable]").first().textContent();
+    // Sprint 463 (roadmap r13 E14): a file that is not text opens as its bytes, in hex, where it drew "binary file".
+    await win.locator('[data-bytes-view="img.bin"] [data-bytes-row="0"]').first().waitFor({ timeout: 10_000 });
+    const unreadable = await win.locator('[data-bytes-view="img.bin"] [data-bytes-row="0"]').first().textContent();
     await app.evaluate(({ Menu }) => { Menu.getApplicationMenu()?.getMenuItemById("menu-close-pane")?.click(); });
     await win.waitForFunction(() => document.querySelectorAll("[data-editor-tab]").length === 2, undefined, { timeout: 10_000 });
     await settled(win);

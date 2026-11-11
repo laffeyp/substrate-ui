@@ -41,6 +41,7 @@ import type { Chip } from "../state/input_bar";
 import { addFrom, addItem, carriesChip, dragChip, fileChip } from "./chips";
 import { openMenu } from "../state/context_menu";
 import { StatusLine } from "./StatusLine";
+import { BytesView } from "./BytesView";
 
 const SUNK = "#1a1c20";
 const GROUND = "#212327";
@@ -876,7 +877,10 @@ export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionI
   }, []); // the centre's own lifetime
 
   const showing = facts && facts.path === st.active ? facts.file : null;
-  const unreadable = showing && showing.text === null ? (showing.too_large ? `over the read limit · ${Math.round(showing.size / 1024)} KB` : `binary file · ${Math.round(showing.size / 1024)} KB`) : null;
+  // Sprint 463 (roadmap r13 E14): a file that is not text opens as its bytes, at any size. A text file over the read
+  // limit keeps its line until sprint 464 reads text in pieces.
+  const bytesFile = showing && showing.text === null && showing.encoding === "binary" ? showing : null;
+  const unreadable = showing && showing.text === null && !bytesFile ? `over the read limit · ${Math.round(showing.size / 1024)} KB` : null;
   return (
     <div data-editor-area="centre" style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, background: GROUND }}>
       <div data-editor-tabs={String(st.tabs.length)} style={{ height: tabRow, flex: "none", background: SUNK, display: "flex", overflowX: "auto", overflowY: "hidden" }}>
@@ -895,10 +899,11 @@ export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionI
           onContextMenu={(e) => { const chip = selectionChip(); if (chip) openMenu(e, ContextMenuOpenedSource.CODE, [addItem(paneId, chip)], paneId); }}
           // Sprint 458: a chip's drag is not for the code; stopped here, before the editor's own drop puts its path in the file.
           onDragOverCapture={(e) => { if (carriesChip(e.dataTransfer)) { e.stopPropagation(); e.dataTransfer.dropEffect = "none"; } }}
-          onDropCapture={(e) => { if (carriesChip(e.dataTransfer)) { e.preventDefault(); e.stopPropagation(); } }} style={{ position: "absolute", inset: 0, display: st.active && !unreadable ? "block" : "none" }} />
+          onDropCapture={(e) => { if (carriesChip(e.dataTransfer)) { e.preventDefault(); e.stopPropagation(); } }} style={{ position: "absolute", inset: 0, display: st.active && !unreadable && !bytesFile ? "block" : "none" }} />
+        {bytesFile && st.active && <BytesView sessionId={sessionId} path={st.active} size={bytesFile.size} paneId={paneId} />}
         {unreadable && <div data-editor-unreadable="1" style={{ padding: "20px 24px", color: "#62676f", fontSize: 12 }}>{st.active} · {unreadable}</div>}
       </div>
-      <StatusLine />
+      <StatusLine paneId={paneId} />
     </div>
   );
 }

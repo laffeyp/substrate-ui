@@ -5,7 +5,7 @@ Regenerate: python3 scripts/gen_signals.py. tests/test_signals_generated.py fail
 
 from enum import StrEnum
 
-VOCAB_VERSION = "0.61"
+VOCAB_VERSION = "0.62"
 
 
 class Signal(StrEnum):
@@ -123,6 +123,7 @@ class Signal(StrEnum):
     TOOL_OUTPUT_MODE_SET = "TOOL_OUTPUT_MODE_SET"
     FILES_LISTED = "FILES_LISTED"
     FILE_READ = "FILE_READ"
+    FILE_BYTES_READ = "FILE_BYTES_READ"
     FILE_WRITTEN = "FILE_WRITTEN"
     FILES_WATCH_OPENED = "FILES_WATCH_OPENED"
     FILES_WATCH_CLOSED = "FILES_WATCH_CLOSED"
@@ -138,6 +139,7 @@ class Signal(StrEnum):
     EDITOR_FOLLOW_CONFIRMED = "EDITOR_FOLLOW_CONFIRMED"
     EDITOR_FOLLOW_WITHDRAWN = "EDITOR_FOLLOW_WITHDRAWN"
     EDITOR_HUNK_DRAWN = "EDITOR_HUNK_DRAWN"
+    EDITOR_BYTES_VIEWED = "EDITOR_BYTES_VIEWED"
     EDITOR_CHIP_ADDED = "EDITOR_CHIP_ADDED"
     EDITOR_SAVED_FOR_SEND = "EDITOR_SAVED_FOR_SEND"
     INPUT_CHIP_REMOVED = "INPUT_CHIP_REMOVED"
@@ -633,6 +635,18 @@ class EditorHunkDrawnAuthor(StrEnum):
     SESSION = "session"
     HAND = "hand"
     UNATTRIBUTED = "unattributed"
+
+
+class EditorBytesViewedForm(StrEnum):
+    HEX = "hex"
+    BINARY = "binary"
+    OCTAL = "octal"
+    TEXT = "text"
+
+
+class EditorBytesViewedHow(StrEnum):
+    OPEN = "open"
+    SELECTOR = "selector"
 
 
 class EditorChipAddedKind(StrEnum):

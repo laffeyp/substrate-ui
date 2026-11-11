@@ -644,6 +644,10 @@ function createWindow(cause: WindowOpenedCause) {
     minWidth: minW,
     minHeight: minH,
     title: "substrate",
+    // Sprint 464: a gate's window is made unfocusable and hidden, then shown without the focus. setFocusable(false)
+    // after the fact leaves a focused window focused on macOS (Electron: "it does not remove the focus from the
+    // window"), and the Architect's dictation reached a gate's code that way.
+    ...(GATE_ISOLATED ? { focusable: false, show: false } : {}),
     backgroundColor: "#212327",
     titleBarStyle: "hiddenInset",
     trafficLightPosition: { x: 12, y: 13 },
@@ -655,7 +659,7 @@ function createWindow(cause: WindowOpenedCause) {
       webSecurity: true,
     },
   });
-  if (GATE_ISOLATED) { win.setFocusable(false); win.setIgnoreMouseEvents(true); }
+  if (GATE_ISOLATED) { win.setIgnoreMouseEvents(true); win.showInactive(); }
   const windowId = win.id;
   traceEmit(Signal.WINDOW_OPENED, { cause }, windowId);
   win.on("closed", () => traceEmit(Signal.WINDOW_CLOSED, {}, windowId));
@@ -747,7 +751,7 @@ if (!singleInstanceLock) {
     const win = currentWindow();
     if (win) {
       if (win.isMinimized()) win.restore();
-      win.focus();
+      if (!GATE_ISOLATED) win.focus();
     }
     for (const arg of argv) {
       if (typeof arg === "string" && arg.startsWith("substrate://")) forwardDeepLink(arg);

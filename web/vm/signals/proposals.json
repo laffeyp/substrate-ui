@@ -1482,6 +1482,16 @@
       "rationale": "The file API now reads text in any encoding and names it; the editor refuses to save such a file, and the trace says why.",
       "ratified": true,
       "ratified_by": "agent-resolved 2026-11-11, sprint 462; grounds: project — roadmap r13 E14, the user entries of 2026-11-10 and 2026-11-11; SDD — hard rule 2; practice — n/a"
+    },
+    {
+      "id": "P-0.62-BYTES",
+      "kind": "NEW_TAG_PROPOSED",
+      "layer": 1,
+      "element": "FILE_BYTES_READ (server) {session_id, offset, length}; EDITOR_BYTES_VIEWED (editor) {form, how, bytes}",
+      "source": "roadmap r13 E14 (corrected 2026-11-11); BLACKBOARD 2026-11-11 user; sprint 463",
+      "rationale": "Every file that is not text opens as its bytes, read in pieces; the server's reads and the view's forms are events the trace otherwise lacks.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-11, sprint 463; grounds: project — roadmap r13 E14, the user entries of 2026-11-11; SDD — hard rule 2, BOOTSTRAP step 9 (the read and the view pair); practice — n/a"
     }
   ]
 }
