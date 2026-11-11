@@ -84,7 +84,8 @@ A renderer-owned key is listed in its menu without its key, as Meta and Assays a
 | E10.5 | **Images to the receivers that see them**: an image goes as an image, by its path, and Claude Code's Read opens it (sprint 460). Codex's `-i` and Ollama's images are kernel work and a vocabulary change; set aside by the Architect on 2026-11-11 (the models open the path themselves; BLACKBOARD `deferred` of that date holds what was found). | ADD-TO-MESSAGE r3 |
 | E11 | **The footer and the header as 24a draws them**, each field traced to its source first (`live · clean`, `record <id> · N events`, the worktree chip). | 24a; D6, D40 |
 | E12 | **Text in narrow areas**: a rule for lines with no break points (paths, the bar line) in narrow columns. | BLACKBOARD 2026-11-09 deferred entry |
-| E14 | **Every file's text**: the editor displays the text of every file it opens, a binary file's included (a JPEG, a PDF, any file that is not UTF-8). Every file is made of text; today the file API sends no text for a file that is not UTF-8 and the centre draws nothing. | BLACKBOARD 2026-11-10 user |
+| E14 | **Every file's text, and a binary file's bytes** (`RESEARCH-2026-11-11-binary-files-and-highlighting.md`): a text file in any encoding opens as text, by the server's decoding rule, read-only when it is not UTF-8, its encoding named; a binary file (a NUL byte in its first 8 KB) opens as its bytes, read-only, in a form chosen in the status line: hex (the default: offset, sixteen bytes, the text column), binary (each byte's eight 0s and 1s), octal, or text (the bytes as Latin-1). | BLACKBOARD 2026-11-10 user; the Architect 2026-11-11 |
+| E15 | **Syntax highlighting for every common language and format**: the language picked by `LanguageDescription.matchFilename` over `@codemirror/language-data`'s 143 descriptions (Rust, Go, C, C++, Java, YAML, TOML, SQL, Kotlin, Swift, Ruby, Dockerfile among them), loaded on first use, named in the status line and INFO; the editor's own colours. | the Architect 2026-11-11; RESEARCH-2026-11-11-binary-files-and-highlighting |
 | E13 | **Close**: the full suites once; the runbook's build and install; every editor frame beside the running app; the closing table of the editor's hand actions against their session tools (save → `write_file`; replace and replace all → `edit_file`; step back → `write_file`; search → `grep`; quick open → `glob`), with where "by hand only" is drawn; the evidence reported in chat. | runbook; D91, D92 |
 
 ## Following the session (E7)
@@ -142,6 +143,8 @@ Cards, in order. Each is ≤2 product files where it can be; a card that cannot 
 | E10.5 | 1: images to the receivers that see them | `server.py`; gate `image_chip_claude.ts` (sprint 460); the kernel part set aside | E10.1 |
 | E11 | 1 | `TopBar.tsx`, `Footer.tsx` | E5 |
 | E12 | 1 | the areas it names | — |
+| E14 | 1: text in any encoding; 2: a binary file's bytes in four forms | `server.py` (the file API); `editor/Centre.tsx`, `editor/StatusLine.tsx` | E3 |
+| E15 | 1: every language by its file name | `editor/Centre.tsx`; `package.json` | E3 |
 | E13 | 1: the close | — | all |
 
 About 35 cards.
