@@ -43,7 +43,7 @@ export interface PaneInput {
 export const EMPTY_INPUT: PaneInput = { text: "", chips: [], slashSel: null, hist: [], histAt: null, histDraft: "" };
 const HIST_MAX = 200;
 
-interface Controller { slashCatalog?(): SlashCatalogEntry[]; submitLine?(line: string, attachments?: Chip[]): unknown; }
+interface Controller { slashCatalog?(): SlashCatalogEntry[]; submitLine?(line: string, attachments?: Chip[], onRefused?: () => void): unknown; }
 interface Vm { get?(paneId: number): Controller | null; setActive?(paneId: number): void; submitLine?(line: string): unknown; }
 const vm = () => (window as unknown as { __vm?: Vm }).__vm;
 
@@ -103,12 +103,21 @@ export function removeChip(paneId: number, index: number, how: InputChipRemovedH
   emitSignal(Signal.INPUT_CHIP_REMOVED, { kind: chip.kind as InputChipRemovedKind, how }, { pane_id: paneId });
 }
 
+/** Sprint 451 (ADD-TO-MESSAGE-2026-11-10-r3: "a real error leaves the draft and its chips in the bar"): a refused
+ *  message's line and chips go back into the bar, if it is still empty; anything typed since is kept. */
+export function restoreDraft(paneId: number, line: string, chips: Chip[]): void {
+  const now = paneInput(paneId);
+  if (now.text || now.chips.length) return;
+  patch(paneId, { text: line, chips });
+  emitSignal(Signal.INPUT_DRAFT_RESTORED, { chips: chips.length }, { pane_id: paneId });
+}
+
 function submit(paneId: number, line: string, chips: Chip[] = []): void {
   const v = vm();
   if (!v) return;
   if (typeof v.setActive === "function") v.setActive(paneId);
   const ctl = typeof v.get === "function" ? v.get(paneId) : null;
-  if (ctl && typeof ctl.submitLine === "function") ctl.submitLine(line, chips);
+  if (ctl && typeof ctl.submitLine === "function") ctl.submitLine(line, chips, () => restoreDraft(paneId, line, chips));
   else if (typeof v.submitLine === "function") v.submitLine(line);
 }
 

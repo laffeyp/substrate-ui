@@ -1412,6 +1412,16 @@
       "rationale": "The base is now HEAD when there is no main or default branch, and absent in a repository with no commit; the trace names which.",
       "ratified": true,
       "ratified_by": "agent-resolved 2026-11-10, sprint 450; grounds: project — design spec r6 §5, D6; SDD — PRINCIPLES commitment 1; practice — git-diff(1)"
+    },
+    {
+      "id": "P-0.55-DRAFT-RESTORED",
+      "kind": "TAG_PROPOSED",
+      "layer": 1,
+      "element": "INPUT_DRAFT_RESTORED (editor) {chips}",
+      "source": "ADD-TO-MESSAGE-2026-11-10-r3 (what you see); roadmap r13 E10.2; sprint 451",
+      "rationale": "A refused message's draft and chips go back into the bar; the trace records it.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-10, sprint 451; grounds: project — round 3, roadmap r13 E10.2; SDD — hard rule 2, BOOTSTRAP step 9; practice — n/a"
     }
   ]
 }

@@ -257,6 +257,9 @@ export class SessionController {
   /** Sprint 444: an echo's seq → the seq of its save warning, so the warning moves with the echo when the record's
    *  UserMessage replaces it. */
   private readonly saveWarnings = new Map<number, number>();
+  /** Sprint 451 (roadmap r13 E10.2): the seqs of the echoes still waiting for their message on the record, in send
+   *  order. A refused turn takes its echo out, so a later message with the same words never takes it. */
+  private readonly waitingEchoes: number[] = [];
   private readonly listeners = new Set<Listener>();
   private readonly eventListeners = new Set<EventListener>();
   private unsubscribeStream: Unsubscribe | null = null;
@@ -581,6 +584,7 @@ export class SessionController {
     const ack = result.data;
     this.lastSeq = -1;
     this.seenSeqs.clear();
+    this.waitingEchoes.length = 0;
     this.openCallKey.clear();
     this.harnessToolNames.clear();
     this.endedEmittedFor = null;
@@ -741,7 +745,7 @@ export class SessionController {
     await this.refreshTasks();
   }
 
-  async sendTurn(text: string, opts: { skill?: string; driverCommand?: boolean; attachments?: { kind: string; label: string; ref: string }[] } = {}): Promise<void> {
+  async sendTurn(text: string, opts: { skill?: string; driverCommand?: boolean; attachments?: { kind: string; label: string; ref: string }[]; onRefused?: () => void } = {}): Promise<void> {
     const trimmed = text.trim();
     if (!trimmed) return;
     if (this.snap.viewOnly) {
@@ -760,13 +764,17 @@ export class SessionController {
       this.attachStream(sessionId);
     }
     // Local echo first so the shell never looks hung during a slow round-trip.
-    const echoSeq = -Math.round(Date.now());
+    // Sprint 451: the echo's seq is its identity, so it is unique among the transcript's rows, with the two seqs below
+    // it free for its refusal and save warnings (two messages sent in one millisecond had shared one).
+    let echoSeq = -Math.round(Date.now());
+    while (this.snap.transcript.some((row) => row.seq === echoSeq || row.seq === echoSeq - 1 || row.seq === echoSeq - 2)) echoSeq -= 3;
     this.appendTranscript({
       seq: echoSeq,
       kind: EnvelopeKind.UserMessage,
       role: "user",
       text: trimmed,
     });
+    this.waitingEchoes.push(echoSeq);
     const turnIndex = this.snap.turnIndex;
     this.patch({ turnIndex: turnIndex + 1, parkReason: null, turnFailure: null });
     const attachments = opts.attachments ?? [];
@@ -794,14 +802,20 @@ export class SessionController {
       },
     );
     if (!result.ok) {
+      // Sprint 451: the refused echo waits for nothing; it stays where it is, with its warning under it. The kernel
+      // took no turn, so the turn count goes back (the next TURN_SUBMITTED.turn_index is the record's next).
+      const waiting = this.waitingEchoes.indexOf(echoSeq);
+      if (waiting >= 0) this.waitingEchoes.splice(waiting, 1);
+      if (this.snap.turnIndex === turnIndex + 1) this.patch({ turnIndex });
       this.appendTranscript({
-        seq: -Math.round(Date.now()) - 1,
+        seq: echoSeq - 1,
         kind: "TurnError",
         role: "warning",
         text: `turn refused: ${result.detail}`,
       });
       this.patch({ turnFailure: { detail: String(result.detail), atT: Date.now() / 1000 } });
       this.emit(Signal.TURN_REFUSED, { failure_class: result.failureClass, detail: result.detail });
+      opts.onRefused?.();
     } else {
       this.emit(Signal.TURN_ACK, { session_id: sessionId });
     }
@@ -822,6 +836,7 @@ export class SessionController {
     if (this.unsubscribeStream) { this.unsubscribeStream(); this.unsubscribeStream = null; }
     this.lastSeq = -1;
     this.seenSeqs.clear();
+    this.waitingEchoes.length = 0;
     this.openCallKey.clear();
     this.harnessToolNames.clear();
     this.endedEmittedFor = null;
@@ -895,6 +910,7 @@ export class SessionController {
     const manifest = result.data;
     this.lastSeq = -1;
     this.seenSeqs.clear();
+    this.waitingEchoes.length = 0;
     this.openCallKey.clear();
     this.harnessToolNames.clear();
     this.endedEmittedFor = null;
@@ -1098,16 +1114,17 @@ export class SessionController {
   /** Route a prompt line. `/foo` goes to a slash handler, plain text
    * to `sendTurn`. Returns true when the line was consumed as a
    * slash so the caller can hand a residual back if it wants. */
-  async submitLine(line: string, attachments: { kind: string; label: string; ref: string }[] = []): Promise<boolean> {
+  /** `onRefused` (sprint 451) runs when the server refuses the message's turn, so the input bar can put the draft back. */
+  async submitLine(line: string, attachments: { kind: string; label: string; ref: string }[] = [], onRefused?: () => void): Promise<boolean> {
     const text = line.trim();
     if (!text) return true;
     if (!text.startsWith("/")) {
-      await this.sendTurn(text, { attachments });
+      await this.sendTurn(text, { attachments, onRefused });
       return false;
     }
     // UI sprint 123: `//<command>` passes `/<command>` to the driver itself (e.g. Claude's /context).
     if (text.startsWith("//")) {
-      await this.sendTurn(text.slice(1), { driverCommand: true });
+      await this.sendTurn(text.slice(1), { driverCommand: true, onRefused });
       return true;
     }
     const parts = text.slice(1).split(/\s+/);
@@ -1486,11 +1503,13 @@ export class SessionController {
         if (this.snap.endedReason != null) this.patch({ endedReason: null });
         // Replace the local echo appended in sendTurn. The row moves to the end: envelopes arrive
         // in seq order, and record frames that were still arriving when the echo went up (a
-        // reattach's backlog) belong above the message, not below it.
+        // reattach's backlog) belong above the message, not below it. Sprint 451: the echo is the oldest one
+        // still waiting with this text (identity, not the first row with the same words: a refused echo
+        // waits for nothing); with none waiting, the message is someone else's or a replay, and is added.
         const transcript = this.snap.transcript;
-        const echoIndex = transcript.findIndex(
-          (row) => row.role === "user" && row.text === text && row.seq < 0,
-        );
+        const waitingSeq = this.waitingEchoes.find((seq) => transcript.some((row) => row.seq === seq && row.text === text));
+        if (waitingSeq !== undefined) this.waitingEchoes.splice(this.waitingEchoes.indexOf(waitingSeq), 1);
+        const echoIndex = waitingSeq === undefined ? -1 : transcript.findIndex((row) => row.seq === waitingSeq);
         const rest = echoIndex >= 0
           ? [...transcript.slice(0, echoIndex), ...transcript.slice(echoIndex + 1)]
           : transcript;
