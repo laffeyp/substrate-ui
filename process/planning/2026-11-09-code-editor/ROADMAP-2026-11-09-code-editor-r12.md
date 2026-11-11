@@ -1,6 +1,6 @@
 # Roadmap — the code editor, the rest of it (round 12)
 
-*2026-11-10. Supersedes `superseded/ROADMAP-2026-11-09-code-editor-r11.md`. Round 12 applies the Architect's ruling of 2026-11-10 on E10: sprint 443's chips were a prototype; add to the message restarts from `ADD-TO-MESSAGE-2026-11-10-r2.md`, in five items E10.1–E10.5. Round 11's header follows unchanged.*
+*2026-11-10. Supersedes `superseded/ROADMAP-2026-11-09-code-editor-r11.md`. Round 12 applies the Architect's ruling of 2026-11-10 on E10: sprint 443's chips were a prototype; add to the message restarts from `ADD-TO-MESSAGE-2026-11-10-r3.md`, in five items E10.1–E10.5. Round 11's header follows unchanged.*
 
 *2026-11-10. Supersedes `superseded/ROADMAP-2026-11-09-code-editor-r10.md`. Round 11 applies the Architect's rulings of 2026-11-10 (BLACKBOARD `user` entries): one search bar, described in `SEARCH-BAR-2026-11-10.md`, which replaces E8's search (quick open and the tree's find stay: nothing is undone); and E14, the editor displays every file's text, binary files included. Round 10's header follows unchanged.*
 
@@ -73,12 +73,12 @@ A renderer-owned key is listed in its menu without its key, as Meta and Assays a
 | E7 | **Following the session.** See the follow rules below. Vocabulary: the three follow tags carry the call's seq (and the result's where there is one), and rule S10 gets its checker with planted breaks, as sprint 408 did for S11. | D93; spec §0; review findings 5, 10, 12 |
 | E8 | **The left column's tabs**: `files · search · open · activity`. Search is the one search bar of `SEARCH-BAR-2026-11-10.md`: file names, folder names, paths and the text inside files, in one box. The files tab carries no search text. | SEARCH-BAR-2026-11-10; 24j; spec §5.1 |
 | E9 | **Quick open ⌘P**: built in sprint 441 (24i); the list is the search's own walk. It stays beside the search bar (the Architect, 2026-11-10: nothing undone). | 24i; sprint 441 |
-| E10 | **Add to the message** (`ADD-TO-MESSAGE-2026-11-10-r2.md`; D94, 24k). Sprint 443 built the prototype: chips in the input bar, ⌥-click on the tree, the message's attachments. | ADD-TO-MESSAGE r2; D94 |
-| E10.1 | **Never refuse**: the reference always goes; any text is text; 64 KB inline a file, 256 KB a message; large, binary, image and missing files by reference with one line saying why; folders as listings. | ADD-TO-MESSAGE r2 |
-| E10.2 | **The sent message shows its chips, in order**: the transcript draws attachments with a by-reference mark; the echo matched by identity; a refused message keeps its warning and its chips. | ADD-TO-MESSAGE r2 |
+| E10 | **Add to the message** (`ADD-TO-MESSAGE-2026-11-10-r3.md`; D94, 24k). Sprint 443 built the prototype: chips in the input bar, ⌥-click on the tree, the message's attachments. | ADD-TO-MESSAGE r3; D94 |
+| E10.1 | **Never refuse**: the reference always goes; any text is text; 64 KB inline a file, 256 KB a message; large, binary, image and missing files by reference with one line saying why; folders as listings. | ADD-TO-MESSAGE r3 |
+| E10.2 | **The sent message shows its chips, in order**: the transcript draws attachments with a by-reference mark; the echo matched by identity; a refused message keeps its warning and its chips. | ADD-TO-MESSAGE r3 |
 | E10.3 | **Selections**: ⌥K and right-click › Add to message; lines and in-line ranges; the buffer's text. | D94; the Architect 2026-11-10 |
 | E10.4 | **Drag and right-click in the editor**: the tree, tabs and search results; the terminal header's hint tooltip (D40). | D94, D40; 24k |
-| E10.5 | **Images to the receivers that see them**: Codex's `-i`; Claude Code's Read opens a path; the kernel waits on the Architect's decision. | ADD-TO-MESSAGE r2 |
+| E10.5 | **Images to the receivers that see them**: Codex's `-i`; Claude Code's Read opens a path; the kernel waits on the Architect's decision. | ADD-TO-MESSAGE r3 |
 | E11 | **The footer and the header as 24a draws them**, each field traced to its source first (`live · clean`, `record <id> · N events`, the worktree chip). | 24a; D6, D40 |
 | E12 | **Text in narrow areas**: a rule for lines with no break points (paths, the bar line) in narrow columns. | BLACKBOARD 2026-11-09 deferred entry |
 | E14 | **Every file's text**: the editor displays the text of every file it opens, a binary file's included (a JPEG, a PDF, any file that is not UTF-8). Every file is made of text; today the file API sends no text for a file that is not UTF-8 and the centre draws nothing. | BLACKBOARD 2026-11-10 user |
