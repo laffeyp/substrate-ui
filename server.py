@@ -1941,14 +1941,21 @@ def _workspace_target(root: Path, rel: str) -> Path:
     return target
 
 
+# UI sprint 467 (roadmap r13 E14): a write's temp file, beside its target from `mkstemp` to `os.replace`. The window
+# re-lists on the write's record entry, inside that span, so the listings skip the server's own write files.
+WRITE_TEMP_PREFIX = ".substrate-write-"
+
+
 def _workspace_list(root: Path, rel: str) -> dict[str, object]:
     """A directory's entries, directories first, each by name: kind (`dir`, `file`, `link`), size,
-    modified time. A symlink is listed as `link` and not followed."""
+    modified time. A symlink is listed as `link` and not followed; a write's temp file is not listed."""
     target = _workspace_target(root, rel or ".")
     if not target.is_dir():
         raise NotADirectoryError(f"{rel!r} is not a directory")
     entries: list[dict[str, object]] = []
     for child in target.iterdir():
+        if child.name.startswith(WRITE_TEMP_PREFIX):
+            continue
         st = child.lstat()
         kind = "link" if child.is_symlink() else "dir" if child.is_dir() else "file"
         entries.append(
@@ -2316,7 +2323,11 @@ def _workspace_files(
         for entry in entries:
             if cut:
                 return
-            if entry.name in WORKSPACE_SKIP_NAMES or entry.is_symlink():
+            if (
+                entry.name in WORKSPACE_SKIP_NAMES
+                or entry.name.startswith(WRITE_TEMP_PREFIX)
+                or entry.is_symlink()
+            ):
                 continue
             rel = f"{rel_dir}/{entry.name}" if rel_dir else entry.name
             is_dir = entry.is_dir(follow_symlinks=False)
@@ -3137,6 +3148,8 @@ def _workspace_snapshot(
         links = [d for d in dirnames if (Path(dirpath) / d).is_symlink()]
         dirnames[:] = [d for d in dirnames if d not in links]
         for name in sorted([*filenames, *links]):
+            if name.startswith(WRITE_TEMP_PREFIX):
+                continue
             full = Path(dirpath) / name
             try:
                 st = full.lstat()
@@ -4996,7 +5009,7 @@ class Handler(BaseHTTPRequestHandler):
             if len(new_bytes) > WORKSPACE_READ_MAX:
                 raise WorkspaceConflictError(f"text over {WORKSPACE_READ_MAX} bytes")
             rel_path = str(target.relative_to(root.resolve(strict=True)))
-            fd, tmp = tempfile.mkstemp(dir=str(target.parent), prefix=".substrate-write-")
+            fd, tmp = tempfile.mkstemp(dir=str(target.parent), prefix=WRITE_TEMP_PREFIX)
             try:
                 with os.fdopen(fd, "wb") as fh:
                     fh.write(new_bytes)

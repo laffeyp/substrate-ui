@@ -14,7 +14,9 @@
 // Sprint 466: after each save INFO's CHANGES compares the file with its base in the text shown: one hunk card at line
 // 1 for latin.txt and wide.txt, none for blob.bin saved unchanged, one at line 2 once its byte is changed; server.jsonl:
 // DIFF_READ hunks 1 for each edited file.
-// Screenshots go to runs/packaged/sprint-466-<stamp>-<source|packaged>/. SHAKEOUT_APP=<Substrate.app> runs the bundle.
+// Sprint 467: the repository also holds .substrate-write-gate, a write's temp file kept still; after the tree loads and
+// after each save no tree row starts with ".substrate-write-".
+// Screenshots go to runs/packaged/sprint-467-<stamp>-<source|packaged>/. SHAKEOUT_APP=<Substrate.app> runs the bundle.
 
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -32,6 +34,11 @@ const codeLines = (win: Page) => win.evaluate(`(function () { var h = document.q
 const specials = (win: Page) => win.evaluate(`(function () { var h = document.querySelector("[data-editor-code]"); var r = h && h.shadowRoot; return r ? r.querySelectorAll(".cm-specialChar").length : 0; })()`) as Promise<number>;
 const infoEncoding = (win: Page) => win.evaluate(`(function () { var row = Array.from(document.querySelectorAll("[data-info-row]")).find(function (e) { return e.textContent.indexOf("encoding") === 0; }); return row ? row.textContent.replace(/^encoding/, "").trim() : null; })()`) as Promise<string | null>;
 const hunkCards = (win: Page) => win.evaluate(`Array.from(document.querySelectorAll("[data-hunk-card]")).map(function (e) { return e.getAttribute("data-hunk-card"); })`) as Promise<string[]>;
+const treeRows = (win: Page) => win.evaluate(`Array.from(document.querySelectorAll("[data-tree-row]")).map(function (e) { return e.getAttribute("data-tree-row"); })`) as Promise<string[]>;
+const noTemp = async (win: Page, when: string) => {
+  const rows = await treeRows(win);
+  if (rows.some((r) => r.split("/").pop()!.startsWith(".substrate-write-"))) throw new Error(`the tree draws a write's temp file ${when}: ${JSON.stringify(rows)}`);
+};
 const statusPos = (win: Page) => win.evaluate(`(function () { var e = document.querySelector("[data-status-pos]"); return e ? e.textContent : null; })()`) as Promise<string | null>;
 const returned = (win: Page) => win.evaluate(() => ((window as unknown as { __vm: { get(n: number): { snapshot(): { rawEnvelopes: { kind: string }[] } } } }).__vm.get(1).snapshot().rawEnvelopes ?? []).filter((e) => e.kind === "Returned").length);
 const menu = (app: ElectronApplication, id: string) => app.evaluate(({ Menu }, item) => { Menu.getApplicationMenu()?.getMenuItemById(item)?.click(); }, id);
@@ -46,7 +53,7 @@ async function until<T>(win: Page, what: string, read: () => Promise<T>, ok: (v:
 async function main(): Promise<void> {
   const packaged = !!process.env.SHAKEOUT_APP;
   const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\..*/, "").replace("T", "-");
-  const shots = join(REPO_ROOT, "runs", "packaged", `sprint-466-${stamp}-${packaged ? "packaged" : "source"}`);
+  const shots = join(REPO_ROOT, "runs", "packaged", `sprint-467-${stamp}-${packaged ? "packaged" : "source"}`);
   mkdirSync(shots, { recursive: true });
   const repo = join(__dirname, ".scratch", "editor-edit-any-file-" + process.pid);
   mkdirSync(repo, { recursive: true });
@@ -56,6 +63,7 @@ async function main(): Promise<void> {
   writeFileSync(join(repo, "wide.txt"), Buffer.concat([MARK, Buffer.from(`${WORDS}\n`, "utf16le")]));
   writeFileSync(join(repo, "blob.bin"), BLOB);
   git(repo, "add", "-A"); git(repo, "commit", "-q", "-m", "base");
+  writeFileSync(join(repo, ".substrate-write-gate"), "a write's temp file");
   const disk = (name: string) => readFileSync(join(repo, name));
   const launch = launchArgs();
   const traces = join(launch.state, "electron", "logs", "traces");
@@ -83,6 +91,8 @@ async function main(): Promise<void> {
       await win.keyboard.type(text);
     };
 
+    await until(win, "the tree", () => treeRows(win), (r) => ["blob.bin", "latin.txt", "wide.txt"].every((n) => r.includes(n)));
+    await noTemp(win, "once loaded");
     // 1. latin.txt. The two text files hold the same words; INFO's encoding says which is placed.
     await open("latin.txt");
     await until(win, "latin.txt placed", () => infoEncoding(win), (e) => e === "Latin-1");
@@ -93,6 +103,7 @@ async function main(): Promise<void> {
     const latinWant = Buffer.from(`${WORDS}ñ\n`, "latin1");
     await until(win, "latin.txt saved in Latin-1", async () => disk("latin.txt").toString("hex"), (h) => h === latinWant.toString("hex"));
     await until(win, "latin.txt's change against its base", () => hunkCards(win), (c) => JSON.stringify(c) === '["1"]');
+    await noTemp(win, "after latin.txt's save");
     // 2. wide.txt.
     await open("wide.txt");
     await until(win, "wide.txt placed", () => infoEncoding(win), (e) => e === "UTF-16");
@@ -103,6 +114,7 @@ async function main(): Promise<void> {
     const wideWant = Buffer.concat([MARK, Buffer.from(`${WORDS}Z\n`, "utf16le")]);
     await until(win, "wide.txt saved in UTF-16 LE with its mark", async () => disk("wide.txt").toString("hex"), (h) => h === wideWant.toString("hex"));
     await until(win, "wide.txt's change against its base", () => hunkCards(win), (c) => JSON.stringify(c) === '["1"]');
+    await noTemp(win, "after wide.txt's save");
     // 3. blob.bin in its text form.
     await open("blob.bin");
     await until(win, "blob.bin's bytes", () => win.locator('[data-bytes-view="blob.bin"]').count(), (n) => n === 1);
@@ -118,6 +130,7 @@ async function main(): Promise<void> {
     await until(win, "blob.bin's first save", writes, (n) => n === 3);
     if (sha(disk("blob.bin")) !== sha(BLOB)) throw new Error("blob.bin saved unchanged is not the same bytes");
     await until(win, "blob.bin unchanged against its base", () => hunkCards(win), (c) => c.length === 0);
+    await noTemp(win, "after blob.bin's unchanged save");
     // "A" (byte 0x41) to "B": from the start of the file each character is one byte, so 66 steps right puts the caret
     // after it.
     await win.keyboard.press("Meta+ArrowUp");
@@ -129,6 +142,7 @@ async function main(): Promise<void> {
     const blobWant = Buffer.from(BLOB); blobWant[0x41] = 0x42;
     await until(win, "blob.bin saved byte for byte", async () => disk("blob.bin").toString("hex"), (h) => h === blobWant.toString("hex"));
     const blobCards = await until(win, "blob.bin's change against its base", () => hunkCards(win), (c) => JSON.stringify(c) === '["2"]');
+    await noTemp(win, "after blob.bin's edit");
     await win.screenshot({ path: join(shots, "blob-edited.png") });
     await app.close();
 
@@ -144,7 +158,7 @@ async function main(): Promise<void> {
     if (JSON.stringify(written) !== JSON.stringify(["latin1", "utf16", "bytes", "bytes"])) throw new Error(`FILE_WRITTEN encodings ${JSON.stringify(written)}`);
     const booted = readFileSync(join(traces, boot, "main.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as { name: string; payload: Record<string, unknown> }).find((r) => r.name === "APP_BOOTED")!.payload;
     if (packaged && booted.packaged !== true) throw new Error(`APP_BOOTED packaged ${String(booted.packaged)}`);
-    console.log(`editor_edit_any_file: ok — latin.txt saved as ${latinWant.toString("hex")} (Latin-1); wide.txt saved as UTF-16 LE with its mark (${wideWant.length} bytes); blob.bin in text form as ${lines.length} lines with ${marks} control markers, status ${JSON.stringify(pos)}; saved unchanged with the same sha256; byte 0x41 now 0x42 and no other byte changed; FILE_WRITTEN ${JSON.stringify(written)}; EDITOR_FILE_SAVED ×${saved}; no key refused; CHANGES after the edits: one card each, blob.bin's ${JSON.stringify(blobCards)}; DIFF_READ hunks 1 ×${diffHunks}; packaged=${String(booted.packaged)}; screenshots in ${shots}`);
+    console.log(`editor_edit_any_file: ok — latin.txt saved as ${latinWant.toString("hex")} (Latin-1); wide.txt saved as UTF-16 LE with its mark (${wideWant.length} bytes); blob.bin in text form as ${lines.length} lines with ${marks} control markers, status ${JSON.stringify(pos)}; saved unchanged with the same sha256; byte 0x41 now 0x42 and no other byte changed; FILE_WRITTEN ${JSON.stringify(written)}; EDITOR_FILE_SAVED ×${saved}; no key refused; CHANGES after the edits: one card each, blob.bin's ${JSON.stringify(blobCards)}; DIFF_READ hunks 1 ×${diffHunks}; no write temp file in the tree; packaged=${String(booted.packaged)}; screenshots in ${shots}`);
     status = 0;
   } catch (e) {
     console.error(`editor_edit_any_file: FAIL — ${(e as Error).message}`);
