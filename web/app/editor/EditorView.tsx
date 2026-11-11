@@ -29,6 +29,7 @@ import { GraphMode } from "../../vm/kinds";
 import { selectSeqFromEditor, setMode } from "../state/meta";
 import { stopFollowing } from "../../reveal/follow_bottom";
 import { followItems } from "../derive/follow";
+import { ADD_HINT } from "../derive/control_notes";
 import { editor } from "../state/editor";
 import { clampSize, loadSizes, saveSizes, type EditorSizes } from "./sizes";
 import { emit as emitSignal } from "../../vm/instrumentation/sdd";
@@ -321,7 +322,8 @@ export function EditorView({ paneId, fontSize, sessionId, workspace, shape }: { 
     <div data-editor-area="bottom" data-editor-dock={dock}
       style={dock === "bottom" ? { height: sizes.bottom, flex: "none", display: "flex", flexDirection: "column", borderTop: DIVIDER, background: GROUND, minHeight: 0 }
         : { flex: `0 1 ${sizes.side}px`, minWidth: 0, display: "flex", flexDirection: "column", borderLeft: DIVIDER, background: GROUND, minHeight: 0 }}>
-      <div style={{ flex: "none", padding: "6px 16px 2px", display: "flex", ...LABEL }}>SUBSTRATE TERMINAL<span style={{ flex: 1 }} /><span data-editor-fold="bottom" title="fold the terminal (⌘J)" onClick={() => foldColumn("bottom", true, EditorColumnFoldedCause.RAIL, paneId)} style={GLYPH}>▾</span></div>
+      {/* Sprint 458 (24k; D40): the header's hint, as its tooltip. */}
+      <div data-editor-terminal-head="1" title={ADD_HINT} style={{ flex: "none", padding: "6px 16px 2px", display: "flex", ...LABEL }}>SUBSTRATE TERMINAL<span style={{ flex: 1 }} /><span data-editor-fold="bottom" title="fold the terminal (⌘J)" onClick={() => foldColumn("bottom", true, EditorColumnFoldedCause.RAIL, paneId)} style={GLYPH}>▾</span></div>
       <div style={{ flex: "none" }}><FindBar view="meta" /></div>
       <div onClick={() => setFindScope("transcript")} style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "2px 16px", lineHeight: 1.7, fontSize, minWidth: 0, minHeight: 0 }}>
         <div data-vm-transcript-mount="editor" data-pane-id={String(paneId)}>

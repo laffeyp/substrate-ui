@@ -5,7 +5,7 @@ Regenerate: python3 scripts/gen_signals.py. tests/test_signals_generated.py fail
 
 from enum import StrEnum
 
-VOCAB_VERSION = "0.59"
+VOCAB_VERSION = "0.60"
 
 
 class Signal(StrEnum):
@@ -642,6 +642,7 @@ class EditorChipAddedHow(StrEnum):
     ALT_CLICK = "alt_click"
     KEY = "key"
     MENU = "menu"
+    DRAG = "drag"
 
 
 class InputChipRemovedKind(StrEnum):

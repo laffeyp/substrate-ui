@@ -13,6 +13,7 @@ import { slashHint } from "./derive/slash";
 import { barKey, catalogFor, inputBar, paneInput, pickRow, removeChip, rowsFor, setText } from "./state/input_bar";
 import { InputChipRemovedHow } from "../vm/signals.gen";
 import { shell } from "./state/shell";
+import { carriesChip, dropChip } from "./editor/chips";
 import "./hover.css";
 
 /** `compact`: the editor's sill (sprint 415; frame 16c, 28 px tall) draws the same bar with less padding. */
@@ -26,6 +27,12 @@ export function InputBar({ paneId, compact = false }: { paneId: number; compact?
   // UI sprint 182: a run's pane says why it takes no typing.
   const placeholder = snaps.snapshots[paneId]?.viewOnly || INPUT_HINT;
   let choiceAt = -1;
+  // Sprint 458 (D94: drag a thing into the prompt): a chip dragged over the bar outlines it; dropped, it is added,
+  // and its path never goes into the draft as text.
+  const [over, setOver] = React.useState(false);
+  const dragOver = (e: React.DragEvent) => { if (!carriesChip(e.dataTransfer)) return; e.preventDefault(); e.dataTransfer.dropEffect = "copy"; if (!over) setOver(true); };
+  const dragLeave = (e: React.DragEvent) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOver(false); };
+  const drop = (e: React.DragEvent) => { if (!carriesChip(e.dataTransfer)) return; e.preventDefault(); setOver(false); dropChip(paneId, e.dataTransfer); };
   return (
     <>
       {rows.length ? (
@@ -42,7 +49,8 @@ export function InputBar({ paneId, compact = false }: { paneId: number; compact?
         </div>
       ) : null}
       {/* UI sprint 141: the one input bar. */}
-      <div style={{ display: "flex", gap: 12, alignItems: "flex-start", borderRadius: rows.length ? "0 0 6px 6px" : "6px", padding: compact ? "4px 12px" : "11px 16px", background: "#1a1c20" }}>
+      <div data-drop-over={over ? "1" : undefined} onDragEnter={dragOver} onDragOver={dragOver} onDragLeave={dragLeave} onDrop={drop}
+        style={{ display: "flex", gap: 12, alignItems: "flex-start", borderRadius: rows.length ? "0 0 6px 6px" : "6px", padding: compact ? "4px 12px" : "11px 16px", background: "#1a1c20", boxShadow: over ? "inset 0 0 0 1px #82a5c8" : undefined }}>
         <span style={{ color: "#82a5c8", lineHeight: 1.4 }}>›</span>
         {/* Sprint 443 (D94; 24k): the chips that go with the next message; the path on hover, × removes one. */}
         {pane.chips.length > 0 && (

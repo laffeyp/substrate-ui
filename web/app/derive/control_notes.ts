@@ -9,6 +9,8 @@ import { LengthPosition, TonePosition } from "../../vm/controls.gen";
 
 /** The input bar's placeholder; a run's pane shows why it takes no typing instead (UI sprint 182). */
 export const INPUT_HINT = "type to input · / for commands · ↵ to send";
+/** Sprint 458 (24k's terminal header; D40, a hint is a tooltip): how a thing is added to the message. */
+export const ADD_HINT = "⌥-click or drag to add · right-click › Add to message · ⌥A adds the selection · ⌫ removes the last chip";
 
 export const GUIDANCE_AUTO_META = "follows the model";
 export const GUIDANCE_META: Record<string, string> = { harness: "loop rules only", low: "one line a rule", medium: "rules, no examples", high: "the full standard" };

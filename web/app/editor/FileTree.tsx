@@ -27,7 +27,7 @@ import { openFile } from "./Centre";
 import { filterRows, matchesBelow, nameHits } from "../derive/tree_find";
 import { emit as emitSignal } from "../../vm/instrumentation/sdd";
 import { ContextMenuOpenedSource, EditorChipAddedHow, EditorTreeFoundMode, Signal } from "../../vm/signals.gen";
-import { addFrom, addItem, fileChip, folderChip } from "./chips";
+import { addFrom, addItem, dragChip, fileChip, folderChip } from "./chips";
 import { openMenu } from "../state/context_menu";
 
 interface Entry { name: string; kind: "dir" | "file" | "link"; size: number; modified: number }
@@ -204,8 +204,10 @@ export function FileTree({ sessionId, paneId }: { sessionId: string; paneId: num
             }
             if (filtering) choose(r.rel); else if (r.kind === "dir") toggle(r.rel); else openFile(r.rel, paneId);
           }}
-          // Sprint 457 (D94): right-click › Add to message, the same chip as ⌥-click.
+          // Sprint 457 (D94): right-click › Add to message, the same chip as ⌥-click; sprint 458, a drag to the bar.
           onContextMenu={r.kind === "file" || r.kind === "dir" ? (e) => openMenu(e, ContextMenuOpenedSource.TREE, [addItem(paneId, r.kind === "dir" ? folderChip(r.rel) : fileChip(r.rel))], paneId) : undefined}
+          draggable={r.kind === "file" || r.kind === "dir"}
+          onDragStart={r.kind === "file" || r.kind === "dir" ? (e) => dragChip(e, r.kind === "dir" ? folderChip(r.rel) : fileChip(r.rel)) : undefined}
           data-tree-at={at >= 0 && order[at] === r.rel ? "1" : undefined}
           data-tree-active={r.rel === editor.getSnapshot().active ? "1" : "0"}
           data-follow-mark={following.has(r.rel) ? "1" : undefined}

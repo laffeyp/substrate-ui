@@ -38,7 +38,7 @@ import { baseText, vsBase } from "../derive/status_line";
 import { HISTORY_VIEW, SEND_VIEW, lineHunks } from "../derive/inspector";
 import { setBeforeTurn, type BeforeTurnResult } from "../../vm/session_controller";
 import type { Chip } from "../state/input_bar";
-import { addFrom, addItem, fileChip } from "./chips";
+import { addFrom, addItem, carriesChip, dragChip, fileChip } from "./chips";
 import { openMenu } from "../state/context_menu";
 import { StatusLine } from "./StatusLine";
 
@@ -321,7 +321,8 @@ function Tab({ rel, active, unsaved, paneId }: { rel: string; active: boolean; u
   const name = rel.slice(rel.lastIndexOf("/") + 1);
   return (
     <div data-editor-tab={rel} data-active={active ? "1" : "0"} title={rel} onClick={() => editor.set({ active: rel })}
-      onContextMenu={(e) => openMenu(e, ContextMenuOpenedSource.TAB, [addItem(paneId, fileChip(rel))], paneId)} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+      onContextMenu={(e) => openMenu(e, ContextMenuOpenedSource.TAB, [addItem(paneId, fileChip(rel))], paneId)}
+      draggable onDragStart={(e) => dragChip(e, fileChip(rel))} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
       style={{ display: "flex", alignItems: "center", gap: 8, padding: "0 14px", height: "100%", cursor: "pointer", fontSize: 12, whiteSpace: "nowrap", flex: "none",
         background: active ? GROUND : "transparent", color: active ? "#d7dade" : "#9aa0a8", boxShadow: active ? `inset 0 2px 0 ${ACCENT}` : undefined }}>
       {name}
@@ -881,7 +882,10 @@ export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionI
       )}
       <div style={{ flex: 1, minHeight: 0, position: "relative" }}>
         <div ref={host} data-editor-code={st.active ?? ""} data-binding={binding}
-          onContextMenu={(e) => { const chip = selectionChip(); if (chip) openMenu(e, ContextMenuOpenedSource.CODE, [addItem(paneId, chip)], paneId); }} style={{ position: "absolute", inset: 0, display: st.active && !unreadable ? "block" : "none" }} />
+          onContextMenu={(e) => { const chip = selectionChip(); if (chip) openMenu(e, ContextMenuOpenedSource.CODE, [addItem(paneId, chip)], paneId); }}
+          // Sprint 458: a chip's drag is not for the code; stopped here, before the editor's own drop puts its path in the file.
+          onDragOverCapture={(e) => { if (carriesChip(e.dataTransfer)) { e.stopPropagation(); e.dataTransfer.dropEffect = "none"; } }}
+          onDropCapture={(e) => { if (carriesChip(e.dataTransfer)) { e.preventDefault(); e.stopPropagation(); } }} style={{ position: "absolute", inset: 0, display: st.active && !unreadable ? "block" : "none" }} />
         {unreadable && <div data-editor-unreadable="1" style={{ padding: "20px 24px", color: "#62676f", fontSize: 12 }}>{st.active} · {unreadable}</div>}
       </div>
       <StatusLine />

@@ -1462,6 +1462,16 @@
       "rationale": "The window gains its first right-click menu; its opening and its end are events the trace otherwise lacks (a menu closed with Escape adds nothing), and the chip it adds names its gesture.",
       "ratified": true,
       "ratified_by": "agent-resolved 2026-11-11, sprint 457; grounds: project — D94, roadmap r13 E10.4, the BLACKBOARD entries of this date; SDD — hard rule 2, BOOTSTRAP step 9 (the menu's open and close pair); practice — n/a"
+    },
+    {
+      "id": "P-0.60-CHIP-DRAG",
+      "kind": "PAYLOAD_FIELD_PROPOSED",
+      "layer": 2,
+      "element": "EDITOR_CHIP_ADDED.how gains drag",
+      "source": "D94 (drag a thing into the prompt); roadmap r13 E10.4; BLACKBOARD 2026-11-11 (what a drag carries); sprint 458",
+      "rationale": "Chips now come by drag as well; the trace says which gesture added each.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-11, sprint 458; grounds: project — D94, roadmap r13 E10.4; SDD — hard rule 2; practice — n/a"
     }
   ]
 }
