@@ -18,14 +18,26 @@ def ws(tmp_path: Path) -> Path:
     for d in ("src/cart", "src/lib", "build"):
         (tmp_path / d).mkdir(parents=True)
     (tmp_path / ".gitignore").write_text("build/\n")
-    for f in ("src/cart/Cart.ts", "src/cart/index.ts", "src/lib/checkout.ts", "src/lib/tax.ts", "build/cart.js", "README.md"):
+    for f in (
+        "src/cart/Cart.ts",
+        "src/cart/index.ts",
+        "src/lib/checkout.ts",
+        "src/lib/tax.ts",
+        "build/cart.js",
+        "README.md",
+    ):
         (tmp_path / f).write_text("x\n")
     return tmp_path
 
 
 def test_continuous_names_files_and_folders(ws: Path) -> None:
     out = server._workspace_find_names(ws, "cart", fuzzy=False)
-    assert out == {"files": ["src/cart/Cart.ts"], "folders": ["src/cart"], "truncated": False, "unreadable": 0}
+    assert out == {
+        "files": ["src/cart/Cart.ts"],
+        "folders": ["src/cart"],
+        "truncated": False,
+        "unreadable": 0,
+    }
 
 
 def test_fuzzy_names(ws: Path) -> None:
@@ -40,7 +52,12 @@ def test_the_cap_marks_the_result_cut(ws: Path, monkeypatch: pytest.MonkeyPatch)
 
 
 def test_an_empty_name_finds_nothing(ws: Path) -> None:
-    assert server._workspace_find_names(ws, "", fuzzy=True) == {"files": [], "folders": [], "truncated": False, "unreadable": 0}
+    assert server._workspace_find_names(ws, "", fuzzy=True) == {
+        "files": [],
+        "folders": [],
+        "truncated": False,
+        "unreadable": 0,
+    }
 
 
 def test_an_unreadable_folder_is_counted(ws: Path) -> None:

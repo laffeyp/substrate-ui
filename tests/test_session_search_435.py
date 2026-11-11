@@ -26,7 +26,9 @@ def ws(tmp_path: Path) -> Path:
     (root / "src" / ".ignore").write_text("generated.ts\n")
     (root / "src/lib/cart.ts").write_text("const total = 12;\nlet subtotal = 3;\n  total += tax;\n")
     (root / "src/generated.ts").write_text("total\n")
-    (root / "src/lib/generated.ts").write_text("total\n")  # .ignore's pattern has no slash: any depth below src
+    (root / "src/lib/generated.ts").write_text(
+        "total\n"
+    )  # .ignore's pattern has no slash: any depth below src
     (root / "build/out.js").write_text("total\n")
     (root / "node_modules/pkg/index.js").write_text("total\n")
     (root / ".git/config").write_text("total\n")
@@ -44,23 +46,52 @@ def rows(out: dict[str, object]) -> list[str]:
     return [f"{f['path']}:{ln['line']}" for f in out["files"] for ln in f["lines"]]  # type: ignore[index, union-attr]
 
 
-def test_the_walk_needs_no_git_and_applies_ignore_files(ws: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_the_walk_needs_no_git_and_applies_ignore_files(
+    ws: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     def no_git(*a: object, **k: object) -> None:
         raise AssertionError(f"git was run: {a}")
 
     monkeypatch.setattr(subprocess, "run", no_git)
     files, cut = server._workspace_files(ws)
-    assert files == [".env", ".gitignore", "big.txt", "blob.bin", "docs/guide.md", "logs/keep.log", "src/.ignore", "src/lib/cart.ts"]
+    assert files == [
+        ".env",
+        ".gitignore",
+        "big.txt",
+        "blob.bin",
+        "docs/guide.md",
+        "logs/keep.log",
+        "src/.ignore",
+        "src/lib/cart.ts",
+    ]
     assert cut is False
     out = server._workspace_search(ws, "total", regex=False, case=False)
-    assert rows(out) == [".env:1", "docs/guide.md:1", "logs/keep.log:1", "src/lib/cart.ts:1", "src/lib/cart.ts:2", "src/lib/cart.ts:3"]
+    assert rows(out) == [
+        ".env:1",
+        "docs/guide.md:1",
+        "logs/keep.log:1",
+        "src/lib/cart.ts:1",
+        "src/lib/cart.ts:2",
+        "src/lib/cart.ts:3",
+    ]
 
 
 def test_the_regex_editors_write(ws: Path) -> None:
-    assert rows(server._workspace_search(ws, r"\btotal\s=\s\d+", regex=True, case=True)) == ["src/lib/cart.ts:1"]
-    assert rows(server._workspace_search(ws, r"total\s=\s\d+", regex=True, case=True)) == ["src/lib/cart.ts:1", "src/lib/cart.ts:2"]
-    assert rows(server._workspace_search(ws, r"\btotal\b", regex=True, case=True)) == ["logs/keep.log:1", "src/lib/cart.ts:1", "src/lib/cart.ts:3"]
-    assert rows(server._workspace_search(ws, r"(?<=const )total", regex=True, case=True)) == ["src/lib/cart.ts:1"]
+    assert rows(server._workspace_search(ws, r"\btotal\s=\s\d+", regex=True, case=True)) == [
+        "src/lib/cart.ts:1"
+    ]
+    assert rows(server._workspace_search(ws, r"total\s=\s\d+", regex=True, case=True)) == [
+        "src/lib/cart.ts:1",
+        "src/lib/cart.ts:2",
+    ]
+    assert rows(server._workspace_search(ws, r"\btotal\b", regex=True, case=True)) == [
+        "logs/keep.log:1",
+        "src/lib/cart.ts:1",
+        "src/lib/cart.ts:3",
+    ]
+    assert rows(server._workspace_search(ws, r"(?<=const )total", regex=True, case=True)) == [
+        "src/lib/cart.ts:1"
+    ]
     with pytest.raises(server.SearchQueryError):
         server._workspace_search(ws, "(", regex=True, case=True)
 
@@ -80,10 +111,20 @@ def test_ranges_count_utf16_units(tmp_path: Path) -> None:
 
 
 def test_include_and_exclude_globs(ws: Path) -> None:
-    assert rows(server._workspace_search(ws, "total", regex=False, case=False, include="src")) == ["src/lib/cart.ts:1", "src/lib/cart.ts:2", "src/lib/cart.ts:3"]
-    assert rows(server._workspace_search(ws, "total", regex=False, case=False, include="*.md, .env")) == [".env:1", "docs/guide.md:1"]
-    assert rows(server._workspace_search(ws, "total", regex=False, case=False, exclude="src/**, logs")) == [".env:1", "docs/guide.md:1"]
-    assert rows(server._workspace_search(ws, "total", regex=False, case=False, include="./docs")) == ["docs/guide.md:1"]
+    assert rows(server._workspace_search(ws, "total", regex=False, case=False, include="src")) == [
+        "src/lib/cart.ts:1",
+        "src/lib/cart.ts:2",
+        "src/lib/cart.ts:3",
+    ]
+    assert rows(
+        server._workspace_search(ws, "total", regex=False, case=False, include="*.md, .env")
+    ) == [".env:1", "docs/guide.md:1"]
+    assert rows(
+        server._workspace_search(ws, "total", regex=False, case=False, exclude="src/**, logs")
+    ) == [".env:1", "docs/guide.md:1"]
+    assert rows(
+        server._workspace_search(ws, "total", regex=False, case=False, include="./docs")
+    ) == ["docs/guide.md:1"]
 
 
 def test_replace_works_out_new_texts_and_writes_nothing(ws: Path) -> None:
@@ -104,10 +145,22 @@ def test_caret_is_each_lines_start(tmp_path: Path) -> None:
 
 
 def test_replace_in_one_file_and_one_match(ws: Path) -> None:
-    one_file = server._workspace_replace(ws, "total", "sum", regex=False, case=True, path="src/lib/cart.ts")
+    one_file = server._workspace_replace(
+        ws, "total", "sum", regex=False, case=True, path="src/lib/cart.ts"
+    )
     assert [f["path"] for f in one_file["files"]] == ["src/lib/cart.ts"]  # type: ignore[index]
     assert one_file["replaced"] == 3
-    one = server._workspace_replace(ws, "total", "sum", regex=False, case=True, word=True, path="src/lib/cart.ts", line=3, index=0)
+    one = server._workspace_replace(
+        ws,
+        "total",
+        "sum",
+        regex=False,
+        case=True,
+        word=True,
+        path="src/lib/cart.ts",
+        line=3,
+        index=0,
+    )
     assert one["files"][0]["text"] == "const total = 12;\nlet subtotal = 3;\n  sum += tax;\n"  # type: ignore[index]
     with pytest.raises(server.WorkspaceEscapeError):
         server._workspace_replace(ws, "total", "sum", regex=False, case=True, path="../outside.txt")
@@ -121,7 +174,18 @@ def test_a_fixed_replacement_is_taken_as_written(tmp_path: Path) -> None:
 
 def test_gitignore_globs() -> None:
     g = server._Glob("**/gen/*.ts", "")
-    assert g.matches("gen/a.ts", False) and g.matches("x/y/gen/a.ts", False) and not g.matches("gen/sub/a.ts", False)
+    assert (
+        g.matches("gen/a.ts", False)
+        and g.matches("x/y/gen/a.ts", False)
+        and not g.matches("gen/sub/a.ts", False)
+    )
     d = server._Glob("out/", "pkg")
-    assert d.matches("pkg/out", True) and d.matches("pkg/x/out", True) and not d.matches("pkg/out", False) and not d.matches("out", True)
-    assert server._Glob("[!a]bc", "").matches("xbc", False) and not server._Glob("[!a]bc", "").matches("abc", False)
+    assert (
+        d.matches("pkg/out", True)
+        and d.matches("pkg/x/out", True)
+        and not d.matches("pkg/out", False)
+        and not d.matches("out", True)
+    )
+    assert server._Glob("[!a]bc", "").matches("xbc", False) and not server._Glob(
+        "[!a]bc", ""
+    ).matches("abc", False)

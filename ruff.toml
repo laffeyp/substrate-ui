@@ -2,8 +2,9 @@
 # which had linted at different line lengths and formatted only one of them.
 target-version = "py312"
 line-length = 100
-# _deprecated/ holds archived code kept for the audit trail; it is not built, shipped or tested.
-extend-exclude = ["_deprecated"]
+# _deprecated/ holds archived code kept for the audit trail, and process/ the planning documents and code set
+# aside in them (sprint 459); neither is built, shipped or tested.
+extend-exclude = ["_deprecated", "process"]
 
 [lint]
 # ruff's defaults plus BLE (blind except) and S (bandit), as the kernel (lens audit F008).

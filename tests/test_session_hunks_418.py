@@ -17,7 +17,9 @@ import server
 
 
 def git(root: Path, *args: str) -> str:
-    return subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True, check=True).stdout
+    return subprocess.run(
+        ["git", "-C", str(root), *args], capture_output=True, text=True, check=True
+    ).stdout
 
 
 @pytest.fixture
@@ -45,21 +47,30 @@ def ws(tmp_path: Path) -> Path:
 def test_an_edited_file_has_gits_own_hunks(ws: Path) -> None:
     out = server._workspace_hunks(ws, "cart.ts")
     assert out["base"] == "main"
-    got = [(h["old_start"], h["old_count"], h["new_start"], h["new_count"], h["lines"]) for h in out["hunks"]]
+    got = [
+        (h["old_start"], h["old_count"], h["new_start"], h["new_count"], h["lines"])
+        for h in out["hunks"]
+    ]
     assert got == [
         (3, 1, 3, 1, ["-line 3", "+line 3 changed"]),
         (7, 0, 8, 2, ["+added a", "+added b"]),
         (10, 1, 11, 0, ["-line 10"]),
     ]
     # The same ranges git prints itself.
-    headers = [ln for ln in git(ws, "diff", "-U0", "main", "--", "cart.ts").splitlines() if ln.startswith("@@")]
+    headers = [
+        ln
+        for ln in git(ws, "diff", "-U0", "main", "--", "cart.ts").splitlines()
+        if ln.startswith("@@")
+    ]
     assert len(headers) == len(out["hunks"])
 
 
 def test_a_new_file_is_all_added_and_the_index_is_untouched(ws: Path) -> None:
     before = (ws / ".git" / "index").read_bytes()
     out = server._workspace_hunks(ws, "new.ts")
-    assert [(h["old_count"], h["new_start"], h["new_count"], h["lines"]) for h in out["hunks"]] == [(0, 1, 2, ["+x", "+y"])]
+    assert [(h["old_count"], h["new_start"], h["new_count"], h["lines"]) for h in out["hunks"]] == [
+        (0, 1, 2, ["+x", "+y"])
+    ]
     assert (ws / ".git" / "index").read_bytes() == before
 
 
@@ -73,7 +84,11 @@ def test_an_unchanged_file_has_no_hunk(ws: Path) -> None:
 def test_outside_git_there_is_no_base_and_no_hunk(tmp_path: Path) -> None:
     (tmp_path / "plain").mkdir()
     (tmp_path / "plain" / "a.txt").write_text("a\n")
-    assert server._workspace_hunks(tmp_path / "plain", "a.txt") == {"base": "none", "path": "a.txt", "hunks": []}
+    assert server._workspace_hunks(tmp_path / "plain", "a.txt") == {
+        "base": "none",
+        "path": "a.txt",
+        "hunks": [],
+    }
 
 
 def test_a_path_outside_the_workspace_is_refused(ws: Path) -> None:
@@ -83,4 +98,8 @@ def test_a_path_outside_the_workspace_is_refused(ws: Path) -> None:
 
 def test_the_whole_workspace_read_is_unchanged(ws: Path) -> None:
     out = server._workspace_diff(ws)
-    assert sorted((f["path"], f["status"]) for f in out["files"]) == [("cart.ts", "M"), ("gone.ts", "M"), ("new.ts", "A")]
+    assert sorted((f["path"], f["status"]) for f in out["files"]) == [
+        ("cart.ts", "M"),
+        ("gone.ts", "M"),
+        ("new.ts", "A"),
+    ]

@@ -36,13 +36,13 @@ Every event lands on an append-only log at `~/.substrate/sessions/<id>/record/`.
 
 ```
 npm install
-npm run pack:runtime
 npm run pack:dev
 ditto dist-electron/mac-arm64/Substrate.app /Applications/Substrate.app
+xattr -dr com.apple.quarantine /Applications/Substrate.app
 open /Applications/Substrate.app
 ```
 
-The signed, notarized path is `scripts/release.sh --notarize --install`. The runbook has every step: `RUNBOOK-2026-10-29-project-r6.md` at the repo root.
+The signed, notarized path is `scripts/release.sh --notarize --install`. `npm run pack:dev` builds the window, bundles the Python runtime and the kernel, and packages the app unsigned. The runbook has every step: `RUNBOOK-2026-11-11-project-r7.md` at the repo root.
 
 ## Dev
 
@@ -58,10 +58,10 @@ The window is Electron over a Python HTTP backend. Electron spawns the backend o
 
 | Path | What |
 |---|---|
-| `electron/main.js` | Spawns the backend, reads back the port, opens the window. |
+| `electron/main.ts`, `menu.ts`, `preload.ts` | Spawns the backend, reads back the port, opens the window; the native menu; the bridge to the window. Compiled into `dist-main/`. |
 | `server.py` | HTTP backend. Routes `substrate.api` reads; builds the session topology from a stored manifest. |
-| `web/reveal.html`, `web/reveal.ts`, `web/reveal_component.ts` | The window. |
-| `web/vm/` | Per-pane controller. Signal vocabulary at `web/vm/signals/versions/0.1.json`. |
+| `web/reveal.html`, `web/reveal.ts`, `web/app/` | The window: the page, its bootstrap, and the React app (`App.tsx`, the editor view in `web/app/editor/`). |
+| `web/vm/` | Per-pane controller. Signal vocabulary at `web/vm/signals/versions/current.json`. |
 | `web/reveal/transcript/` | React tree. |
 | `harness/shakeout/*.ts` | Playwright `_electron.launch` gates. |
 | `tests/*.py` | pytest on the backend. |
@@ -69,7 +69,7 @@ The window is Electron over a Python HTTP backend. Electron spawns the backend o
 | `scripts/fetch-python-runtime.sh` | Bundles CPython and the kernel wheel. |
 | `electron-builder.config.js` | macOS packaging. |
 
-Python stdlib + `msgspec` + the Substrate kernel as a library. React 18 UMD from the CDN, routed through `web/shims/`. Vite builds the window.
+Python stdlib + `msgspec` + the Substrate kernel as a library. React 18 and CodeMirror 6, bundled from `node_modules`. Vite builds the window.
 
 The kernel is imported through `substrate.api`, `substrate.topologies`, and the session topology's public modules. `tests/test_server.py`'s import-boundary test holds the line.
 

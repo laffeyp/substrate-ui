@@ -30,25 +30,40 @@ def names(out: dict[str, object]) -> list[tuple[str, str]]:
 
 
 def test_file_names_with_their_extensions(ws: Path) -> None:
-    assert names(server._workspace_search(ws, "jpeg", regex=False, case=False)) == [("assets/hero.jpeg", "file")]
+    assert names(server._workspace_search(ws, "jpeg", regex=False, case=False)) == [
+        ("assets/hero.jpeg", "file")
+    ]
 
 
 def test_folder_names_and_paths(ws: Path) -> None:
-    assert names(server._workspace_search(ws, "lib", regex=False, case=False)) == [("src/lib", "dir"), ("src/lib/cart.ts", "file")]
+    assert names(server._workspace_search(ws, "lib", regex=False, case=False)) == [
+        ("src/lib", "dir"),
+        ("src/lib/cart.ts", "file"),
+    ]
     out = server._workspace_search(ws, "lib/cart", regex=False, case=False)
     assert names(out) == [("src/lib/cart.ts", "file")]
     assert out["names"][0]["ranges"] == [[4, 12]]  # type: ignore[index]
 
 
 def test_names_in_the_name_first_then_shorter(ws: Path) -> None:
-    assert names(server._workspace_search(ws, "cart", regex=False, case=False)) == [("src/lib/cart.ts", "file"), ("src/ui/CartDrawer.tsx", "file")]
+    assert names(server._workspace_search(ws, "cart", regex=False, case=False)) == [
+        ("src/lib/cart.ts", "file"),
+        ("src/ui/CartDrawer.tsx", "file"),
+    ]
     assert names(server._workspace_search(ws, "src", regex=False, case=False))[0] == ("src", "dir")
 
 
 def test_the_one_rule_applies_to_names(ws: Path) -> None:
-    assert names(server._workspace_search(ws, "cart", regex=False, case=True)) == [("src/lib/cart.ts", "file")]
-    assert names(server._workspace_search(ws, r"\.tsx?$", regex=True, case=False)) == [("src/lib/cart.ts", "file"), ("src/ui/CartDrawer.tsx", "file")]
-    assert names(server._workspace_search(ws, "Cart", regex=False, case=False, word=True)) == [("src/lib/cart.ts", "file")]
+    assert names(server._workspace_search(ws, "cart", regex=False, case=True)) == [
+        ("src/lib/cart.ts", "file")
+    ]
+    assert names(server._workspace_search(ws, r"\.tsx?$", regex=True, case=False)) == [
+        ("src/lib/cart.ts", "file"),
+        ("src/ui/CartDrawer.tsx", "file"),
+    ]
+    assert names(server._workspace_search(ws, "Cart", regex=False, case=False, word=True)) == [
+        ("src/lib/cart.ts", "file")
+    ]
 
 
 def test_names_and_text_together(ws: Path) -> None:

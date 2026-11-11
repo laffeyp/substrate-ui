@@ -189,18 +189,24 @@ def test_a_session_that_is_off_still_has_its_file_written_off_the_record(
     with serving(app) as base:
         fresh = _session(base, ws, turn=False)
         mark = _mark()
-        status, out = call("PUT", base + f"/api/session/{fresh}/file?path=src/a.py", {"text": "y = 1\n"})
+        status, out = call(
+            "PUT", base + f"/api/session/{fresh}/file?path=src/a.py", {"text": "y = 1\n"}
+        )
         assert status == 200 and out["written"] == "off_record" and out["seq"] is None, out
         assert (ws / "src" / "a.py").read_text() == "y = 1\n"
         sid = _session(base, ws)
         status, body = call("POST", base + f"/api/session/{sid}/end", {})
         assert status == 200, body
         before = len(_file_entries(app, sid))
-        status, out = call("PUT", base + f"/api/session/{sid}/file?path=src/a.py", {"text": "y = 2\n"})
+        status, out = call(
+            "PUT", base + f"/api/session/{sid}/file?path=src/a.py", {"text": "y = 2\n"}
+        )
         assert status == 200 and out["written"] == "off_record", out
         assert (ws / "src" / "a.py").read_text() == "y = 2\n"
         assert len(_file_entries(app, sid)) == before, "the ended record takes nothing"
         recs = [r for r in _since(mark) if r["name"] == "FILE_WRITTEN"]
-    assert [(r["payload"]["written"], r["payload"]["seq"]) for r in recs] == [("off_record", None), ("off_record", None)]
+    assert [(r["payload"]["written"], r["payload"]["seq"]) for r in recs] == [
+        ("off_record", None),
+        ("off_record", None),
+    ]
     assert not [p for p in (ws / "src").iterdir() if p.name.startswith(".substrate-write-")]
-

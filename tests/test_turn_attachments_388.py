@@ -93,7 +93,10 @@ def test_attachments_reach_the_record_with_their_text(
         (a["kind"], a["label"], a["ref"]) for a in attachments
     ]
     assert got[0]["text"] == "(src/cart.py)\none\ntwo\nthree\nfour\n"
-    assert got[1]["text"] == "(src/cart.py, lines 2–3)\ntwo\nthree\n" and got[1]["span"] == [2.0, 3.0]
+    assert got[1]["text"] == "(src/cart.py, lines 2–3)\ntwo\nthree\n" and got[1]["span"] == [
+        2.0,
+        3.0,
+    ]
     assert got[2]["text"] == "(src/, 1 file)\nsrc/cart.py"
     assert got[4]["text"] == "(not found when the message was sent: shot.png)"
     event = json.loads(got[3]["text"])

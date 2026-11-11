@@ -19,7 +19,9 @@ import server
 
 
 def git(root: Path, *args: str) -> str:
-    return subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True, check=True).stdout
+    return subprocess.run(
+        ["git", "-C", str(root), *args], capture_output=True, text=True, check=True
+    ).stdout
 
 
 def repo(root: Path, branch: str = "main") -> Path:
@@ -102,7 +104,11 @@ def test_a_repository_with_no_commit_has_no_base(tmp_path: Path) -> None:
     root = repo(tmp_path / "empty")
     (root / "x.txt").write_text("x\n")
     assert server._workspace_diff(root) == {"base": "no_commit", "files": []}
-    assert server._workspace_hunks(root, "x.txt") == {"base": "no_commit", "path": "x.txt", "hunks": []}
+    assert server._workspace_hunks(root, "x.txt") == {
+        "base": "no_commit",
+        "path": "x.txt",
+        "hunks": [],
+    }
 
 
 def test_a_plain_folder_has_no_base_and_no_files(tmp_path: Path) -> None:

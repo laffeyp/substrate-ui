@@ -452,7 +452,10 @@ def _interrupt_then_end(
 # Most specific first; a path no route serves is "unrouted".
 _AREA_RULES: tuple[tuple[str, ApiRefusedArea], ...] = (
     (r"/api/session/[^/]+/(turn|interrupt)", ApiRefusedArea.TURN),
-    (r"/api/session/[^/]+/(files|file|diff|search|search/replace|files/find|files/list)(/watch)?", ApiRefusedArea.FILES),
+    (
+        r"/api/session/[^/]+/(files|file|diff|search|search/replace|files/find|files/list)(/watch)?",
+        ApiRefusedArea.FILES,
+    ),
     (r"/api/session/[^/]+/children", ApiRefusedArea.CHILDREN),
     (r"/api/session/[^/]+/language(/.*)?", ApiRefusedArea.LANGUAGE),
     (r"/api/session/[^/]+/mcp", ApiRefusedArea.MCP),
@@ -1955,8 +1958,6 @@ def _workspace_list(root: Path, rel: str) -> dict[str, object]:
     return {"dir": str(target.relative_to(base)) if target != base else "", "entries": entries}
 
 
-
-
 def _git_out(root: Path, *args: str, env: dict[str, str] | None = None) -> str | None:
     """`git -C root args…` stdout, or None when git fails or is missing."""
     try:
@@ -1985,7 +1986,10 @@ def _workspace_diff(root: Path) -> dict[str, object]:
     if base is None:
         return {"base": base_kind, "files": []}
     with _scratch_index(root) as env:
-        out = _git_out(root, "diff", "--name-status", "--no-renames", "--relative", base, env=env) or ""
+        out = (
+            _git_out(root, "diff", "--name-status", "--no-renames", "--relative", base, env=env)
+            or ""
+        )
     files = []
     for line in out.splitlines():
         status, _, path = line.partition("\t")
@@ -2045,16 +2049,35 @@ def _workspace_hunks(root: Path, rel: str) -> dict[str, object]:
     if base is None:
         return {"base": base_kind, "path": rel, "hunks": []}
     with _scratch_index(root) as env:
-        out = _git_out(root, "diff", "-U0", "--no-color", "--no-ext-diff", "--no-renames", "--relative", base, "--", str(target.relative_to(root.resolve())), env=env) or ""
+        out = (
+            _git_out(
+                root,
+                "diff",
+                "-U0",
+                "--no-color",
+                "--no-ext-diff",
+                "--no-renames",
+                "--relative",
+                base,
+                "--",
+                str(target.relative_to(root.resolve())),
+                env=env,
+            )
+            or ""
+        )
     hunks: list[dict[str, object]] = []
     for line in out.splitlines():
         m = _HUNK_HEADER.match(line)
         if m:
-            hunks.append({
-                "old_start": int(m.group(1)), "old_count": int(m.group(2) if m.group(2) is not None else 1),
-                "new_start": int(m.group(3)), "new_count": int(m.group(4) if m.group(4) is not None else 1),
-                "lines": [],
-            })
+            hunks.append(
+                {
+                    "old_start": int(m.group(1)),
+                    "old_count": int(m.group(2) if m.group(2) is not None else 1),
+                    "new_start": int(m.group(3)),
+                    "new_count": int(m.group(4) if m.group(4) is not None else 1),
+                    "lines": [],
+                }
+            )
         elif hunks and line[:1] in ("-", "+") and not line.startswith(("--- ", "+++ ")):
             cast(list[str], hunks[-1]["lines"]).append(line)
     return {"base": base_kind, "path": rel, "hunks": hunks}
@@ -2187,7 +2210,9 @@ def _globs(spec: str) -> list[_Glob]:
     return out
 
 
-def _workspace_files(root: Path, include: str = "", exclude: str = "", unreadable: list[str] | None = None) -> tuple[list[str], bool]:
+def _workspace_files(
+    root: Path, include: str = "", exclude: str = "", unreadable: list[str] | None = None
+) -> tuple[list[str], bool]:
     """The workspace's searchable files, relative and /-separated, in path order, and whether the walk
     stopped at WORKSPACE_WALK_MAX_FILES. An include glob keeps a file when it or one of its folders matches.
     A folder the walk cannot read is added to `unreadable` (its relative path) and skipped."""
@@ -2200,7 +2225,11 @@ def _workspace_files(root: Path, include: str = "", exclude: str = "", unreadabl
         if not inc:
             return True
         parts = rel.split("/")
-        return any(g.matches("/".join(parts[:n]), n < len(parts)) for g in inc for n in range(1, len(parts) + 1))
+        return any(
+            g.matches("/".join(parts[:n]), n < len(parts))
+            for g in inc
+            for n in range(1, len(parts) + 1)
+        )
 
     def walk(folder: Path, rel_dir: str, rules: list[_Glob]) -> None:
         nonlocal cut
@@ -2256,7 +2285,11 @@ def _search_regex(query: str, *, regex: bool, case: bool, word: bool) -> re.Patt
     that is a word character, as VS Code's createRegExp does."""
     src = query if regex else re.escape(query)
     if word:
-        src = ("\\b" if re.match(r"\w", query[:1]) else "") + f"(?:{src})" + ("\\b" if re.match(r"\w", query[-1:]) else "")
+        src = (
+            ("\\b" if re.match(r"\w", query[:1]) else "")
+            + f"(?:{src})"
+            + ("\\b" if re.match(r"\w", query[-1:]) else "")
+        )
     try:
         return re.compile(src, 0 if case else re.IGNORECASE)
     except re.error as exc:
@@ -2278,7 +2311,14 @@ def _lines(text: str) -> list[tuple[str, str]]:
 
 
 def _workspace_search(
-    root: Path, query: str, *, regex: bool, case: bool, word: bool = False, include: str = "", exclude: str = "",
+    root: Path,
+    query: str,
+    *,
+    regex: bool,
+    case: bool,
+    word: bool = False,
+    include: str = "",
+    exclude: str = "",
     buffers: dict[str, str] | None = None,
 ) -> dict[str, object]:
     """The workspace's matches (UI sprint 435). Each file is `{path, lines: [{line, text, ranges}]}`, ranges
@@ -2289,7 +2329,15 @@ def _workspace_search(
     the walked files read from them."""
     buffers = buffers or {}
     if not query:
-        return {"names": [], "files": [], "lines": 0, "matches": 0, "truncated": False, "buffers": 0, "unreadable": 0}
+        return {
+            "names": [],
+            "files": [],
+            "lines": 0,
+            "matches": 0,
+            "truncated": False,
+            "buffers": 0,
+            "unreadable": 0,
+        }
     rx = _search_regex(query, regex=regex, case=case, word=word)
     unreadable: list[str] = []
     paths, truncated = _workspace_files(root, include, exclude, unreadable)
@@ -2304,7 +2352,11 @@ def _workspace_search(
             continue
         hits: list[dict[str, object]] = []
         for n, (line, _end) in enumerate(_lines(got[0]), 1):
-            ranges = [[_u16(line, m.start()), _u16(line, m.end())] for m in rx.finditer(line) if m.end() > m.start()]
+            ranges = [
+                [_u16(line, m.start()), _u16(line, m.end())]
+                for m in rx.finditer(line)
+                if m.end() > m.start()
+            ]
             if not ranges:
                 continue
             if count == WORKSPACE_SEARCH_MAX_LINES:
@@ -2319,7 +2371,15 @@ def _workspace_search(
             files.append({"path": rel, "lines": hits})
         if count == WORKSPACE_SEARCH_MAX_LINES and truncated:
             break
-    return {"names": names, "files": files, "lines": count, "matches": matches, "truncated": truncated, "buffers": from_buffers, "unreadable": len(unreadable)}
+    return {
+        "names": names,
+        "files": files,
+        "lines": count,
+        "matches": matches,
+        "truncated": truncated,
+        "buffers": from_buffers,
+        "unreadable": len(unreadable),
+    }
 
 
 # UI sprint 442 (SEARCH-BAR-2026-11-10): the search bar finds names as well as text, by the bar's one rule.
@@ -2339,7 +2399,18 @@ def _name_matches(paths: list[str], rx: re.Pattern[str]) -> list[dict[str, objec
         if not spans:
             continue
         in_name = any(start >= at for start, _ in spans)
-        found.append((0 if in_name else 1, len(path), path, {"path": path, "kind": kind, "ranges": [[_u16(path, a), _u16(path, b)] for a, b in spans]}))
+        found.append(
+            (
+                0 if in_name else 1,
+                len(path),
+                path,
+                {
+                    "path": path,
+                    "kind": kind,
+                    "ranges": [[_u16(path, a), _u16(path, b)] for a, b in spans],
+                },
+            )
+        )
     found.sort(key=lambda x: (x[0], x[1], x[2]))
     return [x[3] for x in found[:WORKSPACE_SEARCH_MAX_NAMES]]
 
@@ -2375,7 +2446,12 @@ def _workspace_find_names(root: Path, query: str, *, fuzzy: bool) -> dict[str, o
                 truncated = True
             else:
                 files.append(rel)
-    return {"files": files, "folders": sorted(folders), "truncated": truncated, "unreadable": len(unreadable)}
+    return {
+        "files": files,
+        "folders": sorted(folders),
+        "truncated": truncated,
+        "unreadable": len(unreadable),
+    }
 
 
 def _expand_replacement(template: str, m: re.Match[str]) -> str:
@@ -2417,7 +2493,15 @@ def _expand_replacement(template: str, m: re.Match[str]) -> str:
     return "".join(out)
 
 
-def _replaced(text: str, rx: re.Pattern[str], replacement: str, *, regex: bool, line: int | None = None, index: int | None = None) -> tuple[str, int]:
+def _replaced(
+    text: str,
+    rx: re.Pattern[str],
+    replacement: str,
+    *,
+    regex: bool,
+    line: int | None = None,
+    index: int | None = None,
+) -> tuple[str, int]:
     """The text with its matches replaced line by line, as the search found them (so `^` and `$` are each
     line's), and how many: every match, the matches on one line, or the index-th match on that line."""
     out: list[str] = []
@@ -2443,8 +2527,19 @@ def _replaced(text: str, rx: re.Pattern[str], replacement: str, *, regex: bool, 
 
 
 def _workspace_replace(
-    root: Path, query: str, replacement: str, *, regex: bool, case: bool, word: bool = False, include: str = "", exclude: str = "",
-    path: str | None = None, line: int | None = None, index: int | None = None, buffers: dict[str, str] | None = None,
+    root: Path,
+    query: str,
+    replacement: str,
+    *,
+    regex: bool,
+    case: bool,
+    word: bool = False,
+    include: str = "",
+    exclude: str = "",
+    path: str | None = None,
+    line: int | None = None,
+    index: int | None = None,
+    buffers: dict[str, str] | None = None,
 ) -> dict[str, object]:
     """The new text of each file a replace changes (UI sprint 435), not written: every file the search
     finds, the one `path`, or one match (`path`, `line`, `index`). Each file is `{path, text, before,
@@ -2468,7 +2563,16 @@ def _workspace_replace(
             continue
         text, n = _replaced(got[0], rx, replacement, regex=regex, line=line, index=index)
         if n:
-            files.append({"path": rel, "text": text, "before": got[0], "sha256": got[1], "replaced": n, "buffer": rel in buffers})
+            files.append(
+                {
+                    "path": rel,
+                    "text": text,
+                    "before": got[0],
+                    "sha256": got[1],
+                    "replaced": n,
+                    "buffer": rel in buffers,
+                }
+            )
             total += n
     return {"files": files, "replaced": total}
 
@@ -2476,7 +2580,9 @@ def _workspace_replace(
 def _buffers(body: dict[str, Any]) -> dict[str, str]:
     """A request body's `buffers`: the editor's unsaved text by workspace path, strings only."""
     raw = body.get("buffers")
-    return {str(k): v for k, v in raw.items() if isinstance(v, str)} if isinstance(raw, dict) else {}
+    return (
+        {str(k): v for k, v in raw.items() if isinstance(v, str)} if isinstance(raw, dict) else {}
+    )
 
 
 def _line_endings(text: str) -> str | None:
@@ -2621,7 +2727,12 @@ def _slice_span(text: str, span: tuple[float, ...]) -> str:
 
 
 def _attachment_text(
-    kind: str, ref: str, span: tuple[float, ...], workspace: Path, room: int, given: str | None = None
+    kind: str,
+    ref: str,
+    span: tuple[float, ...],
+    workspace: Path,
+    room: int,
+    given: str | None = None,
 ) -> tuple[str, int, bool]:
     """A file, line-range, folder or image attachment's text: (the text, the bytes it inlines, whether it
     went as its reference). `room` is what is left of the message's 256 KB. `given` (sprint 453) is a line
@@ -2633,29 +2744,56 @@ def _attachment_text(
         used = len(given.encode("utf-8"))
         what = f"{_human_size(used)}, {_line_count(given):,} lines"
         if used > ATTACH_FILE_INLINE_MAX:
-            return f"{ATTACH_NOT_INLINED}{what}, over the 64 KB a selection goes inline; {ref}{lines_note}; read them with your file tools)", 0, True
+            return (
+                f"{ATTACH_NOT_INLINED}{what}, over the 64 KB a selection goes inline; {ref}{lines_note}; read them with your file tools)",
+                0,
+                True,
+            )
         if used > room:
-            return f"{ATTACH_NOT_INLINED}{what}, past the 256 KB a message inlines; {ref}{lines_note}; read them with your file tools)", 0, True
+            return (
+                f"{ATTACH_NOT_INLINED}{what}, past the 256 KB a message inlines; {ref}{lines_note}; read them with your file tools)",
+                0,
+                True,
+            )
         return f"({ref}{lines_note})\n{given}", used, False
     if kind == "folder":
         if not target.is_dir():
             return f"{ATTACH_NOT_FOUND}{ref}/)", 0, True
         base = workspace.resolve(strict=True)
         rel_dir = str(target.relative_to(base)) if target != base else ""
-        files, cut = _workspace_files(workspace, include=rel_dir) if rel_dir else _workspace_files(workspace)
+        files, cut = (
+            _workspace_files(workspace, include=rel_dir) if rel_dir else _workspace_files(workspace)
+        )
         shown = files[:ATTACH_FOLDER_LIST_MAX]
         files_n = lambda n: f"{n:,} file{'' if n == 1 else 's'}"  # noqa: E731
-        head = f"({rel_dir or '.'}/, {files_n(len(files))}{', the walk stopped there' if cut else ''})"
-        body = "\n".join([head, *shown] + ([f"(and {files_n(len(files) - len(shown))} more)"] if len(files) > len(shown) else []))
+        head = (
+            f"({rel_dir or '.'}/, {files_n(len(files))}{', the walk stopped there' if cut else ''})"
+        )
+        body = "\n".join(
+            [head, *shown]
+            + (
+                [f"(and {files_n(len(files) - len(shown))} more)"]
+                if len(files) > len(shown)
+                else []
+            )
+        )
         size = len(body.encode("utf-8"))
         if size > room:
-            return f"{ATTACH_NOT_INLINED}a listing of {files_n(len(files))}, past the 256 KB a message inlines; {rel_dir or '.'}/; list it with your file tools)", 0, True
+            return (
+                f"{ATTACH_NOT_INLINED}a listing of {files_n(len(files))}, past the 256 KB a message inlines; {rel_dir or '.'}/; list it with your file tools)",
+                0,
+                True,
+            )
         return body, size, False
     if not target.is_file():
         return f"{ATTACH_NOT_FOUND}{ref}{lines_note})", 0, True
     size = target.stat().st_size
     if kind == "image":
-        return f"{ATTACH_NOT_INLINED}an image, {_human_size(size)}; {ref}; {ATTACH_FOLLOW})", 0, True
+        return (
+            f"{ATTACH_NOT_INLINED}an image, {_human_size(size)}; {ref}; {ATTACH_FOLLOW})",
+            0,
+            True,
+        )
     with target.open("rb") as fh:
         sniff = fh.read(ATTACH_BINARY_SNIFF)
     utf16 = sniff.startswith((b"\xff\xfe", b"\xfe\xff"))
@@ -2671,7 +2809,11 @@ def _attachment_text(
             with target.open("rb") as fh:
                 n = sum(chunk.count(b"\n") for chunk in iter(lambda: fh.read(1 << 20), b""))
             count = f", {n:,} lines"
-        return f"{ATTACH_NOT_INLINED}{_human_size(size)}{count}, over the 64 KB a file goes inline; {ref}{lines_note}; {follow})", 0, True
+        return (
+            f"{ATTACH_NOT_INLINED}{_human_size(size)}{count}, over the 64 KB a file goes inline; {ref}{lines_note}; {follow})",
+            0,
+            True,
+        )
     decoded = _decode_any(target.read_bytes())
     if decoded is None:
         return binary, 0, True
@@ -2681,14 +2823,24 @@ def _attachment_text(
     used = len(text.encode("utf-8"))
     what = f"{_human_size(used)}, {_line_count(text):,} lines"
     if used > ATTACH_FILE_INLINE_MAX:
-        return f"{ATTACH_NOT_INLINED}{what}, over the 64 KB a file goes inline; {ref}{lines_note}; {follow})", 0, True
+        return (
+            f"{ATTACH_NOT_INLINED}{what}, over the 64 KB a file goes inline; {ref}{lines_note}; {follow})",
+            0,
+            True,
+        )
     if used > room:
-        return f"{ATTACH_NOT_INLINED}{what}, past the 256 KB a message inlines; {ref}{lines_note}; {follow})", 0, True
+        return (
+            f"{ATTACH_NOT_INLINED}{what}, past the 256 KB a message inlines; {ref}{lines_note}; {follow})",
+            0,
+            True,
+        )
     enc = "" if encoding == "UTF-8" else f", {encoding}"
     return f"({ref}{lines_note}{enc})\n{text}", used, False
 
 
-def _resolve_attachments(raw: object, workspace: Path, record_root: Path) -> tuple[tuple[Any, ...], int]:
+def _resolve_attachments(
+    raw: object, workspace: Path, record_root: Path
+) -> tuple[tuple[Any, ...], int]:
     """The body's `attachments`, each {kind, label, ref, span?, text?}, as kernel `Attachment`s with their text
     read now (UI sprint 446: by round 3's rules, through `_attachment_text`), and how many went as their
     reference. ValueError names a malformed one, and WorkspaceEscapeError a path outside the workspace;
@@ -2723,10 +2875,18 @@ def _resolve_attachments(raw: object, workspace: Path, record_root: Path) -> tup
             all(x == int(x) for x in span)
             and (
                 (len(span) == 2 and 1 <= span[0] <= span[1])
-                or (len(span) == 4 and 1 <= span[0] <= span[2] and span[1] >= 1 and span[3] >= 0 and (span[0] < span[2] or span[1] <= span[3] + 1))
+                or (
+                    len(span) == 4
+                    and 1 <= span[0] <= span[2]
+                    and span[1] >= 1
+                    and span[3] >= 0
+                    and (span[0] < span[2] or span[1] <= span[3] + 1)
+                )
             )
         ):
-            raise ValueError(f"attachments[{i}].span must be [first, last] lines or [line, column, line, column], from 1")
+            raise ValueError(
+                f"attachments[{i}].span must be [first, last] lines or [line, column, line, column], from 1"
+            )
         given = item.get("text")
         if given is not None and (kind != "lines" or not isinstance(given, str)):
             raise ValueError(f"attachments[{i}].text is a line range's text, a string")
@@ -2736,7 +2896,11 @@ def _resolve_attachments(raw: object, workspace: Path, record_root: Path) -> tup
                 text, used, referred = _attachment_text(kind, ref, span, workspace, room, given)
             except OSError as exc:
                 # A file the server cannot open (permission, a vanished folder) still goes, as its reference.
-                text, used, referred = f"{ATTACH_NOT_INLINED}it could not be read, {exc.strerror or type(exc).__name__}; {ref}; {ATTACH_FOLLOW})", 0, True
+                text, used, referred = (
+                    f"{ATTACH_NOT_INLINED}it could not be read, {exc.strerror or type(exc).__name__}; {ref}; {ATTACH_FOLLOW})",
+                    0,
+                    True,
+                )
             room -= used
             by_reference += int(referred)
         elif kind == "event":
@@ -3542,11 +3706,17 @@ class Handler(BaseHTTPRequestHandler):
                 except (BodyTooLarge, ValueError) as exc:
                     self._error(400, str(exc))
                     return
-                args = {k: ["1" if v is True else "0" if v is False else str(v)] for k, v in body.items() if k in ("q", "regex", "case", "word", "include", "exclude")}
+                args = {
+                    k: ["1" if v is True else "0" if v is False else str(v)]
+                    for k, v in body.items()
+                    if k in ("q", "regex", "case", "word", "include", "exclude")
+                }
                 self._session_search(m_search.group(1), args, _buffers(body))
                 return
             m_replace = re.fullmatch(r"/api/session/([^/]+)/search/replace", path)
-            if m_replace:  # UI sprint 435: a replace's new texts, for the page to write through PUT …/file
+            if (
+                m_replace
+            ):  # UI sprint 435: a replace's new texts, for the page to write through PUT …/file
                 self._session_search_replace(m_replace.group(1))
                 return
             m_mcp = re.fullmatch(r"/api/session/([^/]+)/mcp", path)
@@ -4389,39 +4559,68 @@ class Handler(BaseHTTPRequestHandler):
                 return
             TRACE.emit(
                 Signal.DIFF_READ,
-                {"session_id": session_id, "base": one["base"], "files": 1 if one["hunks"] else 0, "hunks": len(cast(list[Any], one["hunks"]))},
+                {
+                    "session_id": session_id,
+                    "base": one["base"],
+                    "files": 1 if one["hunks"] else 0,
+                    "hunks": len(cast(list[Any], one["hunks"])),
+                },
             )
             self._json(one)
             return
         diff = _workspace_diff(root)
         TRACE.emit(
             Signal.DIFF_READ,
-            {"session_id": session_id, "base": diff["base"], "files": len(cast(list[Any], diff["files"]))},
+            {
+                "session_id": session_id,
+                "base": diff["base"],
+                "files": len(cast(list[Any], diff["files"])),
+            },
         )
         self._json(diff)
 
-    def _session_search(self, session_id: str, q: dict[str, list[str]], buffers: dict[str, str] | None = None) -> None:
+    def _session_search(
+        self, session_id: str, q: dict[str, list[str]], buffers: dict[str, str] | None = None
+    ) -> None:
         """UI sprint 434: GET /api/session/<id>/search?q=<query>&regex=1&case=1, the workspace's
         matching lines (`_workspace_search`), written as FILES_SEARCHED with its counts and no query
         or path (E1). A query git grep refuses is a 400 with git's message."""
         root = self._session_workspace_root(session_id)
         if root is None:
             return
+
         def flag(key: str) -> bool:
             return q.get(key, ["0"])[0] == "1"
 
         regex, word = flag("regex"), flag("word")
         try:
             out = _workspace_search(
-                root, q.get("q", [""])[0], regex=regex, case=flag("case"), word=word,
-                include=q.get("include", [""])[0], exclude=q.get("exclude", [""])[0], buffers=buffers,
+                root,
+                q.get("q", [""])[0],
+                regex=regex,
+                case=flag("case"),
+                word=word,
+                include=q.get("include", [""])[0],
+                exclude=q.get("exclude", [""])[0],
+                buffers=buffers,
             )
         except SearchQueryError as exc:
             self._error(400, str(exc))
             return
         TRACE.emit(
             Signal.FILES_SEARCHED,
-            {"session_id": session_id, "regex": regex, "word": word, "files": len(cast(list[Any], out["files"])), "lines": out["lines"], "matches": out["matches"], "truncated": out["truncated"], "buffers": out["buffers"], "unreadable": out["unreadable"], "names": len(cast(list[Any], out["names"]))},
+            {
+                "session_id": session_id,
+                "regex": regex,
+                "word": word,
+                "files": len(cast(list[Any], out["files"])),
+                "lines": out["lines"],
+                "matches": out["matches"],
+                "truncated": out["truncated"],
+                "buffers": out["buffers"],
+                "unreadable": out["unreadable"],
+                "names": len(cast(list[Any], out["names"])),
+            },
         )
         self._json(out)
 
@@ -4436,7 +4635,12 @@ class Handler(BaseHTTPRequestHandler):
         files, truncated = _workspace_files(root, unreadable=unreadable)
         TRACE.emit(
             Signal.FILES_LISTED_ALL,
-            {"session_id": session_id, "files": len(files), "truncated": truncated, "unreadable": len(unreadable)},
+            {
+                "session_id": session_id,
+                "files": len(files),
+                "truncated": truncated,
+                "unreadable": len(unreadable),
+            },
         )
         self._json({"files": files, "truncated": truncated, "unreadable": len(unreadable)})
 
@@ -4450,7 +4654,15 @@ class Handler(BaseHTTPRequestHandler):
         out = _workspace_find_names(root, q.get("q", [""])[0], fuzzy=fuzzy)
         TRACE.emit(
             Signal.FILES_FOUND,
-            {"session_id": session_id, "fuzzy": fuzzy, "name_length": len(q.get("q", [""])[0]), "files": len(cast(list[Any], out["files"])), "folders": len(cast(list[Any], out["folders"])), "truncated": out["truncated"], "unreadable": out["unreadable"]},
+            {
+                "session_id": session_id,
+                "fuzzy": fuzzy,
+                "name_length": len(q.get("q", [""])[0]),
+                "files": len(cast(list[Any], out["files"])),
+                "folders": len(cast(list[Any], out["folders"])),
+                "truncated": out["truncated"],
+                "unreadable": out["unreadable"],
+            },
         )
         self._json(out)
 
@@ -4466,11 +4678,17 @@ class Handler(BaseHTTPRequestHandler):
             body = self._read_json_body()
             line, index = body.get("line"), body.get("index")
             out = _workspace_replace(
-                root, str(body.get("q") or ""), str(body.get("replace") or ""),
-                regex=body.get("regex") is True, case=body.get("case") is True, word=body.get("word") is True,
-                include=str(body.get("include") or ""), exclude=str(body.get("exclude") or ""),
+                root,
+                str(body.get("q") or ""),
+                str(body.get("replace") or ""),
+                regex=body.get("regex") is True,
+                case=body.get("case") is True,
+                word=body.get("word") is True,
+                include=str(body.get("include") or ""),
+                exclude=str(body.get("exclude") or ""),
                 path=str(body["path"]) if body.get("path") else None,
-                line=line if isinstance(line, int) else None, index=index if isinstance(index, int) else None,
+                line=line if isinstance(line, int) else None,
+                index=index if isinstance(index, int) else None,
                 buffers=_buffers(body),
             )
         except BodyTooLarge as exc:
@@ -4482,10 +4700,21 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError as exc:
             self._error(400, str(exc))
             return
-        scope = FilesReplacePreparedScope.ONE if body.get("index") is not None else FilesReplacePreparedScope.FILE if body.get("path") else FilesReplacePreparedScope.ALL
+        scope = (
+            FilesReplacePreparedScope.ONE
+            if body.get("index") is not None
+            else FilesReplacePreparedScope.FILE
+            if body.get("path")
+            else FilesReplacePreparedScope.ALL
+        )
         TRACE.emit(
             Signal.FILES_REPLACE_PREPARED,
-            {"session_id": session_id, "scope": scope, "files": len(cast(list[Any], out["files"])), "replaced": out["replaced"]},
+            {
+                "session_id": session_id,
+                "scope": scope,
+                "files": len(cast(list[Any], out["files"])),
+                "replaced": out["replaced"],
+            },
         )
         self._json(out)
 
