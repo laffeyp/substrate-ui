@@ -11,7 +11,8 @@
 //            harness/pixel/png.ts: a scan across the middle row for the side dividers, down the
 //            centre for the terminal's top edge;
 //   signal — after close, one EDITOR_COLUMN_RESIZED per drag in window-1.jsonl with that size.
-// Then ⌘⇧E out and back (sprint 447: Escape no longer leaves the editor): the sizes are kept. SHAKEOUT_APP=<Substrate.app> runs the bundle.
+// Then ⌘⇧E out and back (sprint 447: Escape no longer leaves the editor): the sizes are kept. Then a drag
+// whose pointer capture is lost before its pointerup (sprint 448): it ends where it was, ended capture_lost. SHAKEOUT_APP=<Substrate.app> runs the bundle.
 
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -55,15 +56,29 @@ async function dividers(win: Page, file: string): Promise<{ xs: number[]; y: num
   return { xs, y };
 }
 
-async function drag(win: Page, col: Col, dx: number, dy: number): Promise<void> {
+/** A drag of a divider. Sprint 448: a MutationObserver watches whether the handle's node is taken out of the page
+ *  (removed, or moved, which removes and reinserts it) during the drag, which ends its pointer capture; what it saw
+ *  is returned for the failure message. */
+async function drag(win: Page, col: Col, dx: number, dy: number): Promise<string> {
   const h = await win.locator(`[data-editor-resize="${col}"]`).boundingBox();
   if (!h) throw new Error(`no grab zone for ${col}`);
+  await win.evaluate((c) => {
+    const el = document.querySelector(`[data-editor-resize="${c}"]`)!;
+    const w = window as unknown as { __gateMoved: string[]; __gateObs?: MutationObserver };
+    w.__gateMoved = [];
+    w.__gateObs?.disconnect();
+    w.__gateObs = new MutationObserver((list) => {
+      for (const m of list) for (const n of Array.from(m.removedNodes)) if (n === el || n.contains(el)) w.__gateMoved.push(`${(n as Element).tagName ?? "node"} removed, connected=${el.isConnected}`);
+    });
+    w.__gateObs.observe(document.body, { childList: true, subtree: true });
+  }, col);
   const x = h.x + h.width / 2, y = h.y + h.height / 2;
   await win.mouse.move(x, y);
   await win.mouse.down();
   for (let i = 1; i <= 10; i++) await win.mouse.move(x + (dx * i) / 10, y + (dy * i) / 10);
   await win.mouse.up();
   await settled(win);
+  return win.evaluate(() => { const w = window as unknown as { __gateMoved: string[]; __gateObs?: MutationObserver }; w.__gateObs?.disconnect(); return w.__gateMoved.join("; ") || "the handle stayed in place"; });
 }
 
 async function main(): Promise<void> {
@@ -80,6 +95,11 @@ async function main(): Promise<void> {
     const win = await app.firstWindow({ timeout: 30_000 });
     await waitForApp(win);
     await app.evaluate(({ BrowserWindow }) => { BrowserWindow.getAllWindows()[0].setContentSize(1512, 945); });
+    // Sprint 448: the person's mouse stays out of this window while the gate holds a synthetic button down. A
+    // mouse move with no button held, arriving during a drag, ends the drag's pointer capture (reproduced with
+    // webContents.sendInputEvent: 301 → 307 px, EDITOR_COLUMN_RESIZED ended capture_lost); Playwright's input is
+    // injected into the page and still arrives (Electron, BrowserWindow.setIgnoreMouseEvents).
+    await app.evaluate(({ BrowserWindow }) => { for (const w of BrowserWindow.getAllWindows()) w.setIgnoreMouseEvents(true); });
     await win.waitForFunction(() => window.innerWidth === 1512, undefined, { timeout: 10_000 });
     await bindPaneAsUser(win, "deterministic", { folder });
     await win.locator("textarea[data-input-bar]").filter({ visible: true }).first().fill("hello");
@@ -94,10 +114,10 @@ async function main(): Promise<void> {
     const want: Record<Col, number> = { ...before };
     const lines: string[] = [];
     for (const [col, dx, dy, grow] of drags) {
-      await drag(win, col, dx, dy);
+      const seen = await drag(win, col, dx, dy);
       want[col] += grow;
       const got = await boxes(win);
-      if (got[col] !== want[col]) throw new Error(`${col}: the mouse moved ${grow} px from ${before[col]}, so ${want[col]}; the box is ${got[col]}`);
+      if (got[col] !== want[col]) throw new Error(`${col}: the mouse moved ${grow} px from ${before[col]}, so ${want[col]}; the box is ${got[col]} (during the drag: ${seen})`);
       const px = await dividers(win, join(shots, `after-${col}.png`));
       const view = await win.evaluate(() => document.querySelector("[data-editor-view]")!.getBoundingClientRect().toJSON() as { left: number; right: number; bottom: number });
       const wantXs = [view.left + want.left - 1, view.right - want.right];
@@ -116,16 +136,37 @@ async function main(): Promise<void> {
     const again = await boxes(win);
     if (JSON.stringify(again) !== JSON.stringify(want)) throw new Error(`after ⌘⇧E out and back the sizes are ${JSON.stringify(again)}, not ${JSON.stringify(want)}`);
 
+    // Sprint 448: a drag whose pointer capture is lost before its pointerup reaches the handle ends where it
+    // was (EDITOR_COLUMN_RESIZED ended capture_lost), and a later hover over the handle changes nothing.
+    await win.evaluate(() => { document.querySelector('[data-editor-resize="left"]')!.addEventListener("pointerdown", (e) => { (window as unknown as { __gatePointer: number }).__gatePointer = (e as PointerEvent).pointerId; }, { once: true }); });
+    const hb = (await win.locator('[data-editor-resize="left"]').boundingBox())!;
+    const hx = hb.x + hb.width / 2, hy = hb.y + hb.height / 2;
+    await win.mouse.move(hx, hy);
+    await win.mouse.down();
+    for (let i = 1; i <= 5; i++) await win.mouse.move(hx + 6 * i, hy);
+    await win.evaluate(() => { const el = document.querySelector('[data-editor-resize="left"]') as HTMLElement; el.releasePointerCapture((window as unknown as { __gatePointer: number }).__gatePointer); });
+    await win.mouse.move(700, 500);
+    await win.mouse.up();
+    await settled(win);
+    const lost = (await boxes(win)).left;
+    if (lost !== want.left + 30) throw new Error(`the lost drag left the column at ${lost}, not ${want.left + 30}`);
+    const hb2 = (await win.locator('[data-editor-resize="left"]').boundingBox())!;
+    await win.mouse.move(hb2.x + hb2.width / 2 - 2, hb2.y + hb2.height / 2);
+    await win.mouse.move(hb2.x + hb2.width / 2 + 2, hb2.y + hb2.height / 2);
+    await settled(win);
+    const hovered = (await boxes(win)).left;
+    if (hovered !== lost) throw new Error(`a hover over the handle after the lost drag moved the column from ${lost} to ${hovered}`);
+
     await app.close();
-    const recs = windowRecords(launch).filter((r) => r.name === "EDITOR_COLUMN_RESIZED").map((r) => `${String(r.payload.column)}=${String(r.payload.size)}`);
+    const recs = windowRecords(launch).filter((r) => r.name === "EDITOR_COLUMN_RESIZED").map((r) => `${String(r.payload.column)}=${String(r.payload.size)}:${String(r.payload.ended)}`);
     // The record carries the stored size, which leaves out the area's 1 px divider line (24a: 210 px + the line).
-    const wantRecs = drags.map(([col]) => `${col}=${want[col] - 1}`);
+    const wantRecs = [...drags.map(([col]) => `${col}=${want[col] - 1}:pointerup`), `left=${want.left + 30 - 1}:capture_lost`];
     if (JSON.stringify(recs) !== JSON.stringify(wantRecs)) throw new Error(`EDITOR_COLUMN_RESIZED: ${JSON.stringify(recs)}; want one per drag: ${JSON.stringify(wantRecs)}`);
     const traces = join(launch.state, "electron", "logs", "traces");
     const boot = readdirSync(traces).sort().pop()!;
     const booted = readFileSync(join(traces, boot, "main.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as { name: string; payload: Record<string, unknown> }).find((r) => r.name === "APP_BOOTED")!.payload;
     if (packaged && booted.packaged !== true) throw new Error(`APP_BOOTED packaged ${String(booted.packaged)}`);
-    console.log(`editor_resize: ok — ${lines.join("; ")}; kept after ⌘⇧E out and back; EDITOR_COLUMN_RESIZED ${recs.join(" ")}; packaged=${String(booted.packaged)}; screenshots in ${shots}`);
+    console.log(`editor_resize: ok — ${lines.join("; ")}; kept after ⌘⇧E out and back; a drag whose capture was lost ended at ${want.left + 30} and a later hover left it; EDITOR_COLUMN_RESIZED ${recs.join(" ")}; packaged=${String(booted.packaged)}; screenshots in ${shots}`);
     code = 0;
   } catch (e) {
     console.error(`editor_resize: FAIL — ${(e as Error).message}`);

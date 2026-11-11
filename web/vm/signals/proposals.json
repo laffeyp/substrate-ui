@@ -1382,6 +1382,16 @@
       "rationale": "An attachment now goes as content or as its reference; the turn's record of acceptance says how many went by reference.",
       "ratified": true,
       "ratified_by": "agent-resolved 2026-11-10, sprint 446; grounds: project — round 3 rules 2-8, roadmap r13 E10.1; SDD — hard rule 2; practice — n/a"
+    },
+    {
+      "id": "P-0.52-RESIZE-ENDED",
+      "kind": "PAYLOAD_FIELD_PROPOSED",
+      "layer": 2,
+      "element": "EDITOR_COLUMN_RESIZED gains ended (pointerup | cancelled | blurred | capture_lost)",
+      "source": "BLACKBOARD 2026-11-10 open question (editor_resize on the bundle: a drag whose pointerup never reached the handle)",
+      "rationale": "A drag now ends on lostpointercapture too; the record says which way it ended, so a lost pointerup is visible in the trace.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-10, sprint 448; grounds: project — the open question of this date; SDD — hard rule 2; practice — MDN, lostpointercapture"
     }
   ]
 }

@@ -5,7 +5,7 @@ Regenerate: python3 scripts/gen_signals.py. tests/test_signals_generated.py fail
 
 from enum import StrEnum
 
-VOCAB_VERSION = "0.51"
+VOCAB_VERSION = "0.52"
 
 
 class Signal(StrEnum):
@@ -704,6 +704,13 @@ class EditorColumnResizedColumn(StrEnum):
     LEFT = "left"
     RIGHT = "right"
     BOTTOM = "bottom"
+
+
+class EditorColumnResizedEnded(StrEnum):
+    POINTERUP = "pointerup"
+    CANCELLED = "cancelled"
+    BLURRED = "blurred"
+    CAPTURE_LOST = "capture_lost"
 
 
 class DiffReadBase(StrEnum):

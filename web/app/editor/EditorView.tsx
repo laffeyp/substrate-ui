@@ -32,7 +32,7 @@ import { followItems } from "../derive/follow";
 import { editor } from "../state/editor";
 import { clampSize, loadSizes, saveSizes, type EditorSizes } from "./sizes";
 import { emit as emitSignal } from "../../vm/instrumentation/sdd";
-import { EditorColumnFoldedCause, EditorColumnFoldedColumn, EditorColumnResizedColumn, EditorDockSetDock, EditorInspectorSwappedShowing, Signal } from "../../vm/signals.gen";
+import { EditorColumnFoldedCause, EditorColumnFoldedColumn, EditorColumnResizedColumn, EditorColumnResizedEnded, EditorDockSetDock, EditorInspectorSwappedShowing, Signal } from "../../vm/signals.gen";
 import { shell } from "../state/shell";
 
 export type Column = "left" | "right" | "bottom";
@@ -230,15 +230,26 @@ export function EditorView({ paneId, fontSize, sessionId, workspace, shape }: { 
       now = { ...now, [column]: clampSize(column, start.size + delta, now, { width: rect.width, height: rect.height }, dock === "right") };
       setSizes(now);
     };
-    const up = () => {
+    // Sprint 448: the drag ends when the pointer capture ends, which follows a pointerup and also any loss of
+    // capture without one (MDN, lostpointercapture). Ended only by a pointerup, a drag whose pointerup never
+    // reached the handle kept its listeners, and a later hover over the handle went on resizing.
+    let released = false, cancelled = false;
+    const up = () => { released = true; };
+    const cancel = () => { cancelled = true; };
+    const end = () => {
       el.removeEventListener("pointermove", move);
       el.removeEventListener("pointerup", up);
+      el.removeEventListener("pointercancel", cancel);
+      el.removeEventListener("lostpointercapture", end);
+      const ended = released ? EditorColumnResizedEnded.POINTERUP : cancelled ? EditorColumnResizedEnded.CANCELLED : !document.hasFocus() ? EditorColumnResizedEnded.BLURRED : EditorColumnResizedEnded.CAPTURE_LOST;
       saveSizes("code", now, storage());
       // The terminal's size is reported as `bottom` docked either way (vocabulary v0.29, EDITOR_COLUMN_RESIZED).
-      emitSignal(Signal.EDITOR_COLUMN_RESIZED, { column: (column === "side" ? "bottom" : column) as EditorColumnResizedColumn, size: now[column] }, { pane_id: paneId });
+      emitSignal(Signal.EDITOR_COLUMN_RESIZED, { column: (column === "side" ? "bottom" : column) as EditorColumnResizedColumn, size: now[column], ended }, { pane_id: paneId });
     };
     el.addEventListener("pointermove", move);
     el.addEventListener("pointerup", up);
+    el.addEventListener("pointercancel", cancel);
+    el.addEventListener("lostpointercapture", end);
   };
 
   // The left column's tabs (sprints 434, 440; roadmap r10 E8; 24j; spec r6 §5.1): files, search, open and
