@@ -65,9 +65,9 @@ Reading through the editor cannot work here. Claude Code, Codex and Cursor read 
 
   A third file, changed on disk behind its buffer, is refused, offered, warned of, and the message still goes.
 
-## Decisions for the Architect
+## Scope
 
-- **What the model is told.** The kernel's prompt does not mention a person's saves. A model that read a file in an earlier turn has that text in its history and may not read it again. Telling it, with a line like `(the person saved src/cart.ts)` among the turn's environment updates, is a kernel change, which the editor work has stayed out of since 2026-11-09. Claude Code tells its own model about files changed since it read them, but only within one run. Substrate starts a new `claude -p` for every call, with no `--resume` (the driver profile in `server.py`).
+The model is told nothing about the person's saves (the Architect, 2026-11-10). The work saves the buffers and records the saves; the kernel's prompt stays as it is. Claude Code tells its own model about files changed since it read them, but only within one run, and Substrate starts a new `claude -p` for every call, with no `--resume` (the driver profile in `server.py`).
 
 ## Sources
 
