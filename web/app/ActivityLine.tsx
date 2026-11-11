@@ -13,7 +13,7 @@ import { HANDOFF_DEFAULT, LENGTH_DEFAULT, TONE_DEFAULT } from "../vm/controls.ge
 import { TaskStatus } from "../vm/statuses.gen";
 import type { Snapshot } from "../vm/types";
 import { liveActivity } from "../reveal/activity";
-import { settingsTail } from "../reveal/settings_tail";
+import { settingsTail, TAIL_SEPARATOR, type TailSeg } from "../reveal/settings_tail";
 import { formatClock } from "../reveal/timeline";
 import { shell } from "./state/shell";
 
@@ -43,6 +43,17 @@ function useClock(running: boolean): number {
   return running ? now : Date.now() / 1000;
 }
 
+/** The tail's segments as settings: each starts at a separator, which is drawn apart so the line may break there. */
+function settingItems(segs: TailSeg[]): { separator: TailSeg | null; segs: TailSeg[] }[] {
+  const items: { separator: TailSeg | null; segs: TailSeg[] }[] = [];
+  for (const sg of segs) {
+    if (sg.text === TAIL_SEPARATOR) items.push({ separator: sg, segs: [] });
+    else if (items.length) items[items.length - 1].segs.push(sg);
+    else items.push({ separator: null, segs: [sg] });
+  }
+  return items;
+}
+
 export function ActivityLine({ paneId, view }: { paneId: number; view: PaneView }): React.ReactElement | null {
   const snap = useSnapshot(paneId);
   // Only a live turn pulses (web/reveal/activity.ts), so the pulse says whether the clock must run.
@@ -60,9 +71,18 @@ export function ActivityLine({ paneId, view }: { paneId: number; view: PaneView 
     <div data-session-bar-line="1" style={{ flex: "none", padding: view === "panes" ? "0 22px 8px" : "0 26px 6px", fontSize: 11, lineHeight: 1.6, color: activity.color }}>
       <span className={activity.pulseOn ? "act-pulse" : ""} style={{ color: activity.turnColor }}>{activity.turnWord}</span>
       {activity.hasRest ? <span> · {activity.restText}</span> : null}
-      <span data-settings-tail="1" style={{ whiteSpace: "nowrap", display: "inline-block" }}>
-        {segs.map((sg, i) => (
-          <span key={i} data-lang-shift={sg.shift ? sg.text : ""} title={sg.title} style={{ color: sg.color, textDecoration: sg.shift ? "underline dotted" : "none", textUnderlineOffset: 3, cursor: sg.shift ? "help" : "inherit", whiteSpace: "pre" }}>{sg.text}</span>
+      {/* Sprint 461 (roadmap r13 E12): in a narrow column the line wraps between settings, at each separator; a
+          setting (its name, value and shift marks) stays on one line, and nothing is cut. */}
+      <span data-settings-tail="1">
+        {settingItems(segs).map((item, k) => (
+          <React.Fragment key={k}>
+            {item.separator ? <span style={{ color: item.separator.color }}>{item.separator.text}</span> : null}
+            <span data-settings-item="1" style={{ whiteSpace: "nowrap" }}>
+              {item.segs.map((sg, i) => (
+                <span key={i} data-lang-shift={sg.shift ? sg.text : ""} title={sg.title} style={{ color: sg.color, textDecoration: sg.shift ? "underline dotted" : "none", textUnderlineOffset: 3, cursor: sg.shift ? "help" : "inherit", whiteSpace: "pre" }}>{sg.text}</span>
+              ))}
+            </span>
+          </React.Fragment>
         ))}
       </span>
     </div>

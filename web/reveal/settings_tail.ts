@@ -22,6 +22,9 @@ const MAX_LISTED = 2;
 const HANDOFF_NOTE =
   "how readily the model hands work to delegate, review or build instead of doing it itself; /handoff rare|normal|eager";
 
+/** The text between two settings; sprint 461: the bar line may wrap at it, and nowhere else in the tail. */
+export const TAIL_SEPARATOR = " · ";
+
 export function settingsTail(opts: {
   guidance: string;
   length: string;
@@ -41,7 +44,7 @@ export function settingsTail(opts: {
   const shifts = opts.off || !view ? [] : view.shifts.filter((sh) => sh.stream === LanguageStreamId.Model && sh.seq > since);
   const segs: TailSeg[] = [];
   for (const [group, value] of settings) {
-    segs.push({ text: " · ", color: NAME, title: "", shift: false });
+    segs.push({ text: TAIL_SEPARATOR, color: NAME, title: "", shift: false });
     segs.push({ text: `${group} `, color: NAME, title: "", shift: false });
     segs.push({ text: value, color: VALUE, title: "", shift: false });
     const mine = shifts.filter((sh) => LANGUAGE_MEASURES[sh.measure]?.group === group);
@@ -62,7 +65,7 @@ export function settingsTail(opts: {
     }
   }
   // UI sprint 184 (kernel K334): handoff has no language measure, so it carries no shifts.
-  segs.push({ text: " · ", color: NAME, title: "", shift: false });
+  segs.push({ text: TAIL_SEPARATOR, color: NAME, title: "", shift: false });
   segs.push({ text: "handoff ", color: NAME, title: HANDOFF_NOTE, shift: false });
   segs.push({ text: opts.handoff, color: VALUE, title: HANDOFF_NOTE, shift: false });
   return segs;

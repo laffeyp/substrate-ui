@@ -175,6 +175,7 @@ When a fold-pass edit touches surfaces the closed card did not enumerate, it lan
 
 | Date | Sprint | What was bypassed | Why |
 |---|---|---|---|
+| 2026-11-11 | 461 | Hard rule 6: `web/reveal/settings_tail.ts` beside the card's two files. | The tail is split on the separator it is built with; exporting it keeps one copy of the string. |
 | 2026-11-11 | 460 | Hard rule 6: `server.py`, `tests/test_turn_attachments_446.py`, `harness/shakeout/lib/electron.ts`, and two new files (a test, a gate). | Test 446 pinned the fault the sprint fixes, and the gate's live driver exposed the helper's missing roster wait; each was fixed where found. |
 | 2026-11-11 | 459 | Hard rule 6: `ruff.toml`, `server.py` and 11 tests (by `ruff format` only), the runbook's round 7 with round 6 archived, `README.md`. | The runbook's lint steps fail until the formatter runs and the set-aside code is excluded, and the runbook and the README named the same gone files; one concept, the repo's instructions matching the repo. |
 | 2026-11-11 | 458 | Hard rule 6: `editor/chips.ts`, `InputBar.tsx`, `editor/FileTree.tsx`, `editor/Centre.tsx`, `editor/Search.tsx`, `editor/EditorView.tsx`, `derive/control_notes.ts`, the vocabulary; gate `editor_drag_chips.ts`. | A drag starts at each of the three sources and ends at the bar, which is shared by every view; the code must refuse the same drag; the hint is the header's tooltip and its words one constant. |

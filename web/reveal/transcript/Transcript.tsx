@@ -66,7 +66,9 @@ export function Transcript(props: TranscriptProps): React.ReactElement | null {
   const start = startLine(snapshot);
   return (
     <div ref={attachTo}>
-      {start ? <div data-session-start-line="1" style={{ color: "#62676f", marginBottom: 10 }}>{start}</div> : null}
+      {/* Sprint 461 (roadmap r13 E12): a workspace path has no break points; it breaks anywhere, as the rows do, so a
+          narrow column shows all of it. */}
+      {start ? <div data-session-start-line="1" style={{ color: "#62676f", marginBottom: 10, overflowWrap: "anywhere" }}>{start}</div> : null}
       {rows.map((row) => {
         const id = row.callKey ?? row.callId;
         const paired = id ? resultByCallId.get(id) : undefined;
