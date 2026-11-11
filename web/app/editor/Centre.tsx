@@ -28,7 +28,7 @@ import { shell as shellMode } from "@codemirror/legacy-modes/mode/shell";
 import { preserveCase } from "../derive/preserve_case";
 import { editor } from "../state/editor";
 import { emit as emitSignal } from "../../vm/instrumentation/sdd";
-import { EditorConflictResolvedChoice, EditorFileOpenedHow, EditorFileSavedCommand, EditorKeyRefusedReason, EditorReplacedScope, Signal, UndoRoutedTo } from "../../vm/signals.gen";
+import { DiffReadBase, EditorConflictResolvedChoice, EditorFileOpenedHow, EditorFileSavedCommand, EditorKeyRefusedReason, EditorReplacedScope, Signal, UndoRoutedTo } from "../../vm/signals.gen";
 import { redo, redoDepth, undo, undoDepth } from "@codemirror/commands";
 import { EnvelopeKind } from "../../vm/envelope_kinds.gen";
 import { sendCommand, shell } from "../state/shell";
@@ -334,7 +334,8 @@ const BUFFERS = new Map<string, EditorState>();
 const DISK = new Map<string, string>();
 /** The binding part of every buffer: module-wide, so a kept buffer reconfigures in a new centre. */
 const CONF = { binding: new Compartment() };
-/** Each file's base text (sprint 424, the status line's `vs main`), by session and path; absent outside git. */
+/** Each file's base text (sprint 424, the status line's `vs main`), by session and path; absent outside git and in a
+ *  repository with no commit (sprint 450). */
 const BASES = new Map<string, { name: string; text: string }>();
 /** The SHA-256 each file had when its buffer read it (sprint 425): a save sends it, and a file changed on
  *  disk since is refused as stale (409). */
@@ -609,7 +610,8 @@ export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionI
         DISK.set(key(rel), normal(file.text!));
         if (file.sha256) SHAS.set(key(rel), file.sha256);
         ENDS.set(key(rel), lineEnd(file.text!));
-        if (diff.base && diff.base !== "none") BASES.set(key(rel), { name: diff.base, text: baseText(normal(file.text!), diff.hunks) });
+        // Sprint 450: no base outside git or in a repository with no commit; the status line then shows no `vs`.
+        if (diff.base && diff.base !== DiffReadBase.NONE && diff.base !== DiffReadBase.NO_COMMIT) BASES.set(key(rel), { name: diff.base, text: baseText(normal(file.text!), diff.hunks) });
         else BASES.delete(key(rel));
       };
       // The file on disk is the buffer shown (the centre's own save, landing on the record): the buffer, its

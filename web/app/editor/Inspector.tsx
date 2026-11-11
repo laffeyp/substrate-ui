@@ -162,8 +162,10 @@ export function Inspector({ paneId, workspace }: { paneId: number; workspace: st
           ))}
         </Plain>
       )}
-      <Plain name="changes in this file" meta="vs main">
-        {hunks.length === 0 && <div style={{ padding: "2px 14px 6px", color: DIM, fontSize: 10.5 }}>no changes against the base</div>}
+      {/* Sprint 450: the base the hunks are against (the status line's), not a fixed "vs main"; none outside git or
+          before a first commit. */}
+      <Plain name="changes in this file" meta={st.vsBase ? `vs ${st.vsBase.base}` : "no base"}>
+        {hunks.length === 0 && <div style={{ padding: "2px 14px 6px", color: DIM, fontSize: 10.5 }}>{st.vsBase ? "no changes against the base" : "nothing to compare with"}</div>}
         {hunks.map((hunk, i) => {
           const end = hunk.new_count > 0 ? hunk.new_start + hunk.new_count - 1 : hunk.new_start;
           const plus = hunk.lines.filter((l) => l.startsWith("+")).length, minus = hunk.lines.filter((l) => l.startsWith("-")).length;

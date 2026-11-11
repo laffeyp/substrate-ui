@@ -5,7 +5,7 @@ Regenerate: python3 scripts/gen_signals.py. tests/test_signals_generated.py fail
 
 from enum import StrEnum
 
-VOCAB_VERSION = "0.53"
+VOCAB_VERSION = "0.54"
 
 
 class Signal(StrEnum):
@@ -716,7 +716,8 @@ class EditorColumnResizedEnded(StrEnum):
 class DiffReadBase(StrEnum):
     MAIN = "main"
     DEFAULT_BRANCH = "default_branch"
-    FIRST_COMMIT = "first_commit"
+    HEAD = "head"
+    NO_COMMIT = "no_commit"
     NONE = "none"
 
 

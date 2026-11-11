@@ -81,22 +81,28 @@ def test_a_subfolder_workspace_lists_its_own_paths(feature: Path) -> None:
     assert sorted(f["path"] for f in out["files"]) == ["cart.ts", "menu.ts", "new.ts"]
 
 
-def test_no_main_falls_back_to_the_first_commit(tmp_path: Path) -> None:
+def test_no_main_compares_with_the_last_commit(tmp_path: Path) -> None:
+    # Sprint 450: not the first commit, which marked everything since it added.
     root = repo(tmp_path / "trunk", branch="trunk")
     (root / "a.txt").write_text("1\n")
     commit_all(root, "one")
     (root / "b.txt").write_text("2\n")
     commit_all(root, "two")
+    assert server._workspace_diff(root) == {"base": "head", "files": []}
+    (root / "b.txt").write_text("2\nmore\n")
     out = server._workspace_diff(root)
-    assert out["base"] == "first_commit"
-    assert [(f["path"], f["status"]) for f in out["files"]] == [("b.txt", "A")]
+    assert out["base"] == "head"
+    assert [(f["path"], f["status"]) for f in out["files"]] == [("b.txt", "M")]
+    hunks = server._workspace_hunks(root, "b.txt")
+    assert hunks["base"] == "head" and [h["lines"] for h in hunks["hunks"]] == [["+more"]]
 
 
-def test_a_repository_with_no_commit_lists_every_file_as_new(tmp_path: Path) -> None:
+def test_a_repository_with_no_commit_has_no_base(tmp_path: Path) -> None:
+    # Sprint 450: git's empty tree as the base marked every line added, and the editor drew the text teal.
     root = repo(tmp_path / "empty")
     (root / "x.txt").write_text("x\n")
-    out = server._workspace_diff(root)
-    assert (out["base"], out["files"]) == ("first_commit", [{"path": "x.txt", "status": "A"}])
+    assert server._workspace_diff(root) == {"base": "no_commit", "files": []}
+    assert server._workspace_hunks(root, "x.txt") == {"base": "no_commit", "path": "x.txt", "hunks": []}
 
 
 def test_a_plain_folder_has_no_base_and_no_files(tmp_path: Path) -> None:

@@ -1402,6 +1402,16 @@
       "rationale": "A launch whose windows are isolated for a gate says so in its first record, as a mock path must say it is one.",
       "ratified": true,
       "ratified_by": "agent-resolved 2026-11-10, sprint 449; grounds: project — the user entry of this date; SDD — hard rule 2, PRINCIPLES (runtime grammar: a test path must be able to say it is one); practice — n/a"
+    },
+    {
+      "id": "P-0.54-DIFF-BASE",
+      "kind": "PAYLOAD_FIELD_PROPOSED",
+      "layer": 2,
+      "element": "DIFF_READ.base gains head and no_commit; first_commit retired",
+      "source": "BLACKBOARD 2026-11-10 user (the editor's text blue) and agent-resolved (the base without main); sprint 450",
+      "rationale": "The base is now HEAD when there is no main or default branch, and absent in a repository with no commit; the trace names which.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-10, sprint 450; grounds: project — design spec r6 §5, D6; SDD — PRINCIPLES commitment 1; practice — git-diff(1)"
     }
   ]
 }
