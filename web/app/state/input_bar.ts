@@ -18,10 +18,18 @@ import { createStore } from "../store";
 import { CHOICE_NOTES } from "../derive/control_notes";
 import { slashRows, tabComplete, type SlashRow } from "../derive/slash";
 import { openEndSession } from "./dialogs";
+import { emit as emitSignal } from "../../vm/instrumentation/sdd";
+import { InputChipRemovedHow, type InputChipRemovedKind, Signal } from "../../vm/signals.gen";
+
+/** Sprint 443 (D94; 24k): a thing added to the message, sent with it as one of the turn's attachments
+ *  (server.py `_resolve_attachments`: a file's text read when the turn is sent, a folder by name). */
+export interface Chip { kind: "file" | "folder"; label: string; ref: string }
 
 export interface PaneInput {
   /** The draft in the bar. */
   text: string;
+  /** Sprint 443: the chips beside the draft, in the order they were added. */
+  chips: Chip[];
   /** The lit row among a command's choices; null while the caret is in the bar. */
   slashSel: number | null;
   /** The lines sent from this pane, oldest first, at most 200. */
@@ -32,10 +40,10 @@ export interface PaneInput {
   histDraft: string;
 }
 
-export const EMPTY_INPUT: PaneInput = { text: "", slashSel: null, hist: [], histAt: null, histDraft: "" };
+export const EMPTY_INPUT: PaneInput = { text: "", chips: [], slashSel: null, hist: [], histAt: null, histDraft: "" };
 const HIST_MAX = 200;
 
-interface Controller { slashCatalog?(): SlashCatalogEntry[]; submitLine?(line: string): unknown; }
+interface Controller { slashCatalog?(): SlashCatalogEntry[]; submitLine?(line: string, attachments?: Chip[]): unknown; }
 interface Vm { get?(paneId: number): Controller | null; setActive?(paneId: number): void; submitLine?(line: string): unknown; }
 const vm = () => (window as unknown as { __vm?: Vm }).__vm;
 
@@ -78,12 +86,29 @@ export function setText(paneId: number, text: string): void {
   patch(paneId, { text, histAt: null, slashSel: null });
 }
 
-function submit(paneId: number, line: string): void {
+/** Sprint 443: a chip added to a pane's input; false when the same thing is there already. */
+export function addChip(paneId: number, chip: Chip): boolean {
+  const chips = paneInput(paneId).chips;
+  if (chips.some((c) => c.kind === chip.kind && c.ref === chip.ref)) return false;
+  patch(paneId, { chips: [...chips, chip] });
+  return true;
+}
+
+/** A chip removed by its × or by ⌫ (INPUT_CHIP_REMOVED). */
+export function removeChip(paneId: number, index: number, how: InputChipRemovedHow): void {
+  const chips = paneInput(paneId).chips;
+  const chip = chips[index];
+  if (!chip) return;
+  patch(paneId, { chips: chips.filter((_, k) => k !== index) });
+  emitSignal(Signal.INPUT_CHIP_REMOVED, { kind: chip.kind as InputChipRemovedKind, how }, { pane_id: paneId });
+}
+
+function submit(paneId: number, line: string, chips: Chip[] = []): void {
   const v = vm();
   if (!v) return;
   if (typeof v.setActive === "function") v.setActive(paneId);
   const ctl = typeof v.get === "function" ? v.get(paneId) : null;
-  if (ctl && typeof ctl.submitLine === "function") ctl.submitLine(line);
+  if (ctl && typeof ctl.submitLine === "function") ctl.submitLine(line, chips);
   else if (typeof v.submitLine === "function") v.submitLine(line);
 }
 
@@ -124,11 +149,19 @@ export function barKey(paneId: number, ev: KeyEventLike): void {
     ev.preventDefault();
     const line = pane.text.trim();
     if (!line) return;
-    patch(paneId, { text: "", hist: [...pane.hist, line].slice(-HIST_MAX), histAt: null, histDraft: "" });
-    submit(paneId, line);
+    // The chips go with a message; a slash command leaves them in the bar.
+    const chips = line.startsWith("/") && !line.startsWith("//") ? [] : pane.chips;
+    patch(paneId, { text: "", hist: [...pane.hist, line].slice(-HIST_MAX), histAt: null, histDraft: "", ...(chips.length ? { chips: [] } : {}) });
+    submit(paneId, line, chips);
     return;
   }
   const el = ev.target as HTMLTextAreaElement | null;
+  // Sprint 443: ⌫ at the start of an empty draft removes the last chip.
+  if (ev.key === "Backspace" && plain && el && el.selectionStart === 0 && el.selectionEnd === 0 && !String(el.value || "") && pane.chips.length) {
+    ev.preventDefault();
+    removeChip(paneId, pane.chips.length - 1, InputChipRemovedHow.BACKSPACE);
+    return;
+  }
   if (!plain || !el || typeof el.selectionStart !== "number" || el.selectionStart !== el.selectionEnd) return;
   const text = String(el.value || "");
   if (ev.key === "ArrowUp" && !text.slice(0, el.selectionStart).includes("\n") && pane.hist.length) {

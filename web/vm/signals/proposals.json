@@ -1352,6 +1352,16 @@
       "rationale": "One search bar finds names, folders, paths and text (SEARCH-BAR-2026-11-10).",
       "ratified": true,
       "ratified_by": "the Architect, 2026-11-10 (one search bar); recorded in sprint 442"
+    },
+    {
+      "id": "P-0.49-CHIPS",
+      "kind": "TAG_PROPOSED",
+      "layer": 1,
+      "element": "INPUT_CHIP_REMOVED (editor); TURN_SUBMITTED gains attachments; EDITOR_CHIP_ADDED emitted",
+      "source": "roadmap r11 E10; D94",
+      "rationale": "Chips are added, removed and sent with the message; each step has its tag.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-10, sprint 443; grounds: project — D94, roadmap r11 E10; SDD — BOOTSTRAP step 9; practice — n/a"
     }
   ]
 }

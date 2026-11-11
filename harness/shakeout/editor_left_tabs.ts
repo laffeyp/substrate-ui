@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Peter Laffey
 // The left column's open and activity tabs (sprint 440; design spec r6 §5.1; roadmap r10 E8). A repository
 // written here; the live roster's model (EDITOR_LIVE_MODEL overrides) is prompted from the editor's terminal to
-// read one file and edit another. These agree:
+// read one file, and another is saved by hand. These agree:
 //   open — the open tabs in tab order, the shown one lit, an accent dot on the one with unsaved typing; a click
 //          shows that tab and writes no EDITOR_FILE_OPENED;
 //   activity — every workspace file the record's calls touched, newest touch first, equal to the order the gate
@@ -94,8 +94,18 @@ async function main(): Promise<void> {
     await win.locator('[data-left-row="open"][data-path="src/menu.ts"]').first().click();
     await until(win, "menu.ts shown from open", () => active(win), (a) => a === "src/menu.ts");
 
-    // A turn that reads one file and edits another.
-    await turn(win, "Use read_file on src/tax.ts. Then use edit_file on README.md to replace exactly `# demo` with `# demo app`. Do not read README.md first. Then reply done.");
+    // A turn that reads one file (one call: a live model asked for two in one turn once made only the first);
+    // README.md saved by hand, which the activity tab lists too.
+    await turn(win, "Use read_file on src/tax.ts. Then reply done.");
+    await win.locator('[data-editor-left-tab="files"]').first().click();
+    await win.locator('[data-tree-row="README.md"]').first().click();
+    await until(win, "README.md shown", () => active(win), (a) => a === "README.md");
+    await until(win, "README.md's text drawn", () => win.evaluate(`(function () { var r = document.querySelector("[data-editor-code]").shadowRoot; var l = r && r.querySelector(".cm-line"); return l ? l.textContent : null; })()`) as Promise<string | null>, (t) => t === "# demo");
+    await win.locator("[data-editor-code] .cm-line").first().click();
+    await win.keyboard.press("Meta+ArrowRight");
+    await win.keyboard.type(" app");
+    await app.evaluate(({ Menu }) => { Menu.getApplicationMenu()?.getMenuItemById("menu-save")?.click(); });
+    await until(win, "README.md saved", async () => readFileSync(join(ws, "README.md"), "utf8"), (t) => t === "# demo app\n");
 
     // activity: the record's touched files, newest first; a click opens tax.ts.
     await win.locator('[data-editor-left-tab="activity"]').first().click();
@@ -108,7 +118,7 @@ async function main(): Promise<void> {
       if (e.kind === "FileWritten") last.set(rel(e.payload.path), e.seq);
     }
     const want = [...last.entries()].filter(([p]) => p && !p.startsWith("/") && !p.startsWith("..")).sort((a, b) => b[1] - a[1]).map(([p]) => p);
-    if (!want.includes("src/tax.ts") || !want.includes("README.md")) throw new Error(`the turn did not read src/tax.ts and edit README.md: the record names ${JSON.stringify(want)}`);
+    if (!want.includes("src/tax.ts") || want[0] !== "README.md") throw new Error(`the record does not name the read of src/tax.ts and the save of README.md: ${JSON.stringify(want)}`);
     await until(win, "the activity rows", async () => (await leftRows(win, "activity")).map((r) => r.path), (r) => same(r, want));
     const outside = await win.evaluate(`(function () { var col = document.querySelector("[data-editor-area=left]").getBoundingClientRect(); return Array.from(document.querySelectorAll("[data-editor-left-tab], [data-left-row] > span, [data-editor-fold=left]")).filter(function (e) { var r = e.getBoundingClientRect(); return r.width > 0 && (r.right > col.right + 0.5 || r.left < col.left - 0.5); }).map(function (e) { return e.outerHTML.slice(0, 70); }); })()`) as string[];
     if (outside.length) throw new Error(`outside the left column: ${JSON.stringify(outside)}`);
@@ -122,9 +132,9 @@ async function main(): Promise<void> {
 
     const recs = windowRecords(launch);
     const opened = recs.filter((r) => r.name === "EDITOR_FILE_OPENED").map((r) => String(r.payload.how));
-    if (!same(opened.slice(openedBefore), ["activity"])) throw new Error(`EDITOR_FILE_OPENED after the open tab: ${JSON.stringify(opened.slice(openedBefore))}`);
+    if (!same(opened.slice(openedBefore), ["tree", "activity"])) throw new Error(`EDITOR_FILE_OPENED after the open tab: ${JSON.stringify(opened.slice(openedBefore))}`);
     const tabs = recs.filter((r) => r.name === "EDITOR_DRAWN").map((r) => String(r.payload.left_tab)).filter((t, i, a) => t !== a[i - 1]);
-    if (!same(tabs, ["files", "open", "activity"])) throw new Error(`EDITOR_DRAWN.left_tab ${JSON.stringify(tabs)}`);
+    if (!same(tabs, ["files", "open", "files", "activity"])) throw new Error(`EDITOR_DRAWN.left_tab ${JSON.stringify(tabs)}`);
     const named = recs.find((r) => r.proc_seq === row3.seq);
     if (!named || named.name !== "EDITOR_DRAWN" || named.payload.left_tab !== "activity") throw new Error(`the third row names seq ${row3.seq}: ${named ? named.name : "missing"}`);
     const traces = join(launch.state, "electron", "logs", "traces");

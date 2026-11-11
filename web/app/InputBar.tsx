@@ -10,7 +10,8 @@ import * as React from "react";
 import { useSyncExternalStore } from "react";
 import { INPUT_HINT } from "./derive/control_notes";
 import { slashHint } from "./derive/slash";
-import { barKey, catalogFor, inputBar, paneInput, pickRow, rowsFor, setText } from "./state/input_bar";
+import { barKey, catalogFor, inputBar, paneInput, pickRow, removeChip, rowsFor, setText } from "./state/input_bar";
+import { InputChipRemovedHow } from "../vm/signals.gen";
 import { shell } from "./state/shell";
 import "./hover.css";
 
@@ -43,6 +44,18 @@ export function InputBar({ paneId, compact = false }: { paneId: number; compact?
       {/* UI sprint 141: the one input bar. */}
       <div style={{ display: "flex", gap: 12, alignItems: "flex-start", borderRadius: rows.length ? "0 0 6px 6px" : "6px", padding: compact ? "4px 12px" : "11px 16px", background: "#1a1c20" }}>
         <span style={{ color: "#82a5c8", lineHeight: 1.4 }}>›</span>
+        {/* Sprint 443 (D94; 24k): the chips that go with the next message; the path on hover, × removes one. */}
+        {pane.chips.length > 0 && (
+          <div data-input-chips="1" style={{ display: "flex", flexWrap: "wrap", gap: 6, flex: "none", maxWidth: "60%" }}>
+            {pane.chips.map((c, k) => (
+              <span key={`${c.kind}:${c.ref}`} data-chip={c.ref} data-chip-kind={c.kind} title={c.ref}
+                style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "1px 7px", borderRadius: 4, background: "#2b2e33", color: "#d7dade", fontSize: 12, lineHeight: 1.4, whiteSpace: "nowrap" }}>
+                {c.label}
+                <span data-chip-x={c.ref} title="remove" onClick={() => removeChip(paneId, k, InputChipRemovedHow.X)} style={{ color: "#62676f", fontSize: 10, cursor: "pointer" }}>×</span>
+              </span>
+            ))}
+          </div>
+        )}
         <div style={{ position: "relative", flex: 1, display: "flex", minWidth: 0 }}>
           {/* UI sprints 163, 166: the slash hint, in one column (in ch of the bar's font) behind the textarea. */}
           {hint ? (

@@ -5,7 +5,7 @@ Regenerate: python3 scripts/gen_signals.py. tests/test_signals_generated.py fail
 
 from enum import StrEnum
 
-VOCAB_VERSION = "0.48"
+VOCAB_VERSION = "0.49"
 
 
 class Signal(StrEnum):
@@ -136,6 +136,7 @@ class Signal(StrEnum):
     EDITOR_FOLLOW_WITHDRAWN = "EDITOR_FOLLOW_WITHDRAWN"
     EDITOR_HUNK_DRAWN = "EDITOR_HUNK_DRAWN"
     EDITOR_CHIP_ADDED = "EDITOR_CHIP_ADDED"
+    INPUT_CHIP_REMOVED = "INPUT_CHIP_REMOVED"
     EDITOR_TREE_FOUND = "EDITOR_TREE_FOUND"
     EDITOR_SEARCH_QUERIED = "EDITOR_SEARCH_QUERIED"
     EDITOR_SEARCH_REPLACED = "EDITOR_SEARCH_REPLACED"
@@ -616,6 +617,17 @@ class EditorChipAddedKind(StrEnum):
     FILE = "file"
     FOLDER = "folder"
     RANGE = "range"
+
+
+class InputChipRemovedKind(StrEnum):
+    FILE = "file"
+    FOLDER = "folder"
+    RANGE = "range"
+
+
+class InputChipRemovedHow(StrEnum):
+    X = "x"
+    BACKSPACE = "backspace"
 
 
 class EditorTreeFoundMode(StrEnum):

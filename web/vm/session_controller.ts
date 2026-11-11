@@ -725,7 +725,7 @@ export class SessionController {
     await this.refreshTasks();
   }
 
-  async sendTurn(text: string, opts: { skill?: string; driverCommand?: boolean } = {}): Promise<void> {
+  async sendTurn(text: string, opts: { skill?: string; driverCommand?: boolean; attachments?: { kind: string; label: string; ref: string }[] } = {}): Promise<void> {
     const trimmed = text.trim();
     if (!trimmed) return;
     if (this.snap.viewOnly) {
@@ -752,7 +752,8 @@ export class SessionController {
     });
     const turnIndex = this.snap.turnIndex;
     this.patch({ turnIndex: turnIndex + 1, parkReason: null, turnFailure: null });
-    this.emit(Signal.TURN_SUBMITTED, { session_id: sessionId, turn_index: turnIndex, text_length: trimmed.length });
+    const attachments = opts.attachments ?? [];
+    this.emit(Signal.TURN_SUBMITTED, { session_id: sessionId, turn_index: turnIndex, text_length: trimmed.length, attachments: attachments.length });
     const result = await this.client.fetchJson<unknown>(
       `/api/session/${encodeURIComponent(sessionId)}/turn`,
       {
@@ -761,7 +762,7 @@ export class SessionController {
           ? { text: trimmed, skill: opts.skill }
           : opts.driverCommand
             ? { text: trimmed, driver_command: true }
-            : { text: trimmed },
+            : attachments.length ? { text: trimmed, attachments } : { text: trimmed },
       },
     );
     if (!result.ok) {
@@ -1069,11 +1070,11 @@ export class SessionController {
   /** Route a prompt line. `/foo` goes to a slash handler, plain text
    * to `sendTurn`. Returns true when the line was consumed as a
    * slash so the caller can hand a residual back if it wants. */
-  async submitLine(line: string): Promise<boolean> {
+  async submitLine(line: string, attachments: { kind: string; label: string; ref: string }[] = []): Promise<boolean> {
     const text = line.trim();
     if (!text) return true;
     if (!text.startsWith("/")) {
-      await this.sendTurn(text);
+      await this.sendTurn(text, { attachments });
       return false;
     }
     // UI sprint 123: `//<command>` passes `/<command>` to the driver itself (e.g. Claude's /context).
