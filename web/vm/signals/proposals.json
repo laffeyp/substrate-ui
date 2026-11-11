@@ -1392,6 +1392,16 @@
       "rationale": "A drag now ends on lostpointercapture too; the record says which way it ended, so a lost pointerup is visible in the trace.",
       "ratified": true,
       "ratified_by": "agent-resolved 2026-11-10, sprint 448; grounds: project — the open question of this date; SDD — hard rule 2; practice — MDN, lostpointercapture"
+    },
+    {
+      "id": "P-0.53-GATE-ISOLATED",
+      "kind": "PAYLOAD_FIELD_PROPOSED",
+      "layer": 2,
+      "element": "APP_BOOTED gains gate_isolated",
+      "source": "BLACKBOARD 2026-11-10 user (the machine in active use) and surfaced (a buttonless move ends a drag); sprint 449",
+      "rationale": "A launch whose windows are isolated for a gate says so in its first record, as a mock path must say it is one.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-10, sprint 449; grounds: project — the user entry of this date; SDD — hard rule 2, PRINCIPLES (runtime grammar: a test path must be able to say it is one); practice — n/a"
     }
   ]
 }

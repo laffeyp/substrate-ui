@@ -34,7 +34,9 @@ export interface Launch {
 export function launchArgs(opts: { roster?: "offline" | "live"; csp?: "bypass" | "enforce"; plantsBreaks?: boolean } = {}): Launch {
   const dir = scratchDir("electron-shakeout-");
   const state = scratchDir("electron-shakeout-state-");
-  const env = { ...process.env, SUBSTRATE_HOME: state } as Record<string, string>;
+  // Sprint 449: the app's windows take no focus and let the OS's mouse through (electron/main.ts GATE_ISOLATED), so a
+  // person working on the machine cannot reach a gate's window.
+  const env = { ...process.env, SUBSTRATE_HOME: state, SUBSTRATE_GATE_ISOLATE: "1" } as Record<string, string>;
   if ((opts.roster ?? "offline") === "offline") {
     env.OLLAMA_BASE_URL = "http://127.0.0.1:9";
     env.SUBSTRATE_CLI_ADAPTERS = "";

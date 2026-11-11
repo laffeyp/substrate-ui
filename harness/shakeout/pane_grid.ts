@@ -56,11 +56,6 @@ async function main(): Promise<void> {
   const seen: string[] = [];
   try {
     const win = await app.firstWindow({ timeout: 30_000 });
-    // Sprint 448: the person's mouse stays out of this window while the gate holds a synthetic button down. A
-    // mouse move with no button held, arriving during a drag, ends the drag's pointer capture (reproduced with
-    // webContents.sendInputEvent: 301 → 307 px, EDITOR_COLUMN_RESIZED ended capture_lost); Playwright's input is
-    // injected into the page and still arrives (Electron, BrowserWindow.setIgnoreMouseEvents).
-    await app.evaluate(({ BrowserWindow }) => { for (const w of BrowserWindow.getAllWindows()) w.setIgnoreMouseEvents(true); });
     await waitForApp(win);
     await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1200, 800));
     await waitPanes(win, 1);

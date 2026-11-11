@@ -36,6 +36,11 @@ import { Signal, VOCAB_VERSION, AppBootedHomeKind, AppQuitRequestedCause, ChildP
 // server's, for the loss gate only.
 // SUBSTRATE_TRACE_CAP (bytes) is a test seam: harness/shakeout/trace_files.ts sets it low to force losses.
 const TRACE_FILE_CAP = Number(process.env.SUBSTRATE_TRACE_CAP) > 0 ? Number(process.env.SUBSTRATE_TRACE_CAP) : Infinity;
+/** Sprint 449: a gate's launch (harness/shakeout/lib/electron.ts `launchArgs` sets SUBSTRATE_GATE_ISOLATE=1). The gates
+ *  run while a person works on the same machine, and their windows open on the screen in use: each window takes no
+ *  focus, so the person's keys stay in their own app, and lets the OS's mouse through, since a buttonless move ends
+ *  a drag's pointer capture (BLACKBOARD 2026-11-10). Playwright's input is injected into the page and still arrives. */
+const GATE_ISOLATED = process.env.SUBSTRATE_GATE_ISOLATE === "1";
 const BOOT_ID = new Date().toISOString().replace(/[-:.]/g, "").replace("T", "-").slice(0, 15) + "-" + Math.random().toString(16).slice(2, 8);
 const trace: { [key: string]: any } = { dir: null, opened: false, held: [], files: new Map(), written: 0, lost: 0, mainSeq: 0, windowSeq: new Map(), windowsOpened: 0, serverLost: 0 };
 
@@ -186,6 +191,7 @@ function openTrace() {
   traceEmit(Signal.APP_BOOTED, {
     app_version: app.getVersion(), app_commit: commits.app_commit, kernel_commit: commits.kernel_commit,
     vocab_version: VOCAB_VERSION, packaged: app.isPackaged, home_kind: process.env.SUBSTRATE_HOME ? AppBootedHomeKind.ENV : AppBootedHomeKind.DEFAULT,
+    gate_isolated: GATE_ISOLATED,
   });
   traceEmit(Signal.TRACE_OPENED, { process: TraceOpenedProcess.MAIN });
   const held = trace.held;
@@ -649,6 +655,7 @@ function createWindow(cause: WindowOpenedCause) {
       webSecurity: true,
     },
   });
+  if (GATE_ISOLATED) { win.setFocusable(false); win.setIgnoreMouseEvents(true); }
   const windowId = win.id;
   traceEmit(Signal.WINDOW_OPENED, { cause }, windowId);
   win.on("closed", () => traceEmit(Signal.WINDOW_CLOSED, {}, windowId));
