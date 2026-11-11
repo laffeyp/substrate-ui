@@ -29,7 +29,7 @@ import { preserveCase } from "../derive/preserve_case";
 import { editor } from "../state/editor";
 import { emit as emitSignal } from "../../vm/instrumentation/sdd";
 import { ContextMenuOpenedSource, DiffReadBase, EditorChipAddedHow, EditorConflictResolvedChoice, EditorFileOpenedHow, EditorFileSavedCommand, EditorKeyRefusedReason, EditorReplacedScope, Signal, UndoRoutedTo } from "../../vm/signals.gen";
-import { redo, redoDepth, undo, undoDepth } from "@codemirror/commands";
+import { isolateHistory, redo, redoDepth, undo, undoDepth } from "@codemirror/commands";
 import { EnvelopeKind } from "../../vm/envelope_kinds.gen";
 import { sendCommand, shell } from "../state/shell";
 import { settings, type Binding } from "../state/settings";
@@ -41,7 +41,7 @@ import type { Chip } from "../state/input_bar";
 import { addFrom, addItem, carriesChip, dragChip, fileChip } from "./chips";
 import { openMenu } from "../state/context_menu";
 import { StatusLine } from "./StatusLine";
-import { BytesView, formOf } from "./BytesView";
+import { BytesView, formOf, type ByteBuffer } from "./BytesView";
 
 const SUNK = "#1a1c20";
 const GROUND = "#212327";
@@ -644,10 +644,10 @@ export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionI
     let live = true;
     const q = encodeURIComponent(rel), sid = encodeURIComponent(sessionId);
     const writesAtRead = WRITES.get(key(rel)) ?? 0;
-    // Sprint 465: a file that is not text, its text form picked, reads as Latin-1 to edit; a text file ignores `as`.
-    const as = formOf(rel) === "text" ? "&as=latin-1" : "";
+    // Sprint 465: a file that is not text reads as Latin-1 to edit; a text file ignores `as`. Sprint 468: in every form,
+    // so hex, binary and octal type into the same buffer.
     Promise.all([
-      fetch(`/api/session/${sid}/file?path=${q}${as}`).then((r) => r.json() as Promise<FileFacts>),
+      fetch(`/api/session/${sid}/file?path=${q}&as=latin-1`).then((r) => r.json() as Promise<FileFacts>),
       fetch(`/api/session/${sid}/diff?path=${q}`).then((r) => (r.ok ? (r.json() as Promise<{ hunks: Hunk[]; base: string }>) : { hunks: [], base: "none" })),
     ]).then(([file, diff]) => {
       if (!live || (WRITES.get(key(rel)) ?? 0) !== writesAtRead) return;
@@ -724,7 +724,7 @@ export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionI
       if (editor.getSnapshot().focusOnOpen === rel) { editor.set({ focusOnOpen: null }); view.current.focus(); }
     }).catch(() => undefined);
     return () => { live = false; };
-  }, [st.active, sessionId, writes, reloads, st.active ? st.bytesForm[st.active] : undefined]);
+  }, [st.active, sessionId, writes, reloads]);
   // Sprint 431 (E7; D93): the session's edits in flight on the file shown, marked where they will land and
   // brought into view; the marks go when the edit resolves.
   const followHere = st.follow.filter((f) => f.path === st.active);
@@ -890,10 +890,21 @@ export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionI
     view.current?.destroy(); view.current = null;
   }, []); // the centre's own lifetime
 
+  // Sprint 468: the shown buffer as bytes, for hex, binary and octal: each byte one character (sprint 465).
+  const byteBuffer = React.useMemo<ByteBuffer>(() => ({
+    length: () => view.current?.state.doc.length ?? 0,
+    slice: (from, to) => view.current?.state.sliceDoc(from, to) ?? "",
+    disk: (from, to) => (shown.current ? DISK.get(key(shown.current)) ?? "" : "").slice(from, to),
+    put: (offset, byte, fresh) => { view.current?.dispatch({ changes: { from: offset, to: offset + 1, insert: String.fromCharCode(byte) }, userEvent: "input.type", ...(fresh ? { annotations: isolateHistory.of("before") } : {}) }); },
+    subscribe: onBufferEdit,
+  }), [sessionId]);
   const showing = facts && facts.path === st.active ? facts.file : null;
-  // Sprint 463 (roadmap r13 E14): a file that is not text opens as its bytes, at any size. A text file over the read
-  // limit keeps its line until sprint 464 reads text in pieces.
-  const bytesFile = showing && showing.text === null && showing.encoding === "binary" ? showing : null;
+  // Sprint 463 (roadmap r13 E14): a file that is not text opens as its bytes, at any size. Sprint 468: up to the read
+  // limit it is the code's buffer, shown as the code in its text form and as the bytes view in the others; over it the
+  // bytes view reads the server. A text file over the read limit keeps its line until sprint 469 reads text in pieces.
+  const bytesFile = showing && showing.encoding === "binary" ? showing : null;
+  const inBuffer = !!bytesFile && bytesFile.text !== null && shown.current === st.active;
+  const asCode = inBuffer && st.active !== null && formOf(st.active) === "text";
   const unreadable = showing && showing.text === null && !bytesFile ? `over the read limit · ${Math.round(showing.size / 1024)} KB` : null;
   return (
     <div data-editor-area="centre" style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, background: GROUND }}>
@@ -913,8 +924,9 @@ export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionI
           onContextMenu={(e) => { const chip = selectionChip(); if (chip) openMenu(e, ContextMenuOpenedSource.CODE, [addItem(paneId, chip)], paneId); }}
           // Sprint 458: a chip's drag is not for the code; stopped here, before the editor's own drop puts its path in the file.
           onDragOverCapture={(e) => { if (carriesChip(e.dataTransfer)) { e.stopPropagation(); e.dataTransfer.dropEffect = "none"; } }}
-          onDropCapture={(e) => { if (carriesChip(e.dataTransfer)) { e.preventDefault(); e.stopPropagation(); } }} style={{ position: "absolute", inset: 0, display: st.active && !unreadable && !bytesFile ? "block" : "none" }} />
-        {bytesFile && st.active && <BytesView sessionId={sessionId} path={st.active} size={bytesFile.size} paneId={paneId} />}
+          onDropCapture={(e) => { if (carriesChip(e.dataTransfer)) { e.preventDefault(); e.stopPropagation(); } }} style={{ position: "absolute", inset: 0, display: st.active && !unreadable && (!bytesFile || asCode) ? "block" : "none" }} />
+        {/* A file within the limit waits for its buffer to be placed, so the view mounts (and records its opening) once. */}
+        {bytesFile && st.active && (bytesFile.text === null || inBuffer) && <BytesView sessionId={sessionId} path={st.active} size={bytesFile.size} paneId={paneId} buffer={inBuffer ? byteBuffer : undefined} hidden={asCode} />}
         {unreadable && <div data-editor-unreadable="1" style={{ padding: "20px 24px", color: "#62676f", fontSize: 12 }}>{st.active} · {unreadable}</div>}
       </div>
       <StatusLine paneId={paneId} />

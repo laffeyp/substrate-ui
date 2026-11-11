@@ -3,8 +3,9 @@
 // Every file that is not text opens as its bytes, at any size (sprint 463; roadmap r13 E14; the Architect, 2026-11-11).
 // A repository written here holds pic.jpg (a JPEG header and 600 KB), sound.wav (a RIFF/WAVE header and bytes) and
 // big.bin (12 MB, each 16-byte row holding its own offset). The deterministic driver; in the editor, these agree:
-//   pic.jpg opens in hex: "00000000  ff d8 ff e0 …"; picking binary, octal and text in the status line redraws row 0
-//   as xxd -b, od -b and Latin-1 print it;
+//   pic.jpg opens in hex: "00000000  ff d8 ff e0 …"; picking binary and octal in the status line redraws row 0
+//   as xxd -b and od -b print it; picking text shows the code, its first line the bytes as Latin-1 (sprint 468: a file
+//   up to the read limit is the code's buffer in its text form);
 //   sound.wav opens in hex, its text column "|RIFF….WAVEfmt |";
 //   big.bin, six times the old 2 MB limit, opens; scrolled to its end, the last row is offset 0xbffff0 with those
 //   bytes; scrolled to its middle, the row there holds its own offset;
@@ -31,6 +32,7 @@ async function until<T>(win: Page, what: string, read: () => Promise<T>, ok: (v:
   if (!ok(v)) throw new Error(`${what}: ${JSON.stringify(v)}`);
   return v;
 }
+const codeLines = (win: Page) => win.evaluate(`(function () { var h = document.querySelector("[data-editor-code]"); var r = h && h.shadowRoot; return r ? Array.from(r.querySelectorAll(".cm-line")).map(function (e) { return e.textContent; }) : []; })()`) as Promise<string[]>;
 const hexOf = (n: number) => n.toString(16).padStart(8, "0");
 
 async function main(): Promise<void> {
@@ -66,12 +68,15 @@ async function main(): Promise<void> {
     const forms: Record<string, string | null> = {};
     forms.hex = await until(win, "pic.jpg in hex", () => row(win, "pic.jpg", 0), (t) => !!t && t.startsWith("00000000  ff d8 ff e0 00 10 4a 46  49 46 00 00 01 02 03 04  |......JFIF......|"));
     await win.screenshot({ path: join(shots, "pic-hex.png") });
-    const want: Record<string, string> = { binary: "00000000: 11111111 11011000 11111111 11100000 00000000 00010000  ......", octal: "0000000   377 330 377 340 000 020 112 106 111 106 000 000 001 002 003 004", text: "ÿØÿà..JFIF..." };
-    for (const f of ["binary", "octal", "text"]) {
+    const want: Record<string, string> = { binary: "00000000: 11111111 11011000 11111111 11100000 00000000 00010000  ......", octal: "0000000   377 330 377 340 000 020 112 106 111 106 000 000 001 002 003 004" };
+    for (const f of ["binary", "octal"]) {
       await win.locator(`[data-bytes-form-pick="${f}"]`).first().click();
       forms[f] = await until(win, `pic.jpg in ${f}`, () => row(win, "pic.jpg", 0), (t) => !!t && t.startsWith(want[f]));
       await win.screenshot({ path: join(shots, `pic-${f}.png`) });
     }
+    await win.locator('[data-bytes-form-pick="text"]').first().click();
+    forms.text = (await until(win, "pic.jpg in text, as the code", () => codeLines(win), (l) => !!l[0] && l[0].startsWith("ÿØÿà") && l[0].includes("JFIF")))[0];
+    await win.screenshot({ path: join(shots, "pic-text.png") });
     // 3. sound.wav, hex.
     await win.locator('[data-tree-row="sound.wav"]').first().click();
     const wav = await until(win, "sound.wav in hex", () => row(win, "sound.wav", 0), (t) => !!t && t.endsWith("|RIFF$...WAVEfmt |"));

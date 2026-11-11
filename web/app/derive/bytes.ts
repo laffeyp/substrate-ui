@@ -39,3 +39,30 @@ export function bytesRow(form: BytesForm, offset: number, bytes: Uint8Array): st
 
 /** How many rows `size` bytes make in `form`. */
 export const rowCount = (form: BytesForm, size: number): number => Math.ceil(size / ROW_BYTES[form]);
+
+/** Sprint 468 (roadmap r13 E14; the Architect, 2026-11-11: every file editable by hand): the forms whose digits are
+ *  typed over, and each byte's digits there (two hex, eight binary, three octal). */
+export const DIGIT_FORMS = ["hex", "binary", "octal"] as const;
+export type DigitForm = (typeof DIGIT_FORMS)[number];
+export const DIGITS: Record<DigitForm, number> = { hex: 2, binary: 8, octal: 3 };
+const RADIX: Record<DigitForm, number> = { hex: 16, binary: 2, octal: 8 };
+export const isDigitForm = (form: string): form is DigitForm => (DIGIT_FORMS as readonly string[]).includes(form);
+
+/** Where digit `d` of the row's byte `k` sits in `bytesRow`'s text: every form's first cell starts at column 10
+ *  (hexdump -C's eight-digit offset and two spaces, xxd -b's offset, colon and space, od -b's seven digits and three
+ *  spaces); a hex cell takes three columns, with one more after the eighth byte, a binary nine, an octal four. */
+export function digitColumn(form: DigitForm, k: number, d: number): number {
+  if (form === "hex") return 10 + k * 3 + (k >= 8 ? 1 : 0) + d;
+  return 10 + k * (form === "binary" ? 9 : 4) + d;
+}
+
+/** The byte after `ch` is typed over its digit `d` in `form`, or null when `ch` is no digit of the form or the
+ *  result is over 255 (an octal byte's first digit is 0 to 3). */
+export function typeDigit(form: DigitForm, byte: number, d: number, ch: string): number | null {
+  const radix = RADIX[form];
+  if (ch.length !== 1 || Number.isNaN(parseInt(ch, radix))) return null;
+  const digits = byte.toString(radix).padStart(DIGITS[form], "0").split("");
+  digits[d] = ch.toLowerCase();
+  const out = parseInt(digits.join(""), radix);
+  return out > 255 ? null : out;
+}

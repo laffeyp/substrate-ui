@@ -21,12 +21,14 @@ export function StatusLine({ paneId }: { paneId?: number } = {}): React.ReactEle
   if (!st.active || !st.file || st.file.path !== st.active) return null;
   const name = st.active.slice(st.active.lastIndexOf("/") + 1);
   // Sprint 463 (roadmap r13 E14): a file that is not text: its size, and the four forms to pick from. Sprint 465: in
-  // its text form the code edits it, and the line shows the caret too; hex, binary and octal stay read views.
+  // its text form the code edits it, and the line shows the caret too. Sprint 468: hex, binary and octal type into the
+  // same buffer, and the line shows the caret's byte offset; a file over the read limit is read-only until sprint 469.
   if (st.file.encoding === "binary") {
-    const form = formOf(st.active), size = st.file.size, path = st.active, asText = st.file.text !== null;
+    const form = formOf(st.active), size = st.file.size, path = st.active, inBuffer = st.file.text !== null;
+    const at = !inBuffer ? "" : form === "text" ? `${st.caretLine}:${st.caretCol} · ` : st.bytesCaret !== null ? `0x${st.bytesCaret.toString(16)} · ` : "";
     return (
       <div data-status-line="1" data-status-bytes="1" style={{ display: "flex", gap: 14, padding: "5px 14px", background: "#1a1c20", fontSize: 10, color: "#62676f", whiteSpace: "nowrap", overflow: "hidden", flex: "none" }}>
-        <span data-status-pos="1">{name} · {asText ? `${st.caretLine}:${st.caretCol} · ` : ""}{size.toLocaleString("en-US")} bytes{asText ? "" : " · read-only"}</span>
+        <span data-status-pos="1">{name} · {at}{size.toLocaleString("en-US")} bytes{inBuffer ? "" : " · read-only"}</span>
         <span style={{ marginLeft: "auto", display: "flex", gap: 10 }}>
           {BYTES_FORMS.map((f) => (
             <span key={f} data-bytes-form-pick={f} data-on={f === form ? "1" : "0"} onClick={() => pickBytesForm(paneId ?? 0, path, f, size)}

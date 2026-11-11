@@ -7,7 +7,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert";
-import { bytesRow, rowCount, ROW_BYTES } from "../derive/bytes";
+import { bytesRow, digitColumn, DIGITS, DIGIT_FORMS, rowCount, ROW_BYTES, typeDigit } from "../derive/bytes";
 
 const BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52, 0x00, 0x01]);
 const slice = (from: number, n: number) => BYTES.subarray(from, from + n);
@@ -34,4 +34,30 @@ test("text is the bytes as Latin-1, a control byte as a dot", () => {
 test("rows per form, and the count of rows for a size", () => {
   assert.deepStrictEqual(ROW_BYTES, { hex: 16, binary: 6, octal: 16, text: 64 });
   assert.deepStrictEqual([rowCount("hex", 18), rowCount("binary", 18), rowCount("hex", 12 * 1024 * 1024)], [2, 3, 786432]);
+});
+
+// Sprint 468: typing over a digit.
+test("each digit's column is where bytesRow draws it, in every row of every digit form", () => {
+  for (const form of DIGIT_FORMS) {
+    const per = ROW_BYTES[form];
+    const row = bytesRow(form, 0, slice(0, per));
+    for (let k = 0; k < per; k++) {
+      const cell = row.slice(digitColumn(form, k, 0), digitColumn(form, k, 0) + DIGITS[form]);
+      assert.strictEqual(cell, BYTES[k].toString(form === "hex" ? 16 : form === "binary" ? 2 : 8).padStart(DIGITS[form], "0"), `${form} byte ${k}`);
+      for (let d = 1; d < DIGITS[form]; d++) assert.strictEqual(digitColumn(form, k, d), digitColumn(form, k, 0) + d);
+    }
+  }
+});
+
+test("a typed digit replaces that digit of the byte; a key that is no digit of the form changes nothing", () => {
+  assert.strictEqual(typeDigit("hex", 0x41, 1, "2"), 0x42);
+  assert.strictEqual(typeDigit("hex", 0x41, 0, "F"), 0xf1);
+  assert.strictEqual(typeDigit("hex", 0x41, 0, "g"), null);
+  assert.strictEqual(typeDigit("binary", 0x42, 5, "1"), 0x46);
+  assert.strictEqual(typeDigit("binary", 0x42, 0, "2"), null);
+  assert.strictEqual(typeDigit("octal", 0o103, 2, "5"), 0o105);
+  assert.strictEqual(typeDigit("octal", 0o103, 0, "3"), 0o303);
+  // An octal byte's first digit is 0 to 3: 0o403 is over 255.
+  assert.strictEqual(typeDigit("octal", 0o103, 0, "4"), null);
+  assert.strictEqual(typeDigit("octal", 0o103, 1, "8"), null);
 });
