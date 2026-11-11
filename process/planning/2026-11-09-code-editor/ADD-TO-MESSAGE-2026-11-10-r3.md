@@ -32,7 +32,7 @@ The models set the outer limits. Claude takes JPEG, PNG, GIF and WebP up to 8000
 4. Inline little, because inlined content is paid again every turn. A file goes inline up to 64 KB, about 16,000 tokens and under Claude Code's 25,000 a read. A message carries at most 256 KB of inline content, a quarter of the harnesses' 1 MB argument cap. Past either, the reference goes with the size and line count. This round chose both numbers from the facts above.
 5. A selection's text always goes with its range, because it may exist only in the buffer. Over 64 KB, a selection from a saved file goes as path and range; one from a buffer with unsaved edits sends its first 64 KB and a line saying the rest stayed behind.
 6. A folder goes as a listing of the files the search's walk reaches, ignore files applied: up to 200, then a count of the rest. Claude Code's folder references give "file listings, not contents" too.
-7. An image goes as its reference. Claude Code's Read opens it from the path today. Codex can be handed it with `-i`, a change to its driver profile. The kernel's loop cannot see it until a responder sends images, which is a kernel decision below.
+7. An image goes as its reference. Claude Code's Read opens it from the path today. Codex can be handed it with `codex exec -i <path>`, but the path differs on every message, and the kernel's `CliResponder` builds each call from a fixed command and the prompt (`respond(prompt, system)`), so it is kernel work too. The kernel's loop cannot see it until a responder sends images. Both are a kernel decision below.
 8. A missing file goes as its reference, with the line `(not found when the message was sent)`.
 9. Content is read when the message is sent, and the record keeps it, as the kernel's `Attachment.text` already does. A selection's text comes from the page, the buffer as shown; a file's comes from the disk.
 
@@ -63,7 +63,7 @@ Selections had no source. Only files and folders did.
 ## Decisions for the Architect
 
 - **The kernel's `read_file` reads only UTF-8.** Rule 3 there is a kernel change, and the editor work has stayed out of the kernel since 2026-11-09. Without it, the kernel's models cannot open a non-UTF-8 text file even from its path.
-- **The kernel's responders send no images.** Sending them to multimodal Ollama models is kernel work as well.
+- **The kernel's responders send no images.** Sending them to multimodal Ollama models is kernel work, and so is handing Codex a message's image paths with `-i`: `CliResponder` takes only the prompt and the system text per call.
 - **Files dragged in from Finder, from outside the workspace.** The server refuses paths outside the session's workspace, and the kernel's tools are rooted in it. Taking them means copying them in or widening the roots.
 - **A pasted image has no file.** Keeping it means writing it somewhere: the workspace, or the session's record.
 
@@ -75,7 +75,7 @@ Each is one concept with its own card.
 2. The sent message shows its chips, in order: the transcript draws attachments with the by-reference mark; the echo is matched by identity; a refused message keeps its warning under it and its chips in the bar.
 3. Selections: ⌥A and right-click › Add to message, lines and in-line ranges, the buffer's text.
 4. Drag and right-click in the editor, from the tree, the tabs and the search results, and the terminal header's hint tooltip (D40).
-5. Images to the receivers that see them. Codex gets `-i` in its driver profile; Claude Code's Read already opens a path; the kernel waits on the decision above.
+5. Images to the receivers that see them. Claude Code's Read already opens a path; Codex's `-i` and the Ollama models wait on the kernel decision above.
 
 ## Sources
 

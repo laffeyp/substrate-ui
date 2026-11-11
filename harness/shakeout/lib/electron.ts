@@ -112,8 +112,9 @@ export async function bindPaneAsUser(win: Page, model?: string, opts: { folder?:
   await win.keyboard.press("Enter");
   await win.locator('[data-model-half][data-armed="1"]').first().waitFor({ state: "visible", timeout: 15_000 });
   // The roster's default, once the roster has loaded; an offline roster has none, and its one row
-  // is `deterministic`.
-  const target = model ?? await win.waitForFunction(
+  // is `deterministic`. Sprint 460: a named model waits for the roster too; before it loads the picker
+  // shows only `deterministic`, so a CLI agent's group header is not there to open.
+  const fallback = await win.waitForFunction(
     () => {
       const w = window as unknown as { __vm?: { snapshot(): { driverDefault: string | null } }; __vmSignals?: { name: string }[] };
       if (!(w.__vmSignals ?? []).some((s) => s.name === "DRIVER_ROSTER_LOADED")) return null;
@@ -122,6 +123,7 @@ export async function bindPaneAsUser(win: Page, model?: string, opts: { folder?:
     undefined,
     { timeout: 15_000 },
   ).then((h) => h.jsonValue() as Promise<string>);
+  const target = model ?? fallback;
   const row = win.locator(`[data-model-row="${target}"] > span`).first();
   for (const group of ["cli agents", "ollama · cloud", "ollama · local"]) {
     if (await row.isVisible()) break;

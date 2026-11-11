@@ -2670,6 +2670,20 @@ ATTACH_NOT_INLINED = "(not inlined: "
 ATTACH_NOT_FOUND = "(not found when the message was sent: "
 
 
+def _image_format(head: bytes) -> str | None:
+    """The image format a file's first bytes name, for the four Claude reads (Claude API, "Vision": JPEG,
+    PNG, GIF, WebP), by each format's signature; None for anything else (sprint 460)."""
+    if head.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "PNG"
+    if head.startswith(b"\xff\xd8\xff"):
+        return "JPEG"
+    if head.startswith((b"GIF87a", b"GIF89a")):
+        return "GIF"
+    if head[:4] == b"RIFF" and head[8:12] == b"WEBP":
+        return "WebP"
+    return None
+
+
 def _human_size(n: int) -> str:
     if n < 1024:
         return f"{n} B"
@@ -2788,14 +2802,14 @@ def _attachment_text(
     if not target.is_file():
         return f"{ATTACH_NOT_FOUND}{ref}{lines_note})", 0, True
     size = target.stat().st_size
-    if kind == "image":
-        return (
-            f"{ATTACH_NOT_INLINED}an image, {_human_size(size)}; {ref}; {ATTACH_FOLLOW})",
-            0,
-            True,
-        )
     with target.open("rb") as fh:
         sniff = fh.read(ATTACH_BINARY_SNIFF)
+    # Sprint 460 (round 3 rule 7): an image goes as its reference, named as an image, whether the chip
+    # said image or file (the editor's tree sends a file); the bytes decide, not the name.
+    fmt = _image_format(sniff) if kind in ("file", "image") else None
+    if kind == "image" or fmt:
+        what = f"an image, {fmt}, " if fmt else "an image, "
+        return f"{ATTACH_NOT_INLINED}{what}{_human_size(size)}; {ref}; {ATTACH_FOLLOW})", 0, True
     utf16 = sniff.startswith((b"\xff\xfe", b"\xfe\xff"))
     binary = f"{ATTACH_NOT_INLINED}{_human_size(size)}, binary; {ref}; {ATTACH_FOLLOW})"
     if not utf16 and not sniff.startswith(b"\xef\xbb\xbf") and b"\x00" in sniff:

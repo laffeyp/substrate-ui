@@ -105,7 +105,7 @@ def test_every_file_goes_as_content_or_its_reference(
     assert status == 200, body
     got = [a.get("text", "") for a in _last_attachments(app, sid)]
     assert got[0] == "(src/cart.ts)\none\ntwo\nthree\n"
-    assert got[1] == "(not inlined: 212 B, binary; photo.jpg; read it with your file tools)"
+    assert got[1] == "(not inlined: an image, JPEG, 212 B; photo.jpg; read it with your file tools)"
     assert (
         got[2]
         == "(not inlined: 3.1 MB, 300,000 lines, over the 64 KB a file goes inline; big.log; read it with your file tools)"
@@ -118,7 +118,7 @@ def test_every_file_goes_as_content_or_its_reference(
     assert got[5] == "(utf16.txt, UTF-16)\nhéllo\nwörld\n"
     assert got[6] == "(bom8.txt)\nhi there\n"
     assert got[7] == "(not found when the message was sent: gone.ts)"
-    assert got[8] == "(not inlined: an image, 212 B; photo.jpg; read it with your file tools)"
+    assert got[8] == "(not inlined: an image, JPEG, 212 B; photo.jpg; read it with your file tools)"
     assert got[9] == "(src/cart.ts, lines 2–3)\ntwo\nthree\n"
     assert (
         got[10]

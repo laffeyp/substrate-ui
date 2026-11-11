@@ -81,7 +81,7 @@ A renderer-owned key is listed in its menu without its key, as Meta and Assays a
 | E10.2 | **The sent message shows its chips, in order**: the transcript draws attachments with a by-reference mark; the echo matched by identity; a refused message keeps its warning and its chips. | ADD-TO-MESSAGE r3 |
 | E10.3 | **Selections**: ⌥A (the left hand alone, ⌥ as for ⌥-click; the Architect, 2026-11-10); lines and in-line ranges; the buffer's text; no selection adds the file. Right-click › Add to message in the code comes with E10.4's right-click menu (the app has none yet). | D94; the Architect 2026-11-10 |
 | E10.4 | **Drag and right-click in the editor**: the tree, tabs, search results and the code's selection (one right-click menu for all); the terminal header's hint tooltip (D40). | D94, D40; 24k |
-| E10.5 | **Images to the receivers that see them**: Codex's `-i`; Claude Code's Read opens a path; the kernel waits on the Architect's decision. | ADD-TO-MESSAGE r3 |
+| E10.5 | **Images to the receivers that see them**: Claude Code's Read opens a path (checked against the live CLI); Codex's `-i` and Ollama's images are kernel work and wait on the Architect's decision. | ADD-TO-MESSAGE r3 |
 | E11 | **The footer and the header as 24a draws them**, each field traced to its source first (`live · clean`, `record <id> · N events`, the worktree chip). | 24a; D6, D40 |
 | E12 | **Text in narrow areas**: a rule for lines with no break points (paths, the bar line) in narrow columns. | BLACKBOARD 2026-11-09 deferred entry |
 | E14 | **Every file's text**: the editor displays the text of every file it opens, a binary file's included (a JPEG, a PDF, any file that is not UTF-8). Every file is made of text; today the file API sends no text for a file that is not UTF-8 and the centre draws nothing. | BLACKBOARD 2026-11-10 user |
@@ -139,7 +139,7 @@ Cards, in order. Each is ≤2 product files where it can be; a card that cannot 
 | E10.2 | 1: chips on the sent message, in order | `session_controller.ts`, the transcript row | E10.1 |
 | E10.3 | 1: selections | `editor/Centre.tsx`, `state/input_bar.ts` | E10.0, E10.2 |
 | E10.4 | 1: drag and right-click in the editor | `editor/*`; the terminal header | E10.2 |
-| E10.5 | 1: images to the receivers that see them | `server.py`, the Codex driver profile | E10.1 |
+| E10.5 | 1: images to the receivers that see them | a gate with the live Claude Code driver; the kernel's `CliResponder` after the decision | E10.1 |
 | E11 | 1 | `TopBar.tsx`, `Footer.tsx` | E5 |
 | E12 | 1 | the areas it names | — |
 | E13 | 1: the close | — | all |
