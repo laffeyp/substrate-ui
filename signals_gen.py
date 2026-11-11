@@ -5,7 +5,7 @@ Regenerate: python3 scripts/gen_signals.py. tests/test_signals_generated.py fail
 
 from enum import StrEnum
 
-VOCAB_VERSION = "0.63"
+VOCAB_VERSION = "0.64"
 
 
 class Signal(StrEnum):
@@ -124,6 +124,7 @@ class Signal(StrEnum):
     FILES_LISTED = "FILES_LISTED"
     FILE_READ = "FILE_READ"
     FILE_BYTES_READ = "FILE_BYTES_READ"
+    FILE_LINES_READ = "FILE_LINES_READ"
     FILE_WRITTEN = "FILE_WRITTEN"
     FILES_WATCH_OPENED = "FILES_WATCH_OPENED"
     FILES_WATCH_CLOSED = "FILES_WATCH_CLOSED"

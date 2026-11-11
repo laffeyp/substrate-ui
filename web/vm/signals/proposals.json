@@ -1502,6 +1502,16 @@
       "rationale": "A save now writes a file in its own encoding or byte for byte; the trace says which.",
       "ratified": true,
       "ratified_by": "agent-resolved 2026-11-11, sprint 465; grounds: project — the user entry of this date, roadmap r13 E14; SDD — hard rule 2; practice — n/a"
+    },
+    {
+      "id": "P-0.64-LINES",
+      "kind": "NEW_TAG_PROPOSED",
+      "layer": 1,
+      "element": "FILE_LINES_READ (server): session_id, from, count",
+      "source": "BLACKBOARD 2026-11-11 user (every file opens, at any size); roadmap r13 E14; sprint 469",
+      "rationale": "A text file over the read limit is read by line range; the trace counts each range read, as FILE_BYTES_READ counts each slice of bytes.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-11, sprint 469; grounds: project — the user entries of this date, roadmap r13 E14; SDD — hard rule 2; practice — n/a"
     }
   ]
 }

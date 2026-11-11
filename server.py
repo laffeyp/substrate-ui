@@ -24,6 +24,7 @@ Then open http://127.0.0.1:8765/ .
 from __future__ import annotations
 
 import asyncio
+import codecs
 import contextlib
 import functools
 import hashlib
@@ -2812,6 +2813,188 @@ def _workspace_bytes(root: Path, rel: str, offset: int, length: int) -> dict[str
     }
 
 
+# UI sprint 469 (roadmap r13 E14): a text file over the read limit is read by line range. One pass in 1 MB blocks counts
+# its line breaks and keeps the byte offset of every LINES_STEP-th line, and checks the bytes as UTF-8; a request seeks to
+# the nearest kept line and reads on. An index is kept per file version (path, size, modified time).
+LINES_STEP = 1024
+LINES_MAX = 2000
+LINE_PIECE = 64 * 1024
+_LINE_BLOCK = 1 << 20
+_LINE_INDEXES: dict[tuple[str, int, int], _LineIndex] = {}
+_LINE_INDEX_LOCK = threading.Lock()
+_LINE_INDEX_KEEP = 8
+#: Passes over a file made so far, for the tests: a second read of the same version makes none.
+line_index_scans = 0
+
+
+@dataclass(frozen=True)
+class _LineIndex:
+    """A text file's lines: its encoding as the file API names it, the codec its lines decode with, the bytes before
+    the first line (a byte-order mark), its line break in bytes, its line count (line breaks plus one, as the editor
+    counts), and the byte offset of every LINES_STEP-th line."""
+
+    encoding: str
+    codec: str
+    start: int
+    newline: bytes
+    lines: int
+    marks: tuple[int, ...]
+
+
+def _aligned_find(data: bytes, nl: bytes, at: int = 0) -> int:
+    """The first `nl` in `data` from `at` that starts on a code unit (an even offset), or -1: UTF-16's line break."""
+    i = data.find(nl, at)
+    while i >= 0 and i % 2:
+        i = data.find(nl, i + 1)
+    return i
+
+
+def _scan_lines(target: Path) -> _LineIndex:
+    """One pass over `target`: its line breaks counted, every LINES_STEP-th line's offset kept, and, with no
+    byte-order mark, its bytes checked as UTF-8 (a file that fails is Latin-1, by `_decode_any`'s rule)."""
+    global line_index_scans
+    line_index_scans += 1
+    with target.open("rb") as fh:
+        head = fh.read(3)
+    if head.startswith(b"\xef\xbb\xbf"):
+        start, nl, codec, name = 3, b"\n", "utf-8", "utf-8-bom"
+    elif head.startswith(b"\xff\xfe"):
+        start, nl, codec, name = 2, b"\n\x00", "utf-16-le", "utf-16"
+    elif head.startswith(b"\xfe\xff"):
+        start, nl, codec, name = 2, b"\x00\n", "utf-16-be", "utf-16"
+    else:
+        start, nl, codec, name = 0, b"\n", "utf-8", "utf-8"
+    check = codecs.getincrementaldecoder("utf-8")() if name == "utf-8" else None
+    valid = True
+    breaks = 0
+    marks = [start]
+    with target.open("rb") as fh:
+        fh.seek(start)
+        pos, carry = start, b""
+        while True:
+            block = fh.read(_LINE_BLOCK)
+            if not block:
+                break
+            if check is not None and valid:
+                try:
+                    check.decode(block)
+                except UnicodeDecodeError:
+                    valid = False
+            if len(nl) == 1:
+                n = block.count(nl)
+                if (breaks + n) // LINES_STEP == breaks // LINES_STEP:
+                    breaks += n
+                else:
+                    i = block.find(nl)
+                    while i >= 0:
+                        breaks += 1
+                        if breaks % LINES_STEP == 0:
+                            marks.append(pos + i + 1)
+                        i = block.find(nl, i + 1)
+                pos += len(block)
+                continue
+            # UTF-16: a break is two bytes on a code unit; an odd byte left over waits for the next block.
+            data, base = carry + block, pos - len(carry)
+            even = len(data) - len(data) % 2
+            i = _aligned_find(data[:even], nl)
+            while i >= 0:
+                breaks += 1
+                if breaks % LINES_STEP == 0:
+                    marks.append(base + i + 2)
+                i = _aligned_find(data[:even], nl, i + 2)
+            carry = data[even:]
+            pos += len(block)
+    if check is not None and valid:
+        try:
+            check.decode(b"", final=True)
+        except UnicodeDecodeError:
+            valid = False
+    if not valid:
+        codec, name = "latin-1", "latin-1"
+    return _LineIndex(name, codec, start, nl, breaks + 1, tuple(marks))
+
+
+def _line_index(target: Path) -> _LineIndex:
+    """`target`'s line index, built once per version (path, size, modified time); the last few are kept."""
+    st = target.stat()
+    key = (str(target), st.st_size, st.st_mtime_ns)
+    with _LINE_INDEX_LOCK:
+        found = _LINE_INDEXES.get(key)
+        if found is None:
+            found = _scan_lines(target)
+            _LINE_INDEXES[key] = found
+            while len(_LINE_INDEXES) > _LINE_INDEX_KEEP:
+                del _LINE_INDEXES[next(iter(_LINE_INDEXES))]
+        return found
+
+
+def _read_line(fh: Any, nl: bytes) -> tuple[bytes, int]:
+    """The line at the file's position: its first LINE_PIECE bytes and the count of its bytes past them; the file is
+    left after the line's break."""
+    if len(nl) == 1:
+        piece = fh.readline(LINE_PIECE)
+        if piece.endswith(nl):
+            return piece[:-1], 0
+        if len(piece) < LINE_PIECE:
+            return piece, 0
+        more = 0
+        while True:
+            chunk = fh.readline(_LINE_BLOCK)
+            if not chunk:
+                return piece, more
+            if chunk.endswith(nl):
+                return piece, more + len(chunk) - 1
+            more += len(chunk)
+    got, more = bytearray(), 0
+    while True:
+        here = fh.tell()
+        chunk = fh.read(LINE_PIECE)
+        i = _aligned_find(chunk, nl)
+        take = chunk if i < 0 else chunk[:i]
+        room = LINE_PIECE - len(got)
+        got += take[:room]
+        more += max(0, len(take) - room)
+        if i >= 0:
+            fh.seek(here + i + len(nl))
+            return bytes(got), more
+        if len(chunk) < LINE_PIECE:
+            return bytes(got), more
+
+
+def _workspace_lines(root: Path, rel: str, first: int, count: int) -> dict[str, object]:
+    """Lines `first` to `first + count - 1` (at most LINES_MAX) of a text file of the workspace, at any size: the file's
+    size, encoding and line count, and each line's text without its break or a `\r` before it, a line past LINE_PIECE
+    bytes sent in part with the count of bytes past it (`more`)."""
+    target = _workspace_target(root, rel)
+    if not target.is_file():
+        raise FileNotFoundError(f"{rel!r} is not a file in the workspace")
+    if first < 0 or count < 0:
+        raise ValueError("from and count must not be negative")
+    idx = _line_index(target)
+    first = min(first, idx.lines)
+    end = min(idx.lines, first + min(count, LINES_MAX))
+    lines: list[dict[str, object]] = []
+    if end > first:
+        with target.open("rb") as fh:
+            fh.seek(idx.marks[first // LINES_STEP])
+            for _ in range(first % LINES_STEP):
+                _read_line(fh, idx.newline)
+            for _ in range(end - first):
+                piece, more = _read_line(fh, idx.newline)
+                # A piece cut inside a character loses only that character's start (the file decoded whole).
+                text = piece.decode(idx.codec, errors="ignore" if more else "replace")
+                if not more and text.endswith("\r"):
+                    text = text[:-1]
+                lines.append({"text": text, "more": more})
+    return {
+        "size": target.stat().st_size,
+        "encoding": idx.encoding,
+        "total": idx.lines,
+        "from": first,
+        "lines": lines,
+    }
+
+
 # Sprint 462: the file API's encoding as FILE_READ names it (vocabulary v0.61).
 FILE_READ_ENCODING = {
     "utf-8": FileReadEncoding.UTF8,
@@ -4744,6 +4927,35 @@ class Handler(BaseHTTPRequestHandler):
         )
         self._json(out)
 
+    def _session_lines(self, session_id: str, q: dict[str, list[str]]) -> None:
+        """UI sprint 469: GET /api/session/<id>/lines?path=<rel>&from=<n>&count=<n>, a range of a text file's lines for
+        the editor's lines view (FILE_LINES_READ)."""
+        root = self._session_workspace_root(session_id)
+        if root is None:
+            return
+        try:
+            first = int(q.get("from", ["0"])[0])
+            count = int(q.get("count", [str(LINES_MAX)])[0])
+            out = _workspace_lines(root, q.get("path", [""])[0], first, count)
+        except WorkspaceEscapeError as exc:
+            self._error(400, str(exc))
+            return
+        except ValueError as exc:
+            self._error(400, str(exc))
+            return
+        except (FileNotFoundError, NotADirectoryError) as exc:
+            self._error(404, str(exc))
+            return
+        TRACE.emit(
+            Signal.FILE_LINES_READ,
+            {
+                "session_id": session_id,
+                "from": out["from"],
+                "count": len(cast(list[Any], out["lines"])),
+            },
+        )
+        self._json(out)
+
     def _session_files(self, session_id: str, what: str, q: dict[str, list[str]]) -> None:
         """UI sprint 348: GET /api/session/<id>/files?dir=<rel> lists a directory of the session's
         workspace; GET /api/session/<id>/file?path=<rel> reads one file's facts and text. Each path
@@ -6232,6 +6444,10 @@ class Handler(BaseHTTPRequestHandler):
             m_bytes = re.fullmatch(r"/api/session/([^/]+)/bytes", path)
             if m_bytes:  # UI sprint 463: a file's bytes, in pieces, for the bytes view
                 self._session_bytes(m_bytes.group(1), parse_qs(urlparse(self.path).query))
+                return
+            m_lines = re.fullmatch(r"/api/session/([^/]+)/lines", path)
+            if m_lines:  # UI sprint 469: a text file's lines, by range, at any size
+                self._session_lines(m_lines.group(1), parse_qs(urlparse(self.path).query))
                 return
             m_files = re.fullmatch(r"/api/session/([^/]+)/(files|file)", path)
             if m_files:  # UI sprint 348, editor shared work 0(c)
