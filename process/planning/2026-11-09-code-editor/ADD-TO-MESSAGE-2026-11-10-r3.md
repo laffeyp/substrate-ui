@@ -48,7 +48,7 @@ The page's echo of a message is replaced by the record's copy by identity, not b
 
 D94 names "cart.ts 85–89". Claude Code's editor integration inserts `@app.ts#5-10` for the current selection with ⌥K, drops it with an × beside the line count, and sends the selection on its own unless a setting turns that off.
 
-Here, a selection of whole lines makes the chip "cart.ts 85–89". One inside a line makes "cart.ts 85:4–20", and one across lines "cart.ts 85:4–89:12". ⌥K adds it, after Claude Code, with the code focused; so does right-click › Add to message. The chip carries the text the buffer shows, unsaved edits included (rule 5). Nothing goes on its own: D94 adds things by choice.
+Here, a selection of whole lines makes the chip "cart.ts 85–89". One inside a line makes "cart.ts 85:4–20", and one across lines "cart.ts 85:4–89:12". ⌘⇧A adds it with the code focused, a chord the left hand plays alone while the right holds the mouse (the Architect, 2026-11-10: ⌥K sat on the wrong side of the keyboard); so does right-click › Add to message. The chip carries the text the buffer shows, unsaved edits included (rule 5). Nothing goes on its own: D94 adds things by choice.
 
 ## The prototype's faults
 
@@ -73,7 +73,7 @@ Each is one concept with its own card.
 
 1. Never refuse. The server applies rules 2 to 8. Its test sends a JPEG, a 3 MB file, a Latin-1 file, a UTF-16 file, a deleted file and a folder, and every message goes.
 2. The sent message shows its chips, in order: the transcript draws attachments with the by-reference mark; the echo is matched by identity; a refused message keeps its warning under it and its chips in the bar.
-3. Selections: ⌥K and right-click › Add to message, lines and in-line ranges, the buffer's text.
+3. Selections: ⌘⇧A and right-click › Add to message, lines and in-line ranges, the buffer's text.
 4. Drag and right-click in the editor, from the tree, the tabs and the search results, and the terminal header's hint tooltip (D40).
 5. Images to the receivers that see them. Codex gets `-i` in its driver profile; Claude Code's Read already opens a path; the kernel waits on the decision above.
 

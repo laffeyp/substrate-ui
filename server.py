@@ -2595,14 +2595,45 @@ def _line_count(text: str) -> int:
     return text.count("\n") + (1 if text and not text.endswith("\n") else 0)
 
 
+def _span_note(span: tuple[float, ...]) -> str:
+    """A line range's words on its path line (sprint 453): `lines 85–89` for whole lines, `85:4–89:12` inside lines."""
+    if len(span) == 4:
+        return f"{int(span[0])}:{int(span[1])}–{int(span[2])}:{int(span[3])}"
+    return f"lines {int(span[0])}–{int(span[1])}"
+
+
+def _slice_span(text: str, span: tuple[float, ...]) -> str:
+    """The text a span names: whole lines for [first, last]; for [line, column, line, column] the characters from
+    the first position to the last, both included, columns counting from 1."""
+    lines = text.splitlines(keepends=True)
+    if len(span) == 2:
+        return "".join(lines[int(span[0]) - 1 : int(span[1])])
+    l1, c1, l2, c2 = (int(x) for x in span)
+    part = lines[l1 - 1 : l2]
+    if not part:
+        return ""
+    if len(part) == 1:
+        return part[0][c1 - 1 : c2]
+    return part[0][c1 - 1 :] + "".join(part[1:-1]) + part[-1][:c2]
+
+
 def _attachment_text(
-    kind: str, ref: str, span: tuple[float, ...], workspace: Path, room: int
+    kind: str, ref: str, span: tuple[float, ...], workspace: Path, room: int, given: str | None = None
 ) -> tuple[str, int, bool]:
     """A file, line-range, folder or image attachment's text: (the text, the bytes it inlines, whether it
-    went as its reference). `room` is what is left of the message's 256 KB. A path outside the workspace
-    raises WorkspaceEscapeError, the one refusal left besides a malformed request."""
+    went as its reference). `room` is what is left of the message's 256 KB. `given` (sprint 453) is a line
+    range's text from the page, the buffer as shown (round 3 rule 9), used in place of the file's. A path
+    outside the workspace raises WorkspaceEscapeError, the one refusal left besides a malformed request."""
     target = _workspace_target(workspace, ref or ".")
-    lines_note = f", lines {int(span[0])}–{int(span[1])}" if kind == "lines" else ""
+    lines_note = f", {_span_note(span)}" if kind == "lines" else ""
+    if kind == "lines" and given is not None:
+        used = len(given.encode("utf-8"))
+        what = f"{_human_size(used)}, {_line_count(given):,} lines"
+        if used > ATTACH_FILE_INLINE_MAX:
+            return f"{ATTACH_NOT_INLINED}{what}, over the 64 KB a selection goes inline; {ref}{lines_note}; read them with your file tools)", 0, True
+        if used > room:
+            return f"{ATTACH_NOT_INLINED}{what}, past the 256 KB a message inlines; {ref}{lines_note}; read them with your file tools)", 0, True
+        return f"({ref}{lines_note})\n{given}", used, False
     if kind == "folder":
         if not target.is_dir():
             return f"{ATTACH_NOT_FOUND}{ref}/)", 0, True
@@ -2643,7 +2674,7 @@ def _attachment_text(
         return binary, 0, True
     text, encoding = decoded
     if kind == "lines":
-        text = "".join(text.splitlines(keepends=True)[int(span[0]) - 1 : int(span[1])])
+        text = _slice_span(text, span)
     used = len(text.encode("utf-8"))
     what = f"{_human_size(used)}, {_line_count(text):,} lines"
     if used > ATTACH_FILE_INLINE_MAX:
@@ -2655,7 +2686,7 @@ def _attachment_text(
 
 
 def _resolve_attachments(raw: object, workspace: Path, record_root: Path) -> tuple[tuple[Any, ...], int]:
-    """The body's `attachments`, each {kind, label, ref, span?}, as kernel `Attachment`s with their text
+    """The body's `attachments`, each {kind, label, ref, span?, text?}, as kernel `Attachment`s with their text
     read now (UI sprint 446: by round 3's rules, through `_attachment_text`), and how many went as their
     reference. ValueError names a malformed one, and WorkspaceEscapeError a path outside the workspace;
     nothing else refuses a message."""
@@ -2685,12 +2716,21 @@ def _resolve_attachments(raw: object, workspace: Path, record_root: Path) -> tup
         ):
             raise ValueError(f"attachments[{i}].span must be a list of numbers")
         span = tuple(float(x) for x in span_raw)
-        if kind == "lines" and (len(span) != 2 or not all(x == int(x) for x in span) or not 1 <= span[0] <= span[1]):
-            raise ValueError(f"attachments[{i}].span must be [first, last] lines, from 1")
+        if kind == "lines" and not (
+            all(x == int(x) for x in span)
+            and (
+                (len(span) == 2 and 1 <= span[0] <= span[1])
+                or (len(span) == 4 and 1 <= span[0] <= span[2] and span[1] >= 1 and span[3] >= 0 and (span[0] < span[2] or span[1] <= span[3] + 1))
+            )
+        ):
+            raise ValueError(f"attachments[{i}].span must be [first, last] lines or [line, column, line, column], from 1")
+        given = item.get("text")
+        if given is not None and (kind != "lines" or not isinstance(given, str)):
+            raise ValueError(f"attachments[{i}].text is a line range's text, a string")
         text = ""
         if kind in ("file", "lines", "folder", "image"):
             try:
-                text, used, referred = _attachment_text(kind, ref, span, workspace, room)
+                text, used, referred = _attachment_text(kind, ref, span, workspace, room, given)
             except OSError as exc:
                 # A file the server cannot open (permission, a vanished folder) still goes, as its reference.
                 text, used, referred = f"{ATTACH_NOT_INLINED}it could not be read, {exc.strerror or type(exc).__name__}; {ref}; {ATTACH_FOLLOW})", 0, True
