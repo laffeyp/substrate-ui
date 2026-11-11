@@ -15,12 +15,16 @@
 // files on disk (VS Code's getOpenEditorResults); a replace changes such a buffer and saves it from there. The
 // last replace can be undone in one step ("undo replace"): each file written back to its text before it, a
 // buffer put back unsaved, as VS Code's one undo element over every file (EDITOR_SEARCH_REPLACE_UNDONE).
+// Sprint 457 (D94): right-click on a name adds its file or folder to the message, on a file its file, on a match
+// its line ("cart.ts 85"; BLACKBOARD 2026-11-11).
 
 import * as React from "react";
 import { editor } from "../state/editor";
 import { nameParts, searchRows, type SearchName, type SearchResult } from "../derive/search";
 import { emit as emitSignal } from "../../vm/instrumentation/sdd";
-import { EditorColumnFoldedCause, EditorFileOpenedHow, EditorSearchReplacedScope, Signal } from "../../vm/signals.gen";
+import { ContextMenuOpenedSource, EditorColumnFoldedCause, EditorFileOpenedHow, EditorSearchReplacedScope, Signal } from "../../vm/signals.gen";
+import { addItem, fileChip, folderChip, lineChip } from "./chips";
+import { openMenu } from "../state/context_menu";
 import { find, onBufferEdit, openFile, putBuffer, unsavedBuffers, writeBuffer } from "./Centre";
 import { foldColumn } from "./EditorView";
 
@@ -211,6 +215,7 @@ export function SearchTab({ sessionId, paneId }: { sessionId: string; paneId: nu
           };
           return (
             <div key={`${n.kind}:${n.path}`} data-search-name={n.path} data-kind={n.kind} data-at={k === at ? "1" : "0"} onClick={() => goName(k)}
+              onContextMenu={(e) => openMenu(e, ContextMenuOpenedSource.SEARCH, [addItem(paneId, n.kind === "dir" ? folderChip(n.path) : fileChip(n.path))], paneId)}
               style={{ display: "flex", alignItems: "baseline", gap: 6, padding: "2px 10px", cursor: "pointer", fontSize: 11, whiteSpace: "nowrap", minWidth: 0, background: k === at ? SELECT : undefined }}>
               <span style={{ color: TEXT, flex: "none" }}>{lit(p.name, p.nameLit)}{n.kind === "dir" ? "/" : ""}</span>
               <span style={{ color: FAINT, fontSize: 10, overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>{lit(p.dir, p.dirLit)}</span>
@@ -225,6 +230,7 @@ export function SearchTab({ sessionId, paneId }: { sessionId: string; paneId: nu
           return (
             <div key={f.path} data-search-file={f.path}>
               <div className="hover-search-row" onClick={() => setShut(open ? new Set([...shut, f.path]) : new Set([...shut].filter((p) => p !== f.path)))}
+                onContextMenu={(e) => openMenu(e, ContextMenuOpenedSource.SEARCH, [addItem(paneId, fileChip(f.path))], paneId)}
                 style={{ display: "flex", alignItems: "baseline", gap: 6, padding: "2px 10px", cursor: "pointer", fontSize: 11, color: TEXT, whiteSpace: "nowrap" }}>
                 <span style={{ color: DIM, fontSize: 9, width: 8, flex: "none" }}>{open ? "▾" : "▸"}</span>
                 <span style={{ flex: "none" }}>{f.path.slice(slash + 1)}</span>
@@ -239,6 +245,7 @@ export function SearchTab({ sessionId, paneId }: { sessionId: string; paneId: nu
                 const key = `${row.path}:${row.line}:${row.index}`;
                 return (
                   <div key={key} data-search-line={`${row.path}:${row.line}`} data-search-match={key} data-at={names.length + n === at ? "1" : "0"} className="hover-search-row" onClick={() => go(n)}
+                    onContextMenu={(e) => openMenu(e, ContextMenuOpenedSource.SEARCH, [addItem(paneId, lineChip(row.path, row.line))], paneId)}
                     style={{ display: "flex", gap: 6, padding: "1.5px 10px 1.5px 22px", cursor: "pointer", fontSize: 10.5, whiteSpace: "nowrap", overflow: "hidden", background: names.length + n === at ? SELECT : undefined }}>
                     <span style={{ color: FAINT, width: 18, textAlign: "right", flex: "none" }}>{row.line}</span>
                     <span style={{ color: DIM, overflow: "hidden", textOverflow: "ellipsis", minWidth: 0, flex: 1 }}>{row.text.slice(0, row.from)}<span style={LIT}>{row.text.slice(row.from, row.to)}</span>{row.text.slice(row.to)}</span>

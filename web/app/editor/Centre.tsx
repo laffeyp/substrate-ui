@@ -28,7 +28,7 @@ import { shell as shellMode } from "@codemirror/legacy-modes/mode/shell";
 import { preserveCase } from "../derive/preserve_case";
 import { editor } from "../state/editor";
 import { emit as emitSignal } from "../../vm/instrumentation/sdd";
-import { DiffReadBase, EditorChipAddedHow, EditorChipAddedKind, EditorConflictResolvedChoice, EditorFileOpenedHow, EditorFileSavedCommand, EditorKeyRefusedReason, EditorReplacedScope, Signal, UndoRoutedTo } from "../../vm/signals.gen";
+import { ContextMenuOpenedSource, DiffReadBase, EditorChipAddedHow, EditorConflictResolvedChoice, EditorFileOpenedHow, EditorFileSavedCommand, EditorKeyRefusedReason, EditorReplacedScope, Signal, UndoRoutedTo } from "../../vm/signals.gen";
 import { redo, redoDepth, undo, undoDepth } from "@codemirror/commands";
 import { EnvelopeKind } from "../../vm/envelope_kinds.gen";
 import { sendCommand, shell } from "../state/shell";
@@ -37,7 +37,9 @@ import { bindingExtension, type BindingHooks } from "./bindings";
 import { baseText, vsBase } from "../derive/status_line";
 import { HISTORY_VIEW, SEND_VIEW, lineHunks } from "../derive/inspector";
 import { setBeforeTurn, type BeforeTurnResult } from "../../vm/session_controller";
-import { addChip, type Chip } from "../state/input_bar";
+import type { Chip } from "../state/input_bar";
+import { addFrom, addItem, fileChip } from "./chips";
+import { openMenu } from "../state/context_menu";
 import { StatusLine } from "./StatusLine";
 
 const SUNK = "#1a1c20";
@@ -318,7 +320,8 @@ function Tab({ rel, active, unsaved, paneId }: { rel: string; active: boolean; u
   const [hover, setHover] = React.useState(false);
   const name = rel.slice(rel.lastIndexOf("/") + 1);
   return (
-    <div data-editor-tab={rel} data-active={active ? "1" : "0"} title={rel} onClick={() => editor.set({ active: rel })} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+    <div data-editor-tab={rel} data-active={active ? "1" : "0"} title={rel} onClick={() => editor.set({ active: rel })}
+      onContextMenu={(e) => openMenu(e, ContextMenuOpenedSource.TAB, [addItem(paneId, fileChip(rel))], paneId)} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
       style={{ display: "flex", alignItems: "center", gap: 8, padding: "0 14px", height: "100%", cursor: "pointer", fontSize: 12, whiteSpace: "nowrap", flex: "none",
         background: active ? GROUND : "transparent", color: active ? "#d7dade" : "#9aa0a8", boxShadow: active ? `inset 0 2px 0 ${ACCENT}` : undefined }}>
       {name}
@@ -515,26 +518,28 @@ setBeforeTurn(saveForSend);
  *  code's selection as a chip in the pane's input bar. Whole lines make "cart.ts 85–89" (one line "cart.ts 85"); a
  *  range inside lines "cart.ts 85:4–20" or "cart.ts 85:4–89:12" (columns from 1, both ends included); no selection
  *  adds the file, as Claude Code's ⌥K adds "the current file and selection". A selection ending at the start of a
- *  line covers the lines above it. The chip carries the text the buffer shows (rule 9). */
-export function addSelection(paneId: number): void {
+ *  line covers the lines above it. The chip carries the text the buffer shows (rule 9). Null with no file shown. */
+export function selectionChip(): Chip | null {
   const rel = activeBuffer?.path() ?? null, state = activeBuffer?.state() ?? null;
-  if (!rel || !state) { emitSignal(Signal.EDITOR_KEY_REFUSED, { key: "Alt+A", reason: EditorKeyRefusedReason.NO_FILE }, { pane_id: paneId }); return; }
+  if (!rel || !state) return null;
   const name = rel.slice(rel.lastIndexOf("/") + 1);
   const sel = state.selection.main, doc = state.doc;
-  let chip: Chip;
-  if (sel.empty) chip = { kind: "file", label: name, ref: rel };
-  else {
-    const a = doc.lineAt(sel.from);
-    let b = doc.lineAt(sel.to), to = sel.to;
-    if (to === b.from && b.number > a.number) { b = doc.line(b.number - 1); to = b.to; }
-    if (sel.from === a.from && to === b.to) {
-      chip = { kind: "lines", label: a.number === b.number ? `${name} ${a.number}` : `${name} ${a.number}–${b.number}`, ref: rel, span: [a.number, b.number], text: doc.sliceString(a.from, Math.min(doc.length, b.to + 1)) };
-    } else {
-      const c1 = sel.from - a.from + 1, c2 = to - b.from;
-      chip = { kind: "lines", label: a.number === b.number ? `${name} ${a.number}:${c1}–${c2}` : `${name} ${a.number}:${c1}–${b.number}:${c2}`, ref: rel, span: [a.number, c1, b.number, c2], text: doc.sliceString(sel.from, to) };
-    }
+  if (sel.empty) return fileChip(rel);
+  const a = doc.lineAt(sel.from);
+  let b = doc.lineAt(sel.to), to = sel.to;
+  if (to === b.from && b.number > a.number) { b = doc.line(b.number - 1); to = b.to; }
+  if (sel.from === a.from && to === b.to) {
+    return { kind: "lines", label: a.number === b.number ? `${name} ${a.number}` : `${name} ${a.number}–${b.number}`, ref: rel, span: [a.number, b.number], text: doc.sliceString(a.from, Math.min(doc.length, b.to + 1)) };
   }
-  if (addChip(paneId, chip)) emitSignal(Signal.EDITOR_CHIP_ADDED, { kind: chip.kind === "lines" ? EditorChipAddedKind.RANGE : EditorChipAddedKind.FILE, how: EditorChipAddedHow.KEY }, { pane_id: paneId });
+  const c1 = sel.from - a.from + 1, c2 = to - b.from;
+  return { kind: "lines", label: a.number === b.number ? `${name} ${a.number}:${c1}–${c2}` : `${name} ${a.number}:${c1}–${b.number}:${c2}`, ref: rel, span: [a.number, c1, b.number, c2], text: doc.sliceString(sel.from, to) };
+}
+
+/** ⌥A (how key) or right-click › Add to message in the code (how menu, sprint 457): the selection's chip added. */
+export function addSelection(paneId: number, how: EditorChipAddedHow = EditorChipAddedHow.KEY): void {
+  const chip = selectionChip();
+  if (!chip) { emitSignal(Signal.EDITOR_KEY_REFUSED, { key: "Alt+A", reason: EditorKeyRefusedReason.NO_FILE }, { pane_id: paneId }); return; }
+  addFrom(paneId, chip, how);
 }
 
 export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionId: string; tabRow: number }): React.ReactElement {
@@ -875,7 +880,8 @@ export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionI
         </div>
       )}
       <div style={{ flex: 1, minHeight: 0, position: "relative" }}>
-        <div ref={host} data-editor-code={st.active ?? ""} data-binding={binding} style={{ position: "absolute", inset: 0, display: st.active && !unreadable ? "block" : "none" }} />
+        <div ref={host} data-editor-code={st.active ?? ""} data-binding={binding}
+          onContextMenu={(e) => { const chip = selectionChip(); if (chip) openMenu(e, ContextMenuOpenedSource.CODE, [addItem(paneId, chip)], paneId); }} style={{ position: "absolute", inset: 0, display: st.active && !unreadable ? "block" : "none" }} />
         {unreadable && <div data-editor-unreadable="1" style={{ padding: "20px 24px", color: "#62676f", fontSize: 12 }}>{st.active} · {unreadable}</div>}
       </div>
       <StatusLine />

@@ -1452,6 +1452,16 @@
       "rationale": "The selection's key changes, and an ⌥ chord's key would otherwise be a typed character in the trace.",
       "ratified": true,
       "ratified_by": "agent-resolved 2026-11-10, sprint 456; grounds: project — the user entry of this date, KEY_ROUTED's field note; SDD — hard rule 2; practice — n/a"
+    },
+    {
+      "id": "P-0.59-CONTEXT-MENU",
+      "kind": "TAG_PROPOSED",
+      "layer": 1,
+      "element": "CONTEXT_MENU_OPENED (window) {source, items}; CONTEXT_MENU_CLOSED (window) {outcome}; EDITOR_CHIP_ADDED.how gains menu",
+      "source": "D94 (right-click › Add to message); roadmap r13 E10.4; BLACKBOARD 2026-11-11 (the menu drawn in the page); sprint 457",
+      "rationale": "The window gains its first right-click menu; its opening and its end are events the trace otherwise lacks (a menu closed with Escape adds nothing), and the chip it adds names its gesture.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-11, sprint 457; grounds: project — D94, roadmap r13 E10.4, the BLACKBOARD entries of this date; SDD — hard rule 2, BOOTSTRAP step 9 (the menu's open and close pair); practice — n/a"
     }
   ]
 }

@@ -2596,9 +2596,12 @@ def _line_count(text: str) -> int:
 
 
 def _span_note(span: tuple[float, ...]) -> str:
-    """A line range's words on its path line (sprint 453): `lines 85–89` for whole lines, `85:4–89:12` inside lines."""
+    """A line range's words on its path line (sprint 453): `lines 85–89` for whole lines, `85:4–89:12` inside lines;
+    one whole line `line 85` (sprint 457), as its chip reads "cart.ts 85"."""
     if len(span) == 4:
         return f"{int(span[0])}:{int(span[1])}–{int(span[2])}:{int(span[3])}"
+    if int(span[0]) == int(span[1]):
+        return f"line {int(span[0])}"
     return f"lines {int(span[0])}–{int(span[1])}"
 
 

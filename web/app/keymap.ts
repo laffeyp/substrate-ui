@@ -16,6 +16,9 @@
 // Sprint 406 (roadmap 2026-11-09-code-editor r6, R1): ⌘⇧E goes to the editor view and back. Sprint 447 (the
 // Architect, 2026-11-10: Escape "should actually interrupt the model always"): in the editor Escape is the
 // pane's Escape, the close cascade and then the interrupt; it no longer leaves the editor.
+//
+// Sprint 457 (roadmap r13 E10.4): with the right-click menu open, Escape closes it before anything else, so it
+// never interrupts a turn, and the arrows and ↵ are the menu's.
 
 import { TurnInterruptedTier } from "../vm/signals.gen";
 /** `code`, the physical key: with ⌥ held, macOS gives `key` a symbol (⌥L is "¬"), so ⌥ chords read the code. */
@@ -52,6 +55,8 @@ export interface KeyContext {
   cardOpen: boolean;
   /** The focused pane's turn is in flight. */
   running: boolean;
+  /** Sprint 457: the right-click menu is open (state/context_menu.ts). */
+  menuOpen?: boolean;
 }
 
 export type KeyAction =
@@ -62,6 +67,7 @@ export type KeyAction =
   | { kind: "editor-find"; field: "query" | "replace" } | { kind: "editor-search" } | { kind: "tree-find" } | { kind: "quick-open" }
   | { kind: "fold-editor"; column: "left" | "right" | "bottom" }
   | { kind: "refuse-split" }
+  | { kind: "menu" } | { kind: "close-menu" }
   | { kind: "close-find" } | { kind: "close-dialog" } | { kind: "close-cards" } | { kind: "close-surface" }
   | { kind: "interrupt"; tier: TurnInterruptedTier };
 
@@ -70,6 +76,10 @@ export const ARROWS = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Enter
 
 /** The action a key takes, or null to leave it to the page (⌘C among them). */
 export function windowKey(ev: KeyLike, ctx: KeyContext): KeyAction | null {
+  if (ctx.menuOpen && !ev.metaKey && !ev.ctrlKey) {
+    if (ev.key === "Escape") return { kind: "close-menu" };
+    if (ev.key === "ArrowUp" || ev.key === "ArrowDown" || ev.key === "Enter") return { kind: "menu" };
+  }
   const quiet = !ctx.dialogOpen && !ctx.findOpen;
   const listKey = (ARROWS.includes(ev.key) || ev.key === "Escape") && !ev.metaKey && !ev.ctrlKey;
   if (listKey && ev.key !== "Escape" && !ctx.typing && ctx.surface === "records" && quiet) return { kind: "records" };

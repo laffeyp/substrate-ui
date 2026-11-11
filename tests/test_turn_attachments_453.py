@@ -62,7 +62,7 @@ def test_without_text_an_inline_span_slices_the_file(app: server.App, tmp_path: 
     assert texts == [
         "(src/cart.ts, 1:8–1:22)\nconst total = 1",
         "(src/cart.ts, 2:17–3:14)\nadd(a, b) {\n  return a + b",
-        "(src/cart.ts, lines 3–3)\n  return a + b;\n",
+        "(src/cart.ts, line 3)\n  return a + b;\n",
     ]
 
 

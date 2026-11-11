@@ -5,7 +5,7 @@ Regenerate: python3 scripts/gen_signals.py. tests/test_signals_generated.py fail
 
 from enum import StrEnum
 
-VOCAB_VERSION = "0.58"
+VOCAB_VERSION = "0.59"
 
 
 class Signal(StrEnum):
@@ -68,6 +68,8 @@ class Signal(StrEnum):
     KEY_ROUTED = "KEY_ROUTED"
     UNDO_ROUTED = "UNDO_ROUTED"
     DIALOG_OPENED = "DIALOG_OPENED"
+    CONTEXT_MENU_OPENED = "CONTEXT_MENU_OPENED"
+    CONTEXT_MENU_CLOSED = "CONTEXT_MENU_CLOSED"
     DIALOG_CLOSED = "DIALOG_CLOSED"
     PANE_OPENED = "PANE_OPENED"
     PANE_CLOSED = "PANE_CLOSED"
@@ -263,6 +265,20 @@ class UndoRoutedTo(StrEnum):
     HISTORY = "history"
     PAGE = "page"
     NONE = "none"
+
+
+class ContextMenuOpenedSource(StrEnum):
+    TREE = "tree"
+    TAB = "tab"
+    SEARCH = "search"
+    CODE = "code"
+
+
+class ContextMenuClosedOutcome(StrEnum):
+    PICKED = "picked"
+    ESCAPE = "escape"
+    OUTSIDE = "outside"
+    BLUR = "blur"
 
 
 class DialogClosedOutcome(StrEnum):
@@ -625,6 +641,7 @@ class EditorChipAddedKind(StrEnum):
 class EditorChipAddedHow(StrEnum):
     ALT_CLICK = "alt_click"
     KEY = "key"
+    MENU = "menu"
 
 
 class InputChipRemovedKind(StrEnum):

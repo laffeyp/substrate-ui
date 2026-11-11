@@ -64,8 +64,10 @@ import { PanesView } from "./PanesView";
 import { RecordsPage } from "./RecordsPage";
 import { StudioPage } from "./StudioPage";
 import { TopBar } from "./TopBar";
+import { ContextMenu } from "./ContextMenu";
+import { closeMenu, menuKey, menuOpen } from "./state/context_menu";
 import "./window.css";
-import { Signal, UndoRoutedDirection, UndoRoutedTo, EditorColumnFoldedCause, EditorDrawnBinding, EditorDrawnMode, EditorOpenedBinding, EditorDrawnDock, EditorDrawnLeftTab, EditorDrawnShowing, EditorKeyRefusedReason, SeqSelectedHow, ToolOutputModeSetCause, TopBarCardSetCard, TopBarCardSetCause, DialogClosedOutcome, KeyRoutedTarget, RecordOpenedHow, ViewChangedCause, PaneBoundBinding, PaneBoundHow, PaneDrawnConnection, PaneDrawnPickerLine, PaneDrawnState, PaneDrawnTurnState, PaneFocusedCause, PaneOpenedCause, PickerFolderArmedSource, PickerFolderDisarmedCause, PickerLineEnteredCause, PickerLineEnteredLine, type SignalPayloads } from "../vm/signals.gen";
+import { Signal, UndoRoutedDirection, UndoRoutedTo, EditorColumnFoldedCause, EditorDrawnBinding, EditorDrawnMode, EditorOpenedBinding, EditorDrawnDock, EditorDrawnLeftTab, EditorDrawnShowing, EditorKeyRefusedReason, SeqSelectedHow, ToolOutputModeSetCause, TopBarCardSetCard, TopBarCardSetCause, DialogClosedOutcome, ContextMenuClosedOutcome, KeyRoutedTarget, RecordOpenedHow, ViewChangedCause, PaneBoundBinding, PaneBoundHow, PaneDrawnConnection, PaneDrawnPickerLine, PaneDrawnState, PaneDrawnTurnState, PaneFocusedCause, PaneOpenedCause, PickerFolderArmedSource, PickerFolderDisarmedCause, PickerLineEnteredCause, PickerLineEnteredLine, type SignalPayloads } from "../vm/signals.gen";
 import type { Activity } from "../reveal/activity";
 
 // UI sprint 132 (kernel K288, session vocabulary § R): the guidance levels the bar offers, each with
@@ -796,6 +798,7 @@ export class App extends React.Component<AppProps, AppState> {
       languageTurns: !!(lens && lens.turns.length),
       findOpen: find.getSnapshot().open, dialogOpen: dialogOpen(), cardOpen: !!(s.ddFor || s.wsFor),
       running: !!(fsnap && fsnap.sessionId && fsnap.connection === PaneDrawnConnection.CONNECTED && !fsnap.parkReason && !fsnap.endedReason),
+      menuOpen: menuOpen(),
     });
     // KEY_ROUTED (sprint 367): the keys the keymap reads, the arrows, Enter, Escape and any ⌘ or Ctrl
     // chord, with the action they took and where it went: a key with no action pressed in a text box
@@ -827,6 +830,9 @@ export class App extends React.Component<AppProps, AppState> {
       else setMode(GraphMode.Stream, s.focused, fsnap ? fsnap.sessionId : null);
       return;
     }
+    // Sprint 457: the right-click menu's keys; its Escape closes it, first in the cascade.
+    if (action.kind === "menu") { e.preventDefault(); menuKey(e.key); return; }
+    if (action.kind === "close-menu") { e.preventDefault(); closeMenu(ContextMenuClosedOutcome.ESCAPE); return; }
     if (action.kind === "close-find") { closeFind(); return; }
     if (action.kind === "close-dialog") { closeDialog(DialogClosedOutcome.ESCAPE); return; }
     if (action.kind === "close-cards") { this.noteCards({ ddFor: null, wsFor: null }, TopBarCardSetCause.ESCAPE); this.setState({ ddFor: null, wsFor: null }); return; }
@@ -1272,6 +1278,7 @@ export class App extends React.Component<AppProps, AppState> {
         {surf === Surface.Studio && <StudioPage />}
         <div style={{ flex: "none" }}><Footer /></div>
         <Dialogs defaultFontSize={this.props.transcriptFontSize ?? 13} />
+        <ContextMenu />
         <FirstRun />
       </div>
     );

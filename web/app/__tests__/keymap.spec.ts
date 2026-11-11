@@ -117,3 +117,13 @@ test("⌘D and ⌘⇧D are refused in the editor and split outside it", () => {
   assert.deepStrictEqual(windowKey(key("D", { metaKey: true, shiftKey: true }), ed), { kind: "refuse-split" });
   assert.deepStrictEqual(windowKey(key("d", { metaKey: true }), CTX), { kind: "split", dir: "right" });
 });
+
+test("sprint 457: with the right-click menu open, Escape closes it before anything else, and ↑ ↓ ↵ are the menu's", () => {
+  const open = { ...CTX, menuOpen: true, editor: true, running: true, findOpen: true, dialogOpen: true, editorCode: true, typing: true };
+  assert.deepStrictEqual(windowKey(key("Escape"), open), { kind: "close-menu" });
+  assert.deepStrictEqual(windowKey(key("Escape", { shiftKey: true }), open), { kind: "close-menu" });
+  for (const k of ["ArrowUp", "ArrowDown", "Enter"]) assert.deepStrictEqual(windowKey(key(k), open), { kind: "menu" });
+  // ⌘ chords keep their meaning; with the menu shut, Escape interrupts the running turn again.
+  assert.deepStrictEqual(windowKey(key("p", { metaKey: true }), open), { kind: "quick-open" });
+  assert.deepStrictEqual(windowKey(key("Escape"), { ...CTX, editor: true, running: true }), { kind: "interrupt", tier: "hard" });
+});

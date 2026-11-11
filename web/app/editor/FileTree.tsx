@@ -26,8 +26,9 @@ import { editor } from "../state/editor";
 import { openFile } from "./Centre";
 import { filterRows, matchesBelow, nameHits } from "../derive/tree_find";
 import { emit as emitSignal } from "../../vm/instrumentation/sdd";
-import { EditorChipAddedHow, type EditorChipAddedKind, EditorTreeFoundMode, Signal } from "../../vm/signals.gen";
-import { addChip } from "../state/input_bar";
+import { ContextMenuOpenedSource, EditorChipAddedHow, EditorTreeFoundMode, Signal } from "../../vm/signals.gen";
+import { addFrom, addItem, fileChip, folderChip } from "./chips";
+import { openMenu } from "../state/context_menu";
 
 interface Entry { name: string; kind: "dir" | "file" | "link"; size: number; modified: number }
 type Listing = { entries: Entry[] } | { error: string };
@@ -198,12 +199,13 @@ export function FileTree({ sessionId, paneId }: { sessionId: string; paneId: num
           onClick={r.kind === "error" ? undefined : (e) => {
             // Sprint 443 (D94): ⌥-click adds the file or folder to the message as a chip.
             if (e.altKey && (r.kind === "file" || r.kind === "dir")) {
-              const kind = r.kind === "dir" ? "folder" : "file";
-              if (addChip(paneId, { kind, label: r.kind === "dir" ? `${r.name}/` : r.name, ref: r.rel })) emitSignal(Signal.EDITOR_CHIP_ADDED, { kind: kind as EditorChipAddedKind, how: EditorChipAddedHow.ALT_CLICK }, { pane_id: paneId });
+              addFrom(paneId, r.kind === "dir" ? folderChip(r.rel) : fileChip(r.rel), EditorChipAddedHow.ALT_CLICK);
               return;
             }
             if (filtering) choose(r.rel); else if (r.kind === "dir") toggle(r.rel); else openFile(r.rel, paneId);
           }}
+          // Sprint 457 (D94): right-click › Add to message, the same chip as ⌥-click.
+          onContextMenu={r.kind === "file" || r.kind === "dir" ? (e) => openMenu(e, ContextMenuOpenedSource.TREE, [addItem(paneId, r.kind === "dir" ? folderChip(r.rel) : fileChip(r.rel))], paneId) : undefined}
           data-tree-at={at >= 0 && order[at] === r.rel ? "1" : undefined}
           data-tree-active={r.rel === editor.getSnapshot().active ? "1" : "0"}
           data-follow-mark={following.has(r.rel) ? "1" : undefined}
