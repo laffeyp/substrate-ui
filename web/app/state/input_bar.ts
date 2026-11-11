@@ -19,11 +19,15 @@ import { CHOICE_NOTES } from "../derive/control_notes";
 import { slashRows, tabComplete, type SlashRow } from "../derive/slash";
 import { openEndSession } from "./dialogs";
 import { emit as emitSignal } from "../../vm/instrumentation/sdd";
-import { InputChipRemovedHow, type InputChipRemovedKind, Signal } from "../../vm/signals.gen";
+import { InputChipRemovedHow, InputChipRemovedKind, Signal } from "../../vm/signals.gen";
 
 /** Sprint 443 (D94; 24k): a thing added to the message, sent with it as one of the turn's attachments
- *  (server.py `_resolve_attachments`: a file's text read when the turn is sent, a folder by name). */
-export interface Chip { kind: "file" | "folder"; label: string; ref: string }
+ *  (server.py `_resolve_attachments`). Sprint 454: `lines`, an editor selection: its span ([first, last] lines, or
+ *  [line, column, line, column]) and its text, the buffer as shown (ADD-TO-MESSAGE-2026-11-10-r3 rule 9). */
+export interface Chip { kind: "file" | "folder" | "lines"; label: string; ref: string; span?: number[]; text?: string }
+
+/** The vocabulary's name for a chip's kind (EDITOR_CHIP_ADDED, INPUT_CHIP_REMOVED): a selection is a `range`. */
+export const chipKindName = (kind: Chip["kind"]): InputChipRemovedKind => (kind === "lines" ? InputChipRemovedKind.RANGE : kind === "folder" ? InputChipRemovedKind.FOLDER : InputChipRemovedKind.FILE);
 
 export interface PaneInput {
   /** The draft in the bar. */
@@ -89,7 +93,7 @@ export function setText(paneId: number, text: string): void {
 /** Sprint 443: a chip added to a pane's input; false when the same thing is there already. */
 export function addChip(paneId: number, chip: Chip): boolean {
   const chips = paneInput(paneId).chips;
-  if (chips.some((c) => c.kind === chip.kind && c.ref === chip.ref)) return false;
+  if (chips.some((c) => c.kind === chip.kind && c.ref === chip.ref && JSON.stringify(c.span ?? []) === JSON.stringify(chip.span ?? []))) return false;
   patch(paneId, { chips: [...chips, chip] });
   return true;
 }
@@ -100,7 +104,7 @@ export function removeChip(paneId: number, index: number, how: InputChipRemovedH
   const chip = chips[index];
   if (!chip) return;
   patch(paneId, { chips: chips.filter((_, k) => k !== index) });
-  emitSignal(Signal.INPUT_CHIP_REMOVED, { kind: chip.kind as InputChipRemovedKind, how }, { pane_id: paneId });
+  emitSignal(Signal.INPUT_CHIP_REMOVED, { kind: chipKindName(chip.kind), how }, { pane_id: paneId });
 }
 
 /** Sprint 451 (ADD-TO-MESSAGE-2026-11-10-r3: "a real error leaves the draft and its chips in the bar"): a refused

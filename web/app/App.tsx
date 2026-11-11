@@ -53,7 +53,7 @@ import { AssayPage } from "./AssayPage";
 import { EditorView, foldColumn, toggleDock, toggleFocus, toggleMetaPane, toggleSwap } from "./editor/EditorView";
 import { openSearch } from "./editor/Search";
 import { openQuick } from "./editor/QuickOpen";
-import { closeFile, requestSave, routeUndo } from "./editor/Centre";
+import { addSelection, closeFile, requestSave, routeUndo } from "./editor/Centre";
 import { Dialogs } from "./Dialogs";
 import { FindBar } from "./FindBar";
 import { FirstRun } from "./FirstRun";
@@ -200,6 +200,7 @@ const KEY_TARGET: Partial<Record<KeyAction["kind"], KeyRoutedTarget>> = {
   "editor-search": KeyRoutedTarget.EDITOR,
   "tree-find": KeyRoutedTarget.EDITOR,
   "quick-open": KeyRoutedTarget.EDITOR,
+  "add-selection": KeyRoutedTarget.EDITOR,
 };
 /** The picker line PICKER_LINE_ENTERED names, as the pane's open line. */
 const HALF_OF_LINE: Record<PickerLineEnteredLine, PaneDrawnPickerLine> = {
@@ -790,6 +791,7 @@ export class App extends React.Component<AppProps, AppState> {
       vimCode: s.vs.view === "editor" && settings.getSnapshot().binding === "vim" && !!(el instanceof HTMLElement && el.hasAttribute("data-editor-code")),
       editorTerminal: s.vs.view === "editor" && !!(el instanceof HTMLElement && el.closest('[data-editor-area="bottom"], [data-editor-sill]')),
       editorTree: s.vs.view === "editor" && !!(el instanceof HTMLElement && el.closest("[data-editor-tree]")),
+      editorCode: s.vs.view === "editor" && !!(el instanceof HTMLElement && el.hasAttribute("data-editor-code")),
       pickerFocused: !!(fp && fp.unbound && !(fsnap && fsnap.sessionId)),
       languageTurns: !!(lens && lens.turns.length),
       findOpen: find.getSnapshot().open, dialogOpen: dialogOpen(), cardOpen: !!(s.ddFor || s.wsFor),
@@ -843,6 +845,8 @@ export class App extends React.Component<AppProps, AppState> {
     else if (action.kind === "editor-search") openSearch(s.focused);
     // Sprint 441: ⌘P in the editor opens quick open.
     else if (action.kind === "quick-open") openQuick();
+    // Sprint 454: ⌘⇧A in the code adds the selection (or the file) to the message.
+    else if (action.kind === "add-selection") addSelection(s.focused);
     // Sprint 437: ⌥⌘F in the tree opens its find by name.
     else if (action.kind === "tree-find") {
       if (editorStore.getSnapshot().folded.left) foldColumn("left", false, EditorColumnFoldedCause.KEY, s.focused);

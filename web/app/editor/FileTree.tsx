@@ -26,7 +26,7 @@ import { editor } from "../state/editor";
 import { openFile } from "./Centre";
 import { filterRows, matchesBelow, nameHits } from "../derive/tree_find";
 import { emit as emitSignal } from "../../vm/instrumentation/sdd";
-import { type EditorChipAddedKind, EditorTreeFoundMode, Signal } from "../../vm/signals.gen";
+import { EditorChipAddedHow, type EditorChipAddedKind, EditorTreeFoundMode, Signal } from "../../vm/signals.gen";
 import { addChip } from "../state/input_bar";
 
 interface Entry { name: string; kind: "dir" | "file" | "link"; size: number; modified: number }
@@ -199,7 +199,7 @@ export function FileTree({ sessionId, paneId }: { sessionId: string; paneId: num
             // Sprint 443 (D94): ⌥-click adds the file or folder to the message as a chip.
             if (e.altKey && (r.kind === "file" || r.kind === "dir")) {
               const kind = r.kind === "dir" ? "folder" : "file";
-              if (addChip(paneId, { kind, label: r.kind === "dir" ? `${r.name}/` : r.name, ref: r.rel })) emitSignal(Signal.EDITOR_CHIP_ADDED, { kind: kind as EditorChipAddedKind }, { pane_id: paneId });
+              if (addChip(paneId, { kind, label: r.kind === "dir" ? `${r.name}/` : r.name, ref: r.rel })) emitSignal(Signal.EDITOR_CHIP_ADDED, { kind: kind as EditorChipAddedKind, how: EditorChipAddedHow.ALT_CLICK }, { pane_id: paneId });
               return;
             }
             if (filtering) choose(r.rel); else if (r.kind === "dir") toggle(r.rel); else openFile(r.rel, paneId);

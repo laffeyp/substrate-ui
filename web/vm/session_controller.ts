@@ -745,7 +745,7 @@ export class SessionController {
     await this.refreshTasks();
   }
 
-  async sendTurn(text: string, opts: { skill?: string; driverCommand?: boolean; attachments?: { kind: string; label: string; ref: string }[]; onRefused?: () => void } = {}): Promise<void> {
+  async sendTurn(text: string, opts: { skill?: string; driverCommand?: boolean; attachments?: { kind: string; label: string; ref: string; span?: number[]; text?: string }[]; onRefused?: () => void } = {}): Promise<void> {
     const trimmed = text.trim();
     if (!trimmed) return;
     if (this.snap.viewOnly) {
@@ -1116,7 +1116,7 @@ export class SessionController {
    * to `sendTurn`. Returns true when the line was consumed as a
    * slash so the caller can hand a residual back if it wants. */
   /** `onRefused` (sprint 451) runs when the server refuses the message's turn, so the input bar can put the draft back. */
-  async submitLine(line: string, attachments: { kind: string; label: string; ref: string }[] = [], onRefused?: () => void): Promise<boolean> {
+  async submitLine(line: string, attachments: { kind: string; label: string; ref: string; span?: number[]; text?: string }[] = [], onRefused?: () => void): Promise<boolean> {
     const text = line.trim();
     if (!text) return true;
     if (!text.startsWith("/")) {

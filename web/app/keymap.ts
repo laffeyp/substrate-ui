@@ -40,6 +40,8 @@ export interface KeyContext {
   editorTerminal?: boolean;
   /** Sprint 437: the focus is in the editor's files tree. */
   editorTree?: boolean;
+  /** Sprint 454: the focus is in the editor's code (any binding). */
+  editorCode?: boolean;
   /** The focused pane has no session: its picker takes the arrows. */
   pickerFocused: boolean;
   /** The meta view shows the language lens and the lens has turns. */
@@ -56,7 +58,7 @@ export type KeyAction =
   | { kind: "records" } | { kind: "picker" } | { kind: "language" }
   | { kind: "toggle-meta" } | { kind: "toggle-tools" } | { kind: "split"; dir: "right" | "down" }
   | { kind: "toggle-find" } | { kind: "settings" } | { kind: "toggle-assays" }
-  | { kind: "toggle-editor" }
+  | { kind: "toggle-editor" } | { kind: "add-selection" }
   | { kind: "editor-find"; field: "query" | "replace" } | { kind: "editor-search" } | { kind: "tree-find" } | { kind: "quick-open" }
   | { kind: "fold-editor"; column: "left" | "right" | "bottom" }
   | { kind: "refuse-split" }
@@ -98,6 +100,8 @@ export function windowKey(ev: KeyLike, ctx: KeyContext): KeyAction | null {
   if (ctx.editor && plainCmd && key === "p") return { kind: "quick-open" };
   // Sprint 434 (roadmap r10 E8): ⌘⇧F in the editor is the workspace search in the left column.
   if (ctx.editor && cmd && ev.shiftKey && !ev.altKey && ev.code === "KeyF") return { kind: "editor-search" };
+  // Sprint 454 (the Architect, 2026-11-10: a key under the left hand): ⌘⇧A adds the code's selection to the message.
+  if (ctx.editor && ctx.editorCode && cmd && ev.shiftKey && !ev.altKey && ev.code === "KeyA") return { kind: "add-selection" };
   if (ctx.editor && !ctx.editorTerminal && cmd && !ev.shiftKey && ev.code === "KeyF") return { kind: "editor-find", field: ev.altKey ? "replace" : "query" };
   if (ev.metaKey && key === "f") return { kind: "toggle-find" };
   if (ev.metaKey && ev.key === ",") return { kind: "settings" };

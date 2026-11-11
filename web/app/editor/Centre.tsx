@@ -28,7 +28,7 @@ import { shell as shellMode } from "@codemirror/legacy-modes/mode/shell";
 import { preserveCase } from "../derive/preserve_case";
 import { editor } from "../state/editor";
 import { emit as emitSignal } from "../../vm/instrumentation/sdd";
-import { DiffReadBase, EditorConflictResolvedChoice, EditorFileOpenedHow, EditorFileSavedCommand, EditorKeyRefusedReason, EditorReplacedScope, Signal, UndoRoutedTo } from "../../vm/signals.gen";
+import { DiffReadBase, EditorChipAddedHow, EditorChipAddedKind, EditorConflictResolvedChoice, EditorFileOpenedHow, EditorFileSavedCommand, EditorKeyRefusedReason, EditorReplacedScope, Signal, UndoRoutedTo } from "../../vm/signals.gen";
 import { redo, redoDepth, undo, undoDepth } from "@codemirror/commands";
 import { EnvelopeKind } from "../../vm/envelope_kinds.gen";
 import { sendCommand, shell } from "../state/shell";
@@ -37,6 +37,7 @@ import { bindingExtension, type BindingHooks } from "./bindings";
 import { baseText, vsBase } from "../derive/status_line";
 import { HISTORY_VIEW, SEND_VIEW, lineHunks } from "../derive/inspector";
 import { setBeforeTurn, type BeforeTurnResult } from "../../vm/session_controller";
+import { addChip, type Chip } from "../state/input_bar";
 import { StatusLine } from "./StatusLine";
 
 const SUNK = "#1a1c20";
@@ -80,7 +81,9 @@ const THEME = EditorView.theme({
   // 24a draws a whole added line in teal: the hunk's colour wins over the syntax colours.
   ".cm-added, .cm-added span": { color: `${ADDED} !important` },
   ".cm-change-gutter .cm-gutterElement": { width: "14px", textAlign: "center" },
-  ".cm-removed": { color: REMOVED, paddingLeft: "6px", whiteSpace: "pre" },
+  // Sprint 454: a removed line is not the buffer's text, so the browser's own selection never takes it (it drew a
+  // removed line as selected inside a selection of the lines around it).
+  ".cm-removed": { color: REMOVED, paddingLeft: "6px", whiteSpace: "pre", userSelect: "none" },
   "&.cm-focused": { outline: "none" },
   // Sprint 428: find matches in the accent, the current one stronger (D7: the one UI accent).
   ".cm-find-match": { backgroundColor: "rgba(130,165,200,.22)", borderRadius: "2px" },
@@ -394,7 +397,7 @@ export function onBufferEdit(fn: () => void): () => void {
 
 /** The mounted centre's shown buffer (sprint 436), for the workspace search: its path, its text, and a change
  *  of its whole text as one edit, so its own undo can take a replace back. */
-let activeBuffer: { session(): string; path(): string | null; text(): string | null; put(text: string): void } | null = null;
+let activeBuffer: { session(): string; path(): string | null; text(): string | null; state(): EditorState | null; put(text: string): void } | null = null;
 /** The session whose files the editor store's `unsaved` and `conflict` describe: the one the centre last showed
  *  (sprint 444). */
 let storeSession: string | null = null;
@@ -507,6 +510,32 @@ export async function saveForSend(sessionId: string, paneId: number | null): Pro
   return out;
 }
 setBeforeTurn(saveForSend);
+
+/** Sprint 454 (roadmap r13 E10.3; ADD-TO-MESSAGE-2026-11-10-r3, selections; ⌘⇧A, the Architect's left-hand key): the
+ *  code's selection as a chip in the pane's input bar. Whole lines make "cart.ts 85–89" (one line "cart.ts 85"); a
+ *  range inside lines "cart.ts 85:4–20" or "cart.ts 85:4–89:12" (columns from 1, both ends included); no selection
+ *  adds the file, as Claude Code's ⌥K adds "the current file and selection". A selection ending at the start of a
+ *  line covers the lines above it. The chip carries the text the buffer shows (rule 9). */
+export function addSelection(paneId: number): void {
+  const rel = activeBuffer?.path() ?? null, state = activeBuffer?.state() ?? null;
+  if (!rel || !state) { emitSignal(Signal.EDITOR_KEY_REFUSED, { key: "Meta+Shift+A", reason: EditorKeyRefusedReason.NO_FILE }, { pane_id: paneId }); return; }
+  const name = rel.slice(rel.lastIndexOf("/") + 1);
+  const sel = state.selection.main, doc = state.doc;
+  let chip: Chip;
+  if (sel.empty) chip = { kind: "file", label: name, ref: rel };
+  else {
+    const a = doc.lineAt(sel.from);
+    let b = doc.lineAt(sel.to), to = sel.to;
+    if (to === b.from && b.number > a.number) { b = doc.line(b.number - 1); to = b.to; }
+    if (sel.from === a.from && to === b.to) {
+      chip = { kind: "lines", label: a.number === b.number ? `${name} ${a.number}` : `${name} ${a.number}–${b.number}`, ref: rel, span: [a.number, b.number], text: doc.sliceString(a.from, Math.min(doc.length, b.to + 1)) };
+    } else {
+      const c1 = sel.from - a.from + 1, c2 = to - b.from;
+      chip = { kind: "lines", label: a.number === b.number ? `${name} ${a.number}:${c1}–${c2}` : `${name} ${a.number}:${c1}–${b.number}:${c2}`, ref: rel, span: [a.number, c1, b.number, c2], text: doc.sliceString(sel.from, to) };
+    }
+  }
+  if (addChip(paneId, chip)) emitSignal(Signal.EDITOR_CHIP_ADDED, { kind: chip.kind === "lines" ? EditorChipAddedKind.RANGE : EditorChipAddedKind.FILE, how: EditorChipAddedHow.KEY }, { pane_id: paneId });
+}
 
 export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionId: string; tabRow: number }): React.ReactElement {
   const st = React.useSyncExternalStore(editor.subscribe, editor.getSnapshot, editor.getSnapshot);
@@ -810,6 +839,7 @@ export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionI
     activeBuffer = {
       session: () => sessionId,
       path: () => shown.current,
+      state: () => view.current?.state ?? null,
       text: () => view.current?.state.doc.toString() ?? null,
       put: (text) => { const v = view.current; if (v && v.state.doc.toString() !== text) v.dispatch({ changes: changeTo(v.state.doc.toString(), text) }); },
     };

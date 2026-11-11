@@ -1432,6 +1432,16 @@
       "rationale": "The sent message draws its chips and marks the ones sent by reference; the view side of TURN_ACCEPTED's counts.",
       "ratified": true,
       "ratified_by": "agent-resolved 2026-11-10, sprint 452; grounds: project — round 3, D94, roadmap r13 E10.2; SDD — BOOTSTRAP step 9 (dual-contract pairing); practice — n/a"
+    },
+    {
+      "id": "P-0.57-CHIP-HOW",
+      "kind": "PAYLOAD_FIELD_PROPOSED",
+      "layer": 2,
+      "element": "EDITOR_CHIP_ADDED gains how (alt_click | key)",
+      "source": "roadmap r13 E10.3; BLACKBOARD 2026-11-10 (⌘⇧A); sprint 454",
+      "rationale": "Chips now come from two gestures; the trace says which.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-10, sprint 454; grounds: project — roadmap r13 E10.3; SDD — hard rule 2; practice — n/a"
     }
   ]
 }
