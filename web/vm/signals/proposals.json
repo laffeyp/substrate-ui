@@ -1442,6 +1442,16 @@
       "rationale": "Chips now come from two gestures; the trace says which.",
       "ratified": true,
       "ratified_by": "agent-resolved 2026-11-10, sprint 454; grounds: project — roadmap r13 E10.3; SDD — hard rule 2; practice — n/a"
+    },
+    {
+      "id": "P-0.58-OPTION-A",
+      "kind": "INVARIANT_PROPOSED",
+      "layer": 7,
+      "element": "notes: EDITOR_CHIP_ADDED.how key is ⌥A; KEY_ROUTED names an acting ⌥ chord by its physical letter",
+      "source": "BLACKBOARD 2026-11-10 user (⌥, not ⌘⇧); sprint 456",
+      "rationale": "The selection's key changes, and an ⌥ chord's key would otherwise be a typed character in the trace.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-10, sprint 456; grounds: project — the user entry of this date, KEY_ROUTED's field note; SDD — hard rule 2; practice — n/a"
     }
   ]
 }

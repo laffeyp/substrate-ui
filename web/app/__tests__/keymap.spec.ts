@@ -78,10 +78,12 @@ test("⌘⇧E toggles the editor; Escape in the editor is the pane's: the cascad
   assert.deepStrictEqual(windowKey({ key: "F", code: "KeyF", metaKey: true, ctrlKey: false, shiftKey: true, altKey: false }, ed), { kind: "editor-search" });
   assert.deepStrictEqual(windowKey({ key: "F", code: "KeyF", metaKey: true, ctrlKey: false, shiftKey: true, altKey: false }, { ...ed, editorTerminal: true }), { kind: "editor-search" });
   assert.deepStrictEqual(windowKey({ key: "F", code: "KeyF", metaKey: true, ctrlKey: false, shiftKey: true, altKey: false }, CTX), { kind: "toggle-find" });
-  // Sprint 454: ⌘⇧A with the code focused adds the selection; anywhere else it does nothing here.
-  assert.deepStrictEqual(windowKey({ key: "A", code: "KeyA", metaKey: true, ctrlKey: false, shiftKey: true, altKey: false }, { ...ed, editorCode: true }), { kind: "add-selection" });
-  assert.strictEqual(windowKey({ key: "A", code: "KeyA", metaKey: true, ctrlKey: false, shiftKey: true, altKey: false }, ed), null);
-  assert.strictEqual(windowKey({ key: "a", code: "KeyA", metaKey: true, ctrlKey: false, shiftKey: false, altKey: false }, { ...ed, editorCode: true }), null);
+  // Sprint 456: ⌥A (macOS gives the key as "å") with the code focused adds the selection; outside the code it is the
+  // typed character; ⌘⇧A is nothing here.
+  assert.deepStrictEqual(windowKey({ key: "å", code: "KeyA", metaKey: false, ctrlKey: false, shiftKey: false, altKey: true }, { ...ed, editorCode: true }), { kind: "add-selection" });
+  assert.strictEqual(windowKey({ key: "å", code: "KeyA", metaKey: false, ctrlKey: false, shiftKey: false, altKey: true }, ed), null);
+  assert.strictEqual(windowKey({ key: "A", code: "KeyA", metaKey: true, ctrlKey: false, shiftKey: true, altKey: false }, { ...ed, editorCode: true }), null);
+  assert.strictEqual(windowKey({ key: "Å", code: "KeyA", metaKey: false, ctrlKey: false, shiftKey: true, altKey: true }, { ...ed, editorCode: true }), null);
   // Sprint 441: ⌘P in the editor is quick open; outside it the key is the page's.
   assert.deepStrictEqual(windowKey({ key: "p", code: "KeyP", metaKey: true, ctrlKey: false, shiftKey: false, altKey: false }, ed), { kind: "quick-open" });
   assert.strictEqual(windowKey({ key: "p", code: "KeyP", metaKey: true, ctrlKey: false, shiftKey: false, altKey: false }, CTX), null);

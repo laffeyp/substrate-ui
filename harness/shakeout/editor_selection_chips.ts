@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2026 Peter Laffey
-// ⌘⇧A adds the editor's selection to the message (sprint 454; roadmap r13 E10.3; the Architect, 2026-11-10: a key
-// under the left hand). A repository written here holds src/cart.ts, four lines; the deterministic driver. Line 3 is
+// ⌥A adds the editor's selection to the message (sprints 454, 456; roadmap r13 E10.3; the Architect, 2026-11-10: a key
+// under the left hand, and ⌥ as for ⌥-click; ⌘⇧ is kept for switching views). A repository written here holds src/cart.ts, four lines; the deterministic driver. Line 3 is
 // typed into, unsaved; then, with the code focused, these agree:
-//   lines 2–3 selected, ⌘⇧A: the chip "cart.ts 2–3"; line 1's columns 8–22, ⌘⇧A: "cart.ts 1:8–22"; no selection,
-//   ⌘⇧A: "cart.ts"; lines 2–3 again: still three chips;
+//   lines 2–3 selected, ⌥A: the chip "cart.ts 2–3"; line 1's columns 8–22, ⌥A: "cart.ts 1:8–22"; no selection,
+//   ⌥A: "cart.ts"; lines 2–3 again: still three chips; the buffer unchanged by the four ⌥A (no character typed);
+//   ⌘⇧A in the code: no chip;
 //   "look" sent: the record's UserMessage holds the range [2, 3] with the typed line, [1, 8, 1, 22] with
 //   "const total = 1", and the file; the disk holds the typed line (the save before send);
-//   window-1.jsonl: KEY_ROUTED Meta+Shift+A → add-selection ×4; EDITOR_CHIP_ADDED range key, range key, file key;
+//   window-1.jsonl: KEY_ROUTED Alt+A → add-selection ×4; EDITOR_CHIP_ADDED range key, range key, file key;
 //   TRANSCRIPT_CHIPS_DRAWN chips 3, by_reference 0.
 // SHAKEOUT_APP=<Substrate.app> runs the bundle.
 
@@ -66,23 +67,32 @@ async function main(): Promise<void> {
     await win.locator("[data-editor-code] .cm-line", { hasText: "return a + b;" }).first().click();
     await press(win, "Meta+ArrowRight");
     await win.keyboard.type(" // three");
+    const typedLines = await win.evaluate(`Array.from(document.querySelector("[data-editor-code]").shadowRoot.querySelectorAll(".cm-line")).map(function (e) { return e.textContent; })`) as string[];
     // Lines 2–3, whole.
     await press(win, "Meta+ArrowUp"); await press(win, "ArrowDown"); await press(win, "Shift+ArrowDown", 2);
-    await press(win, "Meta+Shift+A");
+    await press(win, "Alt+KeyA");
     await until(win, "the lines chip", () => chips(win), (c) => JSON.stringify(c) === JSON.stringify(["cart.ts 2–3"]));
     // Line 1, columns 8–22.
     await press(win, "Meta+ArrowUp"); await press(win, "ArrowRight", 7); await press(win, "Shift+ArrowRight", 15);
-    await press(win, "Meta+Shift+A");
+    await press(win, "Alt+KeyA");
     await until(win, "the in-line chip", () => chips(win), (c) => c.length === 2 && c[1] === "cart.ts 1:8–22");
-    // No selection: the file.
+    // No selection: the file. This ⌥A comes as macOS sends it, one key-down whose key and text are the composed "å" (the
+    // DevTools Protocol's Input.dispatchKeyEvent), so a keystroke the app did not cancel would type "å" into the code.
     await press(win, "ArrowRight");
-    await press(win, "Meta+Shift+A");
+    const cdp = await win.context().newCDPSession(win);
+    await cdp.send("Input.dispatchKeyEvent", { type: "keyDown", modifiers: 1, key: "å", code: "KeyA", windowsVirtualKeyCode: 65, text: "å", unmodifiedText: "a" });
+    await cdp.send("Input.dispatchKeyEvent", { type: "keyUp", modifiers: 1, key: "å", code: "KeyA", windowsVirtualKeyCode: 65 });
     await until(win, "the file chip", () => chips(win), (c) => c.length === 3 && c[2] === "cart.ts");
     // Lines 2–3 again: one chip still.
     await press(win, "Meta+ArrowUp"); await press(win, "ArrowDown"); await press(win, "Shift+ArrowDown", 2);
-    await press(win, "Meta+Shift+A");
+    await press(win, "Alt+KeyA");
     await settled(win);
     if ((await chips(win)).length !== 3) throw new Error(`the same range twice: ${JSON.stringify(await chips(win))}`);
+    const afterLines = await win.evaluate(`Array.from(document.querySelector("[data-editor-code]").shadowRoot.querySelectorAll(".cm-line")).map(function (e) { return e.textContent; })`) as string[];
+    if (JSON.stringify(afterLines) !== JSON.stringify(typedLines)) throw new Error(`⌥A typed into the code: ${JSON.stringify(afterLines)}`);
+    await press(win, "Meta+Shift+A");
+    await settled(win);
+    if ((await chips(win)).length !== 3) throw new Error(`⌘⇧A added a chip: ${JSON.stringify(await chips(win))}`);
     await win.screenshot({ path: join(shots, "bar.png") });
 
     const box = win.locator('[data-editor-area="bottom"] textarea[data-input-bar]').first();
@@ -108,8 +118,8 @@ async function main(): Promise<void> {
     ];
     if (JSON.stringify(att) !== JSON.stringify(want)) throw new Error(`the UserMessage's attachments: ${JSON.stringify(att)}`);
     const recs = windowRecords(launch);
-    const routed = recs.filter((r) => r.name === "KEY_ROUTED" && r.payload.key === "Meta+Shift+A").map((r) => `${String(r.payload.action)}:${String(r.payload.target)}`);
-    if (JSON.stringify(routed) !== JSON.stringify(Array(4).fill("add-selection:editor"))) throw new Error(`KEY_ROUTED ⌘⇧A ${JSON.stringify(routed)}`);
+    const routed = recs.filter((r) => r.name === "KEY_ROUTED" && r.payload.key === "Alt+A").map((r) => `${String(r.payload.action)}:${String(r.payload.target)}`);
+    if (JSON.stringify(routed) !== JSON.stringify(Array(4).fill("add-selection:editor"))) throw new Error(`KEY_ROUTED ⌥A ${JSON.stringify(routed)}`);
     const added = recs.filter((r) => r.name === "EDITOR_CHIP_ADDED").map((r) => `${String(r.payload.kind)}:${String(r.payload.how)}`);
     if (JSON.stringify(added) !== JSON.stringify(["range:key", "range:key", "file:key"])) throw new Error(`EDITOR_CHIP_ADDED ${JSON.stringify(added)}`);
     const drawn = recs.filter((r) => r.name === "TRANSCRIPT_CHIPS_DRAWN").map((r) => [r.payload.chips, r.payload.by_reference]);
@@ -118,7 +128,7 @@ async function main(): Promise<void> {
     const boot = readdirSync(traces).sort().pop()!;
     const booted = readFileSync(join(traces, boot, "main.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as { name: string; payload: Record<string, unknown> }).find((r) => r.name === "APP_BOOTED")!.payload;
     if (packaged && booted.packaged !== true) throw new Error(`APP_BOOTED packaged ${String(booted.packaged)}`);
-    console.log(`editor_selection_chips: ok — ⌘⇧A: "cart.ts 2–3", "cart.ts 1:8–22", "cart.ts", the range again one chip; "look" carried the typed line, "const total = 1" and the file; the disk saved first; KEY_ROUTED add-selection ×4; EDITOR_CHIP_ADDED range, range, file by key; TRANSCRIPT_CHIPS_DRAWN 3/0; packaged=${String(booted.packaged)}; screenshot ${shot}`);
+    console.log(`editor_selection_chips: ok — ⌥A: "cart.ts 2–3", "cart.ts 1:8–22", "cart.ts", the range again one chip, nothing typed; ⌘⇧A no chip; "look" carried the typed line, "const total = 1" and the file; the disk saved first; KEY_ROUTED Alt+A add-selection ×4; EDITOR_CHIP_ADDED range, range, file by key; TRANSCRIPT_CHIPS_DRAWN 3/0; packaged=${String(booted.packaged)}; screenshot ${shot}`);
     status = 0;
   } catch (e) {
     console.error(`editor_selection_chips: FAIL — ${(e as Error).message}`);

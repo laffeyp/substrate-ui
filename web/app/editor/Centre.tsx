@@ -511,14 +511,14 @@ export async function saveForSend(sessionId: string, paneId: number | null): Pro
 }
 setBeforeTurn(saveForSend);
 
-/** Sprint 454 (roadmap r13 E10.3; ADD-TO-MESSAGE-2026-11-10-r3, selections; ⌘⇧A, the Architect's left-hand key): the
+/** Sprint 454 (roadmap r13 E10.3; ADD-TO-MESSAGE-2026-11-10-r3, selections; ⌥A since sprint 456, the Architect's key): the
  *  code's selection as a chip in the pane's input bar. Whole lines make "cart.ts 85–89" (one line "cart.ts 85"); a
  *  range inside lines "cart.ts 85:4–20" or "cart.ts 85:4–89:12" (columns from 1, both ends included); no selection
  *  adds the file, as Claude Code's ⌥K adds "the current file and selection". A selection ending at the start of a
  *  line covers the lines above it. The chip carries the text the buffer shows (rule 9). */
 export function addSelection(paneId: number): void {
   const rel = activeBuffer?.path() ?? null, state = activeBuffer?.state() ?? null;
-  if (!rel || !state) { emitSignal(Signal.EDITOR_KEY_REFUSED, { key: "Meta+Shift+A", reason: EditorKeyRefusedReason.NO_FILE }, { pane_id: paneId }); return; }
+  if (!rel || !state) { emitSignal(Signal.EDITOR_KEY_REFUSED, { key: "Alt+A", reason: EditorKeyRefusedReason.NO_FILE }, { pane_id: paneId }); return; }
   const name = rel.slice(rel.lastIndexOf("/") + 1);
   const sel = state.selection.main, doc = state.doc;
   let chip: Chip;

@@ -801,8 +801,10 @@ export class App extends React.Component<AppProps, AppState> {
     // chord, with the action they took and where it went: a key with no action pressed in a text box
     // went to the box (its target, as the Enter that runs `/language` has unmounted it by now). A typed
     // character is never written.
-    const name = [e.metaKey && "Meta", e.ctrlKey && "Control", e.altKey && "Alt", e.shiftKey && "Shift", e.key].filter(Boolean).join("+");
-    if (ARROWS.includes(e.key) || e.key === "Escape" || ((e.metaKey || e.ctrlKey) && !MODIFIER_KEYS.includes(e.key))) {
+    // Sprint 456: an ⌥ chord is named by its physical letter (Alt+A), since macOS gives `key` the composed character (å).
+    const letter = e.altKey && /^Key[A-Z]$/.test(e.code) ? e.code.slice(3) : e.key;
+    const name = [e.metaKey && "Meta", e.ctrlKey && "Control", e.altKey && "Alt", e.shiftKey && "Shift", letter].filter(Boolean).join("+");
+    if (ARROWS.includes(e.key) || e.key === "Escape" || ((e.metaKey || e.ctrlKey) && !MODIFIER_KEYS.includes(e.key)) || action?.kind === "add-selection") {
       // A key typed in the editor's code reaches the window retargeted to the code's shadow host (sprint 423).
       const inCode = e.target instanceof HTMLElement && e.target.hasAttribute("data-editor-code");
       const target = action ? KEY_TARGET[action.kind] ?? KeyRoutedTarget.WINDOW : inCode ? KeyRoutedTarget.EDITOR : isBox(e.target) ? KeyRoutedTarget.BOX : KeyRoutedTarget.NONE;
@@ -829,7 +831,8 @@ export class App extends React.Component<AppProps, AppState> {
     if (action.kind === "close-dialog") { closeDialog(DialogClosedOutcome.ESCAPE); return; }
     if (action.kind === "close-cards") { this.noteCards({ ddFor: null, wsFor: null }, TopBarCardSetCause.ESCAPE); this.setState({ ddFor: null, wsFor: null }); return; }
     if (action.kind === "close-surface") { this.viewCause = ViewChangedCause.CLOSE; this.setState((st) => ({ vs: closePage(st.vs) })); return; }
-    // Sprint 407: Escape in the editor view returns to the panes (frame 24a's footer).
+    // Every other action is the window's own: the key does nothing else, so no character is typed (⌥A in the code,
+    // sprint 456).
     e.preventDefault();
     if (action.kind === "toggle-meta") this.toggleMeta(ViewChangedCause.KEY);
     else if (action.kind === "toggle-editor") this.toggleEditor(ViewChangedCause.KEY, name);
@@ -845,7 +848,7 @@ export class App extends React.Component<AppProps, AppState> {
     else if (action.kind === "editor-search") openSearch(s.focused);
     // Sprint 441: ⌘P in the editor opens quick open.
     else if (action.kind === "quick-open") openQuick();
-    // Sprint 454: ⌘⇧A in the code adds the selection (or the file) to the message.
+    // Sprint 454, 456: ⌥A in the code adds the selection (or the file) to the message, and types nothing.
     else if (action.kind === "add-selection") addSelection(s.focused);
     // Sprint 437: ⌥⌘F in the tree opens its find by name.
     else if (action.kind === "tree-find") {
