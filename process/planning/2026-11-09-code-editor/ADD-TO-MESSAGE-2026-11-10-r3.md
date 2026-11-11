@@ -63,7 +63,7 @@ Selections had no source. Only files and folders did.
 ## Decisions for the Architect
 
 - **The kernel's `read_file` reads only UTF-8.** Rule 3 there is a kernel change, and the editor work has stayed out of the kernel since 2026-11-09. Without it, the kernel's models cannot open a non-UTF-8 text file even from its path.
-- **The kernel's responders send no images.** Sending them to multimodal Ollama models is kernel work, and so is handing Codex a message's image paths with `-i`: `CliResponder` takes only the prompt and the system text per call.
+- **The kernel's responders send no images.** Sending them to multimodal Ollama models is kernel work, and so is handing Codex a message's image paths with `-i`: `CliResponder` takes only the prompt and the system text per call. Decided 2026-11-11: not now; the models open an image from its path (BLACKBOARD `user` and `deferred` entries of that date).
 - **Files dragged in from Finder, from outside the workspace.** The server refuses paths outside the session's workspace, and the kernel's tools are rooted in it. Taking them means copying them in or widening the roots.
 - **A pasted image has no file.** Keeping it means writing it somewhere: the workspace, or the session's record.
 
