@@ -133,7 +133,13 @@ Cards, in order. Each is ≤2 product files where it can be; a card that cannot 
 | E7 | 3: the vocabulary proposal and S10's checker; following native and harness calls; the driver fixtures and their gate | vocabulary, `electron/invariants.ts`; `editor/follow.ts` (new); gate | E6 |
 | E8 | 4: the tab row; search (server endpoint, then the tab); open and activity | `editor/LeftTabs.tsx` (new); `server.py`; `editor/Search.tsx` (new); `editor/LeftTabs.tsx` | E3 |
 | E9 | built in sprint 441 | `editor/QuickOpen.tsx`; `server.py` | E3 |
-| E10 | 4: chips in the input bar and the turn body; the editor's sources; unsaved lines; folder and size | `InputBar.tsx`, `session_controller.ts`; `editor/*`; `server.py` | E3, E8 |
+| E10 | the prototype: built in sprint 443 | `state/input_bar.ts`, `InputBar.tsx`, `session_controller.ts`, `editor/FileTree.tsx` | E3, E8 |
+| E10.0 | 1: save before send | `state/input_bar.ts`, `App.tsx`; gate `editor_save_on_send.ts` | E4, E10 |
+| E10.1 | 1: never refuse | `server.py`; `tests/` | E10 |
+| E10.2 | 1: chips on the sent message, in order | `session_controller.ts`, the transcript row | E10.1 |
+| E10.3 | 1: selections | `editor/Centre.tsx`, `state/input_bar.ts` | E10.0, E10.2 |
+| E10.4 | 1: drag and right-click in the editor | `editor/*`; the terminal header | E10.2 |
+| E10.5 | 1: images to the receivers that see them | `server.py`, the Codex driver profile | E10.1 |
 | E11 | 1 | `TopBar.tsx`, `Footer.tsx` | E5 |
 | E12 | 1 | the areas it names | — |
 | E13 | 1: the close | — | all |
