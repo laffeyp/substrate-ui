@@ -42,14 +42,12 @@ Once the bar finds names, two other boxes find the same things.
 | Quick open, ⌘P (sprint 441) | file names and paths | a box over the code when the left column is folded; recent files | Yes. ⌘⇧F unfolds the column and focuses the bar; the open tab lists the open files. |
 | The tree's find, ⌥⌘F (sprint 437) | file and folder names | filters or highlights the tree itself | Yes. The bar lists the matching files and folders, and a folder result opens the tree to it. |
 
-Three ways to find a file by name, and a search bar that could not find one, is duplication. Both boxes come out.
+Three ways to find a file by name is duplication. The Architect's ruling of the same day: nothing is undone; the search bar is fixed. Quick open and the tree's find stay as built.
 
-## What comes out, and what changes
+## What changes
 
-- **Quick open, sprint 441:** `editor/QuickOpen.tsx`, `derive/quick_open.ts` and its spec, the Go menu, ⌘P in the keymap, the recent list in the store, `openFile`'s keep-the-shown-tab option, `editor_quick_open.ts`. The server's file list (`GET …/files/list`) stays only if the bar's name matching uses it. Vocabulary: FILES_LISTED_ALL and EDITOR_QUICK_OPENED retired, EDITOR_FILE_OPENED.how quick_open retired.
-- **The tree's find, sprint 437:** its find box, filter and highlight in `editor/FileTree.tsx`, `derive/tree_find.ts` and its spec, ⌥⌘F's tree meaning (it is replace in the open file everywhere again), `GET …/files/find`, `editor_tree_find.ts`. Vocabulary: FILES_FOUND and EDITOR_TREE_FOUND retired.
+- **The search bar:** gains name and path matches, the names-first results, the count over both, folder results that open the tree, and re-running on disk changes (sprint 442). Vocabulary v0.48: FILES_SEARCHED and EDITOR_SEARCH_QUERIED carry the name matches' count.
 - **The files tab:** the `⌘⇧F search workspace` text above the tree comes out. The tree is for files; the key stays.
-- **The search bar:** gains name and path matches, the names-first results, the count over both, folder results that open the tree, and re-running on disk changes. Vocabulary: FILES_SEARCHED and EDITOR_SEARCH_QUERIED carry the name matches' count.
 
 ## Why it went wrong
 

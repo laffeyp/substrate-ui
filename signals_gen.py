@@ -5,7 +5,7 @@ Regenerate: python3 scripts/gen_signals.py. tests/test_signals_generated.py fail
 
 from enum import StrEnum
 
-VOCAB_VERSION = "0.47"
+VOCAB_VERSION = "0.48"
 
 
 class Signal(StrEnum):

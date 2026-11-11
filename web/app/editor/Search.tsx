@@ -9,6 +9,8 @@
 // one file (a file's ↵), or every match (⌘⇧↵ or "all") — is worked out by the server (POST …/search/replace,
 // FILES_REPLACE_PREPARED) and written by the page through PUT …/file with the hash each file was read at (one
 // FileWritten each; a file changed since is refused, 409); then EDITOR_SEARCH_REPLACED, and the search again.
+// Sprint 442 (SEARCH-BAR-2026-11-10): the bar finds file names, folder names and paths as well as the text inside
+// files, names first; files changing on disk run it again.
 // Sprint 436: the editor's unsaved buffers go with each search and replace, and are searched in place of the
 // files on disk (VS Code's getOpenEditorResults); a replace changes such a buffer and saves it from there. The
 // last replace can be undone in one step ("undo replace"): each file written back to its text before it, a
@@ -16,10 +18,10 @@
 
 import * as React from "react";
 import { editor } from "../state/editor";
-import { searchRows, type SearchResult } from "../derive/search";
+import { nameParts, searchRows, type SearchName, type SearchResult } from "../derive/search";
 import { emit as emitSignal } from "../../vm/instrumentation/sdd";
 import { EditorColumnFoldedCause, EditorFileOpenedHow, EditorSearchReplacedScope, Signal } from "../../vm/signals.gen";
-import { onBufferEdit, openFile, putBuffer, unsavedBuffers, writeBuffer } from "./Centre";
+import { find, onBufferEdit, openFile, putBuffer, unsavedBuffers, writeBuffer } from "./Centre";
 import { foldColumn } from "./EditorView";
 
 const CARD = "#212327";
@@ -70,7 +72,7 @@ export function SearchTab({ sessionId, paneId }: { sessionId: string; paneId: nu
     setError(null);
     setResult(out);
     setAt(-1);
-    emitSignal(Signal.EDITOR_SEARCH_QUERIED, { regex: now.regexp, word: now.word, result_file_count: out.files.length, result_match_count: out.matches }, { pane_id: paneId });
+    emitSignal(Signal.EDITOR_SEARCH_QUERIED, { regex: now.regexp, word: now.word, result_file_count: out.files.length, result_match_count: out.matches, name_count: out.names.length }, { pane_id: paneId });
   }, [sid, sessionId, paneId]);
 
   React.useEffect(() => {
@@ -83,20 +85,41 @@ export function SearchTab({ sessionId, paneId }: { sessionId: string; paneId: nu
     const off = onBufferEdit(() => { window.clearTimeout(t); t = window.setTimeout(() => void run(), SETTLE_MS); });
     return () => { off(); window.clearTimeout(t); };
   }, [run]);
+  // Sprint 442: files changing on disk (the watch stream) run the search again, so a file the session writes
+  // appears without retyping.
+  React.useEffect(() => {
+    let t: number | undefined;
+    const es = new EventSource(`/api/session/${sid}/files/watch`);
+    es.onmessage = () => { if (!editor.getSnapshot().search.query) return; window.clearTimeout(t); t = window.setTimeout(() => void run(), SETTLE_MS); };
+    return () => { es.close(); window.clearTimeout(t); };
+  }, [sid, run]);
   React.useEffect(() => {
     if (!st.searchFocus) return;
     requestAnimationFrame(() => { queryBox.current?.focus(); queryBox.current?.select(); });
   }, [st.searchFocus]);
 
   const rows = React.useMemo(() => (result ? searchRows(result) : []), [result]);
+  // Sprint 442: the names come first in the results, and ↵ ↑ ↓ step through names and lines as one list.
+  const names: SearchName[] = result?.names ?? [];
   const go = (i: number) => {
     const row = rows[i];
     if (!row) return;
-    setAt(i);
+    setAt(names.length + i);
     openFile(row.path, paneId, EditorFileOpenedHow.SEARCH, row.line);
     if (shut.has(row.path)) setShut(new Set([...shut].filter((p) => p !== row.path)));
   };
-  const next = () => { if (rows.length) go((at + 1) % rows.length); };
+  /** A file name opens the file with the code focused; a folder name opens the files tab at that folder. */
+  const goName = (k: number) => {
+    const n = names[k];
+    if (!n) return;
+    setAt(k);
+    if (n.kind === "dir") { editor.set({ leftTab: "files", reveal: { path: n.path, n: (editor.getSnapshot().reveal?.n ?? 0) + 1 } }); return; }
+    editor.set({ focusOnOpen: n.path });
+    openFile(n.path, paneId, EditorFileOpenedHow.SEARCH);
+    requestAnimationFrame(() => { const s = editor.getSnapshot(); if (s.active === n.path && s.file?.path === n.path && s.focusOnOpen === n.path) { editor.set({ focusOnOpen: null }); find.focusCode(); } });
+  };
+  const total = names.length + rows.length;
+  const next = () => { if (!total) return; const k = (at + 1) % total; if (k < names.length) goName(k); else go(k - names.length); };
   const replace = async (target?: Target) => {
     const now = editor.getSnapshot().search;
     if (!result || busy || !now.query) return;
@@ -149,7 +172,8 @@ export function SearchTab({ sessionId, paneId }: { sessionId: string; paneId: nu
   const toggle = (on: boolean): React.CSSProperties => ({ cursor: "pointer", color: on ? BRIGHT : DIM, userSelect: "none", fontSize: 10.5, flex: "none" });
   const glyph = (dim = false): React.CSSProperties => ({ cursor: "pointer", color: dim ? FAINT : DIM, userSelect: "none", fontSize: 10.5, flex: "none" });
   const matches = result?.matches ?? 0;
-  const summary = error ? error : !result ? "" : !result.files.length ? "no matches" : `${matches} match${matches === 1 ? "" : "es"} in ${result.files.length} file${result.files.length === 1 ? "" : "s"}${result.truncated ? " (the first only)" : ""}`;
+  const counts = result ? [names.length ? `${names.length} name${names.length === 1 ? "" : "s"}` : "", result.files.length ? `${matches} match${matches === 1 ? "" : "es"} in ${result.files.length} file${result.files.length === 1 ? "" : "s"}` : ""].filter(Boolean).join(" · ") : "";
+  const summary = error ? error : !result ? "" : !counts ? "no matches" : `${counts}${result.truncated ? " (the first only)" : ""}`;
   const replacing = !!spec.replace;
   return (
     <div data-editor-search="1" style={{ display: "flex", flexDirection: "column", minHeight: 0, minWidth: 0, flex: 1, paddingTop: 6 }}>
@@ -176,6 +200,24 @@ export function SearchTab({ sessionId, paneId }: { sessionId: string; paneId: nu
         <span data-search-details="1" data-on={spec.details ? "1" : "0"} title="files to include and exclude" onClick={() => set({ details: !spec.details })} style={{ ...glyph(), color: spec.details || spec.include || spec.exclude ? TEXT : DIM }}>…</span>
       </div>
       <div data-search-results="1" style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
+        {names.map((n, k) => {
+          const p = nameParts(n);
+          const lit = (text: string, spans: [number, number][]) => {
+            const out: React.ReactNode[] = [];
+            let from = 0;
+            spans.forEach(([a, b], i) => { if (a > from) out.push(text.slice(from, a)); out.push(<span key={i} style={LIT}>{text.slice(a, b)}</span>); from = b; });
+            out.push(text.slice(from));
+            return out;
+          };
+          return (
+            <div key={`${n.kind}:${n.path}`} data-search-name={n.path} data-kind={n.kind} data-at={k === at ? "1" : "0"} onClick={() => goName(k)}
+              style={{ display: "flex", alignItems: "baseline", gap: 6, padding: "2px 10px", cursor: "pointer", fontSize: 11, whiteSpace: "nowrap", minWidth: 0, background: k === at ? SELECT : undefined }}>
+              <span style={{ color: TEXT, flex: "none" }}>{lit(p.name, p.nameLit)}{n.kind === "dir" ? "/" : ""}</span>
+              <span style={{ color: FAINT, fontSize: 10, overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>{lit(p.dir, p.dirLit)}</span>
+            </div>
+          );
+        })}
+        {names.length > 0 && rows.length > 0 && <div style={{ height: 6 }} />}
         {result?.files.map((f) => {
           const open = !shut.has(f.path);
           const slash = f.path.lastIndexOf("/");
@@ -196,8 +238,8 @@ export function SearchTab({ sessionId, paneId }: { sessionId: string; paneId: nu
                 if (row.path !== f.path) return null;
                 const key = `${row.path}:${row.line}:${row.index}`;
                 return (
-                  <div key={key} data-search-line={`${row.path}:${row.line}`} data-search-match={key} data-at={n === at ? "1" : "0"} className="hover-search-row" onClick={() => go(n)}
-                    style={{ display: "flex", gap: 6, padding: "1.5px 10px 1.5px 22px", cursor: "pointer", fontSize: 10.5, whiteSpace: "nowrap", overflow: "hidden", background: n === at ? SELECT : undefined }}>
+                  <div key={key} data-search-line={`${row.path}:${row.line}`} data-search-match={key} data-at={names.length + n === at ? "1" : "0"} className="hover-search-row" onClick={() => go(n)}
+                    style={{ display: "flex", gap: 6, padding: "1.5px 10px 1.5px 22px", cursor: "pointer", fontSize: 10.5, whiteSpace: "nowrap", overflow: "hidden", background: names.length + n === at ? SELECT : undefined }}>
                     <span style={{ color: FAINT, width: 18, textAlign: "right", flex: "none" }}>{row.line}</span>
                     <span style={{ color: DIM, overflow: "hidden", textOverflow: "ellipsis", minWidth: 0, flex: 1 }}>{row.text.slice(0, row.from)}<span style={LIT}>{row.text.slice(row.from, row.to)}</span>{row.text.slice(row.to)}</span>
                     {replacing && <span className="hover-search-act" data-search-replace-one={key} title="replace this match" onClick={(e) => { e.stopPropagation(); void replace({ path: row.path, line: row.line, index: row.index }); }} style={glyph()}>↵</span>}

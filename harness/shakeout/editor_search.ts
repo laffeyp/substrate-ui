@@ -4,6 +4,9 @@
 // RESEARCH-2026-11-10-editor-search-r2). A repository written here: priceCents in two tracked files,
 // priceCentsTotal in a third, promoPriceCents untracked, PriceCents in a test, and an ignored copy in build/.
 // The expected rows are written here by hand. These agree:
+//   sprint 442: `jpeg` lists assets/hero.jpeg (a binary file, by its extension); `lib` lists the folder src/lib
+//   first and a click opens the tree to it; `lib/cart` lists src/lib/cart.ts by its path; `tax` lists
+//   src/lib/tax.ts first and ↵ opens it with the code focused;
 //   ⌘⇧F shows the search tab with the query focused; every field, toggle and count inside the column;
 //   case folded: one row per match, lit, the ignored file absent; Aa and ab (whole word) narrow to the four
 //   exact words; .* reads `priceCents:\s\d+` (\s and \d); `…` shows the globs, and excluding `tests` drops
@@ -60,6 +63,8 @@ async function main(): Promise<void> {
   writeFileSync(join(repo, "src/lib/menu.ts"), ["export const menu = {", "  tea: { priceCents: 450 },", "  cake: { priceCents: 375 },", "};", ""].join("\n"));
   writeFileSync(join(repo, "src/lib/tax.ts"), "export const priceCentsTotal = 0;\n");
   writeFileSync(join(repo, "tests/cart.test.ts"), ["// PriceCents in a comment", "expect(1).toBe(1);", ""].join("\n"));
+  mkdirSync(join(repo, "assets"), { recursive: true });
+  writeFileSync(join(repo, "assets/hero.jpeg"), Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00])); // binary
   git(repo, "add", "-A"); git(repo, "commit", "-q", "-m", "base");
   writeFileSync(join(repo, "src/lib/promo.ts"), "export const promoPriceCents = 0;\n"); // untracked
   mkdirSync(join(repo, "build"));
@@ -88,6 +93,29 @@ async function main(): Promise<void> {
     await win.keyboard.press("Meta+Shift+F");
     await until(win, "the search tab", () => snap(win), (s) => s.leftTab === "search");
     await until(win, "the query focused", () => win.evaluate(`document.activeElement && document.activeElement.getAttribute("data-search-input")`), (v) => v === "query");
+
+    // Sprint 442, the one search bar: names, extensions, folders and paths as well as text.
+    const names = () => win.evaluate(`Array.from(document.querySelectorAll("[data-search-name]")).map(function (e) { return e.getAttribute("data-kind") + ":" + e.getAttribute("data-search-name"); })`) as Promise<string[]>;
+    await win.keyboard.type("jpeg");
+    await until(win, "jpeg by its extension", () => names(), (n) => same(n, ["file:assets/hero.jpeg"]));
+    await until(win, "jpeg's count", () => summary(win), (t) => t === "1 name");
+    await win.locator('[data-search-input="query"]').first().fill("lib");
+    await until(win, "lib, the folder first", () => names(), (n) => n[0] === "dir:src/lib" && n.includes("file:src/lib/cart.ts"));
+    await win.screenshot({ path: join(shots, "names.png") });
+    await win.locator('[data-search-name="src/lib"]').first().click();
+    await until(win, "the folder opened in the tree", () => win.evaluate(`!!document.querySelector('[data-tree-row="src/lib/cart.ts"]') && globalThis.__substrateEditor.getSnapshot().leftTab === "files"`) as Promise<boolean>, (v) => v);
+    await win.locator('[data-editor-left-tab="search"]').first().click();
+    await win.locator('[data-search-input="query"]').first().fill("lib/cart");
+    await until(win, "a path fragment", () => names(), (n) => same(n, ["file:src/lib/cart.ts"]));
+    await win.locator('[data-search-input="query"]').first().fill("tax");
+    await until(win, "tax by name first", () => names(), (n) => n[0] === "file:src/lib/tax.ts");
+    await win.locator('[data-search-input="query"]').first().focus();
+    await win.keyboard.press("Enter");
+    await until(win, "↵ opened tax.ts", () => snap(win), (s) => s.active === "src/lib/tax.ts");
+    await until(win, "the code focused", () => win.evaluate(`!!(document.activeElement && document.activeElement.hasAttribute("data-editor-code"))`) as Promise<boolean>, (v) => v);
+    await win.keyboard.press("Meta+Shift+F");
+    await until(win, "the query focused again", () => win.evaluate(`document.activeElement && document.activeElement.getAttribute("data-search-input")`), (v) => v === "query");
+    await win.keyboard.press("Backspace");
     await win.keyboard.type("priceCents");
 
     // Case folded: one row per match, every one lit, the ignored copy absent.
@@ -181,7 +209,7 @@ async function main(): Promise<void> {
 
     const recs = windowRecords(launch);
     const drawnTabs = recs.filter((r) => r.name === "EDITOR_DRAWN").map((r) => String(r.payload.left_tab)).filter((t, i, a) => t !== a[i - 1]);
-    if (!same(drawnTabs, ["files", "search", "files"])) throw new Error(`EDITOR_DRAWN.left_tab ${JSON.stringify(drawnTabs)}`);
+    if (!same(drawnTabs, ["files", "search", "files", "search", "files"])) throw new Error(`EDITOR_DRAWN.left_tab ${JSON.stringify(drawnTabs)}`);
     const named = recs.find((r) => r.proc_seq === row3.seq);
     if (!named || named.name !== "EDITOR_DRAWN" || named.payload.left_tab !== "search") throw new Error(`the third row names seq ${row3.seq}: ${named ? `${named.name} ${JSON.stringify(named.payload)}` : "missing"}`);
     const queried = recs.filter((r) => r.name === "EDITOR_SEARCH_QUERIED").map((r) => `${String(r.payload.regex)}:${String(r.payload.word)}:${String(r.payload.result_file_count)}:${String(r.payload.result_match_count)}`);
@@ -191,7 +219,7 @@ async function main(): Promise<void> {
     const undone = recs.filter((r) => r.name === "EDITOR_SEARCH_REPLACE_UNDONE").map((r) => `${String(r.payload.files)}:${String(r.payload.refused)}`);
     if (!same(undone, ["1:0"])) throw new Error(`EDITOR_SEARCH_REPLACE_UNDONE ${JSON.stringify(undone)}`);
     const opened = recs.filter((r) => r.name === "EDITOR_FILE_OPENED").map((r) => String(r.payload.how));
-    if (opened.length !== 2 || opened.some((h) => h !== "search")) throw new Error(`EDITOR_FILE_OPENED ${JSON.stringify(opened)}`);
+    if (opened.length !== 3 || opened.some((h) => h !== "search")) throw new Error(`EDITOR_FILE_OPENED ${JSON.stringify(opened)}`);
     const traces = join(launch.state, "electron", "logs", "traces");
     const boot = readdirSync(traces).sort().pop()!;
     const server = readFileSync(join(traces, boot, "server.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as { name: string; payload: Record<string, unknown> });

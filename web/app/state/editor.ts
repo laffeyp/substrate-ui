@@ -53,6 +53,8 @@ export interface EditorState {
   recent: string[];
   /** The file whose code takes the focus once the centre has placed it (quick open's ↵), then null. */
   focusOnOpen: string | null;
+  /** Sprint 442: a folder the search bar asks the files tab to open the tree to (n tells one ask from the next). */
+  reveal: { path: string; n: number } | null;
   /** Bumped by ⌥⌘F in the tree (sprint 437): the tree's find by name opens, its field focused. */
   treeFindFocus: number;
   jump: { path: string; line: number; n: number } | null;
@@ -77,4 +79,4 @@ export interface EditorState {
 
 const KEY = "__substrateEditor";
 const scope = globalThis as unknown as Record<string, ReturnType<typeof createStore<EditorState>> | undefined>;
-export const editor = scope[KEY] ?? (scope[KEY] = createStore<EditorState>({ treeRows: 0, modifiedDots: 0, folded: { left: false, right: false, bottom: false }, tabs: [], active: null, file: null, hunks: [], outline: [], caretLine: 1, unsaved: [], mode: null, caretCol: 1, vsBase: null, nanoHelp: false, anchor3: null, conflict: null, find: { search: "", caseSensitive: false, regexp: false, replace: "", wholeWord: false, preserveCase: false, inSelection: false }, findCount: { total: 0, current: 0 }, findFocus: 0, showing: "inspector", leftTab: "files", search: { query: "", replace: "", caseSensitive: false, regexp: false, word: false, include: "", exclude: "", details: false }, searchFocus: 0, quickOpen: 0, recent: [], focusOnOpen: null, treeFindFocus: 0, jump: null, follow: [], followLanded: null, inspector: { outlineRows: 0, hunks: 0, activityRows: 0, historyRows: 0 }, anchor2: null, dock: "bottom", swapped: false, focus: { on: false, before: null }, anchor: null }));
+export const editor = scope[KEY] ?? (scope[KEY] = createStore<EditorState>({ treeRows: 0, modifiedDots: 0, folded: { left: false, right: false, bottom: false }, tabs: [], active: null, file: null, hunks: [], outline: [], caretLine: 1, unsaved: [], mode: null, caretCol: 1, vsBase: null, nanoHelp: false, anchor3: null, conflict: null, find: { search: "", caseSensitive: false, regexp: false, replace: "", wholeWord: false, preserveCase: false, inSelection: false }, findCount: { total: 0, current: 0 }, findFocus: 0, showing: "inspector", leftTab: "files", search: { query: "", replace: "", caseSensitive: false, regexp: false, word: false, include: "", exclude: "", details: false }, searchFocus: 0, quickOpen: 0, recent: [], focusOnOpen: null, reveal: null, treeFindFocus: 0, jump: null, follow: [], followLanded: null, inspector: { outlineRows: 0, hunks: 0, activityRows: 0, historyRows: 0 }, anchor2: null, dock: "bottom", swapped: false, focus: { on: false, before: null }, anchor: null }));

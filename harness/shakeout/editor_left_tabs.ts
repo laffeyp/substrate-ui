@@ -8,7 +8,7 @@
 //   activity — every workspace file the record's calls touched, newest touch first, equal to the order the gate
 //          reads from the record on disk itself (read_file, edit_file, write_file by path; FileWritten); a click
 //          opens the file, EDITOR_FILE_OPENED how=activity;
-//   the files tab's `⌘⇧F search workspace` box opens the search tab;
+//   the files tab carries no search text;
 //   the four tabs and every row inside the 210 px column; EDITOR_DRAWN.left_tab open then activity; the
 //   anchor's third row reads activity.
 // SHAKEOUT_APP=<Substrate.app> runs the bundle.
@@ -84,10 +84,8 @@ async function main(): Promise<void> {
     await win.keyboard.type(" // typed");
     const openedBefore = windowRecords(launch).filter((r) => r.name === "EDITOR_FILE_OPENED").length;
 
-    // The files tab's search box opens the search tab.
-    await win.locator('[data-editor-left-tab="files"]').first().click();
-    await win.locator("[data-editor-search-box]").first().click();
-    await until(win, "the search box opens the search tab", () => win.evaluate(`globalThis.__substrateEditor.getSnapshot().leftTab`) as Promise<string>, (t) => t === "search");
+    // The files tab carries no search text (the Architect, 2026-11-10).
+    if (await win.locator("[data-editor-search-box]").count()) throw new Error("the files tab shows search text");
 
     // open: the tabs in tab order, cart.ts lit with its dot; a click shows menu.ts.
     await win.locator('[data-editor-left-tab="open"]').first().click();
@@ -126,7 +124,7 @@ async function main(): Promise<void> {
     const opened = recs.filter((r) => r.name === "EDITOR_FILE_OPENED").map((r) => String(r.payload.how));
     if (!same(opened.slice(openedBefore), ["activity"])) throw new Error(`EDITOR_FILE_OPENED after the open tab: ${JSON.stringify(opened.slice(openedBefore))}`);
     const tabs = recs.filter((r) => r.name === "EDITOR_DRAWN").map((r) => String(r.payload.left_tab)).filter((t, i, a) => t !== a[i - 1]);
-    if (!same(tabs, ["files", "search", "open", "activity"])) throw new Error(`EDITOR_DRAWN.left_tab ${JSON.stringify(tabs)}`);
+    if (!same(tabs, ["files", "open", "activity"])) throw new Error(`EDITOR_DRAWN.left_tab ${JSON.stringify(tabs)}`);
     const named = recs.find((r) => r.proc_seq === row3.seq);
     if (!named || named.name !== "EDITOR_DRAWN" || named.payload.left_tab !== "activity") throw new Error(`the third row names seq ${row3.seq}: ${named ? named.name : "missing"}`);
     const traces = join(launch.state, "electron", "logs", "traces");

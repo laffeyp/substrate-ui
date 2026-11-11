@@ -140,6 +140,13 @@ export function FileTree({ sessionId, paneId }: { sessionId: string; paneId: num
     setOpen((was) => ({ ...was, ...Object.fromEntries(dirs.map((d) => [d, true])) }));
     for (const d of dirs) read(d);
   };
+  // Sprint 442: a folder chosen in the search bar opens the tree to it.
+  const revealAsk = React.useSyncExternalStore(editor.subscribe, () => editor.getSnapshot().reveal, () => editor.getSnapshot().reveal);
+  React.useEffect(() => {
+    if (!revealAsk) return;
+    reveal(revealAsk.path, true);
+    requestAnimationFrame(() => treeRoot.current?.querySelector(`[data-tree-row="${CSS.escape(revealAsk.path)}"]`)?.scrollIntoView({ block: "nearest" }));
+  }, [revealAsk?.n]);
   const closeFind = () => { setFind((f) => ({ ...f, on: false })); setFound(null); setAt(-1); treeRoot.current?.focus(); };
   const choose = (rel: string) => {
     const isDir = !!found?.folders.includes(rel);

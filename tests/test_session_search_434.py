@@ -75,8 +75,8 @@ def test_a_plain_folder_is_searched_without_git(tmp_path: Path) -> None:
 
 
 def test_nothing_matches_and_an_empty_query_reads_nothing(ws: Path) -> None:
-    assert server._workspace_search(ws, "zebra", regex=False, case=True) == {"files": [], "lines": 0, "matches": 0, "truncated": False, "buffers": 0, "unreadable": 0}
-    assert server._workspace_search(ws, "", regex=False, case=True) == {"files": [], "lines": 0, "matches": 0, "truncated": False, "buffers": 0, "unreadable": 0}
+    assert server._workspace_search(ws, "zebra", regex=False, case=True) == {"names": [], "files": [], "lines": 0, "matches": 0, "truncated": False, "buffers": 0, "unreadable": 0}
+    assert server._workspace_search(ws, "", regex=False, case=True) == {"names": [], "files": [], "lines": 0, "matches": 0, "truncated": False, "buffers": 0, "unreadable": 0}
 
 
 def test_a_pattern_git_refuses_raises(ws: Path) -> None:

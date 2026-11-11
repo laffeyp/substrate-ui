@@ -8,7 +8,16 @@
 export interface SearchSpec { query: string; caseSensitive: boolean; regexp: boolean; word: boolean; include: string; exclude: string }
 export interface SearchLine { line: number; text: string; ranges: [number, number][] }
 export interface SearchFile { path: string; lines: SearchLine[] }
-export interface SearchResult { files: SearchFile[]; lines: number; matches: number; truncated: boolean }
+/** Sprint 442: a file or folder whose name or path matched, the matches' ranges in the path. */
+export interface SearchName { path: string; kind: "file" | "dir"; ranges: [number, number][] }
+export interface SearchResult { names: SearchName[]; files: SearchFile[]; lines: number; matches: number; truncated: boolean }
+
+/** A name row's two parts as drawn, the name and its folder, each with the lit ranges inside it. */
+export function nameParts(n: SearchName): { name: string; dir: string; nameLit: [number, number][]; dirLit: [number, number][] } {
+  const at = n.path.lastIndexOf("/") + 1;
+  const clip = (from: number, to: number) => n.ranges.filter(([a, b]) => b > from && a < to).map(([a, b]) => [Math.max(a, from) - from, Math.min(b, to) - from] as [number, number]);
+  return { name: n.path.slice(at), dir: at ? n.path.slice(0, at) : "", nameLit: clip(at, n.path.length), dirLit: clip(0, at) };
+}
 /** One match: its file, line, its index among the line's matches, and the line's text with it. */
 export interface SearchRow { path: string; line: number; index: number; text: string; from: number; to: number }
 

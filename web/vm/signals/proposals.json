@@ -1342,6 +1342,16 @@
       "rationale": "Quick open's file list is a server read like FILES_LISTED and FILES_FOUND, from the search's walk in place of git ls-files.",
       "ratified": true,
       "ratified_by": "agent-resolved 2026-11-10, sprint 441; grounds: project — roadmap r10 E9, research r2; SDD — BOOTSTRAP step 9; practice — n/a"
+    },
+    {
+      "id": "P-0.48-SEARCH-NAMES",
+      "kind": "PAYLOAD_FIELD_PROPOSED",
+      "layer": 2,
+      "element": "FILES_SEARCHED gains names, EDITOR_SEARCH_QUERIED gains name_count",
+      "source": "SEARCH-BAR-2026-11-10; BLACKBOARD 2026-11-10 user",
+      "rationale": "One search bar finds names, folders, paths and text (SEARCH-BAR-2026-11-10).",
+      "ratified": true,
+      "ratified_by": "the Architect, 2026-11-10 (one search bar); recorded in sprint 442"
     }
   ]
 }

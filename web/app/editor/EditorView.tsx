@@ -18,7 +18,7 @@ import { InputBar } from "../InputBar";
 import { paneInput, setText } from "../state/input_bar";
 import { setFindScope } from "../state/find";
 import { FileTree } from "./FileTree";
-import { openSearch, SearchTab } from "./Search";
+import { SearchTab } from "./Search";
 import { ActivityTab, OpenTab } from "./LeftTabs";
 import { QuickOpen } from "./QuickOpen";
 import { Centre } from "./Centre";
@@ -256,8 +256,6 @@ export function EditorView({ paneId, fontSize, sessionId, workspace, shape }: { 
         <span style={{ flex: 1 }} />
         <span data-editor-fold="left" title={`fold the ${tab} (⌥⌘L)`} onClick={() => foldColumn("left", true, EditorColumnFoldedCause.RAIL, paneId)} style={{ ...GLYPH, padding: "0 0 0 4px" }}>{start ? "◂" : "▸"}</span>
       </div>
-      {/* 24a and 24j: the workspace search's key above the tree; a click opens the search tab (roadmap r10 E8). */}
-      {tab === "files" && <div data-editor-search-box="1" onClick={() => openSearch(paneId)} style={{ flex: "none", margin: "6px 10px 0", padding: "4px 8px", borderRadius: 4, background: "#212327", color: "#4a4e55", fontSize: 10.5, cursor: "pointer", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>⌘⇧F search workspace</div>}
       <div data-editor-tree="1" style={{ flex: 1, overflow: "auto", minHeight: 0, display: tab === "files" ? undefined : "none" }}><FileTree key={sessionId} sessionId={sessionId} paneId={paneId} /></div>
       <div style={{ flex: 1, minHeight: 0, minWidth: 0, flexDirection: "column", display: tab === "search" ? "flex" : "none" }}><SearchTab key={sessionId} sessionId={sessionId} paneId={paneId} /></div>
       {tab === "open" && <OpenTab />}

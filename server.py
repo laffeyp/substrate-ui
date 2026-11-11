@@ -2288,10 +2288,11 @@ def _workspace_search(
     the walked files read from them."""
     buffers = buffers or {}
     if not query:
-        return {"files": [], "lines": 0, "matches": 0, "truncated": False, "buffers": 0, "unreadable": 0}
+        return {"names": [], "files": [], "lines": 0, "matches": 0, "truncated": False, "buffers": 0, "unreadable": 0}
     rx = _search_regex(query, regex=regex, case=case, word=word)
     unreadable: list[str] = []
     paths, truncated = _workspace_files(root, include, exclude, unreadable)
+    names = _name_matches(paths, rx)
     base = root.resolve(strict=True)
     files: list[dict[str, object]] = []
     count = matches = from_buffers = 0
@@ -2317,7 +2318,29 @@ def _workspace_search(
             files.append({"path": rel, "lines": hits})
         if count == WORKSPACE_SEARCH_MAX_LINES and truncated:
             break
-    return {"files": files, "lines": count, "matches": matches, "truncated": truncated, "buffers": from_buffers, "unreadable": len(unreadable)}
+    return {"names": names, "files": files, "lines": count, "matches": matches, "truncated": truncated, "buffers": from_buffers, "unreadable": len(unreadable)}
+
+
+# UI sprint 442 (SEARCH-BAR-2026-11-10): the search bar finds names as well as text, by the bar's one rule.
+WORKSPACE_SEARCH_MAX_NAMES = 500
+
+
+def _name_matches(paths: list[str], rx: re.Pattern[str]) -> list[dict[str, object]]:
+    """The walked files and their folders whose name or path the query matches: `{path, kind, ranges}`, kind
+    `file` or `dir`, ranges the matches in the path in UTF-16 units. A match in the name ranks above one only
+    in the folders, a shorter path above a longer one, then the path's order; at most
+    WORKSPACE_SEARCH_MAX_NAMES. A binary file's name is matched like any other."""
+    dirs = sorted({"/".join(p.split("/")[:n]) for p in paths for n in range(1, p.count("/") + 1)})
+    found: list[tuple[int, int, str, dict[str, object]]] = []
+    for path, kind in [*((d, "dir") for d in dirs), *((f, "file") for f in paths)]:
+        at = path.rfind("/") + 1
+        spans = [(m.start(), m.end()) for m in rx.finditer(path) if m.end() > m.start()]
+        if not spans:
+            continue
+        in_name = any(start >= at for start, _ in spans)
+        found.append((0 if in_name else 1, len(path), path, {"path": path, "kind": kind, "ranges": [[_u16(path, a), _u16(path, b)] for a, b in spans]}))
+    found.sort(key=lambda x: (x[0], x[1], x[2]))
+    return [x[3] for x in found[:WORKSPACE_SEARCH_MAX_NAMES]]
 
 
 # UI sprint 437: the tree's find by name, as VS Code's ExplorerFindProvider (explorerViewer.ts): files whose
@@ -4251,7 +4274,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         TRACE.emit(
             Signal.FILES_SEARCHED,
-            {"session_id": session_id, "regex": regex, "word": word, "files": len(cast(list[Any], out["files"])), "lines": out["lines"], "matches": out["matches"], "truncated": out["truncated"], "buffers": out["buffers"], "unreadable": out["unreadable"]},
+            {"session_id": session_id, "regex": regex, "word": word, "files": len(cast(list[Any], out["files"])), "lines": out["lines"], "matches": out["matches"], "truncated": out["truncated"], "buffers": out["buffers"], "unreadable": out["unreadable"], "names": len(cast(list[Any], out["names"]))},
         )
         self._json(out)
 
