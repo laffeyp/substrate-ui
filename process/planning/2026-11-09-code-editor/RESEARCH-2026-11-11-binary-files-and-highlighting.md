@@ -19,7 +19,7 @@ So the standard is: a binary file is shown as its bytes, in hex by default, with
 
 1. **A text file in any encoding opens as text.** The server already decides this for attachments (round 3 rule 3, sprint 446: a byte-order mark names UTF-8 or UTF-16; with no NUL byte in the first 8 KB, UTF-8, else Latin-1). The file API uses the same rule and names the encoding, which the status line and INFO show. Such a file opens read-only when it is not UTF-8, until saving in its own encoding is built; the status line says so.
 2. **A binary file (a NUL byte in its first 8 KB, the server's rule and ripgrep's) opens as its bytes**, read-only, in one of four forms chosen in the status line: **hex** (the default: offset, sixteen bytes in hex, the text column), **binary** (each byte as its eight 0s and 1s, as `xxd -b`: `H` is `01001000`; the Architect asked for this form by name, 2026-11-11), **octal** (as `od -b`), **text** (the bytes as Latin-1, every byte one character, garbled for a picture but complete). The form is kept per file while the editor is open, and each change of form is recorded.
-3. **Past the read limit** a file keeps today's line (`over the read limit · N KB`); a hex view of a file that large is a separate piece of work.
+3. **No file is too big to open.** The file API's 2 MB limit (`WORKSPACE_READ_MAX`) goes for reading: the server sends a file in pieces by byte range, and the editor loads them as the person scrolls, for text and for bytes (corrected 2026-11-11; the first version of this line kept the limit, which the Architect rejected).
 
 Editing bytes, which the Hex Editor extension does, is not part of E14.
 
