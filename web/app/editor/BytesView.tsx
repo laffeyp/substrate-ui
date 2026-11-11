@@ -11,7 +11,8 @@
 // buffer, every byte one character (sprint 465). The view reads its rows from that buffer, and in hex, binary and
 // octal a caret sits on a digit: a digit typed over it replaces that byte in the buffer and the caret moves on, so ⌘S,
 // undo and the unsaved dot are the code's, and every form shows the same unsaved bytes. A changed byte is drawn in the
-// accent. A file over the limit is read from the server as before, read-only until sprint 469.
+// accent. A file over the limit is read from the server as before, read-only (a save that size waits on the Architect's
+// answer, BLACKBOARD 2026-11-11 surfaced).
 
 import * as React from "react";
 import { editor } from "../state/editor";

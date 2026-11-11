@@ -2961,10 +2961,32 @@ def _read_line(fh: Any, nl: bytes) -> tuple[bytes, int]:
             return bytes(got), more
 
 
+def _whole_characters(piece: bytes, codec: str) -> int:
+    """How many of `piece`'s bytes end on a whole character: UTF-8 without a trailing sequence cut short, UTF-16 without
+    an odd byte or a lone leading surrogate, Latin-1 all of them (UI sprint 470)."""
+    if codec == "utf-8":
+        j = len(piece) - 1
+        while j >= 0 and len(piece) - j <= 4 and piece[j] & 0xC0 == 0x80:
+            j -= 1
+        if j < 0:
+            return len(piece)
+        lead = piece[j]
+        need = 1 if lead < 0x80 else 2 if 0xC0 <= lead < 0xE0 else 3 if lead < 0xF0 else 4
+        return j if len(piece) - j < need else len(piece)
+    if codec.startswith("utf-16"):
+        n = len(piece) - len(piece) % 2
+        if n < 2:
+            return n
+        high = piece[n - 1] if codec == "utf-16-le" else piece[n - 2]
+        return n - 2 if 0xD8 <= high <= 0xDB else n
+    return len(piece)
+
+
 def _workspace_lines(root: Path, rel: str, first: int, count: int) -> dict[str, object]:
     """Lines `first` to `first + count - 1` (at most LINES_MAX) of a text file of the workspace, at any size: the file's
     size, encoding and line count, and each line's text without its break or a `\r` before it, a line past LINE_PIECE
-    bytes sent in part with the count of bytes past it (`more`)."""
+    bytes sent in part, cut on a whole character, with the count of bytes past it (`more`) and the byte its unsent part
+    starts at (`rest`, sprint 470)."""
     target = _workspace_target(root, rel)
     if not target.is_file():
         raise FileNotFoundError(f"{rel!r} is not a file in the workspace")
@@ -2980,15 +3002,22 @@ def _workspace_lines(root: Path, rel: str, first: int, count: int) -> dict[str, 
             for _ in range(first % LINES_STEP):
                 _read_line(fh, idx.newline)
             for _ in range(end - first):
+                at = fh.tell()
                 piece, more = _read_line(fh, idx.newline)
-                # A piece cut inside a character loses only that character's start (the file decoded whole).
-                text = piece.decode(idx.codec, errors="ignore" if more else "replace")
-                if not more and text.endswith("\r"):
-                    text = text[:-1]
-                lines.append({"text": text, "more": more})
+                if not more:
+                    text = piece.decode(idx.codec, errors="replace")
+                    lines.append({"text": text[:-1] if text.endswith("\r") else text, "more": 0})
+                    continue
+                # Sprint 470: a line sent in part is cut on a whole character, and `rest` is the byte its unsent part
+                # starts at, which the editor reads on through the bytes route.
+                kept = _whole_characters(piece, idx.codec)
+                more += len(piece) - kept
+                text = piece[:kept].decode(idx.codec, errors="replace")
+                lines.append({"text": text, "more": more, "rest": at + kept})
     return {
         "size": target.stat().st_size,
         "encoding": idx.encoding,
+        "codec": idx.codec,
         "total": idx.lines,
         "from": first,
         "lines": lines,

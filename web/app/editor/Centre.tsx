@@ -42,6 +42,7 @@ import { addFrom, addItem, carriesChip, dragChip, fileChip } from "./chips";
 import { openMenu } from "../state/context_menu";
 import { StatusLine } from "./StatusLine";
 import { BytesView, formOf, type ByteBuffer } from "./BytesView";
+import { LinesView } from "./LinesView";
 
 const SUNK = "#1a1c20";
 const GROUND = "#212327";
@@ -901,11 +902,12 @@ export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionI
   const showing = facts && facts.path === st.active ? facts.file : null;
   // Sprint 463 (roadmap r13 E14): a file that is not text opens as its bytes, at any size. Sprint 468: up to the read
   // limit it is the code's buffer, shown as the code in its text form and as the bytes view in the others; over it the
-  // bytes view reads the server. A text file over the read limit keeps its line until sprint 469 reads text in pieces.
+  // bytes view reads the server. Sprint 470: a text file over the read limit shows in the lines view, read-only (a save
+  // that size waits on the Architect's answer, BLACKBOARD 2026-11-11 surfaced).
   const bytesFile = showing && showing.encoding === "binary" ? showing : null;
   const inBuffer = !!bytesFile && bytesFile.text !== null && shown.current === st.active;
   const asCode = inBuffer && st.active !== null && formOf(st.active) === "text";
-  const unreadable = showing && showing.text === null && !bytesFile ? `over the read limit · ${Math.round(showing.size / 1024)} KB` : null;
+  const largeText = !!showing && showing.text === null && !bytesFile;
   return (
     <div data-editor-area="centre" style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, background: GROUND }}>
       <div data-editor-tabs={String(st.tabs.length)} style={{ height: tabRow, flex: "none", background: SUNK, display: "flex", overflowX: "auto", overflowY: "hidden" }}>
@@ -924,10 +926,10 @@ export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionI
           onContextMenu={(e) => { const chip = selectionChip(); if (chip) openMenu(e, ContextMenuOpenedSource.CODE, [addItem(paneId, chip)], paneId); }}
           // Sprint 458: a chip's drag is not for the code; stopped here, before the editor's own drop puts its path in the file.
           onDragOverCapture={(e) => { if (carriesChip(e.dataTransfer)) { e.stopPropagation(); e.dataTransfer.dropEffect = "none"; } }}
-          onDropCapture={(e) => { if (carriesChip(e.dataTransfer)) { e.preventDefault(); e.stopPropagation(); } }} style={{ position: "absolute", inset: 0, display: st.active && !unreadable && (!bytesFile || asCode) ? "block" : "none" }} />
+          onDropCapture={(e) => { if (carriesChip(e.dataTransfer)) { e.preventDefault(); e.stopPropagation(); } }} style={{ position: "absolute", inset: 0, display: st.active && !largeText && (!bytesFile || asCode) ? "block" : "none" }} />
         {/* A file within the limit waits for its buffer to be placed, so the view mounts (and records its opening) once. */}
         {bytesFile && st.active && (bytesFile.text === null || inBuffer) && <BytesView sessionId={sessionId} path={st.active} size={bytesFile.size} paneId={paneId} buffer={inBuffer ? byteBuffer : undefined} hidden={asCode} />}
-        {unreadable && <div data-editor-unreadable="1" style={{ padding: "20px 24px", color: "#62676f", fontSize: 12 }}>{st.active} · {unreadable}</div>}
+        {largeText && st.active && <LinesView sessionId={sessionId} path={st.active} />}
       </div>
       <StatusLine paneId={paneId} />
     </div>

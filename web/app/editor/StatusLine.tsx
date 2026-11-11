@@ -22,7 +22,8 @@ export function StatusLine({ paneId }: { paneId?: number } = {}): React.ReactEle
   const name = st.active.slice(st.active.lastIndexOf("/") + 1);
   // Sprint 463 (roadmap r13 E14): a file that is not text: its size, and the four forms to pick from. Sprint 465: in
   // its text form the code edits it, and the line shows the caret too. Sprint 468: hex, binary and octal type into the
-  // same buffer, and the line shows the caret's byte offset; a file over the read limit is read-only until sprint 469.
+  // same buffer, and the line shows the caret's byte offset; a file over the read limit is read-only (a save that size
+  // waits on the Architect's answer, BLACKBOARD 2026-11-11 surfaced).
   if (st.file.encoding === "binary") {
     const form = formOf(st.active), size = st.file.size, path = st.active, inBuffer = st.file.text !== null;
     const at = !inBuffer ? "" : form === "text" ? `${st.caretLine}:${st.caretCol} · ` : st.bytesCaret !== null ? `0x${st.bytesCaret.toString(16)} · ` : "";
@@ -38,7 +39,14 @@ export function StatusLine({ paneId }: { paneId?: number } = {}): React.ReactEle
       </div>
     );
   }
-  if (st.file.text === null) return null;
+  // Sprint 470: a text file over the read limit, in the lines view: its size, read-only.
+  if (st.file.text === null) {
+    return (
+      <div data-status-line="1" data-status-lines="1" style={{ display: "flex", gap: 14, padding: "5px 14px", background: "#1a1c20", fontSize: 10, color: "#62676f", whiteSpace: "nowrap", overflow: "hidden", flex: "none" }}>
+        <span data-status-pos="1">{name} · {st.file.size.toLocaleString("en-US")} bytes · read-only</span>
+      </div>
+    );
+  }
   const mode = binding === "vim" ? modeLabel(st.mode) : null;
   return (
     <div data-status-line="1" style={{ display: "flex", gap: 14, padding: "5px 14px", background: "#1a1c20", fontSize: 10, color: "#62676f", whiteSpace: "nowrap", overflow: "hidden", flex: "none" }}>

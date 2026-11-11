@@ -95,6 +95,25 @@ def test_a_line_past_64_kb_is_sent_in_part(ws: Path) -> None:
     assert len(line["text"]) == server.LINE_PIECE
     assert line["text"].startswith("[1,1,")
     assert line["more"] == size - server.LINE_PIECE
+    # Sprint 470: the byte the unsent part starts at, for the editor to read on.
+    assert line["rest"] == server.LINE_PIECE
+    assert out["codec"] == "utf-8"
+    assert server._workspace_lines(ws, "wide.txt", 0, 1)["codec"] == "utf-16-le"
+
+
+def test_a_line_sent_in_part_is_cut_on_a_whole_character(ws: Path) -> None:
+    # "x" then two-byte characters: byte 65,535 is the first byte of one, so the cut keeps 65,535 bytes.
+    data = ("x" + "é" * 40_000 + "\nnext\n").encode()
+    (ws / "accents.txt").write_bytes(data)
+    out = server._workspace_lines(ws, "accents.txt", 0, 2)
+    first, second = out["lines"]  # type: ignore[misc]
+    assert first["text"] == "x" + "é" * 32_767
+    assert (first["rest"], first["more"]) == (65_535, 80_001 - 65_535)
+    assert data[first["rest"] : first["rest"] + first["more"]].decode() == "é" * (40_000 - 32_767)
+    assert second == {"text": "next", "more": 0}
+    assert server._whole_characters("aé".encode()[:2], "utf-8") == 1
+    assert server._whole_characters("😀".encode("utf-16-le")[:2], "utf-16-le") == 0
+    assert server._whole_characters(b"ab\xe9", "latin-1") == 3
 
 
 def test_the_route_reads_lines_names_each_read_and_holds_paths_to_the_workspace(
