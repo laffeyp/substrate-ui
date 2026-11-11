@@ -3,12 +3,12 @@
 // A text file in any encoding opens as text (sprint 462; roadmap r13 E14). A repository written here holds latin.txt
 // (Latin-1 bytes), wide.txt (UTF-16 with its mark), bom.txt (UTF-8 with its mark), plain.txt (UTF-8) and img.bin (a NUL
 // byte); the deterministic driver. In the editor, these agree:
-//   each text file shows "café crème"; INFO's encoding reads "Latin-1 · read-only", "UTF-16 · read-only",
-//   "UTF-8 with BOM · read-only", "UTF-8";
-//   a character typed into latin.txt changes nothing, and ⌘S there is refused; plain.txt takes the character and saves;
+//   each text file shows "café crème"; INFO's encoding reads "Latin-1", "UTF-16", "UTF-8 with BOM", "UTF-8" (sprint
+//   465: every file edits, so none is named read-only; editing each is editor_edit_any_file's);
+//   plain.txt takes a character and saves;
 //   img.bin opens as its bytes (sprint 463), not as text;
-//   server.jsonl: FILE_READ encoding latin1, utf16, utf8_bom, utf8, binary among the reads; window-1.jsonl:
-//   EDITOR_KEY_REFUSED Meta+s not_utf8 once, EDITOR_FILE_SAVED once; latin.txt's bytes unchanged on disk.
+//   server.jsonl: FILE_READ encoding latin1, utf16, utf8_bom, utf8, binary among the reads; window-1.jsonl: no
+//   EDITOR_KEY_REFUSED, EDITOR_FILE_SAVED once; latin.txt's bytes unchanged on disk.
 // A screenshot of latin.txt with INFO goes to runs/packaged/sprint-462-<stamp>-<source|packaged>/.
 // SHAKEOUT_APP=<Substrate.app> runs the bundle.
 
@@ -66,25 +66,16 @@ async function main(): Promise<void> {
     const open = async (name: string) => { await win.locator(`[data-tree-row="${name}"]`).first().click(); };
 
     const seen: Record<string, string | null> = {};
-    for (const [name, want] of [["latin.txt", "Latin-1 · read-only"], ["wide.txt", "UTF-16 · read-only"], ["bom.txt", "UTF-8 with BOM · read-only"], ["plain.txt", "UTF-8"]] as const) {
+    for (const [name, want] of [["latin.txt", "Latin-1"], ["wide.txt", "UTF-16"], ["bom.txt", "UTF-8 with BOM"], ["plain.txt", "UTF-8"]] as const) {
       await open(name);
       seen[name] = await until(win, `${name}'s encoding`, () => infoEncoding(win), (e) => e === want);
       await until(win, `${name}'s text`, () => codeText(win), (t) => t === SHOWN);
     }
-    // latin.txt: a typed character changes nothing, and ⌘S is refused.
-    // The files hold the same words, so the text alone does not show which file is placed; INFO names its encoding.
     await open("latin.txt");
-    await until(win, "latin.txt placed again", () => infoEncoding(win), (e) => e === "Latin-1 · read-only");
-    await until(win, "latin.txt again", () => codeText(win), (t) => t === SHOWN);
-    await win.locator("[data-editor-code] .cm-line").first().click();
-    await win.keyboard.press("End");
-    await win.keyboard.type("Z");
-    await settled(win);
-    if ((await codeText(win)) !== SHOWN) throw new Error(`latin.txt took a character: ${JSON.stringify(await codeText(win))}`);
-    await menu(app, "menu-save");
-    await settled(win);
-    await win.screenshot({ path: join(shots, "latin-read-only.png") });
-    // plain.txt: as before, typed and saved.
+    await until(win, "latin.txt placed again", () => infoEncoding(win), (e) => e === "Latin-1");
+    await win.screenshot({ path: join(shots, "latin.png") });
+    // plain.txt: as before, typed and saved. The files hold the same words, so the text alone does not show which file
+    // is placed; INFO names its encoding.
     await open("plain.txt");
     await until(win, "plain.txt placed again", () => infoEncoding(win), (e) => e === "UTF-8");
     await until(win, "plain.txt again", () => codeText(win), (t) => t === SHOWN);
@@ -102,7 +93,7 @@ async function main(): Promise<void> {
     if (!readFileSync(join(repo, "latin.txt")).equals(latin)) throw new Error("latin.txt changed on disk");
     const recs = windowRecords(launch);
     const refused = recs.filter((r) => r.name === "EDITOR_KEY_REFUSED").map((r) => `${String(r.payload.key)}:${String(r.payload.reason)}`);
-    if (JSON.stringify(refused) !== JSON.stringify(["Meta+s:not_utf8"])) throw new Error(`EDITOR_KEY_REFUSED ${JSON.stringify(refused)}`);
+    if (refused.length) throw new Error(`EDITOR_KEY_REFUSED ${JSON.stringify(refused)}`);
     const saved = recs.filter((r) => r.name === "EDITOR_FILE_SAVED").length;
     if (saved !== 1) throw new Error(`EDITOR_FILE_SAVED ×${saved}`);
     const traces = join(launch.state, "electron", "logs", "traces");
@@ -112,7 +103,7 @@ async function main(): Promise<void> {
     for (const e of ["latin1", "utf16", "utf8_bom", "utf8", "binary"]) if (!reads.has(e)) throw new Error(`no FILE_READ ${e}: ${JSON.stringify([...reads])}`);
     const booted = readFileSync(join(traces, boot, "main.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as { name: string; payload: Record<string, unknown> }).find((r) => r.name === "APP_BOOTED")!.payload;
     if (packaged && booted.packaged !== true) throw new Error(`APP_BOOTED packaged ${String(booted.packaged)}`);
-    console.log(`editor_encodings: ok — "${WORDS}" in each: ${JSON.stringify(seen)}; latin.txt took no character and its ⌘S was refused (not_utf8), its bytes unchanged; plain.txt typed and saved; img.bin as its bytes; FILE_READ ${JSON.stringify([...reads])}; packaged=${String(booted.packaged)}; screenshots in ${shots}`);
+    console.log(`editor_encodings: ok — "${WORDS}" in each: ${JSON.stringify(seen)}; latin.txt's bytes unchanged; no key refused; plain.txt typed and saved; img.bin as its bytes; FILE_READ ${JSON.stringify([...reads])}; packaged=${String(booted.packaged)}; screenshots in ${shots}`);
     status = 0;
   } catch (e) {
     console.error(`editor_encodings: FAIL — ${(e as Error).message}`);

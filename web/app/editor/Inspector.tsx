@@ -109,10 +109,10 @@ function FindSection(): React.ReactElement {
 /** Sprint 462 (roadmap r13 E14): the file API's encoding as INFO names it; a text file in any encoding but plain
  *  UTF-8 opens read-only, and INFO says so. */
 const ENCODING_NAMES: Record<string, string> = { "utf-8": "UTF-8", "utf-8-bom": "UTF-8 with BOM", "utf-16": "UTF-16", "latin-1": "Latin-1", binary: "binary" };
-function encodingName(encoding: string | null, hasText: boolean): string {
+/** Sprint 465: every file the editor reads as text edits and saves in its own encoding, so no name says read-only. */
+function encodingName(encoding: string | null): string {
   if (encoding === null) return "binary";
-  const name = ENCODING_NAMES[encoding] ?? encoding;
-  return hasText && encoding !== "utf-8" ? `${name} · read-only` : name;
+  return ENCODING_NAMES[encoding] ?? encoding;
 }
 
 export function Inspector({ paneId, workspace }: { paneId: number; workspace: string | null }): React.ReactElement | null {
@@ -235,7 +235,7 @@ export function Inspector({ paneId, workspace }: { paneId: number; workspace: st
           ["path", file.path],
           ["size", `${(file.size / 1024).toFixed(1)} KB${lines !== null ? ` · ${linesText(lines)}` : ""}`],
           ["modified", `${when(file.modified)}${latest ? ` · ${latest.author === "hand" ? "by hand" : "by the session"}` : ""}`],
-          ["encoding", encodingName(file.encoding, file.text !== null)],
+          ["encoding", encodingName(file.encoding)],
           ["line ends", file.lineEndings ? file.lineEndings.toUpperCase() : "—"],
           ["type", fileType(file.path)],
         ] as [string, string][]).map(([k, v]) => (

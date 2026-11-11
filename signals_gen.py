@@ -5,7 +5,7 @@ Regenerate: python3 scripts/gen_signals.py. tests/test_signals_generated.py fail
 
 from enum import StrEnum
 
-VOCAB_VERSION = "0.62"
+VOCAB_VERSION = "0.63"
 
 
 class Signal(StrEnum):
@@ -589,6 +589,14 @@ class FileWrittenWritten(StrEnum):
     AT_REST = "at_rest"
     LIVE = "live"
     OFF_RECORD = "off_record"
+
+
+class FileWrittenEncoding(StrEnum):
+    UTF8 = "utf8"
+    UTF8_BOM = "utf8_bom"
+    UTF16 = "utf16"
+    LATIN1 = "latin1"
+    BYTES = "bytes"
 
 
 class EditorOpenedBinding(StrEnum):

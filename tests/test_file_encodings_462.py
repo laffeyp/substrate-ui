@@ -35,9 +35,9 @@ def ws(tmp_path: Path) -> Path:
     ("name", "encoding", "read_only", "text", "ends"),
     [
         ("plain.txt", "utf-8", False, "café crème\n", "lf"),
-        ("bom.txt", "utf-8-bom", True, "café crème\n", "lf"),
-        ("wide.txt", "utf-16", True, "café crème\r\n", "crlf"),
-        ("latin.txt", "latin-1", True, "café crème\n", "lf"),
+        ("bom.txt", "utf-8-bom", False, "café crème\n", "lf"),
+        ("wide.txt", "utf-16", False, "café crème\r\n", "crlf"),
+        ("latin.txt", "latin-1", False, "café crème\n", "lf"),
         ("img.bin", "binary", True, None, None),
     ],
 )

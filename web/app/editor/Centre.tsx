@@ -14,7 +14,7 @@
 
 import * as React from "react";
 import { Compartment, EditorState, RangeSetBuilder, StateEffect, StateField, Transaction, type Extension } from "@codemirror/state";
-import { Decoration, EditorView, GutterMarker, ViewPlugin, WidgetType, gutter, lineNumbers, type DecorationSet, type ViewUpdate } from "@codemirror/view";
+import { Decoration, EditorView, GutterMarker, ViewPlugin, WidgetType, gutter, highlightSpecialChars, lineNumbers, type DecorationSet, type ViewUpdate } from "@codemirror/view";
 import { SearchQuery, getSearchQuery, replaceAll, replaceNext, search, setSearchQuery } from "@codemirror/search";
 import { HighlightStyle, StreamLanguage, ensureSyntaxTree, syntaxHighlighting } from "@codemirror/language";
 import { tags as t } from "@lezer/highlight";
@@ -41,7 +41,7 @@ import type { Chip } from "../state/input_bar";
 import { addFrom, addItem, carriesChip, dragChip, fileChip } from "./chips";
 import { openMenu } from "../state/context_menu";
 import { StatusLine } from "./StatusLine";
-import { BytesView } from "./BytesView";
+import { BytesView, formOf } from "./BytesView";
 
 const SUNK = "#1a1c20";
 const GROUND = "#212327";
@@ -316,8 +316,12 @@ export function closeFile(rel: string, paneId: number): void {
   emitSignal(Signal.EDITOR_FILE_CLOSED, { tab_count: tabs.length }, { pane_id: paneId });
 }
 
-/** Sprint 462: a buffer the person reads but cannot change. */
+/** Sprint 462: a buffer the person reads but cannot change (a file the server reads as `read_only`). */
 const READ_ONLY: Extension[] = [EditorState.readOnly.of(true)];
+/** Sprint 465 (roadmap r13 E14; the Architect, 2026-11-11: every file editable by hand): a file that is not text, in
+ *  its text form, is every byte one character (Latin-1). Lines split only at `\n`, so a `\r` byte stays in the doc
+ *  (`EditorState.lineSeparator`); control bytes draw as markers (`highlightSpecialChars`). */
+const BYTE_TEXT: Extension[] = [EditorState.lineSeparator.of("\n"), highlightSpecialChars()];
 
 /** A tab (sprint 419). Sprint 445 (BLACKBOARD 2026-11-09, the tab row: "the tab's dot means unsaved changes"; × on
  *  hover): an unsaved file's tab draws a dot in the ×'s place, as VS Code and Xcode do, and hovering shows the ×. */
@@ -393,6 +397,11 @@ function lineEnd(text: string): "\n" | "\r\n" {
   return crlf > lf ? "\r\n" : "\n";
 }
 const ENDS = new Map<string, "\n" | "\r\n">();
+/** The encoding a save writes, by session and path (sprint 465): the file's own, as read; a file that is not text
+ *  saves as Latin-1, byte for byte. The server's write takes these names (`WRITE_CODECS`). */
+const CODECS = new Map<string, string>();
+const WRITE_CODEC: Record<string, string> = { "utf-8": "utf-8", "utf-8-bom": "utf-8-bom", "utf-16": "utf-16", "latin-1": "latin-1", binary: "latin-1" };
+const codecOf = (k: string) => CODECS.get(k) ?? "utf-8";
 
 /** Told, once the update is done, that the shown buffer changed (sprint 436): the workspace search runs again
  *  over the new text. Not the editor store: a store change renders App at once (flushSync), and a render inside
@@ -458,7 +467,7 @@ export async function writeBuffer(sessionId: string, rel: string, text: string):
   wrote(k);
   const r = await fetch(`/api/session/${encodeURIComponent(sessionId)}/file?path=${encodeURIComponent(rel)}`, {
     method: "PUT", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text: end === "\n" ? text : text.replace(/\n/g, end), view: "editor", base_sha256: SHAS.get(k) }),
+    body: JSON.stringify({ text: end === "\n" ? text : text.replace(/\n/g, end), view: "editor", base_sha256: SHAS.get(k), encoding: codecOf(k) }),
   }).catch(() => null);
   wrote(k);
   if (r?.ok) {
@@ -493,7 +502,7 @@ export async function saveForSend(sessionId: string, paneId: number | null): Pro
     wrote(k);
     const r = await fetch(`/api/session/${encodeURIComponent(sessionId)}/file?path=${encodeURIComponent(rel)}`, {
       method: "PUT", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: end === "\n" ? text : text.replace(/\n/g, end), view: SEND_VIEW, base_sha256: SHAS.get(k) }),
+      body: JSON.stringify({ text: end === "\n" ? text : text.replace(/\n/g, end), view: SEND_VIEW, base_sha256: SHAS.get(k), encoding: codecOf(k) }),
     }).catch(() => null);
     wrote(k);
     if (r?.ok) {
@@ -635,8 +644,10 @@ export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionI
     let live = true;
     const q = encodeURIComponent(rel), sid = encodeURIComponent(sessionId);
     const writesAtRead = WRITES.get(key(rel)) ?? 0;
+    // Sprint 465: a file that is not text, its text form picked, reads as Latin-1 to edit; a text file ignores `as`.
+    const as = formOf(rel) === "text" ? "&as=latin-1" : "";
     Promise.all([
-      fetch(`/api/session/${sid}/file?path=${q}`).then((r) => r.json() as Promise<FileFacts>),
+      fetch(`/api/session/${sid}/file?path=${q}${as}`).then((r) => r.json() as Promise<FileFacts>),
       fetch(`/api/session/${sid}/diff?path=${q}`).then((r) => (r.ok ? (r.json() as Promise<{ hunks: Hunk[]; base: string }>) : { hunks: [], base: "none" })),
     ]).then(([file, diff]) => {
       if (!live || (WRITES.get(key(rel)) ?? 0) !== writesAtRead) return;
@@ -648,17 +659,21 @@ export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionI
       if (shown.current === rel && view.current && unsaved(rel)) return;
       // Another file: a buffer with unsaved changes is kept for its tab.
       if (shown.current && shown.current !== rel && view.current && unsaved(shown.current)) BUFFERS.set(key(shown.current), view.current.state);
+      // Sprint 465: a file that is not text keeps every byte: no line end is rewritten on the way in or out.
+      const bytes = file.encoding === "binary";
+      const text = bytes ? file.text : normal(file.text);
       const record = () => {
-        DISK.set(key(rel), normal(file.text!));
+        DISK.set(key(rel), text);
         if (file.sha256) SHAS.set(key(rel), file.sha256);
-        ENDS.set(key(rel), lineEnd(file.text!));
+        ENDS.set(key(rel), bytes ? "\n" : lineEnd(file.text!));
+        CODECS.set(key(rel), WRITE_CODEC[file.encoding ?? "utf-8"] ?? "utf-8");
         // Sprint 450: no base outside git or in a repository with no commit; the status line then shows no `vs`.
-        if (diff.base && diff.base !== DiffReadBase.NONE && diff.base !== DiffReadBase.NO_COMMIT) BASES.set(key(rel), { name: diff.base, text: baseText(normal(file.text!), diff.hunks) });
+        if (diff.base && diff.base !== DiffReadBase.NONE && diff.base !== DiffReadBase.NO_COMMIT) BASES.set(key(rel), { name: diff.base, text: baseText(text, diff.hunks) });
         else BASES.delete(key(rel));
       };
       // The file on disk is the buffer shown (the centre's own save, landing on the record): the buffer, its
       // caret and its undo history stay; the read's facts and the marks are taken.
-      if (shown.current === rel && view.current && normal(file.text) === view.current.state.doc.toString()) {
+      if (shown.current === rel && view.current && text === view.current.state.doc.toString()) {
         record();
         markUnsaved(rel, false);
         view.current.dispatch({ effects: setHunks.of(diff.hunks) });
@@ -682,12 +697,12 @@ export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionI
         const landed = editor.getSnapshot().followLanded;
         if (prev && landed && landed.path === rel && landed.seq !== shownLanded.current) {
           shownLanded.current = landed.seq;
-          landedLine = firstChange(prev.doc.toString(), normal(file.text));
+          landedLine = firstChange(prev.doc.toString(), text);
         }
-        // Sprint 462 (roadmap r13 E14): a file in another encoding opens for reading only; its caret and selection work.
-        // `readOnly` stops CodeMirror's commands, and its view ignores typed changes while it is set (@codemirror/view,
-        // "Ignore changes when the editor is read-only").
-        const state = EditorState.create({ doc: file.text, extensions: [...configured(), lineNumbers(), hunkExtension(diff.hunks), language(rel), syntaxHighlighting(HIGHLIGHT), THEME, search(), findMarks, scopeField, followField, listener, ...(file.read_only ? READ_ONLY : [])] });
+        // Sprint 465: every file the server reads as text edits, in any encoding; `read_only` stays honoured. `readOnly`
+        // stops CodeMirror's commands, and its view ignores typed changes while it is set (@codemirror/view, "Ignore
+        // changes when the editor is read-only").
+        const state = EditorState.create({ doc: file.text, extensions: [...configured(), lineNumbers(), hunkExtension(diff.hunks), language(rel), syntaxHighlighting(HIGHLIGHT), THEME, search(), findMarks, scopeField, followField, listener, ...(bytes ? BYTE_TEXT : []), ...(file.read_only ? READ_ONLY : [])] });
         placed = keep > 1 ? state.update({ selection: { anchor: state.doc.line(keep).from } }).state : state;
         markUnsaved(rel, false);
       }
@@ -709,7 +724,7 @@ export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionI
       if (editor.getSnapshot().focusOnOpen === rel) { editor.set({ focusOnOpen: null }); view.current.focus(); }
     }).catch(() => undefined);
     return () => { live = false; };
-  }, [st.active, sessionId, writes, reloads]);
+  }, [st.active, sessionId, writes, reloads, st.active ? st.bytesForm[st.active] : undefined]);
   // Sprint 431 (E7; D93): the session's edits in flight on the file shown, marked where they will land and
   // brought into view; the marks go when the edit resolves.
   const followHere = st.follow.filter((f) => f.path === st.active);
@@ -733,12 +748,9 @@ export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionI
   const save = async (command: EditorFileSavedCommand, overwrite = false, step = false): Promise<void> => {
     const rel = shown.current, v = view.current;
     if (!rel || !v || editor.getSnapshot().active !== rel) { emitSignal(Signal.EDITOR_KEY_REFUSED, { key: SAVE_KEY[command], reason: EditorKeyRefusedReason.NO_FILE }, { pane_id: paneId }); return; }
-    // Sprint 462: a file read in another encoding is not written back as UTF-8; the server's write would refuse it.
-    const facts = editor.getSnapshot().file;
-    if (facts && facts.path === rel && facts.text !== null && facts.encoding !== null && facts.encoding !== "utf-8") { emitSignal(Signal.EDITOR_KEY_REFUSED, { key: SAVE_KEY[command], reason: EditorKeyRefusedReason.NOT_UTF8 }, { pane_id: paneId }); return; }
     const sent = v.state.doc.toString();
     const end = ENDS.get(key(rel)) ?? "\n";
-    const body = { text: end === "\n" ? sent : sent.replace(/\n/g, end), view: step ? HISTORY_VIEW : "editor", ...(overwrite ? {} : { base_sha256: SHAS.get(key(rel)) }) };
+    const body = { text: end === "\n" ? sent : sent.replace(/\n/g, end), view: step ? HISTORY_VIEW : "editor", encoding: codecOf(key(rel)), ...(overwrite ? {} : { base_sha256: SHAS.get(key(rel)) }) };
     wrote(key(rel));
     const r = await fetch(`/api/session/${encodeURIComponent(sessionId)}/file?path=${encodeURIComponent(rel)}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).finally(() => wrote(key(rel)));
     if (r.ok) {
@@ -781,7 +793,9 @@ export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionI
     if (unsaved(rel)) return UndoRoutedTo.NONE;
     const text = historyStep?.(direction === "undo") ?? null;
     if (text === null) return UndoRoutedTo.NONE;
-    v.dispatch({ changes: { from: 0, to: v.state.doc.length, insert: normal(text) }, annotations: Transaction.addToHistory.of(false) });
+    // Sprint 465: a file that is not text takes the step's bytes as they are.
+    const bytes = editor.getSnapshot().file?.encoding === "binary";
+    v.dispatch({ changes: { from: 0, to: v.state.doc.length, insert: bytes ? text : normal(text) }, annotations: Transaction.addToHistory.of(false) });
     void save(EditorFileSavedCommand.MENU_S, false, true);
     return UndoRoutedTo.HISTORY;
   };

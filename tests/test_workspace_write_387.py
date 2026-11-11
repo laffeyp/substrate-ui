@@ -108,6 +108,7 @@ def test_a_write_goes_on_the_record_and_then_changes_the_file(
                 "created": False,
                 "written": "at_rest",
                 "seq": out["seq"],
+                "encoding": "utf8",
             },
         ),
         (
@@ -118,6 +119,7 @@ def test_a_write_goes_on_the_record_and_then_changes_the_file(
                 "created": True,
                 "written": "at_rest",
                 "seq": made["seq"],
+                "encoding": "utf8",
             },
         ),
     ]

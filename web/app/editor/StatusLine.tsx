@@ -20,12 +20,13 @@ export function StatusLine({ paneId }: { paneId?: number } = {}): React.ReactEle
   const binding = React.useSyncExternalStore(settings.subscribe, settings.getSnapshot, settings.getSnapshot).binding;
   if (!st.active || !st.file || st.file.path !== st.active) return null;
   const name = st.active.slice(st.active.lastIndexOf("/") + 1);
-  // Sprint 463 (roadmap r13 E14): a file shown as its bytes: its size, and the four forms to pick from.
-  if (st.file.text === null && st.file.encoding === "binary") {
-    const form = formOf(st.active), size = st.file.size, path = st.active;
+  // Sprint 463 (roadmap r13 E14): a file that is not text: its size, and the four forms to pick from. Sprint 465: in
+  // its text form the code edits it, and the line shows the caret too; hex, binary and octal stay read views.
+  if (st.file.encoding === "binary") {
+    const form = formOf(st.active), size = st.file.size, path = st.active, asText = st.file.text !== null;
     return (
       <div data-status-line="1" data-status-bytes="1" style={{ display: "flex", gap: 14, padding: "5px 14px", background: "#1a1c20", fontSize: 10, color: "#62676f", whiteSpace: "nowrap", overflow: "hidden", flex: "none" }}>
-        <span data-status-pos="1">{name} · {size.toLocaleString("en-US")} bytes · read-only</span>
+        <span data-status-pos="1">{name} · {asText ? `${st.caretLine}:${st.caretCol} · ` : ""}{size.toLocaleString("en-US")} bytes{asText ? "" : " · read-only"}</span>
         <span style={{ marginLeft: "auto", display: "flex", gap: 10 }}>
           {BYTES_FORMS.map((f) => (
             <span key={f} data-bytes-form-pick={f} data-on={f === form ? "1" : "0"} onClick={() => pickBytesForm(paneId ?? 0, path, f, size)}

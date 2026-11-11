@@ -55,6 +55,7 @@ from signals_gen import (
     DiffReadBase,
     FileReadEncoding,
     FilesReplacePreparedScope,
+    FileWrittenEncoding,
     FileWrittenWritten,
     Signal,
     SessionCreatedWorkspaceShape,
@@ -2607,15 +2608,17 @@ class WorkspaceConflictError(ValueError):
     (`base_sha256` differs), or the file is not UTF-8 text."""
 
 
-def _workspace_read(root: Path, rel: str, max_bytes: int = WORKSPACE_READ_MAX) -> dict[str, object]:
+def _workspace_read(
+    root: Path, rel: str, max_bytes: int = WORKSPACE_READ_MAX, as_latin1: bool = False
+) -> dict[str, object]:
     """A file's facts and, for text up to `max_bytes`, its text: size, modified time, the sha256 of its
     bytes (a write sends it back as `base_sha256`), encoding, line endings, and `read_only`. Over the cap
     the text is null and `too_large` true.
 
     Sprint 462 (roadmap r13 E14): a file decodes by the attachments' rule (`_decode_any`, round 3 rule 3),
     and its encoding is named: `utf-8`, `utf-8-bom`, `utf-16`, `latin-1`, or `binary` with no text for a
-    file with a NUL byte in its first 8 KB. Anything but plain `utf-8` is `read_only`: the write below
-    refuses a file that is not UTF-8 text, so the editor opens it for reading only."""
+    file with a NUL byte in its first 8 KB. Sprint 465: every text file is editable, and the write saves it
+    in its own encoding; a binary file comes as Latin-1 text when `as_latin1` asks (the editor's text form)."""
     target = _workspace_target(root, rel)
     if not target.is_file():
         raise FileNotFoundError(f"{rel!r} is not a file in the workspace")
@@ -2641,7 +2644,11 @@ def _workspace_read(root: Path, rel: str, max_bytes: int = WORKSPACE_READ_MAX) -
     data = target.read_bytes()
     decoded = _decode_any(data)
     if decoded is None:
-        out.update(encoding="binary", read_only=True)
+        # Sprint 465: asked for, a file that is not text comes as Latin-1, every byte one character, to edit.
+        if as_latin1:
+            out.update(encoding="binary", text=data.decode("latin-1"), read_only=False)
+        else:
+            out.update(encoding="binary", read_only=True)
         return out
     text, name = decoded
     encoding = FILE_ENCODINGS[name, data.startswith(b"\xef\xbb\xbf")]
@@ -2649,13 +2656,55 @@ def _workspace_read(root: Path, rel: str, max_bytes: int = WORKSPACE_READ_MAX) -
         encoding=encoding,
         line_endings=_line_endings(text),
         text=text,
-        read_only=encoding != "utf-8",
+        read_only=False,
     )
     return out
 
 
 # Sprint 463 (roadmap r13 E14): the bytes view reads a file in pieces, so no file is too big to open.
 WORKSPACE_BYTES_MAX = 256 * 1024
+
+
+# Sprint 465: the encodings a save writes in, and how.
+WRITE_CODECS = ("utf-8", "utf-8-bom", "utf-16", "latin-1")
+
+
+def _written_encoding(encoding: str, data: bytes) -> FileWrittenEncoding:
+    """FILE_WRITTEN's name for a save: `bytes` for a Latin-1 save of a file that is not text (a NUL byte in
+    its first 8 KB, before the save or, for a new file, after it)."""
+    if encoding == "latin-1":
+        return (
+            FileWrittenEncoding.BYTES
+            if b"\x00" in data[:ATTACH_BINARY_SNIFF]
+            else FileWrittenEncoding.LATIN1
+        )
+    return {
+        "utf-8": FileWrittenEncoding.UTF8,
+        "utf-8-bom": FileWrittenEncoding.UTF8_BOM,
+        "utf-16": FileWrittenEncoding.UTF16,
+    }[encoding]
+
+
+def _decode_as(data: bytes, encoding: str) -> str:
+    """`data` read in `encoding`; a UTF-8 mark or a UTF-16 mark is not part of the text."""
+    if encoding == "utf-8-bom":
+        return data.decode("utf-8-sig")
+    if encoding == "utf-16":
+        return data.decode("utf-16")
+    return data.decode(encoding)
+
+
+def _encode_as(text: str, encoding: str, old: bytes) -> bytes:
+    """`text` written in `encoding`: UTF-8 with its mark; UTF-16 with its mark in the old file's byte order
+    (little-endian for a new file); Latin-1 one byte a character, so a file that is not text saves byte
+    for byte. A character the encoding cannot hold raises UnicodeEncodeError."""
+    if encoding == "utf-8-bom":
+        return b"\xef\xbb\xbf" + text.encode("utf-8")
+    if encoding == "utf-16":
+        if old.startswith(b"\xfe\xff"):
+            return b"\xfe\xff" + text.encode("utf-16-be")
+        return b"\xff\xfe" + text.encode("utf-16-le")
+    return text.encode(encoding)
 
 
 def _workspace_bytes(root: Path, rel: str, offset: int, length: int) -> dict[str, object]:
@@ -4626,7 +4675,9 @@ class Handler(BaseHTTPRequestHandler):
                 )
                 self._json(listing)
             else:
-                facts = _workspace_read(root, q.get("path", [""])[0])
+                facts = _workspace_read(
+                    root, q.get("path", [""])[0], as_latin1=q.get("as", [""])[0] == "latin-1"
+                )
                 encoding = (
                     FileReadEncoding.TOO_LARGE
                     if facts["too_large"]
@@ -4843,21 +4894,33 @@ class Handler(BaseHTTPRequestHandler):
             if not isinstance(text, str):
                 raise ValueError("body needs `text`, a string")
             view = str(body.get("view") or "editor")
+            # Sprint 465: the text is written in the file's own encoding; `latin-1` writes every character as
+            # its one byte, so a file that is not text saves byte for byte.
+            encoding = str(body.get("encoding") or "utf-8")
+            if encoding not in WRITE_CODECS:
+                raise ValueError(f"encoding must be one of {', '.join(WRITE_CODECS)}")
             target = _workspace_target(root, rel)
             if not target.parent.is_dir():
                 raise FileNotFoundError(f"no folder for {rel!r} in the workspace")
             if target.is_dir():
                 raise WorkspaceEscapeError(f"{rel!r} is a folder")
             old_text: str | None = None
+            old_data = b""
             if target.exists():
                 base = body.get("base_sha256")
                 if base is not None and base != _file_sha256(target):
                     raise WorkspaceConflictError(f"{rel!r} changed since it was read")
+                old_data = target.read_bytes()
                 try:
-                    old_text = target.read_bytes().decode("utf-8")
+                    old_text = _decode_as(old_data, encoding)
                 except UnicodeDecodeError:
-                    raise WorkspaceConflictError(f"{rel!r} is not a UTF-8 text file") from None
-            new_bytes = text.encode("utf-8")
+                    raise WorkspaceConflictError(f"{rel!r} is not {encoding} text") from None
+            try:
+                new_bytes = _encode_as(text, encoding, old_data)
+            except UnicodeEncodeError as exc:
+                raise ValueError(
+                    f"the text has a character {encoding} cannot hold: {exc.reason}"
+                ) from None
             if len(new_bytes) > WORKSPACE_READ_MAX:
                 raise WorkspaceConflictError(f"text over {WORKSPACE_READ_MAX} bytes")
             rel_path = str(target.relative_to(root.resolve(strict=True)))
@@ -4901,6 +4964,7 @@ class Handler(BaseHTTPRequestHandler):
                 "created": old_text is None,
                 "written": FileWrittenWritten(written["written"]),
                 "seq": written["seq"],
+                "encoding": _written_encoding(encoding, old_data or new_bytes),
             },
         )
         self._json(

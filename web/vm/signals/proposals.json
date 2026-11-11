@@ -1492,6 +1492,16 @@
       "rationale": "Every file that is not text opens as its bytes, read in pieces; the server's reads and the view's forms are events the trace otherwise lacks.",
       "ratified": true,
       "ratified_by": "agent-resolved 2026-11-11, sprint 463; grounds: project — roadmap r13 E14, the user entries of 2026-11-11; SDD — hard rule 2, BOOTSTRAP step 9 (the read and the view pair); practice — n/a"
+    },
+    {
+      "id": "P-0.63-WRITE-ENCODING",
+      "kind": "PAYLOAD_FIELD_PROPOSED",
+      "layer": 2,
+      "element": "FILE_WRITTEN gains encoding (utf8 | utf8_bom | utf16 | latin1 | bytes); EDITOR_KEY_REFUSED.reason not_utf8 no longer written",
+      "source": "BLACKBOARD 2026-11-11 user (every file editable by hand, by default); roadmap r13 E14; sprint 465",
+      "rationale": "A save now writes a file in its own encoding or byte for byte; the trace says which.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-11, sprint 465; grounds: project — the user entry of this date, roadmap r13 E14; SDD — hard rule 2; practice — n/a"
     }
   ]
 }
