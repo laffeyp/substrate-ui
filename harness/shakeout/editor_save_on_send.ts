@@ -14,6 +14,8 @@
 //   the transcript's row after the message is the one warning naming tax.ts, and the centre draws tax.ts's offer
 //   to reload or overwrite; the unsaved list holds tax.ts alone; the activity tab names menu.ts, whose latest touch is
 //   its save, "saved with the message" (cart.ts's latest is the model's read);
+//   the tab row (sprint 445): before the message every tab carries the unsaved dot, after it tax.ts's alone, and
+//   hovering tax.ts's tab shows its × in the dot's place;
 //   signals — EDITOR_SAVED_FOR_SEND files 2 refused 1, then TURN_SUBMITTED saved 2 (the first turn's saved 0);
 //   EDITOR_SAVE_CONFLICTED once; the server's FILE_WRITTEN twice and one API_REFUSED files 409.
 // SHAKEOUT_APP=<Substrate.app> runs the bundle.
@@ -42,6 +44,7 @@ const transcript = (win: Page) => win.evaluate(() => (window as unknown as { __v
 const active = (win: Page) => win.evaluate(`globalThis.__substrateEditor.getSnapshot().active`) as Promise<string | null>;
 const unsaved = (win: Page) => win.evaluate(`globalThis.__substrateEditor.getSnapshot().unsaved.slice()`) as Promise<string[]>;
 
+const tabDots = (win: Page) => win.evaluate(`Array.from(document.querySelectorAll("[data-editor-tab-unsaved]")).map(function (e) { return e.getAttribute("data-editor-tab-unsaved"); }).sort()`) as Promise<string[]>;
 const lines = (win: Page) => win.evaluate(`(function () { var r = document.querySelector("[data-editor-code]").shadowRoot; return r ? Array.from(r.querySelectorAll(".cm-line")).map(function (e) { return e.textContent; }) : []; })()`) as Promise<string[]>;
 
 const FILES: Record<string, { lines: string[]; eol: string }> = {
@@ -131,6 +134,8 @@ async function main(): Promise<void> {
     const buffers: Record<string, string[]> = {};
     for (const rel of ["src/cart.ts", "src/menu.ts", "src/tax.ts"]) buffers[rel] = await editIn(win, rel);
     await until(win, "three unsaved", () => unsaved(win), (u) => same([...u].sort(), ["src/cart.ts", "src/menu.ts", "src/tax.ts"]));
+    await win.mouse.move(700, 600);
+    await until(win, "three tabs dotted", () => tabDots(win), (d) => same(d, ["src/cart.ts", "src/menu.ts", "src/tax.ts"]));
     writeFileSync(join(ws, "src/tax.ts"), ON_DISK);
 
     // The message, from the editor's terminal.
@@ -149,6 +154,13 @@ async function main(): Promise<void> {
     if (readFileSync(join(ws, "src/menu.ts"), "utf8").replace(/\r\n/g, "").includes("\n")) throw new Error("menu.ts lost its CRLF line ends");
     if (readFileSync(join(ws, "src/tax.ts"), "utf8") !== ON_DISK) throw new Error("tax.ts on disk is not its change on disk");
     await until(win, "unsaved: tax.ts alone", () => unsaved(win), (u) => same(u, ["src/tax.ts"]));
+    await win.mouse.move(700, 600);
+    await until(win, "tax.ts's tab alone dotted", () => tabDots(win), (d) => same(d, ["src/tax.ts"]));
+    await win.locator('[data-editor-tab="src/tax.ts"]').first().hover();
+    await until(win, "tax.ts's × on hover", async () => [await win.locator('[data-editor-tab-close="src/tax.ts"]').isVisible(), await tabDots(win)], ([x, d]) => x === true && same(d, []));
+    const tabsShot = join(shots, "tabs-hover.png");
+    await win.screenshot({ path: tabsShot, clip: { x: 0, y: 30, width: 1000, height: 60 } });
+    await win.mouse.move(700, 600);
     await until(win, "tax.ts's offer", () => win.locator('[data-save-conflict="src/tax.ts"]').count(), (n) => n === 1);
     const rows = await transcript(win);
     const at = rows.findIndex((r) => r.role === "user" && r.text === ASK);
@@ -201,7 +213,7 @@ async function main(): Promise<void> {
     if (written !== 2 || refused !== 1) throw new Error(`server: FILE_WRITTEN ×${written}, API_REFUSED 409 ×${refused}`);
     const booted = readFileSync(join(traces, boot, "main.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as { name: string; payload: Record<string, unknown> }).find((r) => r.name === "APP_BOOTED")!.payload;
     if (packaged && booted.packaged !== true) throw new Error(`APP_BOOTED packaged ${String(booted.packaged)}`);
-    console.log(`editor_save_on_send: ok — cart.ts and menu.ts saved before the message (FileWritten send at ${sends.map((e) => e.seq).join(", ")}, the message at ${asked.seq}); the model's read_file of cart.ts at ${read.seq} returned its new lines (${buffers["src/cart.ts"].length} lines) without the deleted ones; menu.ts kept CRLF; tax.ts refused, its change on disk kept, one warning under the message, its offer drawn, unsaved [src/tax.ts]; activity: menu.ts "${label}"; EDITOR_SAVED_FOR_SEND 2/1 before TURN_SUBMITTED saved 2; FILE_WRITTEN ×2, API_REFUSED 409 ×1; packaged=${String(booted.packaged)}; screenshot ${shot}`);
+    console.log(`editor_save_on_send: ok — cart.ts and menu.ts saved before the message (FileWritten send at ${sends.map((e) => e.seq).join(", ")}, the message at ${asked.seq}); the model's read_file of cart.ts at ${read.seq} returned its new lines (${buffers["src/cart.ts"].length} lines) without the deleted ones; menu.ts kept CRLF; tax.ts refused, its change on disk kept, one warning under the message, its offer drawn, unsaved [src/tax.ts]; tab dots on all three before, on tax.ts alone after, × on hover; activity: menu.ts "${label}"; EDITOR_SAVED_FOR_SEND 2/1 before TURN_SUBMITTED saved 2; FILE_WRITTEN ×2, API_REFUSED 409 ×1; packaged=${String(booted.packaged)}; screenshot ${shot}`);
     status = 0;
   } catch (e) {
     console.error(`editor_save_on_send: FAIL — ${(e as Error).message}`);

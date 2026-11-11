@@ -309,7 +309,9 @@ export function closeFile(rel: string, paneId: number): void {
   emitSignal(Signal.EDITOR_FILE_CLOSED, { tab_count: tabs.length }, { pane_id: paneId });
 }
 
-function Tab({ rel, active, paneId }: { rel: string; active: boolean; paneId: number }): React.ReactElement {
+/** A tab (sprint 419). Sprint 445 (BLACKBOARD 2026-11-09, the tab row: "the tab's dot means unsaved changes"; × on
+ *  hover): an unsaved file's tab draws a dot in the ×'s place, as VS Code and Xcode do, and hovering shows the ×. */
+function Tab({ rel, active, unsaved, paneId }: { rel: string; active: boolean; unsaved: boolean; paneId: number }): React.ReactElement {
   const [hover, setHover] = React.useState(false);
   const name = rel.slice(rel.lastIndexOf("/") + 1);
   return (
@@ -317,7 +319,11 @@ function Tab({ rel, active, paneId }: { rel: string; active: boolean; paneId: nu
       style={{ display: "flex", alignItems: "center", gap: 8, padding: "0 14px", height: "100%", cursor: "pointer", fontSize: 12, whiteSpace: "nowrap", flex: "none",
         background: active ? GROUND : "transparent", color: active ? "#d7dade" : "#9aa0a8", boxShadow: active ? `inset 0 2px 0 ${ACCENT}` : undefined }}>
       {name}
-      <span data-editor-tab-close={rel} onClick={(e) => { e.stopPropagation(); closeFile(rel, paneId); }} style={{ color: "#62676f", fontSize: 10, visibility: hover ? "visible" : "hidden" }}>×</span>
+      <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 8 }}>
+        {unsaved && !hover
+          ? <span data-editor-tab-unsaved={rel} title="unsaved changes" style={{ display: "inline-block", width: 5, height: 5, borderRadius: "50%", background: ACCENT }} />
+          : <span data-editor-tab-close={rel} onClick={(e) => { e.stopPropagation(); closeFile(rel, paneId); }} style={{ color: "#62676f", fontSize: 10, visibility: hover ? "visible" : "hidden" }}>×</span>}
+      </span>
     </div>
   );
 }
@@ -818,7 +824,7 @@ export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionI
   return (
     <div data-editor-area="centre" style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, background: GROUND }}>
       <div data-editor-tabs={String(st.tabs.length)} style={{ height: tabRow, flex: "none", background: SUNK, display: "flex", overflowX: "auto", overflowY: "hidden" }}>
-        {st.tabs.map((rel) => <Tab key={rel} rel={rel} active={rel === st.active} paneId={paneId} />)}
+        {st.tabs.map((rel) => <Tab key={rel} rel={rel} active={rel === st.active} unsaved={st.unsaved.includes(rel)} paneId={paneId} />)}
       </div>
       {st.conflict && st.conflict === st.active && (
         <div data-save-conflict={st.conflict} style={{ display: "flex", gap: 14, alignItems: "center", padding: "6px 14px", background: SUNK, borderBottom: "1px solid rgba(255,255,255,.055)", fontSize: 11, color: "#b9bec5", flex: "none" }}>
