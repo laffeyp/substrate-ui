@@ -2558,6 +2558,10 @@ ATTACH_MESSAGE_INLINE_MAX = 256 * 1024
 ATTACH_FOLDER_LIST_MAX = 200
 ATTACH_BINARY_SNIFF = 8 * 1024
 ATTACH_FOLLOW = "read it with your file tools"
+# The reference line's opening words (sprint 452): the page marks a chip whose text opens with one of them as sent
+# by reference (web/reveal/transcript/attachments.ts holds the same two; tests/test_attachment_marks_452.py keeps them equal).
+ATTACH_NOT_INLINED = "(not inlined: "
+ATTACH_NOT_FOUND = "(not found when the message was sent: "
 
 
 def _human_size(n: int) -> str:
@@ -2601,7 +2605,7 @@ def _attachment_text(
     lines_note = f", lines {int(span[0])}–{int(span[1])}" if kind == "lines" else ""
     if kind == "folder":
         if not target.is_dir():
-            return f"(not found when the message was sent: {ref}/)", 0, True
+            return f"{ATTACH_NOT_FOUND}{ref}/)", 0, True
         base = workspace.resolve(strict=True)
         rel_dir = str(target.relative_to(base)) if target != base else ""
         files, cut = _workspace_files(workspace, include=rel_dir) if rel_dir else _workspace_files(workspace)
@@ -2611,17 +2615,17 @@ def _attachment_text(
         body = "\n".join([head, *shown] + ([f"(and {files_n(len(files) - len(shown))} more)"] if len(files) > len(shown) else []))
         size = len(body.encode("utf-8"))
         if size > room:
-            return f"(not inlined: a listing of {files_n(len(files))}, past the 256 KB a message inlines; {rel_dir or '.'}/; list it with your file tools)", 0, True
+            return f"{ATTACH_NOT_INLINED}a listing of {files_n(len(files))}, past the 256 KB a message inlines; {rel_dir or '.'}/; list it with your file tools)", 0, True
         return body, size, False
     if not target.is_file():
-        return f"(not found when the message was sent: {ref}{lines_note})", 0, True
+        return f"{ATTACH_NOT_FOUND}{ref}{lines_note})", 0, True
     size = target.stat().st_size
     if kind == "image":
-        return f"(not inlined: an image, {_human_size(size)}; {ref}; {ATTACH_FOLLOW})", 0, True
+        return f"{ATTACH_NOT_INLINED}an image, {_human_size(size)}; {ref}; {ATTACH_FOLLOW})", 0, True
     with target.open("rb") as fh:
         sniff = fh.read(ATTACH_BINARY_SNIFF)
     utf16 = sniff.startswith((b"\xff\xfe", b"\xfe\xff"))
-    binary = f"(not inlined: {_human_size(size)}, binary; {ref}; {ATTACH_FOLLOW})"
+    binary = f"{ATTACH_NOT_INLINED}{_human_size(size)}, binary; {ref}; {ATTACH_FOLLOW})"
     if not utf16 and not sniff.startswith(b"\xef\xbb\xbf") and b"\x00" in sniff:
         return binary, 0, True
     follow = "read them with your file tools" if kind == "lines" else ATTACH_FOLLOW
@@ -2633,7 +2637,7 @@ def _attachment_text(
             with target.open("rb") as fh:
                 n = sum(chunk.count(b"\n") for chunk in iter(lambda: fh.read(1 << 20), b""))
             count = f", {n:,} lines"
-        return f"(not inlined: {_human_size(size)}{count}, over the 64 KB a file goes inline; {ref}{lines_note}; {follow})", 0, True
+        return f"{ATTACH_NOT_INLINED}{_human_size(size)}{count}, over the 64 KB a file goes inline; {ref}{lines_note}; {follow})", 0, True
     decoded = _decode_any(target.read_bytes())
     if decoded is None:
         return binary, 0, True
@@ -2643,9 +2647,9 @@ def _attachment_text(
     used = len(text.encode("utf-8"))
     what = f"{_human_size(used)}, {_line_count(text):,} lines"
     if used > ATTACH_FILE_INLINE_MAX:
-        return f"(not inlined: {what}, over the 64 KB a file goes inline; {ref}{lines_note}; {follow})", 0, True
+        return f"{ATTACH_NOT_INLINED}{what}, over the 64 KB a file goes inline; {ref}{lines_note}; {follow})", 0, True
     if used > room:
-        return f"(not inlined: {what}, past the 256 KB a message inlines; {ref}{lines_note}; {follow})", 0, True
+        return f"{ATTACH_NOT_INLINED}{what}, past the 256 KB a message inlines; {ref}{lines_note}; {follow})", 0, True
     enc = "" if encoding == "UTF-8" else f", {encoding}"
     return f"({ref}{lines_note}{enc})\n{text}", used, False
 
@@ -2689,7 +2693,7 @@ def _resolve_attachments(raw: object, workspace: Path, record_root: Path) -> tup
                 text, used, referred = _attachment_text(kind, ref, span, workspace, room)
             except OSError as exc:
                 # A file the server cannot open (permission, a vanished folder) still goes, as its reference.
-                text, used, referred = f"(not inlined: it could not be read, {exc.strerror or type(exc).__name__}; {ref}; {ATTACH_FOLLOW})", 0, True
+                text, used, referred = f"{ATTACH_NOT_INLINED}it could not be read, {exc.strerror or type(exc).__name__}; {ref}; {ATTACH_FOLLOW})", 0, True
             room -= used
             by_reference += int(referred)
         elif kind == "event":

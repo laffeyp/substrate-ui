@@ -20,6 +20,7 @@ import { ToolCard } from "./ToolCard";
 import { AuthPromptCard } from "./AuthPromptCard";
 import { emit as emitSignal } from "../../vm/instrumentation/sdd";
 import { Signal } from "../../vm/signals.gen";
+import { byReference, chipTitle } from "./attachments";
 
 export interface RowProps {
   row: TranscriptRow;
@@ -127,8 +128,35 @@ const RowInner: React.FC<RowProps> = ({ row, paired, progressText, progressEof, 
       ) : (
         <span>{text}</span>
       )}
+      {row.role === "user" && row.attachments?.length ? <SentChips row={row} paneId={paneId} /> : null}
     </div>
   );
 };
+
+/** Sprint 452 (ADD-TO-MESSAGE-2026-11-10-r3, what you see; D94): a sent message's chips beside its text, as the input
+ *  bar draws them, the path on hover; one that went as its reference line is dashed, its hover adding the reason.
+ *  A recorded message's chips are TRANSCRIPT_CHIPS_DRAWN, once. */
+function SentChips({ row, paneId }: { row: TranscriptRow; paneId?: number }): React.ReactElement {
+  const chips = row.attachments ?? [];
+  const recorded = Number.isInteger(row.seq) && row.seq >= 0;
+  React.useEffect(() => {
+    if (paneId === undefined || !recorded) return;
+    emitSignal(Signal.TRANSCRIPT_CHIPS_DRAWN, { pane_id: paneId, seq: row.seq, chips: chips.length, by_reference: chips.filter(byReference).length }, { pane_id: paneId });
+  }, [recorded]);
+  return (
+    <span data-sent-chips="1" style={{ display: "inline-flex", flexWrap: "wrap", gap: 6, marginLeft: 10, verticalAlign: "top" }}>
+      {chips.map((c) => {
+        const ref = byReference(c);
+        return (
+          <span key={`${c.kind}:${c.ref}`} data-sent-chip={c.ref} data-by-reference={ref ? "1" : "0"} title={chipTitle(c)}
+            style={{ display: "inline-flex", alignItems: "center", padding: "0 7px", borderRadius: 4, fontSize: 12, lineHeight: 1.4, whiteSpace: "nowrap", color: "#d7dade",
+              ...(ref ? { border: "1px dashed #62676f", background: "transparent" } : { border: "1px solid transparent", background: "#2b2e33" }) }}>
+            {c.label}
+          </span>
+        );
+      })}
+    </span>
+  );
+}
 
 export const Row = React.memo(RowInner);

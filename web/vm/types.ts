@@ -47,6 +47,9 @@ export interface TranscriptRow {
   toolRoute?: string;
   /** UI sprint 162: `/help`'s list, one entry per command, drawn as rows. */
   helpRows?: { usage: string; about: string }[];
+  /** Sprint 452: a user message's chips: the echo's from the bar, then the record's attachments (with `text`, what the
+   *  model read: content or the reference line). */
+  attachments?: { kind: string; label: string; ref: string; text?: string }[];
 }
 
 /** A tool card's call row: Substrate's `ToolCall` or a harness driver's `HarnessToolCall`. */

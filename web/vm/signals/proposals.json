@@ -1422,6 +1422,16 @@
       "rationale": "A refused message's draft and chips go back into the bar; the trace records it.",
       "ratified": true,
       "ratified_by": "agent-resolved 2026-11-10, sprint 451; grounds: project — round 3, roadmap r13 E10.2; SDD — hard rule 2, BOOTSTRAP step 9; practice — n/a"
+    },
+    {
+      "id": "P-0.56-CHIPS-DRAWN",
+      "kind": "TAG_PROPOSED",
+      "layer": 1,
+      "element": "TRANSCRIPT_CHIPS_DRAWN (transcript) {pane_id, seq, chips, by_reference}",
+      "source": "ADD-TO-MESSAGE-2026-11-10-r3 (what you see); roadmap r13 E10.2; sprint 452",
+      "rationale": "The sent message draws its chips and marks the ones sent by reference; the view side of TURN_ACCEPTED's counts.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-10, sprint 452; grounds: project — round 3, D94, roadmap r13 E10.2; SDD — BOOTSTRAP step 9 (dual-contract pairing); practice — n/a"
     }
   ]
 }

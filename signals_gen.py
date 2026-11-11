@@ -5,7 +5,7 @@ Regenerate: python3 scripts/gen_signals.py. tests/test_signals_generated.py fail
 
 from enum import StrEnum
 
-VOCAB_VERSION = "0.55"
+VOCAB_VERSION = "0.56"
 
 
 class Signal(StrEnum):
@@ -75,6 +75,7 @@ class Signal(StrEnum):
     PANE_BOUND = "PANE_BOUND"
     LENS_CHANGED = "LENS_CHANGED"
     TRANSCRIPT_ROW_DRAWN = "TRANSCRIPT_ROW_DRAWN"
+    TRANSCRIPT_CHIPS_DRAWN = "TRANSCRIPT_CHIPS_DRAWN"
     TRANSCRIPT_ROW_SKIPPED = "TRANSCRIPT_ROW_SKIPPED"
     WORKSPACE_ADDED = "WORKSPACE_ADDED"
     CONTROLS_PICKED = "CONTROLS_PICKED"

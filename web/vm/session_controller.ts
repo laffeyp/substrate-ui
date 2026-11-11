@@ -773,6 +773,7 @@ export class SessionController {
       kind: EnvelopeKind.UserMessage,
       role: "user",
       text: trimmed,
+      ...(opts.attachments?.length ? { attachments: opts.attachments } : {}),
     });
     this.waitingEchoes.push(echoSeq);
     const turnIndex = this.snap.turnIndex;
@@ -1513,7 +1514,10 @@ export class SessionController {
         const rest = echoIndex >= 0
           ? [...transcript.slice(0, echoIndex), ...transcript.slice(echoIndex + 1)]
           : transcript;
-        const row = echoIndex >= 0 ? transcript[echoIndex] : { kind: env.kind, role: "user", text };
+        // Sprint 452: the record's attachments (with what the model read) replace the echo's chips.
+        const recorded = Array.isArray(payload.attachments) ? (payload.attachments as { kind: string; label: string; ref: string; text?: string }[]) : undefined;
+        const echoed = echoIndex >= 0 ? transcript[echoIndex] : { kind: env.kind, role: "user", text };
+        const row = recorded?.length ? { ...echoed, attachments: recorded } : echoed;
         // Sprint 444: the echo's save warning moves with it and stays under the message.
         const warningSeq = echoIndex >= 0 ? this.saveWarnings.get(transcript[echoIndex].seq) : undefined;
         const warning = warningSeq === undefined ? undefined : rest.find((r) => r.seq === warningSeq);
