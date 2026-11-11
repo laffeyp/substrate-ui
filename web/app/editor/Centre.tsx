@@ -604,8 +604,10 @@ export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionI
         const v = view.current;
         if (!v || shown.current !== rel) return;
         const text = v.state.doc.toString(), b = BASES.get(key(rel));
-        if (b) v.dispatch({ effects: setHunks.of(lineHunks(b.text, text)) });
-        editor.set({ vsBase: against(rel, text) });
+        const bh = b ? lineHunks(b.text, text) : null;
+        if (bh) v.dispatch({ effects: setHunks.of(bh) });
+        // Sprint 455: the inspector's CHANGES follows the buffer while it has unsaved edits.
+        editor.set({ vsBase: against(rel, text), bufferHunks: bh && text !== (DISK.get(key(rel)) ?? "") ? bh : null });
       });
     }
     // The outline needs the syntax tree: it follows once typing pauses.
@@ -649,6 +651,7 @@ export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionI
         record();
         markUnsaved(rel, false);
         view.current.dispatch({ effects: setHunks.of(diff.hunks) });
+        editor.set({ bufferHunks: null });
         editor.set({ outline: outlineOf(view.current.state), vsBase: against(rel, view.current.state.doc.toString()) });
         return;
       }
@@ -682,7 +685,11 @@ export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionI
       editor.set({ findCount: findCount(view.current.state) });
       if (landedLine !== null) view.current.dispatch({ effects: EditorView.scrollIntoView(view.current.state.doc.line(Math.min(landedLine, view.current.state.doc.lines)).from, { y: "center" }) });
       const head = placed.selection.main.head, line = placed.doc.lineAt(head);
-      editor.set({ outline: outlineOf(placed), caretLine: line.number, caretCol: head - line.from + 1, vsBase: against(rel, placed.doc.toString()) });
+      // Sprint 455: a kept buffer with unsaved edits is marked, and listed, as the buffer it is.
+      const placedText = placed.doc.toString(), placedBase = BASES.get(key(rel));
+      const placedHunks = kept && placedBase && placedText !== (DISK.get(key(rel)) ?? "") ? lineHunks(placedBase.text, placedText) : null;
+      if (placedHunks) view.current.dispatch({ effects: setHunks.of(placedHunks) });
+      editor.set({ outline: outlineOf(placed), caretLine: line.number, caretCol: head - line.from + 1, vsBase: against(rel, placedText), bufferHunks: placedHunks });
       takeJump();
       // Sprint 441: quick open's ↵ gives the code the focus once the file is placed.
       if (editor.getSnapshot().focusOnOpen === rel) { editor.set({ focusOnOpen: null }); view.current.focus(); }
@@ -726,6 +733,7 @@ export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionI
       if (facts && facts.path === rel) editor.set({ file: { ...facts, text: sent } });
       // Typing during the save stays unsaved.
       if (view.current && shown.current === rel) markUnsaved(rel, view.current.state.doc.toString() !== sent);
+      if (view.current && shown.current === rel && view.current.state.doc.toString() === sent) editor.set({ bufferHunks: null });
       if (editor.getSnapshot().conflict === rel) editor.set({ conflict: null });
       if (!step) emitSignal(Signal.EDITOR_FILE_SAVED, { command }, { pane_id: paneId });
     } else if (r.status === 409) {

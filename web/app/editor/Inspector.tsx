@@ -123,21 +123,28 @@ export function Inspector({ paneId, workspace }: { paneId: number; workspace: st
     setHistoryStep(state ? (back) => stepText(state.rows, state.opened, lit, back) : null);
     return () => setHistoryStep(null);
   }, [state, lit]);
-  const hunks = file ? st.hunks : [];
+  // Sprint 455: with unsaved edits, the buffer's hunks (the centre's marks, the status line's count); a hunk equal line
+  // for line to a saved one keeps that one's author, any other is the person's unsaved typing.
+  const saved = file ? st.hunks : [];
+  const hunks = file ? (st.bufferHunks ?? st.hunks) : [];
   const outline = file ? st.outline : [];
   const lineAuthors = state?.authors ?? { lines: [], gaps: [] };
-  const authors = hunks.map((hunk) => hunkAuthor(hunk, lineAuthors, history));
+  const authors = hunks.map((hunk): ReturnType<typeof hunkAuthor> | "unsaved" => {
+    if (!st.bufferHunks) return hunkAuthor(hunk, lineAuthors, history);
+    const same = saved.find((s) => s.lines.length === hunk.lines.length && s.lines.every((l, k) => l === hunk.lines[k]));
+    return same ? hunkAuthor(same, lineAuthors, history) : "unsaved";
+  });
 
   // The drawn counts, for EDITOR_DRAWN and the anchor's second row; each newly drawn hunk set is written.
   const counts = { outlineRows: outline.length, hunks: hunks.length, activityRows: activity.length, historyRows: file ? history.length + 1 : 0 };
   const key = JSON.stringify(counts);
   React.useEffect(() => { editor.set({ inspector: counts }); }, [key]);
-  const hunkKey = path ? JSON.stringify([path, hunks.map((hunk) => [hunk.new_start, hunk.new_count, hunk.old_count]), authors.map((a) => a?.seq ?? null)]) : "";
+  const hunkKey = path ? JSON.stringify([path, hunks.map((hunk) => [hunk.new_start, hunk.new_count, hunk.old_count]), authors.map((a) => (a === "unsaved" ? "unsaved" : a?.seq ?? null))]) : "";
   React.useEffect(() => {
     if (!path) return;
     hunks.forEach((hunk, i) => {
       const a = authors[i];
-      emitSignal(Signal.EDITOR_HUNK_DRAWN, { author: a ? (a.author === "hand" ? EditorHunkDrawnAuthor.HAND : EditorHunkDrawnAuthor.SESSION) : EditorHunkDrawnAuthor.UNATTRIBUTED, line_count: hunk.lines.length }, { pane_id: paneId });
+      emitSignal(Signal.EDITOR_HUNK_DRAWN, { author: a === "unsaved" ? EditorHunkDrawnAuthor.HAND : a ? (a.author === "hand" ? EditorHunkDrawnAuthor.HAND : EditorHunkDrawnAuthor.SESSION) : EditorHunkDrawnAuthor.UNATTRIBUTED, line_count: hunk.lines.length }, { pane_id: paneId });
     });
   }, [hunkKey]);
   React.useEffect(() => () => editor.set({ inspector: { outlineRows: 0, hunks: 0, activityRows: 0, historyRows: 0 } }), []);
@@ -172,7 +179,7 @@ export function Inspector({ paneId, workspace }: { paneId: number; workspace: st
           return (
             <div key={i} data-hunk-card={`${hunk.new_start}`} style={{ margin: "2px 14px", padding: "8px 10px", background: CARD, borderRadius: 5, fontSize: 10.5, lineHeight: 1.7 }}>
               <div style={{ display: "flex" }}><span style={{ color: TEXT }}>@@ {hunk.new_start}{end !== hunk.new_start ? `–${end}` : ""}</span><span style={{ marginLeft: "auto", color: DIM }}>+{plus} −{minus}</span></div>
-              <div data-hunk-author="1" style={{ color: DIM }}>{authorLabel(authors[i])}</div>
+              <div data-hunk-author="1" style={{ color: DIM }}>{authors[i] === "unsaved" ? "by hand · unsaved" : authorLabel(authors[i] as ReturnType<typeof hunkAuthor>)}</div>
             </div>
           );
         })}
