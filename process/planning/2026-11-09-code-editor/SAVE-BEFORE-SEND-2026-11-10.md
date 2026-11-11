@@ -28,8 +28,8 @@ Reading through the editor cannot work here. Claude Code, Codex and Cursor read 
 - **The hook:** before the controller posts the turn, the page saves every unsaved buffer of that pane's session. The editor already has the parts:
   - `unsavedBuffers(sessionId)` lists the buffer shown and the buffers kept for other tabs;
   - `writeBuffer(sessionId, path, text)` saves one through `PUT …/file` with the hash the buffer read, the file's own line endings, and the buffer's undo history kept (sprints 425 and 436).
-- **The wiring:** the session controller is in `web/vm` and must not import the editor, so App, which knows both, registers the save as the input bar's step before a send. The registration is one function in `state/input_bar.ts`.
-- **The order:** the echo appears at once, the saves run, then the turn is posted. The post waits for the saves, so the model never starts before them.
+- **The wiring:** `sendTurn` in `vm/session_controller.ts` is the one place a turn is posted, so the step lives there: a registry, `setBeforeTurn`, that `sendTurn` awaits. The editor registers its save from `editor/Centre.tsx`, and `web/vm` imports nothing from the editor. A message, a `//` driver command and the `/dellm` skill all post through `sendTurn`, so all of them save first (BLACKBOARD 2026-11-10, agent-resolved, where the save hooks in).
+- **The order:** the echo appears at once, the saves run, then TURN_SUBMITTED and the post. The post waits for the saves, so the model never starts before them.
 - **Which buffers:** every unsaved buffer of the session, whether or not the editor is open. A buffer kept from an earlier visit counts, because it is what the person last saw.
 
 **The server.** No new route. Each save is the existing `PUT …/file`: one FILE_WRITTEN in the server's trace, and one FileWritten on the record through `SessionRegistry.append_event`.
@@ -46,7 +46,7 @@ Reading through the editor cannot work here. Claude Code, Codex and Cursor read 
 - **Between turns:** the saves are at rest, on the record before the message.
 - **A turn is running:** the saves inject into it. The new message posts after them and waits its turn as messages do today.
 - **The session has ended:** the saves are written off the record (sprint 427), and the message resumes the session as it does today.
-- **The file changed on disk since the buffer read it:** the save is refused as stale (409), so the file is not overwritten. The message still goes, since no attachment, and no save, refuses a message. The editor shows its offer to reload or overwrite for that file, as for any stale save (sprint 425). The transcript shows one warning row under the message, naming the file as not saved.
+- **The file changed on disk since the buffer read it:** the save is refused as stale (409), so the file is not overwritten. The message still goes, since no attachment, and no save, refuses a message. When that file is shown, the editor shows its offer to reload or overwrite, as for any stale save (sprint 425). The transcript shows one warning row under the message, quoting the server's reason for each file not saved.
 - **A slash command** (`/model`, `/help`) starts no model turn and saves nothing. A command passed to the driver (`//context`) does start one, and saves.
 - **The undo boundary moves.** ⌘Z undoes in the buffer while it has unsaved edits, and steps through HISTORY after a save (BLACKBOARD 2026-11-09, the undo boundary). A save at send moves that line to the moment of sending. ⌘Z after a message steps the file's HISTORY, where the save is a row.
 - **The model edits a file while the person types in it again:** unchanged from today. The follow marks show the edit (sprint 431), and the next save meets the stale offer.

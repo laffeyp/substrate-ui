@@ -1026,3 +1026,19 @@ The clean build that followed was reported as "every suite has run". It had not:
 1. For UI work, the design frames are rendered into the repository before the vocabulary session, and the session reads them; a vocabulary for a view written from prose alone models it wrongly.
 2. Every UI card's gate takes a screenshot at the window's minimum width and asserts that the prompt and the main area survive it.
 3. A vocabulary's ordering rules each name the card that implements their check; a rule with no checker code is a gap the Rubber Duck Pass looks for.
+
+### 2026-11-10 — Sprint 444, save before send: what reading the kit and the decisions caught
+
+**What happened.** The Architect asked mid-sprint for SDD adherence and a full read of the kit. The session read `../sdd-kit-3/` in full, then the working agreement, the BLACKBOARD's decisions and its tail, and wrote a comprehension affirmation before any code.
+
+**What worked.**
+- The decision grep found that the save-before-send design contradicted a recorded decision. The 2026-11-09 save policy says "save on explicit command only … No autosave", and the design doc never named it. The sprint card and an agent-resolved entry now say which decision the ruling supersedes, and for which saves.
+- Resolve-and-record, applied to the hook, changed the design. The doc put the step in the input bar. A grep for every POST to `/turn` found one, in `sendTurn`, and found that `/dellm` posts a turn without the bar. The step moved there.
+- Reading the code behind "which buffers" found a cross-session fault before it shipped. The editor store's `unsaved` list and `activeBuffer` name no session, so a send from another pane would have written one session's text into another's workspace.
+- A mutation check on the new spec showed the warning-placement test fails with the handler change removed.
+
+**What got in the way.**
+- Two gate expectations were wrong rather than the code: the activity row names a file's latest touch, and `editor_follow` tested typing before a send. Each was read back to the behaviour it encodes before it was changed.
+- The editor gates typed single lines. The Architect asked for multi-line edits, and the gates now make them.
+
+**What this says about the next kit version.** A design doc for a behaviour change should list the recorded decisions it supersedes, found by the decision grep, before its card is written. Here that grep ran only because the Architect asked for a re-read of the kit.

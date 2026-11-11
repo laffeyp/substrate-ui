@@ -5,12 +5,12 @@
 // touched, with the turn, seq and tool of its latest touch. Read as the inspector's ACTIVITY reads one file
 // (derive/inspector.ts): the kernel's read_file, edit_file and write_file by their path, and grep by the files
 // its result names; the harness drivers' file edits in the shapes derive/follow.ts reads, and Claude's Read
-// {file_path}; and each FileWritten (a save by hand, or a HISTORY step). bash names no file it is sure of, so
+// {file_path}; and each FileWritten (a save by hand, a HISTORY step, or a save made before a turn was posted). bash names no file it is sure of, so
 // it is left out here. A path outside the workspace is left out. No I/O, no state.
 
 import { EnvelopeKind } from "../../vm/envelope_kinds.gen";
 import type { RecordEnvelope } from "../../vm/types";
-import { relPath, resultOf, turnOf } from "./inspector";
+import { HISTORY_VIEW, SEND_VIEW, relPath, resultOf, turnOf } from "./inspector";
 import { harnessFiles } from "./follow";
 
 export interface ActivityFile { path: string; seq: number; turn: number | null; tool: string; touches: number }
@@ -42,7 +42,7 @@ export function activityFiles(envs: readonly RecordEnvelope[], workspace: string
       const files = tool === "Read" ? [{ path: typeof args.file_path === "string" ? args.file_path : null }] : harnessFiles(tool, args) ?? [];
       for (const f of files) touch(relPath(f.path, workspace), e, tool);
     } else if (e.kind === EnvelopeKind.FileWritten) {
-      touch(relPath(e.payload.path, workspace), e, e.payload.view === "history" ? "history step" : "saved by hand");
+      touch(relPath(e.payload.path, workspace), e, e.payload.view === HISTORY_VIEW ? "history step" : e.payload.view === SEND_VIEW ? "saved with the message" : "saved by hand");
     }
   }
   return Array.from(by.values()).sort((a, b) => b.seq - a.seq);

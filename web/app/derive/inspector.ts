@@ -33,6 +33,8 @@ export interface HistoryRow {
 }
 /** A HISTORY step (sprint 429): a save with this view moves the lit row and adds no row. */
 export const HISTORY_VIEW = "history";
+/** A save made before a turn was posted (sprint 444; roadmap r13 E10.0): a hand edit, listed like any save. */
+export const SEND_VIEW = "send";
 /** Per line of the file now, the seq of the edit that last wrote it, and per gap (before each line, and
  *  after the last) the seq of the edit that last removed lines there; null where the record cannot say. */
 export interface Authors { lines: (number | null)[]; gaps: (number | null)[] }

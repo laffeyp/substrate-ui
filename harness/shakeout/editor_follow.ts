@@ -8,8 +8,10 @@
 //            files on disk carry the model's edits;
 //   turn 1 — edits to the open file and to src/other.ts: the tab stays on cart.ts (one tab), its buffer
 //            equals the disk and the changed line is in view; other.ts gets its changed-vs-main dot;
-//   turn 2 — with unsaved typing in the buffer, an edit to cart.ts: CONFIRMED conflict true, the buffer kept
-//            as typed, and ⌘S meets the reload-or-overwrite offer;
+//   turn 2 — the person types several lines into cart.ts after ↵, while the model runs `sleep 3`; typing before ↵
+//            is saved with the message (sprint 444). The model's edit then replaces two lines with three:
+//            CONFIRMED conflict true, the buffer kept as typed, the disk holding the three lines, and ⌘S meets
+//            the reload-or-overwrite offer (the Architect, 2026-11-10: "complicated multi-line edits");
 //   turn 3 — an edit whose search text is not in the file: WITHDRAWN with the failing result;
 //   signals — S10 holds (no INVARIANT_BROKEN); the last EDITOR_DRAWN has follow_marks 0, and the anchor's
 //            third row from a screenshot after the turns reads 0.
@@ -90,13 +92,28 @@ async function main(): Promise<void> {
     if (!inView) throw new Error("turn 1: the changed line is not in view");
     await until(win, "other.ts's dot", () => win.evaluate(() => !!document.querySelector('[data-tree-row="src/other.ts"] [data-tree-dot]')), (v) => v);
 
-    // Turn 2: unsaved typing, then the session's edit to the same file.
+    // Turn 2: the message sent, then several lines typed and the last line deleted while the model waits on
+    // `sleep 3`; then the model's edit of two lines into three lands on the file under the unsaved buffer.
+    const before2 = await returned(win);
+    const box2 = win.locator('[data-editor-area="bottom"] textarea[data-input-bar]').first();
+    await box2.click();
+    await box2.fill("Call the bash tool once with the command `sleep 3`. After it returns, call edit_file once on src/cart.ts with search equal to the two lines\nexport const line5 = 5;\nexport const line6 = 6;\nand replace equal to the three lines\nexport const line5 = 500;\nexport const line6 = 600;\nexport const line6b = 650;\nDo not read the file first. Then reply done.");
+    await win.keyboard.press("Enter");
     await win.locator("[data-editor-code] .cm-line").first().click();
-    await win.keyboard.press("Meta+ArrowLeft");
-    await win.keyboard.type("// mine ");
+    await win.keyboard.press("Meta+ArrowUp");
+    await win.keyboard.type("// mine one");
+    await win.keyboard.press("Enter");
+    await win.keyboard.type("// mine two");
+    await win.keyboard.press("Enter");
+    await win.keyboard.press("Meta+ArrowDown");
+    await win.keyboard.press("ArrowUp");
+    await win.keyboard.press("Shift+Meta+K");
     const typed = await lines(win);
-    await turn(win, "Use edit_file on src/cart.ts to replace exactly `export const line5 = 5;` with `export const line5 = 500;`. Do not read the file first. Then reply done.");
-    if (!disk("src/cart.ts").includes("line5 = 500;")) throw new Error("turn 2: the model did not make the edit");
+    if (typed[0] !== "// mine one" || typed[1] !== "// mine two" || typed.includes("export const line12 = 12;")) throw new Error(`turn 2: the typing: ${JSON.stringify(typed)}`);
+    if (disk("src/cart.ts").includes("line5 = 500;")) throw new Error("turn 2: the model's edit landed before the typing ended");
+    await until(win, "turn 2's Returned", () => returned(win), (n) => n > before2, 300_000);
+    await settled(win);
+    if (!disk("src/cart.ts").includes("export const line5 = 500;\nexport const line6 = 600;\nexport const line6b = 650;\n")) throw new Error(`turn 2: the model did not make the edit: ${JSON.stringify(disk("src/cart.ts"))}`);
     if (JSON.stringify(await lines(win)) !== JSON.stringify(typed)) throw new Error("turn 2: the unsaved buffer was replaced");
     await menu(app, "menu-save");
     await win.locator("[data-save-conflict]").first().waitFor({ timeout: 10_000 });

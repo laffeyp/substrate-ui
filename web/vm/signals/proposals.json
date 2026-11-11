@@ -1362,6 +1362,16 @@
       "rationale": "Chips are added, removed and sent with the message; each step has its tag.",
       "ratified": true,
       "ratified_by": "agent-resolved 2026-11-10, sprint 443; grounds: project — D94, roadmap r11 E10; SDD — BOOTSTRAP step 9; practice — n/a"
+    },
+    {
+      "id": "P-0.50-SAVE-FOR-SEND",
+      "kind": "TAG_PROPOSED",
+      "layer": 1,
+      "element": "EDITOR_SAVED_FOR_SEND (editor) {files, refused}; TURN_SUBMITTED gains saved",
+      "source": "BLACKBOARD 2026-11-10 user (save before send); SAVE-BEFORE-SEND-2026-11-10; roadmap r13 E10.0",
+      "rationale": "A turn now saves the session's unsaved buffers before it is posted; the saves and their refusals need a tag, and the turn the count it waited for.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-10, sprint 444; grounds: project — the Architect's ruling of 2026-11-10, roadmap r13 E10.0; SDD — hard rule 2, BOOTSTRAP step 9; practice — n/a"
     }
   ]
 }

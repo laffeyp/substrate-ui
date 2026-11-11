@@ -30,15 +30,17 @@ test("every workspace file the calls touched, newest touch first, with its turn 
   ]);
 });
 
-test("harness drivers' edits and Claude's Read, and saves by hand", () => {
+test("harness drivers' edits and Claude's Read, saves by hand, HISTORY steps and saves made before a turn", () => {
   const envs = [
     env(EnvelopeKind.HarnessToolCall, { call_id: "t1", tool: "Read", args: { file_path: WS + "/README.md" } }),
     env(EnvelopeKind.HarnessToolCall, { call_id: "t2", tool: "file_change", args: { changes: [{ kind: "update", path: "src/x.ts" }, { kind: "add", path: "src/y.ts" }] } }),
     env(EnvelopeKind.HarnessToolCall, { call_id: "t3", tool: "mcp__substrate__edit_file", args: { path: "src/z.ts", search: "a", replace: "b" } }),
     env(EnvelopeKind.FileWritten, { path: "README.md", old_text: "a", new_text: "b", view: "editor" }),
     env(EnvelopeKind.FileWritten, { path: "src/x.ts", old_text: "a", new_text: "b", view: "history" }),
+    env(EnvelopeKind.FileWritten, { path: "src/w.ts", old_text: "a", new_text: "b", view: "send" }),
   ];
   assert.deepStrictEqual(activityFiles(envs, WS).map((f) => [f.path, f.tool]), [
+    ["src/w.ts", "saved with the message"],
     ["src/x.ts", "history step"],
     ["README.md", "saved by hand"],
     ["src/z.ts", "mcp__substrate__edit_file"],

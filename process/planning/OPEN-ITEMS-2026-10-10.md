@@ -120,3 +120,8 @@ Items 1–3 closed on 2026-10-10 (roadmap `substrate/process/planning/ROADMAP-20
     - the five reply failures, as instructions (`sdd-kit-4/ADDENDUMS.md` E);
     - the project's core documents (the `## Core corpus` table in its working agreement).
     After one of Substrate's own compactions (K290–K294), the session puts the list of files the model read before the cut in front of the model, with the instruction to re-read them before writing. The session topology already records what the model read (`ToolCall` on the record), and its prompt's start survives compaction, so both sources stay in every prompt. Every topology copied from the session topology carries them.
+
+## The code editor (Architect, 2026-11-10)
+
+32. **What is on screen is what the model sees.** Every unsaved buffer of the session is saved when a message is sent, before the model starts. Roadmap `2026-11-09-code-editor/ROADMAP-2026-11-09-code-editor-r13.md` E10.0; design `SAVE-BEFORE-SEND-2026-11-10.md`. Built in sprint 444.
+33. **The editor gates make complicated multi-line edits, not single-line ones.** Applied in sprint 444 to `editor_save_on_send` and `editor_follow`.

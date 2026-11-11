@@ -35,7 +35,8 @@ import { sendCommand, shell } from "../state/shell";
 import { settings, type Binding } from "../state/settings";
 import { bindingExtension, type BindingHooks } from "./bindings";
 import { baseText, vsBase } from "../derive/status_line";
-import { HISTORY_VIEW, lineHunks } from "../derive/inspector";
+import { HISTORY_VIEW, SEND_VIEW, lineHunks } from "../derive/inspector";
+import { setBeforeTurn, type BeforeTurnResult } from "../../vm/session_controller";
 import { StatusLine } from "./StatusLine";
 
 const SUNK = "#1a1c20";
@@ -386,7 +387,10 @@ export function onBufferEdit(fn: () => void): () => void {
 
 /** The mounted centre's shown buffer (sprint 436), for the workspace search: its path, its text, and a change
  *  of its whole text as one edit, so its own undo can take a replace back. */
-let activeBuffer: { path(): string | null; text(): string | null; put(text: string): void } | null = null;
+let activeBuffer: { session(): string; path(): string | null; text(): string | null; put(text: string): void } | null = null;
+/** The session whose files the editor store's `unsaved` and `conflict` describe: the one the centre last showed
+ *  (sprint 444). */
+let storeSession: string | null = null;
 const bufferKey = (sessionId: string, rel: string) => `${sessionId}\n${rel}`;
 /** The one change that turns `from` into `to`: the span between their shared head and tail, so the caret and
  *  the marks outside it stay where they were. */
@@ -446,6 +450,56 @@ export async function writeBuffer(sessionId: string, rel: string, text: string):
   }
   return r?.status ?? 0;
 }
+
+/** Sprint 444 (roadmap r13 E10.0; SAVE-BEFORE-SEND-2026-11-10; the Architect, 2026-11-10: what is on screen is
+ *  what the model sees): before a turn of `sessionId` is posted, every buffer of that session whose text differs
+ *  from the file as read is saved through PUT …/file with view `send`, the file's own line ends and the hash the
+ *  buffer read. Only that session's buffers: the kept ones, and the shown one when the centre shows that session
+ *  (BLACKBOARD 2026-11-10, which buffers). One at a time, so the record's order is the buffers' order. A file the
+ *  server will not write keeps its buffer and its reason goes back to the turn; when it is the file shown, the
+ *  centre draws its offer to reload or overwrite. */
+export async function saveForSend(sessionId: string, paneId: number | null): Promise<BeforeTurnResult> {
+  const prefix = bufferKey(sessionId, "");
+  const texts = new Map<string, string>();
+  for (const [k, state] of BUFFERS) if (k.startsWith(prefix)) texts.set(k.slice(prefix.length), state.doc.toString());
+  const shown = activeBuffer && activeBuffer.session() === sessionId ? activeBuffer.path() : null;
+  const shownText = shown ? activeBuffer!.text() : null;
+  if (shown && shownText !== null) texts.set(shown, shownText);
+  const pending = [...texts].filter(([rel, text]) => DISK.has(bufferKey(sessionId, rel)) && text !== DISK.get(bufferKey(sessionId, rel)));
+  const out: BeforeTurnResult = { saved: 0, refused: [] };
+  if (!pending.length) return out;
+  const ours = storeSession === sessionId;
+  for (const [rel, text] of pending) {
+    const k = bufferKey(sessionId, rel), end = ENDS.get(k) ?? "\n";
+    wrote(k);
+    const r = await fetch(`/api/session/${encodeURIComponent(sessionId)}/file?path=${encodeURIComponent(rel)}`, {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: end === "\n" ? text : text.replace(/\n/g, end), view: SEND_VIEW, base_sha256: SHAS.get(k) }),
+    }).catch(() => null);
+    wrote(k);
+    if (r?.ok) {
+      DISK.set(k, text);
+      SHAS.set(k, ((await r.json()) as { sha256: string }).sha256);
+      out.saved++;
+      if (!ours) continue;
+      // Typing during the save stays unsaved.
+      const now = shown === rel && activeBuffer?.session() === sessionId ? activeBuffer.text() : BUFFERS.get(k)?.doc.toString();
+      setUnsaved(rel, now !== text);
+      const facts = editor.getSnapshot().file;
+      if (facts && facts.path === rel) editor.set({ file: { ...facts, text } });
+      continue;
+    }
+    const why = r ? ((await r.json().catch(() => null)) as { error?: string } | null)?.error ?? `${rel}: HTTP ${r.status}` : `${rel}: the save request failed`;
+    out.refused.push({ path: rel, why });
+    if (ours && r?.status === 409 && shown === rel) {
+      editor.set({ conflict: rel });
+      emitSignal(Signal.EDITOR_SAVE_CONFLICTED, {}, { pane_id: paneId });
+    }
+  }
+  emitSignal(Signal.EDITOR_SAVED_FOR_SEND, { files: out.saved, refused: out.refused.length }, { pane_id: paneId });
+  return out;
+}
+setBeforeTurn(saveForSend);
 
 export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionId: string; tabRow: number }): React.ReactElement {
   const st = React.useSyncExternalStore(editor.subscribe, editor.getSnapshot, editor.getSnapshot);
@@ -744,7 +798,9 @@ export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionI
     activeSave = (command) => { void save(command); };
     activeUndo = undoRedo;
     activeFind = findImpl;
+    storeSession = sessionId;
     activeBuffer = {
+      session: () => sessionId,
       path: () => shown.current,
       text: () => view.current?.state.doc.toString() ?? null,
       put: (text) => { const v = view.current; if (v && v.state.doc.toString() !== text) v.dispatch({ changes: changeTo(v.state.doc.toString(), text) }); },

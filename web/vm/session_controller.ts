@@ -239,8 +239,24 @@ const EMPTY_SNAPSHOT: Snapshot = {
   progressByCallId: {},
 };
 
+/** Sprint 444 (roadmap r13 E10.0; the Architect, 2026-11-10: "Save every unsaved buffer when a message is sent,
+ *  before the model starts"): what the step before a turn did. `saved` counts the files written; `refused` holds
+ *  each file the server would not write, with the server's own reason (a file changed since it was read, a file
+ *  that is not UTF-8). */
+export interface BeforeTurnResult { saved: number; refused: { path: string; why: string }[] }
+const NOTHING_SAVED: BeforeTurnResult = { saved: 0, refused: [] };
+/** The step every turn awaits after its echo and before it is posted (`sendTurn`, the one place a turn is
+ *  posted). The editor registers its save of the session's unsaved buffers (`web/app/editor/Centre.tsx`), so this
+ *  module imports nothing from the editor (BLACKBOARD 2026-11-10, where the save hooks in). */
+type BeforeTurn = (sessionId: string, paneId: number | null) => Promise<BeforeTurnResult>;
+let beforeTurn: BeforeTurn | null = null;
+export function setBeforeTurn(fn: BeforeTurn | null): void { beforeTurn = fn; }
+
 export class SessionController {
   private snap: Snapshot = { ...EMPTY_SNAPSHOT };
+  /** Sprint 444: an echo's seq → the seq of its save warning, so the warning moves with the echo when the record's
+   *  UserMessage replaces it. */
+  private readonly saveWarnings = new Map<number, number>();
   private readonly listeners = new Set<Listener>();
   private readonly eventListeners = new Set<EventListener>();
   private unsubscribeStream: Unsubscribe | null = null;
@@ -744,8 +760,9 @@ export class SessionController {
       this.attachStream(sessionId);
     }
     // Local echo first so the shell never looks hung during a slow round-trip.
+    const echoSeq = -Math.round(Date.now());
     this.appendTranscript({
-      seq: -Math.round(Date.now()),
+      seq: echoSeq,
       kind: EnvelopeKind.UserMessage,
       role: "user",
       text: trimmed,
@@ -753,7 +770,18 @@ export class SessionController {
     const turnIndex = this.snap.turnIndex;
     this.patch({ turnIndex: turnIndex + 1, parkReason: null, turnFailure: null });
     const attachments = opts.attachments ?? [];
-    this.emit(Signal.TURN_SUBMITTED, { session_id: sessionId, turn_index: turnIndex, text_length: trimmed.length, attachments: attachments.length });
+    // Sprint 444 (roadmap r13 E10.0): the session's unsaved buffers are saved before the turn is posted, so the model
+    // reads what the person sees. A save refused as stale leaves its file unwritten, is named under the message, and
+    // the message still goes.
+    const before = beforeTurn
+      ? await beforeTurn(sessionId, this.paneId).catch((e: unknown): BeforeTurnResult => ({ saved: 0, refused: [{ path: "", why: `the save before sending failed: ${String(e)}` }] }))
+      : NOTHING_SAVED;
+    if (before.refused.length) {
+      const warningSeq = echoSeq - 2;
+      this.saveWarnings.set(echoSeq, warningSeq);
+      this.appendTranscript({ seq: warningSeq, kind: "SaveRefused", role: "warning", text: `not saved before sending: ${before.refused.map((r) => r.why).join("; ")}` });
+    }
+    this.emit(Signal.TURN_SUBMITTED, { session_id: sessionId, turn_index: turnIndex, text_length: trimmed.length, attachments: attachments.length, saved: before.saved });
     const result = await this.client.fetchJson<unknown>(
       `/api/session/${encodeURIComponent(sessionId)}/turn`,
       {
@@ -1467,7 +1495,11 @@ export class SessionController {
           ? [...transcript.slice(0, echoIndex), ...transcript.slice(echoIndex + 1)]
           : transcript;
         const row = echoIndex >= 0 ? transcript[echoIndex] : { kind: env.kind, role: "user", text };
-        this.patch({ transcript: [...rest, { ...row, seq: env.seq } as TranscriptRow] });
+        // Sprint 444: the echo's save warning moves with it and stays under the message.
+        const warningSeq = echoIndex >= 0 ? this.saveWarnings.get(transcript[echoIndex].seq) : undefined;
+        const warning = warningSeq === undefined ? undefined : rest.find((r) => r.seq === warningSeq);
+        if (warningSeq !== undefined) this.saveWarnings.delete(transcript[echoIndex].seq);
+        this.patch({ transcript: [...rest.filter((r) => r !== warning), { ...row, seq: env.seq } as TranscriptRow, ...(warning ? [warning] : [])] });
         return;
       }
       case EnvelopeKind.ModelReply: {
