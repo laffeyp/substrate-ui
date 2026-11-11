@@ -45,7 +45,7 @@ import socketserver
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from typing import Any, cast
 from urllib.parse import parse_qs, unquote, urlparse
 
@@ -1975,6 +1975,21 @@ def _git_out(root: Path, *args: str, env: dict[str, str] | None = None) -> str |
     return proc.stdout if proc.returncode == 0 else None
 
 
+def _git_bytes(root: Path, *args: str, ok: tuple[int, ...] = (0,)) -> bytes | None:
+    """`git -C root args…` stdout as bytes, or None when git exits with a code not in `ok` or is missing (UI sprint
+    466: a file's base as it is, and `diff --no-index`, which exits 1 when the files differ)."""
+    try:
+        proc = subprocess.run(  # noqa: S603 — git with fixed arguments, in the session's workspace
+            ["git", "-C", str(root), *args],  # noqa: S607 — git from PATH, as `_git_out` runs it
+            capture_output=True,
+            timeout=30,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return proc.stdout if proc.returncode in ok else None
+
+
 def _workspace_diff(root: Path) -> dict[str, object]:
     """What changed in a session's workspace against main (UI sprint 412; design spec r6 §5: "each hunk
     vs main"; D48: modified dots from the real diff). The base is main's merge-base with HEAD; with no
@@ -2049,6 +2064,10 @@ def _workspace_hunks(root: Path, rel: str) -> dict[str, object]:
     base_kind, base = _diff_base(root)
     if base is None:
         return {"base": base_kind, "path": rel, "hunks": []}
+    if target.is_file() and target.stat().st_size <= WORKSPACE_READ_MAX:
+        decoded = _decoded_hunks(root, base, target.relative_to(root.resolve()).as_posix(), target)
+        if decoded is not None:
+            return {"base": base_kind, "path": rel, "hunks": decoded}
     with _scratch_index(root) as env:
         out = (
             _git_out(
@@ -2066,8 +2085,14 @@ def _workspace_hunks(root: Path, rel: str) -> dict[str, object]:
             )
             or ""
         )
+    return {"base": base_kind, "path": rel, "hunks": _parse_hunks(out.splitlines())}
+
+
+def _parse_hunks(lines: Iterable[str]) -> list[dict[str, object]]:
+    """`git diff -U0`'s hunks: each header's ranges (a count of 0 for a pure insertion or removal) and its `-` and
+    `+` lines."""
     hunks: list[dict[str, object]] = []
-    for line in out.splitlines():
+    for line in lines:
         m = _HUNK_HEADER.match(line)
         if m:
             hunks.append(
@@ -2081,7 +2106,54 @@ def _workspace_hunks(root: Path, rel: str) -> dict[str, object]:
             )
         elif hunks and line[:1] in ("-", "+") and not line.startswith(("--- ", "+++ ")):
             cast(list[str], hunks[-1]["lines"]).append(line)
-    return {"base": base_kind, "path": rel, "hunks": hunks}
+    return hunks
+
+
+def _plain_utf8(data: bytes) -> bool:
+    """`data` is UTF-8 with no byte-order mark and no NUL byte in its first 8 KB: git diffs it as the editor shows it."""
+    decoded = _decode_any(data)
+    return decoded is not None and decoded[1] == "UTF-8" and not data.startswith(b"\xef\xbb\xbf")
+
+
+def _shown_text(data: bytes) -> str:
+    """`data` as the editor shows it: text by the file API's rule (`_decode_any`) with its line ends as `\n` (the
+    centre's `normal`); a file that is not text every byte one character (Latin-1, sprint 465), its `\r` bytes kept."""
+    decoded = _decode_any(data)
+    if decoded is None:
+        return data.decode("latin-1")
+    return re.sub(r"\r\n?", "\n", decoded[0])
+
+
+def _decoded_hunks(root: Path, base: str, rel: str, target: Path) -> list[dict[str, object]] | None:
+    """UI sprint 466 (roadmap r13 E14): the hunks of a file that is not plain UTF-8, or whose base is not, in the text
+    the editor shows. git diffs the bytes: a NUL byte or UTF-16 makes "Binary files differ" and no hunk, and a Latin-1
+    diff does not decode as UTF-8. Each side is decoded (`_shown_text`) and git compares the two texts written in
+    UTF-8 to scratch files (`git diff --no-index -U0 --text`), so the ranges are git's own; lines split only at `\\n`,
+    as the editor's do. None for a plain UTF-8 file and base, which `_workspace_hunks` diffs as before. A file not in
+    the base reads as all added, and an ignored one has no hunk, as the scratch index gives."""
+    data = target.read_bytes()
+    show = _git_bytes(root, "show", f"{base}:./{rel}")
+    if _plain_utf8(data) and (show is None or _plain_utf8(show)):
+        return None
+    if show is None and _git_out(root, "check-ignore", "-q", "--", rel) is not None:
+        return []
+    with tempfile.TemporaryDirectory(prefix="substrate-ui-hunks-") as tmp:
+        old, new = Path(tmp) / "base", Path(tmp) / "file"
+        old.write_text(_shown_text(show or b""), encoding="utf-8", newline="")
+        new.write_text(_shown_text(data), encoding="utf-8", newline="")
+        out = _git_bytes(
+            root,
+            "diff",
+            "--no-index",
+            "-U0",
+            "--text",
+            "--no-color",
+            "--no-ext-diff",
+            str(old),
+            str(new),
+            ok=(0, 1),
+        )
+    return _parse_hunks((out or b"").decode("utf-8").split("\n"))
 
 
 # UI sprints 434, 435 (roadmap 2026-11-09-code-editor r10, E8; research RESEARCH-2026-11-10-editor-search-r2): the
