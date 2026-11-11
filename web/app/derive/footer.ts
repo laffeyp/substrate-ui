@@ -50,6 +50,6 @@ export function footerText(input: FooterInput): FooterText {
     statusColor,
     record: (input.unbound ? "unbound — pick a workspace" : input.title ? "session " + input.title : "")
       + (input.editorOpen && !input.surfaceOpen && input.recordSeq != null ? ` · seq ${input.recordSeq} selected` : ""),
-    hint: input.surfaceOpen ? "esc back to session" : input.editorOpen ? "esc or ⌘⇧E back to the pane · ⌘M meta" : "⌘M toggles meta",
+    hint: input.surfaceOpen ? "esc back to session" : input.editorOpen ? "⌘⇧E back to the pane · ⌘M meta" : "⌘M toggles meta",
   };
 }

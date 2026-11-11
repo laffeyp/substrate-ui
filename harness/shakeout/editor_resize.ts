@@ -11,7 +11,7 @@
 //            harness/pixel/png.ts: a scan across the middle row for the side dividers, down the
 //            centre for the terminal's top edge;
 //   signal — after close, one EDITOR_COLUMN_RESIZED per drag in window-1.jsonl with that size.
-// Then Escape and ⌘⇧E: the sizes are kept. SHAKEOUT_APP=<Substrate.app> runs the bundle.
+// Then ⌘⇧E out and back (sprint 447: Escape no longer leaves the editor): the sizes are kept. SHAKEOUT_APP=<Substrate.app> runs the bundle.
 
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -108,13 +108,13 @@ async function main(): Promise<void> {
       lines.push(`${col} ${want[col]} px (pixels: dividers x ${px.xs.join(",")}, edge y ${px.y})`);
     }
     // Kept: close and reopen the editor.
-    await win.keyboard.press("Escape");
+    await win.keyboard.press("Meta+Shift+E");
     await win.locator("[data-editor-view]").first().waitFor({ state: "detached", timeout: 10_000 });
     await win.keyboard.press("Meta+Shift+E");
     await win.locator("[data-editor-view]").first().waitFor({ state: "visible", timeout: 10_000 });
     await settled(win);
     const again = await boxes(win);
-    if (JSON.stringify(again) !== JSON.stringify(want)) throw new Error(`after Escape and ⌘⇧E the sizes are ${JSON.stringify(again)}, not ${JSON.stringify(want)}`);
+    if (JSON.stringify(again) !== JSON.stringify(want)) throw new Error(`after ⌘⇧E out and back the sizes are ${JSON.stringify(again)}, not ${JSON.stringify(want)}`);
 
     await app.close();
     const recs = windowRecords(launch).filter((r) => r.name === "EDITOR_COLUMN_RESIZED").map((r) => `${String(r.payload.column)}=${String(r.payload.size)}`);
@@ -125,7 +125,7 @@ async function main(): Promise<void> {
     const boot = readdirSync(traces).sort().pop()!;
     const booted = readFileSync(join(traces, boot, "main.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as { name: string; payload: Record<string, unknown> }).find((r) => r.name === "APP_BOOTED")!.payload;
     if (packaged && booted.packaged !== true) throw new Error(`APP_BOOTED packaged ${String(booted.packaged)}`);
-    console.log(`editor_resize: ok — ${lines.join("; ")}; kept after Escape and ⌘⇧E; EDITOR_COLUMN_RESIZED ${recs.join(" ")}; packaged=${String(booted.packaged)}; screenshots in ${shots}`);
+    console.log(`editor_resize: ok — ${lines.join("; ")}; kept after ⌘⇧E out and back; EDITOR_COLUMN_RESIZED ${recs.join(" ")}; packaged=${String(booted.packaged)}; screenshots in ${shots}`);
     code = 0;
   } catch (e) {
     console.error(`editor_resize: FAIL — ${(e as Error).message}`);

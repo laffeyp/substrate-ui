@@ -13,9 +13,9 @@
 // then the ⌘ keys; then Escape, which closes the innermost open thing or interrupts a running turn
 // (⇧Esc softly: stop after this tool); then Ctrl+C.
 //
-// Sprint 406 (roadmap 2026-11-09-code-editor r6, R1): ⌘⇧E goes to the editor view and back, and in the
-// editor Escape returns to the pane once nothing inside it is open, before any interrupt (spec r6 §4,
-// D73 (c), frame 24a's footer "esc or ⌘⇧E back to the pane").
+// Sprint 406 (roadmap 2026-11-09-code-editor r6, R1): ⌘⇧E goes to the editor view and back. Sprint 447 (the
+// Architect, 2026-11-10: Escape "should actually interrupt the model always"): in the editor Escape is the
+// pane's Escape, the close cascade and then the interrupt; it no longer leaves the editor.
 
 import { TurnInterruptedTier } from "../vm/signals.gen";
 /** `code`, the physical key: with ⌥ held, macOS gives `key` a symbol (⌥L is "¬"), so ⌥ chords read the code. */
@@ -56,7 +56,7 @@ export type KeyAction =
   | { kind: "records" } | { kind: "picker" } | { kind: "language" }
   | { kind: "toggle-meta" } | { kind: "toggle-tools" } | { kind: "split"; dir: "right" | "down" }
   | { kind: "toggle-find" } | { kind: "settings" } | { kind: "toggle-assays" }
-  | { kind: "toggle-editor" } | { kind: "close-editor" }
+  | { kind: "toggle-editor" }
   | { kind: "editor-find"; field: "query" | "replace" } | { kind: "editor-search" } | { kind: "tree-find" } | { kind: "quick-open" }
   | { kind: "fold-editor"; column: "left" | "right" | "bottom" }
   | { kind: "refuse-split" }
@@ -110,7 +110,6 @@ export function windowKey(ev: KeyLike, ctx: KeyContext): KeyAction | null {
     if (ctx.cardOpen) return { kind: "close-cards" };
     if (ctx.surface) return { kind: "close-surface" };
     if (ctx.editor && ctx.vimCode) return null;
-    if (ctx.editor) return { kind: "close-editor" };
     return ctx.running ? { kind: "interrupt", tier: ev.shiftKey ? TurnInterruptedTier.SOFT : TurnInterruptedTier.HARD } : null;
   }
   if (ev.ctrlKey && !ev.metaKey && key === "c" && ctx.typing && ctx.caretOnly) return { kind: "interrupt", tier: TurnInterruptedTier.HARD };

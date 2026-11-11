@@ -828,7 +828,6 @@ export class App extends React.Component<AppProps, AppState> {
     if (action.kind === "close-cards") { this.noteCards({ ddFor: null, wsFor: null }, TopBarCardSetCause.ESCAPE); this.setState({ ddFor: null, wsFor: null }); return; }
     if (action.kind === "close-surface") { this.viewCause = ViewChangedCause.CLOSE; this.setState((st) => ({ vs: closePage(st.vs) })); return; }
     // Sprint 407: Escape in the editor view returns to the panes (frame 24a's footer).
-    if (action.kind === "close-editor") { this.viewCause = ViewChangedCause.CLOSE; this.setState({ vs: show("panes") }); return; }
     e.preventDefault();
     if (action.kind === "toggle-meta") this.toggleMeta(ViewChangedCause.KEY);
     else if (action.kind === "toggle-editor") this.toggleEditor(ViewChangedCause.KEY, name);

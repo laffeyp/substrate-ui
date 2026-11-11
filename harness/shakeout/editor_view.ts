@@ -3,8 +3,9 @@
 // The editor view opens and returns (sprint 407; roadmap 2026-11-09-code-editor r6, R1 and R3).
 //
 // The real input path: keys pressed on the window, the pane bound through its picker. At the picker
-// ⌘⇧E is refused; on a session it shows frame 24a's four areas; Escape (from the input bar) and ⌘⇧E
-// return; a page opens over the editor and Escape goes back to it. Screenshots at 1512 and 504 points
+// ⌘⇧E is refused; on a session it shows frame 24a's four areas; ⌘⇧E returns; Escape in the editor with no
+// turn running leaves the editor open (sprint 447: Escape is the pane's interrupt, `editor_escape_interrupt`);
+// a page opens over the editor and Escape goes back to it. Screenshots at 1512 and 504 points
 // wide go to runs/packaged/sprint-407-<stamp>-<source|packaged>/ to be read beside
 // runs/design/sheet-v11/24a.png. After the app closes, window-1.jsonl must hold the editor's records
 // in order and main.jsonl no INVARIANT_BROKEN (launch.cleanup). SHAKEOUT_APP=<Substrate.app> runs the
@@ -91,10 +92,13 @@ async function main(): Promise<void> {
     if (narrow.centre < 240 || narrow.wrapped || narrow.scrollX) throw new Error(`at 504 px: centre ${narrow.centre} px, labels wrapped ${narrow.wrapped}, sideways scroll ${narrow.scrollX}`);
     if (!(await shown(win, '[data-editor-area="bottom"] textarea[data-input-bar]'))) throw new Error("at 504 px the input bar is not shown");
     await size(app, win, 1512, 945);
-    // 5. Escape from the input bar returns to the panes.
+    // 5. Escape from the input bar, no turn running: the editor stays (sprint 447); ⌘⇧E returns to the panes.
     await visible(win, '[data-editor-area="bottom"] textarea[data-input-bar]').click();
     await win.keyboard.press("Escape");
-    await expectView(win, false, "Escape in the editor");
+    await settled(win);
+    await expectView(win, true, "Escape in the editor with no turn running");
+    await win.keyboard.press("Meta+Shift+E");
+    await expectView(win, false, "⌘⇧E after Escape");
     if (!(await shown(win, '[data-vm-transcript-mount="terminal"]'))) throw new Error("the panes did not return");
     // 6. ⌘⇧E twice.
     await win.keyboard.press("Meta+Shift+E");
@@ -108,8 +112,8 @@ async function main(): Promise<void> {
     await expectView(win, false, "⌘3 over the editor");
     await win.keyboard.press("Escape");
     await expectView(win, true, "Escape on the assay page over the editor");
-    await win.keyboard.press("Escape");
-    await expectView(win, false, "Escape in the editor after the page");
+    await win.keyboard.press("Meta+Shift+E");
+    await expectView(win, false, "⌘⇧E in the editor after the page");
     // 8. Sprint 409: the chip and the footer name the way back, and the chip takes it.
     await win.keyboard.press("Meta+Shift+E");
     await expectView(win, true, "⌘⇧E a fourth time");
@@ -118,7 +122,7 @@ async function main(): Promise<void> {
       hint: (document.querySelector("[data-footer] > span:last-child")?.textContent || "").trim(),
     }));
     if (!chrome.chip || chrome.chip.text !== "⌘⇧E pane" || chrome.chip.bg !== "rgb(130, 165, 200)") throw new Error(`the top bar's chip in the editor: ${JSON.stringify(chrome.chip)}`);
-    if (chrome.hint !== "esc or ⌘⇧E back to the pane · ⌘M meta") throw new Error(`the footer's hint in the editor: ${chrome.hint}`);
+    if (chrome.hint !== "⌘⇧E back to the pane · ⌘M meta") throw new Error(`the footer's hint in the editor: ${chrome.hint}`);
     await win.screenshot({ path: join(shots, "editor-chrome-1512x945.png") });
     await win.locator("[data-top-bar] button", { hasText: "⌘⇧E pane" }).first().click();
     await expectView(win, false, "a click on the chip");
@@ -139,10 +143,10 @@ async function main(): Promise<void> {
     const sorted = (o: Record<string, unknown>) => JSON.stringify(Object.keys(o).sort().map((k) => [k, o[k]]));
     if (sorted(drawn) !== sorted(wantDrawn)) throw new Error(`EDITOR_DRAWN ${JSON.stringify(drawn)}`);
     const views = recs.filter((r) => r.name === "VIEW_CHANGED").map((r) => `${String(r.payload.cause)} ${String(r.payload.from)}→${String(r.payload.to)}`);
-    const wantViews = ["key panes→editor", "close editor→panes", "key panes→editor", "key editor→panes", "key panes→editor", "key editor→assay", "close assay→editor", "close editor→panes", "key panes→editor", "button editor→panes"];
+    const wantViews = ["key panes→editor", "key editor→panes", "key panes→editor", "key editor→panes", "key panes→editor", "key editor→assay", "close assay→editor", "key editor→panes", "key panes→editor", "button editor→panes"];
     if (views.join("; ") !== wantViews.join("; ")) throw new Error(`VIEW_CHANGED: ${views.join("; ")}`);
-    const routed = recs.filter((r) => r.name === "KEY_ROUTED" && (r.payload.key === "Meta+Shift+E" || r.payload.action === "close-editor")).map((r) => `${String(r.payload.key)}:${String(r.payload.action)}`);
-    if (routed.filter((x) => x === "Meta+Shift+E:toggle-editor").length !== 6 || routed.filter((x) => x === "Escape:close-editor").length !== 2) throw new Error(`KEY_ROUTED: ${routed.join(" ")}`);
+    const routed = recs.filter((r) => r.name === "KEY_ROUTED" && (r.payload.key === "Meta+Shift+E" || r.payload.key === "Escape")).map((r) => `${String(r.payload.key)}:${String(r.payload.action)}`);
+    if (routed.filter((x) => x === "Meta+Shift+E:toggle-editor").length !== 8 || routed.some((x) => x.endsWith(":close-editor"))) throw new Error(`KEY_ROUTED: ${routed.join(" ")}`);
     if (packaged) {
       const traces = join(launch.state, "electron", "logs", "traces");
       const boot = readdirSync(traces).sort().pop()!;

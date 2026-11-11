@@ -7,6 +7,7 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import { windowKey, type KeyContext, type KeyLike } from "../keymap";
+import { TurnInterruptedTier } from "../../vm/signals.gen";
 
 const CTX: KeyContext = { typing: false, targetTyping: false, caretOnly: false, surface: null, revealed: false, editor: false, pickerFocused: false, languageTurns: false, findOpen: false, dialogOpen: false, cardOpen: false, running: false };
 const key = (k: string, mods: Partial<KeyLike> = {}): KeyLike => ({ key: k, metaKey: false, ctrlKey: false, shiftKey: false, altKey: false, ...mods });
@@ -53,15 +54,20 @@ test("the arrows go to the records list, the picker, or the language lens, by wh
 });
 
 // Sprint 406: the editor view's keys (spec r6 §4, D73 (c), frame 24a's footer).
-test("⌘⇧E toggles the editor; Escape in the editor returns to the pane after what is open inside it", () => {
+test("⌘⇧E toggles the editor; Escape in the editor is the pane's: the cascade, then the interrupt (sprint 447)", () => {
   assert.deepStrictEqual(windowKey(key("E", { metaKey: true, shiftKey: true }), CTX), { kind: "toggle-editor" });
   assert.deepStrictEqual(windowKey(key("e", { metaKey: true, shiftKey: true }), { ...CTX, editor: true, typing: true }), { kind: "toggle-editor" });
   assert.strictEqual(windowKey(key("E", { metaKey: true, shiftKey: true, altKey: true }), CTX), null);
   assert.strictEqual(windowKey(key("E", { metaKey: true, shiftKey: true, ctrlKey: true }), CTX), null);
   assert.deepStrictEqual(windowKey(key("e", { metaKey: true }), { ...CTX, editor: true }), { kind: "toggle-tools" });
   const ed = { ...CTX, editor: true, running: true };
-  assert.deepStrictEqual(windowKey(key("Escape"), ed), { kind: "close-editor" });
-  assert.deepStrictEqual(windowKey(key("Escape"), { ...ed, typing: true }), { kind: "close-editor" });
+  assert.deepStrictEqual(windowKey(key("Escape"), ed), { kind: "interrupt", tier: TurnInterruptedTier.HARD });
+  assert.deepStrictEqual(windowKey(key("Escape"), { ...ed, typing: true }), { kind: "interrupt", tier: TurnInterruptedTier.HARD });
+  assert.deepStrictEqual(windowKey(key("Escape", { shiftKey: true }), ed), { kind: "interrupt", tier: TurnInterruptedTier.SOFT });
+  assert.strictEqual(windowKey(key("Escape"), { ...ed, running: false }), null);
+  assert.deepStrictEqual(windowKey(key("Escape"), { ...ed, findOpen: true }), { kind: "close-find" });
+  assert.deepStrictEqual(windowKey(key("Escape"), { ...ed, dialogOpen: true }), { kind: "close-dialog" });
+  assert.strictEqual(windowKey(key("Escape"), { ...ed, vimCode: true }), null);
   // Sprint 430: ⌘M in the editor is meta's key still; App opens the meta pane inside the editor.
   assert.deepStrictEqual(windowKey({ key: "m", code: "KeyM", metaKey: true, ctrlKey: false, shiftKey: false, altKey: false }, ed), { kind: "toggle-meta" });
   // Sprint 428: ⌘F and ⌥⌘F find and replace in the open file; in the terminal ⌘F is the transcript's find.
