@@ -8,7 +8,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert";
-import { authorLabel, fileActivity, fileAuthors, fileHistory, fileHistoryState, fileType, hunkAuthor, lineDelta, litRow, readResult, relPath, stepText } from "../derive/inspector";
+import { authorLabel, fileActivity, fileAuthors, fileHistory, fileHistoryState, fileType, hunkAuthor, lineDelta, linesText, litRow, readResult, relPath, stepText } from "../derive/inspector";
 import type { RecordEnvelope } from "../../vm/types";
 import { EnvelopeKind } from "../../vm/envelope_kinds.gen";
 
@@ -125,4 +125,8 @@ test("HISTORY's steps (sprint 429): a step is not a row, the lit row follows the
   // Line 2 (B) is the first save's again after the step.
   assert.strictEqual(hunkAuthor({ old_start: 2, old_count: 1, new_start: 2, new_count: 1, lines: ["-b", "+B"] }, st.authors, st.rows)?.seq, first);
   assert.strictEqual(litRow(st.rows, st.opened, "x\n"), null, "a text off the record lights nothing");
+});
+
+test("sprint 462: a count of lines reads \"1 line\" and \"N lines\"", () => {
+  assert.deepStrictEqual([0, 1, 2, 312].map(linesText), ["0 lines", "1 line", "2 lines", "312 lines"]);
 });

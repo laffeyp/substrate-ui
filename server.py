@@ -2608,9 +2608,14 @@ class WorkspaceConflictError(ValueError):
 
 
 def _workspace_read(root: Path, rel: str, max_bytes: int = WORKSPACE_READ_MAX) -> dict[str, object]:
-    """A file's facts and, for UTF-8 text up to `max_bytes`, its text: size, modified time, the
-    sha256 of its bytes (a write sends it back as `base_sha256`), encoding (`utf-8` or `binary`),
-    line endings. Over the cap the text is null and `too_large` true."""
+    """A file's facts and, for text up to `max_bytes`, its text: size, modified time, the sha256 of its
+    bytes (a write sends it back as `base_sha256`), encoding, line endings, and `read_only`. Over the cap
+    the text is null and `too_large` true.
+
+    Sprint 462 (roadmap r13 E14): a file decodes by the attachments' rule (`_decode_any`, round 3 rule 3),
+    and its encoding is named: `utf-8`, `utf-8-bom`, `utf-16`, `latin-1`, or `binary` with no text for a
+    file with a NUL byte in its first 8 KB. Anything but plain `utf-8` is `read_only`: the write below
+    refuses a file that is not UTF-8 text, so the editor opens it for reading only."""
     target = _workspace_target(root, rel)
     if not target.is_file():
         raise FileNotFoundError(f"{rel!r} is not a file in the workspace")
@@ -2625,17 +2630,44 @@ def _workspace_read(root: Path, rel: str, max_bytes: int = WORKSPACE_READ_MAX) -
         "encoding": None,
         "line_endings": None,
         "text": None,
+        "read_only": False,
     }
     if st.st_size > max_bytes:
         return out
     data = target.read_bytes()
-    try:
-        text = data.decode("utf-8")
-    except UnicodeDecodeError:
-        out["encoding"] = "binary"
+    decoded = _decode_any(data)
+    if decoded is None:
+        out.update(encoding="binary", read_only=True)
         return out
-    out.update(encoding="utf-8", line_endings=_line_endings(text), text=text)
+    text, name = decoded
+    encoding = FILE_ENCODINGS[name, data.startswith(b"\xef\xbb\xbf")]
+    out.update(
+        encoding=encoding,
+        line_endings=_line_endings(text),
+        text=text,
+        read_only=encoding != "utf-8",
+    )
     return out
+
+
+# Sprint 462: the file API's encoding as FILE_READ names it (vocabulary v0.61).
+FILE_READ_ENCODING = {
+    "utf-8": FileReadEncoding.UTF8,
+    "utf-8-bom": FileReadEncoding.UTF8_BOM,
+    "utf-16": FileReadEncoding.UTF16,
+    "latin-1": FileReadEncoding.LATIN1,
+    "binary": FileReadEncoding.BINARY,
+}
+
+# Sprint 462: `_decode_any`'s name and whether the bytes open with UTF-8's mark, to the file API's encoding.
+FILE_ENCODINGS = {
+    ("UTF-8", False): "utf-8",
+    ("UTF-8", True): "utf-8-bom",
+    ("UTF-16", False): "utf-16",
+    ("UTF-16", True): "utf-16",
+    ("Latin-1", False): "latin-1",
+    ("Latin-1", True): "latin-1",
+}
 
 
 # UI sprint 388, editor shared work 0(e): a turn's attachments (kernel K344, session vocabulary
@@ -4543,9 +4575,7 @@ class Handler(BaseHTTPRequestHandler):
                 encoding = (
                     FileReadEncoding.TOO_LARGE
                     if facts["too_large"]
-                    else FileReadEncoding.UTF8
-                    if facts["encoding"] == "utf-8"
-                    else FileReadEncoding.BINARY
+                    else FILE_READ_ENCODING[str(facts["encoding"])]
                 )
                 TRACE.emit(
                     Signal.FILE_READ,

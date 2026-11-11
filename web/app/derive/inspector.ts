@@ -42,6 +42,8 @@ export interface Hunk { old_start: number; old_count: number; new_start: number;
 
 const FILE_TOOLS = new Set(["read_file", "edit_file", "write_file"]);
 const lines = (s: string) => (s === "" ? 0 : s.replace(/\n$/, "").split("\n").length);
+/** Sprint 462: a count of lines in words, "1 line" or "N lines". */
+export const linesText = (n: number): string => `${n} line${n === 1 ? "" : "s"}`;
 
 /** A read_file result: its numbered lines, and the file's text when the window is the whole file. */
 export function readResult(output: string): { count: number; first: number; text: string | null } {
@@ -95,10 +97,10 @@ export function fileActivity(envs: readonly RecordEnvelope[], path: string, work
       if (res && res.payload.ok === false) gist = `${tool} · failed`;
       else if (tool === "read_file") {
         const r = readResult(String(res?.payload.output ?? ""));
-        gist = r.first > 1 ? `${tool} · lines ${r.first}–${r.first + r.count - 1}` : `${tool} · ${r.count} lines`;
+        gist = r.first > 1 ? `${tool} · lines ${r.first}–${r.first + r.count - 1}` : `${tool} · ${linesText(r.count)}`;
       }
       else if (tool === "edit_file") gist = `${tool} · +${lines(String(args[2] ?? ""))} −${lines(String(args[1] ?? ""))}`;
-      else gist = `${tool} · ${lines(String(args[1] ?? ""))} lines`;
+      else gist = `${tool} · ${linesText(lines(String(args[1] ?? "")))}`;
     } else if (tool === "grep") {
       // grep's result lists its matches by file (`path:line:text`): the matches in this file (24a: `grep "price" · 6 matches`).
       const hits = String(res?.payload.output ?? "").split("\n").filter((l) => relPath(l.split(":")[0], workspace) === path).length;

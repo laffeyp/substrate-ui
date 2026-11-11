@@ -5,7 +5,7 @@ Regenerate: python3 scripts/gen_signals.py. tests/test_signals_generated.py fail
 
 from enum import StrEnum
 
-VOCAB_VERSION = "0.60"
+VOCAB_VERSION = "0.61"
 
 
 class Signal(StrEnum):
@@ -576,6 +576,9 @@ class ToolOutputModeSetCause(StrEnum):
 
 class FileReadEncoding(StrEnum):
     UTF8 = "utf8"
+    UTF8_BOM = "utf8_bom"
+    UTF16 = "utf16"
+    LATIN1 = "latin1"
     BINARY = "binary"
     TOO_LARGE = "too_large"
 
@@ -687,6 +690,7 @@ class EditorKeyRefusedReason(StrEnum):
     NO_GIT = "no_git"
     NOT_EDITOR = "not_editor"
     NO_FILE = "no_file"
+    NOT_UTF8 = "not_utf8"
 
 
 class EditorDrawnBinding(StrEnum):

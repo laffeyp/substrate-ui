@@ -50,7 +50,8 @@ const REMOVED = "#c26058";
 const CHOICE: React.CSSProperties = { background: "#2e3138", color: "#d7dade", border: "none", borderRadius: 4, padding: "2px 10px", fontSize: 11, cursor: "pointer", fontFamily: "inherit" };
 
 interface Hunk { old_start: number; old_count: number; new_start: number; new_count: number; lines: string[] }
-interface FileFacts { text: string | null; encoding: string | null; too_large: boolean; size: number; modified: number; line_endings: string | null; sha256?: string }
+/** `read_only`: sprint 462, a text file not in plain UTF-8 (the server's write refuses it). */
+interface FileFacts { text: string | null; encoding: string | null; too_large: boolean; size: number; modified: number; line_endings: string | null; sha256?: string; read_only?: boolean }
 
 /** The first languages (BLACKBOARD 2026-11-09, the first grammars), by file extension. */
 function language(path: string): Extension {
@@ -313,6 +314,9 @@ export function closeFile(rel: string, paneId: number): void {
   editor.set({ tabs, active: st.active === rel ? tabs[Math.min(at, tabs.length - 1)] ?? null : st.active });
   emitSignal(Signal.EDITOR_FILE_CLOSED, { tab_count: tabs.length }, { pane_id: paneId });
 }
+
+/** Sprint 462: a buffer the person reads but cannot change. */
+const READ_ONLY: Extension[] = [EditorState.readOnly.of(true)];
 
 /** A tab (sprint 419). Sprint 445 (BLACKBOARD 2026-11-09, the tab row: "the tab's dot means unsaved changes"; × on
  *  hover): an unsaved file's tab draws a dot in the ×'s place, as VS Code and Xcode do, and hovering shows the ×. */
@@ -679,7 +683,10 @@ export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionI
           shownLanded.current = landed.seq;
           landedLine = firstChange(prev.doc.toString(), normal(file.text));
         }
-        const state = EditorState.create({ doc: file.text, extensions: [...configured(), lineNumbers(), hunkExtension(diff.hunks), language(rel), syntaxHighlighting(HIGHLIGHT), THEME, search(), findMarks, scopeField, followField, listener] });
+        // Sprint 462 (roadmap r13 E14): a file in another encoding opens for reading only; its caret and selection work.
+        // `readOnly` stops CodeMirror's commands, and its view ignores typed changes while it is set (@codemirror/view,
+        // "Ignore changes when the editor is read-only").
+        const state = EditorState.create({ doc: file.text, extensions: [...configured(), lineNumbers(), hunkExtension(diff.hunks), language(rel), syntaxHighlighting(HIGHLIGHT), THEME, search(), findMarks, scopeField, followField, listener, ...(file.read_only ? READ_ONLY : [])] });
         placed = keep > 1 ? state.update({ selection: { anchor: state.doc.line(keep).from } }).state : state;
         markUnsaved(rel, false);
       }
@@ -725,6 +732,9 @@ export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionI
   const save = async (command: EditorFileSavedCommand, overwrite = false, step = false): Promise<void> => {
     const rel = shown.current, v = view.current;
     if (!rel || !v || editor.getSnapshot().active !== rel) { emitSignal(Signal.EDITOR_KEY_REFUSED, { key: SAVE_KEY[command], reason: EditorKeyRefusedReason.NO_FILE }, { pane_id: paneId }); return; }
+    // Sprint 462: a file read in another encoding is not written back as UTF-8; the server's write would refuse it.
+    const facts = editor.getSnapshot().file;
+    if (facts && facts.path === rel && facts.text !== null && facts.encoding !== null && facts.encoding !== "utf-8") { emitSignal(Signal.EDITOR_KEY_REFUSED, { key: SAVE_KEY[command], reason: EditorKeyRefusedReason.NOT_UTF8 }, { pane_id: paneId }); return; }
     const sent = v.state.doc.toString();
     const end = ENDS.get(key(rel)) ?? "\n";
     const body = { text: end === "\n" ? sent : sent.replace(/\n/g, end), view: step ? HISTORY_VIEW : "editor", ...(overwrite ? {} : { base_sha256: SHAS.get(key(rel)) }) };

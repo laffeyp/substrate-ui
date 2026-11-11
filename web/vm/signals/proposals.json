@@ -1472,6 +1472,16 @@
       "rationale": "Chips now come by drag as well; the trace says which gesture added each.",
       "ratified": true,
       "ratified_by": "agent-resolved 2026-11-11, sprint 458; grounds: project — D94, roadmap r13 E10.4; SDD — hard rule 2; practice — n/a"
+    },
+    {
+      "id": "P-0.61-ENCODINGS",
+      "kind": "PAYLOAD_FIELD_PROPOSED",
+      "layer": 2,
+      "element": "FILE_READ.encoding gains utf8_bom, utf16, latin1; EDITOR_KEY_REFUSED.reason gains not_utf8",
+      "source": "roadmap r13 E14; RESEARCH-2026-11-11-binary-files-and-highlighting; BLACKBOARD 2026-11-11; sprint 462",
+      "rationale": "The file API now reads text in any encoding and names it; the editor refuses to save such a file, and the trace says why.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-11, sprint 462; grounds: project — roadmap r13 E14, the user entries of 2026-11-10 and 2026-11-11; SDD — hard rule 2; practice — n/a"
     }
   ]
 }
