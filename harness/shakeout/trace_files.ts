@@ -80,11 +80,13 @@ async function main(): Promise<void> {
 
     const main = readJsonl(join(traceDir, "main.jsonl"));
     if (main[0]?.name !== "APP_BOOTED") throw new Error(`main.jsonl does not open with APP_BOOTED: ${main[0]?.name}`);
-    for (const f of ["app_version", "app_commit", "kernel_commit", "vocab_version", "packaged", "home_kind"]) {
+    for (const f of ["app_version", "app_commit", "kernel_commit", "vocab_version", "packaged", "home_kind", "app_name"]) {
       if (!(f in (main[0].payload ?? {}))) throw new Error(`APP_BOOTED lacks ${f}`);
     }
     // Sprint 354: the vocabulary the launch speaks is the one in the tree it was built from.
     const vocab = (JSON.parse(readFileSync(join(__dirname, "..", "..", "web", "vm", "signals", "versions", "current.json"), "utf8")) as { vocabulary_version: string }).vocabulary_version;
+    // v0.68: a gate names its own SUBSTRATE_HOME, so the app runs as "Substrate Dev" (electron/main.ts).
+    if (main[0].payload?.app_name !== "Substrate Dev") throw new Error(`APP_BOOTED.app_name ${String(main[0].payload?.app_name)}; a gate launch runs as Substrate Dev`);
     if (main[0].payload?.vocab_version !== vocab) throw new Error(`APP_BOOTED.vocab_version ${String(main[0].payload?.vocab_version)}; current.json is ${vocab}`);
     // Sprint 354: the commit names the code that ran; "+dirty" when the tree had uncommitted changes.
     const appCommit = String(main[0].payload?.app_commit);

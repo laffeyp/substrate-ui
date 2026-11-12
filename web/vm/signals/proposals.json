@@ -1542,6 +1542,16 @@
       "rationale": "The POST returns at the turn's end, and turns have no time limit; the acknowledgement T6 times must be the kernel's acceptance, which the turn's UserMessage on the stream shows.",
       "ratified": true,
       "ratified_by": "agent-resolved 2026-11-11, sprint 483; grounds: project — server.py `_session_turn` (`turn_sync`), the trace; SDD — hard rule 2, grammar Layer 4; practice — Nielsen 1993 (response time limits)"
+    },
+    {
+      "id": "P-0.68-APP-NAME",
+      "kind": "PAYLOAD_FIELD_PROPOSED",
+      "layer": 2,
+      "element": "APP_BOOTED.app_name (string): the name the app runs under",
+      "source": "roadmap 2026-11-11-second-build r1 E4; PAPER-2026-11-11-second-build-r2.md section 6: two packaged installs (Substrate, Substrate Next) write the same APP_BOOTED but for its version fields; sprint 490",
+      "rationale": "With a working install and a test install on one machine, a reader and the Rubber Duck Pass must tell from the trace which app spoke; the name main.ts sets is the install's identity.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-11, sprint 490; grounds: project — electron/identity.json, the user entries of 2026-11-11 on the second build; SDD — hard rule 2, grammar Layer 2; practice — microsoft/vscode product.json (one identity record per build)"
     }
   ]
 }

@@ -119,8 +119,8 @@ async function main(): Promise<void> {
     const traces = join(NEXT.logs, "traces");
     const boot = readdirSync(traces).filter((n) => statSync(join(traces, n)).isDirectory()).sort().pop()!;
     const booted = readFileSync(join(traces, boot, "main.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as { name: string; payload: Record<string, unknown> }).find((r) => r.name === "APP_BOOTED")!.payload;
-    report.push(`next APP_BOOTED packaged ${String(booted.packaged)} home_kind ${String(booted.home_kind)} gate_isolated ${String(booted.gate_isolated)}`);
-    if (booted.packaged !== true || booted.home_kind !== "default") throw new Error(`APP_BOOTED ${JSON.stringify(booted)}`);
+    report.push(`next APP_BOOTED app_name ${String(booted.app_name)} packaged ${String(booted.packaged)} home_kind ${String(booted.home_kind)} gate_isolated ${String(booted.gate_isolated)}`);
+    if (booted.packaged !== true || booted.home_kind !== "default" || booted.app_name !== "Substrate Next") throw new Error(`APP_BOOTED ${JSON.stringify(booted)}`);
 
     const pid1 = workingPid();
     const work1 = statuses(WORK.store);

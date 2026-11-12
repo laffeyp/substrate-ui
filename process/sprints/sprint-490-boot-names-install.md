@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 490
-status: pending
+status: closed
 phase: second build (roadmap r1), E4
 pass_kind: functional
 ---
@@ -88,3 +88,13 @@ The generated files beside `0.68.json` follow the vocabulary tool; the two hand-
 - [x] Artifact contract is gradable.
 - [x] Observation contract present.
 - [x] Two hand-edited files.
+
+## close
+
+Vocabulary v0.68 (P-0.68-APP-NAME, `PAYLOAD_FIELD_PROPOSED`): `APP_BOOTED` gains `app_name` (string). `0.68.json`, `0.68-rationale.md`, the proposal, `current.json` → 0.68; `scripts/gen_signals.py` regenerated `web/vm/signals.gen.ts`, `electron/signals.gen.ts` and `signals_gen.py`. `electron/main.ts` writes `app_name: app.getName()`. Gates: `trace_files` requires `app_name` and reads "Substrate Dev" for a gate launch; `two_installs` reads "Substrate Next" for the test install.
+
+Results (logs `runs/packaged/sprint-490-20261111-233614/`): `npm run signals` 0 (0.68, 157 tags, all locked); build 0; `test:unit` 0; the 11 server test files that read the vocabulary, 70 passed. `trace_files` from source and on the Next bundle: ok, app_name Substrate Dev. `two_installs` on the rebuilt Next bundle, the working install open: ok, app_name Substrate Next; the working install untouched (pid 8228, 129 sessions, no boot in its log). Mutant (`app_name` fixed to "Substrate"): `trace_files` fails, "APP_BOOTED.app_name Substrate; a gate launch runs as Substrate Dev".
+
+Not observed here: "Substrate" from the working install itself. The installed working app is build 1794463909, from before this vocabulary, and a second launch named Substrate would quit at the working install's lock. Sprint 493's swap installs a working build that writes it.
+
+Rubber Duck Pass: narrated, the Next trace's `APP_BOOTED` now reads app_name Substrate Next, packaged true, home_kind default; a gate's reads Substrate Dev, home_kind env. Parity holds; no other tag or field changed. No observations.

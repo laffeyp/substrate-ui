@@ -192,6 +192,8 @@ function openTrace() {
     app_version: app.getVersion(), app_commit: commits.app_commit, kernel_commit: commits.kernel_commit,
     vocab_version: VOCAB_VERSION, packaged: app.isPackaged, home_kind: process.env.SUBSTRATE_HOME ? AppBootedHomeKind.ENV : AppBootedHomeKind.DEFAULT,
     gate_isolated: GATE_ISOLATED,
+    // v0.68: which install wrote this trace (its identity record's name, or "Substrate Dev").
+    app_name: app.getName(),
   });
   traceEmit(Signal.TRACE_OPENED, { process: TraceOpenedProcess.MAIN });
   const held = trace.held;
