@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 495
-status: active
+status: closed
 phase: continuing a session (roadmap 2026-11-12-continue-a-session r1, E6)
 pass_kind: observation
 ---
