@@ -6,7 +6,7 @@
 // and Cargo.toml; the deterministic driver. For each file, once its language has loaded: a screenshot; for each named
 // token the glyph pixels inside the token's box are decoded from the PNG (the 15% of pixels farthest from the ground,
 // averaged: the glyph's inked core), and their colour is within 40 (RGB distance) of the palette's colour for that
-// token; in main.rs the keyword's colour is more than 60 from the bound name's. Prints each token's decoded colour.
+// token, and main.c's OUTLINE reads "fn main" (sprint 476); in main.rs the keyword's colour is more than 60 from the bound name's. Prints each token's decoded colour.
 // Screenshots go to runs/packaged/sprint-475-<stamp>-<source|packaged>/. SHAKEOUT_APP=<Substrate.app> runs the bundle.
 
 import { execFileSync } from "node:child_process";
@@ -119,6 +119,13 @@ async function main(): Promise<void> {
         if (!got || dist(got, hex(want)) >= 40) throw new Error(`${f.name}: ${token} drawn ${got ? `rgb(${got.join(",")})` : "not found"}, want ${want} (distance ${got ? Math.round(dist(got, hex(want))) : "-"})`);
       }
       if (f.name === "main.rs" && dist(seen.fn!, seen.total!) <= 60) throw new Error(`main.rs: the keyword and the bound name are ${Math.round(dist(seen.fn!, seen.total!))} apart`);
+      // Sprint 476: C names a function through its declarator; OUTLINE reads "fn main".
+      if (f.name === "main.c") {
+        const outline = () => win.evaluate(() => Array.from(document.querySelectorAll("[data-outline-row]")).map((e) => Array.from(e.children).slice(0, 2).map((c) => c.textContent ?? "").join(" ")));
+        const rows = await until(win, "main.c's OUTLINE", outline, (r) => r.length > 0);
+        report.push(`main.c OUTLINE ${JSON.stringify(rows)}`);
+        if (!rows.some((r) => /^fn main\b/.test(r))) throw new Error(`main.c: OUTLINE ${JSON.stringify(rows)}, want a row "fn main"`);
+      }
     }
     await app.close();
     const traces = join(launch.state, "electron", "logs", "traces");

@@ -16,10 +16,11 @@ import * as React from "react";
 import { Compartment, EditorState, RangeSetBuilder, StateEffect, StateField, Transaction, type Extension } from "@codemirror/state";
 import { Decoration, EditorView, GutterMarker, ViewPlugin, WidgetType, gutter, highlightSpecialChars, lineNumbers, type DecorationSet, type ViewUpdate } from "@codemirror/view";
 import { SearchQuery, getSearchQuery, replaceAll, replaceNext, search, setSearchQuery } from "@codemirror/search";
-import { HighlightStyle, LanguageDescription, ensureSyntaxTree, syntaxHighlighting } from "@codemirror/language";
+import { HighlightStyle, LanguageDescription, syntaxHighlighting } from "@codemirror/language";
 import { languages } from "@codemirror/language-data";
 import { tags as t } from "@lezer/highlight";
 import { preserveCase } from "../derive/preserve_case";
+import { outlineOf } from "../derive/outline";
 import { editor } from "../state/editor";
 import { emit as emitSignal } from "../../vm/instrumentation/sdd";
 import { ContextMenuOpenedSource, DiffReadBase, EditorChipAddedHow, EditorConflictResolvedChoice, EditorFileOpenedHow, EditorFileSavedCommand, EditorKeyRefusedReason, EditorReplacedScope, Signal, UndoRoutedTo } from "../../vm/signals.gen";
@@ -262,41 +263,6 @@ function firstChange(a: string, b: string): number | null {
 
 /** CodeMirror keeps "\n" in its buffer; the file's own line ends come back on save. */
 const normal = (text: string) => text.replace(/\r\n?/g, "\n");
-
-/** The outline 24a's inspector draws: classes and functions (TypeScript, JavaScript, Python), top-level
- *  keys (JSON), headings (Markdown), selectors (CSS), each with its 1-based line; nested ones one deeper. */
-const OUTLINE_NODES: Record<string, string> = {
-  ClassDeclaration: "class", FunctionDeclaration: "fn", MethodDeclaration: "fn", ClassDefinition: "class", FunctionDefinition: "fn",
-  ATXHeading1: "h1", ATXHeading2: "h2", ATXHeading3: "h3", SetextHeading1: "h1", SetextHeading2: "h2", RuleSet: "rule",
-};
-const NAME_NODES = new Set(["VariableDefinition", "PropertyDefinition", "VariableName", "TypeDefinition"]);
-export function outlineOf(state: EditorState): { kind: string; name: string; line: number; end: number; depth: number }[] {
-  const tree = ensureSyntaxTree(state, state.doc.length, 500);
-  if (!tree) return [];
-  const out: { kind: string; name: string; line: number; end: number; depth: number }[] = [];
-  let depth = 0;
-  const isJson = tree.type.name === "JsonText";
-  tree.iterate({
-    enter: (node) => {
-      const kind = OUTLINE_NODES[node.name];
-      if (isJson && node.name === "Property" && node.node.parent?.parent?.name === "JsonText") {
-        const key = node.node.getChild("PropertyName");
-        if (key) out.push({ kind: "key", name: state.doc.sliceString(key.from, key.to).replace(/^"|"$/g, ""), line: state.doc.lineAt(node.from).number, end: state.doc.lineAt(node.to).number, depth: 0 });
-        return false;
-      }
-      if (!kind) return undefined;
-      let name = "";
-      if (kind.startsWith("h")) name = state.doc.sliceString(node.from, node.to).replace(/^#+\s*/, "").split("\n")[0];
-      else if (kind === "rule") name = state.doc.sliceString(node.from, node.to).split("{")[0].trim();
-      else { let c = node.node.firstChild; while (c && !NAME_NODES.has(c.name)) c = c.nextSibling; name = c ? state.doc.sliceString(c.from, c.to) : ""; }
-      out.push({ kind, name, line: state.doc.lineAt(node.from).number, end: state.doc.lineAt(node.to).number, depth });
-      if (kind === "class") { depth++; return undefined; }
-      return kind === "fn" ? false : undefined;
-    },
-    leave: (node) => { if (OUTLINE_NODES[node.name] === "class") depth--; },
-  });
-  return out;
-}
 
 /** Open a file in a tab, or show its tab (sprint 419); with `line` (sprint 434, a search result), the caret
  *  goes to that line once the file is shown. Sprint 441: `show` false adds the tab and keeps the shown one
