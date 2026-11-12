@@ -6,7 +6,9 @@
 // and Cargo.toml; the deterministic driver. For each file, once its language has loaded: a screenshot; for each named
 // token the glyph pixels inside the token's box are decoded from the PNG (the 15% of pixels farthest from the ground,
 // averaged: the glyph's inked core), and their colour is within 40 (RGB distance) of the palette's colour for that
-// token; in main.rs the keyword's colour is more than 60 from the bound name's. Prints each token's decoded colour.
+// token; in main.rs the keyword's colour is more than 60 from the bound name's. Sprint 481: the colours are each look's palette;
+// every pair of coloured classes decodes at least 8 ΔE2000 apart under `new`; under `original` (Settings) main.c draws
+// sprint 475's palette. Prints each token's decoded colour.
 // Screenshots go to runs/packaged/sprint-475-<stamp>-<source|packaged>/. SHAKEOUT_APP=<Substrate.app> runs the bundle.
 
 import { execFileSync } from "node:child_process";
@@ -15,6 +17,7 @@ import { join } from "node:path";
 import { _electron as electron, type Page } from "playwright";
 import { bindPaneAsUser, launchArgs, settled, waitForApp } from "./lib/electron";
 import { decodePng } from "../pixel/png";
+import { ciede2000 } from "../pixel/ciede2000";
 
 const REPO_ROOT = join(__dirname, "..", "..");
 const git = (cwd: string, ...args: string[]) => execFileSync("git", ["-C", cwd, ...args], { encoding: "utf8" });
@@ -22,15 +25,20 @@ type Rgb = [number, number, number];
 const hex = (h: string): Rgb => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
 const dist = (a: Rgb, b: Rgb) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
 const GROUND = hex("#212327");
-const KEYWORD = "#82a5c8", STRING = "#b7a4d8", NUMBER = "#cc8fb8", TYPE = "#a9c0d8", NAME = "#e8eaee";
-/** Each file: its text, its language, and the tokens to check: [text, which occurrence, expected colour]. */
-const FILES: { name: string; text: string; language: string; tokens: [string, string][] }[] = [
+/** Each look's palette, as `web/app/derive/look.ts` holds it: sprint 481's notes (new) and sprint 475's (original). */
+type Cls = "keyword" | "string" | "number" | "type" | "name" | "meta";
+const PALETTE: Record<"new" | "original", Record<Cls, string>> = {
+  new: { keyword: "#7da3ca", string: "#c7ade6", number: "#d496c3", type: "#b0bbd2", name: "#e8eaee", meta: "#948dc5" },
+  original: { keyword: "#82a5c8", string: "#b7a4d8", number: "#cc8fb8", type: "#a9c0d8", name: "#e8eaee", meta: "#9c8fc4" },
+};
+/** Each file: its text, its language, and the tokens to check: [text, class]. */
+const FILES: { name: string; text: string; language: string; tokens: [string, Cls][] }[] = [
   { name: "main.rs", language: "Rust", text: '// a comment\nfn main() {\n    let total = 42;\n    let label = "text";\n}\n',
-    tokens: [["fn", KEYWORD], ["let", KEYWORD], ['"text"', STRING], ["42", NUMBER], ["total", NAME]] },
-  { name: "main.c", language: "C", text: '/* a program */\nint main(void) {\n  printf("hello");\n  return 0;\n}\n',
-    tokens: [["int", TYPE], ["return", KEYWORD], ['"hello"', STRING], ["0", NUMBER]] },
+    tokens: [["fn", "keyword"], ["let", "keyword"], ['"text"', "string"], ["42", "number"], ["total", "name"]] },
+  { name: "main.c", language: "C", text: '#include <stdio.h>\n/* a program */\nint main(void) {\n  printf("hello");\n  return 0;\n}\n',
+    tokens: [["int", "type"], ["return", "keyword"], ['"hello"', "string"], ["0", "number"], ["#include", "meta"]] },
   { name: "Cargo.toml", language: "TOML", text: '# the package\n[package]\nname = "demo"\nversion = "0.1.0"\n',
-    tokens: [['"demo"', STRING]] },
+    tokens: [['"demo"', "string"]] },
 ];
 /** The box of the first occurrence of `token` as a whole word in the code, in CSS pixels. */
 const boxOf = (win: Page, token: string) => win.evaluate(`(function (token) {
@@ -64,7 +72,7 @@ async function until<T>(win: Page, what: string, read: () => Promise<T>, ok: (v:
 async function main(): Promise<void> {
   const packaged = !!process.env.SHAKEOUT_APP;
   const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\..*/, "").replace("T", "-");
-  const shots = join(REPO_ROOT, "runs", "packaged", `sprint-475-${stamp}-${packaged ? "packaged" : "source"}`);
+  const shots = join(REPO_ROOT, "runs", "packaged", `sprint-481-${stamp}-${packaged ? "packaged" : "source"}`);
   mkdirSync(shots, { recursive: true });
   const repo = join(__dirname, ".scratch", "editor-highlight-seen-" + process.pid);
   mkdirSync(repo, { recursive: true });
@@ -85,7 +93,8 @@ async function main(): Promise<void> {
     await until(win, "hello's Returned", () => returned(win), (n) => n >= 1, 30_000);
     await win.keyboard.press("Meta+Shift+E");
     const report: string[] = [];
-    for (const f of FILES) {
+    const seenBy: Partial<Record<Cls, Rgb>> = {};
+    const checkFile = async (f: (typeof FILES)[number], look: "new" | "original") => {
       await win.locator(`[data-tree-row="${f.name}"]`).first().click();
       await until(win, `${f.name}'s language`, () => statusLanguage(win), (l) => l === f.language);
       // The parser's tokens: the first token's colour leaves the text's white once the language has applied.
@@ -112,14 +121,28 @@ async function main(): Promise<void> {
         }
         return out;
       };
-      const seen = await until(win, `${f.name} drawn in its colours`, decode, (o) => !!o[first[0]] && dist(o[first[0]]!, hex(first[1])) < 40);
-      for (const [token, want] of f.tokens) {
-        const got = seen[token];
-        report.push(`${f.name} ${token}=${got ? `rgb(${got.join(",")})` : "none"} want ${want}`);
-        if (!got || dist(got, hex(want)) >= 40) throw new Error(`${f.name}: ${token} drawn ${got ? `rgb(${got.join(",")})` : "not found"}, want ${want} (distance ${got ? Math.round(dist(got, hex(want))) : "-"})`);
+      const seen = await until(win, `${look} ${f.name} drawn in its colours`, decode, (o) => !!o[first[0]] && dist(o[first[0]]!, hex(PALETTE[look][first[1]])) < 40);
+      for (const [token, cls] of f.tokens) {
+        const got = seen[token], want = PALETTE[look][cls];
+        report.push(`${look} ${f.name} ${token}=${got ? `rgb(${got.join(",")})` : "none"} want ${want}`);
+        if (!got || dist(got, hex(want)) >= 40) throw new Error(`${look} ${f.name}: ${token} drawn ${got ? `rgb(${got.join(",")})` : "not found"}, want ${want} (distance ${got ? Math.round(dist(got, hex(want))) : "-"})`);
+        if (look === "new" && cls !== "name" && !seenBy[cls]) seenBy[cls] = got;
       }
       if (f.name === "main.rs" && dist(seen.fn!, seen.total!) <= 60) throw new Error(`main.rs: the keyword and the bound name are ${Math.round(dist(seen.fn!, seen.total!))} apart`);
+    };
+    for (const f of FILES) await checkFile(f, "new");
+    // Sprint 481 (E20): every pair of coloured classes, as decoded, at least 8 ΔE2000 apart (CIEDE2000, `pixel/ciede2000.ts`).
+    const classes = Object.keys(seenBy) as Cls[];
+    for (let i = 0; i < classes.length; i++) for (let j = i + 1; j < classes.length; j++) {
+      const d = ciede2000(seenBy[classes[i]]!, seenBy[classes[j]]!);
+      report.push(`${classes[i]}/${classes[j]} ΔE2000 ${d.toFixed(1)}`);
+      if (d < 8) throw new Error(`${classes[i]} and ${classes[j]} decode ${d.toFixed(1)} ΔE2000 apart, want at least 8`);
     }
+    // The original look (sprint 478) draws sprint 475's palette.
+    await win.keyboard.press("Meta+,");
+    await win.locator('[data-setting-look="original"]').first().click();
+    await win.keyboard.press("Escape");
+    await checkFile(FILES[1], "original");
     await app.close();
     const traces = join(launch.state, "electron", "logs", "traces");
     const boot = readdirSync(traces).sort().pop()!;

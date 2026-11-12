@@ -32,8 +32,9 @@ const firstLine = (win: Page) => win.evaluate(`(function () { var h = document.q
 const infoType = (win: Page) => win.evaluate(`(function () { var row = Array.from(document.querySelectorAll("[data-info-row]")).find(function (e) { return e.textContent.indexOf("type") === 0; }); return row ? row.textContent.replace(/^type/, "").trim() : null; })()`) as Promise<string | null>;
 const statusLanguage = (win: Page) => win.evaluate(`(function () { var e = document.querySelector("[data-status-language]"); return e ? e.textContent : null; })()`) as Promise<string | null>;
 const returned = (win: Page) => win.evaluate(() => ((window as unknown as { __vm: { get(n: number): { snapshot(): { rawEnvelopes: { kind: string }[] } } } }).__vm.get(1).snapshot().rawEnvelopes ?? []).filter((e) => e.kind === "Returned").length);
-// Sprint 475: strings draw lavender #b7a4d8 (the palette a person can see); editor_highlight_seen decodes the pixels.
-const DIM = "rgb(98, 103, 111)", GREY = "rgb(183, 164, 216)";
+// Sprint 481: strings draw #c7ade6 under the default look (sprint 475's #b7a4d8 is the original look's); editor_highlight_seen
+// decodes the pixels.
+const DIM = "rgb(98, 103, 111)", GREY = "rgb(199, 173, 230)";
 async function until<T>(win: Page, what: string, read: () => Promise<T>, ok: (v: T) => boolean, ms = 20_000): Promise<T> {
   const deadline = Date.now() + ms;
   let v = await read();

@@ -20,7 +20,7 @@ import { HighlightStyle, LanguageDescription, ensureSyntaxTree, syntaxHighlighti
 import { languages } from "@codemirror/language-data";
 import { tags as t } from "@lezer/highlight";
 import { preserveCase } from "../derive/preserve_case";
-import { LOOK, type Look } from "../derive/look";
+import { LOOK, type Look, type Syntax } from "../derive/look";
 import { editor } from "../state/editor";
 import { emit as emitSignal } from "../../vm/instrumentation/sdd";
 import { ContextMenuOpenedSource, DiffReadBase, EditorChipAddedHow, EditorConflictResolvedChoice, EditorFileOpenedHow, EditorFileSavedCommand, EditorKeyRefusedReason, EditorReplacedScope, Signal, UndoRoutedTo } from "../../vm/signals.gen";
@@ -63,18 +63,19 @@ function languageOf(path: string): LanguageDescription | null {
 /** Sprint 475 (BLACKBOARD 2026-11-11: "it's like it's all white text still"): hues a person tells apart, within D7 (no
  *  green, no yellow, red for failed only), each readable on the ground #212327. A style on a parent tag applies to its
  *  children (@lezer/highlight), so `t.keyword` covers control, definition, module and operator keywords. */
-const HIGHLIGHT = HighlightStyle.define([
-  { tag: t.comment, color: "#62676f", fontStyle: "italic" },
-  { tag: [t.keyword, t.modifier, t.self], color: "#82a5c8" },
-  { tag: [t.string, t.special(t.string), t.character, t.regexp], color: "#b7a4d8" },
-  { tag: [t.number, t.bool, t.null, t.atom, t.unit, t.escape], color: "#cc8fb8" },
-  { tag: [t.typeName, t.className, t.namespace, t.standard(t.typeName)], color: "#a9c0d8" },
-  { tag: [t.definition(t.variableName), t.function(t.variableName), t.definition(t.function(t.variableName)), t.labelName], color: "#e8eaee" },
-  { tag: [t.propertyName, t.attributeName], color: "#b9bec5" },
-  { tag: [t.meta, t.annotation, t.processingInstruction], color: "#9c8fc4" },
-  { tag: [t.punctuation, t.bracket, t.operator, t.separator], color: "#8a9099" },
-  { tag: t.heading, color: "#82a5c8", fontWeight: "bold" },
-  { tag: [t.link, t.url], color: "#82a5c8", textDecoration: "underline" },
+/** The code's highlighting for a look's palette (sprint 481: the colours come from `derive/look.ts`). */
+const highlightFor = (c: Syntax) => HighlightStyle.define([
+  { tag: t.comment, color: c.comment, fontStyle: "italic" },
+  { tag: [t.keyword, t.modifier, t.self], color: c.keyword },
+  { tag: [t.string, t.special(t.string), t.character, t.regexp], color: c.string },
+  { tag: [t.number, t.bool, t.null, t.atom, t.unit, t.escape], color: c.number },
+  { tag: [t.typeName, t.className, t.namespace, t.standard(t.typeName)], color: c.type },
+  { tag: [t.definition(t.variableName), t.function(t.variableName), t.definition(t.function(t.variableName)), t.labelName], color: c.name },
+  { tag: [t.propertyName, t.attributeName], color: c.property },
+  { tag: [t.meta, t.annotation, t.processingInstruction], color: c.meta },
+  { tag: [t.punctuation, t.bracket, t.operator, t.separator], color: c.punctuation },
+  { tag: t.heading, color: c.keyword, fontWeight: "bold" },
+  { tag: [t.link, t.url], color: c.keyword, textDecoration: "underline" },
   { tag: t.emphasis, fontStyle: "italic" },
   { tag: t.strong, fontWeight: "bold" },
 ]);
@@ -356,7 +357,8 @@ const DISK = new Map<string, string>();
 /** The binding part of every buffer: module-wide, so a kept buffer reconfigures in a new centre. */
 const CONF = { binding: new Compartment(), language: new Compartment(), look: new Compartment() };
 /** The code's line height for a look (sprint 479, E18; `derive/look.ts`). */
-const lookTheme = (look: Look) => EditorView.theme({ ".cm-scroller": { lineHeight: `${LOOK[look].codeLineHeight}px` } });
+const HIGHLIGHTS: Record<Look, ReturnType<typeof highlightFor>> = { new: highlightFor(LOOK.new.syntax), original: highlightFor(LOOK.original.syntax) };
+const lookTheme = (look: Look): Extension[] => [EditorView.theme({ ".cm-scroller": { lineHeight: `${LOOK[look].codeLineHeight}px` } }), syntaxHighlighting(HIGHLIGHTS[look])];
 /** Each file's base text (sprint 424, the status line's `vs main`), by session and path; absent outside git and in a
  *  repository with no commit (sprint 450). */
 const BASES = new Map<string, { name: string; text: string }>();
@@ -784,7 +786,7 @@ export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionI
         // Sprint 465: every file the server reads as text edits, in any encoding; `read_only` stays honoured. `readOnly`
         // stops CodeMirror's commands, and its view ignores typed changes while it is set (@codemirror/view, "Ignore
         // changes when the editor is read-only").
-        const state = EditorState.create({ doc: file.text, extensions: [...configured(), lineNumbers(), hunkExtension(diff.hunks), CONF.language.of(lang?.support ?? []), syntaxHighlighting(HIGHLIGHT), THEME, search(), findMarks, scopeField, followField, listener, ...(bytes ? BYTE_TEXT : []), ...(file.read_only ? READ_ONLY : [])] });
+        const state = EditorState.create({ doc: file.text, extensions: [...configured(), lineNumbers(), hunkExtension(diff.hunks), CONF.language.of(lang?.support ?? []), THEME, search(), findMarks, scopeField, followField, listener, ...(bytes ? BYTE_TEXT : []), ...(file.read_only ? READ_ONLY : [])] });
         placed = keep > 1 ? state.update({ selection: { anchor: state.doc.line(keep).from } }).state : state;
         markUnsaved(rel, false);
       }
