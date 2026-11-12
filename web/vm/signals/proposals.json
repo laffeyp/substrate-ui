@@ -1512,6 +1512,16 @@
       "rationale": "A text file over the read limit is read by line range; the trace counts each range read, as FILE_BYTES_READ counts each slice of bytes.",
       "ratified": true,
       "ratified_by": "agent-resolved 2026-11-11, sprint 469; grounds: project — the user entries of this date, roadmap r13 E14; SDD — hard rule 2; practice — n/a"
+    },
+    {
+      "id": "P-0.65-FILE-SHOWN",
+      "kind": "NEW_TAG_PROPOSED",
+      "layer": 1,
+      "element": "EDITOR_FILE_SHOWN (window): ms",
+      "source": "BLACKBOARD 2026-11-11 user (files no longer open quickly; the tab switches before the text) and surfaced (no signal records the time to show a file); sprint 473",
+      "rationale": "An open that took two seconds left no trace a gate could check; the time to show a file becomes a signal.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-11, sprint 473; grounds: project — the user and surfaced entries of this date; SDD — hard rule 2, foundation 01 performance timelines; practice — n/a"
     }
   ]
 }

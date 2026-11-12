@@ -302,6 +302,8 @@ export function closeFile(rel: string, paneId: number): void {
   const at = st.tabs.indexOf(rel);
   if (at < 0) return;
   const tabs = st.tabs.filter((x) => x !== rel);
+  // Sprint 473: a closed tab's kept state goes with it.
+  if (storeSession) SHOWN.delete(bufferKey(storeSession, rel));
   editor.set({ tabs, active: st.active === rel ? tabs[Math.min(at, tabs.length - 1)] ?? null : st.active });
   emitSignal(Signal.EDITOR_FILE_CLOSED, { tab_count: tabs.length }, { pane_id: paneId });
 }
@@ -343,6 +345,14 @@ const CONF = { binding: new Compartment(), language: new Compartment() };
 /** Each file's base text (sprint 424, the status line's `vs main`), by session and path; absent outside git and in a
  *  repository with no commit (sprint 450). */
 const BASES = new Map<string, { name: string; text: string }>();
+/** Sprint 473: each file's last base comparison, by session and path, so a file shown again takes its marks at once
+ *  while its comparison is read again; a file not yet compared shows none until its comparison lands. */
+const DIFFS = new Map<string, { hunks: Hunk[]; base: string }>();
+const NO_DIFF: { hunks: Hunk[]; base: string } = { hunks: [], base: "none" };
+/** Sprint 473 (the Architect, 2026-11-11: "the text shows immediately whenever you click on a tab … There should be no
+ *  lag"): each open tab's editor state and the facts it was read with, by session and path. A click on its tab places
+ *  the state before the next paint; the read from disk runs after, to take in a change made outside the editor. */
+const SHOWN = new Map<string, { state: EditorState; file: FileFacts }>();
 /** The SHA-256 each file had when its buffer read it (sprint 425): a save sends it, and a file changed on
  *  disk since is refused as stale (409). */
 const SHAS = new Map<string, string>();
@@ -628,27 +638,89 @@ export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionI
     }, 150);
   });
 
-  React.useEffect(() => {
+  /** Sprint 473: a file's state into the view, its language, binding, find and marks, and the store's caret, outline and
+   *  count; the state and the facts kept for its tab. `asked`: when its read was asked, for EDITOR_FILE_SHOWN. */
+  const placeView = (rel: string, placed: EditorState, file: FileFacts, opts: { kept: boolean; landedLine: number | null; asked: number }) => {
+    const lang = file.encoding === "binary" ? null : languageOf(rel);
+    const switched = shown.current !== rel;
+    shown.current = rel;
+    const root = host.current!.shadowRoot ?? host.current!.attachShadow({ mode: "open" });
+    if (!view.current) view.current = new EditorView({ state: placed, parent: root, root });
+    else view.current.setState(placed);
+    // Sprint 473: the time to show a different file, from its read asked to its text placed.
+    if (switched) emitSignal(Signal.EDITOR_FILE_SHOWN, { ms: Math.round(performance.now() - opts.asked) }, { pane_id: paneId });
+    // Sprint 472: a language not loaded yet comes when it arrives, into the buffer still shown; a kept buffer takes the
+    // loaded one. A file that is not text has none.
+    editor.set({ language: lang?.name ?? null });
+    if (lang && lang.support) view.current.dispatch({ effects: CONF.language.reconfigure(lang.support) });
+    else if (lang) {
+      void lang.load().then((support) => {
+        const v = view.current;
+        if (!v || shown.current !== rel) return;
+        v.dispatch({ effects: CONF.language.reconfigure(support) });
+        editor.set({ outline: outlineOf(v.state) });
+      }).catch(() => undefined);
+    }
+    // A kept buffer takes the binding of now; every buffer takes the find's query (sprint 428).
+    view.current.dispatch({ effects: [CONF.binding.reconfigure(bindingExtension(now.current.binding, HOOKS)), setSearchQuery.of(queryOf(editor.getSnapshot().find))] });
+    editor.set({ findCount: findCount(view.current.state) });
+    if (opts.landedLine !== null) view.current.dispatch({ effects: EditorView.scrollIntoView(view.current.state.doc.line(Math.min(opts.landedLine, view.current.state.doc.lines)).from, { y: "center" }) });
+    const head = placed.selection.main.head, line = placed.doc.lineAt(head);
+    // Sprint 455: a kept buffer with unsaved edits is marked, and listed, as the buffer it is.
+    const placedText = placed.doc.toString(), placedBase = BASES.get(key(rel));
+    const placedHunks = opts.kept && placedBase && placedText !== (DISK.get(key(rel)) ?? "") ? lineHunks(placedBase.text, placedText) : null;
+    if (placedHunks) view.current.dispatch({ effects: setHunks.of(placedHunks) });
+    editor.set({ outline: outlineOf(placed), caretLine: line.number, caretCol: head - line.from + 1, vsBase: against(rel, placedText), bufferHunks: placedHunks });
+    takeJump();
+    // Sprint 441: quick open's ↵ gives the code the focus once the file is placed.
+    if (editor.getSnapshot().focusOnOpen === rel) { editor.set({ focusOnOpen: null }); view.current.focus(); }
+    SHOWN.set(key(rel), { state: view.current.state, file });
+  };
+  /** The file shown now, kept for its tab: its state in SHOWN, and in BUFFERS while it has unsaved edits. */
+  const park = () => {
+    const prev = shown.current, v = view.current;
+    if (!prev || !v) return;
+    if (unsaved(prev)) BUFFERS.set(key(prev), v.state);
+    const kept = SHOWN.get(key(prev));
+    if (kept) SHOWN.set(key(prev), { ...kept, state: v.state });
+  };
+  // Sprint 473: a layout effect, so a kept tab's text is placed before the browser paints the click.
+  React.useLayoutEffect(() => {
     const rel = st.active;
     if (!rel) { setFacts(null); return; }
     let live = true;
     const q = encodeURIComponent(rel), sid = encodeURIComponent(sessionId);
     const writesAtRead = WRITES.get(key(rel)) ?? 0;
     // Sprint 465: a file that is not text reads as Latin-1 to edit; a text file ignores `as`. Sprint 468: in every form,
-    // so hex, binary and octal type into the same buffer.
-    Promise.all([
-      fetch(`/api/session/${sid}/file?path=${q}&as=latin-1`).then((r) => r.json() as Promise<FileFacts>),
-      fetch(`/api/session/${sid}/diff?path=${q}`).then((r) => (r.ok ? (r.json() as Promise<{ hunks: Hunk[]; base: string }>) : { hunks: [], base: "none" })),
-    ]).then(([file, diff]) => {
-      if (!live || (WRITES.get(key(rel)) ?? 0) !== writesAtRead) return;
+    // so hex, binary and octal type into the same buffer. Sprint 473 (BLACKBOARD 2026-11-11, the editor broken in use):
+    // the text is placed when the file read lands, with the file's last known comparison; its comparison applies when
+    // it lands (`applyDiff` below), so a slow comparison delays only the marks, never the text.
+    const asked = performance.now();
+    const fileRead = fetch(`/api/session/${sid}/file?path=${q}&as=latin-1`).then((r) => r.json() as Promise<FileFacts>);
+    const diffRead = fetch(`/api/session/${sid}/diff?path=${q}`).then((r) => (r.ok ? (r.json() as Promise<{ hunks: Hunk[]; base: string }>) : NO_DIFF));
+    const stale = () => !live || (WRITES.get(key(rel)) ?? 0) !== writesAtRead;
+    // A tab already read: its kept state is placed now, with no read first.
+    const ready = shown.current !== rel ? SHOWN.get(key(rel)) : undefined;
+    if (ready && host.current) {
+      park();
+      const kept = unsaved(rel) ? BUFFERS.get(key(rel)) : undefined;
+      if (kept) BUFFERS.delete(key(rel));
+      setFacts({ path: rel, file: ready.file });
+      const known = DIFFS.get(key(rel)) ?? NO_DIFF;
+      editor.set({ file: { path: rel, size: ready.file.size, modified: ready.file.modified, encoding: ready.file.encoding, lineEndings: ready.file.line_endings, text: ready.file.text }, hunks: known.hunks });
+      placeView(rel, kept ?? ready.state, ready.file, { kept: !!kept, landedLine: null, asked });
+    }
+    fileRead.then((file) => {
+      if (stale()) return;
+      const diff = DIFFS.get(key(rel)) ?? NO_DIFF;
       setFacts({ path: rel, file });
       editor.set({ file: { path: rel, size: file.size, modified: file.modified, encoding: file.encoding, lineEndings: file.line_endings, text: file.text }, hunks: diff.hunks });
       if (file.text === null || !host.current) return;
       const root = host.current.shadowRoot ?? host.current.attachShadow({ mode: "open" });
       // The buffer shown is the same file with unsaved changes: it stays as typed.
       if (shown.current === rel && view.current && unsaved(rel)) return;
-      // Another file: a buffer with unsaved changes is kept for its tab.
-      if (shown.current && shown.current !== rel && view.current && unsaved(shown.current)) BUFFERS.set(key(shown.current), view.current.state);
+      // Another file: the one shown is kept for its tab (sprint 473: every file, its unsaved edits in BUFFERS).
+      if (shown.current && shown.current !== rel) park();
       // Sprint 465: a file that is not text keeps every byte: no line end is rewritten on the way in or out.
       const bytes = file.encoding === "binary";
       const lang = bytes ? null : languageOf(rel);
@@ -697,34 +769,26 @@ export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionI
         placed = keep > 1 ? state.update({ selection: { anchor: state.doc.line(keep).from } }).state : state;
         markUnsaved(rel, false);
       }
-      shown.current = rel;
-      if (!view.current) view.current = new EditorView({ state: placed, parent: root, root });
-      else view.current.setState(placed);
-      // Sprint 472: a language not loaded yet comes when it arrives, into the buffer still shown; a kept buffer takes the
-      // loaded one. A file that is not text has none.
-      editor.set({ language: lang?.name ?? null });
-      if (lang && lang.support) view.current.dispatch({ effects: CONF.language.reconfigure(lang.support) });
-      else if (lang) {
-        void lang.load().then((support) => {
-          const v = view.current;
-          if (!v || shown.current !== rel) return;
-          v.dispatch({ effects: CONF.language.reconfigure(support) });
-          editor.set({ outline: outlineOf(v.state) });
-        }).catch(() => undefined);
-      }
-      // A kept buffer takes the binding of now; every buffer takes the find's query (sprint 428).
-      view.current.dispatch({ effects: [CONF.binding.reconfigure(bindingExtension(now.current.binding, HOOKS)), setSearchQuery.of(queryOf(editor.getSnapshot().find))] });
-      editor.set({ findCount: findCount(view.current.state) });
-      if (landedLine !== null) view.current.dispatch({ effects: EditorView.scrollIntoView(view.current.state.doc.line(Math.min(landedLine, view.current.state.doc.lines)).from, { y: "center" }) });
-      const head = placed.selection.main.head, line = placed.doc.lineAt(head);
-      // Sprint 455: a kept buffer with unsaved edits is marked, and listed, as the buffer it is.
-      const placedText = placed.doc.toString(), placedBase = BASES.get(key(rel));
-      const placedHunks = kept && placedBase && placedText !== (DISK.get(key(rel)) ?? "") ? lineHunks(placedBase.text, placedText) : null;
-      if (placedHunks) view.current.dispatch({ effects: setHunks.of(placedHunks) });
-      editor.set({ outline: outlineOf(placed), caretLine: line.number, caretCol: head - line.from + 1, vsBase: against(rel, placedText), bufferHunks: placedHunks });
-      takeJump();
-      // Sprint 441: quick open's ↵ gives the code the focus once the file is placed.
-      if (editor.getSnapshot().focusOnOpen === rel) { editor.set({ focusOnOpen: null }); view.current.focus(); }
+      placeView(rel, placed, file, { kept: !!kept, landedLine, asked });
+    }).catch(() => undefined);
+    // Sprint 473: the comparison, once both reads have landed: the base, the marks, the status line's count and
+    // CHANGES. The text, the caret and the undo history are not touched.
+    Promise.all([fileRead, diffRead]).then(([file, diff]) => {
+      if (stale()) return;
+      DIFFS.set(key(rel), diff);
+      editor.set({ hunks: diff.hunks });
+      if (file.text === null) return;
+      const text = file.encoding === "binary" ? file.text : normal(file.text);
+      // Sprint 450: no base outside git or in a repository with no commit; the status line then shows no `vs`.
+      if (diff.base && diff.base !== DiffReadBase.NONE && diff.base !== DiffReadBase.NO_COMMIT) BASES.set(key(rel), { name: diff.base, text: baseText(text, diff.hunks) });
+      else BASES.delete(key(rel));
+      const v = view.current;
+      if (!v || shown.current !== rel) return;
+      const now = v.state.doc.toString(), base = BASES.get(key(rel));
+      // The buffer with unsaved edits is marked against the base as typed (sprint 455); else the file's own hunks.
+      const typed = base && now !== (DISK.get(key(rel)) ?? "") ? lineHunks(base.text, now) : null;
+      v.dispatch({ effects: setHunks.of(typed ?? diff.hunks) });
+      editor.set({ vsBase: against(rel, now), bufferHunks: typed });
     }).catch(() => undefined);
     return () => { live = false; };
   }, [st.active, sessionId, writes, reloads]);
@@ -888,8 +952,8 @@ export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionI
     return () => { activeSave = null; activeUndo = null; activeFind = null; activeBuffer = null; };
   });
   React.useEffect(() => () => {
-    // Leaving the editor: the buffer on screen, if unsaved, is kept for its tab.
-    if (view.current && shown.current && unsaved(shown.current)) BUFFERS.set(key(shown.current), view.current.state);
+    // Leaving the editor: the buffer on screen is kept for its tab (sprint 473: every file; unsaved edits in BUFFERS).
+    park();
     view.current?.destroy(); view.current = null;
   }, []); // the centre's own lifetime
 
