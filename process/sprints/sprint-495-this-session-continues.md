@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 495
-status: pending
+status: active
 phase: continuing a session (roadmap 2026-11-12-continue-a-session r1, E6)
 pass_kind: observation
 ---
@@ -57,3 +57,7 @@ The work continues in Substrate Next, and this terminal session can close.
 - [x] Scope is concrete and bounded.
 - [x] The session is opened in a window the Architect sees.
 - [x] Observation contract present.
+
+## progress
+
+2026-11-12. The test-install section of runbook round 9, steps 1–20 and 17a, all exit 0 (logs `runs/packaged/sprint-495-20261112-005914/`): Substrate Next build 1794474626 at `/Applications/Substrate Next.app`, kernel `ae5d3d6e` (releasable), app `7b47c2f`, beside the working install (pid 8228, unchanged). Session `s_515635cc7350436bae2364a4` ("continued-from-claude-code", driver `claude`, workspace this repository) created through Substrate Next's server with `continue_from` naming this session's file: 949 events from the summary at line 26142 and the 1,279 messages after it; `SESSION_CREATED` `continued_from` `claude_code`. Opened in Substrate Next by `substrate-next://session/<id>`: `DEEP_LINK_RECEIVED` `link_kind` `session`. Waiting on the Architect's first message there, which closes the card.
