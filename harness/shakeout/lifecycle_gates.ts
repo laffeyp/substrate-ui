@@ -113,6 +113,21 @@ async function f6AndF5(): Promise<void> {
       { timeout: 15_000 },
     ).then(() => true, () => false);
     check(attached, `F5 deep link attached the record and streamed its events (${launched.name})`);
+
+    // F5, sprint 496: a session link attaches that session.
+    const created = await fetch(`http://127.0.0.1:${port}/api/session`, {
+      method: "POST",
+      headers: { Origin: `http://127.0.0.1:${port}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ driver: "deterministic" }),
+    }).then((r) => r.json()) as { session_id: string };
+    const sid = created.session_id;
+    await app.evaluate(({ app: a }, u) => { a.emit("open-url", { preventDefault() { /* test */ } }, u); }, "substrate://session/" + encodeURIComponent(sid));
+    const opened = await win2.waitForFunction(
+      (id) => (window as unknown as { __vm: { get(n: number): { snapshot(): { sessionId?: string | null } } } }).__vm.get(1)?.snapshot().sessionId === id,
+      sid,
+      { timeout: 15_000 },
+    ).then(() => true, () => false);
+    check(opened, `F5 a session link attached the session (${sid})`);
   } finally {
     await app.close().catch(() => undefined);
   }

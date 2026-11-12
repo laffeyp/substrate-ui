@@ -113,6 +113,12 @@ function boot(): void {
   // plain-browser tabs no-op.
   if (nativeBridge?.onDeepLink) {
     nativeBridge.onDeepLink((url) => {
+      // Sprint 496: a session link opens that session, as the Records page and `?session=` do.
+      const session = url.match(/^substrate:\/\/session\/(.+)$/);
+      if (session) {
+        controller.attachExisting(decodeURIComponent(session[1])).catch(() => undefined);
+        return;
+      }
       const match = url.match(/^substrate:\/\/record\/(.+)$/);
       if (!match) return;
       const recordRoot = decodeURIComponent(match[1]);
