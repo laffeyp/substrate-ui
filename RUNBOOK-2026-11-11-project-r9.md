@@ -1,17 +1,15 @@
 # RUNBOOK — substrate-ui
 
-*2026-11-11, round 9. Supersedes round 8 (`process/archive/RUNBOOK-2026-11-11-project-r8.md`). Round 9 adds the chapter "Build and install the test install" (sprints 487–490: Substrate Next, the second install beside the working one, `process/planning/2026-11-11-second-build/`); every other chapter is round 8's, unchanged. Round 8: 2026-11-11, round 8. Supersedes round 7 (`process/archive/RUNBOOK-2026-11-11-project-r7.md`), whose last end-to-end run and known failures dated from 2026-10-27; round 8 records the run of sprint 486. Round 7 superseded round 6 (`process/archive/RUNBOOK-2026-10-29-project-r6.md`) and rounds 1–5 (round 4 and the rounds before it are in `process/planning/2026-10-11-before-distribution/superseded/`). Scope: `substrate-ui/`. The kernel is the sibling repo `../substrate/`. This runbook does not override the kit; where they differ, `../sdd-kit-3/AGENTS.md` wins and this file is wrong.*
+*2026-11-11, round 9. Earlier rounds: `process/archive/` and `process/planning/2026-10-11-before-distribution/superseded/`.*
 
 | Owner | the Architect (Peter Laffey) |
 | --- | --- |
 | Last updated | 2026-11-11 |
-| Last run end to end | 2026-11-11, 22:03 — 22:16, no-Apple build + install, steps 1 — 20 all 0, build 1794463909; logs at `runs/packaged/sprint-486-20261111-220313/` (sprint 486). "Build and install the test install" has not run end to end: Substrate Next build 1794469212 was installed by its steps 19 and 20 alone, 2026-11-11 |
+| Last run end to end | 2026-11-11, 22:03 — 22:16, no-Apple build + install, steps 1 — 20 all 0, build 1794463909; logs at `runs/packaged/sprint-486-20261111-220313/` (sprint 486). |
 | Scope | `substrate-ui/` only |
-| Depends on | `../substrate/` (no runbook of its own yet) |
+| Depends on | `../substrate/` |
 | Workspace | `../README.md` says what every item around this repo is and where moved items went |
-| Methodology | `../sdd-kit-3/` (`../sdd-kit-4/` is kept for analysis, not in use) |
-
-What changed from round 6 (sprint 459): the files named here exist. Electron main is TypeScript since sprint 363 (`electron/main.ts`, `menu.ts`, `preload.ts`, compiled into `dist-main/`); the window is typed React in `web/app/` since the shell-to-React move (sprints 199–345), and `web/reveal_component.ts` is gone. The open folders are the six `process/planning/README.md` marks open. The known failures were rechecked on 2026-11-11: `vm_smoke` passes, and the two lint steps pass since sprint 459 excluded `process/` from ruff and formatted twelve files. Round 6's change note: the document-organization folder left the reading list, and `../README.md` maps the workspace around this repo.
+| Methodology | `../sdd-kit-3/` |
 
 ---
 
@@ -32,7 +30,7 @@ What changed from round 6 (sprint 459): the files named here exist. Electron mai
 7. `handoffs/README.md`, `handoffs/TEMPLATE-handoff.md`.
 8. `process-not-prompt-research.md`, `process-not-prompt-summary.md`.
 
-The selective-reading guidance inside `AGENTS.md` ("What you read at session start," "Reference order") was written for sessions that had already internalized the kit. A session that has not read the kit cannot apply it. Read the whole thing first; after that, the selective protocol in `AGENTS.md` is sufficient for subsequent sessions.
+Read the whole kit first; after that, the reading list in `AGENTS.md` ("What you read at session start") is enough.
 
 ### 1.2 The record for this repo
 
@@ -50,7 +48,7 @@ The selective-reading guidance inside `AGENTS.md` ("What you read at session sta
 - `process/BACKLOG.md`
 - `process/methodology/2026-09-24-autonomous-build-topology.md`
 
-A folder the index marks closed is history: open a file there only when a current document points to it.
+Open a file in a folder the index marks closed only when a current document points to it.
 
 ### 1.4 The code
 
@@ -127,7 +125,7 @@ A folder the index marks closed is history: open a file there only when a curren
 
 ## 5. Build and install — no Apple
 
-Run from this repo's root. Sprint 190 wrote a per-command log to `runs/packaged/<sprint-id>-<stamp>/NN-<name>.log`. The bundle is unsigned. No step contacts Apple.
+Run from this repo's root. Each command's log goes to `runs/packaged/<sprint-id>-<stamp>/NN-<name>.log`. The bundle is unsigned. No step contacts Apple.
 
 | # | Command | Exit | Notes |
 | --- | --- | --- | --- |
@@ -142,7 +140,7 @@ Run from this repo's root. Sprint 190 wrote a per-command log to `runs/packaged/
 | 9 | `npm run pack:dev` | 0 | Runs steps 4 and 8 first, then electron-builder with `-c.mac.identity=null -c.mac.notarize=false`. The log prints `skipped macOS code signing  reason=identity explicitly is set to null`. Writes `dist-electron/mac-arm64/Substrate.app` and `Substrate-<v>-arm64.dmg`. |
 | 10 | `SMOKE_UNSIGNED=1 SMOKE_DRIVER=deterministic SMOKE_APP=$APP npx tsx harness/shakeout/packaged_app_smoke.ts` | 0 | `$APP = $PWD/dist-electron/mac-arm64/Substrate.app`. |
 | 11 | `SHAKEOUT_APP=$APP SHAKEOUT_AXIS=C SHAKEOUT_RUNS=1 npx tsx harness/shakeout/run.ts` | 0 | Electron flows against the bundle. |
-| 12 | `SHAKEOUT_APP=$APP SHAKEOUT_AXIS=A SHAKEOUT_RUNS=1 npx tsx harness/shakeout/run.ts` | 0 (see "Known failures on the current tree") | Controller flows against the bundle. |
+| 12 | `SHAKEOUT_APP=$APP SHAKEOUT_AXIS=A SHAKEOUT_RUNS=1 npx tsx harness/shakeout/run.ts` | 0 | Controller flows against the bundle. |
 | 13 | `LIFECYCLE_APP=$APP npx tsx harness/shakeout/lifecycle_gates.ts` | 0 | F5 deep link, F6 Dock activate, F7 bad `SUBSTRATE_HOME`, F8 backend killed. |
 | 14 | `SCROLL_APP=$APP npx tsx harness/shakeout/transcript_follow.ts` | 0 | |
 | 15 | `TASKS_APP=$APP npx tsx harness/shakeout/tasks_gate.ts` | 0 | |
@@ -170,22 +168,18 @@ mv ~/.Trash/Substrate-<prior-CFBundleVersion>-replaced-*.app /Applications/Subst
 open /Applications/Substrate.app
 ```
 
-### 5.3 Last end-to-end run
-
-2026-11-11, 22:03 — 22:16, under `process/sprints/sprint-486-editor-close.md` (the code editor's close). Logs: `runs/packaged/sprint-486-20261111-220313/`. Steps 1 — 20 exited 0; Axis C 5/5 tags, Axis A 29/29, no bugs. The run of 2026-10-27 (`runs/packaged/sprint-190-20261027-211649/`, steps 2, 6 and 12 exited 1) is the one before it.
-
 ---
 
 ## 5A. Build and install the test install
 
-The test install is Substrate Next: its own name, bundle id (`com.greenrosesystems.substrate.next`), store (`~/.substrate-next`), data folder, logs (`~/Library/Logs/Substrate Next`) and link scheme (`substrate-next://`), from its record in `electron/identity.json`. It runs beside the working install, `/Applications/Substrate.app`, and none of these steps touches the working install. Run from this repo's root; per-command logs go to `runs/packaged/<sprint-id>-<stamp>/NN-<name>.log`. `$APP = "$PWD/dist-electron-next/mac-arm64/Substrate Next.app"`.
+The test install is Substrate Next: its own name, bundle id (`com.greenrosesystems.substrate.next`), store (`~/.substrate-next`), data folder, logs (`~/Library/Logs/Substrate Next`) and link scheme (`substrate-next://`), from its record in `electron/identity.json`. It runs beside `/Applications/Substrate.app`. Run from this repo's root; per-command logs go to `runs/packaged/<sprint-id>-<stamp>/NN-<name>.log`. `$APP = "$PWD/dist-electron-next/mac-arm64/Substrate Next.app"`.
 
 | # | Command | Exit | Notes |
 | --- | --- | --- | --- |
 | 1–8 | Steps 1–8 of "Build and install — no Apple" | 0 | Unchanged. |
-| 9 | `npm run pack:next` | 0 | Builds with `SUBSTRATE_INSTALL=next` into `dist-electron-next/`, then renames the bundle to `Substrate Next.app` (electron-builder names it after the executable, `Substrate`). |
+| 9 | `npm run pack:next` | 0 | Builds with `SUBSTRATE_INSTALL=next` into `dist-electron-next/`, then renames the bundle to `Substrate Next.app`. |
 | 10–16 | Steps 10–16 of "Build and install — no Apple" with `$APP` as above | 0 | The gates launch the bundle with their own `SUBSTRATE_HOME`, as for the working bundle. |
-| 17 | `osascript -e 'tell application "Substrate Next" to quit'` | 0 or non-zero | Quits only the test install. Wait up to 60 s for its pid to go. It comes before 17a: a second Substrate Next finds its lock held and quits. |
+| 17 | `osascript -e 'tell application "Substrate Next" to quit'` | 0 or non-zero | Quits only the test install. Wait up to 60 s for its pid to go. |
 | 17a | `npx tsx harness/shakeout/two_installs.ts` | 0 | Needs the working install running. Opens the new bundle beside it and checks that each keeps to its own lock, store and logs. |
 | 18 | `mv "/Applications/Substrate Next.app" ~/.Trash/"Substrate Next-<old-CFBundleVersion>-replaced-<stamp>.app"` | 0 | Only when it existed. |
 | 19 | `ditto "$APP" "/Applications/Substrate Next.app" && xattr -dr com.apple.quarantine "/Applications/Substrate Next.app"` | 0 | Install. |
@@ -281,7 +275,7 @@ Ship a new build with a higher `CFBundleVersion`. A notary ticket cannot be with
 
 ### 10.1 Known failures on the current tree (checked 2026-11-11, sprint 486)
 
-- None. Steps 1 — 20 exit 0 on the tree of sprint 486; the /help defect Axis A reported on 2026-10-27 no longer fails.
+- None.
 
 ---
 
@@ -315,19 +309,7 @@ Ship a new build with a higher `CFBundleVersion`. A notary ticket cannot be with
 
 ## 14. References
 
-### 14.1 Inside this repo
-
 - `scripts/release.sh`, `scripts/fetch-python-runtime.sh`, `electron-builder.config.js`, `package.json`, `electron/main.ts`, `WORKING_AGREEMENT.md`
-- `process/sprints/sprint-190-build-release-runbook.md` — the sprint that first ran "Build and install — no Apple" end to end
-- `runs/packaged/sprint-190-20261027-211649/` — the per-command logs for that run
-- `process/planning/2026-10-11-before-distribution/superseded/` — rounds 1–4 of this runbook; `process/archive/RUNBOOK-2026-10-29-project-r6.md` — round 6; on disk as audit trail
-
-### 14.2 Prior art for runbook form
-
-- [Runbook Example (Nobl9)](https://www.nobl9.com/it-incident-management/runbook-example)
-- [SRE Runbook Framework (Garnet Wiki)](https://www.thegarnetwiki.com/sre/runbook-framework/)
-- [Runbook Templates (adhdecode)](https://adhdecode.com/reliability-engineering/runbooks-and-playbooks/runbook-templates/)
-- [Effective Runbooks (OneUptime)](https://oneuptime.com/blog/post/2026-02-02-effective-runbooks/view)
 
 ---
 
