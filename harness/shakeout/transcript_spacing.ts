@@ -6,8 +6,8 @@
 // its pixel rows that hold ink are grouped into text lines, and the pitch between the starts of consecutive lines is
 // 20 px ± 1 at 13 px type (1.54). Sprint 478: the same under the look `original` from Settings, where each place
 // keeps its spacing before sprint 477 (26, 25.35 and 22.1 px), and under `new` again. Sprint 479: the code's lines in the editor
-// (20 px new, 23 px original), and in the pane the reply's text 2.5 to 8 L* brighter than the message's under `new`, at
-// least 8 L* dimmer under `original`. Prints each place's pitch and lightness. SHAKEOUT_APP=<Substrate.app> runs the bundle.
+// (20 px new, 23 px original), and in the pane the message's text at least 8 L* brighter than the reply's in both looks (the
+// reply made brighter in sprint 479 was reverted). Prints each place's pitch and lightness. SHAKEOUT_APP=<Substrate.app> runs the bundle.
 
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
@@ -136,8 +136,9 @@ async function main(): Promise<void> {
           if (!reply) throw new Error(`${look} pane: no reply row`);
           const m = await textLightness(win, (await messageBox(win, scope))!), r = await textLightness(win, reply);
           report.push(`${look} pane message L* ${m.toFixed(1)}, reply L* ${r.toFixed(1)}`);
-          if (look === "new" && !(r - m >= 2.5 && r - m <= 8)) throw new Error(`new pane: the reply L* ${r.toFixed(1)} is not 2.5 to 8 above the message's ${m.toFixed(1)}`);
-          if (look === "original" && !(m - r >= 8)) throw new Error(`original pane: the message L* ${m.toFixed(1)} is not 8 above the reply's ${r.toFixed(1)}`);
+          // The reply brighter than the message was reverted (the Architect, 2026-11-11: "too bright"): both looks draw the
+          // message brighter than the reply, as before sprint 479.
+          if (!(m - r >= 8)) throw new Error(`${look} pane: the message L* ${m.toFixed(1)} is not 8 above the reply's ${r.toFixed(1)}`);
         }
       }
       // Sprint 479 (E18): the code's lines, in the editor (open from the terminal step).

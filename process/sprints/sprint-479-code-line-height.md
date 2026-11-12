@@ -131,3 +131,7 @@ No INVARIANT_BROKEN.
 **Rubber Duck Pass.** EDITOR_FILE_SHOWN now follows EDITOR_OPENED on a return to the editor (order violation, resolved here). No other observations.
 
 Installed: CFBundleVersion 1794454569.
+
+## reverted in part, 2026-11-11
+
+The Architect, after using build 1794454569: "remove the brightness difference revert it back to it was before it was perfectly fine before this is actually too bright … what it was right before you did this." `LOOK.new` takes the reply's and message's colours from before this sprint (reply #b9bec5, message #e2e5e9); the code's 20 px lines stay. The CSS variables stay, carrying those colours. The gate now wants the message at least 8 L* above the reply in both looks. On the bundle (build 1794455508, packaged true): new pane message L* 90.9, reply 76.9; new code 20 px. Unit specs 231/231. Installed: CFBundleVersion 1794455508.
