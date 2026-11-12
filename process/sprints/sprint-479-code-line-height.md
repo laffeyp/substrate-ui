@@ -4,7 +4,7 @@
 ---
 id: 479
 status: pending
-phase: code editor (roadmap r16), E18
+phase: code editor (roadmap r17), E18
 pass_kind: functional
 ---
 ```
@@ -20,7 +20,7 @@ The code editor draws 13 px type on 23 px lines (1.77; `Centre.tsx` `.cm-scrolle
 ## context_files
 
 - `../sdd-kit-3/AGENTS.md`, `../sdd-kit-3/templates/SPRINT_CARD.md`, `../sdd-kit-3/ADDENDUMS.md` A1, A2
-- `process/planning/2026-11-09-code-editor/ROADMAP-2026-11-09-code-editor-r16.md`
+- `process/planning/2026-11-09-code-editor/ROADMAP-2026-11-09-code-editor-r17.md`
 - `BLACKBOARD.md`: the user entries of 2026-11-11 on how text looks
 - `process/planning/2026-11-09-code-editor/RESEARCH-2026-11-11-colour-spacing-wrap.md`
 - `web/app/editor/Centre.tsx` (`THEME`, `.cm-scroller`), `web/app/editor/BytesView.tsx` (its row height)

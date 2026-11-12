@@ -1,26 +1,26 @@
-# Sprint 484 — the ghost scheme
+# Sprint 482 — the ghost scheme
 
 ```yaml
 ---
-id: 484
+id: 482
 status: pending
-phase: code editor (roadmap r16), E23
+phase: code editor (roadmap r17), E21
 pass_kind: functional
 ---
 ```
 
 ## scope
 
-`RESEARCH-2026-11-11-colour-spacing-wrap-r2.md`: ghost is the key with the colour taken out, all whites and greys (the Architect: "all whites and grays"): the same lightness steps as E21's notes, each in the tinted grey of its L*. A setting picks the scheme. One verifiable property: with ghost chosen, every token decodes to chroma below 5 and the classes keep E21's lightness order.
+`RESEARCH-2026-11-11-colour-spacing-wrap-r2.md`: ghost is the key with the colour taken out, all whites and greys (the Architect: "all whites and grays"): the same lightness steps as E21's notes, each in the tinted grey of its L*. A setting picks the scheme. One verifiable property: with ghost chosen, every token decodes to chroma below 5 and the classes keep E20's lightness order.
 
 ## prerequisites
 
-- 482
+- 481
 
 ## context_files
 
 - `../sdd-kit-3/AGENTS.md`, `../sdd-kit-3/templates/SPRINT_CARD.md`, `../sdd-kit-3/ADDENDUMS.md` A1, A2
-- `process/planning/2026-11-09-code-editor/ROADMAP-2026-11-09-code-editor-r16.md`
+- `process/planning/2026-11-09-code-editor/ROADMAP-2026-11-09-code-editor-r17.md`
 - `BLACKBOARD.md`: the user entries of 2026-11-11 on how text looks
 - `process/planning/2026-11-09-code-editor/RESEARCH-2026-11-11-colour-spacing-wrap-r2.md`
 - `web/app/derive/palette.ts`; `web/app/state/settings.ts`
@@ -62,7 +62,7 @@ No new tag.
 
 ### UI driving steps
 
-The setting set to ghost; main.rs's tokens decode with chroma below 5 and in E21's lightness order.
+The setting set to ghost; main.rs's tokens decode with chroma below 5 and in E20's lightness order.
 
 ### Expected screenshot / visual state
 
@@ -74,7 +74,7 @@ A person can pick a scheme of whites and greys that keeps the code's structure.
 
 ## notes
 
-Built on E21's notes, so ghost follows them.
+Built on E20's notes, so ghost follows them.
 
 ## self-review checklist
 

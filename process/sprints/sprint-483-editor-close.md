@@ -1,10 +1,10 @@
-# Sprint 487 — the code editor's close
+# Sprint 483 — the code editor's close
 
 ```yaml
 ---
-id: 487
+id: 483
 status: pending
-phase: code editor (roadmap r16), E26
+phase: code editor (roadmap r17), E22
 pass_kind: functional
 ---
 ```
@@ -15,12 +15,12 @@ The roadmap's close: the full suites once; the runbook's build and install, step
 
 ## prerequisites
 
-- 477 to 486
+- 477 to 482
 
 ## context_files
 
 - `../sdd-kit-3/AGENTS.md`, `../sdd-kit-3/templates/SPRINT_CARD.md`, `../sdd-kit-3/ADDENDUMS.md` A1, A2
-- `process/planning/2026-11-09-code-editor/ROADMAP-2026-11-09-code-editor-r16.md`
+- `process/planning/2026-11-09-code-editor/ROADMAP-2026-11-09-code-editor-r17.md`
 - `BLACKBOARD.md`: the user entries of 2026-11-11 on how text looks
 - `RUNBOOK-2026-11-11-project-r7.md`
 

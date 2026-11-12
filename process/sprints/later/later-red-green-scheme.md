@@ -2,12 +2,14 @@
 
 ```yaml
 ---
-id: 485
-status: pending
-phase: code editor (roadmap r16), E24
+id: none (later)
+status: later
+phase: later (roadmap r17, "Later")
 pass_kind: functional
 ---
 ```
+
+*Moved to later on 2026-11-11 (the Architect: "Those things need to be pushed to the future so they don't fuck up what we're trying to do"). Kept as written; it takes an E number and a sprint id when it is taken up.*
 
 ## scope
 
