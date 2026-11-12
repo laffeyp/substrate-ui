@@ -4,8 +4,8 @@
 // shouldn't be blue inside the editor"). Two repositories written here, each opened in its own launch:
 //   (a) `git init` and a file, no commit: no line is drawn added; every line's colour is the editor's text colour
 //       (#d7dade), not the added teal (#7fb3b8); DIFF_READ base no_commit; the tree shows no changed dot;
-//   (b) branch `trunk`, one commit, then one line changed: exactly that line is drawn added and teal, the others
-//       in the text colour; DIFF_READ base head.
+//   (b) branch `trunk`, one commit, then one line changed: exactly that line is marked added, and every line, the
+//       added one too, is in the text colour (sprint 482: an added line keeps its syntax colours); DIFF_READ base head.
 //   The status line's `vs` and the inspector's changes header name the base: none and "no base" for (a), "vs head" for (b).
 // Screenshots go to runs/packaged/sprint-450-<stamp>-<source|packaged>/. SHAKEOUT_APP=<Substrate.app> runs the bundle.
 
@@ -22,7 +22,7 @@ const git = (cwd: string, ...args: string[]) => execFileSync("git", ["-C", cwd, 
 type Line = { text: string; added: boolean; colour: string };
 const drawn = (win: Page) => win.evaluate(`(function () { var r = document.querySelector("[data-editor-code]").shadowRoot; return r ? Array.from(r.querySelectorAll(".cm-line")).map(function (e) { return { text: e.textContent, added: e.classList.contains("cm-added"), colour: getComputedStyle(e).color }; }) : []; })()`) as Promise<Line[]>;
 
-async function look(repo: string, file: string, shot: string, packaged: boolean): Promise<{ lines: Line[]; bases: string[]; dots: number; status: string | null; changesMeta: string | null }> {
+async function look(repo: string, file: string, shot: string, packaged: boolean, wantAdded: boolean): Promise<{ lines: Line[]; bases: string[]; dots: number; status: string | null; changesMeta: string | null }> {
   const launch = launchArgs();
   const app = await electron.launch({ ...launch.options, timeout: 60_000 });
   let ok = false;
@@ -39,12 +39,15 @@ async function look(repo: string, file: string, shot: string, packaged: boolean)
     await win.locator(`[data-tree-row="${file}"]`).first().click();
     const deadline = Date.now() + 15_000;
     let lines = await drawn(win);
-    while (!(lines.length > 1 && lines[0].text === "line one") && Date.now() < deadline) { await settled(win); lines = await drawn(win); }
+    // The text shows before its comparison lands (sprint 473), and the workspace's comparison fills the changes header
+    // before the file's own marks the lines: the lines are read once (b)'s added line is marked, or (a)'s `no base` shows.
+    const meta = () => win.evaluate(`(function () { var hs = Array.from(document.querySelectorAll("[data-editor-area=right] *")).filter(function (e) { return e.children.length === 0 && /^(vs |no base)/.test(e.textContent || ""); }); return hs.length ? hs[0].textContent : null; })()`) as Promise<string | null>;
+    let changesMeta = await meta();
+    while (!(lines.length > 1 && lines[0].text === "line one" && (wantAdded ? lines.some((l) => l.added) : changesMeta === "no base")) && Date.now() < deadline) { await settled(win); lines = await drawn(win); changesMeta = await meta(); }
     await settled(win);
     lines = await drawn(win);
     const dots = await win.locator("[data-tree-dot]").count();
     const status = await win.evaluate(`(function () { var e = document.querySelector("[data-status-vs]"); return e ? e.textContent : null; })()`) as string | null;
-    const changesMeta = await win.evaluate(`(function () { var hs = Array.from(document.querySelectorAll("[data-editor-area=right] *")).filter(function (e) { return e.children.length === 0 && /^(vs |no base)/.test(e.textContent || ""); }); return hs.length ? hs[0].textContent : null; })()`) as string | null;
     await win.screenshot({ path: shot });
     await app.close();
     const traces = join(launch.state, "electron", "logs", "traces");
@@ -74,7 +77,7 @@ async function main(): Promise<void> {
     mkdirSync(a, { recursive: true });
     git(a, "init", "-q", "-b", "main");
     writeFileSync(join(a, "notes.txt"), "line one\nline two\nline three\n");
-    const seenA = await look(a, "notes.txt", join(shots, "no-commit.png"), packaged);
+    const seenA = await look(a, "notes.txt", join(shots, "no-commit.png"), packaged, false);
     if (seenA.lines.some((l) => l.added) || seenA.lines.some((l) => l.text && l.colour !== TEXT)) throw new Error(`(a) the lines: ${JSON.stringify(seenA.lines)}`);
     if (!seenA.bases.length || seenA.bases.some((b) => b !== "no_commit")) throw new Error(`(a) DIFF_READ base ${JSON.stringify(seenA.bases)}`);
     if (seenA.dots !== 0) throw new Error(`(a) ${seenA.dots} changed dots in the tree`);
@@ -87,13 +90,13 @@ async function main(): Promise<void> {
     writeFileSync(join(b, "notes.txt"), "line one\nline two\nline three\n");
     git(b, "add", "-A"); git(b, "commit", "-q", "-m", "base");
     writeFileSync(join(b, "notes.txt"), "line one\nline two changed\nline three\n");
-    const seenB = await look(b, "notes.txt", join(shots, "trunk.png"), packaged);
+    const seenB = await look(b, "notes.txt", join(shots, "trunk.png"), packaged, true);
     const added = seenB.lines.filter((l) => l.added).map((l) => l.text);
     if (JSON.stringify(added) !== JSON.stringify(["line two changed"])) throw new Error(`(b) the added lines: ${JSON.stringify(seenB.lines)}`);
-    if (seenB.lines.some((l) => l.text && (l.added ? l.colour !== TEAL : l.colour !== TEXT))) throw new Error(`(b) the colours: ${JSON.stringify(seenB.lines)}`);
+    if (seenB.lines.some((l) => l.text && l.colour !== TEXT)) throw new Error(`(b) the colours: ${JSON.stringify(seenB.lines)}`);
     if (!seenB.bases.length || seenB.bases.some((x) => x !== "head")) throw new Error(`(b) DIFF_READ base ${JSON.stringify(seenB.bases)}`);
     if (seenB.status !== "+1 −1 vs head" || seenB.changesMeta !== "vs head") throw new Error(`(b) the status line ${JSON.stringify(seenB.status)}, the changes header ${JSON.stringify(seenB.changesMeta)}`);
-    console.log(`editor_base_colours: ok — (a) no commit: ${seenA.lines.filter((l) => l.text).length} lines in ${TEXT}, none added, DIFF_READ no_commit, no dot; (b) trunk: only "line two changed" added in ${TEAL}, the rest in ${TEXT}, DIFF_READ head; packaged=${packaged}; screenshots in ${shots}`);
+    console.log(`editor_base_colours: ok — (a) no commit: ${seenA.lines.filter((l) => l.text).length} lines in ${TEXT}, none added, DIFF_READ no_commit, no dot; (b) trunk: only "line two changed" added, every line in ${TEXT}, none in ${TEAL}, DIFF_READ head; packaged=${packaged}; screenshots in ${shots}`);
     status = 0;
   } catch (e) {
     console.error(`editor_base_colours: FAIL — ${(e as Error).message}`);

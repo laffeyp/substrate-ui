@@ -1,0 +1,114 @@
+# substrate-ui
+
+![substrate-ui — a desktop cockpit for driving LLMs through structured runs](.github/assets/substrate-ui-banner.png)
+
+A desktop cockpit for driving LLMs through structured runs. The way most folks today run their LLMs is to open a terminal and type `claude`, or more generally to run a command that starts the LLM that you work with for the remainder of the session. This replaces that, because that is not what a terminal is for!
+
+The fundamental insight here is that LLMs are a stochastic process. When we use a stochastic process to generate text, we need to be very clear about what we are doing, so we can consciously orchestrate this process as what it is. Instead of trying to make a chatbot write code, we control the flow of the statistical creation of words. This is very important, as this is a provably correct model of the process. Frankly, for correctness sake, this is a necessary condition to understand the thing itself. One might use a car without knowing how it works, but it would be a foolish carpenter that did not understand the saw. And you can be sure the F1 racers know every aspect of their car. That's what this tool is for, and what it reaches towards. It's making that same understanding visible, legible, and interpretable for people who want to use LLMs as a tool.
+
+There are other runners like [Orca](https://www.onorca.dev/) and [Paradev](https://paradev.com/), but none of those are built on an abstract computational runtime with some very interesting properties. Here, every event in a session — tool calls, replies, prompts, setting changes — lands on a log; you can replay it, diff it, and read any point. With [Substrate](https://github.com/laffeyp/substrate) under the hood, we can easily do interesting things like analyzing the language of every session over a number of variables — a process that can, for instance, tell you when the LLM is being too agreeable, or when the overall sentence structure of the session has changed. Here, information is treated as primary, and this is made possible by paying extra special attention to the details during the development process.
+
+You open a pane, pick a model and a workspace, and talk to the model while the window shows what it is doing, what it has read, how it is answering, and how the conversation is shifting.
+
+## What you can do with it
+
+Pick the model. The driver list carries the three CLI agents (`claude`, `codex`, `cursor-agent`), every Ollama Cloud and local model on the box, and a deterministic stand-in for scripted runs. The CLI agents sign in from inside the app's input bar.
+
+Pick the workspace. Each pane runs in a workspace — a repo the model will work on, a per-session sandbox, or an isolated git worktree. Resuming an existing session reattaches it to the workspace it opened in.
+
+Set the guidance. The four levels — harness, low, medium, high — are four bundles of system-prompt text the model reads at session open. `harness` is Substrate's loop rules alone, for a CLI agent that carries its own instructions; the three `standard` levels add more writing guidance in each step up. Length (terse, normal, full) and tone (blunt, neutral, formal, dry) sit beside the level: each writes one or two sentences, the same on every model. A change mid-session rewrites the next prompt.
+
+The window has five meta tabs:
+
+- **stream + graph** — the event stream and the run-as-graph (one lane per Producer-instance firing, cohorts banded).
+- **i/o** — the composed prompt and the model's reply, side by side.
+- **structure** — the authored shape of the running topology.
+- **language** — one lane per measure (words, hedges, boosters, contractions, exclamations, LLM-words, em-dashes, bold spans, list items, positive emotion, opening restatement, closing offers, sentence length). Each lane runs turn by turn with drift marks where the detector alarms.
+- **scene** — any 2-D payload field a topology emits (`game_of_life` fits).
+
+Slash commands steer from the input bar: `/model`, `/bundle`, `/guidance`, `/length`, `/tone`, `/workspace`, `/isolate`, `/tools`, `/set`, `/fold`, `/language`, `/exit`, among others. Shift-ESC interrupts a running tool without ending the session.
+
+Cmd-D splits a pane. The session's `delegate` tool opens a child session as its own pane with the child's full controls.
+
+Every event lands on an append-only log at `~/.substrate/sessions/<id>/record/`. Replay a session, diff two records, inspect a Producer's inputs and outputs at any seq.
+
+## Install
+
+```
+npm install
+npm run pack:dev
+ditto dist-electron/mac-arm64/Substrate.app /Applications/Substrate.app
+xattr -dr com.apple.quarantine /Applications/Substrate.app
+open /Applications/Substrate.app
+```
+
+The signed, notarized path is `scripts/release.sh --notarize --install`. `npm run pack:dev` builds the window, bundles the Python runtime and the kernel, and packages the app unsigned. The runbook has every step: `RUNBOOK-2026-11-11-project-r7.md` at the repo root.
+
+## Dev
+
+```
+npm run electron
+```
+
+Window title: "Substrate Dev". State at `~/.substrate-dev/`, separate from the installed app's `~/.substrate/`.
+
+## Architecture
+
+The window is Electron over a Python HTTP backend. Electron spawns the backend on an ephemeral port, reads the port back from stdout, and loads the window.
+
+| Path | What |
+|---|---|
+| `electron/main.ts`, `menu.ts`, `preload.ts` | Spawns the backend, reads back the port, opens the window; the native menu; the bridge to the window. Compiled into `dist-main/`. |
+| `server.py` | HTTP backend. Routes `substrate.api` reads; builds the session topology from a stored manifest. |
+| `web/reveal.html`, `web/reveal.ts`, `web/app/` | The window: the page, its bootstrap, and the React app (`App.tsx`, the editor view in `web/app/editor/`). |
+| `web/vm/` | Per-pane controller. Signal vocabulary at `web/vm/signals/versions/current.json`. |
+| `web/reveal/transcript/` | React tree. |
+| `harness/shakeout/*.ts` | Playwright `_electron.launch` gates. |
+| `tests/*.py` | pytest on the backend. |
+| `scripts/release.sh` | The release pipeline. |
+| `scripts/fetch-python-runtime.sh` | Bundles CPython and the kernel wheel. |
+| `electron-builder.config.js` | macOS packaging. |
+
+Python stdlib + `msgspec` + the Substrate kernel as a library. React 18 and CodeMirror 6, bundled from `node_modules`. Vite builds the window.
+
+The kernel is imported through `substrate.api`, `substrate.topologies`, and the session topology's public modules. `tests/test_server.py`'s import-boundary test holds the line.
+
+## Tests
+
+```
+npm run test:py           # pytest
+npm run test:unit         # vocabulary parity + node --test
+npx tsx harness/vm_smoke.ts
+npm run gates:electron    # chained Playwright gates
+npm test                  # all of the above
+```
+
+Gates against a built bundle set `SHAKEOUT_APP=$APP` and `*_APP=$APP`.
+
+## Boundary
+
+The backend binds `127.0.0.1`. A session's tools include `bash`, `edit_file`, `write_file` at the chosen workspace. Moving off loopback with `SUBSTRATE_UI_HOST` without authentication in front gives anyone on the network a shell at that workspace.
+
+## Licensing and use
+
+This project is licensed under the **PolyForm Noncommercial License 1.0.0**.
+Source-available; noncommercial use only.
+
+Permitted uses include personal, research, educational, hobbyist,
+government, and nonprofit charitable use. Commercial use of any kind
+is not permitted under this license. See `LICENSE` for the full text
+and the additional statements on AI-mediated derivation that ride
+alongside it.
+
+### Position on machine learning
+
+The licensor does not consent to the use of this software, its
+documentation, or its records as training data for AI or machine
+learning systems. Training crawlers should honor the `robots.txt` and
+`ai.txt` at the repository root or any hosted docs site.
+
+A reimplementation produced by exposing this codebase to an AI or ML
+system is a derivative work and is subject to the PolyForm Noncommercial
+License in full — that is, no commercial use of the derivative work.
+
+See `LICENSE` Sections A and B for the full statement.

@@ -7,7 +7,8 @@
 //   truth  — the file on disk and `git diff -U0` against main's merge-base in the session's workspace;
 //   DOM    — the tabs; CodeMirror's lines (inside its shadow root) equal the file's; the lines marked added
 //            and removed equal git's;
-//   pixels — in a screenshot, each added line holds teal (#7fb3b8) and each removed line red (#c26058);
+//   pixels — in a screenshot, each added line's gutter holds the teal + (#7fb3b8) and its text holds no teal
+//            (sprint 482: an added line keeps its syntax colours); each removed line holds red (#c26058);
 //            the anchor decodes and names an EDITOR_DRAWN;
 //   signals (after close) — EDITOR_FILE_OPENED how tree with tab counts 1, 2, 3; EDITOR_FILE_CLOSED 2;
 //            FILE_READ per open; no session end: ⌘W in the editor closes the tab, not the session.
@@ -24,26 +25,27 @@ import { decodePng } from "../pixel/png";
 const REPO_ROOT = join(__dirname, "..", "..");
 const git = (cwd: string, ...args: string[]) => execFileSync("git", ["-C", cwd, ...args], { encoding: "utf8" });
 
-async function code(win: Page): Promise<{ lines: string[]; added: number; removed: number; addedBoxes: number[][]; removedBoxes: number[][] }> {
+async function code(win: Page): Promise<{ lines: string[]; added: number; removed: number; addedBoxes: number[][]; removedBoxes: number[][]; plusBoxes: number[][] }> {
   // A string, not a function: tsx wraps named functions in a __name helper the page lacks.
   return win.evaluate(`(() => {
     var root = document.querySelector("[data-editor-code]").shadowRoot;
-    if (!root) return { lines: [], added: 0, removed: 0, addedBoxes: [], removedBoxes: [] };
+    if (!root) return { lines: [], added: 0, removed: 0, addedBoxes: [], removedBoxes: [], plusBoxes: [] };
     var box = function (e) { var r = e.getBoundingClientRect(); return [r.left, r.top, r.width, r.height]; };
     var lines = Array.from(root.querySelectorAll(".cm-line")).map(function (e) { return e.textContent; });
     var added = Array.from(root.querySelectorAll("[data-added-line]")), removed = Array.from(root.querySelectorAll("[data-removed-line]"));
-    return { lines: lines, added: added.length, removed: removed.length, addedBoxes: added.map(box), removedBoxes: removed.map(box) };
+    var plus = Array.from(root.querySelectorAll(".cm-change-gutter .cm-gutterElement")).filter(function (e) { return e.textContent === "+"; });
+    return { lines: lines, added: added.length, removed: removed.length, addedBoxes: added.map(box), removedBoxes: removed.map(box), plusBoxes: plus.map(box) };
   })()`);
 }
 
-function holds(file: string, dpr: number, boxes: number[][], rgb: [number, number, number]): number {
+function holds(file: string, dpr: number, boxes: number[][], rgb: [number, number, number], tol = 20): number {
   const img = decodePng(readFileSync(file));
   let n = 0;
   for (const [x, y, w, h] of boxes) {
     let hit = false;
     for (let yy = Math.round(y * dpr); yy < Math.round((y + h) * dpr) && !hit; yy++) for (let xx = Math.round(x * dpr); xx < Math.round((x + w) * dpr); xx++) {
       const i = (yy * img.width + xx) * 4;
-      if (Math.abs(img.data[i] - rgb[0]) < 20 && Math.abs(img.data[i + 1] - rgb[1]) < 20 && Math.abs(img.data[i + 2] - rgb[2]) < 20) { hit = true; break; }
+      if (Math.abs(img.data[i] - rgb[0]) < tol && Math.abs(img.data[i + 1] - rgb[1]) < tol && Math.abs(img.data[i + 2] - rgb[2]) < tol) { hit = true; break; }
     }
     if (hit) n++;
   }
@@ -101,8 +103,9 @@ async function main(): Promise<void> {
     const shot = join(shots, "cart.png");
     const px = await readPixels(win, shot, 0);
     const dpr = await win.evaluate(() => window.devicePixelRatio);
-    const teal = holds(shot, dpr, got.addedBoxes, [0x7f, 0xb3, 0xb8]), red = holds(shot, dpr, got.removedBoxes, [0xc2, 0x60, 0x58]);
-    if (teal !== wantAdded || red !== wantRemoved) throw new Error(`on screen ${teal} added lines hold teal and ${red} removed lines hold red; want ${wantAdded} and ${wantRemoved}`);
+    // Within 10, not 20: the keyword blue #7da3ca lies 16 and 18 from teal in green and blue.
+    const marked = holds(shot, dpr, got.plusBoxes, [0x7f, 0xb3, 0xb8]), tealText = holds(shot, dpr, got.addedBoxes, [0x7f, 0xb3, 0xb8], 10), red = holds(shot, dpr, got.removedBoxes, [0xc2, 0x60, 0x58]);
+    if (marked !== wantAdded || tealText !== 0 || red !== wantRemoved) throw new Error(`on screen ${marked} gutter marks hold teal, ${tealText} added lines' text holds teal, ${red} removed lines hold red; want ${wantAdded}, 0 and ${wantRemoved}`);
     if ("error" in px.anchor) throw new Error(`the pixel anchor does not decode: ${px.anchor.error}`);
 
     await win.locator('[data-tree-row="app.py"]').first().click();
@@ -133,7 +136,7 @@ async function main(): Promise<void> {
     if (lines("server.jsonl").some((r) => r.name === "SESSION_ENDED")) throw new Error("the server ended the session");
     const booted = lines("main.jsonl").find((r) => r.name === "APP_BOOTED")!.payload;
     if (packaged && booted.packaged !== true) throw new Error(`APP_BOOTED packaged ${String(booted.packaged)}`);
-    console.log(`editor_centre: ok — src/cart.ts ${text.length} lines = the file; ${wantAdded} added and ${wantRemoved} removed = git, painted teal and red; img.bin "${unreadable}"; ⌘W closed a tab, the session lives; ${files.join(", ")}; FILE_READ ${reads.join(" ")}; packaged=${String(booted.packaged)}; screenshot ${shot}`);
+    console.log(`editor_centre: ok — src/cart.ts ${text.length} lines = the file; ${wantAdded} added and ${wantRemoved} removed = git, the added marked by the gutter's teal + in their syntax colours, the removed red; img.bin "${unreadable}"; ⌘W closed a tab, the session lives; ${files.join(", ")}; FILE_READ ${reads.join(" ")}; packaged=${String(booted.packaged)}; screenshot ${shot}`);
     status = 0;
   } catch (e) {
     console.error(`editor_centre: FAIL — ${(e as Error).message}`);

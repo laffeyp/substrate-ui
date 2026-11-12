@@ -86,8 +86,9 @@ const THEME = EditorView.theme({
   ".cm-gutters": { backgroundColor: GROUND, border: "none", color: "#62676f" },
   ".cm-lineNumbers .cm-gutterElement": { padding: "0 12px 0 20px", minWidth: "28px" },
   ".cm-content": { caretColor: ACCENT },
-  // 24a draws a whole added line in teal: the hunk's colour wins over the syntax colours.
-  ".cm-added, .cm-added span": { color: `${ADDED} !important` },
+  // An added line keeps its syntax colours; the change gutter's teal + marks it (the Architect, 2026-11-11: frame 24a's
+  // whole line in teal hid the highlighting, "Syntax highlighting is way more important"). `.cm-added` stays as the
+  // line's mark for the gates and the follow.
   ".cm-change-gutter .cm-gutterElement": { width: "14px", textAlign: "center" },
   // Sprint 454: a removed line is not the buffer's text, so the browser's own selection never takes it (it drew a
   // removed line as selected inside a selection of the lines around it).

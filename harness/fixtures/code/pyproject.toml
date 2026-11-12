@@ -1,0 +1,212 @@
+# Substrate — concurrent streaming dataflow runtime.
+# Distribution name: substrate-kernel (the bare "substrate" is registered to an unrelated
+# party on PyPI). Import name: substrate. Decided 2026-07-24 (BLACKBOARD ## Decisions).
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "substrate-kernel"
+version = "1.1.2"
+description = "A Python runtime that coordinates models and anything else you want through a single append-only log. Replay, diff, and trace every run."
+requires-python = ">=3.12"          # D-6: 3.12+ only (msgspec C ext, per-task eager exec)
+license = "PolyForm-Noncommercial-1.0.0"  # D-1: relicensed 2026-09-01 per publish-bundle-2026-08-31/README.md
+readme = "README.md"
+authors = [{ name = "Green Rose Systems" }]
+keywords = ["dataflow", "runtime", "event-sourcing", "llm", "orchestration", "replay", "append-only-log"]
+classifiers = [
+  "Development Status :: 5 - Production/Stable",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Operating System :: MacOS",
+  "Operating System :: POSIX :: Linux",
+  "Topic :: Software Development :: Libraries :: Python Modules",
+  "Typing :: Typed",
+]
+
+dependencies = [
+  "msgspec>=0.21,<0.22",            # D-3: validation + encoding + schema + to_builtins
+  "rfc8785",                        # D-7: RFC 8785 canonical JSON (the bytes everything hashes over)
+  "python-ulid",                    # run_id generation
+  "typing_extensions",              # python-ulid 3.x imports it at runtime but doesn't declare it;
+                                    # without this a base `pip install substrate` fails at import
+  "click",                          # CLI parsing
+  "rich",                           # the CLI's stderr narration channel ([config]/[lock]/[FAIL]
+  # status lines); record DATA goes to stdout via plain click.echo
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest", "pytest-asyncio", "pytest-benchmark", "pytest-timeout",
+  # ruff PINNED: `ruff format` output is version-sensitive, so an unpinned ruff silently re-drifts the
+  # CI format gate across releases (it stranded the repo red before 2026-07-02). Bump deliberately +
+  # reformat in one commit. mypy/pytest are behaviour-stable enough to float.
+  "mypy", "ruff==0.15.17", "hypothesis", "coverage",
+  "import-linter",                  # enforces the F-API-6 cli-imports-only-api contract (below)
+  "httpx",                          # so dev + CI type-check/test the [openai-compat] reference adapter
+  # Sprint 304: the published implementations the language measures are checked against. Tests
+  # only; the measure library itself imports none of them. textstat is left out on purpose: its
+  # wheel installs a top-level `tests` package that shadows this repo's; the comparison script
+  # runs it with `uv run --with textstat==0.7.13`.
+  "lexicalrichness", "nolds", "powerlaw", "cmudict",
+  "river",                          # sprint 305: Page-Hinkley reference
+]
+openai-compat = ["httpx"]           # optional extra; kernel imports none of these
+# The SWE-bench confirmatory + host + agent scripts hard-import `datasets` (HuggingFace, to
+# load the Lite split) and `swebench` (the official grading harness). Neither is a runtime dep
+# of the kernel — they're only needed on the Architect's box for a real Docker eval run.
+# `uv sync --extra swebench` installs both in one command so a new operator does not have to
+# know to pip-install them by hand (the pre-2026-08-08 tribal state).
+swebench = ["datasets", "swebench"]
+
+[project.urls]
+Repository = "https://github.com/laffeyp/substrate"
+Changelog = "https://github.com/laffeyp/substrate/blob/main/CHANGELOG.md"
+
+[project.scripts]
+substrate = "substrate.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/substrate"]
+
+# The sdist carries the package, its tests and the project files, nothing else. Without this
+# list hatch packed everything git tracks, process/runs included: 18,336 assay record files,
+# 95 MB compressed, since 1.0.1 (1.0.0's sdist was 1.3 MB; PyPI's default limit is 100 MB).
+[tool.hatch.build.targets.sdist]
+include = [
+  "src/substrate",
+  "tests",
+  "README.md",
+  "LICENSE",
+  "CHANGELOG.md",
+  "CONTRIBUTING.md",
+  "SECURITY.md",
+  "pyproject.toml",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+# pytest-asyncio 1.4 warns while this is unset; "function" (its announced future default) gives each
+# async fixture a fresh loop (UI sprint 107).
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+# Every run ends with one line per test that did not pass (failed, error, skipped, xfail, xpass)
+# and its reason, so a run that skips a test names it however its output is cut.
+addopts = "-ra"
+# The suite is FUNCTION-tests only (def test_*, with underscore-prefixed helper classes). Disable
+# class-based collection so a DOMAIN record whose name starts with "Test" (e.g. the locked vocabulary
+# record `TestResults`) isn't mistaken for a test class when imported into a test module.
+python_classes = []
+markers = [
+  # real-model demos run a topology against a LIVE local LLM (Ollama) and verify the claim from the
+  # record. Self-skip when the models are absent (so CI / other machines stay green); run here.
+  # Deselect with `-m "not realmodel"`. The per-test timeouts override the 30s suite default below.
+  "realmodel: runs against a live local model (Ollama); skips if the model is absent",
+  # SWE-bench harness binding gold-differential checks. Runs the OFFICIAL swebench evaluation harness
+  # in Docker against a real instance (gold patch → resolved; empty patch → not-resolved). The one
+  # end-to-end check that pins substrate.assay.swebench's binding to the harness on-disk contract.
+  # Skips when swebench isn't importable OR Docker isn't running OR the eval image isn't pullable.
+  # Long: an emulated x86 image pull + evaluation on arm64 can take 10+ min. Deselect with
+  # `-m "not swebench_harness"`. Restored from the deleted swebench_smoke.py + assay_swebench_smoke.py
+  # after Sprint 146 removed them without pytest coverage equivalents (sprint 146a).
+  "swebench_harness: pins the swebench 4.x harness binding via a live Docker gold-differential run",
+]
+# Sprint 173 (F9): elevate the retired heavy topology's DeprecationWarning so any new
+# consumer trips CI red. Filter matches by message substring so callers of
+# `swebench_solver_topology_with_test_selection` (from anywhere in the tree) escalate to
+# error unless the caller opts in with `pytest.warns(DeprecationWarning)` around the site.
+# The nine legitimate tests in test_swebench_solver.py + two in test_assay_swebench_suite.py
+# were updated to opt-in per site. Every other DeprecationWarning stays a warning.
+filterwarnings = [
+  "error:swebench_solver_topology_with_test_selection is deprecated:DeprecationWarning",
+]
+# Hard safety net: any test (e.g. a never-quiescent writer or a self-feeding Trigger
+# loop) FAILS FAST instead of wedging the machine. Each test finishes well under a second (this timeout is PER-TEST, not whole-suite); 30s is
+# generous headroom that still catches non-termination immediately.
+timeout = 30
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+# docs/specs/kernel_spec/, docs/proof/ and process/archive/ hold scratch / spec-history / archived Python (audit-trail, hard
+# rule 12); they are not part of the package and are excluded from both lint and format gates.
+extend-exclude = ["docs/specs/kernel_spec", "docs/proof", "process/archive"]
+
+[tool.ruff.lint]
+# ruff's defaults plus BLE (blind except) and S (bandit). Until 2026-10-08 neither ran, so the
+# 82 `# noqa: BLE001` and 10 `# noqa: S…` comments, and the pre-commit BLE001-rationale gate,
+# policed rules that were off (lens audit F008).
+extend-select = ["BLE", "S"]
+# S603/S607: every subprocess call here passes an argv list (no shell) to a tool the code names
+# (git, docker, uv, the interpreter). The one shell=True call (the coding gate) is marked where it is.
+ignore = ["S603", "S607"]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests assert, write scratch paths, exec fixtures and open local URLs by design.
+"tests/**" = ["S101", "S102", "S108", "S310", "S110", "BLE001"]
+"scripts/**" = ["S101", "S108", "S310", "S311"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["src/substrate"]
+
+# `swebench` is an optional, env-gated dependency: the SWE-bench Adapter (substrate.assay.swebench)
+# lazy-imports it only on the Architect's box for a real Docker eval run. It ships no type stubs and is
+# not installed in CI, so declare its imports untyped here rather than scattering fragile inline
+# `type: ignore[import-not-found]` comments (which churn as mypy dedups the missing package).
+[[tool.mypy.overrides]]
+module = "swebench.*"
+ignore_missing_imports = true
+
+# HuggingFace `datasets` — no bundled stubs; the loader is used only by scripts (bench + confirmatory).
+[[tool.mypy.overrides]]
+module = "datasets"
+ignore_missing_imports = true
+
+# F-API-6: the CLI is the standing proof that the public API suffices — `substrate.cli` may
+# import `substrate.api` (and stdlib / third-party) but NO other `substrate.*` module. Enforced
+# by `uv run lint-imports` (import-linter), run in CI. The src layout means the package must be
+# importable; the editable install (`uv pip install -e`) provides that.
+[tool.importlinter]
+root_package = "substrate"
+
+[[tool.importlinter.contracts]]
+name = "cli imports only substrate.api and substrate.app"
+type = "forbidden"
+source_modules = ["substrate.cli"]
+# Only DIRECT cli imports are constrained: cli -> api/app -> internals is the point of a facade.
+allow_indirect_imports = true
+# Every top-level unit except the two facades. A new top-level module is caught by the CLI's AST
+# test (tests/test_cli.py::test_cli_imports_only_substrate_api), which also counts string imports
+# through importlib (lens audit F061, F200: the old list omitted adapters, topologies, assay, the
+# registry, bundles, _daemon and reference, and the CLI reached topologies through importlib).
+forbidden_modules = [
+  "substrate._daemon", "substrate.adapters", "substrate.assay", "substrate.bundles",
+  "substrate.conformance", "substrate.constants", "substrate.encoding", "substrate.errors",
+  "substrate.home", "substrate.kernel", "substrate.naming", "substrate.projections",
+  "substrate.protocols", "substrate.record", "substrate.reference", "substrate.testing",
+  "substrate.topologies", "substrate.types", "substrate.language",
+]
+
+[[tool.importlinter.contracts]]
+name = "layers: each unit imports only units below it"
+type = "layers"
+# Top to bottom. Units in one layer separated by | are independent: neither imports the other.
+# Until 2026-10-08 no layers contract existed; topologies and assay imported each other, api and
+# bundles, api and conformance, and kernel and projections did too (lens audit F025, F042, F199).
+layers = [
+  "substrate.cli",
+  "substrate.app",
+  "substrate.assay | substrate.conformance",
+  "substrate.topologies | substrate.reference",
+  "substrate._daemon | substrate.adapters",
+  "substrate.api",
+  "substrate.bundles | substrate.projections | substrate.testing",
+  "substrate.kernel | substrate.naming | substrate.home",
+  "substrate.record",
+  "substrate.encoding | substrate.protocols | substrate.errors",
+  "substrate.constants | substrate.types | substrate.language",
+]

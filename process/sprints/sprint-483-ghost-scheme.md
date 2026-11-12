@@ -1,10 +1,10 @@
-# Sprint 482 — the ghost scheme
+# Sprint 483 — the ghost scheme
 
 ```yaml
 ---
-id: 482
+id: 483
 status: pending
-phase: code editor (roadmap r17), E21
+phase: code editor (roadmap r18), E22
 pass_kind: functional
 ---
 ```
@@ -15,12 +15,12 @@ pass_kind: functional
 
 ## prerequisites
 
-- 481
+- 482
 
 ## context_files
 
 - `../sdd-kit-3/AGENTS.md`, `../sdd-kit-3/templates/SPRINT_CARD.md`, `../sdd-kit-3/ADDENDUMS.md` A1, A2
-- `process/planning/2026-11-09-code-editor/ROADMAP-2026-11-09-code-editor-r17.md`
+- `process/planning/2026-11-09-code-editor/ROADMAP-2026-11-09-code-editor-r18.md`
 - `BLACKBOARD.md`: the user entries of 2026-11-11 on how text looks
 - `process/planning/2026-11-09-code-editor/RESEARCH-2026-11-11-colour-spacing-wrap-r2.md`
 - `web/app/derive/palette.ts`; `web/app/state/settings.ts`
