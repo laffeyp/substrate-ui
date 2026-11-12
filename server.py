@@ -4599,6 +4599,14 @@ class Handler(BaseHTTPRequestHandler):
             except (OSError, ValueError, UnicodeDecodeError) as exc:
                 self._error(400, f"continue_from: {exc}")
                 return
+        # App sprint 497 (kernel K349): `make_repository: false` keeps a workspace that is not
+        # inside a repository a plain folder; absent or true, it is made one, as before.
+        make_repository = body.get("make_repository", True)
+        if not isinstance(make_repository, bool):
+            self._error(
+                400, f"make_repository must be a bool; got {type(make_repository).__name__}"
+            )
+            return
         session_id = _forced_session_id or f"s_{uuid.uuid4().hex[:24]}"
         continued_path: str | None = None
         if continued is not None:
@@ -4622,6 +4630,7 @@ class Handler(BaseHTTPRequestHandler):
                 tone=controls[Control.TONE],
                 handoff=controls[Control.HANDOFF],
                 continued_session=continued_path,
+                make_repository=make_repository,
             )
             # Validate driver_params at the same boundary as PATCH does. If
             # the client sent bad shape/values, roll back the create so the
