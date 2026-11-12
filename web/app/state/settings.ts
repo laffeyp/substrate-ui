@@ -8,6 +8,7 @@
 // (web/app/Dialogs.tsx) calls `pickTheme` and `stepFont`.
 
 import { createStore } from "../store";
+import { LOOKS, type Look } from "../derive/look";
 
 export type Theme = "dark" | "light" | "system";
 export const THEMES: readonly Theme[] = ["dark", "light", "system"];
@@ -27,13 +28,15 @@ export interface SettingsState {
   /** The line under the theme chips after a pick the build does not draw yet. */
   settingsNote: string;
   binding: Binding;
+  /** The look (sprint 478): `new`, or `original`, the look before the appearance work, kept to compare against. */
+  look: Look;
 }
 
 // One instance per window, kept on globalThis as in shell.ts. The page once loaded two copies of this
 // module (sprint 213); Vite now bundles one, and the shared key costs nothing.
 const KEY_SHARED = "__substrateSettings";
 const scope = globalThis as unknown as Record<string, ReturnType<typeof createStore<SettingsState>> | undefined>;
-export const settings = scope[KEY_SHARED] ?? (scope[KEY_SHARED] = createStore<SettingsState>({ theme: "dark", fontOverride: null, settingsNote: "", binding: "standard" }));
+export const settings = scope[KEY_SHARED] ?? (scope[KEY_SHARED] = createStore<SettingsState>({ theme: "dark", fontOverride: null, settingsNote: "", binding: "standard", look: "new" }));
 
 /** The saved fields that pass their checks; anything else is left at its default. */
 export function readSaved(raw: string | null): Partial<SettingsState> {
@@ -46,6 +49,7 @@ export function readSaved(raw: string | null): Partial<SettingsState> {
   if (THEMES.includes(saved.theme as Theme)) patch.theme = saved.theme as Theme;
   if (typeof saved.fontOverride === "number" && saved.fontOverride >= FONT_MIN && saved.fontOverride <= FONT_MAX) patch.fontOverride = saved.fontOverride;
   if (BINDINGS.includes(saved.binding as Binding)) patch.binding = saved.binding as Binding;
+  if (LOOKS.includes(saved.look as Look)) patch.look = saved.look as Look;
   return patch;
 }
 
@@ -56,8 +60,8 @@ export function loadSettings(): void {
 
 function save(): void {
   try {
-    const { theme, fontOverride, binding } = settings.getSnapshot();
-    window.localStorage.setItem(KEY, JSON.stringify({ theme, fontOverride, binding }));
+    const { theme, fontOverride, binding, look } = settings.getSnapshot();
+    window.localStorage.setItem(KEY, JSON.stringify({ theme, fontOverride, binding, look }));
   } catch { /* not saved */ }
 }
 
@@ -75,6 +79,11 @@ export function fontSize(fallback: number): number {
 export function stepFont(delta: number, fallback: number): void {
   const next = Math.min(FONT_MAX, Math.max(FONT_MIN, fontSize(fallback) + delta));
   settings.set({ fontOverride: next });
+  save();
+}
+
+export function pickLook(look: Look): void {
+  settings.set({ look });
   save();
 }
 

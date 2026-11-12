@@ -12,7 +12,7 @@
 
 import * as React from "react";
 import { Transcript } from "../../reveal/transcript";
-import { TRANSCRIPT_LINE_HEIGHT } from "../../reveal/transcript/Row";
+import { LOOK } from "../derive/look";
 import { ActivityLine, TaskRows } from "../ActivityLine";
 import { FindBar } from "../FindBar";
 import { InputBar } from "../InputBar";
@@ -32,6 +32,7 @@ import { stopFollowing } from "../../reveal/follow_bottom";
 import { followItems } from "../derive/follow";
 import { ADD_HINT } from "../derive/control_notes";
 import { editor } from "../state/editor";
+import { settings } from "../state/settings";
 import { clampSize, loadSizes, saveSizes, type EditorSizes } from "./sizes";
 import { emit as emitSignal } from "../../vm/instrumentation/sdd";
 import { EditorColumnFoldedCause, EditorColumnFoldedColumn, EditorColumnResizedColumn, EditorColumnResizedEnded, EditorDockSetDock, EditorInspectorSwappedShowing, Signal } from "../../vm/signals.gen";
@@ -213,6 +214,7 @@ export function EditorView({ paneId, fontSize, sessionId, workspace, shape }: { 
   // are kept per mode, and each finished drag is one EDITOR_COLUMN_RESIZED.
   const [sizes, setSizes] = React.useState<EditorSizes>(() => loadSizes("code", storage()));
   const ed = React.useSyncExternalStore(editor.subscribe, editor.getSnapshot, editor.getSnapshot);
+  const look = React.useSyncExternalStore(settings.subscribe, settings.getSnapshot, settings.getSnapshot).look;
   const { folded, dock, swapped } = ed;
   const snap = React.useSyncExternalStore(shell.subscribe, shell.getSnapshot, shell.getSnapshot).snapshots[paneId];
   const parked = !!snap?.parkReason;
@@ -326,7 +328,7 @@ export function EditorView({ paneId, fontSize, sessionId, workspace, shape }: { 
       {/* Sprint 458 (24k; D40): the header's hint, as its tooltip. */}
       <div data-editor-terminal-head="1" title={ADD_HINT} style={{ flex: "none", padding: "6px 16px 2px", display: "flex", ...LABEL }}>SUBSTRATE TERMINAL<span style={{ flex: 1 }} /><span data-editor-fold="bottom" title="fold the terminal (⌘J)" onClick={() => foldColumn("bottom", true, EditorColumnFoldedCause.RAIL, paneId)} style={GLYPH}>▾</span></div>
       <div style={{ flex: "none" }}><FindBar view="meta" /></div>
-      <div onClick={() => setFindScope("transcript")} style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "2px 16px", lineHeight: TRANSCRIPT_LINE_HEIGHT, fontSize, minWidth: 0, minHeight: 0 }}>
+      <div onClick={() => setFindScope("transcript")} style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "2px 16px", lineHeight: LOOK[look].terminalLineHeight, fontSize, minWidth: 0, minHeight: 0 }}>
         <div data-vm-transcript-mount="editor" data-pane-id={String(paneId)}>
           {/* The reveal's scroll anchor: meta and the editor are never shown together. */}
           <div data-vm-atom-root="editor" data-pane-id={String(paneId)}><Transcript paneId={paneId} view="reveal" /></div>

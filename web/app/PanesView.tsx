@@ -11,7 +11,8 @@
 import * as React from "react";
 import { useSyncExternalStore } from "react";
 import { Transcript } from "../reveal/transcript";
-import { TRANSCRIPT_LINE_HEIGHT } from "../reveal/transcript/Row";
+import { settings } from "./state/settings";
+import { LOOK } from "./derive/look";
 import { ActivityLine, TaskRows } from "./ActivityLine";
 import { FindBar } from "./FindBar";
 import { InputBar } from "./InputBar";
@@ -21,10 +22,11 @@ import { panes, type PaneCellView } from "./state/panes";
 const gutter: React.CSSProperties = { position: "absolute", zIndex: 15 };
 
 export function PaneSession({ paneId, fontSize }: { paneId: number; fontSize: number }): React.ReactElement {
+  const look = useSyncExternalStore(settings.subscribe, settings.getSnapshot).look;
   return (
     <>
       <div data-view="panes" data-pane-id={String(paneId)} style={{ flex: "none" }}><FindBar view="panes" /></div>
-      <div data-vm-transcript-scroller={String(paneId)} style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "16px 22px", lineHeight: TRANSCRIPT_LINE_HEIGHT, fontSize, minWidth: 0 }}>
+      <div data-vm-transcript-scroller={String(paneId)} style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "16px 22px", lineHeight: LOOK[look].paneLineHeight, fontSize, minWidth: 0 }}>
         <div data-vm-transcript-mount="terminal" data-pane-id={String(paneId)}>
           <div data-vm-atom-root="terminal" data-pane-id={String(paneId)}><Transcript paneId={paneId} view="terminal" /></div>
         </div>

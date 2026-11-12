@@ -9,7 +9,8 @@
 import * as React from "react";
 import { useSyncExternalStore } from "react";
 import { closeDialog, dialogs } from "./state/dialogs";
-import { BINDINGS as EDITOR_BINDINGS, fontSize, pickBinding, pickTheme, settings, stepFont, THEMES } from "./state/settings";
+import { BINDINGS as EDITOR_BINDINGS, fontSize, pickBinding, pickLook, pickTheme, settings, stepFont, THEMES } from "./state/settings";
+import { LOOKS } from "./derive/look";
 import { DialogClosedOutcome, PaneDrawnConnection } from "../vm/signals.gen";
 
 interface VmLike {
@@ -50,6 +51,14 @@ function SettingsDialog({ defaultFontSize }: { defaultFontSize: number }): React
           <span style={{ display: "flex", border: "1px solid rgba(255,255,255,.09)", borderRadius: 5, overflow: "hidden" }}>
             {THEMES.map((t) => (
               <span key={t} onClick={() => pickTheme(t)} style={{ padding: "3px 12px", cursor: "pointer", color: st.theme === t ? "#e2e5e9" : "#62676f", background: st.theme === t ? "#2e3138" : "transparent" }}>{t}</span>
+            ))}
+          </span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <span style={label}>look</span>
+          <span style={{ display: "flex", border: "1px solid rgba(255,255,255,.09)", borderRadius: 5, overflow: "hidden" }}>
+            {LOOKS.map((l) => (
+              <span key={l} data-setting-look={l} data-lit={st.look === l ? "1" : "0"} onClick={() => pickLook(l)} style={{ padding: "3px 12px", cursor: "pointer", color: st.look === l ? "#e2e5e9" : "#62676f", background: st.look === l ? "#2e3138" : "transparent" }}>{l}</span>
             ))}
           </span>
         </div>

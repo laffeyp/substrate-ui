@@ -4,7 +4,8 @@
 // pane "looks like it's like 1.5 spaced", measured at 2.0). The deterministic driver; a message long enough to wrap
 // is sent. In the pane, in meta (⌘M) and in the editor's terminal (⌘⇧E), the message's row is cut from a screenshot,
 // its pixel rows that hold ink are grouped into text lines, and the pitch between the starts of consecutive lines is
-// 20 px ± 1 at 13 px type (1.54). Prints each place's pitch. SHAKEOUT_APP=<Substrate.app> runs the bundle.
+// 20 px ± 1 at 13 px type (1.54). Sprint 478: the same under the look `original` from Settings, where each place
+// keeps its spacing before sprint 477 (26, 25.35 and 22.1 px), and under `new` again. Prints each place's pitch. SHAKEOUT_APP=<Substrate.app> runs the bundle.
 
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
@@ -74,24 +75,44 @@ async function main(): Promise<void> {
     for (let k = 0; k < 300 && (await returned(win)) < 1; k++) await settled(win);
     if ((await returned(win)) < 1) throw new Error("the message's turn did not return");
     const report: string[] = [];
-    const places: [string, string, () => Promise<void>][] = [
-      ["pane", "[data-vm-transcript-scroller]", async () => undefined],
-      ["meta", '[data-vm-transcript-mount="reveal"]', async () => { await win.keyboard.press("Meta+m"); }],
-      ["editor terminal", '[data-vm-transcript-mount="editor"]', async () => { await win.keyboard.press("Meta+m"); await settled(win); await win.keyboard.press("Meta+Shift+E"); }],
-    ];
-    for (const [name, scope, open] of places) {
-      await open();
-      let box = await messageBox(win, scope);
-      for (let k = 0; k < 100 && !box; k++) { await settled(win); box = await messageBox(win, scope); }
-      if (!box) throw new Error(`${name}: no message row in ${scope}`);
-      for (let k = 0; k < 10; k++) await settled(win);
-      box = (await messageBox(win, scope))!;
-      const { pitch, lines } = await pitchOf(win, box, join(shots, `${name.replace(" ", "-")}.png`));
-      report.push(`${name} ${lines} lines, pitch ${pitch.join(", ")} px`);
-      if (lines < 2) throw new Error(`${name}: the message drew ${lines} line(s); it must wrap to be measured`);
-      const off = pitch.filter((p) => Math.abs(p - WANT) > 1);
-      if (off.length) throw new Error(`${name}: line pitch ${pitch.join(", ")} px, want ${WANT} ± 1`);
-    }
+    // Each look's pitch per place (sprint 478): `new` 20 px everywhere; `original` as drawn before sprint 477.
+    const WANTS: Record<string, Record<string, number>> = { new: { pane: WANT, meta: WANT, "editor terminal": WANT }, original: { pane: 26, meta: 25.35, "editor terminal": 22.1 } };
+    const pick = async (look: string) => {
+      await win.keyboard.press("Meta+,");
+      const chip = win.locator(`[data-setting-look="${look}"]`).first();
+      await chip.waitFor({ state: "visible", timeout: 10_000 });
+      await chip.click();
+      await win.waitForFunction((l) => document.querySelector(`[data-setting-look="${l}"]`)?.getAttribute("data-lit") === "1", look, { timeout: 5_000 });
+      await win.keyboard.press("Escape");
+      await settled(win);
+    };
+    const measureAll = async (look: string) => {
+      const places: [string, string, () => Promise<void>][] = [
+        ["pane", "[data-vm-transcript-scroller]", async () => undefined],
+        ["meta", '[data-vm-transcript-mount="reveal"]', async () => { await win.keyboard.press("Meta+m"); }],
+        ["editor terminal", '[data-vm-transcript-mount="editor"]', async () => { await win.keyboard.press("Meta+m"); await settled(win); await win.keyboard.press("Meta+Shift+E"); }],
+      ];
+      for (const [name, scope, open] of places) {
+        await open();
+        let box = await messageBox(win, scope);
+        for (let k = 0; k < 100 && !box; k++) { await settled(win); box = await messageBox(win, scope); }
+        if (!box) throw new Error(`${look} ${name}: no message row in ${scope}`);
+        for (let k = 0; k < 10; k++) await settled(win);
+        box = (await messageBox(win, scope))!;
+        const want = WANTS[look][name];
+        const { pitch, lines } = await pitchOf(win, box, join(shots, `${look}-${name.replace(" ", "-")}.png`));
+        report.push(`${look} ${name} ${lines} lines, pitch ${pitch.join(", ")} px`);
+        if (lines < 2) throw new Error(`${look} ${name}: the message drew ${lines} line(s); it must wrap to be measured`);
+        if (pitch.some((p) => Math.abs(p - want) > 1)) throw new Error(`${look} ${name}: line pitch ${pitch.join(", ")} px, want ${want} ± 1`);
+      }
+      // Back to the pane for the next look.
+      await win.keyboard.press("Meta+Shift+E"); await settled(win);
+    };
+    await measureAll("new");
+    await pick("original");
+    await measureAll("original");
+    await pick("new");
+    await measureAll("new");
     await app.close();
     const traces = join(launch.state, "electron", "logs", "traces");
     const boot = readdirSync(traces).sort().pop()!;
