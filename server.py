@@ -2053,7 +2053,9 @@ def _scratch_index(root: Path) -> Iterator[dict[str, str]]:
     with tempfile.TemporaryDirectory(prefix="substrate-ui-diff-") as tmp:
         scratch = Path(tmp) / "index"
         if index_path.is_file():
-            shutil.copyfile(index_path, scratch)
+            # Sprint 474: the copy keeps the index's modification time, so git's racy-clean rule (an entry not older
+            # than the index is checked by content) still sees a file rewritten in the second the index was written.
+            shutil.copy2(index_path, scratch)
         env = {**os.environ, "GIT_INDEX_FILE": str(scratch)}
         _git_out(root, "add", "-A", "--intent-to-add", ".", env=env)
         yield env
@@ -2064,8 +2066,10 @@ _HUNK_HEADER = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
 
 def _workspace_hunks(root: Path, rel: str) -> dict[str, object]:
     """One file's changes against the base `_workspace_diff` uses (UI sprint 418; roadmap
-    2026-11-09-code-editor r8, E2): `git diff -U0` with the same scratch index, so a new file reads as
-    all added. Each hunk: `old_start`, `old_count`, `new_start`, `new_count` (git's ranges, a count of 0
+    2026-11-09-code-editor r8, E2): `git diff -U0 <base> -- <path>`. UI sprint 474: against the workspace's own
+    index, read-only, for that file alone; a file not in the base reads as all added and an ignored one has none
+    (`_decoded_hunks`). Sprint 418's scratch index ran `git add -A --intent-to-add .` over the whole workspace for
+    every file (about a second with 60,000 untracked files) and, copied with a new time, hid a same-second edit. Each hunk: `old_start`, `old_count`, `new_start`, `new_count` (git's ranges, a count of 0
     for a pure insertion or removal) and `lines`, each `-text` or `+text`. Outside a git work tree the
     base is `none` and there are no hunks. The path is held to the workspace (`_workspace_target`)."""
     target = _workspace_target(root, rel)
@@ -2076,23 +2080,21 @@ def _workspace_hunks(root: Path, rel: str) -> dict[str, object]:
         decoded = _decoded_hunks(root, base, target.relative_to(root.resolve()).as_posix(), target)
         if decoded is not None:
             return {"base": base_kind, "path": rel, "hunks": decoded}
-    with _scratch_index(root) as env:
-        out = (
-            _git_out(
-                root,
-                "diff",
-                "-U0",
-                "--no-color",
-                "--no-ext-diff",
-                "--no-renames",
-                "--relative",
-                base,
-                "--",
-                str(target.relative_to(root.resolve())),
-                env=env,
-            )
-            or ""
+    out = (
+        _git_out(
+            root,
+            "diff",
+            "-U0",
+            "--no-color",
+            "--no-ext-diff",
+            "--no-renames",
+            "--relative",
+            base,
+            "--",
+            str(target.relative_to(root.resolve())),
         )
+        or ""
+    )
     return {"base": base_kind, "path": rel, "hunks": _parse_hunks(out.splitlines())}
 
 
@@ -2137,14 +2139,16 @@ def _decoded_hunks(root: Path, base: str, rel: str, target: Path) -> list[dict[s
     the editor shows. git diffs the bytes: a NUL byte or UTF-16 makes "Binary files differ" and no hunk, and a Latin-1
     diff does not decode as UTF-8. Each side is decoded (`_shown_text`) and git compares the two texts written in
     UTF-8 to scratch files (`git diff --no-index -U0 --text`), so the ranges are git's own; lines split only at `\\n`,
-    as the editor's do. None for a plain UTF-8 file and base, which `_workspace_hunks` diffs as before. A file not in
-    the base reads as all added, and an ignored one has no hunk, as the scratch index gives."""
+    as the editor's do. None for a plain UTF-8 file and base, which `_workspace_hunks` diffs with git. A file not in
+    the base reads as all added, in any encoding (sprint 474: here, not through a scratch index), and an ignored one
+    has no hunk."""
     data = target.read_bytes()
     show = _git_bytes(root, "show", f"{base}:./{rel}")
-    if _plain_utf8(data) and (show is None or _plain_utf8(show)):
+    if show is None:
+        if _git_out(root, "check-ignore", "-q", "--", rel) is not None:
+            return []
+    elif _plain_utf8(data) and _plain_utf8(show):
         return None
-    if show is None and _git_out(root, "check-ignore", "-q", "--", rel) is not None:
-        return []
     with tempfile.TemporaryDirectory(prefix="substrate-ui-hunks-") as tmp:
         old, new = Path(tmp) / "base", Path(tmp) / "file"
         old.write_text(_shown_text(show or b""), encoding="utf-8", newline="")

@@ -13,6 +13,8 @@
 //   a.ts's hunk card appears in CHANGES once its comparison lands;
 //   window-1.jsonl: EDITOR_FILE_SHOWN ×4, the opens under 100 ms, the tab switches under 5 ms; server.jsonl: each per-file DIFF_READ lands more than the
 //   shown time after its FILE_READ (printed, so the run shows the comparison was the slow half).
+// Sprint 474: each per-file comparison lands within 300 ms of its read, with the 60,000 untracked files; c.ts, rewritten
+// at the same size in the second it was committed (the app's launch puts its read seconds later), shows its hunk card.
 // Screenshots go to runs/packaged/sprint-473-<stamp>-<source|packaged>/. SHAKEOUT_APP=<Substrate.app> runs the bundle.
 
 import { execFileSync } from "node:child_process";
@@ -49,8 +51,10 @@ async function main(): Promise<void> {
   git(repo, "init", "-q", "-b", "main"); git(repo, "config", "user.email", "gate@example.invalid"); git(repo, "config", "user.name", "gate");
   writeFileSync(join(repo, "a.ts"), "export const a = 1;\n");
   writeFileSync(join(repo, "b.toml"), 'name = "b"\n');
+  writeFileSync(join(repo, "c.ts"), "export const c = 1;\n");
   git(repo, "add", "-A"); git(repo, "commit", "-q", "-m", "base");
   writeFileSync(join(repo, "a.ts"), `${FIRST["a.ts"]}\n`);
+  writeFileSync(join(repo, "c.ts"), "export const c = 2;\n");
   for (let d = 0; d < 300; d++) {
     const dir = join(repo, "gen", `d${d}`);
     mkdirSync(dir, { recursive: true });
@@ -94,6 +98,8 @@ async function main(): Promise<void> {
     }
     await win.locator('[data-editor-tab="a.ts"]').first().click();
     const cards = await until(win, "a.ts's hunk in CHANGES", () => hunkCards(win), (n) => n === 1, 20_000);
+    await win.locator('[data-tree-row="c.ts"]').first().click();
+    const cCards = await until(win, "c.ts's same-second, same-size edit in CHANGES", () => hunkCards(win), (n) => n === 1, 20_000);
     await app.close();
 
     const shown = windowRecords(launch).filter((r) => r.name === "EDITOR_FILE_SHOWN").map((r) => Number(r.payload.ms));
@@ -106,9 +112,10 @@ async function main(): Promise<void> {
       if (r.name === "FILE_READ") lastRead = Date.parse(r.wall);
       else if (r.name === "DIFF_READ" && "hunks" in r.payload && lastRead !== null) { gaps.push(Date.parse(r.wall) - lastRead); lastRead = null; }
     }
+    if (gaps.length < 4 || gaps.some((ms) => !(ms < 300))) throw new Error(`per-file comparisons landed ${JSON.stringify(gaps)} ms after their reads`);
     const booted = readFileSync(join(traces, boot, "main.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as { name: string; payload: Record<string, unknown> }).find((r) => r.name === "APP_BOOTED")!.payload;
     if (packaged && booted.packaged !== true) throw new Error(`APP_BOOTED packaged ${String(booted.packaged)}`);
-    console.log(`editor_open_speed: ok — EDITOR_FILE_SHOWN ms ${JSON.stringify(shown)}; the per-file comparisons landed ${JSON.stringify(gaps)} ms after their reads; after each click: ${seenAt.join(" | ")}; a.ts's CHANGES ${cards} card; packaged=${String(booted.packaged)}; screenshots in ${shots}`);
+    console.log(`editor_open_speed: ok — EDITOR_FILE_SHOWN ms ${JSON.stringify(shown)}; the per-file comparisons landed ${JSON.stringify(gaps)} ms after their reads; after each click: ${seenAt.join(" | ")}; a.ts's CHANGES ${cards} card; c.ts's (same second, same size) ${cCards} card; packaged=${String(booted.packaged)}; screenshots in ${shots}`);
     status = 0;
   } catch (e) {
     console.error(`editor_open_speed: FAIL — ${(e as Error).message}`);
