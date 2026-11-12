@@ -8,6 +8,16 @@ card when picked up. Append-only-ish; mark items done/promoted rather than delet
 
 ## Actionable (small fixes)
 
+- **[2026-11-11] Open after the code editor's roadmap closed (sprint 486).** The roadmap's Later list (`process/planning/2026-11-09-code-editor/ROADMAP-2026-11-09-code-editor-r20.md`) holds code colours in replies (a research program), the reply's length as an option, the red-green scheme, wrapping, and C and C++ in the outline. Also open, and held here:
+  - **Change marks as a mode.** Off while the person types, on when the session edits the file; a `git` toggle in the status line and in Settings (the Architect, 2026-11-11: "This is definitely a mode … maybe it shouldn't be default for humans"). Set aside with the next item.
+  - **The marks in the line numbers' margin**, so a first change does not shift the code sideways ("We keep the shift for now … We can think about this later").
+  - **The tree's dot on every file** in a mostly uncommitted workspace (BLACKBOARD `surfaced`, 2026-11-11): "differs from HEAD" tells little there.
+  - **The workspace search's long-line hang**: Python `re` backtracks on a long line (`_workspace_search`, `_workspace_replace`); set aside 2026-11-11 ("Just mark it and go"); the `regex` module's `timeout=` is the known fix.
+  - **The frames' parts not built** (`CLOSE-2026-11-11-code-editor.md`): the inspector header's ⌃⇧` record chip; the top bar's short worktree chip and the model chip's ▾; the footer's `clean · record … · N events` (E11, waiting on what "clean" means); the record column's `RECORD` header and its chip; a 16c capture with every column folded.
+  - **The large-file views retired by sprint 471** still in the code: `web/app/editor/LinesView.tsx` (imported by `Centre.tsx`) and the server's `/lines` route; no file reaches them since every file opens in the code editor.
+  - **Images to the models that see them** (BLACKBOARD `deferred`, 2026-11-11): kernel work, set aside.
+  - **The tree's find returning no file** once (BLACKBOARD `open question`, 2026-11-10): instrumented, not seen again in 85 runs.
+
 - **[2026-11-11] The editor highlights every occurrence of what is selected.** The Architect: "when I double click on part of a word … I want to see everywhere that's used highlighted Every time I do that by default … I'm talking about in code … every object dot function call In the editor should become highlighted, maybe it should be highlighted a little less … You highlight a line and you can see where that line is duplicated throughout the whole thing." On by default for code, not Markdown or prose; a tweak in Settings (the tweaks panel). Highlighted more softly than find's matches; in view and through the whole file. `@codemirror/search` 6 ships `highlightSelectionMatches({ highlightWordAroundCursor, minSelectionLength, maxMatches, wholeWords })` (`node_modules/@codemirror/search/dist/index.d.ts`): it marks matches in the viewport with `cm-selectionMatch`, and stops at `maxMatches` (default 100) in view. The whole-file count (a scrollbar mark, or a count in the status line) is not in it and needs its own design. Not started.
 
 - **[2026-10-09] Shell in the cockpit: a plain terminal pane, and `!` in the session input.** Two notes from the Architect.
