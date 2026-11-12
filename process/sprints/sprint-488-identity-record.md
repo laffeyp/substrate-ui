@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 488
-status: pending
+status: closed
 phase: second build (roadmap r1), E2
 pass_kind: architecture
 ---
@@ -11,7 +11,7 @@ pass_kind: architecture
 
 ## scope
 
-`electron/identity.json` holds one record per install, as VS Code's `product.json` does: `substrate` (name Substrate, bundle id `com.greenrosesystems.substrate`, store `.substrate`, link scheme `substrate`) and `next` (Substrate Next, `com.greenrosesystems.substrate.next`, `.substrate-next`, `substrate-next`), both with executable `Substrate`. `electron-builder.config.js` takes `productName`, `appId`, `mac.executableName` and the declared scheme from the record named by `SUBSTRATE_INSTALL` (default `substrate`), and writes the output for `next` to its own folder. `npm run pack:next` builds it. One verifiable property: the two bundles' Info.plists carry their own record's name, bundle id and scheme, and both run `Contents/MacOS/Substrate`.
+`electron/identity.json` holds one record per install, as VS Code's `product.json` does: `substrate` (name Substrate, bundle id `com.greenrosesystems.substrate`, store `.substrate`, link scheme `substrate`) and `next` (Substrate Next, `com.greenrosesystems.substrate.next`, `.substrate-next`, `substrate-next`), both with executable `Substrate`. `electron-builder.config.js` takes `productName`, `appId`, `mac.executableName` and the declared scheme from the record named by `SUBSTRATE_INSTALL` (default `substrate`), writes the record's name into the packaged `package.json` (`extraMetadata.productName`; today the packaged `package.json` has none), and writes the output for `next` to its own folder. `npm run pack:next` builds it. One verifiable property: the two bundles' Info.plists carry their own record's name, bundle id and scheme, their packaged `package.json` files their own `productName`, and both run `Contents/MacOS/Substrate`.
 
 ## prerequisites
 
@@ -94,3 +94,26 @@ Three files, past the two-file limit: the record, the build that reads it, and t
 - [x] Artifact contract is gradable.
 - [x] Observation contract present (static; launching waits for 489).
 - [x] Past the two-file limit, for the reason in the notes.
+
+## close
+
+`electron/identity.json` holds the two records. `electron-builder.config.js` takes `appId`, `productName`, `extraMetadata.productName`, `mac.executableName`, the declared scheme and the output folder from the record `SUBSTRATE_INSTALL` names, and packs `identity.json` into the asar for sprint 489. `pack:next` builds the Next bundle and renames its folder: electron-builder names the `.app` after the executable (`app-builder-lib` `macPackager.js` line 357), so it wrote `Substrate.app`, now `Substrate Next.app`. `.gitignore` gains `dist-electron-*/` (a fourth file, one line).
+
+Read from the two bundles (logs `runs/packaged/sprint-488-20261111-230835/`; `pack:dev` 0, `pack:next` 0):
+
+| | `dist-electron/mac-arm64/Substrate.app` | `dist-electron-next/mac-arm64/Substrate Next.app` |
+|---|---|---|
+| CFBundleName, CFBundleDisplayName | Substrate | Substrate Next |
+| CFBundleIdentifier | com.greenrosesystems.substrate | com.greenrosesystems.substrate.next |
+| CFBundleExecutable | Substrate | Substrate |
+| URL scheme | substrate | substrate-next |
+| asar `package.json` productName | Substrate | Substrate Next |
+| CFBundleVersion | 1794467502 | 1794467705 |
+
+The working bundle keeps every identity field build 1794463909 had; its packaged `package.json` gains `productName` "Substrate", the name `main.ts` already sets. Both bundles read `SubstrateKernelReleasable` false: `../substrate` holds the uncommitted registry comment (sprint 487's close).
+
+Mutant: the config ignoring `SUBSTRATE_INSTALL` resolves a Next build to Substrate, `com.greenrosesystems.substrate`, `substrate`, `dist-electron`, which would build over the working bundle. Checked on the resolved config, not by a third pack.
+
+Not opened: until sprint 489 the Next bundle would name itself Substrate at launch and use `~/.substrate`.
+
+Rubber Duck Pass: no runtime trace (nothing launched). No tag changed. No observations.

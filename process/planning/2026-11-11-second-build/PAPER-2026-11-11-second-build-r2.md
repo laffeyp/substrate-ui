@@ -23,16 +23,16 @@ Substrate does the same with a table of two records:
 | Link scheme | `substrate://` | `substrate-next://` |
 | Installed at | `/Applications/Substrate.app` | `/Applications/Substrate Next.app` |
 
-electron-builder reads the record at build time (`pack:dev` for the working install, `pack:next` for the test install). At launch, `main.ts` finds its own record by the bundle's name and takes the store, logs and link scheme from it. The executable keeps the name `Substrate` in both, so the gates' launch path (`Contents/MacOS/Substrate`, `harness/shakeout/lib/electron.ts` line 48) works on either bundle. electron-builder's `executableName` is a platform option (`app-builder-lib` `PlatformSpecificBuildOptions`), so it applies on macOS. `npm run electron` and the gates keep "Substrate Dev" and their own `SUBSTRATE_HOME`, as today.
+electron-builder reads the record at build time (`pack:dev` for the working install, `pack:next` for the test install) and writes its name into the packaged `package.json` as `productName`. At launch, `main.ts` reads that name, sets it with `app.setName` before any path is asked for, and takes the store and link scheme from the record. Measured: the data folder, the single-instance lock and the logs all follow the name set before the first path lookup, and the packaged `package.json` today carries no `productName` (its `name` is `substrate-ui-e2e`), so without the build writing it the app cannot know which install it is. The executable keeps the name `Substrate` in both, so the gates' launch path (`Contents/MacOS/Substrate`, `harness/shakeout/lib/electron.ts` line 48) works on either bundle. electron-builder's `executableName` is a platform option (`app-builder-lib` `PlatformSpecificBuildOptions`), so it applies on macOS. `npm run electron` and the gates keep "Substrate Dev" and their own `SUBSTRATE_HOME`, as today.
 
 ## 3. The conflicts, and what the identity solves
 
 | Conflict (round 1) | Solved by the identity alone? | What checking it found |
 |---|---|---|
-| 3.1 Same-named installs share one single-instance lock | Yes | Measured: an Electron app whose `package.json` says `productName` "Substrate Next" gets `userData` `~/Library/Application Support/Substrate Next`. A later `app.setName("Substrate")` changes the name and leaves the folder, so the lock follows the bundle's name |
+| 3.1 Same-named installs share one single-instance lock | Yes, once `main.ts` sets the install's name | Measured: `app.setName("Substrate Next")` before the first path lookup gives `userData` `~/Library/Application Support/Substrate Next` and logs `~/Library/Logs/Substrate Next`. `main.ts` line 290 sets "Substrate" before the lock (line 746), so the name `main.ts` sets decides the folder and the lock |
 | 3.2 The install step quits the app doing the installing | Yes, for installing the test install | Steps 17–20 name "Substrate Next" and its path. Promoting into the working slot still quits the working install; that is the swap, done from outside the app (section 4) |
 | 3.3 A shared store: each backend ends the other's sessions | Yes, once `main.ts` passes the record's store | Not solved by the name alone: the kernel's store is `SUBSTRATE_HOME` or `~/.substrate` (`../substrate/src/substrate/home.py`), and nothing in the bundle's name reaches it |
-| Logs (round 1, 3.3) | Yes, once `main.ts` names the app from the record | Not solved by the name alone: measured, `app.getPath("logs")` after `setName("Substrate")` is `~/Library/Logs/Substrate`. Logs follow the name set in code, and `main.ts` line 290 sets "Substrate" |
+| Logs (round 1, 3.3) | Yes, once `main.ts` sets the install's name | The logs follow the same name as the data folder (measured above) |
 | 3.4 A test server run from a session writes into the working install's trace | No | It comes from the environment a session's `bash` inherits (`SUBSTRATE_TRACE_DIR`, `SUBSTRATE_BOOT_ID`, `SUBSTRATE_PARENT_PID`), whatever the apps are called. `harness/shakeout/lib/server.ts` passes them on; the gates that start the app itself (`packaged_app_smoke`, `resume_ended_session`) do not leak, because the app's main process sets its own |
 | New: both installs register `substrate://` | Yes, with `substrate-next://` in the test record | electron-builder declares the scheme in Info.plist; with two apps claiming it, macOS picks one to open a link. VS Code gives each build its own `urlProtocol` |
 
@@ -64,8 +64,8 @@ The second install adds no event the vocabulary lacks. It adds a second writer o
 |---|---|
 | Four conflicts between the installs | Three go with a separate identity; the trace leak does not |
 | Two installs on one store end each other's sessions | True only on a shared store, which the design never has |
-| The lock follows the name | Measured: it follows the bundle's `productName`, not the code's `setName` |
-| A second name separates everything | Data folder and lock, yes; logs and store only once `main.ts` takes them from the record; link scheme only once the record names its own |
+| The lock follows the name | Measured: it follows the name `main.ts` sets before its first path lookup; the bundle's own name reaches it only if the build writes it into the packaged `package.json` |
+| A second name separates everything | Data folder, lock and logs once `main.ts` sets the install's name; store once `main.ts` passes the record's; link scheme once the record names its own |
 | The registry's `daemon.pid` lock is a defect to fix | It is a wrong comment; corrected |
 | The promoted build is the tested build | Not byte for byte: the identity differs, and the bundle comparison bounds the difference |
 

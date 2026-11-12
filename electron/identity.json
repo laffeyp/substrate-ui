@@ -1,0 +1,16 @@
+{
+  "substrate": {
+    "productName": "Substrate",
+    "appId": "com.greenrosesystems.substrate",
+    "executableName": "Substrate",
+    "store": ".substrate",
+    "scheme": "substrate"
+  },
+  "next": {
+    "productName": "Substrate Next",
+    "appId": "com.greenrosesystems.substrate.next",
+    "executableName": "Substrate",
+    "store": ".substrate-next",
+    "scheme": "substrate-next"
+  }
+}

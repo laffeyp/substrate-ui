@@ -42,9 +42,18 @@ const KERNEL_SOURCE = (() => {
   }
 })();
 
+// Sprint 488: one identity record per install (electron/identity.json), as VS Code's product.json
+// gives Stable and Insiders theirs. SUBSTRATE_INSTALL names the record (`substrate`, the working
+// install, by default; `next`, the test install, for `npm run pack:next`). The record's name goes
+// into the packaged package.json too, where electron/main.ts reads which install it is.
+const INSTALL = process.env.SUBSTRATE_INSTALL || "substrate";
+const IDENTITY = require("./electron/identity.json")[INSTALL];
+if (!IDENTITY) throw new Error(`SUBSTRATE_INSTALL=${INSTALL}: no such record in electron/identity.json`);
+
 module.exports = {
-  appId: "com.greenrosesystems.substrate",
-  productName: "Substrate",
+  appId: IDENTITY.appId,
+  productName: IDENTITY.productName,
+  extraMetadata: { productName: IDENTITY.productName },
   copyright: "Copyright © 2026 Green Rose Systems, LLC",
   asar: true,
 
@@ -75,6 +84,7 @@ module.exports = {
     "demo_topologies.py",
     "signals_gen.py",
     "package.json",
+    "electron/identity.json",
     "!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}",
     "!**/node_modules/*/{test,__tests__,tests,powered-test,example,examples}",
     "!**/node_modules/*.d.ts",
@@ -99,7 +109,8 @@ module.exports = {
   ],
 
   directories: {
-    output: "dist-electron",
+    // The test install builds beside the working one, never over it.
+    output: INSTALL === "substrate" ? "dist-electron" : `dist-electron-${INSTALL}`,
     buildResources: "build",
   },
 
@@ -110,7 +121,8 @@ module.exports = {
   // in electron/main.js is source-mode-only without this. Review
   // 2026-09-28 § F5.
   protocols: [
-    { name: "Substrate deep-link", schemes: ["substrate"], role: "Editor" },
+    // Each install its own scheme: two apps claiming one leave macOS to pick which opens a link.
+    { name: `${IDENTITY.productName} deep-link`, schemes: [IDENTITY.scheme], role: "Editor" },
   ],
 
   // Every new signed build gets a CFBundleVersion strictly greater
@@ -123,6 +135,8 @@ module.exports = {
 
   mac: {
     category: "public.app-category.developer-tools",
+    // Both installs run Contents/MacOS/Substrate, the path the gates launch (harness/shakeout/lib/electron.ts).
+    executableName: IDENTITY.executableName,
     // F10 (review 2026-09-28): the app shipped Electron's default icon. Built from the canonical
     // mascot by scripts/make_icon.py; committed so a build does not need Pillow.
     icon: "build/icon.icns",

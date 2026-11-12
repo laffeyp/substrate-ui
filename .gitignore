@@ -39,6 +39,7 @@ runs/.archive-*/
 # Sprint 089 packaging outputs
 build/python/
 dist-electron/
+dist-electron-*/
 .env.local
 build/python-native/
 

@@ -21,6 +21,7 @@
     "smoke:packaged": "npx tsx harness/shakeout/packaged_app_smoke.ts",
     "pack:runtime": "bash scripts/fetch-python-runtime.sh",
     "pack:dev": "npm run build && npm run pack:runtime && electron-builder --mac --config electron-builder.config.js -c.mac.identity=null -c.mac.notarize=false",
+    "pack:next": "npm run build && npm run pack:runtime && SUBSTRATE_INSTALL=next electron-builder --mac --config electron-builder.config.js -c.mac.identity=null -c.mac.notarize=false && rm -rf \"dist-electron-next/mac-arm64/Substrate Next.app\" && mv dist-electron-next/mac-arm64/Substrate.app \"dist-electron-next/mac-arm64/Substrate Next.app\"",
     "dist": "npm run build && npm run pack:runtime && electron-builder --mac --config electron-builder.config.js",
     "shakeout:packaged": "SHAKEOUT_AXIS=A SHAKEOUT_APP=${SHAKEOUT_APP:-$PWD/dist-electron/mac-arm64/Substrate.app} npx tsx harness/shakeout/run.ts",
     "release": "bash scripts/release.sh",
