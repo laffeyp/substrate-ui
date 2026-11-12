@@ -35,6 +35,26 @@ async function freePort(): Promise<number> {
   });
 }
 
+/** A running app's backend names its launch's trace folder, boot id and own pid in these; a
+ * session's `bash` inherits them (sprint 487). A test server that kept them would append to the
+ * running app's `server.jsonl` under its boot id and watch its pid, so they are dropped. */
+export const INHERITED_LAUNCH_VARS = ["SUBSTRATE_TRACE_DIR", "SUBSTRATE_BOOT_ID", "SUBSTRATE_PARENT_PID"] as const;
+
+/** The test server's environment: the parent's, less the running app's launch variables, with its
+ * own store. */
+export function serverEnv(parent: NodeJS.ProcessEnv, substrateHome: string, app?: string): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...parent };
+  for (const k of INHERITED_LAUNCH_VARS) delete env[k];
+  return {
+    ...env,
+    SUBSTRATE_HOME: substrateHome,
+    PYTHONUNBUFFERED: "1",
+    PYTHONDONTWRITEBYTECODE: "1",
+    // the packaged interpreter is a symlink into Contents/Frameworks (F10); name its home
+    ...(app ? { PYTHONHOME: join(app, "Contents", "Resources", "python") } : {}),
+  };
+}
+
 export class ServerHandle {
   private proc: ChildProcess | null = null;
   private logPath = join(shakeoutOutDir(), "server.log");
@@ -73,14 +93,7 @@ export class ServerHandle {
       cwd: cwd as string,
       detached: true,
       stdio: ["ignore", out, out],
-      env: {
-        ...process.env,
-        SUBSTRATE_HOME: this.substrateHome,
-        PYTHONUNBUFFERED: "1",
-        PYTHONDONTWRITEBYTECODE: "1",
-        // the packaged interpreter is a symlink into Contents/Frameworks (F10); name its home
-        ...(app ? { PYTHONHOME: join(app, "Contents", "Resources", "python") } : {}),
-      },
+      env: serverEnv(process.env, this.substrateHome, app),
     });
     await this.waitHealthy(30000);
   }
