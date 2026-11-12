@@ -15,11 +15,24 @@ export interface LookValues {
   metaLineHeight: number;
   /** The transcript's line height in the editor's terminal (`editor/EditorView.tsx`). */
   terminalLineHeight: number;
+  /** The code editor's line height in px (`editor/Centre.tsx`, `.cm-scroller`). */
+  codeLineHeight: number;
+  /** The model's reply in the transcript (`--transcript-reply`, read by `reveal/transcript/Row.tsx`). */
+  replyColor: string;
+  /** The person's message in the transcript (`--transcript-message`). */
+  messageColor: string;
+}
+
+/** The transcript's colours as CSS variables, set on each transcript container; the rows read them (the transcript does
+ *  not import the app). */
+export function transcriptVars(v: LookValues): Record<string, string> {
+  return { "--transcript-reply": v.replyColor, "--transcript-message": v.messageColor };
 }
 
 export const LOOK: Record<Look, LookValues> = {
   // As drawn before sprint 477 (git e804ee3^).
-  original: { paneLineHeight: 2, metaLineHeight: 1.95, terminalLineHeight: 1.7 },
-  // Sprint 477 (E16): 20 px at 13 px, RESEARCH-2026-11-11-colour-spacing-wrap.
-  new: { paneLineHeight: 1.54, metaLineHeight: 1.54, terminalLineHeight: 1.54 },
+  original: { paneLineHeight: 2, metaLineHeight: 1.95, terminalLineHeight: 1.7, codeLineHeight: 23, replyColor: "#b9bec5", messageColor: "#e2e5e9" },
+  // Sprint 477 (E16): the transcript at 20 px on 13 px; sprint 479 (E18, E19): the code at 20 px, the reply brighter than the
+  // message (RESEARCH-2026-11-11-colour-spacing-wrap; RESEARCH-2026-11-11-pane-text-emphasis).
+  new: { paneLineHeight: 1.54, metaLineHeight: 1.54, terminalLineHeight: 1.54, codeLineHeight: 20, replyColor: "#e2e5e9", messageColor: "#d7dade" },
 };

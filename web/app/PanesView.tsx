@@ -12,7 +12,7 @@ import * as React from "react";
 import { useSyncExternalStore } from "react";
 import { Transcript } from "../reveal/transcript";
 import { settings } from "./state/settings";
-import { LOOK } from "./derive/look";
+import { LOOK, transcriptVars } from "./derive/look";
 import { ActivityLine, TaskRows } from "./ActivityLine";
 import { FindBar } from "./FindBar";
 import { InputBar } from "./InputBar";
@@ -26,7 +26,7 @@ export function PaneSession({ paneId, fontSize }: { paneId: number; fontSize: nu
   return (
     <>
       <div data-view="panes" data-pane-id={String(paneId)} style={{ flex: "none" }}><FindBar view="panes" /></div>
-      <div data-vm-transcript-scroller={String(paneId)} style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "16px 22px", lineHeight: LOOK[look].paneLineHeight, fontSize, minWidth: 0 }}>
+      <div data-vm-transcript-scroller={String(paneId)} style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "16px 22px", lineHeight: LOOK[look].paneLineHeight, fontSize, minWidth: 0, ...transcriptVars(LOOK[look]) } as React.CSSProperties}>
         <div data-vm-transcript-mount="terminal" data-pane-id={String(paneId)}>
           <div data-vm-atom-root="terminal" data-pane-id={String(paneId)}><Transcript paneId={paneId} view="terminal" /></div>
         </div>

@@ -20,6 +20,7 @@ import { HighlightStyle, LanguageDescription, ensureSyntaxTree, syntaxHighlighti
 import { languages } from "@codemirror/language-data";
 import { tags as t } from "@lezer/highlight";
 import { preserveCase } from "../derive/preserve_case";
+import { LOOK, type Look } from "../derive/look";
 import { editor } from "../state/editor";
 import { emit as emitSignal } from "../../vm/instrumentation/sdd";
 import { ContextMenuOpenedSource, DiffReadBase, EditorChipAddedHow, EditorConflictResolvedChoice, EditorFileOpenedHow, EditorFileSavedCommand, EditorKeyRefusedReason, EditorReplacedScope, Signal, UndoRoutedTo } from "../../vm/signals.gen";
@@ -80,7 +81,7 @@ const HIGHLIGHT = HighlightStyle.define([
 
 const THEME = EditorView.theme({
   "&": { height: "100%", backgroundColor: GROUND, color: "#d7dade", fontSize: "13px" },
-  ".cm-scroller": { fontFamily: "ui-monospace,'SF Mono',Menlo,Consolas,monospace", lineHeight: "23px", paddingTop: "12px" },
+  ".cm-scroller": { fontFamily: "ui-monospace,'SF Mono',Menlo,Consolas,monospace", paddingTop: "12px" },
   ".cm-gutters": { backgroundColor: GROUND, border: "none", color: "#62676f" },
   ".cm-lineNumbers .cm-gutterElement": { padding: "0 12px 0 20px", minWidth: "28px" },
   ".cm-content": { caretColor: ACCENT },
@@ -353,7 +354,9 @@ function Tab({ rel, active, unsaved, paneId }: { rel: string; active: boolean; u
 const BUFFERS = new Map<string, EditorState>();
 const DISK = new Map<string, string>();
 /** The binding part of every buffer: module-wide, so a kept buffer reconfigures in a new centre. */
-const CONF = { binding: new Compartment(), language: new Compartment() };
+const CONF = { binding: new Compartment(), language: new Compartment(), look: new Compartment() };
+/** The code's line height for a look (sprint 479, E18; `derive/look.ts`). */
+const lookTheme = (look: Look) => EditorView.theme({ ".cm-scroller": { lineHeight: `${LOOK[look].codeLineHeight}px` } });
 /** Each file's base text (sprint 424, the status line's `vs main`), by session and path; absent outside git and in a
  *  repository with no commit (sprint 450). */
 const BASES = new Map<string, { name: string; text: string }>();
@@ -571,14 +574,14 @@ export function addSelection(paneId: number, how: EditorChipAddedHow = EditorChi
 
 export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionId: string; tabRow: number }): React.ReactElement {
   const st = React.useSyncExternalStore(editor.subscribe, editor.getSnapshot, editor.getSnapshot);
-  const binding = React.useSyncExternalStore(settings.subscribe, settings.getSnapshot, settings.getSnapshot).binding;
+  const { binding, look } = React.useSyncExternalStore(settings.subscribe, settings.getSnapshot, settings.getSnapshot);
   const host = React.useRef<HTMLDivElement>(null);
   const view = React.useRef<EditorView | null>(null);
   /** The path the view shows, so a read again of the same file keeps the caret. */
   const shown = React.useRef<string | null>(null);
   const key = (rel: string) => `${sessionId}\n${rel}`;
-  const now = React.useRef<{ binding: Binding }>({ binding });
-  now.current = { binding };
+  const now = React.useRef<{ binding: Binding; look: Look }>({ binding, look });
+  now.current = { binding, look };
   const outlineTimer = React.useRef<number | null>(null);
   const recount = React.useRef(false);
   /** The followed edit whose landing the view last brought into view (sprint 431). */
@@ -609,6 +612,7 @@ export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionI
   };
   const configured = (): Extension[] => [
     CONF.binding.of(bindingExtension(now.current.binding, HOOKS)),
+    CONF.look.of(lookTheme(now.current.look)),
   ];
   /** The buffer against the file's base, or null outside git. */
   const against = (rel: string, text: string) => { const b = BASES.get(key(rel)); return b ? { base: b.name, ...vsBase(b.text, text) } : null; };
@@ -660,7 +664,10 @@ export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionI
     if (!view.current) view.current = new EditorView({ state: placed, parent: root, root });
     else view.current.setState(placed);
     // Sprint 473: the time to show a different file, from its read asked to its text placed.
-    if (switched) emitSignal(Signal.EDITOR_FILE_SHOWN, { ms: Math.round(performance.now() - opts.asked) }, { pane_id: paneId });
+    // Sprint 479: written after the render's commit, not inside it. On a return to the editor with a tab already read,
+    // this layout effect places the text before App's componentDidUpdate writes EDITOR_OPENED; written at once, the
+    // editor record came before the editor run it belongs to (invariant S11). The time is taken here, at placement.
+    if (switched) { const ms = Math.round(performance.now() - opts.asked); queueMicrotask(() => emitSignal(Signal.EDITOR_FILE_SHOWN, { ms }, { pane_id: paneId })); }
     // Sprint 472: a language not loaded yet comes when it arrives, into the buffer still shown; a kept buffer takes the
     // loaded one. A file that is not text has none.
     editor.set({ language: lang?.name ?? null });
@@ -674,7 +681,7 @@ export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionI
       }).catch(() => undefined);
     }
     // A kept buffer takes the binding of now; every buffer takes the find's query (sprint 428).
-    view.current.dispatch({ effects: [CONF.binding.reconfigure(bindingExtension(now.current.binding, HOOKS)), setSearchQuery.of(queryOf(editor.getSnapshot().find))] });
+    view.current.dispatch({ effects: [CONF.binding.reconfigure(bindingExtension(now.current.binding, HOOKS)), CONF.look.reconfigure(lookTheme(now.current.look)), setSearchQuery.of(queryOf(editor.getSnapshot().find))] });
     editor.set({ findCount: findCount(view.current.state) });
     if (opts.landedLine !== null) view.current.dispatch({ effects: EditorView.scrollIntoView(view.current.state.doc.line(Math.min(opts.landedLine, view.current.state.doc.lines)).from, { y: "center" }) });
     const head = placed.selection.main.head, line = placed.doc.lineAt(head);
@@ -820,6 +827,10 @@ export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionI
   React.useEffect(() => {
     view.current?.dispatch({ effects: CONF.binding.reconfigure(bindingExtension(binding, HOOKS)) });
   }, [binding]);
+  // The look chosen in settings (sprint 479) applies to the buffer shown at once.
+  React.useEffect(() => {
+    view.current?.dispatch({ effects: CONF.look.reconfigure(lookTheme(look)) });
+  }, [look]);
   // Saving (sprint 425; roadmap r8 E4; BLACKBOARD 2026-11-09, the save policy): on command only, one
   // FileWritten per save, through PUT …/file with the SHA-256 the buffer read; a file changed on disk since
   // is refused (409) and the offer to reload or overwrite is drawn.

@@ -5,7 +5,9 @@
 // is sent. In the pane, in meta (⌘M) and in the editor's terminal (⌘⇧E), the message's row is cut from a screenshot,
 // its pixel rows that hold ink are grouped into text lines, and the pitch between the starts of consecutive lines is
 // 20 px ± 1 at 13 px type (1.54). Sprint 478: the same under the look `original` from Settings, where each place
-// keeps its spacing before sprint 477 (26, 25.35 and 22.1 px), and under `new` again. Prints each place's pitch. SHAKEOUT_APP=<Substrate.app> runs the bundle.
+// keeps its spacing before sprint 477 (26, 25.35 and 22.1 px), and under `new` again. Sprint 479: the code's lines in the editor
+// (20 px new, 23 px original), and in the pane the reply's text 2.5 to 8 L* brighter than the message's under `new`, at
+// least 8 L* dimmer under `original`. Prints each place's pitch and lightness. SHAKEOUT_APP=<Substrate.app> runs the bundle.
 
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
@@ -22,9 +24,9 @@ const returned = (win: Page) => win.evaluate(() => ((window as unknown as { __vm
 
 /** The message row's text box (right of its glyph) inside the container `scope`, in CSS pixels: the row scrolled to
  *  the top of its scroller (the editor's terminal is short), and the box cut to what the scroller shows. */
-const messageBox = (win: Page, scope: string) => win.evaluate((sel) => {
+const messageBox = (win: Page, scope: string, mark = "›") => win.evaluate(([sel, m]) => {
   const root = document.querySelector(sel); if (!root) return null;
-  const glyph = Array.from(root.querySelectorAll("span")).find((s) => s.textContent === "›"); if (!glyph) return null;
+  const glyph = Array.from(root.querySelectorAll("span")).find((s) => s.textContent === m); if (!glyph) return null;
   const row = glyph.parentElement as HTMLElement;
   row.scrollIntoView({ block: "start" });
   let scroller: HTMLElement | null = row.parentElement;
@@ -33,7 +35,31 @@ const messageBox = (win: Page, scope: string) => win.evaluate((sel) => {
   const r = row.getBoundingClientRect(); const g = glyph.getBoundingClientRect();
   const top = Math.max(r.top, view.top), bottom = Math.min(r.bottom, view.bottom);
   return { x: g.right + 2, y: top, w: r.right - g.right - 2, h: bottom - top };
-}, scope);
+}, [scope, mark] as const);
+
+const lstar = (r: number, g: number, b: number) => {
+  const lin = (c: number) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+  const y = 0.2126 * lin(r / 255) + 0.7152 * lin(g / 255) + 0.0722 * lin(b / 255);
+  return y > 216 / 24389 ? 116 * Math.cbrt(y) - 16 : (24389 / 27) * y;
+};
+/** The lightness (CIE L*) of a box's text: the mean of its brightest 1% of pixels, the glyphs' inked cores (a short row is mostly ground). */
+async function textLightness(win: Page, box: { x: number; y: number; w: number; h: number }): Promise<number> {
+  const img = decodePng(await win.screenshot());
+  const scale = img.width / (await win.evaluate(() => window.innerWidth));
+  const ls: number[] = [];
+  for (let y = Math.ceil(box.y * scale); y < Math.floor((box.y + box.h) * scale); y++) for (let x = Math.ceil(box.x * scale); x < Math.floor((box.x + box.w) * scale); x++) { const i = (y * img.width + x) * 4; ls.push(lstar(img.data[i], img.data[i + 1], img.data[i + 2])); }
+  ls.sort((a, b) => b - a);
+  const core = ls.slice(0, Math.max(1, Math.floor(ls.length * 0.01)));
+  return core.reduce((a, b) => a + b, 0) / core.length;
+}
+
+/** The code's box in the editor: the content, cut to what its scroller shows. */
+const codeBox = (win: Page) => win.evaluate(() => {
+  const root = document.querySelector("[data-editor-code]")?.shadowRoot; if (!root) return null;
+  const c = root.querySelector(".cm-content") as HTMLElement | null, sc = root.querySelector(".cm-scroller") as HTMLElement | null; if (!c || !sc) return null;
+  const r = c.getBoundingClientRect(), v = sc.getBoundingClientRect();
+  return { x: r.x + 4, y: Math.max(r.y, v.y), w: Math.min(r.width, 400), h: Math.min(r.bottom, v.bottom) - Math.max(r.y, v.y) };
+});
 
 /** The pitch, in CSS pixels, between the starts of consecutive text lines in `box`, read from the pixels. */
 async function pitchOf(win: Page, box: { x: number; y: number; w: number; h: number }, shot: string): Promise<{ pitch: number[]; lines: number }> {
@@ -55,12 +81,12 @@ async function pitchOf(win: Page, box: { x: number; y: number; w: number; h: num
 async function main(): Promise<void> {
   const packaged = !!process.env.SHAKEOUT_APP;
   const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\..*/, "").replace("T", "-");
-  const shots = join(REPO_ROOT, "runs", "packaged", `sprint-477-${stamp}-${packaged ? "packaged" : "source"}`);
+  const shots = join(REPO_ROOT, "runs", "packaged", `sprint-479-${stamp}-${packaged ? "packaged" : "source"}`);
   mkdirSync(shots, { recursive: true });
   const repo = join(__dirname, ".scratch", "transcript-spacing-" + process.pid);
   mkdirSync(repo, { recursive: true });
   git(repo, "init", "-q", "-b", "main"); git(repo, "config", "user.email", "gate@example.invalid"); git(repo, "config", "user.name", "gate");
-  writeFileSync(join(repo, "notes.md"), "# notes\n"); git(repo, "add", "-A"); git(repo, "commit", "-q", "-m", "base");
+  writeFileSync(join(repo, "notes.md"), Array.from({ length: 12 }, (_, i) => `line ${i + 1} of the notes, long enough to see`).join("\n") + "\n"); git(repo, "add", "-A"); git(repo, "commit", "-q", "-m", "base");
   const launch = launchArgs();
   const app = await electron.launch({ ...launch.options, timeout: 60_000 });
   let status = 1;
@@ -76,7 +102,7 @@ async function main(): Promise<void> {
     if ((await returned(win)) < 1) throw new Error("the message's turn did not return");
     const report: string[] = [];
     // Each look's pitch per place (sprint 478): `new` 20 px everywhere; `original` as drawn before sprint 477.
-    const WANTS: Record<string, Record<string, number>> = { new: { pane: WANT, meta: WANT, "editor terminal": WANT }, original: { pane: 26, meta: 25.35, "editor terminal": 22.1 } };
+    const WANTS: Record<string, Record<string, number>> = { new: { pane: WANT, meta: WANT, "editor terminal": WANT, code: 20 }, original: { pane: 26, meta: 25.35, "editor terminal": 22.1, code: 23 } };
     const pick = async (look: string) => {
       await win.keyboard.press("Meta+,");
       const chip = win.locator(`[data-setting-look="${look}"]`).first();
@@ -104,7 +130,26 @@ async function main(): Promise<void> {
         report.push(`${look} ${name} ${lines} lines, pitch ${pitch.join(", ")} px`);
         if (lines < 2) throw new Error(`${look} ${name}: the message drew ${lines} line(s); it must wrap to be measured`);
         if (pitch.some((p) => Math.abs(p - want) > 1)) throw new Error(`${look} ${name}: line pitch ${pitch.join(", ")} px, want ${want} ± 1`);
+        // Sprint 479 (E19): in the pane, the reply against the message, decoded from the pixels.
+        if (name === "pane") {
+          const reply = await messageBox(win, scope, "◆");
+          if (!reply) throw new Error(`${look} pane: no reply row`);
+          const m = await textLightness(win, (await messageBox(win, scope))!), r = await textLightness(win, reply);
+          report.push(`${look} pane message L* ${m.toFixed(1)}, reply L* ${r.toFixed(1)}`);
+          if (look === "new" && !(r - m >= 2.5 && r - m <= 8)) throw new Error(`new pane: the reply L* ${r.toFixed(1)} is not 2.5 to 8 above the message's ${m.toFixed(1)}`);
+          if (look === "original" && !(m - r >= 8)) throw new Error(`original pane: the message L* ${m.toFixed(1)} is not 8 above the reply's ${r.toFixed(1)}`);
+        }
       }
+      // Sprint 479 (E18): the code's lines, in the editor (open from the terminal step).
+      await win.locator('[data-tree-row="notes.md"]').first().click();
+      let cb = await codeBox(win);
+      for (let k = 0; k < 100 && !(cb && cb.h > 100); k++) { await settled(win); cb = await codeBox(win); }
+      for (let k = 0; k < 10; k++) await settled(win);
+      cb = await codeBox(win);
+      if (!cb) throw new Error(`${look} code: no code box`);
+      const code = await pitchOf(win, cb, join(shots, `${look}-code.png`));
+      report.push(`${look} code ${code.lines} lines, pitch ${[...new Set(code.pitch)].join("/")} px`);
+      if (code.lines < 5 || code.pitch.some((p) => Math.abs(p - WANTS[look].code) > 1)) throw new Error(`${look} code: line pitch ${code.pitch.join(", ")} px, want ${WANTS[look].code} ± 1`);
       // Back to the pane for the next look.
       await win.keyboard.press("Meta+Shift+E"); await settled(win);
     };

@@ -21,7 +21,7 @@ import { toggleToolOutputMode } from "../vm/tool_output_mode";
 import { GUIDANCE_LEVEL_BUNDLES, LENGTH_DEFAULT, LengthPosition, TONE_DEFAULT, TonePosition } from "../vm/controls.gen";
 import { buildLanguageLens, type Lens } from "../reveal/language_lens";
 import { Transcript } from "../reveal/transcript";
-import { LOOK } from "./derive/look";
+import { LOOK, transcriptVars } from "./derive/look";
 import { liveActivity } from "../reveal/activity";
 import { fontSize, loadSettings, settings } from "./state/settings";
 import { closeDialog, dialogOpen, openSettings } from "./state/dialogs";
@@ -1260,7 +1260,7 @@ export class App extends React.Component<AppProps, AppState> {
             <div style={{ flex: 1, display: "flex", minHeight: 0, position: "relative" }}>
               <div style={{ flex: state.metaSplit.toFixed(3) + " 1 0%", display: "flex", flexDirection: "column", minWidth: 0, background: "#212327" }}>
                 <div data-view="meta" data-pane-id={String(fp.id)} style={{ flex: "none" }}><FindBar view="meta" /></div>
-                <div onClick={() => setFindScope("transcript")} style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "20px 26px", lineHeight: LOOK[settings.getSnapshot().look].metaLineHeight, fontSize: transcriptSize, minWidth: 0 }}>
+                <div onClick={() => setFindScope("transcript")} style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "20px 26px", lineHeight: LOOK[settings.getSnapshot().look].metaLineHeight, fontSize: transcriptSize, minWidth: 0, ...transcriptVars(LOOK[settings.getSnapshot().look]) } as React.CSSProperties}>
                   <div key={fp.id} data-vm-transcript-mount="reveal" data-pane-id={String(fp.id)}>
                     <div data-vm-atom-root="reveal" data-pane-id={String(fp.id)}><Transcript paneId={fp.id} view="reveal" /></div>
                   </div>

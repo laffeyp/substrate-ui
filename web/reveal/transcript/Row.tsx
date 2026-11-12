@@ -43,9 +43,9 @@ interface Style {
 function styleFor(row: TranscriptRow): Style {
   switch (row.role) {
     case "user":
-      return { glyph: "›", glyphColor: "#82a5c8", textColor: "#e2e5e9", marginTop: "12px" };
+      return { glyph: "›", glyphColor: "#82a5c8", textColor: "var(--transcript-message, #d7dade)", marginTop: "12px" };
     case "model":
-      return { glyph: "◆", glyphColor: "#7fb3b8", textColor: "#b9bec5", marginTop: "6px" };
+      return { glyph: "◆", glyphColor: "#7fb3b8", textColor: "var(--transcript-reply, #e2e5e9)", marginTop: "6px" };
     case "tool": {
       const failed = row.toolOk === false;
       return {

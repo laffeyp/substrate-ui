@@ -3,11 +3,13 @@
 ```yaml
 ---
 id: 480
-status: pending
+status: merged into 479
 phase: code editor (roadmap r17), E19
 pass_kind: functional
 ---
 ```
+
+*Merged into sprint 479 on 2026-11-11 (the Architect: "479 and 480 can be done in the same sprint. Those are minor changes"); built and closed there.*
 
 ## scope
 
