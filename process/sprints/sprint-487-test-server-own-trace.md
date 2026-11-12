@@ -82,7 +82,7 @@ A test run from inside the working install writes nothing into the working insta
 
 ## notes
 
-The kernel comment on the store lock (`../substrate/src/substrate/topologies/session_registry.py`, corrected 2026-11-11) is committed in `../substrate` with this sprint's close. Mutant: the spread environment put back fails the gate.
+The kernel comment on the store lock (`../substrate/src/substrate/topologies/session_registry.py`, corrected 2026-11-11) is uncommitted: `../substrate`'s pre-commit hook fails on ruff over 8 untracked scripts in `process/planning/substrate-boundary-and-runbook-2026-11-09/`, which this work did not write. Mutant: the spread environment put back fails the gate.
 
 ## self-review checklist
 
