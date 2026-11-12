@@ -9,7 +9,7 @@
 import * as React from "react";
 import { useSyncExternalStore } from "react";
 import { closeDialog, dialogs } from "./state/dialogs";
-import { BINDINGS as EDITOR_BINDINGS, fontSize, pickBinding, pickLook, pickTheme, settings, stepFont, THEMES } from "./state/settings";
+import { BINDINGS as EDITOR_BINDINGS, fontSize, pickBinding, pickLook, pickSelectionMatches, pickTheme, settings, stepFont, THEMES } from "./state/settings";
 import { LOOKS } from "./derive/look";
 import { DialogClosedOutcome, PaneDrawnConnection } from "../vm/signals.gen";
 
@@ -40,12 +40,17 @@ const swallow = (ev: React.MouseEvent) => ev.stopPropagation();
 const cancelDialog = () => closeDialog(DialogClosedOutcome.CANCELLED);
 const confirmDialog = () => closeDialog(DialogClosedOutcome.CONFIRMED);
 
+/** A section's heading in Settings (sprint 484), quieter than the rows it heads. */
+const section: React.CSSProperties = { fontSize: 9, letterSpacing: ".14em", color: "#4a4e55", marginBottom: -6 };
+
 function SettingsDialog({ defaultFontSize }: { defaultFontSize: number }): React.ReactElement {
   const st = useSyncExternalStore(settings.subscribe, settings.getSnapshot, settings.getSnapshot);
   return (
     <div onClick={cancelDialog} style={backdrop}>
       <div onClick={swallow} style={{ ...panel, gap: 14, fontSize: 12 }}>
         <div style={{ fontSize: 9.5, letterSpacing: ".14em", color: "#62676f" }}>SETTINGS · ⌘,</div>
+        {/* Sprint 484: the tweaks in sections, so each new one has its place (the Architect, 2026-11-11). */}
+        <div data-settings-section="appearance" style={section}>APPEARANCE</div>
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
           <span style={label}>appearance</span>
           <span style={{ display: "flex", border: "1px solid rgba(255,255,255,.09)", borderRadius: 5, overflow: "hidden" }}>
@@ -69,11 +74,20 @@ function SettingsDialog({ defaultFontSize }: { defaultFontSize: number }): React
           <span style={{ color: "#e2e5e9" }}>{fontSize(defaultFontSize) + "px"}</span>
           <span onClick={() => stepFont(1, defaultFontSize)} style={stepper}>+</span>
         </div>
+        <div data-settings-section="editor" style={section}>EDITOR</div>
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
           <span style={label}>editor keys</span>
           <span style={{ display: "flex", border: "1px solid rgba(255,255,255,.09)", borderRadius: 5, overflow: "hidden" }}>
             {EDITOR_BINDINGS.map((b) => (
               <span key={b} data-setting-binding={b} data-lit={st.binding === b ? "1" : "0"} onClick={() => pickBinding(b)} style={{ padding: "3px 12px", cursor: "pointer", color: st.binding === b ? "#e2e5e9" : "#62676f", background: st.binding === b ? "#2e3138" : "transparent" }}>{b}</span>
+            ))}
+          </span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <span style={label}>match highlight</span>
+          <span style={{ display: "flex", border: "1px solid rgba(255,255,255,.09)", borderRadius: 5, overflow: "hidden" }}>
+            {([["on", true], ["off", false]] as const).map(([name, on]) => (
+              <span key={name} data-setting-matches={name} data-lit={st.selectionMatches === on ? "1" : "0"} onClick={() => pickSelectionMatches(on)} style={{ padding: "3px 12px", cursor: "pointer", color: st.selectionMatches === on ? "#e2e5e9" : "#62676f", background: st.selectionMatches === on ? "#2e3138" : "transparent" }}>{name}</span>
             ))}
           </span>
         </div>

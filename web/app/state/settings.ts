@@ -30,13 +30,15 @@ export interface SettingsState {
   binding: Binding;
   /** The look (sprint 478): `new`, or `original`, the look before the appearance work, kept to compare against. */
   look: Look;
+  /** Sprint 484: selecting text in code highlights its other occurrences in view (on by default). */
+  selectionMatches: boolean;
 }
 
 // One instance per window, kept on globalThis as in shell.ts. The page once loaded two copies of this
 // module (sprint 213); Vite now bundles one, and the shared key costs nothing.
 const KEY_SHARED = "__substrateSettings";
 const scope = globalThis as unknown as Record<string, ReturnType<typeof createStore<SettingsState>> | undefined>;
-export const settings = scope[KEY_SHARED] ?? (scope[KEY_SHARED] = createStore<SettingsState>({ theme: "dark", fontOverride: null, settingsNote: "", binding: "standard", look: "new" }));
+export const settings = scope[KEY_SHARED] ?? (scope[KEY_SHARED] = createStore<SettingsState>({ theme: "dark", fontOverride: null, settingsNote: "", binding: "standard", look: "new", selectionMatches: true }));
 
 /** The saved fields that pass their checks; anything else is left at its default. */
 export function readSaved(raw: string | null): Partial<SettingsState> {
@@ -50,6 +52,7 @@ export function readSaved(raw: string | null): Partial<SettingsState> {
   if (typeof saved.fontOverride === "number" && saved.fontOverride >= FONT_MIN && saved.fontOverride <= FONT_MAX) patch.fontOverride = saved.fontOverride;
   if (BINDINGS.includes(saved.binding as Binding)) patch.binding = saved.binding as Binding;
   if (LOOKS.includes(saved.look as Look)) patch.look = saved.look as Look;
+  if (typeof saved.selectionMatches === "boolean") patch.selectionMatches = saved.selectionMatches;
   return patch;
 }
 
@@ -60,8 +63,8 @@ export function loadSettings(): void {
 
 function save(): void {
   try {
-    const { theme, fontOverride, binding, look } = settings.getSnapshot();
-    window.localStorage.setItem(KEY, JSON.stringify({ theme, fontOverride, binding, look }));
+    const { theme, fontOverride, binding, look, selectionMatches } = settings.getSnapshot();
+    window.localStorage.setItem(KEY, JSON.stringify({ theme, fontOverride, binding, look, selectionMatches }));
   } catch { /* not saved */ }
 }
 
@@ -79,6 +82,11 @@ export function fontSize(fallback: number): number {
 export function stepFont(delta: number, fallback: number): void {
   const next = Math.min(FONT_MAX, Math.max(FONT_MIN, fontSize(fallback) + delta));
   settings.set({ fontOverride: next });
+  save();
+}
+
+export function pickSelectionMatches(selectionMatches: boolean): void {
+  settings.set({ selectionMatches });
   save();
 }
 

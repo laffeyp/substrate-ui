@@ -15,7 +15,7 @@
 import * as React from "react";
 import { Compartment, EditorState, RangeSetBuilder, StateEffect, StateField, Transaction, type Extension } from "@codemirror/state";
 import { Decoration, EditorView, GutterMarker, ViewPlugin, WidgetType, gutter, highlightSpecialChars, lineNumbers, type DecorationSet, type ViewUpdate } from "@codemirror/view";
-import { SearchQuery, getSearchQuery, replaceAll, replaceNext, search, setSearchQuery } from "@codemirror/search";
+import { SearchQuery, getSearchQuery, highlightSelectionMatches, replaceAll, replaceNext, search, setSearchQuery } from "@codemirror/search";
 import { HighlightStyle, LanguageDescription, ensureSyntaxTree, syntaxHighlighting } from "@codemirror/language";
 import { languages } from "@codemirror/language-data";
 import { tags as t } from "@lezer/highlight";
@@ -96,6 +96,9 @@ const THEME = EditorView.theme({
   "&.cm-focused": { outline: "none" },
   // Sprint 428: find matches in the accent, the current one stronger (D7: the one UI accent).
   ".cm-find-match": { backgroundColor: "rgba(130,165,200,.22)", borderRadius: "2px" },
+  // Sprint 484: the selection's other occurrences, softer than find's matches (the Architect: "maybe it should be
+  // highlighted a little less").
+  ".cm-selectionMatch": { backgroundColor: "rgba(130,165,200,.14)", borderRadius: "2px" },
   ".cm-find-scope": { backgroundColor: "rgba(130,165,200,.07)" },
   ".cm-find-current": { backgroundColor: "rgba(130,165,200,.5)" },
   // Sprint 431: a session edit in flight, its lines edged in the accent.
@@ -356,7 +359,11 @@ function Tab({ rel, active, unsaved, paneId }: { rel: string; active: boolean; u
 const BUFFERS = new Map<string, EditorState>();
 const DISK = new Map<string, string>();
 /** The binding part of every buffer: module-wide, so a kept buffer reconfigures in a new centre. */
-const CONF = { binding: new Compartment(), language: new Compartment(), look: new Compartment() };
+const CONF = { binding: new Compartment(), language: new Compartment(), look: new Compartment(), matches: new Compartment() };
+/** Sprint 484: in code, a selection highlights its other occurrences in view (`@codemirror/search`'s
+ *  highlightSelectionMatches: the visible lines, at most 100); not in Markdown or plain text, nor with the setting off. */
+const PROSE = new Set(["Markdown"]);
+const matchesFor = (on: boolean, lang: string | null) => (on && lang && !PROSE.has(lang) ? highlightSelectionMatches() : []);
 /** The code's line height for a look (sprint 479, E18; `derive/look.ts`). */
 const HIGHLIGHTS: Record<Look, ReturnType<typeof highlightFor>> = { new: highlightFor(LOOK.new.syntax), original: highlightFor(LOOK.original.syntax) };
 const lookTheme = (look: Look): Extension[] => [EditorView.theme({ ".cm-scroller": { lineHeight: `${LOOK[look].codeLineHeight}px` } }), syntaxHighlighting(HIGHLIGHTS[look])];
@@ -577,14 +584,14 @@ export function addSelection(paneId: number, how: EditorChipAddedHow = EditorChi
 
 export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionId: string; tabRow: number }): React.ReactElement {
   const st = React.useSyncExternalStore(editor.subscribe, editor.getSnapshot, editor.getSnapshot);
-  const { binding, look } = React.useSyncExternalStore(settings.subscribe, settings.getSnapshot, settings.getSnapshot);
+  const { binding, look, selectionMatches } = React.useSyncExternalStore(settings.subscribe, settings.getSnapshot, settings.getSnapshot);
   const host = React.useRef<HTMLDivElement>(null);
   const view = React.useRef<EditorView | null>(null);
   /** The path the view shows, so a read again of the same file keeps the caret. */
   const shown = React.useRef<string | null>(null);
   const key = (rel: string) => `${sessionId}\n${rel}`;
-  const now = React.useRef<{ binding: Binding; look: Look }>({ binding, look });
-  now.current = { binding, look };
+  const now = React.useRef<{ binding: Binding; look: Look; matches: boolean }>({ binding, look, matches: selectionMatches });
+  now.current = { binding, look, matches: selectionMatches };
   const outlineTimer = React.useRef<number | null>(null);
   const recount = React.useRef(false);
   /** The followed edit whose landing the view last brought into view (sprint 431). */
@@ -616,6 +623,7 @@ export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionI
   const configured = (): Extension[] => [
     CONF.binding.of(bindingExtension(now.current.binding, HOOKS)),
     CONF.look.of(lookTheme(now.current.look)),
+    CONF.matches.of([]),
   ];
   /** The buffer against the file's base, or null outside git. */
   const against = (rel: string, text: string) => { const b = BASES.get(key(rel)); return b ? { base: b.name, ...vsBase(b.text, text) } : null; };
@@ -684,7 +692,7 @@ export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionI
       }).catch(() => undefined);
     }
     // A kept buffer takes the binding of now; every buffer takes the find's query (sprint 428).
-    view.current.dispatch({ effects: [CONF.binding.reconfigure(bindingExtension(now.current.binding, HOOKS)), CONF.look.reconfigure(lookTheme(now.current.look)), setSearchQuery.of(queryOf(editor.getSnapshot().find))] });
+    view.current.dispatch({ effects: [CONF.binding.reconfigure(bindingExtension(now.current.binding, HOOKS)), CONF.look.reconfigure(lookTheme(now.current.look)), CONF.matches.reconfigure(matchesFor(now.current.matches, lang?.name ?? null)), setSearchQuery.of(queryOf(editor.getSnapshot().find))] });
     editor.set({ findCount: findCount(view.current.state) });
     if (opts.landedLine !== null) view.current.dispatch({ effects: EditorView.scrollIntoView(view.current.state.doc.line(Math.min(opts.landedLine, view.current.state.doc.lines)).from, { y: "center" }) });
     const head = placed.selection.main.head, line = placed.doc.lineAt(head);
@@ -830,6 +838,12 @@ export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionI
   React.useEffect(() => {
     view.current?.dispatch({ effects: CONF.binding.reconfigure(bindingExtension(binding, HOOKS)) });
   }, [binding]);
+  // Match highlight (sprint 484), switched in settings, applies to the buffer shown at once.
+  React.useEffect(() => {
+    const rel = shown.current;
+    const lang = rel ? languageOf(rel) : null;
+    view.current?.dispatch({ effects: CONF.matches.reconfigure(matchesFor(selectionMatches, lang?.name ?? null)) });
+  }, [selectionMatches]);
   // The look chosen in settings (sprint 479) applies to the buffer shown at once.
   React.useEffect(() => {
     view.current?.dispatch({ effects: CONF.look.reconfigure(lookTheme(look)) });
