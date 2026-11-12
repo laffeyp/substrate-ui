@@ -1922,8 +1922,8 @@ def _resolve_workspace_arg(raw: str) -> str:
 # Editor shared work 0(c) (UI sprints 348, 387): the workspace file API. Each path is held to the
 # session's workspace: an absolute path is refused, and so is any path that resolves, symlinks
 # followed, outside it. A write goes on the session's record as the kernel's FileWritten (item 0(d),
-# K340) before the file changes.
-WORKSPACE_READ_MAX = 2 * 1024 * 1024
+# K340) before the file changes. UI sprint 471 (the Architect, 2026-11-11: "File size limits shouldn't change anything
+# at all"): a file of any size is read, saved, compared with its base and searched by the same path.
 
 
 class WorkspaceEscapeError(ValueError):
@@ -2072,7 +2072,7 @@ def _workspace_hunks(root: Path, rel: str) -> dict[str, object]:
     base_kind, base = _diff_base(root)
     if base is None:
         return {"base": base_kind, "path": rel, "hunks": []}
-    if target.is_file() and target.stat().st_size <= WORKSPACE_READ_MAX:
+    if target.is_file():
         decoded = _decoded_hunks(root, base, target.relative_to(root.resolve()).as_posix(), target)
         if decoded is not None:
             return {"base": base_kind, "path": rel, "hunks": decoded}
@@ -2350,10 +2350,8 @@ def _workspace_files(
 
 
 def _read_text(path: Path) -> tuple[str, str] | None:
-    """A file's text and its SHA-256, or None when it is over the read cap, binary or not UTF-8."""
+    """A file's text and its SHA-256, or None when it is binary or not UTF-8 (sprint 471: at any size)."""
     try:
-        if path.stat().st_size > WORKSPACE_READ_MAX:
-            return None
         data = path.read_bytes()
     except OSError:
         return None
@@ -2692,12 +2690,9 @@ class WorkspaceConflictError(ValueError):
     (`base_sha256` differs), or the file is not UTF-8 text."""
 
 
-def _workspace_read(
-    root: Path, rel: str, max_bytes: int = WORKSPACE_READ_MAX, as_latin1: bool = False
-) -> dict[str, object]:
-    """A file's facts and, for text up to `max_bytes`, its text: size, modified time, the sha256 of its
-    bytes (a write sends it back as `base_sha256`), encoding, line endings, and `read_only`. Over the cap
-    the text is null and `too_large` true.
+def _workspace_read(root: Path, rel: str, as_latin1: bool = False) -> dict[str, object]:
+    """A file's facts and its text, at any size (sprint 471): size, modified time, the sha256 of its bytes (a write
+    sends it back as `base_sha256`), encoding, line endings, and `read_only`.
 
     Sprint 462 (roadmap r13 E14): a file decodes by the attachments' rule (`_decode_any`, round 3 rule 3),
     and its encoding is named: `utf-8`, `utf-8-bom`, `utf-16`, `latin-1`, or `binary` with no text for a
@@ -2712,19 +2707,12 @@ def _workspace_read(
         "path": str(target.relative_to(base)),
         "size": st.st_size,
         "modified": st.st_mtime,
-        "too_large": st.st_size > max_bytes,
         "sha256": _file_sha256(target),
         "encoding": None,
         "line_endings": None,
         "text": None,
         "read_only": False,
     }
-    if st.st_size > max_bytes:
-        # Sprint 463: a large file that is not text is still named, so the editor opens it as its bytes.
-        with target.open("rb") as fh:
-            if b"\x00" in fh.read(ATTACH_BINARY_SNIFF):
-                out.update(encoding="binary", read_only=True)
-        return out
     data = target.read_bytes()
     decoded = _decode_any(data)
     if decoded is None:
@@ -3069,6 +3057,8 @@ ATTACH_FILE_INLINE_MAX = 64 * 1024
 ATTACH_MESSAGE_INLINE_MAX = 256 * 1024
 ATTACH_FOLDER_LIST_MAX = 200
 ATTACH_BINARY_SNIFF = 8 * 1024
+# A message's file past this is not read whole to decide what it holds (its lines are counted by their LF bytes).
+ATTACH_READ_MAX = 2 * 1024 * 1024
 ATTACH_FOLLOW = "read it with your file tools"
 # The reference line's opening words (sprint 452): the page marks a chip whose text opens with one of them as sent
 # by reference (web/reveal/transcript/attachments.ts holds the same two; tests/test_attachment_marks_452.py keeps them equal).
@@ -3221,8 +3211,8 @@ def _attachment_text(
     if not utf16 and not sniff.startswith(b"\xef\xbb\xbf") and b"\x00" in sniff:
         return binary, 0, True
     follow = "read them with your file tools" if kind == "lines" else ATTACH_FOLLOW
-    if size > WORKSPACE_READ_MAX:
-        # Past the read cap: too big to inline whatever it holds; its lines counted by their LF bytes where
+    if size > ATTACH_READ_MAX:
+        # Past ATTACH_READ_MAX: too big to inline whatever it holds; its lines counted by their LF bytes where
         # the encoding has one-byte LFs (not UTF-16).
         count = ""
         if not utf16:
@@ -4087,7 +4077,11 @@ class Handler(BaseHTTPRequestHandler):
         if not self._origin_ok():
             self._error(403, "cross-origin request refused")
             return True
-        if int(self.headers.get("Content-Length", "0") or "0") > _MAX_BODY_BYTES:
+        # Sprint 471: a file's save carries the file, of any size; its route reads it uncapped.
+        saving = self.command == "PUT" and re.fullmatch(
+            r"/api/session/[^/]+/file", unquote(urlparse(self.path).path)
+        )
+        if not saving and int(self.headers.get("Content-Length", "0") or "0") > _MAX_BODY_BYTES:
             self.close_connection = True
             self._error(413, f"request body over {_MAX_BODY_BYTES} bytes")
             return True
@@ -4313,13 +4307,13 @@ class Handler(BaseHTTPRequestHandler):
             }
         )
 
-    def _read_json_body(self) -> dict[str, Any]:
+    def _read_json_body(self, capped: bool = True) -> dict[str, Any]:
         """The one JSON body reader. A body over _MAX_BODY_BYTES raises BodyTooLarge (sent as 413)
-        before any of it is read."""
+        before any of it is read; `capped` False (sprint 471) for a file's save, whose body is the file."""
         length = int(self.headers.get("Content-Length", "0") or "0")
         if length <= 0:
             return {}
-        if length > _MAX_BODY_BYTES:
+        if capped and length > _MAX_BODY_BYTES:
             raise BodyTooLarge(length)
         raw = self.rfile.read(length)
         try:
@@ -5004,11 +4998,7 @@ class Handler(BaseHTTPRequestHandler):
                 facts = _workspace_read(
                     root, q.get("path", [""])[0], as_latin1=q.get("as", [""])[0] == "latin-1"
                 )
-                encoding = (
-                    FileReadEncoding.TOO_LARGE
-                    if facts["too_large"]
-                    else FILE_READ_ENCODING[str(facts["encoding"])]
-                )
+                encoding = FILE_READ_ENCODING[str(facts["encoding"])]
                 TRACE.emit(
                     Signal.FILE_READ,
                     {"session_id": session_id, "bytes": facts["size"], "encoding": encoding},
@@ -5215,7 +5205,8 @@ class Handler(BaseHTTPRequestHandler):
             return
         rel = q.get("path", [""])[0]
         try:
-            body = self._read_json_body()
+            # Sprint 471: a save's body is the file, of any size.
+            body = self._read_json_body(capped=False)
             text = body.get("text")
             if not isinstance(text, str):
                 raise ValueError("body needs `text`, a string")
@@ -5247,8 +5238,6 @@ class Handler(BaseHTTPRequestHandler):
                 raise ValueError(
                     f"the text has a character {encoding} cannot hold: {exc.reason}"
                 ) from None
-            if len(new_bytes) > WORKSPACE_READ_MAX:
-                raise WorkspaceConflictError(f"text over {WORKSPACE_READ_MAX} bytes")
             rel_path = str(target.relative_to(root.resolve(strict=True)))
             fd, tmp = tempfile.mkstemp(dir=str(target.parent), prefix=WRITE_TEMP_PREFIX)
             try:

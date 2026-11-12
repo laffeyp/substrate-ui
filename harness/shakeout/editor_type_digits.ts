@@ -10,7 +10,8 @@
 //   over 0x43;
 //   ⌘S: the disk is the 256 bytes with 0x41, 0x42, 0x43 now 0x42, 0x44, 0x45, no other byte changed; no byte marked
 //   changed, the dot gone;
-//   big.bin opens in hex, not editable, "read-only" in the status line; "f" typed changes nothing on disk;
+//   big.bin (3 MB) opens in hex and is editable as blob.bin is (sprint 471: file size changes nothing), the status line
+//   with no "read-only"; its typing and saving at size are editor_any_size's;
 //   server.jsonl: FILE_WRITTEN encoding bytes once; window-1.jsonl: EDITOR_BYTES_VIEWED hex open, binary, octal, text,
 //   hex by selector, hex open; EDITOR_FILE_SAVED once; no EDITOR_KEY_REFUSED.
 // Screenshots go to runs/packaged/sprint-468-<stamp>-<source|packaged>/. SHAKEOUT_APP=<Substrate.app> runs the bundle.
@@ -119,15 +120,12 @@ async function main(): Promise<void> {
     await until(win, "no byte marked changed", () => count(win, `${view} [data-changed]`), (n) => n === 0);
     await until(win, "the tab's dot gone", () => count(win, '[data-editor-tab-unsaved="blob.bin"]'), (n) => n === 0);
     await win.screenshot({ path: join(shots, "saved.png") });
-    // 7. big.bin, over the read limit: read-only.
+    // 7. big.bin, 3 MB: editable as any file is (sprint 471).
     const bigSha = sha(disk("big.bin"));
     await win.locator('[data-tree-row="big.bin"]').first().click();
     await until(win, "big.bin in hex", () => row(win, "big.bin", 0), (t) => !!t && t.startsWith("00000000  00 41 00 00"));
-    if ((await attr(win, '[data-bytes-view="big.bin"]', "data-bytes-editable")) !== "0") throw new Error("big.bin's view is editable");
-    const bigStatus = await until(win, "big.bin's status line", () => statusPos(win), (t) => !!t && t.endsWith("read-only"));
-    await win.locator('[data-bytes-view="big.bin"] [data-bytes-row="0"]').first().click();
-    await win.keyboard.type("f");
-    await settled(win);
+    await until(win, "big.bin editable", () => attr(win, '[data-bytes-view="big.bin"]', "data-bytes-editable"), (e) => e === "1");
+    const bigStatus = await until(win, "big.bin's status line", () => statusPos(win), (t) => !!t && t.startsWith("big.bin · 0x0 · ") && !t.includes("read-only"));
     if (sha(disk("big.bin")) !== bigSha) throw new Error("big.bin changed on disk");
     await app.close();
 
@@ -145,7 +143,7 @@ async function main(): Promise<void> {
     if (JSON.stringify(written) !== JSON.stringify(["bytes"])) throw new Error(`FILE_WRITTEN ${JSON.stringify(written)}`);
     const booted = readFileSync(join(traces, boot, "main.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as { name: string; payload: Record<string, unknown> }).find((r) => r.name === "APP_BOOTED")!.payload;
     if (packaged && booted.packaged !== true) throw new Error(`APP_BOOTED packaged ${String(booted.packaged)}`);
-    console.log(`editor_type_digits: ok — opened ${JSON.stringify(opened)}; hex ${JSON.stringify(hexRow?.slice(0, 30))}; binary ${JSON.stringify(binRow?.slice(0, 28))}; octal ${JSON.stringify(octRow?.slice(0, 30))}, after Undo ${JSON.stringify(undone?.slice(0, 30))}; text line 2 holds "@BDCDE" (${line2[1].length} characters); saved: 0x41, 0x42, 0x43 now 0x42, 0x44, 0x45, no other byte changed; big.bin ${JSON.stringify(bigStatus)}, unchanged; EDITOR_BYTES_VIEWED ${JSON.stringify(viewed)}; FILE_WRITTEN ${JSON.stringify(written)}; packaged=${String(booted.packaged)}; screenshots in ${shots}`);
+    console.log(`editor_type_digits: ok — opened ${JSON.stringify(opened)}; hex ${JSON.stringify(hexRow?.slice(0, 30))}; binary ${JSON.stringify(binRow?.slice(0, 28))}; octal ${JSON.stringify(octRow?.slice(0, 30))}, after Undo ${JSON.stringify(undone?.slice(0, 30))}; text line 2 holds "@BDCDE" (${line2[1].length} characters); saved: 0x41, 0x42, 0x43 now 0x42, 0x44, 0x45, no other byte changed; big.bin ${JSON.stringify(bigStatus)}, editable; EDITOR_BYTES_VIEWED ${JSON.stringify(viewed)}; FILE_WRITTEN ${JSON.stringify(written)}; packaged=${String(booted.packaged)}; screenshots in ${shots}`);
     status = 0;
   } catch (e) {
     console.error(`editor_type_digits: FAIL — ${(e as Error).message}`);

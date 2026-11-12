@@ -10,8 +10,9 @@
 //   big.bin, six times the old 2 MB limit, opens; scrolled to its end, the last row is offset 0xbffff0 with those
 //   bytes; scrolled to its middle, the row there holds its own offset;
 //   no "binary file" or "over the read limit" line;
-//   window-1.jsonl: EDITOR_BYTES_VIEWED hex open, binary, octal, text by selector, hex open, hex open; server.jsonl:
-//   FILE_BYTES_READ, one with an offset in big.bin's last 64 KB.
+//   window-1.jsonl: EDITOR_BYTES_VIEWED hex open, binary, octal, text by selector, hex open, hex open. Sprint 471: every
+//   file is the editor's buffer at any size, so big.bin's rows come from it, editable, and no piece is read from the
+//   server (no FILE_BYTES_READ).
 // Screenshots go to runs/packaged/sprint-463-<stamp>-<source|packaged>/. SHAKEOUT_APP=<Substrate.app> runs the bundle.
 
 import { execFileSync } from "node:child_process";
@@ -104,7 +105,7 @@ async function main(): Promise<void> {
     const boot = readdirSync(traces).sort().pop()!;
     const server = readFileSync(join(traces, boot, "server.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as { name: string; payload: Record<string, unknown> });
     const reads = server.filter((r) => r.name === "FILE_BYTES_READ").map((r) => Number(r.payload.offset));
-    if (!reads.some((o) => o >= BIG - 64 * 1024)) throw new Error(`no read in big.bin's last 64 KB: ${JSON.stringify(reads.slice(-6))}`);
+    if (reads.length) throw new Error(`pieces read from the server: ${JSON.stringify(reads.slice(-6))}`);
     const booted = readFileSync(join(traces, boot, "main.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as { name: string; payload: Record<string, unknown> }).find((r) => r.name === "APP_BOOTED")!.payload;
     if (packaged && booted.packaged !== true) throw new Error(`APP_BOOTED packaged ${String(booted.packaged)}`);
     console.log(`editor_bytes: ok — pic.jpg row 0 in hex ${JSON.stringify(forms.hex?.slice(0, 40))}, binary, octal and text as the tools print them; sound.wav ${JSON.stringify(wav?.slice(-18))}; big.bin (12 MB) opened, its last row ${JSON.stringify(end?.slice(0, 58))}, its middle row ${midRow} holds its offset; EDITOR_BYTES_VIEWED ${JSON.stringify(viewed)}; FILE_BYTES_READ ×${reads.length}; packaged=${String(booted.packaged)}; screenshots in ${shots}`);

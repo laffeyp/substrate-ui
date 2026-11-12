@@ -2,7 +2,7 @@
 # Copyright (C) 2026 Peter Laffey
 """The workspace search without git (UI sprint 435; research RESEARCH-2026-11-10-editor-search-r2). Plain
 folders written here: the server's own walk applies .gitignore and .ignore with no repository, skips VS
-Code's names and folders, searches hidden files, skips binary and oversized files; Python's re takes \\d, \\b,
+Code's names and folders, searches hidden files, skips binary files and searches a file of any size (sprint 471); Python's re takes \\d, \\b,
 \\s and lookaround; whole word; include and exclude globs; ranges in UTF-16 units; the replace works out new
 texts line by line ($1, ^ per line), for all, one file or one match, and writes nothing.
 """
@@ -38,7 +38,7 @@ def ws(tmp_path: Path) -> Path:
     (root / "docs/guide.md").write_text("Total cost\n")
     (root / ".env").write_text("TOTAL=1\n")  # hidden: searched
     (root / "blob.bin").write_bytes(b"total\x00")
-    (root / "big.txt").write_text("total\n" + "x" * server.WORKSPACE_READ_MAX)
+    (root / "big.txt").write_text("total\n" + ("x" * 99 + "\n") * 21_000)
     return root
 
 
@@ -68,6 +68,7 @@ def test_the_walk_needs_no_git_and_applies_ignore_files(
     out = server._workspace_search(ws, "total", regex=False, case=False)
     assert rows(out) == [
         ".env:1",
+        "big.txt:1",
         "docs/guide.md:1",
         "logs/keep.log:1",
         "src/lib/cart.ts:1",
@@ -85,6 +86,7 @@ def test_the_regex_editors_write(ws: Path) -> None:
         "src/lib/cart.ts:2",
     ]
     assert rows(server._workspace_search(ws, r"\btotal\b", regex=True, case=True)) == [
+        "big.txt:1",
         "logs/keep.log:1",
         "src/lib/cart.ts:1",
         "src/lib/cart.ts:3",
@@ -98,10 +100,10 @@ def test_the_regex_editors_write(ws: Path) -> None:
 
 def test_whole_word_and_the_ranges(ws: Path) -> None:
     out = server._workspace_search(ws, "total", regex=False, case=True, word=True)
-    assert rows(out) == ["logs/keep.log:1", "src/lib/cart.ts:1", "src/lib/cart.ts:3"]
+    assert rows(out) == ["big.txt:1", "logs/keep.log:1", "src/lib/cart.ts:1", "src/lib/cart.ts:3"]
     cart = next(f for f in out["files"] if f["path"] == "src/lib/cart.ts")  # type: ignore[union-attr, index]
     assert [ln["ranges"] for ln in cart["lines"]] == [[[6, 11]], [[2, 7]]]  # type: ignore[index]
-    assert out["matches"] == 3
+    assert out["matches"] == 4
 
 
 def test_ranges_count_utf16_units(tmp_path: Path) -> None:
@@ -121,7 +123,7 @@ def test_include_and_exclude_globs(ws: Path) -> None:
     ) == [".env:1", "docs/guide.md:1"]
     assert rows(
         server._workspace_search(ws, "total", regex=False, case=False, exclude="src/**, logs")
-    ) == [".env:1", "docs/guide.md:1"]
+    ) == [".env:1", "big.txt:1", "docs/guide.md:1"]
     assert rows(
         server._workspace_search(ws, "total", regex=False, case=False, include="./docs")
     ) == ["docs/guide.md:1"]

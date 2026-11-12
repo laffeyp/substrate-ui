@@ -5,7 +5,7 @@
 Every path is held to the session's workspace: an absolute path, a `..` that climbs out, and a
 symlink that points out are refused. A directory lists directories first, then files, each by name;
 a symlink is listed as `link` and not followed. A file reads as UTF-8 text with its line endings, or
-as binary with no text, or, over the cap, with no text and `too_large`.
+as binary with no text; at any size (sprint 471).
 """
 
 from __future__ import annotations
@@ -57,8 +57,8 @@ def test_reading_text_binary_and_over_the_cap(ws: Path) -> None:
     assert server._workspace_read(ws, "notes.md")["line_endings"] == "crlf"
     binary = server._workspace_read(ws, "img.bin")
     assert (binary["encoding"], binary["text"]) == ("binary", None)
-    big = server._workspace_read(ws, "src/a.py", max_bytes=4)
-    assert (big["too_large"], big["text"], big["encoding"]) == (True, None, None)
+    # Sprint 471: no size limit; the facts carry no `too_large`.
+    assert "too_large" not in text
 
 
 @pytest.mark.parametrize(

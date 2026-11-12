@@ -67,7 +67,7 @@ def test_ranges_of_lines_equal_the_decoded_file(ws: Path, name: str, encoding: s
 
 
 def test_a_file_over_the_read_limit_reads_anywhere_after_one_pass(ws: Path) -> None:
-    assert (ws / "big.txt").stat().st_size > server.WORKSPACE_READ_MAX
+    assert (ws / "big.txt").stat().st_size > 2 * 1024 * 1024
     before = server.line_index_scans
     first = server._workspace_lines(ws, "big.txt", 0, 1)
     last = server._workspace_lines(ws, "big.txt", 149_999, 1)

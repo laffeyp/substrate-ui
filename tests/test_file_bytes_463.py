@@ -36,14 +36,16 @@ def test_a_large_file_that_is_not_text_is_named_binary_and_a_large_text_file_is_
     ws: Path,
 ) -> None:
     big = server._workspace_read(ws, "big.bin")
-    assert (big["too_large"], big["encoding"], big["read_only"], big["text"]) == (
-        True,
-        "binary",
-        True,
-        None,
-    )
+    assert (big["encoding"], big["read_only"], big["text"]) == ("binary", True, None)
+    # Sprint 471: at any size a text file reads as text, and a file that is not text as Latin-1 when asked.
     txt = server._workspace_read(ws, "big.txt")
-    assert (txt["too_large"], txt["encoding"], txt["text"]) == (True, None, None)
+    assert (txt["encoding"], txt["text"]) == (
+        "utf-8",
+        b"a line of text\n".decode() * (BIG // 15 + 1),
+    )
+    assert server._workspace_read(ws, "big.bin", as_latin1=True)["text"] == (
+        ws / "big.bin"
+    ).read_bytes().decode("latin-1")
 
 
 def test_the_route_sends_slices_of_any_size_and_names_each_read(
