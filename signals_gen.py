@@ -5,7 +5,7 @@ Regenerate: python3 scripts/gen_signals.py. tests/test_signals_generated.py fail
 
 from enum import StrEnum
 
-VOCAB_VERSION = "0.68"
+VOCAB_VERSION = "0.69"
 
 
 class Signal(StrEnum):
@@ -354,6 +354,11 @@ class SessionCreatedWorkspaceShape(StrEnum):
     FLAT = "flat"
     WORKTREE = "worktree"
     ISOLATE = "isolate"
+
+
+class SessionCreatedContinuedFrom(StrEnum):
+    CLAUDE_CODE = "claude_code"
+    NONE = "none"
 
 
 class ApiRefusedArea(StrEnum):

@@ -1552,6 +1552,16 @@
       "rationale": "With a working install and a test install on one machine, a reader and the Rubber Duck Pass must tell from the trace which app spoke; the name main.ts sets is the install's identity.",
       "ratified": true,
       "ratified_by": "agent-resolved 2026-11-11, sprint 490; grounds: project — electron/identity.json, the user entries of 2026-11-11 on the second build; SDD — hard rule 2, grammar Layer 2; practice — microsoft/vscode product.json (one identity record per build)"
+    },
+    {
+      "id": "P-0.69-CONTINUED-FROM",
+      "kind": "PAYLOAD_FIELD_PROPOSED",
+      "layer": 2,
+      "element": "SESSION_CREATED.continued_from (enum claude_code | none)",
+      "source": "roadmap 2026-11-12-continue-a-session r1 E5; sprint 494: a session created to continue a Claude Code session",
+      "rationale": "The server trace says, at creation, whether a session continues another tool's session; the record's continued_session fragment holds what it continued.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-12, sprint 494; grounds: project — kernel session vocabulary v0.19 § AD, the user entries of 2026-11-12; SDD — hard rule 2, grammar Layer 2; practice — n/a"
     }
   ]
 }

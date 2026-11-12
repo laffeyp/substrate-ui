@@ -97,7 +97,14 @@ def test_create_turn_refusal_and_fault(
         recs = [(r["name"], r["payload"]) for r in _since(mark)]
 
     created = [p for n, p in recs if n == "SESSION_CREATED"]
-    assert created == [{"session_id": sid, "driver": "deterministic", "workspace_shape": "isolate"}]
+    assert created == [
+        {
+            "session_id": sid,
+            "driver": "deterministic",
+            "workspace_shape": "isolate",
+            "continued_from": "none",  # v0.69, sprint 494
+        }
+    ]
     assert [p for n, p in recs if n == "TURN_ACCEPTED"] == [
         {"session_id": sid, "turn_index": 0, "attachments": 0, "by_reference": 0}
     ]

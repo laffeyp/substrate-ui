@@ -39,7 +39,9 @@ def test_each_harness_profile_streams() -> None:
 def test_the_resolver_builds_a_streaming_responder(app: server.App) -> None:
     responder = server._daemon_driver_resolver(app, "codex", workspace="/tmp")
     assert isinstance(responder, CliResponder) and responder.stream_format == "codex-json"
-    assert responder._argv("P", "")[-2:] == ["--json", "P"]
+    # Kernel K348: the prompt goes on standard input; the stream flags end the command line.
+    argv, stdin_text = responder._call("P", "")
+    assert argv[-1] == "--json" and stdin_text == "P"
 
 
 def test_mcp_flags_per_driver(

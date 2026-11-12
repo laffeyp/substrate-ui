@@ -59,6 +59,7 @@ from signals_gen import (
     FileWrittenEncoding,
     FileWrittenWritten,
     Signal,
+    SessionCreatedContinuedFrom,
     SessionCreatedWorkspaceShape,
     TraceOpenedProcess,
 )
@@ -973,6 +974,12 @@ def _build_session_topology_from_manifest(
         if manifest.driver == "deterministic" and (manifest.driver_params or {}).get("script")
         else None,
         first_turn_user_message=first_turn_user_message,
+        # App sprint 494 (kernel § AD): the turns of the session this one continues.
+        continued_session=(
+            json.loads(Path(manifest.continued_session).read_text(encoding="utf-8"))
+            if getattr(manifest, "continued_session", None)
+            else None
+        ),
         mcp=mcp_on,
         # Kernel K310-K311 (vocabulary v0.11 § W): each turn's language is measured before it
         # returns, and LanguageProfile / LanguageDrift land on the record.
@@ -3641,6 +3648,120 @@ def _sessions_base() -> Path:
     return api.substrate_home() / "sessions"
 
 
+def _tool_result_text(content: Any) -> str:
+    """A Claude Code `tool_result` block's content as text: a string as it is; a list of blocks,
+    its text blocks joined, an image as `[image]`."""
+    if isinstance(content, str):
+        return content
+    parts: list[str] = []
+    for block in content or []:
+        if isinstance(block, dict) and block.get("type") == "text":
+            parts.append(str(block.get("text", "")))
+        elif isinstance(block, dict) and block.get("type") == "image":
+            parts.append("[image]")
+    return "\n".join(parts)
+
+
+def _claude_code_continuation(path: Path) -> dict[str, Any]:
+    """App sprint 494 (kernel session vocabulary § AD): a Claude Code session file as the turns of
+    a session that continues it. The file is JSONL. It is read from its last `compact_boundary`
+    entry, so the turns open with that compaction's summary (the `isCompactSummary` user entry
+    after it), then every user and assistant entry after, as the kinds Substrate's history
+    renders: typed text a `UserMessage`, a reply's text a `ModelReply`, a `tool_use` a
+    `HarnessToolCall`, a `tool_result` a `HarnessToolResult`. `thinking` blocks, `attachment`
+    entries and side chains are left out. A file with no compaction is read from its start.
+    ValueError when it holds no message."""
+    entries: list[tuple[int, dict[str, Any]]] = []
+    with path.open(encoding="utf-8") as fh:
+        for lineno, line in enumerate(fh, start=1):
+            if not line.strip():
+                continue
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(entry, dict):
+                entries.append((lineno, entry))
+    start = 0
+    for i, (_n, entry) in enumerate(entries):
+        if entry.get("type") == "system" and entry.get("subtype") == "compact_boundary":
+            start = i + 1
+    events: list[dict[str, Any]] = []
+    turn_index = 0
+    summary_line: int | None = None
+    messages = 0
+    for lineno, entry in entries[start:]:
+        kind = entry.get("type")
+        if kind not in ("user", "assistant") or entry.get("isSidechain"):
+            continue
+        messages += 1
+        content = (entry.get("message") or {}).get("content")
+        blocks = (
+            [{"type": "text", "text": content}] if isinstance(content, str) else list(content or [])
+        )
+        if kind == "user":
+            if entry.get("isCompactSummary") and summary_line is None:
+                summary_line = lineno
+            texts: list[str] = []
+            for block in blocks:
+                if not isinstance(block, dict):
+                    continue
+                if block.get("type") == "text":
+                    texts.append(str(block.get("text", "")))
+                elif block.get("type") == "tool_result":
+                    events.append(
+                        {
+                            "kind": "HarnessToolResult",
+                            "payload": {
+                                "call_id": str(block.get("tool_use_id", "")),
+                                "output": _tool_result_text(block.get("content")),
+                                "ok": not block.get("is_error"),
+                            },
+                        }
+                    )
+            if texts:
+                events.append(
+                    {
+                        "kind": "UserMessage",
+                        "payload": {"text": "\n".join(texts), "turn_index": turn_index},
+                    }
+                )
+                turn_index += 1
+        else:
+            for block in blocks:
+                if not isinstance(block, dict):
+                    continue
+                if block.get("type") == "text" and block.get("text"):
+                    events.append(
+                        {
+                            "kind": "ModelReply",
+                            "payload": {"text": str(block["text"]), "stop_reason": "end_turn"},
+                        }
+                    )
+                elif block.get("type") == "tool_use":
+                    events.append(
+                        {
+                            "kind": "HarnessToolCall",
+                            "payload": {
+                                "call_id": str(block.get("id", "")),
+                                "tool": str(block.get("name", "?")),
+                                "args": block.get("input") or {},
+                            },
+                        }
+                    )
+    if not turn_index:
+        raise ValueError(f"{path} holds no message")
+    return {
+        "turns": events,
+        "provenance": {
+            "tool": "claude_code",
+            "path": str(path),
+            "summary_line": summary_line,
+            "messages": messages,
+        },
+    }
+
+
 # History of the runs root: was `Path(__file__).resolve().parent / "runs"`. In the packaged .app, that
 # resolves inside `Contents/Resources/app.asar.unpacked/`, which macOS refuses
 # to write to on a notarized bundle installed under /Applications — every
@@ -4458,7 +4579,33 @@ class Handler(BaseHTTPRequestHandler):
                 self._error(400, f"{control} must be a string or null; got {type(raw).__name__}")
                 return
             controls[control] = raw or None
+        # App sprint 494 (kernel § AD): a Claude Code session this one continues. Read here, as a
+        # turn's attachments are (sprint 388); the kernel records what it is given.
+        continue_from = body.get("continue_from")
+        continued: dict[str, Any] | None = None
+        if continue_from is not None:
+            if (
+                not isinstance(continue_from, dict)
+                or continue_from.get("tool") != SessionCreatedContinuedFrom.CLAUDE_CODE
+                or not isinstance(continue_from.get("path"), str)
+            ):
+                self._error(
+                    400,
+                    'continue_from must be {"tool": "claude_code", "path": <a Claude Code session file>}',
+                )
+                return
+            try:
+                continued = _claude_code_continuation(Path(continue_from["path"]).expanduser())
+            except (OSError, ValueError, UnicodeDecodeError) as exc:
+                self._error(400, f"continue_from: {exc}")
+                return
         session_id = _forced_session_id or f"s_{uuid.uuid4().hex[:24]}"
+        continued_path: str | None = None
+        if continued is not None:
+            target = _sessions_base() / session_id / "continued_session.json"
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(json.dumps(continued, ensure_ascii=False), encoding="utf-8")
+            continued_path = str(target)
         try:
             manifest = self.app.registry.create(
                 session_id=session_id,
@@ -4474,6 +4621,7 @@ class Handler(BaseHTTPRequestHandler):
                 length=controls[Control.LENGTH],
                 tone=controls[Control.TONE],
                 handoff=controls[Control.HANDOFF],
+                continued_session=continued_path,
             )
             # Validate driver_params at the same boundary as PATCH does. If
             # the client sent bad shape/values, roll back the create so the
@@ -4507,6 +4655,9 @@ class Handler(BaseHTTPRequestHandler):
                 "session_id": manifest.session_id,
                 "driver": str(manifest.driver),
                 "workspace_shape": str(manifest.workspace_shape),
+                "continued_from": SessionCreatedContinuedFrom.CLAUDE_CODE
+                if manifest.continued_session
+                else SessionCreatedContinuedFrom.NONE,
             },
         )
         # Sprint 032c: re-read the manifest post-validation (set_driver_params
@@ -6084,6 +6235,7 @@ class Handler(BaseHTTPRequestHandler):
                         "session_id": session_id,
                         "driver": str(driver),
                         "workspace_shape": SessionCreatedWorkspaceShape.FLAT,
+                        "continued_from": SessionCreatedContinuedFrom.NONE,
                     },
                 )
             except NameCollision as exc:

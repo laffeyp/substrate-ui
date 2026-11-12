@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 494
-status: pending
+status: closed
 phase: continuing a session (roadmap 2026-11-12-continue-a-session r1, E5)
 pass_kind: functional
 ---
@@ -76,3 +76,13 @@ The production consumer of kernel sprint 347's manifest field. Readers for Codex
 - [x] Artifact contract is gradable; fixture hand-written.
 - [x] Observation contract present.
 - [x] Two hand-edited files (`server.py`, the proposal).
+
+## close
+
+`server.py`: `_claude_code_continuation(path)` reads a Claude Code session file from its last `compact_boundary`, the summary first, as `UserMessage`, `ModelReply`, `HarnessToolCall` and `HarnessToolResult` (failed results kept as failed); `thinking`, attachments, side chains and unparsable lines left out. `POST /api/session` takes `continue_from`, writes `continued_session.json` beside the session (`_sessions_base()/<id>/`), and creates the session with its path; `_build_session_topology_from_manifest` reads it and hands the turns to `session_topology`. `SESSION_CREATED` carries `continued_from` at both its sites (vocabulary v0.69, P-0.69-CONTINUED-FROM). Fixture: `tests/fixtures/claude_code_session_494.jsonl`, hand-written, two compactions.
+
+- `tests/test_continue_from_494.py`: 8 passed. The reader takes the second summary and the 8 messages after it, nothing before and no thinking, attachment or side chain; a session created with it writes `SESSION_CREATED` `continued_from` `claude_code`, records one `continued_session` fragment (summary line 7), and its first prompt holds the summary, the tool call and the failed result; without it, `continued_from` `none` and no manifest field; four bad `continue_from` forms and a file with no message are 400s with `API_REFUSED` and no session.
+- `npm run signals` 0 (0.69), build 0, `test:unit` 0. Every server test file that creates a session or reads `SESSION_CREATED`, with `test_driver_profile_120`: 291 passed, 2 failed, both pins of what this work changed (`test_harness_drivers_129` on the old `_argv`, `test_server_signals` on `SESSION_CREATED`'s payload); updated, 46 passed.
+- Mutant (the builder not handing the turns on): 1 of 8 fails.
+
+Rubber Duck Pass: `SESSION_CREATED` (`continued_from` `claude_code`), then on the first turn the session-open fragments with one `continued_session`, then the turn. One payload anomaly found and resolved here: the test's own count of messages (9) was wrong; the reader's 8 is the fixture's count with the side chain left out.

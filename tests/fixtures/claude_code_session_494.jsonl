@@ -1,0 +1,17 @@
+{"type": "user", "message": {"role": "user", "content": "An early message, before both compactions."}}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "An early reply."}]}}
+{"type": "system", "subtype": "compact_boundary", "content": "Conversation compacted"}
+{"type": "user", "isCompactSummary": true, "message": {"role": "user", "content": "FIRST SUMMARY: the early part."}}
+{"type": "user", "message": {"role": "user", "content": "A message between the compactions."}}
+{"type": "system", "subtype": "compact_boundary", "content": "Conversation compacted"}
+{"type": "user", "isCompactSummary": true, "message": {"role": "user", "content": "SECOND SUMMARY: the editor roadmap closed; the second build is next."}}
+{"type": "attachment", "attachment": {"type": "instructions", "content": "ATTACHED CLAUDE.md TEXT"}}
+{"type": "user", "message": {"role": "user", "content": [{"type": "text", "text": "List the folder."}]}}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "thinking", "thinking": "PRIVATE THINKING"}, {"type": "text", "text": "Listing it."}, {"type": "tool_use", "id": "toolu_1", "name": "Bash", "input": {"command": "ls"}}]}}
+{"type": "user", "message": {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "toolu_1", "content": "a.txt\nb.txt"}]}}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "tool_use", "id": "toolu_2", "name": "Read", "input": {"file_path": "/x/missing.txt"}}]}}
+{"type": "user", "message": {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "toolu_2", "is_error": true, "content": [{"type": "text", "text": "File does not exist."}]}]}}
+{"type": "assistant", "isSidechain": true, "message": {"role": "assistant", "content": [{"type": "text", "text": "SIDECHAIN TEXT"}]}}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "Two files: a.txt and b.txt."}]}}
+{"type": "user", "message": {"role": "user", "content": "Now continue in Substrate."}}
+not json at all
