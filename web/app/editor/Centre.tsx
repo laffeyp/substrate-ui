@@ -16,15 +16,9 @@ import * as React from "react";
 import { Compartment, EditorState, RangeSetBuilder, StateEffect, StateField, Transaction, type Extension } from "@codemirror/state";
 import { Decoration, EditorView, GutterMarker, ViewPlugin, WidgetType, gutter, highlightSpecialChars, lineNumbers, type DecorationSet, type ViewUpdate } from "@codemirror/view";
 import { SearchQuery, getSearchQuery, replaceAll, replaceNext, search, setSearchQuery } from "@codemirror/search";
-import { HighlightStyle, StreamLanguage, ensureSyntaxTree, syntaxHighlighting } from "@codemirror/language";
+import { HighlightStyle, LanguageDescription, ensureSyntaxTree, syntaxHighlighting } from "@codemirror/language";
+import { languages } from "@codemirror/language-data";
 import { tags as t } from "@lezer/highlight";
-import { javascript } from "@codemirror/lang-javascript";
-import { python } from "@codemirror/lang-python";
-import { json } from "@codemirror/lang-json";
-import { html } from "@codemirror/lang-html";
-import { css } from "@codemirror/lang-css";
-import { markdown } from "@codemirror/lang-markdown";
-import { shell as shellMode } from "@codemirror/legacy-modes/mode/shell";
 import { preserveCase } from "../derive/preserve_case";
 import { editor } from "../state/editor";
 import { emit as emitSignal } from "../../vm/instrumentation/sdd";
@@ -56,17 +50,12 @@ interface Hunk { old_start: number; old_count: number; new_start: number; new_co
 interface FileFacts { text: string | null; encoding: string | null; too_large: boolean; size: number; modified: number; line_endings: string | null; sha256?: string; read_only?: boolean }
 
 /** The first languages (BLACKBOARD 2026-11-09, the first grammars), by file extension. */
-function language(path: string): Extension {
-  const ext = path.slice(path.lastIndexOf(".") + 1).toLowerCase();
-  if (["ts", "tsx", "mts", "cts"].includes(ext)) return javascript({ typescript: true, jsx: ext === "tsx" });
-  if (["js", "jsx", "mjs", "cjs"].includes(ext)) return javascript({ jsx: ext === "jsx" });
-  if (["py", "pyi"].includes(ext)) return python();
-  if (ext === "json") return json();
-  if (["html", "htm"].includes(ext)) return html();
-  if (ext === "css") return css();
-  if (["md", "markdown"].includes(ext)) return markdown();
-  if (["sh", "bash", "zsh"].includes(ext)) return StreamLanguage.define(shellMode);
-  return [];
+/** Sprint 472 (roadmap r13 E15; the Architect, 2026-11-11: highlighting for "everything from JSON to Rust"): a file's
+ *  language, picked by its name, by extension or whole name (`Dockerfile`), from `@codemirror/language-data`'s 143
+ *  descriptions; null when none matches, and the file is plain text. Its parser loads the first time a file of it
+ *  opens (`load()`, a chunk of its own). */
+function languageOf(path: string): LanguageDescription | null {
+  return LanguageDescription.matchFilename(languages, path.slice(path.lastIndexOf("/") + 1));
 }
 
 /** 24a's code: near-monochrome, comments dim (D7: no yellow, no green; colour carries data only). */
@@ -350,7 +339,7 @@ function Tab({ rel, active, unsaved, paneId }: { rel: string; active: boolean; u
 const BUFFERS = new Map<string, EditorState>();
 const DISK = new Map<string, string>();
 /** The binding part of every buffer: module-wide, so a kept buffer reconfigures in a new centre. */
-const CONF = { binding: new Compartment() };
+const CONF = { binding: new Compartment(), language: new Compartment() };
 /** Each file's base text (sprint 424, the status line's `vs main`), by session and path; absent outside git and in a
  *  repository with no commit (sprint 450). */
 const BASES = new Map<string, { name: string; text: string }>();
@@ -662,6 +651,7 @@ export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionI
       if (shown.current && shown.current !== rel && view.current && unsaved(shown.current)) BUFFERS.set(key(shown.current), view.current.state);
       // Sprint 465: a file that is not text keeps every byte: no line end is rewritten on the way in or out.
       const bytes = file.encoding === "binary";
+      const lang = bytes ? null : languageOf(rel);
       const text = bytes ? file.text : normal(file.text);
       const record = () => {
         DISK.set(key(rel), text);
@@ -703,13 +693,25 @@ export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionI
         // Sprint 465: every file the server reads as text edits, in any encoding; `read_only` stays honoured. `readOnly`
         // stops CodeMirror's commands, and its view ignores typed changes while it is set (@codemirror/view, "Ignore
         // changes when the editor is read-only").
-        const state = EditorState.create({ doc: file.text, extensions: [...configured(), lineNumbers(), hunkExtension(diff.hunks), language(rel), syntaxHighlighting(HIGHLIGHT), THEME, search(), findMarks, scopeField, followField, listener, ...(bytes ? BYTE_TEXT : []), ...(file.read_only ? READ_ONLY : [])] });
+        const state = EditorState.create({ doc: file.text, extensions: [...configured(), lineNumbers(), hunkExtension(diff.hunks), CONF.language.of(lang?.support ?? []), syntaxHighlighting(HIGHLIGHT), THEME, search(), findMarks, scopeField, followField, listener, ...(bytes ? BYTE_TEXT : []), ...(file.read_only ? READ_ONLY : [])] });
         placed = keep > 1 ? state.update({ selection: { anchor: state.doc.line(keep).from } }).state : state;
         markUnsaved(rel, false);
       }
       shown.current = rel;
       if (!view.current) view.current = new EditorView({ state: placed, parent: root, root });
       else view.current.setState(placed);
+      // Sprint 472: a language not loaded yet comes when it arrives, into the buffer still shown; a kept buffer takes the
+      // loaded one. A file that is not text has none.
+      editor.set({ language: lang?.name ?? null });
+      if (lang && lang.support) view.current.dispatch({ effects: CONF.language.reconfigure(lang.support) });
+      else if (lang) {
+        void lang.load().then((support) => {
+          const v = view.current;
+          if (!v || shown.current !== rel) return;
+          v.dispatch({ effects: CONF.language.reconfigure(support) });
+          editor.set({ outline: outlineOf(v.state) });
+        }).catch(() => undefined);
+      }
       // A kept buffer takes the binding of now; every buffer takes the find's query (sprint 428).
       view.current.dispatch({ effects: [CONF.binding.reconfigure(bindingExtension(now.current.binding, HOOKS)), setSearchQuery.of(queryOf(editor.getSnapshot().find))] });
       editor.set({ findCount: findCount(view.current.state) });

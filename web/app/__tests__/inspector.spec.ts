@@ -94,8 +94,9 @@ test("a write with no earlier text on the record cannot step back", () => {
 
 test("line deltas and types", () => {
   assert.deepStrictEqual(lineDelta("a\nb\n", "a\nB\nc\n"), { plus: 2, minus: 1 });
-  assert.strictEqual(fileType("src/cart.ts"), "TypeScript (by extension)");
-  assert.strictEqual(fileType("Makefile"), "plain text");
+  assert.strictEqual(fileType("src/cart.ts", "TypeScript"), "TypeScript");
+  assert.strictEqual(fileType("notes.zz", null), ".zz file");
+  assert.strictEqual(fileType("Makefile", null), "plain text");
 });
 
 test("HISTORY's steps (sprint 429): a step is not a row, the lit row follows the file, and authors come back", () => {

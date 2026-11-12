@@ -199,7 +199,7 @@ async function main(): Promise<void> {
     const wantHistory = [...edits.map((e) => String(e.seq)).reverse(), "opened"];
     if (JSON.stringify(got.history) !== JSON.stringify(wantHistory)) throw new Error(`HISTORY ${JSON.stringify(got.history)}; the record's edits are ${JSON.stringify(wantHistory)}`);
     const lines = text.replace(/\n$/, "").split("\n").length;
-    const wantInfo = { path: FILE, size: `${(size / 1024).toFixed(1)} KB · ${lines} lines`, modified: "today · by hand", encoding: "UTF-8", "line ends": "LF", type: "TypeScript (by extension)" };
+    const wantInfo = { path: FILE, size: `${(size / 1024).toFixed(1)} KB · ${lines} lines`, modified: "today · by hand", encoding: "UTF-8", "line ends": "LF", type: "TypeScript" }; // sprint 472: the language as the editor highlights it
     if (JSON.stringify(got.info) !== JSON.stringify(wantInfo)) throw new Error(`INFO ${JSON.stringify(got.info)}; the disk says ${JSON.stringify(wantInfo)}`);
 
     // Pixels: both anchor rows, from a screenshot.

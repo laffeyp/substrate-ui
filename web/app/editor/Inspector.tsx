@@ -237,7 +237,7 @@ export function Inspector({ paneId, workspace }: { paneId: number; workspace: st
           ["modified", `${when(file.modified)}${latest ? ` · ${latest.author === "hand" ? "by hand" : "by the session"}` : ""}`],
           ["encoding", encodingName(file.encoding)],
           ["line ends", file.lineEndings ? file.lineEndings.toUpperCase() : "—"],
-          ["type", fileType(file.path)],
+          ["type", fileType(file.path, st.language)],
         ] as [string, string][]).map(([k, v]) => (
           <div key={k} data-info-row={k} style={{ display: "flex", gap: 10, padding: "2px 14px" }}>
             <span style={{ color: DIM, width: 78, flex: "none" }}>{k}</span>

@@ -300,8 +300,9 @@ export function authorLabel(r: HistoryRow | null): string {
 }
 
 /** INFO's type line: the language by extension, as 24a writes it ("TypeScript (by extension)"). */
-export function fileType(path: string): string {
-  const ext = path.slice(path.lastIndexOf(".") + 1).toLowerCase();
-  const names: Record<string, string> = { ts: "TypeScript", tsx: "TypeScript (JSX)", js: "JavaScript", jsx: "JavaScript (JSX)", mjs: "JavaScript", py: "Python", json: "JSON", html: "HTML", css: "CSS", md: "Markdown", sh: "Shell", bash: "Shell" };
-  return names[ext] ? `${names[ext]} (by extension)` : path.includes(".") ? `.${ext} file` : "plain text";
+/** INFO's `type` (sprint 472): the file's language as the editor highlights it, or its extension, or plain text. */
+export function fileType(path: string, language: string | null): string {
+  if (language) return language;
+  const name = path.slice(path.lastIndexOf("/") + 1);
+  return name.includes(".") ? `.${name.slice(name.lastIndexOf(".") + 1).toLowerCase()} file` : "plain text";
 }

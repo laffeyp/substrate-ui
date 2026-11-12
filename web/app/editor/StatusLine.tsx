@@ -55,7 +55,9 @@ export function StatusLine({ paneId }: { paneId?: number } = {}): React.ReactEle
         <span data-status-pos="1">{name} · {st.caretLine}:{st.caretCol}</span>
         {st.vsBase && <span data-status-vs="1">+{st.vsBase.plus} −{st.vsBase.minus} vs {st.vsBase.base}</span>}
       </>}
-      <span data-status-binding="1" style={{ marginLeft: "auto" }}>{binding}</span>
+      {/* Sprint 472: the language the code is highlighted as. */}
+      {st.language && <span data-status-language="1" style={{ marginLeft: "auto" }}>{st.language}</span>}
+      <span data-status-binding="1" style={st.language ? undefined : { marginLeft: "auto" }}>{binding}</span>
     </div>
   );
 }
