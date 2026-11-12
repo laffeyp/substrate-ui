@@ -1,11 +1,11 @@
 # RUNBOOK — substrate-ui
 
-*2026-11-11, round 9. Supersedes round 8 (`process/archive/RUNBOOK-2026-11-11-project-r8.md`). Round 9 adds the chapter "Build and install the test install" (sprints 488–491: Substrate Next, the second install beside the working one, `process/planning/2026-11-11-second-build/`); every other chapter is round 8's, unchanged. Round 8: 2026-11-11, round 8. Supersedes round 7 (`process/archive/RUNBOOK-2026-11-11-project-r7.md`), whose last end-to-end run and known failures dated from 2026-10-27; round 8 records the run of sprint 486. Round 7 superseded round 6 (`process/archive/RUNBOOK-2026-10-29-project-r6.md`) and rounds 1–5 (round 4 and the rounds before it are in `process/planning/2026-10-11-before-distribution/superseded/`). Scope: `substrate-ui/`. The kernel is the sibling repo `../substrate/`. This runbook does not override the kit; where they differ, `../sdd-kit-3/AGENTS.md` wins and this file is wrong.*
+*2026-11-11, round 9. Supersedes round 8 (`process/archive/RUNBOOK-2026-11-11-project-r8.md`). Round 9 adds the chapter "Build and install the test install" (sprints 487–490: Substrate Next, the second install beside the working one, `process/planning/2026-11-11-second-build/`); every other chapter is round 8's, unchanged. Round 8: 2026-11-11, round 8. Supersedes round 7 (`process/archive/RUNBOOK-2026-11-11-project-r7.md`), whose last end-to-end run and known failures dated from 2026-10-27; round 8 records the run of sprint 486. Round 7 superseded round 6 (`process/archive/RUNBOOK-2026-10-29-project-r6.md`) and rounds 1–5 (round 4 and the rounds before it are in `process/planning/2026-10-11-before-distribution/superseded/`). Scope: `substrate-ui/`. The kernel is the sibling repo `../substrate/`. This runbook does not override the kit; where they differ, `../sdd-kit-3/AGENTS.md` wins and this file is wrong.*
 
 | Owner | the Architect (Peter Laffey) |
 | --- | --- |
 | Last updated | 2026-11-11 |
-| Last run end to end | 2026-11-11, 22:03 — 22:16, no-Apple build + install, steps 1 — 20 all 0, build 1794463909; logs at `runs/packaged/sprint-486-20261111-220313/` (sprint 486) |
+| Last run end to end | 2026-11-11, 22:03 — 22:16, no-Apple build + install, steps 1 — 20 all 0, build 1794463909; logs at `runs/packaged/sprint-486-20261111-220313/` (sprint 486). "Build and install the test install" has not run end to end: Substrate Next build 1794469212 was installed by its steps 19 and 20 alone, 2026-11-11 |
 | Scope | `substrate-ui/` only |
 | Depends on | `../substrate/` (no runbook of its own yet) |
 | Workspace | `../README.md` says what every item around this repo is and where moved items went |
@@ -116,6 +116,7 @@ A folder the index marks closed is history: open a file there only when a curren
 | --- | --- |
 | First day on this repo | Orientation |
 | "Does the current tree build and install?" | Build and install — no Apple |
+| "Make a tested build the one I work in" | Build and install — no Apple (it replaces `/Applications/Substrate.app`; Rollback puts the old one back) |
 | "Build the next version and install it beside the one in use" | Build and install the test install |
 | "Ship a signed, notarized build" | Build and release — with Apple |
 | "Edit source and try it in a running app" | Day-to-day development |
@@ -177,15 +178,15 @@ open /Applications/Substrate.app
 
 ## 5A. Build and install the test install
 
-The test install is Substrate Next: its own name, bundle id (`com.greenrosesystems.substrate.next`), store (`~/.substrate-next`), data folder, logs (`~/Library/Logs/Substrate Next`) and link scheme (`substrate-next://`), from its record in `electron/identity.json`. It runs beside the working install, `/Applications/Substrate.app`, and none of these steps touches the working install, so the chapter can run from a session inside it. Run from this repo's root; per-command logs go to `runs/packaged/<sprint-id>-<stamp>/NN-<name>.log`. `$APP = "$PWD/dist-electron-next/mac-arm64/Substrate Next.app"`.
+The test install is Substrate Next: its own name, bundle id (`com.greenrosesystems.substrate.next`), store (`~/.substrate-next`), data folder, logs (`~/Library/Logs/Substrate Next`) and link scheme (`substrate-next://`), from its record in `electron/identity.json`. It runs beside the working install, `/Applications/Substrate.app`, and none of these steps touches the working install. Run from this repo's root; per-command logs go to `runs/packaged/<sprint-id>-<stamp>/NN-<name>.log`. `$APP = "$PWD/dist-electron-next/mac-arm64/Substrate Next.app"`.
 
 | # | Command | Exit | Notes |
 | --- | --- | --- | --- |
 | 1–8 | Steps 1–8 of "Build and install — no Apple" | 0 | Unchanged. |
 | 9 | `npm run pack:next` | 0 | Builds with `SUBSTRATE_INSTALL=next` into `dist-electron-next/`, then renames the bundle to `Substrate Next.app` (electron-builder names it after the executable, `Substrate`). |
 | 10–16 | Steps 10–16 of "Build and install — no Apple" with `$APP` as above | 0 | The gates launch the bundle with their own `SUBSTRATE_HOME`, as for the working bundle. |
-| 16a | `npx tsx harness/shakeout/two_installs.ts` | 0 | Needs the working install running. Opens the test install beside it and checks that each keeps to its own lock, store and logs. |
-| 17 | `osascript -e 'tell application "Substrate Next" to quit'` | 0 or non-zero | Quits only the test install. Wait up to 60 s for its pid to go. |
+| 17 | `osascript -e 'tell application "Substrate Next" to quit'` | 0 or non-zero | Quits only the test install. Wait up to 60 s for its pid to go. It comes before 17a: a second Substrate Next finds its lock held and quits. |
+| 17a | `npx tsx harness/shakeout/two_installs.ts` | 0 | Needs the working install running. Opens the new bundle beside it and checks that each keeps to its own lock, store and logs. |
 | 18 | `mv "/Applications/Substrate Next.app" ~/.Trash/"Substrate Next-<old-CFBundleVersion>-replaced-<stamp>.app"` | 0 | Only when it existed. |
 | 19 | `ditto "$APP" "/Applications/Substrate Next.app" && xattr -dr com.apple.quarantine "/Applications/Substrate Next.app"` | 0 | Install. |
 | 20 | `open -g "/Applications/Substrate Next.app"` | 0 | Launch, in the background. |
@@ -195,6 +196,16 @@ The test install is Substrate Next: its own name, bundle id (`com.greenrosesyste
 - `/Applications/Substrate Next.app/Contents/Info.plist`: `CFBundleName` Substrate Next, `CFBundleIdentifier` com.greenrosesystems.substrate.next, `CFBundleVersion` strictly greater than the trashed one.
 - `~/Library/Logs/Substrate Next/substrate.log` tail reads `app boot`, `server up`; its trace's `APP_BOOTED` reads `app_name` Substrate Next.
 - The working install's main pid is the one it had before step 1, and its `server.jsonl` for its boot holds one `SERVER_STARTED`.
+
+### 5A.2 Rollback
+
+```
+osascript -e 'tell application "Substrate Next" to quit'
+# wait for the pid to go
+mv "/Applications/Substrate Next.app" ~/.Trash/
+mv ~/.Trash/"Substrate Next-<prior-CFBundleVersion>-replaced-"*.app "/Applications/Substrate Next.app"
+open -g "/Applications/Substrate Next.app"
+```
 
 ---
 
