@@ -1,6 +1,6 @@
 # Roadmap — the code editor, the rest of it (round 14)
 
-*2026-11-11. Supersedes `superseded/ROADMAP-2026-11-09-code-editor-r13.md`. Round 14 adds the Architect's detour of 2026-11-11 (BLACKBOARD `user`): how the code should look to a person, researched in `RESEARCH-2026-11-11-colour-spacing-wrap.md` and, for colour, `RESEARCH-2026-11-11-colour-spacing-wrap-r2.md`. E16, the palette's notes tuned within its key; E17, the ghost scheme, the key without hue; E20, a red-green colour-blind scheme as an option; E21, the pane's reply brightest (`RESEARCH-2026-11-11-pane-text-emphasis.md`). These six are one group, how text looks to a person, done in this order: E18 and E21 together (the pane's spacing and brightness, then the code's spacing), E16, E17, E20, E19; E18, line spacing at 1.54 in the pane and the code; E19, wrapping as a setting. E15 gains its second item, C's outline (found in sprint 475's screenshot). Round 13's header follows unchanged.*
+*2026-11-11. Supersedes `superseded/ROADMAP-2026-11-09-code-editor-r13.md`. Round 14 adds the Architect's detour of 2026-11-11 (BLACKBOARD `user`): how the code should look to a person, researched in `RESEARCH-2026-11-11-colour-spacing-wrap.md` and, for colour, `RESEARCH-2026-11-11-colour-spacing-wrap-r2.md`. E16, the palette's notes tuned within its key; E17, the ghost scheme, the key without hue; E20, a red-green colour-blind scheme as an option; E21, the pane's reply brightest (`RESEARCH-2026-11-11-pane-text-emphasis.md`); E22, code in replies in the editor's palette, and E23, a reading measure for the reply's prose (`RESEARCH-2026-11-11-pane-legibility.md`). These eight are one group, how text looks to a person, in the pane and the editor alike, done in this order: E18, E21 and E23 (the pane's spacing, brightness and measure, then the code's spacing), E16, E22, E17, E20, E19; E18, line spacing at 1.54 in the pane and the code; E19, wrapping as a setting. E15 gains its second item, C's outline (found in sprint 475's screenshot). Round 13's header follows unchanged.*
 
 *2026-11-10. Supersedes `superseded/ROADMAP-2026-11-09-code-editor-r12.md`. Round 13 adds E10.0, the Architect's ruling of 2026-11-10: what is on screen is what the model sees; every unsaved buffer is saved when a message is sent, before the model starts (`SAVE-BEFORE-SEND-2026-11-10.md`). It goes first among the E10 items. Round 12's header follows unchanged.*
 
@@ -94,6 +94,8 @@ A renderer-owned key is listed in its menu without its key, as Meta and Assays a
 | E18 | **Line spacing**: the pane's transcript text from 2.0 to 1.54 (20 px on 13 px) and the code's from 1.77 to 1.54, as the print evidence and WCAG's 1.5 for prose suggest; box-drawing rows still touch. | the Architect 2026-11-11 |
 | E19 | **Wrapping long lines, as a setting**: off for code, on for Markdown and plain text; ⌥Z switches it for the file shown; a wrapped line takes its first line's indentation. | the Architect 2026-11-11 |
 | E21 | **The pane's reply brightest** (`RESEARCH-2026-11-11-pane-text-emphasis.md`): the model's reply takes the high-emphasis #e2e5e9 (Material's 87% white on the pane's ground), the person's message steps down to #d7dade, one note in the same key; graded on decoded pixels, the reply 3 to 8 L* brighter. | the Architect 2026-11-11 |
+| E22 | **Code in replies in the editor's palette** (`RESEARCH-2026-11-11-pane-legibility.md`): a fenced block with a language highlighted by the editor's parsers and palette (`@lezer/highlight` `highlightCode`), the palette in one shared home both draw from; the pane keeps wrapping code. After E16. | the Architect 2026-11-11 |
+| E23 | **A reading measure for the reply's prose**: paragraphs and lists at most 72 characters (`72ch`); code blocks, tables and tool cards keep the row's width. A proportional font for the pane's prose is not taken: about 5% faster, and monospace is Substrate's look. | the Architect 2026-11-11 |
 | E13 | **Close**: the full suites once; the runbook's build and install; every editor frame beside the running app; the closing table of the editor's hand actions against their session tools (save → `write_file`; replace and replace all → `edit_file`; step back → `write_file`; search → `grep`; quick open → `glob`), with where "by hand only" is drawn; the evidence reported in chat. | runbook; D91, D92 |
 
 ## Following the session (E7)
@@ -159,6 +161,8 @@ Cards, in order. Each is ≤2 product files where it can be; a card that cannot 
 | E19 | 1: wrapping, its key and its default per kind of file | `editor/Centre.tsx`; `keymap.ts`; `state/settings.ts` | — |
 | E20 | 1: the red-green scheme and its simulation check | `editor/Centre.tsx` | E17 |
 | E21 | 1: the reply and message colours, with E18's pane spacing | `web/reveal/transcript/Row.tsx` | — |
+| E22 | 1: code in replies highlighted; the palette's shared home | `web/reveal/transcript/ModelReply.tsx`; `editor/Centre.tsx` | E16 |
+| E23 | 1: the prose measure, with E18 and E21 | `web/reveal/transcript/ModelReply.tsx` | — |
 | E13 | 1: the close | — | all |
 
 About 35 cards.
