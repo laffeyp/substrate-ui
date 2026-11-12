@@ -9,12 +9,12 @@
 // message creates the session, ⌘⇧E opens the editor, a click opens src/. Then, as a session's tools
 // would, the gate edits src/cart.ts and writes src/new.ts in the session's workspace; the server's
 // watch stream tells the tree, which reads the diff again. At each step:
-//   truth  — `git` in the session's workspace: the files changed since main's merge-base, plus
+//   truth  — `git` in the session's workspace: the files changed since HEAD, the branch's last commit (sprint 483), plus
 //            untracked files not ignored;
 //   DOM    — the rows drawn with [data-tree-dot];
 //   pixels — the anchor's modified_dots, and the row bands holding the accent colour (#82a5c8);
 // after close, the signals: the EDITOR_DRAWN whose proc_seq the anchor carries holds those fields,
-// and each DIFF_READ in server.jsonl names base main and the truth's file count.
+// and each DIFF_READ in server.jsonl names base head and the truth's file count.
 // A plain folder, bound the same way, must give DIFF_READ base none and no dot.
 
 import { execFileSync } from "node:child_process";
@@ -41,10 +41,10 @@ function makeRepo(root: string): void {
   git(root, "add", "-A"); git(root, "commit", "-q", "-m", "fix the menu");
 }
 
-/** The files `git` says changed in `ws` since main's merge-base, plus untracked files not ignored. */
+/** The files `git` says changed in `ws` since the branch's last commit (sprint 483), plus untracked files not ignored;
+ *  src/menu.ts, committed on the branch, is not among them. */
 function truth(ws: string): Set<string> {
-  const base = git(ws, "merge-base", "main", "HEAD").trim();
-  const out = new Set(git(ws, "diff", "--name-only", "--relative", base).split("\n").filter(Boolean));
+  const out = new Set(git(ws, "diff", "--name-only", "--relative", "HEAD").split("\n").filter(Boolean));
   for (const f of git(ws, "ls-files", "--others", "--exclude-standard").split("\n").filter(Boolean)) out.add(f);
   return out;
 }
@@ -108,7 +108,7 @@ async function run(name: string, folder: string, shots: string, act: (win: Page,
     const booted = lines("main.jsonl").find((r) => r.name === "APP_BOOTED")!.payload;
     // Each truth the gate saw must appear among the server's reads, in order (the watch may read more than once).
     let at = 0;
-    for (const n of reads) { const i = diffs.indexOf(`main:${n}`, at); if (i < 0) throw new Error(`${name}: DIFF_READ ${JSON.stringify(diffs)} lacks ${n} files after read ${at}`); at = i + 1; }
+    for (const n of reads) { const i = diffs.indexOf(`head:${n}`, at); if (i < 0) throw new Error(`${name}: DIFF_READ ${JSON.stringify(diffs)} lacks ${n} files after read ${at}`); at = i + 1; }
     launch.cleanup();
     return `${name} ok — ${readings.map(([s, p]) => `${s}: ${"error" in p.anchor ? "?" : p.anchor.modified_dots} dots (pixels seq ${"error" in p.anchor ? "?" : p.anchor.seq} = EDITOR_DRAWN; ${p.dotted} accent bands)`).join("; ")}; DIFF_READ ${diffs.join(" ")}; packaged=${String(booted.packaged)} vocabulary=${String(booted.vocab_version)}`;
   } catch (e) {

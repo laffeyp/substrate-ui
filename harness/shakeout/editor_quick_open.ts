@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2026 Peter Laffey
-// Quick open (sprint 441; roadmap r10 E9; frame 24i). A repository written here: src/lib/cart.ts (changed against
-// main), tests/cart.test.ts, src/ui/CartDrawer.tsx, src/lib/menu.ts, and build/cart.js ignored by .gitignore.
-// The change is a commit on branch fix; build/cart.js is written into the session's worktree. These agree:
+// Quick open (sprint 441; roadmap r10 E9; frame 24i). A repository written here: src/lib/cart.ts (changed since
+// HEAD), tests/cart.test.ts, src/ui/CartDrawer.tsx, src/lib/menu.ts, and build/cart.js ignored by .gitignore.
+// The change and build/cart.js are written into the session's worktree, uncommitted (sprint 483). These agree:
 //   ⌘P in the editor opens the box with its field focused (EDITOR_QUICK_OPENED);
 //   `cart` lists src/lib/cart.ts, tests/cart.test.ts, src/ui/CartDrawer.tsx in that order, "cart" lit in the
 //   first, the dot on the changed file, build/cart.js absent;
@@ -48,11 +48,9 @@ async function main(): Promise<void> {
   writeFileSync(join(repo, "src/ui/CartDrawer.tsx"), "export const Drawer = 1;\n");
   writeFileSync(join(repo, "tests/cart.test.ts"), "test();\n");
   git(repo, "add", "-A"); git(repo, "commit", "-q", "-m", "base");
-  // The kernel gives the session a worktree from the repository's HEAD (editor_dots): the change against main
-  // is a commit on a branch, and the ignored copy is written into the session's workspace once it exists.
-  git(repo, "checkout", "-q", "-b", "fix");
-  writeFileSync(join(repo, "src/lib/cart.ts"), "export const total = 2;\n");
-  git(repo, "add", "-A"); git(repo, "commit", "-q", "-m", "fix the total");
+  // The kernel gives the session a worktree from the repository's HEAD (editor_dots). Sprint 483: the change is
+  // compared with the branch's last commit, so it is written uncommitted into the session's workspace once it exists,
+  // with the ignored copy.
   const launch = launchArgs();
   const app = await electron.launch({ ...launch.options, timeout: 60_000 });
   let status = 1;
@@ -67,6 +65,7 @@ async function main(): Promise<void> {
     await win.waitForFunction(() => !!(window as unknown as { __vm?: { get(n: number): { snapshot(): { parkReason: unknown } } } }).__vm?.get(1)?.snapshot().parkReason, undefined, { timeout: 30_000 });
     const ws = await win.evaluate(() => (window as unknown as { __vm: { get(n: number): { snapshot(): { workspacePath: string } } } }).__vm.get(1).snapshot().workspacePath);
     mkdirSync(join(ws, "build"), { recursive: true });
+    writeFileSync(join(ws, "src/lib/cart.ts"), "export const total = 2;\n");
     writeFileSync(join(ws, "build/cart.js"), "x\n"); // ignored by .gitignore
     await win.keyboard.press("Meta+Shift+E");
     await win.locator('[data-tree-row="src"]').first().waitFor({ timeout: 10_000 });

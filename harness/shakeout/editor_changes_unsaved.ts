@@ -33,7 +33,7 @@ async function until<T>(win: Page, what: string, read: () => Promise<T>, ok: (v:
 async function agree(win: Page, what: string, ok: (cs: Card[]) => boolean): Promise<Card[]> {
   const [cs, vs] = await until(win, what, async () => [await cards(win), await statusVs(win)] as const, ([c, v]) => {
     const [p, m] = sums(c as Card[]);
-    return ok(c as Card[]) && v === `+${p} −${m} vs main`;
+    return ok(c as Card[]) && v === `+${p} −${m} vs head`; // sprint 483: the branch's own last commit
   });
   void vs;
   return cs as Card[];

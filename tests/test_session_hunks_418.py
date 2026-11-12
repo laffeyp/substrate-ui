@@ -46,7 +46,7 @@ def ws(tmp_path: Path) -> Path:
 
 def test_an_edited_file_has_gits_own_hunks(ws: Path) -> None:
     out = server._workspace_hunks(ws, "cart.ts")
-    assert out["base"] == "main"
+    assert out["base"] == "head"  # sprint 483: the branch's own last commit
     got = [
         (h["old_start"], h["old_count"], h["new_start"], h["new_count"], h["lines"])
         for h in out["hunks"]
@@ -59,7 +59,7 @@ def test_an_edited_file_has_gits_own_hunks(ws: Path) -> None:
     # The same ranges git prints itself.
     headers = [
         ln
-        for ln in git(ws, "diff", "-U0", "main", "--", "cart.ts").splitlines()
+        for ln in git(ws, "diff", "-U0", "HEAD", "--", "cart.ts").splitlines()
         if ln.startswith("@@")
     ]
     assert len(headers) == len(out["hunks"])

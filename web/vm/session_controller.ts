@@ -260,6 +260,10 @@ export class SessionController {
   /** Sprint 451 (roadmap r13 E10.2): the seqs of the echoes still waiting for their message on the record, in send
    *  order. A refused turn takes its echo out, so a later message with the same words never takes it. */
   private readonly waitingEchoes: number[] = [];
+  /** Sprint 483: the turn submitted and not yet acknowledged. TURN_ACK is written when the turn's UserMessage reaches the
+   *  stream (the kernel has the turn), or when the POST returns if that comes first, once. The POST returns only at the
+   *  turn's end (the server's `turn_sync`), so acknowledging there broke T6 on any turn longer than its 10 s window. */
+  private ackPending: { sessionId: string; turnIndex: number } | null = null;
   private readonly listeners = new Set<Listener>();
   private readonly eventListeners = new Set<EventListener>();
   private unsubscribeStream: Unsubscribe | null = null;
@@ -791,6 +795,7 @@ export class SessionController {
       this.appendTranscript({ seq: warningSeq, kind: "SaveRefused", role: "warning", text: `not saved before sending: ${before.refused.map((r) => r.why).join("; ")}` });
     }
     this.emit(Signal.TURN_SUBMITTED, { session_id: sessionId, turn_index: turnIndex, text_length: trimmed.length, attachments: attachments.length, saved: before.saved });
+    this.ackPending = { sessionId, turnIndex };
     const result = await this.client.fetchJson<unknown>(
       `/api/session/${encodeURIComponent(sessionId)}/turn`,
       {
@@ -815,9 +820,11 @@ export class SessionController {
         text: `turn refused: ${result.detail}`,
       });
       this.patch({ turnFailure: { detail: String(result.detail), atT: Date.now() / 1000 } });
+      if (this.ackPending?.turnIndex === turnIndex) this.ackPending = null;
       this.emit(Signal.TURN_REFUSED, { failure_class: result.failureClass, detail: result.detail });
       opts.onRefused?.();
-    } else {
+    } else if (this.ackPending?.turnIndex === turnIndex) {
+      this.ackPending = null;
       this.emit(Signal.TURN_ACK, { session_id: sessionId });
     }
   }
@@ -1460,6 +1467,12 @@ export class SessionController {
     if (typeof env.seq === "number") this.seenSeqs.add(env.seq);
     if (typeof env.seq === "number" && env.seq > this.lastSeq) this.lastSeq = env.seq;
     this.emit(Signal.STREAM_ENVELOPE_APPENDED, { seq: env.seq, kind: env.kind });
+    // Sprint 483: the submitted turn's UserMessage on the stream acknowledges it (see `ackPending`).
+    const pending = this.ackPending;
+    if (pending && pending.sessionId === sessionId && env.kind === EnvelopeKind.UserMessage && env.payload?.turn_index === pending.turnIndex) {
+      this.ackPending = null;
+      this.emit(Signal.TURN_ACK, { session_id: sessionId });
+    }
     this.patch({ rawEnvelopes: [...existing, env] });
     this.envelopeToRows(sessionId, env);
     this.noteSkipped(env);

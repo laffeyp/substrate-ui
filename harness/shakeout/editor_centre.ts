@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2026 Peter Laffey
 // A file opens in the editor's centre (sprint 419; roadmap 2026-11-09-code-editor r8, E3; frame 24a).
-// A real repository: main, and a branch `fix` checked out that changes src/cart.ts (a line replaced, two
-// inserted, one removed) and adds app.py; img.bin is binary. Clicks in the tree open the files; ⌘W closes
+// A real repository: main with src/cart.ts, app.py and img.bin (binary) committed; once the session's workspace exists,
+// src/cart.ts is edited there, uncommitted (a line replaced, two inserted, one removed). Clicks in the tree open the files; ⌘W closes
 // a tab. These agree:
-//   truth  — the file on disk and `git diff -U0` against main's merge-base in the session's workspace;
+//   truth  — the file on disk and `git diff -U0 HEAD` in the session's workspace (sprint 483: the branch's own last
+//            commit; the edit is written there uncommitted);
 //   DOM    — the tabs; CodeMirror's lines (inside its shadow root) equal the file's; the lines marked added
 //            and removed equal git's;
 //   pixels — in a screenshot, each added line's gutter holds the teal + (#7fb3b8) and its text holds no teal
@@ -63,15 +64,14 @@ async function main(): Promise<void> {
   const base = Array.from({ length: 12 }, (_, i) => `export const line${i + 1} = ${i + 1}; // line ${i + 1}`);
   writeFileSync(join(repo, "src/cart.ts"), base.join("\n") + "\n");
   writeFileSync(join(repo, "img.bin"), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0, 0xff, 0x00, 0x10]));
+  writeFileSync(join(repo, "app.py"), "def total(items):\n    return sum(items)\n");
   git(repo, "add", "-A"); git(repo, "commit", "-q", "-m", "base");
-  git(repo, "checkout", "-q", "-b", "fix");
+  // Sprint 483: the changes are compared with the branch's own last commit, so the edit is written uncommitted into the
+  // session's workspace once it exists, as the session or the person would make it.
   const changed = base.slice();
   changed[2] = "export const line3 = 300; // changed";
   changed.splice(7, 0, "export const added1 = 1;", "export const added2 = 2;");
   changed.splice(changed.indexOf(base[10]), 1);
-  writeFileSync(join(repo, "src/cart.ts"), changed.join("\n") + "\n");
-  writeFileSync(join(repo, "app.py"), "def total(items):\n    return sum(items)\n");
-  git(repo, "add", "-A"); git(repo, "commit", "-q", "-m", "fix");
   const launch = launchArgs();
   const app = await electron.launch({ ...launch.options, timeout: 60_000 });
   let status = 1;
@@ -85,14 +85,14 @@ async function main(): Promise<void> {
     await win.keyboard.press("Enter");
     await win.waitForFunction(() => !!(window as unknown as { __vm?: { get(n: number): { snapshot(): { parkReason: unknown } } } }).__vm?.get(1)?.snapshot().parkReason, undefined, { timeout: 30_000 });
     const ws = await win.evaluate(() => (window as unknown as { __vm: { get(n: number): { snapshot(): { workspacePath: string } } } }).__vm.get(1).snapshot().workspacePath);
+    writeFileSync(join(ws, "src/cart.ts"), changed.join("\n") + "\n");
     await win.keyboard.press("Meta+Shift+E");
     await win.locator('[data-tree-row="src"]').first().click();
     await win.locator('[data-tree-row="src/cart.ts"]').first().click();
 
     // Truth: the file and git's hunks in the session's workspace.
     const text = readFileSync(join(ws, "src/cart.ts"), "utf8").split("\n"); // a final newline is an empty last line, as CodeMirror draws it
-    const mb = git(ws, "merge-base", "main", "HEAD").trim();
-    const diff = git(ws, "diff", "-U0", mb, "--", "src/cart.ts").split("\n");
+    const diff = git(ws, "diff", "-U0", "HEAD", "--", "src/cart.ts").split("\n");
     const wantAdded = diff.filter((l) => l.startsWith("+") && !l.startsWith("+++")).length;
     const wantRemoved = diff.filter((l) => l.startsWith("-") && !l.startsWith("---")).length;
     const deadline = Date.now() + 15_000;

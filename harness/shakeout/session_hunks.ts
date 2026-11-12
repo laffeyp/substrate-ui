@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2026 Peter Laffey
 // One file's hunks through the running app (sprint 418; roadmap 2026-11-09-code-editor r8, E2). A real
-// repository (main, and a branch `fix` that changes src/menu.ts and adds src/new.ts) is bound through the
-// picker; the window reads GET /api/session/<id>/diff?path= for both files and for a path outside the
-// workspace. The answer's hunk headers must equal `git diff -U0` in the session's workspace; after close,
-// server.jsonl must hold DIFF_READ base main with each read's hunk count, and the outside path a 400.
+// repository (main with src/menu.ts) is bound through the picker; in the session's workspace src/menu.ts is then changed
+// and src/new.ts added, uncommitted (sprint 483: the base is the branch's own last commit). The window reads
+// GET /api/session/<id>/diff?path= for both files and for a path outside the workspace. The answer's hunk headers must
+// equal `git diff -U0 HEAD` (a new file: against nothing, `git diff --no-index`); after close, server.jsonl must hold
+// DIFF_READ base head with each read's hunk count, and the outside path a 400.
 // SHAKEOUT_APP=<Substrate.app> runs the bundle.
 
 import { execFileSync } from "node:child_process";
@@ -22,10 +23,6 @@ async function main(): Promise<void> {
   git(repo, "init", "-q", "-b", "main"); git(repo, "config", "user.email", "gate@example.invalid"); git(repo, "config", "user.name", "gate");
   writeFileSync(join(repo, "src/menu.ts"), "a\nb\nc\nd\n");
   git(repo, "add", "-A"); git(repo, "commit", "-q", "-m", "base");
-  git(repo, "checkout", "-q", "-b", "fix");
-  writeFileSync(join(repo, "src/menu.ts"), "a\nB\nc\nd\ne\n");
-  writeFileSync(join(repo, "src/new.ts"), "x\n");
-  git(repo, "add", "-A"); git(repo, "commit", "-q", "-m", "fix");
   const launch = launchArgs();
   const app = await electron.launch({ ...launch.options, timeout: 60_000 });
   let code = 1;
@@ -38,13 +35,17 @@ async function main(): Promise<void> {
     await win.waitForFunction(() => !!(window as unknown as { __vm?: { get(n: number): { snapshot(): { parkReason: unknown } } } }).__vm?.get(1)?.snapshot().parkReason, undefined, { timeout: 30_000 });
     const snap = await win.evaluate(() => { const s = (window as unknown as { __vm: { get(n: number): { snapshot(): { sessionId: string; workspacePath: string } } } }).__vm.get(1).snapshot(); return { sid: s.sessionId, ws: s.workspacePath }; });
     const read = (rel: string) => win.evaluate(`fetch("/api/session/${snap.sid}/diff?path=" + encodeURIComponent(${JSON.stringify(rel)})).then(async (r) => ({ status: r.status, body: await r.json() }))`) as Promise<{ status: number; body: { base: string; hunks: { old_start: number; old_count: number; new_start: number; new_count: number }[] } }>;
+    writeFileSync(join(snap.ws, "src/menu.ts"), "a\nB\nc\nd\ne\n");
+    writeFileSync(join(snap.ws, "src/new.ts"), "x\n");
+    // git diff exits 1 when it finds a difference (--no-index); its output is still the answer.
+    const diffOut = (...args: string[]) => { try { return git(snap.ws, ...args); } catch (e) { return String((e as { stdout?: string }).stdout ?? ""); } };
     const counts: number[] = [];
     for (const rel of ["src/menu.ts", "src/new.ts"]) {
       const got = await read(rel);
       const header = (h: { old_start: number; old_count: number; new_start: number; new_count: number }) => `-${h.old_start},${h.old_count} +${h.new_start},${h.new_count}`;
-      const mb = git(snap.ws, "merge-base", "main", "HEAD").trim();
-      const want = git(snap.ws, "diff", "-U0", mb, "--", rel).split("\n").filter((l) => l.startsWith("@@")).map((l) => { const m = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/.exec(l)!; return `-${m[1]},${m[2] ?? "1"} +${m[3]},${m[4] ?? "1"}`; });
-      if (got.status !== 200 || got.body.base !== "main" || JSON.stringify(got.body.hunks.map(header)) !== JSON.stringify(want)) throw new Error(`${rel}: the app read ${JSON.stringify(got)}; git says ${JSON.stringify(want)}`);
+      const tracked = git(snap.ws, "ls-files", "--", rel).trim() !== "";
+      const want = (tracked ? diffOut("diff", "-U0", "HEAD", "--", rel) : diffOut("diff", "-U0", "--no-index", "/dev/null", rel)).split("\n").filter((l) => l.startsWith("@@")).map((l) => { const m = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/.exec(l)!; return `-${m[1]},${m[2] ?? "1"} +${m[3]},${m[4] ?? "1"}`; });
+      if (got.status !== 200 || got.body.base !== "head" || JSON.stringify(got.body.hunks.map(header)) !== JSON.stringify(want)) throw new Error(`${rel}: the app read ${JSON.stringify(got)}; git says ${JSON.stringify(want)}`);
       counts.push(want.length);
     }
     const out = await read("../outside.txt");
@@ -54,7 +55,7 @@ async function main(): Promise<void> {
     const boot = readdirSync(traces).sort().pop()!;
     const lines = (f: string) => readFileSync(join(traces, boot, f), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as { name: string; payload: Record<string, unknown> });
     const reads = lines("server.jsonl").filter((r) => r.name === "DIFF_READ" && r.payload.hunks !== undefined).map((r) => `${String(r.payload.base)}:${String(r.payload.hunks)}`);
-    if (JSON.stringify(reads) !== JSON.stringify(counts.map((n) => `main:${n}`))) throw new Error(`DIFF_READ with hunks: ${JSON.stringify(reads)}; want ${JSON.stringify(counts)}`);
+    if (JSON.stringify(reads) !== JSON.stringify(counts.map((n) => `head:${n}`))) throw new Error(`DIFF_READ with hunks: ${JSON.stringify(reads)}; want ${JSON.stringify(counts)}`);
     const booted = lines("main.jsonl").find((r) => r.name === "APP_BOOTED")!.payload;
     if (packaged && booted.packaged !== true) throw new Error(`APP_BOOTED packaged ${String(booted.packaged)}`);
     console.log(`session_hunks: ok — src/menu.ts ${counts[0]} hunks, src/new.ts ${counts[1]} (= git diff -U0); the outside path 400; DIFF_READ ${reads.join(" ")}; packaged=${String(booted.packaged)}`);

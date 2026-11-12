@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 # Copyright (C) 2026 Peter Laffey
-"""The workspace's changes against main (UI sprint 412; design spec r6 §5 "each hunk vs main", D48).
+"""The workspace's changes since its branch's last commit (UI sprint 412, D48; sprint 483: HEAD on any branch).
 
 Real git repositories in a temporary folder: a branch ahead of main with a committed change, a
 working-tree edit, a new file, a deleted file and an ignored file; a repository with no main; one
@@ -56,14 +56,16 @@ def feature(tmp_path: Path) -> Path:
     return root
 
 
-def test_a_branch_ahead_of_main_lists_committed_edited_new_and_deleted_files(feature: Path) -> None:
+def test_a_branch_lists_its_uncommitted_edits_new_and_deleted_files_not_its_commits(
+    feature: Path,
+) -> None:
+    # Sprint 483: the base is the branch's own last commit; menu.ts, committed on the branch, is not a change.
     index_before = (feature / ".git" / "index").read_bytes()
     out = server._workspace_diff(feature)
-    assert out["base"] == "main"
+    assert out["base"] == "head"
     assert sorted((f["path"], f["status"]) for f in out["files"]) == [
         ("gone.txt", "D"),
         ("src/cart.ts", "M"),
-        ("src/menu.ts", "M"),
         ("src/new.ts", "A"),
     ]
     # Read-only: the workspace's own index is unchanged and new.ts is still untracked.
@@ -72,15 +74,20 @@ def test_a_branch_ahead_of_main_lists_committed_edited_new_and_deleted_files(fea
 
 
 def test_the_read_agrees_with_git_itself(feature: Path) -> None:
-    base = git(feature, "merge-base", "main", "HEAD").strip()
-    want = set(git(feature, "diff", "--name-only", base).split())
+    want = set(git(feature, "diff", "--name-only", "HEAD").split())
     want |= set(git(feature, "ls-files", "--others", "--exclude-standard").split())
     assert {f["path"] for f in server._workspace_diff(feature)["files"]} == want
 
 
 def test_a_subfolder_workspace_lists_its_own_paths(feature: Path) -> None:
     out = server._workspace_diff(feature / "src")
-    assert sorted(f["path"] for f in out["files"]) == ["cart.ts", "menu.ts", "new.ts"]
+    assert sorted(f["path"] for f in out["files"]) == ["cart.ts", "new.ts"]
+
+
+def test_a_commit_clears_the_changes(feature: Path) -> None:
+    # Sprint 483: commit on the branch, and nothing is left to mark.
+    commit_all(feature, "the rest")
+    assert server._workspace_diff(feature) == {"base": "head", "files": []}
 
 
 def test_no_main_compares_with_the_last_commit(tmp_path: Path) -> None:

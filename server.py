@@ -1999,10 +1999,9 @@ def _git_bytes(root: Path, *args: str, ok: tuple[int, ...] = (0,)) -> bytes | No
 
 
 def _workspace_diff(root: Path) -> dict[str, object]:
-    """What changed in a session's workspace against main (UI sprint 412; design spec r6 §5: "each hunk
-    vs main"; D48: modified dots from the real diff). The base is main's merge-base with HEAD; with no
-    `main`, the default branch (`origin/HEAD`); with neither, HEAD, the last commit (sprint 450); no base and
-    no files in a repository with no commit (`no_commit`), and `none` outside a git repository. New files count:
+    """What changed in a session's workspace since its branch's last commit (UI sprint 412; D48: modified dots from
+    the real diff; sprint 483: the base is HEAD on any branch, `_diff_base`); no base and no files in a repository
+    with no commit (`no_commit`), and `none` outside a git repository. New files count:
     they are marked intent-to-add in a scratch copy of the index (`GIT_INDEX_FILE`), so the
     workspace's own index is never written, as the kernel's `worktree_diff` does. Paths are relative to
     the workspace; ignored files are left out. Each file is `{path, status}`, status `A`, `M` or `D`."""
@@ -2023,24 +2022,16 @@ def _workspace_diff(root: Path) -> dict[str, object]:
 
 
 def _diff_base(root: Path) -> tuple[DiffReadBase, str | None]:
-    """The base `_workspace_diff` and `_workspace_hunks` compare against, and its kind: main's merge-base with
-    HEAD; with no `main`, the default branch's (`origin/HEAD`); with neither, HEAD itself, the last commit, so the
-    changes are those since it (git-diff(1), `git diff HEAD`). A repository with no commit has no base
-    (NO_COMMIT; sprint 450: comparing with git's empty tree marked every line added and drew the text teal), and
-    a folder outside a git work tree none (NONE)."""
+    """The base `_workspace_diff` and `_workspace_hunks` compare against, and its kind: HEAD, the last commit of the
+    branch the workspace is on, whatever that branch is (`git diff HEAD`; the Architect, 2026-11-11: "You're changing
+    against whatever branch you're on … Main is just a branch"), so a commit clears the changes. Before sprint 483 the
+    base was main's merge-base, or the default branch's, and a branch's committed work stayed marked until merged. A
+    repository with no commit has no base (NO_COMMIT; sprint 450: comparing with git's empty tree marked every line
+    added), and a folder outside a git work tree none (NONE)."""
     if _git_out(root, "rev-parse", "--is-inside-work-tree") is None:
         return DiffReadBase.NONE, None
     if _git_out(root, "rev-parse", "--verify", "--quiet", "HEAD") is None:
         return DiffReadBase.NO_COMMIT, None
-    if _git_out(root, "rev-parse", "--verify", "--quiet", "refs/heads/main") is not None:
-        base = (_git_out(root, "merge-base", "main", "HEAD") or "").strip()
-        if base:
-            return DiffReadBase.MAIN, base
-    default = (_git_out(root, "symbolic-ref", "--quiet", "refs/remotes/origin/HEAD") or "").strip()
-    if default:
-        base = (_git_out(root, "merge-base", default, "HEAD") or "").strip()
-        if base:
-            return DiffReadBase.DEFAULT_BRANCH, base
     return DiffReadBase.HEAD, (_git_out(root, "rev-parse", "HEAD") or "").strip()
 
 

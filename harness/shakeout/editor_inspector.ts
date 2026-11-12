@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2026 Peter Laffey
 // The editor's inspector on real data (sprint 422; roadmap 2026-11-09-code-editor r8, E6; frame 24a).
-// A real repository: main, and a branch `fix` whose one commit changes TAX_RATE in src/cart.ts. A real
+// A real repository: main with src/cart.ts; after the model's turn a writer outside the session and the editor changes
+// TAX_RATE on disk (sprint 483: committed changes are not changes against HEAD). A real
 // model (EDITOR_LIVE_MODEL, else the live roster's default, as a first-run user binds it) is asked to read src/cart.ts
 // and edit one line of it; then a save by hand (PUT …/file, view "editor") inserts two lines at the top,
 // which moves the session's change down two lines; a second save writes the same text. Each of the three
 // authors owns one hunk. These agree:
-//   truth   — `git diff -U0` against main's merge-base in the session's workspace; the kernel record on
+//   truth   — `git diff -U0 HEAD` in the session's workspace (sprint 483); the kernel record on
 //             disk (events-*.jsonl): the ToolCalls on src/cart.ts and their results, the FileWritten;
 //             the file on disk (size, lines);
 //   DOM     — OUTLINE's rows, and after a click in total()'s body, `total` lit with its line on disk, still
@@ -94,9 +95,6 @@ async function main(): Promise<void> {
   git(repo, "init", "-q", "-b", "main"); git(repo, "config", "user.email", "gate@example.invalid"); git(repo, "config", "user.name", "gate");
   writeFileSync(join(repo, FILE), BASE);
   git(repo, "add", "-A"); git(repo, "commit", "-q", "-m", "base");
-  git(repo, "checkout", "-q", "-b", "fix");
-  writeFileSync(join(repo, FILE), BASE.replace("TAX_RATE = 0.08", "TAX_RATE = 0.0825"));
-  git(repo, "commit", "-q", "-am", "tax");
   const launch = launchArgs({ roster: "live" });
   const app = await electron.launch({ ...launch.options, timeout: 60_000 });
   let status = 1;
@@ -115,6 +113,9 @@ async function main(): Promise<void> {
     const api = `/api/session/${encodeURIComponent(sid)}`;
     const model = String((await call(win, "GET", api)).data.driver ?? MODEL);
     if (!readFileSync(join(ws, FILE), "utf8").includes(REPLACE)) throw new Error(`${model} did not make the edit; ${FILE} is unchanged by the session`);
+    // The unattributed author (sprint 483: a change committed on the branch is no longer a change against HEAD): a
+    // writer outside the session and the editor changes the tax rate on disk.
+    writeFileSync(join(ws, FILE), readFileSync(join(ws, FILE), "utf8").replace("TAX_RATE = 0.08;", "TAX_RATE = 0.0825;"));
 
     // The save by hand: two lines inserted at the top.
     const read = await call(win, "GET", `${api}/file?path=${encodeURIComponent(FILE)}`);
@@ -145,8 +146,7 @@ async function main(): Promise<void> {
     if (relit !== "total") throw new Error(`after a write landed and the file was read again, OUTLINE lights ${relit}; the caret did not keep its line`);
 
     // Truth, I: git's hunks and the file on disk.
-    const mb = git(ws, "merge-base", "main", "HEAD").trim();
-    const diff = git(ws, "diff", "-U0", mb, "--", FILE).split("\n");
+    const diff = git(ws, "diff", "-U0", "HEAD", "--", FILE).split("\n");
     const hunks: { start: number; count: number; plus: number; minus: number; added: string[] }[] = [];
     for (const l of diff) {
       const m = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/.exec(l);

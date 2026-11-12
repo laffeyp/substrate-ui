@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2026 Peter Laffey
 // The editor's status line (sprint 424; roadmap 2026-11-09-code-editor r8, E4; spec r6 §5 "Code"; frame
-// 24a). A real repository: main, and a branch `fix` checked out that changes src/cart.ts. These agree:
+// 24a). A real repository: main with src/cart.ts; the session's workspace then changes it, uncommitted (sprint 483).
+// These agree:
 //   DOM    — `-- NORMAL --`, `cart.ts · line:col` where vim's keys put the caret (`gg 4j 3l`: 5:4),
 //            `-- INSERT --` after `i`, `-- VISUAL --` after `v`, `-- VISUAL LINE --` after `V`; the binding
 //            at the right; under nano no mode field, and ⌃G shows nano's keys until the next key;
-//   truth  — `+N −M vs main`, and the lines the centre marks added and removed, equal `git diff --no-index --numstat` between main's copy of the file and the
+//   truth  — `+N −M vs head`, and the lines the centre marks added and removed, equal `git diff --no-index --numstat` between HEAD's copy of the file and the
 //            buffer as typed, before typing and after;
 //   pixels — the anchor's third row, from a screenshot taken in insert mode, decodes to mode insert, binding
 //            vim, one unsaved buffer, and names the EDITOR_DRAWN that says the same;
@@ -53,12 +54,11 @@ async function main(): Promise<void> {
   const base = Array.from({ length: 12 }, (_, i) => `export const line${i + 1} = ${i + 1};`);
   writeFileSync(join(repo, "src/cart.ts"), base.join("\n") + "\n");
   git(repo, "add", "-A"); git(repo, "commit", "-q", "-m", "base");
-  git(repo, "checkout", "-q", "-b", "fix");
+  // Sprint 483: the change is compared with the branch's own last commit; it is written uncommitted into the session's
+  // workspace once that exists.
   const changed = base.slice();
   changed[7] = "export const line8 = 800; // fixed";
   changed.splice(8, 0, "export const added = 1;");
-  writeFileSync(join(repo, "src/cart.ts"), changed.join("\n") + "\n");
-  git(repo, "commit", "-q", "-am", "fix");
   const scratch = join(__dirname, ".scratch", "editor-status-truth-" + process.pid);
   mkdirSync(scratch, { recursive: true });
   const launch = launchArgs();
@@ -74,15 +74,15 @@ async function main(): Promise<void> {
     await win.keyboard.press("Enter");
     await win.waitForFunction(() => !!(window as unknown as { __vm?: { get(n: number): { snapshot(): { parkReason: unknown } } } }).__vm?.get(1)?.snapshot().parkReason, undefined, { timeout: 30_000 });
     const ws = await win.evaluate(() => (window as unknown as { __vm: { get(n: number): { snapshot(): { workspacePath: string } } } }).__vm.get(1).snapshot().workspacePath);
-    // Truth: git's count of the buffer's lines against main's copy of the file.
-    const mb = git(ws, "merge-base", "main", "HEAD").trim();
-    writeFileSync(join(scratch, "base.ts"), git(ws, "show", `${mb}:src/cart.ts`));
+    writeFileSync(join(ws, "src/cart.ts"), changed.join("\n") + "\n");
+    // Truth: git's count of the buffer's lines against the branch's last commit (sprint 483).
+    writeFileSync(join(scratch, "base.ts"), git(ws, "show", "HEAD:src/cart.ts"));
     const vsTruth = (text: string) => {
       writeFileSync(join(scratch, "buffer.ts"), text.endsWith("\n") ? text : text + "\n");
       let out = "";
       try { out = execFileSync("git", ["diff", "--no-index", "--numstat", join(scratch, "base.ts"), join(scratch, "buffer.ts")], { encoding: "utf8" }); } catch (e) { out = String((e as { stdout?: string }).stdout ?? ""); }
       const [plus, minus] = (out.trim().split(/\s+/) as string[]).map(Number);
-      return `+${plus || 0} −${minus || 0} vs main`;
+      return `+${plus || 0} −${minus || 0} vs head`;
     };
 
     await win.keyboard.press("Meta+Shift+E");
@@ -108,7 +108,7 @@ async function main(): Promise<void> {
     const atOnce = (await status(win)).vs;
     if (atOnce !== wantTyped) throw new Error(`straight after typing the status line says "${atOnce}"; git says "${wantTyped}"`);
     // The inline marks follow the buffer too: as many added and removed lines as the status line counts.
-    const counted = await win.evaluate(`(() => { var r = document.querySelector("[data-editor-code]").shadowRoot; return "+" + r.querySelectorAll("[data-added-line]").length + " −" + r.querySelectorAll("[data-removed-line]").length + " vs main"; })()`);
+    const counted = await win.evaluate(`(() => { var r = document.querySelector("[data-editor-code]").shadowRoot; return "+" + r.querySelectorAll("[data-added-line]").length + " −" + r.querySelectorAll("[data-removed-line]").length + " vs head"; })()`);
     if (counted !== wantTyped) throw new Error(`the buffer's marks count ${counted}; git says ${wantTyped}`);
     const shot = join(shots, "insert.png");
     const px = await readPixels(win, shot, 0);

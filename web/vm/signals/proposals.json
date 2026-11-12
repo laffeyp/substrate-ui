@@ -1522,6 +1522,26 @@
       "rationale": "An open that took two seconds left no trace a gate could check; the time to show a file becomes a signal.",
       "ratified": true,
       "ratified_by": "agent-resolved 2026-11-11, sprint 473; grounds: project — the user and surfaced entries of this date; SDD — hard rule 2, foundation 01 performance timelines; practice — n/a"
+    },
+    {
+      "id": "P-0.66-BASE-HEAD",
+      "kind": "INVARIANT_PROPOSED",
+      "layer": 7,
+      "element": "DIFF_READ.base (server): head on any branch; main and default_branch no longer written",
+      "source": "BLACKBOARD 2026-11-11 user (the marks represent git, against the branch the workspace is on); sprint 483",
+      "rationale": "A branch's committed work stayed marked against main until merged; git's own diff of a branch is against its HEAD, and a commit clears it.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-11, sprint 483; grounds: project — the user entry of this date; SDD — hard rule 2; practice — git-diff(1), `git diff HEAD`"
+    },
+    {
+      "id": "P-0.67-TURN-ACK",
+      "kind": "INVARIANT_PROPOSED",
+      "layer": 4,
+      "element": "TURN_ACK (window): written when the turn's UserMessage reaches the stream, or the POST returns, whichever first",
+      "source": "editor_follow on build 1794460484 (2026-11-11): T6 broken on a 13 s turn; TURN_ACCEPTED 1 ms after TURN_SUBMITTED, TURN_ACK at the turn's end; sprint 483",
+      "rationale": "The POST returns at the turn's end, and turns have no time limit; the acknowledgement T6 times must be the kernel's acceptance, which the turn's UserMessage on the stream shows.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-11, sprint 483; grounds: project — server.py `_session_turn` (`turn_sync`), the trace; SDD — hard rule 2, grammar Layer 4; practice — Nielsen 1993 (response time limits)"
     }
   ]
 }

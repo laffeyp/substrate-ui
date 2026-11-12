@@ -42,7 +42,7 @@ def ws(tmp_path: Path) -> Path:
 
 def _hunks(ws: Path, rel: str) -> list[tuple[int, int, int, int, list[str]]]:
     out = server._workspace_hunks(ws, rel)
-    assert out["base"] == "main"
+    assert out["base"] == "head"  # sprint 483: the branch's own last commit
     return [
         (h["old_start"], h["old_count"], h["new_start"], h["new_count"], h["lines"])
         for h in out["hunks"]
