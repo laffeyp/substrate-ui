@@ -22,6 +22,10 @@ import { emit as emitSignal } from "../../vm/instrumentation/sdd";
 import { Signal } from "../../vm/signals.gen";
 import { byReference, chipTitle } from "./attachments";
 
+/** The transcript's line height wherever it draws: the pane, meta and the editor's terminal (sprint 477, roadmap r15
+ *  E16; RESEARCH-2026-11-11-colour-spacing-wrap: Tinker's leading studies, WCAG 1.4.8's 1.5 for prose). 20 px at 13 px. */
+export const TRANSCRIPT_LINE_HEIGHT = 1.54;
+
 export interface RowProps {
   row: TranscriptRow;
   paired?: TranscriptRow;
