@@ -43,6 +43,16 @@ export function transcriptVars(v: LookValues): Record<string, string> {
   return { "--transcript-reply": v.replyColor, "--transcript-message": v.messageColor };
 }
 
+/** The code's colour scheme (sprint 485): `colour`, the look's palette; `ghost`, the same notes in whites and greys
+ *  (the Architect, 2026-11-11: "all whites and grays"). */
+export type Scheme = "colour" | "ghost";
+export const SCHEMES: readonly Scheme[] = ["colour", "ghost"];
+/** Sprint 485 (E24; RESEARCH-2026-11-11-colour-spacing-wrap-r2): the key with the colour taken out. Each class a grey
+ *  tinted to the palette's blue (LCh hue 263–272°, chroma 2.4–2.9, as the existing greys' 2.2–2.3), told apart by
+ *  lightness alone, 5 L* apart in the notes' order: name 92.7, text 86.9, property 82, type 77, string 72, number 67,
+ *  keyword 62, meta 57, punctuation 52; comments stay at 43.4, italic. */
+export const SYNTAX_GHOST: Syntax = { comment: "#62676f", keyword: "#93969a", string: "#aeb1b5", number: "#a0a3a7", type: "#bbbec3", name: "#e8eaee", property: "#c9ccd0", meta: "#86898d", punctuation: "#7a7c80" };
+
 export const LOOK: Record<Look, LookValues> = {
   // As drawn before sprint 477 (git e804ee3^).
   original: { paneLineHeight: 2, metaLineHeight: 1.95, terminalLineHeight: 1.7, codeLineHeight: 23, replyColor: "#b9bec5", messageColor: "#e2e5e9", syntax: SYNTAX_475 },

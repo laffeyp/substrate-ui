@@ -8,7 +8,8 @@
 // averaged: the glyph's inked core), and their colour is within 40 (RGB distance) of the palette's colour for that
 // token; in main.rs the keyword's colour is more than 60 from the bound name's. Sprint 481: the colours are each look's palette;
 // every pair of coloured classes decodes at least 8 ΔE2000 apart under `new`; under `original` (Settings) main.c draws
-// sprint 475's palette. Prints each token's decoded colour.
+// sprint 475's palette; under ghost (sprint 485) main.rs and main.c decode to greys (chroma under 6) in the notes' lightness
+// order: type, string, number, keyword, meta. Prints each token's decoded colour.
 // Screenshots go to runs/packaged/sprint-475-<stamp>-<source|packaged>/. SHAKEOUT_APP=<Substrate.app> runs the bundle.
 
 import { execFileSync } from "node:child_process";
@@ -17,7 +18,7 @@ import { join } from "node:path";
 import { _electron as electron, type Page } from "playwright";
 import { bindPaneAsUser, launchArgs, settled, waitForApp } from "./lib/electron";
 import { decodePng } from "../pixel/png";
-import { ciede2000 } from "../pixel/ciede2000";
+import { ciede2000, lab } from "../pixel/ciede2000";
 
 const REPO_ROOT = join(__dirname, "..", "..");
 const git = (cwd: string, ...args: string[]) => execFileSync("git", ["-C", cwd, ...args], { encoding: "utf8" });
@@ -27,7 +28,9 @@ const dist = (a: Rgb, b: Rgb) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2
 const GROUND = hex("#212327");
 /** Each look's palette, as `web/app/derive/look.ts` holds it: sprint 481's notes (new) and sprint 475's (original). */
 type Cls = "keyword" | "string" | "number" | "type" | "name" | "meta";
-const PALETTE: Record<"new" | "original", Record<Cls, string>> = {
+const PALETTE: Record<"new" | "original" | "ghost", Record<Cls, string>> = {
+  // Sprint 485: the ghost scheme (`derive/look.ts` SYNTAX_GHOST).
+  ghost: { keyword: "#93969a", string: "#aeb1b5", number: "#a0a3a7", type: "#bbbec3", name: "#e8eaee", meta: "#86898d" },
   new: { keyword: "#7da3ca", string: "#c7ade6", number: "#d496c3", type: "#b0bbd2", name: "#e8eaee", meta: "#948dc5" },
   original: { keyword: "#82a5c8", string: "#b7a4d8", number: "#cc8fb8", type: "#a9c0d8", name: "#e8eaee", meta: "#9c8fc4" },
 };
@@ -94,7 +97,8 @@ async function main(): Promise<void> {
     await win.keyboard.press("Meta+Shift+E");
     const report: string[] = [];
     const seenBy: Partial<Record<Cls, Rgb>> = {};
-    const checkFile = async (f: (typeof FILES)[number], look: "new" | "original") => {
+    const seenGhost: Partial<Record<Cls, Rgb>> = {};
+    const checkFile = async (f: (typeof FILES)[number], look: "new" | "original" | "ghost") => {
       await win.locator(`[data-tree-row="${f.name}"]`).first().click();
       await until(win, `${f.name}'s language`, () => statusLanguage(win), (l) => l === f.language);
       // The parser's tokens: the first token's colour leaves the text's white once the language has applied.
@@ -127,6 +131,7 @@ async function main(): Promise<void> {
         report.push(`${look} ${f.name} ${token}=${got ? `rgb(${got.join(",")})` : "none"} want ${want}`);
         if (!got || dist(got, hex(want)) >= 40) throw new Error(`${look} ${f.name}: ${token} drawn ${got ? `rgb(${got.join(",")})` : "not found"}, want ${want} (distance ${got ? Math.round(dist(got, hex(want))) : "-"})`);
         if (look === "new" && cls !== "name" && !seenBy[cls]) seenBy[cls] = got;
+        if (look === "ghost" && !seenGhost[cls]) seenGhost[cls] = got;
       }
       if (f.name === "main.rs" && dist(seen.fn!, seen.total!) <= 60) throw new Error(`main.rs: the keyword and the bound name are ${Math.round(dist(seen.fn!, seen.total!))} apart`);
     };
@@ -143,6 +148,17 @@ async function main(): Promise<void> {
     await win.locator('[data-setting-look="original"]').first().click();
     await win.keyboard.press("Escape");
     await checkFile(FILES[1], "original");
+    // Sprint 485: ghost (Settings › code colours): the same notes in greys, told apart by lightness alone.
+    await win.keyboard.press("Meta+,");
+    await win.locator('[data-setting-scheme="ghost"]').first().click();
+    await win.keyboard.press("Escape");
+    await checkFile(FILES[0], "ghost");
+    await checkFile(FILES[1], "ghost");
+    const L = (c: Cls) => lab(seenGhost[c]!)[0], C = (c: Cls) => Math.hypot(lab(seenGhost[c]!)[1], lab(seenGhost[c]!)[2]);
+    for (const c of Object.keys(seenGhost) as Cls[]) if (C(c) >= 6) throw new Error(`ghost: ${c} decodes with chroma ${C(c).toFixed(1)}, not a grey`);
+    const order: Cls[] = ["type", "string", "number", "keyword", "meta"];
+    report.push(`ghost L* ${order.map((c) => `${c} ${L(c).toFixed(1)}`).join(", ")}; chroma at most ${Math.max(...(Object.keys(seenGhost) as Cls[]).map(C)).toFixed(1)}`);
+    for (let i = 1; i < order.length; i++) if (!(L(order[i - 1]) > L(order[i]) + 2)) throw new Error(`ghost: ${order[i - 1]} L* ${L(order[i - 1]).toFixed(1)} is not above ${order[i]} L* ${L(order[i]).toFixed(1)}`);
     await app.close();
     const traces = join(launch.state, "electron", "logs", "traces");
     const boot = readdirSync(traces).sort().pop()!;

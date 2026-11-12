@@ -8,7 +8,7 @@
 // (web/app/Dialogs.tsx) calls `pickTheme` and `stepFont`.
 
 import { createStore } from "../store";
-import { LOOKS, type Look } from "../derive/look";
+import { LOOKS, SCHEMES, type Look, type Scheme } from "../derive/look";
 
 export type Theme = "dark" | "light" | "system";
 export const THEMES: readonly Theme[] = ["dark", "light", "system"];
@@ -32,13 +32,15 @@ export interface SettingsState {
   look: Look;
   /** Sprint 484: selecting text in code highlights its other occurrences in view (on by default). */
   selectionMatches: boolean;
+  /** Sprint 485: the code's colours, `colour` or `ghost`. */
+  scheme: Scheme;
 }
 
 // One instance per window, kept on globalThis as in shell.ts. The page once loaded two copies of this
 // module (sprint 213); Vite now bundles one, and the shared key costs nothing.
 const KEY_SHARED = "__substrateSettings";
 const scope = globalThis as unknown as Record<string, ReturnType<typeof createStore<SettingsState>> | undefined>;
-export const settings = scope[KEY_SHARED] ?? (scope[KEY_SHARED] = createStore<SettingsState>({ theme: "dark", fontOverride: null, settingsNote: "", binding: "standard", look: "new", selectionMatches: true }));
+export const settings = scope[KEY_SHARED] ?? (scope[KEY_SHARED] = createStore<SettingsState>({ theme: "dark", fontOverride: null, settingsNote: "", binding: "standard", look: "new", selectionMatches: true, scheme: "colour" }));
 
 /** The saved fields that pass their checks; anything else is left at its default. */
 export function readSaved(raw: string | null): Partial<SettingsState> {
@@ -53,6 +55,7 @@ export function readSaved(raw: string | null): Partial<SettingsState> {
   if (BINDINGS.includes(saved.binding as Binding)) patch.binding = saved.binding as Binding;
   if (LOOKS.includes(saved.look as Look)) patch.look = saved.look as Look;
   if (typeof saved.selectionMatches === "boolean") patch.selectionMatches = saved.selectionMatches;
+  if (SCHEMES.includes(saved.scheme as Scheme)) patch.scheme = saved.scheme as Scheme;
   return patch;
 }
 
@@ -63,8 +66,8 @@ export function loadSettings(): void {
 
 function save(): void {
   try {
-    const { theme, fontOverride, binding, look, selectionMatches } = settings.getSnapshot();
-    window.localStorage.setItem(KEY, JSON.stringify({ theme, fontOverride, binding, look, selectionMatches }));
+    const { theme, fontOverride, binding, look, selectionMatches, scheme } = settings.getSnapshot();
+    window.localStorage.setItem(KEY, JSON.stringify({ theme, fontOverride, binding, look, selectionMatches, scheme }));
   } catch { /* not saved */ }
 }
 
@@ -82,6 +85,11 @@ export function fontSize(fallback: number): number {
 export function stepFont(delta: number, fallback: number): void {
   const next = Math.min(FONT_MAX, Math.max(FONT_MIN, fontSize(fallback) + delta));
   settings.set({ fontOverride: next });
+  save();
+}
+
+export function pickScheme(scheme: Scheme): void {
+  settings.set({ scheme });
   save();
 }
 

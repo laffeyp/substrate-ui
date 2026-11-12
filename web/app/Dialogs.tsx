@@ -9,8 +9,8 @@
 import * as React from "react";
 import { useSyncExternalStore } from "react";
 import { closeDialog, dialogs } from "./state/dialogs";
-import { BINDINGS as EDITOR_BINDINGS, fontSize, pickBinding, pickLook, pickSelectionMatches, pickTheme, settings, stepFont, THEMES } from "./state/settings";
-import { LOOKS } from "./derive/look";
+import { BINDINGS as EDITOR_BINDINGS, fontSize, pickBinding, pickLook, pickScheme, pickSelectionMatches, pickTheme, settings, stepFont, THEMES } from "./state/settings";
+import { LOOKS, SCHEMES } from "./derive/look";
 import { DialogClosedOutcome, PaneDrawnConnection } from "../vm/signals.gen";
 
 interface VmLike {
@@ -64,6 +64,14 @@ function SettingsDialog({ defaultFontSize }: { defaultFontSize: number }): React
           <span style={{ display: "flex", border: "1px solid rgba(255,255,255,.09)", borderRadius: 5, overflow: "hidden" }}>
             {LOOKS.map((l) => (
               <span key={l} data-setting-look={l} data-lit={st.look === l ? "1" : "0"} onClick={() => pickLook(l)} style={{ padding: "3px 12px", cursor: "pointer", color: st.look === l ? "#e2e5e9" : "#62676f", background: st.look === l ? "#2e3138" : "transparent" }}>{l}</span>
+            ))}
+          </span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <span style={label}>code colours</span>
+          <span style={{ display: "flex", border: "1px solid rgba(255,255,255,.09)", borderRadius: 5, overflow: "hidden" }}>
+            {SCHEMES.map((c) => (
+              <span key={c} data-setting-scheme={c} data-lit={st.scheme === c ? "1" : "0"} onClick={() => pickScheme(c)} style={{ padding: "3px 12px", cursor: "pointer", color: st.scheme === c ? "#e2e5e9" : "#62676f", background: st.scheme === c ? "#2e3138" : "transparent" }}>{c}</span>
             ))}
           </span>
         </div>
