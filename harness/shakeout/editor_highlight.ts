@@ -3,7 +3,7 @@
 // Every common language and format is highlighted (sprint 472; roadmap r13 E15; the Architect, 2026-11-11: "everything
 // from JSON to Rust"). A repository written here holds main.rs, main.go, config.yaml, Cargo.toml, query.sql, Dockerfile
 // and App.kt, each with a comment and a string, and notes.zz. The deterministic driver; in the editor, for each:
-//   once its language loads, the comment draws dim and italic and the string grey (the editor's HighlightStyle); INFO's
+//   once its language loads, the comment draws dim and italic and the string lavender (the editor's HighlightStyle, sprint 475); INFO's
 //   type and the status line name the language: Rust, Go, YAML, TOML, SQL, Dockerfile, Kotlin;
 //   notes.zz is plain text: no italic span, type ".zz file", no language in the status line.
 // Screenshots go to runs/packaged/sprint-472-<stamp>-<source|packaged>/. SHAKEOUT_APP=<Substrate.app> runs the bundle.
@@ -32,7 +32,8 @@ const firstLine = (win: Page) => win.evaluate(`(function () { var h = document.q
 const infoType = (win: Page) => win.evaluate(`(function () { var row = Array.from(document.querySelectorAll("[data-info-row]")).find(function (e) { return e.textContent.indexOf("type") === 0; }); return row ? row.textContent.replace(/^type/, "").trim() : null; })()`) as Promise<string | null>;
 const statusLanguage = (win: Page) => win.evaluate(`(function () { var e = document.querySelector("[data-status-language]"); return e ? e.textContent : null; })()`) as Promise<string | null>;
 const returned = (win: Page) => win.evaluate(() => ((window as unknown as { __vm: { get(n: number): { snapshot(): { rawEnvelopes: { kind: string }[] } } } }).__vm.get(1).snapshot().rawEnvelopes ?? []).filter((e) => e.kind === "Returned").length);
-const DIM = "rgb(98, 103, 111)", GREY = "rgb(154, 160, 168)";
+// Sprint 475: strings draw lavender #b7a4d8 (the palette a person can see); editor_highlight_seen decodes the pixels.
+const DIM = "rgb(98, 103, 111)", GREY = "rgb(183, 164, 216)";
 async function until<T>(win: Page, what: string, read: () => Promise<T>, ok: (v: T) => boolean, ms = 20_000): Promise<T> {
   const deadline = Date.now() + ms;
   let v = await read();

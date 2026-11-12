@@ -59,11 +59,23 @@ function languageOf(path: string): LanguageDescription | null {
 }
 
 /** 24a's code: near-monochrome, comments dim (D7: no yellow, no green; colour carries data only). */
+/** Sprint 475 (BLACKBOARD 2026-11-11: "it's like it's all white text still"): hues a person tells apart, within D7 (no
+ *  green, no yellow, red for failed only), each readable on the ground #212327. A style on a parent tag applies to its
+ *  children (@lezer/highlight), so `t.keyword` covers control, definition, module and operator keywords. */
 const HIGHLIGHT = HighlightStyle.define([
   { tag: t.comment, color: "#62676f", fontStyle: "italic" },
-  { tag: [t.string, t.special(t.string)], color: "#9aa0a8" },
-  { tag: [t.keyword, t.definitionKeyword, t.modifier], color: "#d7dade" },
-  { tag: [t.number, t.bool, t.null], color: "#b9bec5" },
+  { tag: [t.keyword, t.modifier, t.self], color: "#82a5c8" },
+  { tag: [t.string, t.special(t.string), t.character, t.regexp], color: "#b7a4d8" },
+  { tag: [t.number, t.bool, t.null, t.atom, t.unit, t.escape], color: "#cc8fb8" },
+  { tag: [t.typeName, t.className, t.namespace, t.standard(t.typeName)], color: "#a9c0d8" },
+  { tag: [t.definition(t.variableName), t.function(t.variableName), t.definition(t.function(t.variableName)), t.labelName], color: "#e8eaee" },
+  { tag: [t.propertyName, t.attributeName], color: "#b9bec5" },
+  { tag: [t.meta, t.annotation, t.processingInstruction], color: "#9c8fc4" },
+  { tag: [t.punctuation, t.bracket, t.operator, t.separator], color: "#8a9099" },
+  { tag: t.heading, color: "#82a5c8", fontWeight: "bold" },
+  { tag: [t.link, t.url], color: "#82a5c8", textDecoration: "underline" },
+  { tag: t.emphasis, fontStyle: "italic" },
+  { tag: t.strong, fontWeight: "bold" },
 ]);
 
 const THEME = EditorView.theme({
