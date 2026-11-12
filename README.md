@@ -42,7 +42,7 @@ xattr -dr com.apple.quarantine /Applications/Substrate.app
 open /Applications/Substrate.app
 ```
 
-The signed, notarized path is `scripts/release.sh --notarize --install`. `npm run pack:dev` builds the window, bundles the Python runtime and the kernel, and packages the app unsigned. The runbook has every step: `RUNBOOK-2026-11-11-project-r7.md` at the repo root.
+The signed, notarized path is `scripts/release.sh --notarize --install`. `npm run pack:dev` builds the window, bundles the Python runtime and the kernel, and packages the app unsigned. The runbook has every step: `RUNBOOK-2026-11-11-project-r8.md` at the repo root.
 
 ## Dev
 

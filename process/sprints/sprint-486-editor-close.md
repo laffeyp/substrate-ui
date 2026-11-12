@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 486
-status: pending
+status: closed
 phase: code editor (roadmap r20), E25
 pass_kind: functional
 ---
@@ -84,3 +84,15 @@ Run 2026-11-11, before the work began.
 - [x] Artifact contract is gradable.
 - [x] Observation contract present.
 - [x] Files: none in the product.
+
+## close
+
+The evidence is `process/planning/2026-11-09-code-editor/CLOSE-2026-11-11-code-editor.md`:
+
+- **Runbook:** steps 1 to 20 all exit 0, on bundle 1794463909, now installed.
+- **Hand actions:** each hand action that changes a file has a session tool behind it (D92). `bash` covers the file encodings and the bytes that the UTF-8 file tools do not, so nothing is labelled "by hand only".
+- **Frames:** each frame sits beside the app as its gate draws it. The differences are listed as rulings (teal text, `vs head`, the default keys, the search bar, ⌘↵ behind, the hint as a tooltip) or as not built: the inspector's `⌃⇧`` chip, the top bar's worktree chip and ▾, the footer's `clean · record`, the record column's header and chip, and an all-folded capture for 16c.
+
+Rubber Duck Pass: no tag changed in the close. The shakeouts' tag coverage was 5/5 on axis C and 29/29 on axis A, with no dead tags.
+
+Installed: CFBundleVersion 1794463909.
