@@ -280,14 +280,24 @@ ipcMain.on("native:signal", (event, record) => {
   checkRecord(rec);
 });
 
-// F7. Electron reads app.getName() from package.json's `productName`,
-// falling back to `name`. This package.json's `name` is
-// `substrate-ui-e2e`, which is the ORM registry name for the test
-// harness — not what the user sees. Force the runtime name to
-// `Substrate` before any `app.getPath('logs' | 'userData' | ...)`
-// call so the paths land under `~/Library/Logs/Substrate/`,
-// `~/Library/Application Support/Substrate/`, etc.
-app.setName(process.env.SUBSTRATE_HOME ? "Substrate Dev" : "Substrate");
+// Sprint 489: which install this is. electron/identity.json holds one record per install (sprint
+// 488); the build writes the record's name into the packaged package.json as `productName`, and
+// Electron's first app.getName() returns it. In source mode package.json has no `productName`
+// (its `name` is `substrate-ui-e2e`), and the record is the working install's.
+type Identity = { productName: string; appId: string; executableName: string; store: string; scheme: string };
+const IDENTITIES: Record<string, Identity> = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "electron", "identity.json"), "utf8"));
+const IDENTITY: Identity = Object.values(IDENTITIES).find((r) => r.productName === app.getName()) ?? IDENTITIES.substrate;
+
+// F7. Name the app before any `app.getPath('logs' | 'userData' | ...)` call: the data folder, the
+// single-instance lock and the logs all follow this name (measured, sprint 489), so the paths land
+// under `~/Library/Logs/<name>/`, `~/Library/Application Support/<name>/`. A run that names its
+// own SUBSTRATE_HOME (a gate, `npm run electron`) stays "Substrate Dev".
+app.setName(process.env.SUBSTRATE_HOME ? "Substrate Dev" : IDENTITY.productName);
+
+/** The store this install's server uses: the record's, unless SUBSTRATE_HOME names one. The
+ * working install's record is the kernel's default `~/.substrate`, so its server is started as before. */
+const STORE_ENV: Record<string, string> =
+  process.env.SUBSTRATE_HOME || IDENTITY.store === ".substrate" ? {} : { SUBSTRATE_HOME: path.join(os.homedir(), IDENTITY.store) };
 
 // UI sprint 107. A run that names its own SUBSTRATE_HOME (a test gate, `npm run electron`) keeps
 // ALL of its state under that root: logs and the Chromium profile too. On macOS app.getPath('logs')
@@ -522,6 +532,7 @@ function spawnServer() {
       PYTHONUNBUFFERED: "1",
       PYTHONDONTWRITEBYTECODE: "1",
       SUBSTRATE_PARENT_PID: String(process.pid),
+      ...STORE_ENV,
       // The trace (item 2): the server writes server.jsonl into this launch's folder.
       SUBSTRATE_BOOT_ID: BOOT_ID,
       ...(trace.dir ? { SUBSTRATE_TRACE_DIR: trace.dir } : {}),
@@ -611,7 +622,9 @@ function pollHealth(port, deadline) {
   });
 }
 
-function forwardDeepLink(url) {
+function forwardDeepLink(raw) {
+  // The window resolves `substrate://` links; an install with its own scheme passes them on in that form.
+  const url = String(raw).replace(new RegExp("^" + IDENTITY.scheme + "://", "i"), "substrate://");
   // The kind only: a link's path names a record or session, which the window resolves (E1).
   const kind = /^substrate:\/\/record\//i.test(url) ? DeepLinkReceivedLinkKind.RECORD : /^substrate:\/\/session\//i.test(url) ? DeepLinkReceivedLinkKind.SESSION : DeepLinkReceivedLinkKind.UNKNOWN;
   traceEmit(Signal.DEEP_LINK_RECEIVED, { link_kind: kind });
@@ -735,7 +748,7 @@ function createWindow(cause: WindowOpenedCause) {
 // installer, an Info.plist entry via electron-forge completes the
 // system-registered handshake; dev-mode setAsDefaultProtocolClient
 // is enough for the exit test that emits open-url from main.
-app.setAsDefaultProtocolClient("substrate");
+app.setAsDefaultProtocolClient(IDENTITY.scheme);
 app.on("open-url", (event, url) => {
   event.preventDefault();
   forwardDeepLink(url);
@@ -754,7 +767,7 @@ if (!singleInstanceLock) {
       if (!GATE_ISOLATED) win.focus();
     }
     for (const arg of argv) {
-      if (typeof arg === "string" && arg.startsWith("substrate://")) forwardDeepLink(arg);
+      if (typeof arg === "string" && arg.toLowerCase().startsWith(IDENTITY.scheme + "://")) forwardDeepLink(arg);
     }
   });
 }

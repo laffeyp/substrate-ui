@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 489
-status: pending
+status: closed
 phase: second build (roadmap r1), E3
 pass_kind: functional
 ---
@@ -95,3 +95,21 @@ Mutant: the hardcoded `setName("Substrate")` put back puts Next's log lines into
 - [x] Artifact contract is gradable.
 - [x] Observation contract present, with both installs running.
 - [x] One file.
+
+## close
+
+`electron/main.ts` reads `identity.json`, finds its record by Electron's first `app.getName()` (the packaged `productName`; source mode falls to `substrate`), sets that name before any path lookup ("Substrate Dev" when `SUBSTRATE_HOME` is set, as before), passes `SUBSTRATE_HOME` = `~/<store>` to its server when the record's store is not `.substrate`, registers the record's scheme, accepts it from a second launch, and rewrites it to `substrate://` before the window gets the link. New gate `harness/shakeout/two_installs.ts` (a second file, beyond the card's one).
+
+Results (logs `runs/packaged/sprint-489-20261111-231641/`; `test:unit` 0, `pack:dev` 0, `pack:next` 0), with the working install open (build 1794463909, pid 8228):
+
+- `two_installs` on the Next bundle: ok. Next opened through `open`, held `SingletonLock` in `~/Library/Application Support/Substrate Next`, ran one deterministic turn whose session is under `~/.substrate-next/sessions/`, gained one app boot in `~/Library/Logs/Substrate Next/substrate.log`, wrote `APP_BOOTED` packaged true, home_kind default, and quit by name ("Substrate Next"). The working install kept pid 8228; its 129 sessions were unchanged, none added; its log gained no app boot.
+- Mutant (`setName("Substrate")` put back, Next rebuilt): fails, "no server up" in Next's log: the mutant took the working install's name, found its lock held, and quit; it wrote no boot into the working install's log.
+- `lifecycle_gates` on the working bundle and on the Next bundle: all passed (F5's `substrate://` link reaches both).
+- Next's last three traces: one `APP_BOOTED`, one `SERVER_STARTED`, closed by `APP_QUIT_COMPLETED`, no `INVARIANT_BROKEN`.
+- Screenshot `next-window.png`: the Next window, named Substrate Next, its own recent workspaces under `~/.substrate-next`. A screen capture of both windows at once was refused: this shell has no Screen Recording permission (runbook troubleshooting).
+
+Found on the way, in the gate: Playwright's launch leaves no `Singleton*` files (its debugging switches), and `SingletonLock` is a symlink to `<host>-<pid>` that `existsSync` reports absent; the gate launches with `open` and reads the lock with `lstat`.
+
+Found, open: the picker's shared-sandbox row is the fixed text `~/.substrate/sandbox` (`web/app/derive/picker.ts` line 16), a token each server resolves to its own store (`server.py` lines 1909–1914). In the Next install the data is `~/.substrate-next/sandbox`, but the row names the working install's folder. Both installs' windows also read "substrate" in the top bar.
+
+Rubber Duck Pass: narrated from Next's trace: `APP_BOOTED` (packaged true, home_kind default, gate_isolated true) opened each launch, the server's `SERVER_STARTED` followed once, `APP_QUIT_COMPLETED` closed it. Observation (payload anomaly): `APP_BOOTED` cannot say which install spoke; sprint 490 adds `app_name`, recorded. Observation (tone trace): the sandbox row's text, recorded above.
