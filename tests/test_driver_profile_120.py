@@ -88,7 +88,9 @@ def test_the_daemon_builds_claude_with_the_profile(app: server.App) -> None:
         "--dangerously-skip-permissions",
     )
     assert responder.system_channel
-    assert responder._argv("P", "")[-3:] == ["--system-prompt", "", "P"]
+    # Kernel K348: the prompt goes on standard input, after the system text's flag.
+    argv, stdin_text = responder._call("P", "")
+    assert argv[-2:] == ["--system-prompt", ""] and stdin_text == "P"
 
 
 def test_the_daemon_builds_codex_to_run_outside_a_git_repo(app: server.App) -> None:
