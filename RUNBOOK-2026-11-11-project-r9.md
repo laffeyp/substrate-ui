@@ -1,6 +1,6 @@
 # RUNBOOK — substrate-ui
 
-*2026-11-11, round 9. Earlier rounds: `process/archive/` and `process/planning/2026-10-11-before-distribution/superseded/`.*
+*2026-11-11, round 9. Earlier rounds: `process/archive/` and `process/planning/2026-10-11-before-distribution/superseded/`. Where this runbook and `../sdd-kit-3/AGENTS.md` differ, `AGENTS.md` governs.*
 
 | Owner | the Architect (Peter Laffey) |
 | --- | --- |
@@ -9,7 +9,7 @@
 | Scope | `substrate-ui/` only |
 | Depends on | `../substrate/` |
 | Workspace | `../README.md` says what every item around this repo is and where moved items went |
-| Methodology | `../sdd-kit-3/` |
+| Methodology | `../sdd-kit-3/` (`../sdd-kit-4/` is not in use) |
 
 ---
 
@@ -172,14 +172,14 @@ open /Applications/Substrate.app
 
 ## 5A. Build and install the test install
 
-The test install is Substrate Next: its own name, bundle id (`com.greenrosesystems.substrate.next`), store (`~/.substrate-next`), data folder, logs (`~/Library/Logs/Substrate Next`) and link scheme (`substrate-next://`), from its record in `electron/identity.json`. It runs beside `/Applications/Substrate.app`. Run from this repo's root; per-command logs go to `runs/packaged/<sprint-id>-<stamp>/NN-<name>.log`. `$APP = "$PWD/dist-electron-next/mac-arm64/Substrate Next.app"`.
+The test install is Substrate Next: its own name, bundle id (`com.greenrosesystems.substrate.next`), store (`~/.substrate-next`), data folder, logs (`~/Library/Logs/Substrate Next`) and link scheme (`substrate-next://`), from its record in `electron/identity.json`. It runs beside `/Applications/Substrate.app`; no step quits or changes that app. Run from this repo's root; per-command logs go to `runs/packaged/<sprint-id>-<stamp>/NN-<name>.log`. `$APP = "$PWD/dist-electron-next/mac-arm64/Substrate Next.app"`.
 
 | # | Command | Exit | Notes |
 | --- | --- | --- | --- |
 | 1–8 | Steps 1–8 of "Build and install — no Apple" | 0 | Unchanged. |
-| 9 | `npm run pack:next` | 0 | Builds with `SUBSTRATE_INSTALL=next` into `dist-electron-next/`, then renames the bundle to `Substrate Next.app`. |
+| 9 | `npm run pack:next` | 0 | Builds with `SUBSTRATE_INSTALL=next` into `dist-electron-next/`, then renames the bundle to `Substrate Next.app` (electron-builder names it after its executable, `Substrate`). |
 | 10–16 | Steps 10–16 of "Build and install — no Apple" with `$APP` as above | 0 | The gates launch the bundle with their own `SUBSTRATE_HOME`, as for the working bundle. |
-| 17 | `osascript -e 'tell application "Substrate Next" to quit'` | 0 or non-zero | Quits only the test install. Wait up to 60 s for its pid to go. |
+| 17 | `osascript -e 'tell application "Substrate Next" to quit'` | 0 or non-zero | Quits only the test install. Wait up to 60 s for its pid to go. Before 17a: while Substrate Next runs, the bundle 17a opens finds its lock held and quits. |
 | 17a | `npx tsx harness/shakeout/two_installs.ts` | 0 | Needs the working install running. Opens the new bundle beside it and checks that each keeps to its own lock, store and logs. |
 | 18 | `mv "/Applications/Substrate Next.app" ~/.Trash/"Substrate Next-<old-CFBundleVersion>-replaced-<stamp>.app"` | 0 | Only when it existed. |
 | 19 | `ditto "$APP" "/Applications/Substrate Next.app" && xattr -dr com.apple.quarantine "/Applications/Substrate Next.app"` | 0 | Install. |
@@ -310,6 +310,7 @@ Ship a new build with a higher `CFBundleVersion`. A notary ticket cannot be with
 ## 14. References
 
 - `scripts/release.sh`, `scripts/fetch-python-runtime.sh`, `electron-builder.config.js`, `package.json`, `electron/main.ts`, `WORKING_AGREEMENT.md`
+- `process/sprints/sprint-190-build-release-runbook.md`: the sprint that wrote "Build and install — no Apple"
 
 ---
 
