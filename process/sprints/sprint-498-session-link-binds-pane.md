@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 498
-status: active
+status: closed
 phase: continuing a session (roadmap 2026-11-12-continue-a-session r1, found in use)
 pass_kind: functional
 ---
@@ -57,3 +57,7 @@ A session opened by its link shows its workspace.
 - The continued session `s_52bd6e73d1224d5cb6d04830` is intact: its manifest names the Agent Orchestration folder, status parked, and Records lists it under that folder.
 
 Installing into Substrate Next quits it, which ends the session at its current point (kept on disk, reopenable); held until the Architect says.
+
+## close
+
+Substrate Next rebuilt (`pack:next` 0); `lifecycle_gates` on the bundle all passed, F5's chip naming its folder; installed as build 1794548498, the old one to the Trash by version. `open substrate-next://session/s_52bd6e73d1224d5cb6d04830`: the trace reads `DEEP_LINK_RECEIVED` (`session`), `SESSION_ATTACH_STARTED`, `PANE_BOUND` (binding `session`, how `attach`), the Records path's bind, which sprint 496's handler never reached. The session shows ended: the quit before the install ended it; it stays in Records under Agent Orchestration and resumes on the next message.
