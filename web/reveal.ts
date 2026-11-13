@@ -12,6 +12,7 @@ import * as React from "react";
 import * as ReactDOMClient from "react-dom/client";
 import { BrowserSubstrateClient, PaneRegistry } from "./vm";
 import { mirrorSnapshot, sendCommand } from "./app/state/shell";
+import { openSession } from "./app/state/records";
 import { App } from "./app/App";
 import { emit as emitSignal, VOCAB_VERSION } from "./vm/instrumentation/sdd";
 import { PaneOpenedCause, RecordOpenedHow, Signal, WindowFaultedSource } from "./vm/signals.gen";
@@ -113,10 +114,23 @@ function boot(): void {
   // plain-browser tabs no-op.
   if (nativeBridge?.onDeepLink) {
     nativeBridge.onDeepLink((url) => {
-      // Sprint 496: a session link opens that session, as the Records page and `?session=` do.
+      // Sprint 496: a session link opens that session. Sprint 498: as the Records page opens one,
+      // through `openSession`, so the focused pane is bound to the session's own folder, shape and
+      // name before the attach (attached alone, the pane stayed unbound: its workspace chip read
+      // "⌥ —").
       const session = url.match(/^substrate:\/\/session\/(.+)$/);
       if (session) {
-        controller.attachExisting(decodeURIComponent(session[1])).catch(() => undefined);
+        const id = decodeURIComponent(session[1]);
+        fetch(`/api/session/${encodeURIComponent(id)}`)
+          .then((r) => (r.ok ? r.json() : null))
+          .then((m: { name?: string | null; driver?: string | null; workspace?: string | null; workspace_shape?: string | null; created_at?: number } | null) => {
+            if (!m) return;
+            openSession({
+              sessionId: id, name: m.name ?? id, driver: m.driver ?? "", status: "live",
+              workspacePath: m.workspace ?? null, workspaceShape: m.workspace_shape ?? null, createdAt: m.created_at ?? 0,
+            });
+          })
+          .catch(() => undefined);
         return;
       }
       const match = url.match(/^substrate:\/\/record\/(.+)$/);

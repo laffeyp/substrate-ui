@@ -114,11 +114,13 @@ async function f6AndF5(): Promise<void> {
     ).then(() => true, () => false);
     check(attached, `F5 deep link attached the record and streamed its events (${launched.name})`);
 
-    // F5, sprint 496: a session link attaches that session.
+    // F5, sprint 496: a session link attaches that session; sprint 498: and binds the pane to its
+    // folder, so the workspace chip names it.
+    const wsDir = scratchDir("lifecycle-f5-ws-");
     const created = await fetch(`http://127.0.0.1:${port}/api/session`, {
       method: "POST",
       headers: { Origin: `http://127.0.0.1:${port}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ driver: "deterministic" }),
+      body: JSON.stringify({ driver: "deterministic", workspace: wsDir }),
     }).then((r) => r.json()) as { session_id: string };
     const sid = created.session_id;
     await app.evaluate(({ app: a }, u) => { a.emit("open-url", { preventDefault() { /* test */ } }, u); }, "substrate://session/" + encodeURIComponent(sid));
@@ -128,6 +130,13 @@ async function f6AndF5(): Promise<void> {
       { timeout: 15_000 },
     ).then(() => true, () => false);
     check(opened, `F5 a session link attached the session (${sid})`);
+    const chip = await win2.waitForFunction(
+      (leaf) => (document.querySelector(".hover-top-bar-ws-chip")?.textContent ?? "").includes(leaf),
+      wsDir.split("/").pop() ?? wsDir,
+      { timeout: 15_000 },
+    ).then(() => true, () => false);
+    const chipText = await win2.evaluate(() => document.querySelector(".hover-top-bar-ws-chip")?.textContent ?? "");
+    check(chip, `F5 the pane's workspace chip names the session's folder (${chipText})`);
   } finally {
     await app.close().catch(() => undefined);
   }
