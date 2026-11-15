@@ -15,3 +15,9 @@
 | S9 | A pane rebound to another session: its editor shows the new session's files, none of the old | `editor_rebind_pane` | tabs kept across rebind |
 
 The editor gates join `npm run gates:electron` when every row passes.
+
+## Progress
+
+- S1 `editor_two_panes`: passes from source and on bundle 1794704… (sprint 500 run, `runs/packaged/sprint-500-*`); mutant fails.
+- S3 `editor_focus_switches`: passes from source and on the bundle. Two sessions on large fixtures (14 files over folders three to five deep, two 16,724-line files); pane 1 four tabs, pane 2 three tabs with its files column folded; ten switches, each read from the DOM, the pixel anchor and its EDITOR_DRAWN record, all agreeing. Screenshot of switch 10 read: pane 2 shows its three tabs, `long_two.txt` shown, files column folded. Mutant (one store for every pane): fails, pane 2's tree never draws its folders. Shared drivers: `harness/shakeout/lib/multipane.ts`.
+- S2, S4–S9: not yet written.
