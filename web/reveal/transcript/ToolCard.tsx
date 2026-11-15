@@ -12,8 +12,8 @@ import { defaultOpen } from "../../vm/tool_output_mode";
 import { useToolOutputMode } from "./useToolOutputMode";
 import { emit as emitSignal } from "../../vm/instrumentation/sdd";
 import { Signal } from "../../vm/signals.gen";
-import { ToolText } from "./ToolText";
-import { argFormat, outputFormat, shellResult, splitArg } from "../tool_format";
+import { SummaryText, ToolText } from "./ToolText";
+import { argFormat, outputFormat, shellResult, splitArg, summaryOf } from "../tool_format";
 
 const hasResultText = (r: TranscriptRow | undefined) => !!r && typeof r.output === "string" && r.output.length > 0;
 
@@ -79,7 +79,8 @@ const ToolCardInner: React.FC<Props> = ({ call, result, progressText, progressEo
   }, [openKey, toggle.generation, paneId, sessionId, call.seq]);
 
   const toolName = call.toolName ?? "";
-  const toolPreview = call.args?.[0] ?? "";
+  // Sprint 509: the summary's text and its format, without a harness call's `key=`.
+  const summary = summaryOf(toolName, call.args ?? []);
   const status = toolRunning ? "running" : failed ? "err · " + (result?.error ?? "") : "ok";
   // Caret convention: ▸ points right when the card is closed (content
   // hidden), ▾ points down when the card is open (content flows below).
@@ -151,7 +152,7 @@ const ToolCardInner: React.FC<Props> = ({ call, result, progressText, progressEo
           <span>
             <span style={{ color: "#9aa0a8", fontFamily: "ui-monospace,'SF Mono',Menlo,monospace" }}>{toolName}</span>
             {" "}
-            <span style={{ color: "#b9bec5", fontFamily: "ui-monospace,'SF Mono',Menlo,monospace" }}>{toolPreview}</span>
+            <span style={{ fontFamily: "ui-monospace,'SF Mono',Menlo,monospace" }}><SummaryText text={summary.text} format={summary.format} /></span>
           </span>
         </span>
         <span data-tool-status="1" style={{ flex: "none", marginLeft: 6, maxWidth: "40%", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>

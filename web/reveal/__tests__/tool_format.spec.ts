@@ -4,7 +4,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { argFormat, jsonText, outputFormat, pathOf, splitArg, splitNumbered, needsTerminal, shellResult } from "../tool_format";
+import { argFormat, jsonText, outputFormat, pathOf, splitArg, splitNumbered, needsTerminal, shellResult, summaryOf } from "../tool_format";
 
 test("a call's file, from a harness call and a kernel call", () => {
   assert.deepEqual(splitArg("file_path=/x/a.py"), { key: "file_path", value: "/x/a.py" });
@@ -50,4 +50,14 @@ test("a kernel bash result is read apart; other output is not", () => {
   assert.equal(shellResult("Bash", "plain printed text"), null);
   assert.equal(shellResult("read_file", '{"stdout": "a"}'), null);
   assert.equal(shellResult("bash", '{"ok": true}'), null);
+});
+
+test("a closed card's summary: a command, a path, a first arg, never a key", () => {
+  assert.deepEqual(summaryOf("bash", ["ls -la"]), { text: "ls -la", format: "shell" });
+  assert.deepEqual(summaryOf("Bash", ["command=grep -rn \"x\" src", "description=Find x"]), { text: "grep -rn \"x\" src", format: "shell" });
+  assert.deepEqual(summaryOf("Read", ["file_path=/w/src/models.py", "limit=40"]), { text: "/w/src/models.py", format: "path" });
+  assert.deepEqual(summaryOf("read_file", ["alpha/a/b/models.py"]), { text: "alpha/a/b/models.py", format: "path" });
+  assert.deepEqual(summaryOf("Grep", ["path=src", "pattern=class Cart"]), { text: "class Cart", format: "text" });
+  assert.deepEqual(summaryOf("Glob", ["pattern=**/*.ts"]), { text: "**/*.ts", format: "text" });
+  assert.deepEqual(summaryOf("delegate", []), { text: "", format: "text" });
 });

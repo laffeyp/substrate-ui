@@ -101,3 +101,19 @@ export function shellResult(toolName: string, output: string): { exit: number | 
   if (typeof r.stdout !== "string" && typeof r.stderr !== "string") return null;
   return { exit: typeof r.exit === "number" ? r.exit : null, stdout: typeof r.stdout === "string" ? r.stdout : "", stderr: typeof r.stderr === "string" ? r.stderr : "" };
 }
+
+/** What a closed card's summary shows after the tool's name (sprint 509): a shell call's command, a file tool's path,
+ *  any other call's first arg, each without the `key=` a harness call carries (before, a Claude Code `Bash` card read
+ *  `command=ls -la`). */
+export function summaryOf(toolName: string, args: readonly string[]): { text: string; format: "shell" | "path" | "text" } {
+  if (SHELLS.has(toolName)) {
+    const cmd = args.map(splitArg).find((a) => a.key === "command" || a.key === null);
+    if (cmd) return { text: cmd.value, format: "shell" };
+  }
+  const path = READS.has(toolName) || WRITES.has(toolName) || EDITS.has(toolName) ? pathOf(toolName, args) : null;
+  if (path) return { text: path, format: "path" };
+  // A search shows what it looks for (`Grep`, `Glob`), not where.
+  const pattern = args.map(splitArg).find((a) => a.key === "pattern");
+  if (pattern) return { text: pattern.value, format: "text" };
+  return { text: args.length ? splitArg(args[0]).value : "", format: "text" };
+}
