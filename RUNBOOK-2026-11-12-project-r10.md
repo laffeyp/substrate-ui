@@ -5,7 +5,7 @@
 | Owner | the Architect (Peter Laffey) |
 | --- | --- |
 | Last updated | 2026-11-12 |
-| Last run end to end | 2026-11-11, 22:03 — 22:16, no-Apple build + install, steps 1 — 20 all 0, build 1794463909; logs at `runs/packaged/sprint-486-20261111-220313/` (sprint 486). Test install: 2026-11-12, steps 1 — 20 and 17a all 0, Substrate Next build 1794474626; logs at `runs/packaged/sprint-495-20261112-005914/` (sprint 495). |
+| Last run end to end | 2026-11-11, 22:03 — 22:16, no-Apple build + install, steps 1 — 20 all 0, build 1794463909; logs at `runs/packaged/sprint-486-20261111-220313/` (sprint 486). Test install: 2026-11-14, steps 1 — 20 and 17a all 0, Substrate Next build 1794724726 on kernel `6b92f483`; logs at `runs/packaged/sprint-351-20261114-223015/` (sprints 352, 353, 508). |
 | Scope | `substrate-ui/` only |
 | Depends on | `../substrate/` |
 | Workspace | `../README.md` says what every item around this repo is and where moved items went |
