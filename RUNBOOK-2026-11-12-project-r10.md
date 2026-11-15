@@ -207,7 +207,7 @@ open -g "/Applications/Substrate Next.app"
 
 ## 5B. Continue a Claude Code session in Substrate Next
 
-A Claude Code session continues as a Substrate Next session: the server reads the session's file from its last compaction summary on and gives the new session that text as its opening context (kernel session vocabulary § AD; app sprints 494, 496, 497). Substrate Next must be running. `$SESSION_FILE` is `~/.claude/projects/<project folder>/<session id>.jsonl`; `$WORKSPACE` is the folder the session works in.
+A Claude Code session continues as a Substrate Next session: the server reads the session's file from its last compaction summary on, and the new session writes those turns at open as its earliest history (kernel session vocabulary § AD, § AF; kernel sprint 351; app sprints 494, 496, 497). Substrate Next must be running. `$SESSION_FILE` is `~/.claude/projects/<project folder>/<session id>.jsonl`; `$WORKSPACE` is the folder the session works in.
 
 | # | Command | Exit | Notes |
 | --- | --- | --- | --- |
@@ -222,7 +222,7 @@ A Claude Code session continues as a Substrate Next session: the server reads th
 - Its `window-1.jsonl`: `SESSION_ATTACH_STARTED` and `STREAM_ATTACHED` for the session, then `PANE_DRAWN` with `state` `session` and `connection` `connected`.
 - `$WORKSPACE` holds no new `.git` when it had none.
 
-Every turn sends the CLI the whole opening text again, so a long conversation makes each turn larger until the session's compaction trims its history.
+The imported turns are history: the session's compaction drops the oldest of them as the conversation grows, as it drops its own.
 
 ---
 
