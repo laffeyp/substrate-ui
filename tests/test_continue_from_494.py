@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 # Copyright (C) 2026 Peter Laffey
-"""Sprint 494: the server continues a Claude Code session (kernel session vocabulary § AD).
+"""Sprint 494: the server continues a Claude Code session (kernel session vocabulary § AD, § AF).
 
 `POST /api/session` with `continue_from: {"tool": "claude_code", "path": <a session file>}`
 reads the file from its last compaction: that compaction's summary, then every message after it,
@@ -102,21 +102,29 @@ def test_a_session_created_to_continue_opens_with_it(app: server.App, tmp_path: 
         }
     ]
     events = list(read_record(app.registry.get(sid).record_root, resolve_blobs=True))  # type: ignore[union-attr]
-    frags = [
-        e["payload"]
+    # Kernel K351 (session vocabulary § AF): the conversation is the session's earliest turns.
+    imported = [
+        e["payload"]["text"]
         for e in events
-        if e["kind"] == "PromptFragment" and e["payload"]["source"] == "continued_session"
+        if e["kind"] == "UserMessage" and e["payload"].get("slash_source") == "continued"
     ]
-    assert len(frags) == 1
-    assert (
-        frags[0]["provenance"]["tool"] == "claude_code"
-        and frags[0]["provenance"]["summary_line"] == 7
+    assert imported == [
+        "SECOND SUMMARY: the editor roadmap closed; the second build is next.",
+        "List the folder.",
+        "Now continue in Substrate.",
+    ]
+    # The deterministic driver's window is 4,096 tokens and the session-open text fills most of
+    # it, so the first turn's compaction drops the imported turns, oldest first, and keeps the
+    # live message. The kernel's tests pin a window that holds them (K351).
+    first_imported = min(
+        e["seq"] for e in events if e["payload"].get("slash_source") == "continued"
     )
+    live = next(e for e in events if e["kind"] == "UserMessage" and e["payload"]["turn_index"] == 0)
+    (compacted,) = [e["payload"] for e in events if e["kind"] == "TranscriptCompacted"]
+    assert compacted["dropped_seq_range"][0] == first_imported
+    assert compacted["kept_seq_start"] == live["seq"]
     prompt = next(e["payload"]["text"] for e in events if e["kind"] == "PromptComposed")
-    assert "This session continues a conversation held in claude_code." in prompt
-    assert "USER: SECOND SUMMARY: the editor roadmap closed; the second build is next." in prompt
-    assert "HARNESS TOOL Bash: args={'command': 'ls'}" in prompt
-    assert "HARNESS RESULT(fail): File does not exist." in prompt
+    assert "USER: What is next?" in prompt
     assert "PRIVATE THINKING" not in prompt and "FIRST SUMMARY" not in prompt
 
 
