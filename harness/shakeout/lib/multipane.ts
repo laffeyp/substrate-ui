@@ -87,6 +87,10 @@ export async function openFile(win: Page, root: string, rel: string): Promise<vo
 export interface Step { label: string; pane: number; tabs: string[]; active: string | null; anchorSeq: number | null; anchorTabs: number | null; folds: string; shot: string }
 
 export async function read(win: Page, label: string, pane: number, shots: string): Promise<Step> {
+  if (!(await win.locator("[data-editor-view]").first().isVisible().catch(() => false))) {
+    const why = await win.evaluate(() => ({ view: (window as unknown as { __vm?: { activePaneId?: number } }).__vm?.activePaneId, tabs: Array.from(document.querySelectorAll("[data-editor-tab]")).map((e) => e.getAttribute("data-editor-tab")) }));
+    throw new Error(`${label}: the editor is not on screen after it was opened (focused pane ${String(why.view)}; tabs in the DOM ${JSON.stringify(why.tabs)})`);
+  }
   const dom = await win.evaluate(() => {
     const tabs = Array.from(document.querySelectorAll("[data-editor-tab]")).filter((e) => (e as HTMLElement).offsetParent !== null);
     return { tabs: tabs.map((e) => e.getAttribute("data-editor-tab")!), active: tabs.find((e) => e.getAttribute("data-active") === "1")?.getAttribute("data-editor-tab") ?? null };

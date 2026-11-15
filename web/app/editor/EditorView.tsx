@@ -218,8 +218,8 @@ export function workspaceFoot(path: string | null, shape: string | null): string
 }
 
 export function EditorView({ paneId, fontSize, sessionId, workspace, shape }: { paneId: number; fontSize: number; sessionId: string; workspace: string | null; shape: string | null }): React.ReactElement {
+  showEditorFor(paneId, sessionId);
   const editor = editorFor(paneId);
-  showEditorFor(paneId);
   // Sprint 414 (R10): each side column's width and the terminal's height follow a drag of their edge,
   // are kept per mode, and each finished drag is one EDITOR_COLUMN_RESIZED.
   const [sizes, setSizes] = React.useState<EditorSizes>(() => loadSizes("code", storage()));

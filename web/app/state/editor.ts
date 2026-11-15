@@ -95,9 +95,9 @@ export interface EditorState {
 const initial = (): EditorState => ({ treeRows: 0, modifiedDots: 0, folded: { left: false, right: false, bottom: false }, tabs: [], active: null, file: null, bytesForm: {}, bytesCaret: null, language: null, hunks: [], bufferHunks: null, outline: [], caretLine: 1, unsaved: [], mode: null, caretCol: 1, vsBase: null, nanoHelp: false, anchor3: null, conflict: null, find: { search: "", caseSensitive: false, regexp: false, replace: "", wholeWord: false, preserveCase: false, inSelection: false }, findCount: { total: 0, current: 0 }, findFocus: 0, showing: "inspector", leftTab: "files", search: { query: "", replace: "", caseSensitive: false, regexp: false, word: false, include: "", exclude: "", details: false }, searchFocus: 0, quickOpen: 0, recent: [], focusOnOpen: null, reveal: null, treeFindFocus: 0, jump: null, follow: [], followLanded: null, inspector: { outlineRows: 0, hunks: 0, activityRows: 0, historyRows: 0 }, anchor2: null, dock: "bottom", swapped: false, focus: { on: false, before: null }, anchor: null });
 
 const KEY = "__substrateEditors";
-type Stores = { byPane: Map<number, Store<EditorState>>; shown: number; listeners: Set<() => void> };
+type Stores = { byPane: Map<number, Store<EditorState>>; sessionOf: Map<number, string>; shown: number; listeners: Set<() => void> };
 const scope = globalThis as unknown as Record<string, Stores | undefined>;
-const stores: Stores = scope[KEY] ?? (scope[KEY] = { byPane: new Map(), shown: 0, listeners: new Set() });
+const stores: Stores = scope[KEY] ?? (scope[KEY] = { byPane: new Map(), sessionOf: new Map(), shown: 0, listeners: new Set() });
 
 /** The editor state of pane `paneId`, made on first use. */
 export function editorFor(paneId: number): Store<EditorState> {
@@ -111,9 +111,16 @@ export function editorFor(paneId: number): Store<EditorState> {
   return st;
 }
 
-/** The pane whose editor is shown (EditorView, when it renders). Listeners of `editor` hear the switch. */
-export function showEditorFor(paneId: number): void {
-  if (stores.shown === paneId) return;
+/** The pane whose editor is shown, and the session it shows (EditorView, when it renders, before its
+ *  children read the store). A pane bound to another session gets a fresh editor (sprint 500, scenario
+ *  S9: a rebound pane kept the old session's tabs, files of another workspace). Listeners of `editor`
+ *  hear the switch. */
+export function showEditorFor(paneId: number, sessionId: string): void {
+  const was = stores.sessionOf.get(paneId);
+  stores.sessionOf.set(paneId, sessionId);
+  const rebound = was !== undefined && was !== sessionId;
+  if (rebound) stores.byPane.delete(paneId);
+  if (stores.shown === paneId && !rebound) return;
   stores.shown = paneId;
   editorFor(paneId);
   // After the render that asked: a store notified during render would update other components mid-render.
@@ -121,7 +128,7 @@ export function showEditorFor(paneId: number): void {
 }
 
 /** A pane gone: its editor state goes with it. */
-export function dropEditor(paneId: number): void { stores.byPane.delete(paneId); }
+export function dropEditor(paneId: number): void { stores.byPane.delete(paneId); stores.sessionOf.delete(paneId); }
 
 /** The shown pane's editor. */
 export const editor: Store<EditorState> = {
