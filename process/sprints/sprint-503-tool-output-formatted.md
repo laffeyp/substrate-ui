@@ -1,10 +1,10 @@
-# Sprint 502 — Tool output formatted
+# Sprint 503 — Tool output formatted
 
 ```yaml
 ---
-id: 502
+id: 503
 status: pending
-phase: editor features (roadmap 2026-11-14 r1, E4)
+phase: editor features (roadmap 2026-11-14 r2, E5)
 pass_kind: functional
 ---
 ```

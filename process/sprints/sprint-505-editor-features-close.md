@@ -1,10 +1,10 @@
-# Sprint 504 — The editor features' close
+# Sprint 505 — The editor features' close
 
 ```yaml
 ---
-id: 504
+id: 505
 status: pending
-phase: editor features (roadmap 2026-11-14 r1, E6)
+phase: editor features (roadmap 2026-11-14 r2, E7)
 pass_kind: observation
 ---
 ```

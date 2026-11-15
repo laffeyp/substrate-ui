@@ -1,10 +1,10 @@
-# Sprint 503 — A tool's summary shows two or three lines
+# Sprint 504 — A tool's summary shows two or three lines
 
 ```yaml
 ---
-id: 503
+id: 504
 status: pending
-phase: editor features (roadmap 2026-11-14 r1, E5)
+phase: editor features (roadmap 2026-11-14 r2, E6)
 pass_kind: functional
 ---
 ```
