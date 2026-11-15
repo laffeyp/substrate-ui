@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 500
-status: pending
+status: closed
 phase: editor features (roadmap 2026-11-14 r4, E2)
 pass_kind: observation
 ---
@@ -30,3 +30,15 @@ Each gate prints, per pane and step, what the DOM, the pixels and the trace each
 ## done criteria
 
 The editor's multi-pane behaviour is tested by gates that run with every chained suite run, and their output says which pane showed what.
+
+## close
+
+Nine scenarios, six gates (`editor_two_panes`, `editor_one_session_two_panes`, `editor_focus_switches`, `editor_unsaved_per_pane`, `editor_find_and_close`, `editor_follow_per_pane`), shared drivers in `harness/shakeout/lib/multipane.ts`, the matrix in `SCENARIOS-2026-11-14-multi-pane.md`. Each step prints what the DOM, the pixel anchor and the trace say; each scenario's mutant fails its gate.
+
+Bugs found and fixed: a pane rebound to another session kept the old tabs (S9); a send from pane 1 left its saved file marked unsaved when another pane's editor was last shown (S5); `EDITOR_SAVED_FOR_SEND` from a pane with its editor closed broke S11 (vocabulary 0.70, P-0.70-S11-SEND).
+
+All 48 editor gate files on bundle 1794705263 (`runs/packaged/sprint-500-all-20261114-171155/`): 45 pass, two are captures not run, and `editor_large_text` fails: it reads `LinesView`, which no file reaches since sprint 471 (the backlog's retired large-file views); it stays out of the chained suite. The 45 join `npm run gates:electron`.
+
+Installed into Substrate: 1794705263 replaced 1794703199; `APP_BOOTED` app_name Substrate, home_kind default, vocabulary 0.70. Substrate Next ran throughout (pid 89496).
+
+Rubber Duck Pass: one observation, resolved here: the S8 mutant passed at first, since both scripted sessions put their calls at the same seqs; the gate now offsets session A's.
