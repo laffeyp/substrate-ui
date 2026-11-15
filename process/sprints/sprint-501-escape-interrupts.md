@@ -4,7 +4,7 @@
 ---
 id: 501
 status: pending
-phase: editor features (roadmap 2026-11-14 r3, E3)
+phase: editor features (roadmap 2026-11-14 r4, E3)
 pass_kind: functional
 ---
 ```

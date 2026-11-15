@@ -4,7 +4,7 @@
 ---
 id: 500
 status: pending
-phase: editor features (roadmap 2026-11-14 r3, E2)
+phase: editor features (roadmap 2026-11-14 r4, E2)
 pass_kind: observation
 ---
 ```

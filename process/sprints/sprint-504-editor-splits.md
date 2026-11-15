@@ -1,10 +1,10 @@
-# Sprint 503 — Splitting the editor
+# Sprint 504 — Splitting the editor
 
 ```yaml
 ---
-id: 503
+id: 504
 status: pending
-phase: editor features (roadmap 2026-11-14 r3, E5)
+phase: editor features (roadmap 2026-11-14 r4, E6)
 pass_kind: functional
 ---
 ```
