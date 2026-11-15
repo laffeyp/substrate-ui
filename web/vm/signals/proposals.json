@@ -1582,6 +1582,26 @@
       "rationale": "A plain workspace's changes are its repositories' changes; the trace says it read them and how many.",
       "ratified": true,
       "ratified_by": "agent-resolved 2026-11-14, sprint 502; grounds: project — the user entries of 2026-11-14 on change marks; SDD — hard rule 2, grammar Layer 2; practice — VS Code's Source Control lists each repository found in a multi-repository folder"
+    },
+    {
+      "id": "P-0.72-MARKDOWN-SHOWN",
+      "kind": "NEW_TAG_PROPOSED",
+      "layer": 1,
+      "element": "EDITOR_MARKDOWN_SHOWN (form rendered | source)",
+      "source": "roadmap 2026-11-14-editor-features r4 E5, sprint 503; the Architect, 2026-11-14: ⌘-click a Markdown link; a rendered view from the tab's menu",
+      "rationale": "The trace says when a Markdown file is shown rendered and when as source, so a gate can pair the switch with what the screen draws.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-14, sprint 503; grounds: project — the user entries of 2026-11-14, E1 (no addresses in the trace); SDD — hard rule 2, grammar Layers 1–2; practice — VS Code: ⌘-click follows a link in the editor, a click in the Markdown preview"
+    },
+    {
+      "id": "P-0.72-LINK-FOLLOWED",
+      "kind": "NEW_TAG_PROPOSED",
+      "layer": 1,
+      "element": "EDITOR_LINK_FOLLOWED (kind, view, found); EDITOR_FILE_OPENED.how link",
+      "source": "roadmap 2026-11-14-editor-features r4 E5, sprint 503; the Architect, 2026-11-14: ⌘-click a Markdown link; a rendered view from the tab's menu",
+      "rationale": "A followed link is a person's act with three outcomes the screen alone cannot tell apart from a missed click; the kind and whether its target was found reconstruct it without its address.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-14, sprint 503; grounds: project — the user entries of 2026-11-14, E1 (no addresses in the trace); SDD — hard rule 2, grammar Layers 1–2; practice — VS Code: ⌘-click follows a link in the editor, a click in the Markdown preview"
     }
   ]
 }

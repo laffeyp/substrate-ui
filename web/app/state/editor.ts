@@ -20,6 +20,8 @@ export interface EditorState {
   /** The open files, by workspace path, in tab order, and the one shown (sprint 419). */
   tabs: string[];
   active: string | null;
+  /** Sprint 503: the Markdown tabs shown rendered, switched from the tab's menu; a file opens as source. */
+  rendered: string[];
   /** What the centre read for the active file, for the inspector (sprint 422): its facts, its hunks
    *  against the base, and its outline from the syntax tree; null before the read lands. */
   file: { path: string; size: number; modified: number; encoding: string | null; lineEndings: string | null; text: string | null } | null;
@@ -92,7 +94,7 @@ export interface EditorState {
 // (files of another session's workspace, which do not open). A pane's editor reads and writes
 // `editorFor(paneId)`. `editor` is the store of the pane whose editor is shown, for callers that act on
 // the shown editor and hold no pane (the bindings' hooks, quick open, the footer).
-const initial = (): EditorState => ({ treeRows: 0, modifiedDots: 0, folded: { left: false, right: false, bottom: false }, tabs: [], active: null, file: null, bytesForm: {}, bytesCaret: null, language: null, hunks: [], bufferHunks: null, outline: [], caretLine: 1, unsaved: [], mode: null, caretCol: 1, vsBase: null, nanoHelp: false, anchor3: null, conflict: null, find: { search: "", caseSensitive: false, regexp: false, replace: "", wholeWord: false, preserveCase: false, inSelection: false }, findCount: { total: 0, current: 0 }, findFocus: 0, showing: "inspector", leftTab: "files", search: { query: "", replace: "", caseSensitive: false, regexp: false, word: false, include: "", exclude: "", details: false }, searchFocus: 0, quickOpen: 0, recent: [], focusOnOpen: null, reveal: null, treeFindFocus: 0, jump: null, follow: [], followLanded: null, inspector: { outlineRows: 0, hunks: 0, activityRows: 0, historyRows: 0 }, anchor2: null, dock: "bottom", swapped: false, focus: { on: false, before: null }, anchor: null });
+const initial = (): EditorState => ({ treeRows: 0, modifiedDots: 0, folded: { left: false, right: false, bottom: false }, tabs: [], active: null, rendered: [], file: null, bytesForm: {}, bytesCaret: null, language: null, hunks: [], bufferHunks: null, outline: [], caretLine: 1, unsaved: [], mode: null, caretCol: 1, vsBase: null, nanoHelp: false, anchor3: null, conflict: null, find: { search: "", caseSensitive: false, regexp: false, replace: "", wholeWord: false, preserveCase: false, inSelection: false }, findCount: { total: 0, current: 0 }, findFocus: 0, showing: "inspector", leftTab: "files", search: { query: "", replace: "", caseSensitive: false, regexp: false, word: false, include: "", exclude: "", details: false }, searchFocus: 0, quickOpen: 0, recent: [], focusOnOpen: null, reveal: null, treeFindFocus: 0, jump: null, follow: [], followLanded: null, inspector: { outlineRows: 0, hunks: 0, activityRows: 0, historyRows: 0 }, anchor2: null, dock: "bottom", swapped: false, focus: { on: false, before: null }, anchor: null });
 
 const KEY = "__substrateEditors";
 type Stores = { byPane: Map<number, Store<EditorState>>; sessionOf: Map<number, string>; shown: number; listeners: Set<() => void> };

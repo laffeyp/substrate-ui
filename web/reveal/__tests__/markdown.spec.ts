@@ -120,3 +120,16 @@ test("mdBlocks: a fence's language may hold +, - and the like (sprint 343, F358)
   assert.strictEqual(odd[0].kind, "p");
   assert.strictEqual(odd.length <= 2, true);
 });
+
+test("sprint 503: links read only when asked; the transcript's parse is unchanged", () => {
+  const line = "See [the guide](docs/guide.md#intro) and `code`.";
+  assert.deepEqual(mdInlines(line), [{ t: "See [the guide](docs/guide.md#intro) and " }, { t: "code", code: true }, { t: "." }]);
+  assert.deepEqual(mdInlines(line, { links: true }), [{ t: "See " }, { t: "the guide", href: "docs/guide.md#intro" }, { t: " and " }, { t: "code", code: true }, { t: "." }]);
+  const blocks = mdBlocks("- [a](a.md)\n- b", { links: true });
+  assert.deepEqual(blocks[0], { kind: "ul", items: [{ inlines: [{ t: "a", href: "a.md" }] }, { inlines: [{ t: "b" }] }] });
+});
+
+test("sprint 503: an image reads as one segment in link mode, not as a stray ! and a link", () => {
+  assert.deepEqual(mdInlines("![alt text](docs/a.png) after", { links: true }), [{ t: "alt text", image: "docs/a.png" }, { t: " after" }]);
+  assert.deepEqual(mdInlines("![alt text](docs/a.png)"), [{ t: "![alt text](docs/a.png)" }]);
+});

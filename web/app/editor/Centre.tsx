@@ -12,6 +12,9 @@
 // changes is kept: a write landing on the record reads the file's facts and hunks again for the inspector
 // but leaves the buffer as typed, and a buffer whose tab is left or closed is kept until it is saved.
 
+import { MarkdownView } from "./MarkdownView";
+import { followLink } from "./links";
+import { linkAt } from "../derive/md_links";
 import * as React from "react";
 import { Compartment, EditorState, RangeSetBuilder, StateEffect, StateField, Transaction, type Extension } from "@codemirror/state";
 import { Decoration, EditorView, GutterMarker, ViewPlugin, WidgetType, gutter, highlightSpecialChars, lineNumbers, type DecorationSet, type ViewUpdate } from "@codemirror/view";
@@ -25,7 +28,7 @@ import { editor as shownEditor, editorFor } from "../state/editor";
 /** The shown pane's editor, for code here that holds no pane (sprint 499). */
 const editor = shownEditor;
 import { emit as emitSignal } from "../../vm/instrumentation/sdd";
-import { ContextMenuOpenedSource, DiffReadBase, EditorChipAddedHow, EditorConflictResolvedChoice, EditorFileOpenedHow, EditorFileSavedCommand, EditorKeyRefusedReason, EditorReplacedScope, Signal, UndoRoutedTo } from "../../vm/signals.gen";
+import { ContextMenuOpenedSource, DiffReadBase, EditorChipAddedHow, EditorConflictResolvedChoice, EditorFileOpenedHow, EditorFileSavedCommand, EditorKeyRefusedReason, EditorLinkFollowedView, EditorMarkdownShownForm, EditorReplacedScope, Signal, UndoRoutedTo } from "../../vm/signals.gen";
 import { isolateHistory, redo, redoDepth, undo, undoDepth } from "@codemirror/commands";
 import { EnvelopeKind } from "../../vm/envelope_kinds.gen";
 import { sendCommand, shell } from "../state/shell";
@@ -36,7 +39,7 @@ import { HISTORY_VIEW, SEND_VIEW, lineHunks } from "../derive/inspector";
 import { setBeforeTurn, type BeforeTurnResult } from "../../vm/session_controller";
 import type { Chip } from "../state/input_bar";
 import { addFrom, addItem, carriesChip, dragChip, fileChip } from "./chips";
-import { openMenu } from "../state/context_menu";
+import { openMenu, type MenuItem } from "../state/context_menu";
 import { StatusLine } from "./StatusLine";
 import { BytesView, formOf, type ByteBuffer } from "./BytesView";
 import { LinesView } from "./LinesView";
@@ -326,7 +329,7 @@ export function closeFile(rel: string, paneId: number): void {
   const tabs = st.tabs.filter((x) => x !== rel);
   // Sprint 473: a closed tab's kept state goes with it.
   if (storeSession) SHOWN.delete(bufferKey(storeSession, rel));
-  editor.set({ tabs, active: st.active === rel ? tabs[Math.min(at, tabs.length - 1)] ?? null : st.active });
+  editor.set({ tabs, rendered: st.rendered.filter((x) => x !== rel), active: st.active === rel ? tabs[Math.min(at, tabs.length - 1)] ?? null : st.active });
   emitSignal(Signal.EDITOR_FILE_CLOSED, { tab_count: tabs.length }, { pane_id: paneId });
 }
 
@@ -337,6 +340,32 @@ const READ_ONLY: Extension[] = [EditorState.readOnly.of(true)];
  *  (`EditorState.lineSeparator`); control bytes draw as markers (`highlightSpecialChars`). */
 const BYTE_TEXT: Extension[] = [EditorState.lineSeparator.of("\n"), highlightSpecialChars()];
 
+const MARKDOWN = /\.(md|markdown|mdx)$/i;
+
+/** Sprint 503: shows a Markdown tab rendered or as its source. */
+export function showMarkdown(rel: string, paneId: number, rendered: boolean): void {
+  const editor = editorFor(paneId);
+  const was = editor.getSnapshot().rendered;
+  if (was.includes(rel) === rendered) return;
+  editor.set({ rendered: rendered ? [...was, rel] : was.filter((x) => x !== rel) });
+  emitSignal(Signal.EDITOR_MARKDOWN_SHOWN, { form: rendered ? EditorMarkdownShownForm.RENDERED : EditorMarkdownShownForm.SOURCE }, { pane_id: paneId });
+}
+
+/** Sprint 503 (the Architect, 2026-11-14: "right click on the top of the tab … Put it in a menu there"): a tab's menu.
+ *  Add to message (sprint 457), close, close the others, and for a Markdown file its rendered form or its source. */
+function tabMenu(rel: string, paneId: number): MenuItem[] {
+  const editor = editorFor(paneId);
+  const st = editor.getSnapshot();
+  const items: MenuItem[] = [addItem(paneId, fileChip(rel))];
+  if (MARKDOWN.test(rel)) {
+    const on = st.rendered.includes(rel);
+    items.push({ label: on ? "show source" : "show rendered", run: () => { editor.set({ active: rel }); showMarkdown(rel, paneId, !on); } });
+  }
+  items.push({ label: "close", run: () => closeFile(rel, paneId) });
+  if (st.tabs.length > 1) items.push({ label: "close others", run: () => { for (const t of editorFor(paneId).getSnapshot().tabs) if (t !== rel) closeFile(t, paneId); } });
+  return items;
+}
+
 /** A tab (sprint 419). Sprint 445 (BLACKBOARD 2026-11-09, the tab row: "the tab's dot means unsaved changes"; × on
  *  hover): an unsaved file's tab draws a dot in the ×'s place, as VS Code and Xcode do, and hovering shows the ×. */
 function Tab({ rel, active, unsaved, paneId }: { rel: string; active: boolean; unsaved: boolean; paneId: number }): React.ReactElement {
@@ -345,7 +374,7 @@ function Tab({ rel, active, unsaved, paneId }: { rel: string; active: boolean; u
   const name = rel.slice(rel.lastIndexOf("/") + 1);
   return (
     <div data-editor-tab={rel} data-active={active ? "1" : "0"} title={rel} onClick={() => editor.set({ active: rel })}
-      onContextMenu={(e) => openMenu(e, ContextMenuOpenedSource.TAB, [addItem(paneId, fileChip(rel))], paneId)}
+      onContextMenu={(e) => openMenu(e, ContextMenuOpenedSource.TAB, tabMenu(rel, paneId), paneId)}
       draggable onDragStart={(e) => dragChip(e, fileChip(rel))} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
       style={{ display: "flex", alignItems: "center", gap: 8, padding: "0 14px", height: "100%", cursor: "pointer", fontSize: 12, whiteSpace: "nowrap", flex: "none",
         background: active ? GROUND : "transparent", color: active ? "#d7dade" : "#9aa0a8", boxShadow: active ? `inset 0 2px 0 ${ACCENT}` : undefined }}>
@@ -384,7 +413,7 @@ const NO_DIFF: { hunks: Hunk[]; base: string } = { hunks: [], base: "none" };
 /** Sprint 473 (the Architect, 2026-11-11: "the text shows immediately whenever you click on a tab … There should be no
  *  lag"): each open tab's editor state and the facts it was read with, by session and path. A click on its tab places
  *  the state before the next paint; the read from disk runs after, to take in a change made outside the editor. */
-const SHOWN = new Map<string, { state: EditorState; file: FileFacts }>();
+const SHOWN = new Map<string, { state: EditorState; file: FileFacts; scroll?: StateEffect<unknown> }>();
 /** The SHA-256 each file had when its buffer read it (sprint 425): a save sends it, and a file changed on
  *  disk since is refused as stale (409). */
 const SHAS = new Map<string, string>();
@@ -634,6 +663,21 @@ export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionI
     editor.set({ unsaved: on ? [...list, rel] : list.filter((x) => x !== rel) });
   };
   const configured = (): Extension[] => [
+    // Sprint 503: ⌘-click on a link follows it (VS Code's editor does the same); on anything else, ⌘-click is the
+    // editor's own (another caret).
+    EditorView.domEventHandlers({
+      mousedown: (e, v) => {
+        if (!e.metaKey || e.button !== 0 || !shown.current) return false;
+        const pos = v.posAtCoords({ x: e.clientX, y: e.clientY });
+        if (pos === null) return false;
+        const line = v.state.doc.lineAt(pos);
+        const target = linkAt(line.text, pos - line.from, MARKDOWN.test(shown.current));
+        if (!target) return false;
+        e.preventDefault();
+        void followLink(target, { paneId, sessionId, file: shown.current, text: v.state.doc.toString(), view: EditorLinkFollowedView.SOURCE });
+        return true;
+      },
+    }),
     CONF.binding.of(bindingExtension(now.current.binding, HOOKS)),
     CONF.look.of(lookTheme(now.current.look, now.current.scheme)),
     CONF.matches.of([]),
@@ -685,8 +729,15 @@ export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionI
     const switched = shown.current !== rel;
     shown.current = rel;
     const root = host.current!.shadowRoot ?? host.current!.attachShadow({ mode: "open" });
+    const keptScroll = switched ? SHOWN.get(key(rel))?.scroll : undefined;
     if (!view.current) view.current = new EditorView({ state: placed, parent: root, root });
     else view.current.setState(placed);
+    // Sprint 503 (found by editor_markdown_links): a tab comes back where it was left, and a file shown for the first
+    // time from its top. Before, the code kept the last file's scroll, so a short tab after a long one opened far down.
+    if (switched) {
+      if (keptScroll) view.current.dispatch({ effects: keptScroll });
+      else view.current.scrollDOM.scrollTop = 0;
+    }
     // Sprint 473: the time to show a different file, from its read asked to its text placed.
     // Sprint 479: written after the render's commit, not inside it. On a return to the editor with a tab already read,
     // this layout effect places the text before App's componentDidUpdate writes EDITOR_OPENED; written at once, the
@@ -725,7 +776,7 @@ export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionI
     if (!prev || !v) return;
     if (unsaved(prev)) BUFFERS.set(key(prev), v.state);
     const kept = SHOWN.get(key(prev));
-    if (kept) SHOWN.set(key(prev), { ...kept, state: v.state });
+    if (kept) SHOWN.set(key(prev), { ...kept, state: v.state, scroll: v.scrollSnapshot() });
   };
   // Sprint 473: a layout effect, so a kept tab's text is placed before the browser paints the click.
   React.useLayoutEffect(() => {
@@ -1027,6 +1078,9 @@ export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionI
   const inBuffer = !!bytesFile && bytesFile.text !== null && shown.current === st.active;
   const asCode = inBuffer && st.active !== null && formOf(st.active) === "text";
   const largeText = !!showing && showing.text === null && !bytesFile;
+  // Sprint 503: the shown Markdown tab drawn rendered, from the buffer's text as it is now.
+  const mdShown = !!st.active && st.rendered.includes(st.active) && !largeText && !bytesFile;
+  const mdText = mdShown ? (activeBuffer?.path() === st.active ? activeBuffer.text() : null) ?? showing?.text ?? null : null;
   return (
     <div data-editor-area="centre" style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, background: GROUND }}>
       <div data-editor-tabs={String(st.tabs.length)} style={{ height: tabRow, flex: "none", background: SUNK, display: "flex", overflowX: "auto", overflowY: "hidden" }}>
@@ -1045,7 +1099,9 @@ export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionI
           onContextMenu={(e) => { const chip = selectionChip(); if (chip) openMenu(e, ContextMenuOpenedSource.CODE, [addItem(paneId, chip)], paneId); }}
           // Sprint 458: a chip's drag is not for the code; stopped here, before the editor's own drop puts its path in the file.
           onDragOverCapture={(e) => { if (carriesChip(e.dataTransfer)) { e.stopPropagation(); e.dataTransfer.dropEffect = "none"; } }}
-          onDropCapture={(e) => { if (carriesChip(e.dataTransfer)) { e.preventDefault(); e.stopPropagation(); } }} style={{ position: "absolute", inset: 0, display: st.active && !largeText && (!bytesFile || asCode) ? "block" : "none" }} />
+          onDropCapture={(e) => { if (carriesChip(e.dataTransfer)) { e.preventDefault(); e.stopPropagation(); } }} style={{ position: "absolute", inset: 0, display: st.active && !largeText && (!bytesFile || asCode) && !mdShown ? "block" : "none" }} />
+        {/* Sprint 503: a Markdown tab switched to its rendered form; the code stays mounted under it, holding the buffer. */}
+        {mdShown && st.active && <MarkdownView key={st.active} text={mdText ?? ""} paneId={paneId} sessionId={sessionId} file={st.active} />}
         {/* A file within the limit waits for its buffer to be placed, so the view mounts (and records its opening) once. */}
         {bytesFile && st.active && (bytesFile.text === null || inBuffer) && <BytesView sessionId={sessionId} path={st.active} size={bytesFile.size} paneId={paneId} buffer={inBuffer ? byteBuffer : undefined} hidden={asCode} />}
         {largeText && st.active && <LinesView sessionId={sessionId} path={st.active} />}

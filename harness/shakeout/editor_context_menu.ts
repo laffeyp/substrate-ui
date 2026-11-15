@@ -142,7 +142,7 @@ async function main(): Promise<void> {
     if (JSON.stringify(att) !== JSON.stringify(want)) throw new Error(`the UserMessage's attachments: ${JSON.stringify(att)}`);
     const recs = windowRecords(launch);
     const opened = recs.filter((r) => r.name === "CONTEXT_MENU_OPENED").map((r) => `${String(r.payload.source)}:${String(r.payload.items)}`);
-    if (JSON.stringify(opened) !== JSON.stringify(["tree:1", "tree:1", "tab:1", "code:1", "search:1", "tree:1"])) throw new Error(`CONTEXT_MENU_OPENED ${JSON.stringify(opened)}`);
+    if (JSON.stringify(opened) !== JSON.stringify(["tree:1", "tree:1", "tab:2", "code:1", "search:1", "tree:1"])) throw new Error(`CONTEXT_MENU_OPENED ${JSON.stringify(opened)}`);
     const closed = recs.filter((r) => r.name === "CONTEXT_MENU_CLOSED").map((r) => String(r.payload.outcome));
     if (JSON.stringify(closed) !== JSON.stringify(["picked", "picked", "escape", "picked", "picked", "outside"])) throw new Error(`CONTEXT_MENU_CLOSED ${JSON.stringify(closed)}`);
     const added = recs.filter((r) => r.name === "EDITOR_CHIP_ADDED").map((r) => `${String(r.payload.kind)}:${String(r.payload.how)}`);

@@ -8,7 +8,11 @@
 // The parser turns chat-markdown text into a block sequence. The renderer attaches per-kind boolean
 // gates, so `<ModelReply>` reads one flat prop bag per block.
 
-export type InlineSegment = { t: string; code?: true; bold?: true; italic?: true };
+export type InlineSegment = { t: string; code?: true; bold?: true; italic?: true; href?: string; image?: string };
+
+/** Sprint 503: what the parser reads beyond chat Markdown. `links` reads `[text](target)` as a link segment, for the
+ *  editor's rendered view; the transcript passes none, so a reply renders as it did before. */
+export interface MdOptions { links?: boolean }
 
 export type ParsedBlock =
   | { kind: "p"; inlines: InlineSegment[] }
@@ -46,13 +50,15 @@ export interface RenderedBlock {
   tableRows: RenderedInline[][][];
 }
 
-export function mdInlines(text: string): InlineSegment[] {
+export function mdInlines(text: string, opts: MdOptions = {}): InlineSegment[] {
   // Tokenize a single line of prose into inline segments so downstream
   // renderers can flow `code`, **bold**, and *italic* at their own
   // weights and fonts. No HTML injection — every segment renders as a
   // plain `<span>` with styling.
   const out: InlineSegment[] = [];
-  const re = /(`[^`]+`)|(\*\*[^*]+\*\*)|(\*[^*]+\*)/g;
+  const re = opts.links
+    ? /(`[^`]+`)|(\*\*[^*]+\*\*)|(\*[^*]+\*)|(!?)\[([^\]]*)\]\(\s*<?([^)\s>]+)>?(?:\s+"[^"]*")?\s*\)/g
+    : /(`[^`]+`)|(\*\*[^*]+\*\*)|(\*[^*]+\*)/g;
   let last = 0;
   let match: RegExpExecArray | null;
   while ((match = re.exec(text)) !== null) {
@@ -60,13 +66,14 @@ export function mdInlines(text: string): InlineSegment[] {
     if (match[1]) out.push({ t: match[1].slice(1, -1), code: true });
     else if (match[2]) out.push({ t: match[2].slice(2, -2), bold: true });
     else if (match[3]) out.push({ t: match[3].slice(1, -1), italic: true });
+    else if (match[6] !== undefined) out.push(match[4] ? { t: match[5], image: match[6] } : { t: match[5], href: match[6] });
     last = match.index + match[0].length;
   }
   if (last < text.length) out.push({ t: text.slice(last) });
   return out.length ? out : [{ t: text }];
 }
 
-export function mdBlocks(text: string): ParsedBlock[] {
+export function mdBlocks(text: string, opts: MdOptions = {}): ParsedBlock[] {
   // Standard chat-markdown blocks: paragraph, fenced code block,
   // unordered list, ordered list, heading. Anything unmatched falls
   // to a paragraph so no user input is ever dropped.
@@ -95,7 +102,7 @@ export function mdBlocks(text: string): ParsedBlock[] {
     }
     const heading = trimmed.match(/^(#{1,4})\s+(.*)$/);
     if (heading) {
-      blocks.push({ kind: "heading", level: heading[1].length, inlines: mdInlines(heading[2]) });
+      blocks.push({ kind: "heading", level: heading[1].length, inlines: mdInlines(heading[2], opts) });
       i++;
       continue;
     }
@@ -108,8 +115,8 @@ export function mdBlocks(text: string): ParsedBlock[] {
         const rowTrim = lines[i].trim();
         const bulletRow = rowTrim.match(/^[-*+]\s+(.*)$/);
         const orderedRow = rowTrim.match(/^(\d+)\.\s+(.*)$/);
-        if (kind === "ul" && bulletRow) items.push({ inlines: mdInlines(bulletRow[1]) });
-        else if (kind === "ol" && orderedRow) items.push({ inlines: mdInlines(orderedRow[2]) });
+        if (kind === "ul" && bulletRow) items.push({ inlines: mdInlines(bulletRow[1], opts) });
+        else if (kind === "ol" && orderedRow) items.push({ inlines: mdInlines(orderedRow[2], opts) });
         else break;
         i++;
       }
@@ -127,7 +134,7 @@ export function mdBlocks(text: string): ParsedBlock[] {
           let s = row.trim();
           if (s.startsWith("|")) s = s.slice(1);
           if (s.endsWith("|")) s = s.slice(0, -1);
-          return s.split("|").map((cell) => mdInlines(cell.trim()));
+          return s.split("|").map((cell) => mdInlines(cell.trim(), opts));
         };
         const headers = parseCells(lines[i]);
         i += 2;
@@ -160,7 +167,7 @@ export function mdBlocks(text: string): ParsedBlock[] {
       buf.push(lines[i]);
       i++;
     }
-    blocks.push({ kind: "p", inlines: mdInlines(buf.join(" ")) });
+    blocks.push({ kind: "p", inlines: mdInlines(buf.join(" "), opts) });
   }
   return blocks;
 }

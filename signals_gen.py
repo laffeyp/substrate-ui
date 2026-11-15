@@ -5,7 +5,7 @@ Regenerate: python3 scripts/gen_signals.py. tests/test_signals_generated.py fail
 
 from enum import StrEnum
 
-VOCAB_VERSION = "0.71"
+VOCAB_VERSION = "0.72"
 
 
 class Signal(StrEnum):
@@ -165,6 +165,8 @@ class Signal(StrEnum):
     FILES_FOUND = "FILES_FOUND"
     FILES_SEARCHED = "FILES_SEARCHED"
     FILES_REPLACE_PREPARED = "FILES_REPLACE_PREPARED"
+    EDITOR_MARKDOWN_SHOWN = "EDITOR_MARKDOWN_SHOWN"
+    EDITOR_LINK_FOLLOWED = "EDITOR_LINK_FOLLOWED"
 
 
 class TurnInterruptedTier(StrEnum):
@@ -620,6 +622,7 @@ class EditorFileOpenedHow(StrEnum):
     DEEP_LINK = "deep_link"
     OPEN_TAB = "open_tab"
     ACTIVITY = "activity"
+    LINK = "link"
 
 
 class EditorFileSavedCommand(StrEnum):
@@ -784,3 +787,19 @@ class FilesReplacePreparedScope(StrEnum):
     ALL = "all"
     FILE = "file"
     ONE = "one"
+
+
+class EditorMarkdownShownForm(StrEnum):
+    RENDERED = "rendered"
+    SOURCE = "source"
+
+
+class EditorLinkFollowedKind(StrEnum):
+    EXTERNAL = "external"
+    FILE = "file"
+    HEADING = "heading"
+
+
+class EditorLinkFollowedView(StrEnum):
+    SOURCE = "source"
+    RENDERED = "rendered"

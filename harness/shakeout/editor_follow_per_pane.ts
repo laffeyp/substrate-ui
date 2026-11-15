@@ -121,7 +121,7 @@ async function main(): Promise<void> {
     console.log(`editor_follow_per_pane: ok — session A's edit written to disk, pane 2 unchanged; ${seen.join("; ")}; packaged=${String(!!process.env.SHAKEOUT_APP)}; screenshots ${shots}`);
     code = 0;
   } catch (e) {
-    console.error(`editor_follow_per_pane: FAIL at "${at}" — ${(e as Error).message.split("\n")[0]}`);
+    console.error(`editor_follow_per_pane: FAIL at "${at}" — ${(e as Error).message.split("\n").slice(0, 4).join(" / ")}`);
   } finally {
     await app.close().catch(() => undefined);
     launch.cleanup({ keep: code !== 0 });

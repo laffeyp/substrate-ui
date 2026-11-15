@@ -627,10 +627,15 @@ export class App extends React.Component<AppProps, AppState> {
   // is drawn in the panes view, so making one goes there.
   private split(dir: SplitDir, patch?: Partial<AppPane>, then?: (id: number) => void): void {
     let madeId: number | null = null;
+    if (this.state.panes.length >= MAX_PANES) return;
     this.viewCause = ViewChangedCause.SPLIT;
+    // Sprint 503 (found by editor_follow_per_pane): the new pane is taken once, here. Taken inside the updater, it
+    // took a fresh id and controller each time React ran the updater again (React reruns updaters when it rebases
+    // queued updates), so one ⌘D closed pane 2 and opened pane 3 whenever a snapshot update was queued with it.
+    const fresh = { ...this.newPane(), ...(patch || {}) };
     this.setState((s) => {
       if (s.panes.length >= MAX_PANES) return null;
-      const out = splitPane({ cols: s.cols, rows: s.rows, colW: s.colW, rowW: s.rowW }, s.panes, s.focused, dir, { ...this.newPane(), ...(patch || {}) });
+      const out = splitPane({ cols: s.cols, rows: s.rows, colW: s.colW, rowW: s.rowW }, s.panes, s.focused, dir, fresh);
       if (!out) return null;
       madeId = out.made.id;
       return { ...out.grid, panes: out.panes, focused: out.made.id, vs: show("panes") };
