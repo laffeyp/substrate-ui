@@ -85,9 +85,9 @@ Open a file in a folder the index marks closed only when a current document poin
 | Client specs | `web/reveal/__tests__/*.spec.ts`, `web/app/__tests__/*.spec.ts` |
 | Gates | `harness/shakeout/*.ts` |
 | Local bundle (unsigned) | `dist-electron/mac-arm64/Substrate.app` |
-| Local test bundle (unsigned) | `dist-electron-next/mac-arm64/Substrate Next.app` |
+| Local Substrate Next bundle (unsigned) | `dist-electron-next/mac-arm64/Substrate Next.app` |
 | Installed bundle | `/Applications/Substrate.app` |
-| Installed test bundle | `/Applications/Substrate Next.app` |
+| Installed Substrate Next | `/Applications/Substrate Next.app` |
 | Identity records | `electron/identity.json` (one per install: name, bundle id, executable, store, link scheme) |
 | Dev state | `~/.substrate-dev/` |
 | Installed state | `~/.substrate/` |
@@ -115,9 +115,9 @@ Open a file in a folder the index marks closed only when a current document poin
 | --- | --- |
 | First day on this repo | Orientation |
 | "Does the current tree build and install?" | Build and install — no Apple |
-| "Make a tested build the one I work in" | Build and install — no Apple (it replaces `/Applications/Substrate.app`; Rollback puts the old one back) |
-| "Build the next version and install it beside the one in use" | Build and install the test install |
-| "Carry a Claude Code session into Substrate Next" | Continue a Claude Code session in the test install |
+| "Install a card's build to check it" | Build and install — no Apple (it replaces `/Applications/Substrate.app`; Substrate Next keeps running) |
+| "A roadmap is done; roll it up to the build I work in" | Build and install Substrate Next |
+| "Carry a Claude Code session into Substrate Next" | Continue a Claude Code session in Substrate Next |
 | "Ship a signed, notarized build" | Build and release — with Apple |
 | "Edit source and try it in a running app" | Day-to-day development |
 | "Run only the automated checks" | Tests only |
@@ -172,17 +172,17 @@ open /Applications/Substrate.app
 
 ---
 
-## 5A. Build and install the test install
+## 5A. Build and install Substrate Next
 
-The test install is Substrate Next: its own name, bundle id (`com.greenrosesystems.substrate.next`), store (`~/.substrate-next`), data folder, logs (`~/Library/Logs/Substrate Next`) and link scheme (`substrate-next://`), from its record in `electron/identity.json`. It runs beside `/Applications/Substrate.app`; no step quits or changes that app. Steps 1–16 can run anywhere, a session in Substrate Next included: the gates launch the bundle with their own `SUBSTRATE_HOME` and `--user-data-dir`, so the running Substrate Next keeps its lock and sessions. Step 17 quits Substrate Next and stops every command its sessions started, so steps 17–20 run from a terminal or from a session in Substrate. A session's record stays in `~/.substrate-next/sessions/<id>/record/` across the reinstall; after step 20, `open "substrate-next://session/<id>"` resumes it in the new build. Run from this repo's root; per-command logs go to `runs/packaged/<sprint-id>-<stamp>/NN-<name>.log`. `$APP = "$PWD/dist-electron-next/mac-arm64/Substrate Next.app"`.
+Substrate Next is the build the work happens in, updated when a roadmap closes; Substrate takes each card's build. Substrate Next has its own name, bundle id (`com.greenrosesystems.substrate.next`), store (`~/.substrate-next`), data folder, logs (`~/Library/Logs/Substrate Next`) and link scheme (`substrate-next://`), from its record in `electron/identity.json`. It runs beside `/Applications/Substrate.app`; no step quits or changes that app. Steps 1–16 can run anywhere, a session in Substrate Next included: the gates launch the bundle with their own `SUBSTRATE_HOME` and `--user-data-dir`, so the running Substrate Next keeps its lock and sessions. Step 17 quits Substrate Next and stops every command its sessions started, so steps 17–20 run from a terminal or from a session in Substrate. A session's record stays in `~/.substrate-next/sessions/<id>/record/` across the reinstall; after step 20, `open "substrate-next://session/<id>"` resumes it in the new build. Run from this repo's root; per-command logs go to `runs/packaged/<sprint-id>-<stamp>/NN-<name>.log`. `$APP = "$PWD/dist-electron-next/mac-arm64/Substrate Next.app"`.
 
 | # | Command | Exit | Notes |
 | --- | --- | --- | --- |
 | 1–8 | Steps 1–8 of "Build and install — no Apple" | 0 | Unchanged. |
 | 9 | `npm run pack:next` | 0 | Builds with `SUBSTRATE_INSTALL=next` into `dist-electron-next/`, then renames the bundle to `Substrate Next.app` (electron-builder names it after its executable, `Substrate`). |
 | 10–16 | Steps 10–16 of "Build and install — no Apple" with `$APP` as above | 0 | The gates launch the bundle with their own `SUBSTRATE_HOME`, as for the working bundle. |
-| 17 | `osascript -e 'tell application "Substrate Next" to quit'` | 0 or non-zero | Quits only the test install. Wait up to 60 s for its pid to go. Before 17a: while Substrate Next runs, the bundle 17a opens finds its lock held and quits. |
-| 17a | `npx tsx harness/shakeout/two_installs.ts` | 0 | Needs the working install running. Opens the new bundle beside it and checks that each keeps to its own lock, store and logs. |
+| 17 | `osascript -e 'tell application "Substrate Next" to quit'` | 0 or non-zero | Quits only Substrate Next. Wait up to 60 s for its pid to go. Before 17a: while Substrate Next runs, the bundle 17a opens finds its lock held and quits. |
+| 17a | `npx tsx harness/shakeout/two_installs.ts` | 0 | Needs Substrate running. Opens the new bundle beside it and checks that each keeps to its own lock, store and logs. |
 | 18 | `mv "/Applications/Substrate Next.app" ~/.Trash/"Substrate Next-<old-CFBundleVersion>-replaced-<stamp>.app"` | 0 | Only when it existed. |
 | 19 | `ditto "$APP" "/Applications/Substrate Next.app" && xattr -dr com.apple.quarantine "/Applications/Substrate Next.app"` | 0 | Install. |
 | 20 | `open -g "/Applications/Substrate Next.app"` | 0 | Launch, in the background. |
@@ -191,7 +191,7 @@ The test install is Substrate Next: its own name, bundle id (`com.greenrosesyste
 
 - `/Applications/Substrate Next.app/Contents/Info.plist`: `CFBundleName` Substrate Next, `CFBundleIdentifier` com.greenrosesystems.substrate.next, `CFBundleVersion` strictly greater than the trashed one.
 - `~/Library/Logs/Substrate Next/substrate.log` tail reads `app boot`, `server up`; its trace's `APP_BOOTED` reads `app_name` Substrate Next.
-- The working install's main pid is the one it had before step 1, and its `server.jsonl` for its boot holds one `SERVER_STARTED`.
+- Substrate's main pid is the one it had before step 1, and its `server.jsonl` for its boot holds one `SERVER_STARTED`.
 
 ### 5A.2 Rollback
 
@@ -205,7 +205,7 @@ open -g "/Applications/Substrate Next.app"
 
 ---
 
-## 5B. Continue a Claude Code session in the test install
+## 5B. Continue a Claude Code session in Substrate Next
 
 A Claude Code session continues as a Substrate Next session: the server reads the session's file from its last compaction summary on and gives the new session that text as its opening context (kernel session vocabulary § AD; app sprints 494, 496, 497). Substrate Next must be running. `$SESSION_FILE` is `~/.claude/projects/<project folder>/<session id>.jsonl`; `$WORKSPACE` is the folder the session works in.
 
@@ -307,7 +307,7 @@ Ship a new build with a higher `CFBundleVersion`. A notary ticket cannot be with
 ## 11. Rollback across chapters
 
 - Install of Substrate: the Rollback steps of "Build and install — no Apple".
-- Install of Substrate Next: the Rollback steps of "Build and install the test install".
+- Install of Substrate Next: the Rollback steps of "Build and install Substrate Next".
 - Release: the Rollback note of "Build and release — with Apple".
 - Python runtime bundle: `rm -rf build/python build/python-native dist-electron && npm run pack:dev` (which runs `pack:runtime`).
 - Dev state: `rm -rf ~/.substrate-dev`.
