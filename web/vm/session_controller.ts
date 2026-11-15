@@ -1515,6 +1515,11 @@ export class SessionController {
         const text = String(payload.text ?? "");
         // A message after a SessionEnded means the session resumed on the same record.
         if (this.snap.endedReason != null) this.patch({ endedReason: null });
+        // Sprint 501: a message on the record after a park is a turn running, whoever sent it: a message
+        // queued while the last turn ran starts on the server with no sendTurn here. The pane stayed
+        // parked, and Esc, which interrupts only a running turn, did nothing (Substrate Next, 2026-11-15:
+        // TURN_PARKED, then UserMessage and the server's TURN_ACCEPTED, then two Esc with no action).
+        if (this.snap.parkReason != null) this.patch({ parkReason: null });
         // Replace the local echo appended in sendTurn. The row moves to the end: envelopes arrive
         // in seq order, and record frames that were still arriving when the echo went up (a
         // reattach's backlog) belong above the message, not below it. Sprint 451: the echo is the oldest one
