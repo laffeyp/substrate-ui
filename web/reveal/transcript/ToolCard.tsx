@@ -29,6 +29,9 @@ interface Props {
   sessionId?: string | null;
 }
 
+/** A closed card's name and preview show at most this many lines (sprint 506). */
+const SUMMARY_LINES = 3;
+
 function statusColor(toolRunning: boolean, failed: boolean): string {
   if (toolRunning) return "#7fb3b8";
   if (failed) return "#c26058";
@@ -116,35 +119,46 @@ const ToolCardInner: React.FC<Props> = ({ call, result, progressText, progressEo
       // lands, undoing the user's click.
       open={isOpen}
       onToggle={onDetailsToggle}
-      style={{ display: "inline-block", verticalAlign: "top", maxWidth: "calc(100% - 24px)" }}
+      // Sprint 506: a set width beside the row's glyph: shrink-to-fit took the clamped preview's narrowest wrap, and a
+      // block card fell below the glyph.
+      style={{ display: "inline-block", verticalAlign: "top", width: "calc(100% - 24px)" }}
     >
       <summary
+        data-tool-summary="1"
         style={{
           cursor: "pointer",
           listStyle: "none",
-          display: "inline-block",
+          // Sprint 506 (the Architect, 2026-11-14: "two or three lines more of that summary when it's running a bash
+          // command. One line isn't enough"): the name and preview wrap to at most three lines, the status and caret
+          // sit beside the last of them, so a long command never pushes them out of sight.
+          display: "flex",
+          alignItems: "flex-end",
           maxWidth: "calc(100% - 24px)",
           verticalAlign: "top",
-          // The chip row — tool name · preview · status · caret —
-          // is one line by design. Under a narrow pane the row's
-          // spans would otherwise wrap and drop the caret to its
-          // own line while the card is closed, then jump back once
-          // opened (the card's body forces the details to full
-          // width). Clip instead of wrap so the caret always sits
-          // beside the status glyph.
-          whiteSpace: "nowrap",
-          overflow: "hidden",
-          textOverflow: "ellipsis",
         }}
       >
-        <span style={{ color: "#9aa0a8", fontFamily: "ui-monospace,'SF Mono',Menlo,monospace" }}>{toolName}</span>
-        {" "}
-        <span style={{ color: "#b9bec5", fontFamily: "ui-monospace,'SF Mono',Menlo,monospace" }}>{toolPreview}</span>
-        {" "}
-        <span style={{ color: "#4a4e55" }}>{" · "}</span>
-        <span style={{ color: statusColor(toolRunning, failed), fontFamily: "ui-monospace,'SF Mono',Menlo,monospace" }}>{status}</span>
-        {" "}
-        <span style={{ color: "#4a4e55", marginLeft: 8 }}>{cardCaret}</span>
+        <span data-tool-preview="1" style={{
+          display: "-webkit-box",
+          WebkitBoxOrient: "vertical",
+          WebkitLineClamp: SUMMARY_LINES,
+          overflow: "hidden",
+          whiteSpace: "pre-wrap",
+          overflowWrap: "anywhere",
+          minWidth: 0,
+          flex: "0 1 auto",
+        }}>
+          {/* One child: a -webkit-box makes each child a block, which would put the name on a line of its own. */}
+          <span>
+            <span style={{ color: "#9aa0a8", fontFamily: "ui-monospace,'SF Mono',Menlo,monospace" }}>{toolName}</span>
+            {" "}
+            <span style={{ color: "#b9bec5", fontFamily: "ui-monospace,'SF Mono',Menlo,monospace" }}>{toolPreview}</span>
+          </span>
+        </span>
+        <span data-tool-status="1" style={{ flex: "none", marginLeft: 6, maxWidth: "40%", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          <span style={{ color: "#4a4e55" }}>{" · "}</span>
+          <span style={{ color: statusColor(toolRunning, failed), fontFamily: "ui-monospace,'SF Mono',Menlo,monospace" }}>{status}</span>
+          <span style={{ color: "#4a4e55", marginLeft: 8 }}>{cardCaret}</span>
+        </span>
       </summary>
       {descendShow ? (
         <span
