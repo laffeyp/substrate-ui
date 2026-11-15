@@ -1562,6 +1562,16 @@
       "rationale": "The server trace says, at creation, whether a session continues another tool's session; the record's continued_session fragment holds what it continued.",
       "ratified": true,
       "ratified_by": "agent-resolved 2026-11-12, sprint 494; grounds: project — kernel session vocabulary v0.19 § AD, the user entries of 2026-11-12; SDD — hard rule 2, grammar Layer 2; practice — n/a"
+    },
+    {
+      "id": "P-0.70-S11-SEND",
+      "kind": "INVARIANT_PROPOSED",
+      "layer": 5,
+      "element": "S11: EDITOR_SAVED_FOR_SEND may come outside the pane's editor run",
+      "source": "sprint 500, gate editor_unsaved_per_pane: a turn sent from pane 1 with its editor closed wrote EDITOR_SAVED_FOR_SEND and broke S11",
+      "rationale": "Save-before-send runs on every turn of a session with unsaved buffers, wherever the turn is sent from (the tag's note, the Architect 2026-11-10); S11 bounded editor tags to an open run and so forbade it.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-14, sprint 500; grounds: project — EDITOR_SAVED_FOR_SEND's note, SAVE-BEFORE-SEND-2026-11-10; SDD — grammar Layer 5, hard rule 2; practice — n/a"
     }
   ]
 }

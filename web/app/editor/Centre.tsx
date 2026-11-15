@@ -461,9 +461,11 @@ function changeTo(from: string, to: string): { from: number; to: number; insert:
   while (tail < from.length - head && tail < to.length - head && from[from.length - 1 - tail] === to[to.length - 1 - tail]) tail++;
   return { from: head, to: from.length - tail, insert: to.slice(head, to.length - tail) };
 }
-const setUnsaved = (rel: string, on: boolean) => {
-  const list = editor.getSnapshot().unsaved;
-  if (on !== list.includes(rel)) editor.set({ unsaved: on ? [...list, rel] : list.filter((x) => x !== rel) });
+/** Marks `rel` unsaved or saved in `store`, the shown pane's editor unless a pane is named (sprint 500: a
+ *  save-before-send from pane 1 cleared the mark in the shown pane's editor and left pane 1's). */
+const setUnsaved = (rel: string, on: boolean, store: typeof editor = editor) => {
+  const list = store.getSnapshot().unsaved;
+  if (on !== list.includes(rel)) store.set({ unsaved: on ? [...list, rel] : list.filter((x) => x !== rel) });
 };
 
 /** The editor's unsaved text by workspace path (sprint 436): the buffer shown and the buffers kept. The
@@ -529,7 +531,9 @@ export async function saveForSend(sessionId: string, paneId: number | null): Pro
   const pending = [...texts].filter(([rel, text]) => DISK.has(bufferKey(sessionId, rel)) && text !== DISK.get(bufferKey(sessionId, rel)));
   const out: BeforeTurnResult = { saved: 0, refused: [] };
   if (!pending.length) return out;
-  const ours = storeSession === sessionId;
+  // The sending pane's editor holds this session's marks (sprint 500); with no pane named, the shown one
+  // does only when it shows this session.
+  const ours = paneId !== null || storeSession === sessionId;
   for (const [rel, text] of pending) {
     const k = bufferKey(sessionId, rel), end = ENDS.get(k) ?? "\n";
     wrote(k);
@@ -545,7 +549,7 @@ export async function saveForSend(sessionId: string, paneId: number | null): Pro
       if (!ours) continue;
       // Typing during the save stays unsaved.
       const now = shown === rel && activeBuffer?.session() === sessionId ? activeBuffer.text() : BUFFERS.get(k)?.doc.toString();
-      setUnsaved(rel, now !== text);
+      setUnsaved(rel, now !== text, editor);
       const facts = editor.getSnapshot().file;
       if (facts && facts.path === rel) editor.set({ file: { ...facts, text } });
       continue;

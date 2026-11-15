@@ -241,7 +241,8 @@ export function createChecker(now: () => number = () => performance.now()): { se
       if (!st.editor) broke("S11", { pane_id: paneId, editor_open: false, by: r.name });
       st.editor = false;
       st.marks.clear();
-    } else if (r.name.startsWith("EDITOR_") && r.name !== Signal.EDITOR_KEY_REFUSED && !st.editor) {
+    // v0.70 (P-0.70-S11-SEND): a save before send comes from any pane, its editor open or not.
+    } else if (r.name.startsWith("EDITOR_") && r.name !== Signal.EDITOR_KEY_REFUSED && r.name !== Signal.EDITOR_SAVED_FOR_SEND && !st.editor) {
       broke("S11", { pane_id: paneId, editor_open: false, by: r.name });
     }
     // S10: a mark is resolved once, by the call's seq.
