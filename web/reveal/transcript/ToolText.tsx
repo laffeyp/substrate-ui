@@ -12,7 +12,7 @@ import { LanguageDescription } from "@codemirror/language";
 import { languages } from "@codemirror/language-data";
 import { highlightCode, tagHighlighter, tags as t } from "@lezer/highlight";
 import { AnsiTerminal, type Sgr } from "./ansi";
-import { jsonText, needsTerminal, splitNumbered, type TextFormat } from "../tool_format";
+import { grepLines, jsonText, needsTerminal, splitNumbered, type TextFormat } from "../tool_format";
 
 /** Text past this many characters is drawn plain: a parse of it would hold the window. */
 const HIGHLIGHT_MAX = 200_000;
@@ -119,12 +119,88 @@ export function SummaryText({ text, format }: { text: string; format: "shell" | 
   );
 }
 
+/** The editor's change colours (`editor/Centre.tsx`): an added line's teal +, a removed line in red (D7). */
+const ADDED = "#7fb3b8";
+const REMOVED = "#c26058";
+const DIM = "#62676f";
+const ROW: React.CSSProperties = { display: "flex", minHeight: "1.7em" };
+const MARK: React.CSSProperties = { flex: "none", width: "1.4em", userSelect: "none" };
+
+type DiffLine = { sign: "+" | "-" | " " | "h" | "@"; text: string };
+
+/** A diff split by file, so each file's lines are parsed in that file's language. */
+function diffFiles(text: string): { path: string | null; lines: DiffLine[] }[] {
+  const files: { path: string | null; lines: DiffLine[] }[] = [{ path: null, lines: [] }];
+  for (const raw of text.replace(/\n$/, "").split("\n")) {
+    if (/^diff --git |^diff -/.test(raw) && files[files.length - 1].lines.length) files.push({ path: null, lines: [] });
+    const cur = files[files.length - 1];
+    const plus = /^\+\+\+ (?:b\/)?(.*)$/.exec(raw);
+    if (plus && plus[1] !== "/dev/null") cur.path = plus[1];
+    else if (/^--- (?:a\/)?/.test(raw) && !cur.path) { const m = /^--- (?:a\/)?(.*)$/.exec(raw); if (m && m[1] !== "/dev/null") cur.path = m[1]; }
+    const sign: DiffLine["sign"] = /^(diff |index |--- |\+\+\+ |new file|deleted file|similarity|rename |commit |Author:|Date:)/.test(raw) ? "h"
+      : raw.startsWith("@@") ? "@" : raw.startsWith("+") ? "+" : raw.startsWith("-") ? "-" : " ";
+    cur.lines.push({ sign, text: sign === "h" || sign === "@" ? raw : raw.slice(1) });
+  }
+  return files;
+}
+
+/** One file of a diff: its changed and context lines highlighted in its language, a teal + or a red − in a mark
+ *  column; a removed line in red, as the editor draws one; headers dim, hunk headers in the meta colour. */
+function DiffFile({ path, lines }: { path: string | null; lines: DiffLine[] }): React.ReactElement {
+  const body = lines.filter((l) => l.sign !== "h" && l.sign !== "@");
+  const drawn = useDrawn(body.map((l) => l.text).join("\n"), path ? { kind: "code", path } : { kind: "text" });
+  let at = 0;
+  return (
+    <div data-diff-file={path ?? ""} data-tool-lang={drawn.lang ?? ""}>
+      {lines.map((l, i) => {
+        if (l.sign === "h") return <div key={i} data-diff="header" style={{ ...ROW, color: DIM }}>{l.text}</div>;
+        if (l.sign === "@") return <div key={i} data-diff="hunk" style={{ ...ROW, color: colour("meta") }}>{l.text}</div>;
+        const toks = drawn.lines[at++] ?? [{ t: l.text }];
+        const mark = l.sign === "+" ? <span data-diff-mark="+" style={{ ...MARK, color: ADDED }}>+</span> : l.sign === "-" ? <span data-diff-mark="-" style={{ ...MARK, color: REMOVED }}>−</span> : <span style={MARK} />;
+        return (
+          <div key={i} data-diff={l.sign === "+" ? "added" : l.sign === "-" ? "removed" : "context"} style={ROW}>
+            {mark}
+            <span style={{ minWidth: 0, color: l.sign === "-" ? REMOVED : undefined }}>{l.sign === "-" ? toks.map((tok) => tok.t).join("") : toks.map(tokenSpan)}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Grep hits of one file in a row: the matched text highlighted in that file's language. */
+function GrepRun({ rows }: { rows: { path: string | null; line: string | null; sep: string; text: string }[] }): React.ReactElement {
+  const drawn = useDrawn(rows.map((r) => r.text).join("\n"), rows[0].path ? { kind: "code", path: rows[0].path } : { kind: "text" });
+  return (
+    <>
+      {rows.map((r, i) => (
+        <div key={i} data-grep={r.path ? "hit" : "other"} style={ROW}>
+          {r.path ? <span data-grep-path="1" style={{ flex: "none", color: DIM, whiteSpace: "pre" }}>{r.path}</span> : null}
+          {r.line ? <span data-grep-line="1" style={{ flex: "none", color: "#4a4e55" }}>{r.sep}{r.line}</span> : null}
+          {r.path ? <span style={{ flex: "none", color: "#4a4e55", paddingRight: 8 }}>{r.sep}</span> : null}
+          <span style={{ minWidth: 0 }}>{r.path ? (drawn.lines[i] ?? [{ t: r.text }]).map(tokenSpan) : r.text}</span>
+        </div>
+      ))}
+    </>
+  );
+}
+
 /** One piece of a tool card's text, drawn in its format. */
 export function ToolText({ text, format }: { text: string; format: TextFormat }): React.ReactElement {
   const numbered = format.kind === "code" ? splitNumbered(text) : null;
   const code = format.kind === "json" ? jsonText(text) ?? text : numbered ? numbered.code : text;
   const drawn = useDrawn(code, format);
   if (format.kind === "text" && needsTerminal(text)) return <TerminalText text={text} />;
+  // Sprint 510: a diff by file, grep hits by run of one file.
+  if (format.kind === "diff") {
+    return <div data-tool-text="diff" style={{ whiteSpace: "pre-wrap", wordBreak: "break-word", color: "#d7dade" }}>{diffFiles(text).map((f, i) => <DiffFile key={i} path={f.path} lines={f.lines} />)}</div>;
+  }
+  const hits = format.kind === "grep" ? grepLines(text) : null;
+  if (hits) {
+    const runs: (typeof hits)[] = [];
+    for (const hit of hits) { const last = runs[runs.length - 1]; if (last && last[0].path === hit.path) last.push(hit); else runs.push([hit]); }
+    return <div data-tool-text="grep" style={{ whiteSpace: "pre-wrap", wordBreak: "break-word", color: "#d7dade" }}>{runs.map((r, i) => <GrepRun key={i} rows={r} />)}</div>;
+  }
   return (
     <div data-tool-text={format.kind} data-tool-lang={drawn.lang ?? ""} style={{ whiteSpace: "pre-wrap", wordBreak: "break-word", color: format.kind === "text" ? undefined : "#d7dade" }}>
       {drawn.lines.map((line, i) => (

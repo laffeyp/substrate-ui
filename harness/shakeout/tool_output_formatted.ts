@@ -20,7 +20,8 @@
 //   scheme  — switched to ghost in the settings store, the keyword's ink moves to the ghost keyword grey;
 //   trace   — no INVARIANT_BROKEN (lib/electron.ts fails the launch on any).
 // SHAKEOUT_APP=<Substrate.app> runs the bundle.
-import { mkdirSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { _electron as electron, type Locator, type Page } from "playwright";
 import { ciede2000 } from "../pixel/ciede2000";
@@ -33,14 +34,14 @@ const KEYWORD = "#7da3ca", STRING = "#c7ade6", FAIL = "#c26058", GREY = "#9aa0a8
 const rgb = (hex: string): [number, number, number] => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)) as [number, number, number];
 
 /** The ink of a token: of its pixels, the ones far from the card's ground, their median colour. */
-async function ink(win: Page, el: Locator): Promise<{ rgb: [number, number, number]; n: number }> {
+async function ink(win: Page, el: Locator, cut = 25): Promise<{ rgb: [number, number, number]; n: number }> {
   await el.scrollIntoViewIfNeeded();
   const img = decodePng(await el.screenshot());
   const ground = rgb("#1a1c20");
   const px: [number, number, number][] = [];
   for (let i = 0; i < img.data.length; i += 4) {
     const c: [number, number, number] = [img.data[i], img.data[i + 1], img.data[i + 2]];
-    if (ciede2000(c, ground) > 25) px.push(c);
+    if (ciede2000(c, ground) > cut) px.push(c);
   }
   if (!px.length) return { rgb: [0, 0, 0], n: 0 };
   const med = (k: 0 | 1 | 2) => px.map((c) => c[k]).sort((a, b) => a - b)[Math.floor(px.length / 2)];
@@ -54,11 +55,25 @@ async function main(): Promise<void> {
   const written = "alpha/d/e/written_by_gate.ts";
   const tsBody = "export interface Gate {\n  name: string;\n  runs: number;\n}\n\nexport const gate: Gate = { name: \"tool_output_formatted\", runs: 1 };\n";
   const shellCmd = "printf '\\033[31mfailed\\033[0m and \\033[1mbold\\033[0m plain\\n50%%\\r100%% done\\n'";
+  // Sprint 510: the workspace a repository, one Go file then changed, so `git diff` prints a real diff.
+  const rs = ws.files.find((f) => f.endsWith(".rs"))!, go = ws.files.find((f) => f.endsWith(".go"))!;
+  const git = (...a: string[]) => execFileSync("git", ["-C", ws.root, ...a], { encoding: "utf8" });
+  git("init", "-q", "-b", "main"); git("config", "user.email", "gate@example.invalid"); git("config", "user.name", "gate");
+  git("add", "-A"); git("commit", "-q", "-m", "base");
+  const goText = readFileSync(join(ws.root, go), "utf8").split("\n");
+  const at = goText.findIndex((l) => l.startsWith("func "));
+  goText.splice(at, 1, "// changed by the gate, sprint 510", goText[at].replace("func ", "func Gate"));
+  writeFileSync(join(ws.root, go), goText.join("\n"));
   const script = [
     ["read_file", [py]],
     ["bash", [shellCmd]],
     ["bash", ["cat alpha/result.json"]],
     ["write_file", [written, tsBody]],
+    ["bash", [`cat ${rs}`]],
+    ["bash", [`cd ${go.slice(0, go.lastIndexOf("/"))} && cat ${go.slice(go.lastIndexOf("/") + 1)} | head -n 60`]],
+    ["bash", ["git diff"]],
+    ["bash", ['grep -rn "return" alpha --include=*.py --include=*.go --include=*.java --include=*.ts']],
+    ["bash", ["ls -l alpha"]],
   ];
   const launch = launchArgs();
   const shots = join(REPO, "runs", "packaged", `sprint-505-${process.env.SHAKEOUT_APP ? "bundle" : "source"}-${Date.now()}`);
@@ -78,10 +93,12 @@ async function main(): Promise<void> {
     await win.waitForFunction(`window.__vm.get(1).snapshot().sessionId === ${JSON.stringify(sid)}`, undefined, { timeout: 15_000 });
     const r = await post(`/api/session/${sid}/turn`, { text: "read, run, write" });
     if (!r.ok) throw new Error(`turn: HTTP ${r.status}`);
-    await win.waitForFunction("window.__vm.get(1).snapshot().parkReason", undefined, { timeout: 30_000 });
+    const t0 = Date.now();
+    await win.waitForFunction("window.__vm.get(1).snapshot().parkReason", undefined, { timeout: 180_000 });
+    seen.push(`turn parked in the window after ${Date.now() - t0} ms`);
     await settled(win);
     const cards = win.locator("details:has([data-tool-card-body])");
-    await win.waitForFunction(() => document.querySelectorAll("details [data-tool-card-body]").length >= 4, undefined, { timeout: 15_000 });
+    await win.waitForFunction(() => document.querySelectorAll("details [data-tool-card-body]").length >= 9, undefined, { timeout: 15_000 });
     const n = await cards.count();
     for (let i = 0; i < n; i++) {
       const card = cards.nth(i);
@@ -139,6 +156,42 @@ async function main(): Promise<void> {
     if (str.n < 10 || dStr > 12) errs.push(`string ink ${JSON.stringify(str.rgb)}: ΔE ${dStr.toFixed(1)}`);
     if (red.n < 10 || dRed > 12) errs.push(`red ink ${JSON.stringify(red.rgb)}: ΔE ${dRed.toFixed(1)}`);
 
+    // Sprint 510: plain bash output formatted by the command that printed it.
+    await win.waitForFunction(() => {
+      const langs = Array.from(document.querySelectorAll("[data-tool-lang]")).map((e) => e.getAttribute("data-tool-lang"));
+      return langs.includes("Rust") && langs.includes("Go") && document.querySelector("[data-diff-file] [data-tk]") !== null && document.querySelector('[data-tool-text=grep] [data-tk="keyword"]') !== null;
+    }, undefined, { timeout: 20_000 }).catch(() => undefined);
+    const catRs = win.locator('[data-tool-text="code"][data-tool-lang="Rust"]');
+    const headGo = win.locator('[data-tool-text="code"][data-tool-lang="Go"]');
+    const diff = win.locator('[data-tool-text="diff"]');
+    const grep = win.locator('[data-tool-text="grep"]');
+    const lsOut = win.locator("[data-tool-card-body] [data-tool-text]", { hasText: /^total \d+/ });
+    const found = { cat: await catRs.count(), head: await headGo.count(), diff: await diff.count(), grep: await grep.count(), ls: await lsOut.count() };
+    const lsKind = found.ls ? await lsOut.first().getAttribute("data-tool-text") : null;
+    seen.push(`510 formats ${JSON.stringify(found)}, ls as ${String(lsKind)}`);
+    if (!found.cat || !found.head || !found.diff || !found.grep) errs.push(`510: a format missing ${JSON.stringify(found)}`);
+    if (lsKind !== "text") errs.push(`510: ls -l drew as ${String(lsKind)}, not plain text`);
+    const added = await diff.locator('[data-diff="added"]').count(), removed = await diff.locator('[data-diff="removed"]').count();
+    const diffLang = await diff.locator("[data-diff-file]").first().getAttribute("data-tool-lang").catch(() => null);
+    if (added !== 2 || removed !== 1 || diffLang !== "Go") errs.push(`510 diff: ${added} added, ${removed} removed, language ${String(diffLang)}; want 2, 1, Go`);
+    // The dim grey stands 24.8 from the box's ground, so its ink is read with a cut of 15.
+    const inks: [string, Locator, string, number?][] = [
+      ["cat .rs keyword", catRs.locator('[data-tk="keyword"]').first(), KEYWORD],
+      ["diff + mark", diff.locator('[data-diff-mark="+"]').first(), "#7fb3b8"],
+      ["diff removed line", diff.locator('[data-diff="removed"] span').last(), FAIL],
+      ["grep path", grep.locator("[data-grep-path]").first(), "#62676f", 15],
+      ["grep hit keyword", grep.locator('[data-tk="keyword"]').first(), KEYWORD],
+    ];
+    for (const [what, el, hex, cut] of inks) {
+      if (!(await el.count())) { errs.push(`510 ${what}: not drawn`); continue; }
+      const got = await ink(win, el, cut);
+      const d = ciede2000(got.rgb, rgb(hex));
+      seen.push(`510 ${what} ΔE ${d.toFixed(1)}`);
+      if (got.n < 6 || d > 12) errs.push(`510 ${what}: ink ${JSON.stringify(got.rgb)} over ${got.n} px, ΔE ${d.toFixed(1)} to ${hex}`);
+    }
+    for (const [loc, name] of [[catRs, "cat-rs"], [diff, "git-diff"], [grep, "grep"]] as const) {
+      if (await loc.count()) { await loc.first().scrollIntoViewIfNeeded(); await loc.first().screenshot({ path: join(shots, `${name}.png`) }); }
+    }
     await win.evaluate(() => { const s = (globalThis as unknown as Record<string, { set(p: object): void }>).__substrateSettings; s?.set({ scheme: "ghost" }); });
     await settled(win);
     const ghost = await ink(win, keyword);

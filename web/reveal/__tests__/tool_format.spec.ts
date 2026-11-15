@@ -4,7 +4,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { argFormat, jsonText, outputFormat, pathOf, splitArg, splitNumbered, needsTerminal, shellResult, summaryOf } from "../tool_format";
+import { argFormat, jsonText, outputFormat, pathOf, splitArg, splitNumbered, needsTerminal, shellResult, summaryOf, commandFormat, shellWords, isDiff, grepLines } from "../tool_format";
 
 test("a call's file, from a harness call and a kernel call", () => {
   assert.deepEqual(splitArg("file_path=/x/a.py"), { key: "file_path", value: "/x/a.py" });
@@ -60,4 +60,37 @@ test("a closed card's summary: a command, a path, a first arg, never a key", () 
   assert.deepEqual(summaryOf("Grep", ["path=src", "pattern=class Cart"]), { text: "class Cart", format: "text" });
   assert.deepEqual(summaryOf("Glob", ["pattern=**/*.ts"]), { text: "**/*.ts", format: "text" });
   assert.deepEqual(summaryOf("delegate", []), { text: "", format: "text" });
+});
+
+test("sprint 510: shell words", () => {
+  assert.deepEqual(shellWords(`sed -n '1,40p' "src/a b.py"`), ["sed", "-n", "1,40p", "src/a b.py"]);
+  assert.deepEqual(shellWords("grep -rn x\\ y src"), ["grep", "-rn", "x y", "src"]);
+});
+
+test("sprint 510: a command's output format", () => {
+  assert.deepEqual(commandFormat("cat alpha/a/b/c/memchr.rs"), { kind: "code", path: "alpha/a/b/c/memchr.rs" });
+  assert.deepEqual(commandFormat("head -n 40 src/models.py"), { kind: "code", path: "src/models.py" });
+  assert.deepEqual(commandFormat("sed -n '1,40p' src/models.py"), { kind: "code", path: "src/models.py" });
+  assert.deepEqual(commandFormat("cd alpha && cat d/e/strings.go | head -n 30"), { kind: "code", path: "d/e/strings.go" });
+  assert.deepEqual(commandFormat("LANG=C cat a.ts"), { kind: "code", path: "a.ts" });
+  assert.equal(commandFormat("cat a.ts b.ts"), null, "two files are not one file's code");
+  assert.deepEqual(commandFormat("cat a.ts | grep x"), { kind: "grep" }, "grep's own output has no path; grepLines finds none and it stays text");
+  assert.deepEqual(commandFormat("git diff HEAD~1"), { kind: "diff" });
+  assert.deepEqual(commandFormat("git -C x status && git show HEAD"), { kind: "diff" });
+  assert.deepEqual(commandFormat("diff -u a b"), { kind: "diff" });
+  assert.deepEqual(commandFormat("grep -rn 'class Cart' src"), { kind: "grep" });
+  assert.deepEqual(commandFormat("git grep -n foo"), { kind: "grep" });
+  assert.equal(commandFormat("ls -la"), null);
+  assert.equal(commandFormat("npm test"), null);
+});
+
+test("sprint 510: diffs and grep hits are read by their shape", () => {
+  assert.equal(isDiff("diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1 +1 @@\n-a\n+b"), true);
+  assert.equal(isDiff("no changes"), false);
+  const hits = grepLines("src/a.py:12:class Cart:\nsrc/b.py-13-    pass\n--\nsrc/c.py:40:x = Cart()")!;
+  assert.deepEqual(hits[0], { path: "src/a.py", line: "12", sep: ":", text: "class Cart:" });
+  assert.deepEqual(hits[1], { path: "src/b.py", line: "13", sep: "-", text: "    pass" });
+  assert.equal(hits[2].path, null);
+  assert.deepEqual(grepLines("a.ts:const x = 1")![0], { path: "a.ts", line: null, sep: ":", text: "const x = 1" });
+  assert.equal(grepLines("Usage: grep [OPTION]... PATTERNS [FILE]..."), null);
 });
