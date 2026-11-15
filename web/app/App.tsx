@@ -1269,7 +1269,7 @@ export class App extends React.Component<AppProps, AppState> {
             <div style={{ flex: 1, display: "flex", minHeight: 0, position: "relative" }}>
               <div style={{ flex: state.metaSplit.toFixed(3) + " 1 0%", display: "flex", flexDirection: "column", minWidth: 0, background: "#212327" }}>
                 <div data-view="meta" data-pane-id={String(fp.id)} style={{ flex: "none" }}><FindBar view="meta" /></div>
-                <div onClick={() => setFindScope("transcript")} style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "20px 26px", lineHeight: LOOK[settings.getSnapshot().look].metaLineHeight, fontSize: transcriptSize, minWidth: 0, ...transcriptVars(LOOK[settings.getSnapshot().look]) } as React.CSSProperties}>
+                <div onClick={() => setFindScope("transcript")} style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "20px 26px", lineHeight: LOOK[settings.getSnapshot().look].metaLineHeight, fontSize: transcriptSize, minWidth: 0, ...transcriptVars(LOOK[settings.getSnapshot().look], settings.getSnapshot().scheme) } as React.CSSProperties}>
                   <div key={fp.id} data-vm-transcript-mount="reveal" data-pane-id={String(fp.id)}>
                     <div data-vm-atom-root="reveal" data-pane-id={String(fp.id)}><Transcript paneId={fp.id} view="reveal" /></div>
                   </div>

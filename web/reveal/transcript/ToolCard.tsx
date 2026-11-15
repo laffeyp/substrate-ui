@@ -12,6 +12,10 @@ import { defaultOpen } from "../../vm/tool_output_mode";
 import { useToolOutputMode } from "./useToolOutputMode";
 import { emit as emitSignal } from "../../vm/instrumentation/sdd";
 import { Signal } from "../../vm/signals.gen";
+import { ToolText } from "./ToolText";
+import { argFormat, outputFormat, shellResult, splitArg } from "../tool_format";
+
+const hasResultText = (r: TranscriptRow | undefined) => !!r && typeof r.output === "string" && r.output.length > 0;
 
 interface Props {
   call: TranscriptRow;                 // the ToolCall row
@@ -83,6 +87,8 @@ const ToolCardInner: React.FC<Props> = ({ call, result, progressText, progressEo
   // sealed with eof.
   const hasResult = !toolRunning && (!streamingShow || progressEof);
   const outputText = result?.output ?? "";
+  // Sprint 505: a kernel bash result, `{exit, stdout, stderr}`, drawn as what the command printed.
+  const shell = React.useMemo(() => (hasResultText(result) ? shellResult(toolName, outputText) : null), [toolName, outputText, result]);
   const errorText = result?.error ?? "";
   const hasError = !!errorText;
 
@@ -158,11 +164,22 @@ const ToolCardInner: React.FC<Props> = ({ call, result, progressText, progressEo
         color: "#b9bec5",
       }}>
         <div style={{ color: "#62676f" }}>args</div>
-        {argList.map((argRow) => (
-          <div key={argRow.i} style={{ color: "#b9bec5" }}>
-            {argRow.i} <span style={{ color: "#e2e5e9" }}>{argRow.v}</span>
-          </div>
-        ))}
+        {argList.map((argRow, index) => {
+          // Sprint 505: a command as shell, a file's body as that file's code; a short plain value stays on its line.
+          const format = argFormat(toolName, call.args ?? [], index);
+          const { key, value } = splitArg(argRow.v);
+          if (format.kind === "text" && !value.includes("\n")) {
+            return <div key={argRow.i} style={{ color: "#b9bec5" }}>{argRow.i} <span style={{ color: "#e2e5e9" }}>{argRow.v}</span></div>;
+          }
+          return (
+            <div key={argRow.i} data-tool-arg={String(index)} style={{ color: "#b9bec5" }}>
+              {argRow.i} {key ? <span style={{ color: "#62676f" }}>{key}</span> : null}
+              <div style={{ background: "#1a1c20", borderRadius: 5, padding: "6px 12px", margin: "2px 0 4px", maxHeight: 220, overflow: "auto", color: "#d7dade" }}>
+                <ToolText text={value} format={format} />
+              </div>
+            </div>
+          );
+        })}
         {streamingShow ? (
           <ProgressStream progressText={progressText} eof={progressEof} />
         ) : null}
@@ -176,8 +193,13 @@ const ToolCardInner: React.FC<Props> = ({ call, result, progressText, progressEo
               maxHeight: 220,
               overflow: "auto",
               color: "#9aa0a8",
-              whiteSpace: "pre-wrap",
-            }}>{outputText}</div>
+            }}>{shell ? (
+              <>
+                <ToolText text={shell.stdout} format={outputFormat(toolName, call.args ?? [], shell.stdout)} />
+                {shell.stderr ? <><div data-tool-stderr="1" style={{ color: "#62676f", marginTop: shell.stdout ? 6 : 0 }}>stderr</div><ToolText text={shell.stderr} format={{ kind: "text" }} /></> : null}
+                {shell.exit !== null && shell.exit !== 0 ? <div data-tool-exit={String(shell.exit)} style={{ color: "#c26058", marginTop: 6 }}>exit {shell.exit}</div> : null}
+              </>
+            ) : <ToolText text={outputText} format={outputFormat(toolName, call.args ?? [], outputText)} />}</div>
           </>
         ) : null}
         {hasError ? (

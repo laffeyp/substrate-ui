@@ -6,6 +6,11 @@
 // so streaming updates re-render only this pane, not sibling cards.
 
 import * as React from "react";
+import { TerminalText } from "./ToolText";
+import { needsTerminal } from "../tool_format";
+
+/** Sprint 505: past this, a stream redrawn on every chunk is drawn plain rather than through the terminal model. */
+const TERMINAL_MAX = 200_000;
 
 interface Props {
   progressText: string;
@@ -26,7 +31,7 @@ const ProgressStreamInner: React.FC<Props> = ({ progressText, eof }) => {
         overflow: "auto",
         color: "#7fb3b8",
         whiteSpace: "pre-wrap",
-      }}>{progressText}</div>
+      }}>{needsTerminal(progressText) && progressText.length <= TERMINAL_MAX ? <TerminalText text={progressText} /> : progressText}</div>
     </>
   );
 };

@@ -39,8 +39,12 @@ const SYNTAX_481: Syntax = { ...SYNTAX_475, keyword: "#7da3ca", type: "#b0bbd2",
 
 /** The transcript's colours as CSS variables, set on each transcript container; the rows read them (the transcript does
  *  not import the app). */
-export function transcriptVars(v: LookValues): Record<string, string> {
-  return { "--transcript-reply": v.replyColor, "--transcript-message": v.messageColor };
+export function transcriptVars(v: LookValues, scheme: Scheme = "colour"): Record<string, string> {
+  // Sprint 505: the code colours of tool output, `--syntax-<class>`, from the same palette the editor draws with.
+  const syntax = scheme === "ghost" ? SYNTAX_GHOST : v.syntax;
+  const out: Record<string, string> = { "--transcript-reply": v.replyColor, "--transcript-message": v.messageColor };
+  for (const [k, c] of Object.entries(syntax)) out[`--syntax-${k}`] = c;
+  return out;
 }
 
 /** The code's colour scheme (sprint 485): `colour`, the look's palette; `ghost`, the same notes in whites and greys

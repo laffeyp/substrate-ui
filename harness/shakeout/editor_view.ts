@@ -139,7 +139,7 @@ async function main(): Promise<void> {
     if (editor.join(" ") !== wantEditor.join(" ")) throw new Error(`pane 1's editor records: ${editor.join(" ")}; want ${wantEditor.join(" ")}`);
     const drawn = recs.find((r) => r.name === "EDITOR_DRAWN")!.payload;
     // The first record of a fresh editor, every field of the current vocabulary's EDITOR_DRAWN, compared by field.
-    const wantDrawn: Record<string, unknown> = { tab_count: 0, left_folded: false, right_folded: false, bottom_folded: false, showing: "spine", left_tab: "files", binding: "standard", mode: "none", unsaved: 0, conflict: false, follow_marks: 0, dock: "bottom", sides_swapped: false, focus: false, tree_rows: drawn.tree_rows, modified_dots: 0, outline_rows: 0, hunks: 0, activity_rows: 0, history_rows: 0 };
+    const wantDrawn: Record<string, unknown> = { tab_count: 0, left_folded: false, right_folded: false, bottom_folded: false, showing: "spine", left_tab: "files", binding: "standard", mode: "none", unsaved: 0, conflict: false, follow_marks: 0, dock: "bottom", sides_swapped: false, focus: false, tree_rows: drawn.tree_rows, modified_dots: 0, outline_rows: 0, hunks: 0, activity_rows: 0, history_rows: 0, groups: 1 /* v0.73, sprint 504 */ };
     const sorted = (o: Record<string, unknown>) => JSON.stringify(Object.keys(o).sort().map((k) => [k, o[k]]));
     if (sorted(drawn) !== sorted(wantDrawn)) throw new Error(`EDITOR_DRAWN ${JSON.stringify(drawn)}`);
     const views = recs.filter((r) => r.name === "VIEW_CHANGED").map((r) => `${String(r.payload.cause)} ${String(r.payload.from)}→${String(r.payload.to)}`);
