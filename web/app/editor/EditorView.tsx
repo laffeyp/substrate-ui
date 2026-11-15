@@ -22,7 +22,9 @@ import { FileTree } from "./FileTree";
 import { SearchTab } from "./Search";
 import { ActivityTab, OpenTab } from "./LeftTabs";
 import { QuickOpen } from "./QuickOpen";
-import { Centre } from "./Centre";
+import { Centre, moveTab, TAB_TYPE } from "./Centre";
+import { StatusLine } from "./StatusLine";
+import { trackList } from "../derive/panes";
 import { ANCHOR_CELL, ANCHOR_ONE, ANCHOR_ZERO, encodeAnchor, encodeAnchor2, encodeAnchor3 } from "../derive/anchor";
 import { Inspector } from "./Inspector";
 import { MetaView } from "../MetaView";
@@ -31,7 +33,7 @@ import { selectSeqFromEditor, setMode } from "../state/meta";
 import { stopFollowing } from "../../reveal/follow_bottom";
 import { followItems } from "../derive/follow";
 import { ADD_HINT } from "../derive/control_notes";
-import { editor as shownEditor, editorFor, showEditorFor } from "../state/editor";
+import { editor as shownEditor, editorFor, focusGroup, groupLayout, showEditorFor } from "../state/editor";
 /** The shown pane's editor, for code here that holds no pane (sprint 499). */
 const editor = shownEditor;
 import { settings } from "../state/settings";
@@ -361,7 +363,8 @@ export function EditorView({ paneId, fontSize, sessionId, workspace, shape }: { 
       {!folded[startKey] && <Handle column={startKey} across={false} onGrab={grab} />}
       <div data-editor-centre-column="1" style={{ flex: "1 1 0", display: "flex", flexDirection: "column", minWidth: EDITOR_SIZES.centreMin, minHeight: 0, position: "relative" }}>
         <QuickOpen sessionId={sessionId} paneId={paneId} />
-        <Centre paneId={paneId} sessionId={sessionId} tabRow={EDITOR_SIZES.tabRow} />
+        <Groups paneId={paneId} sessionId={sessionId} />
+        <StatusLine paneId={paneId} />
         {dock === "bottom" && !folded.bottom && <Handle column="bottom" across onGrab={grab} />}
         {folded.bottom ? sill : dock === "bottom" ? terminal : null}
       </div>
@@ -369,6 +372,35 @@ export function EditorView({ paneId, fontSize, sessionId, workspace, shape }: { 
       {dock === "right" && !folded.bottom && terminal}
       {!folded[endKey] && <Handle column={endKey} across={false} onGrab={grab} />}
       {endCol}
+    </div>
+  );
+}
+
+/** Sprint 504: the editor's groups, laid out by the pane grid's own rules (editor_groups.ts). Each
+ *  group takes the focus on pointerdown, before any click inside it runs, and takes a dragged tab. */
+function Groups({ paneId, sessionId }: { paneId: number; sessionId: string }): React.ReactElement {
+  const layout = groupLayout(paneId);
+  const lay = React.useSyncExternalStore(layout.subscribe, layout.getSnapshot, layout.getSnapshot);
+  const drop = (to: number) => (ev: React.DragEvent): void => {
+    const raw = ev.dataTransfer.getData(TAB_TYPE);
+    if (!raw) return;
+    ev.preventDefault();
+    const tab = JSON.parse(raw) as { paneId: number; group: number; rel: string };
+    if (tab.paneId === paneId) moveTab(paneId, tab.group, to, tab.rel);
+  };
+  const over = (ev: React.DragEvent): void => {
+    if (!ev.dataTransfer.types.includes(TAB_TYPE)) return;
+    ev.preventDefault();
+    ev.dataTransfer.dropEffect = "move";
+  };
+  return (
+    <div data-editor-groups={String(lay.cells.length)} style={{ flex: "1 1 0", display: "grid", gridTemplateColumns: trackList(lay.grid.colW), gridTemplateRows: trackList(lay.grid.rowW), gap: 1, background: SUNK, minHeight: 0, minWidth: 0 }}>
+      {lay.cells.map((cell) => (
+        <div key={cell.id} data-editor-group-cell={String(cell.id)} onPointerDownCapture={() => focusGroup(paneId, cell.id)} onDragOver={over} onDrop={drop(cell.id)}
+          style={{ gridColumn: `${cell.col} / span ${cell.cw}`, gridRow: `${cell.row} / span ${cell.rh}`, display: "flex", flexDirection: "column", minHeight: 0, minWidth: 0, background: GROUND }}>
+          <Centre paneId={paneId} sessionId={sessionId} tabRow={EDITOR_SIZES.tabRow} group={cell.id} />
+        </div>
+      ))}
     </div>
   );
 }

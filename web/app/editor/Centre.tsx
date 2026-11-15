@@ -24,11 +24,11 @@ import { languages } from "@codemirror/language-data";
 import { tags as t } from "@lezer/highlight";
 import { preserveCase } from "../derive/preserve_case";
 import { LOOK, SYNTAX_GHOST, type Look, type Scheme, type Syntax } from "../derive/look";
-import { editor as shownEditor, editorFor } from "../state/editor";
+import { closeEditorGroup, editor as shownEditor, editorFor, focusGroup, groupEditor, groupHolding, groupLayout, splitEditorGroup } from "../state/editor";
 /** The shown pane's editor, for code here that holds no pane (sprint 499). */
 const editor = shownEditor;
 import { emit as emitSignal } from "../../vm/instrumentation/sdd";
-import { ContextMenuOpenedSource, DiffReadBase, EditorChipAddedHow, EditorConflictResolvedChoice, EditorFileOpenedHow, EditorFileSavedCommand, EditorKeyRefusedReason, EditorLinkFollowedView, EditorMarkdownShownForm, EditorReplacedScope, Signal, UndoRoutedTo } from "../../vm/signals.gen";
+import { ContextMenuOpenedSource, DiffReadBase, EditorChipAddedHow, EditorConflictResolvedChoice, EditorFileOpenedHow, EditorFileSavedCommand, EditorGroupClosedHow, EditorGroupOpenedDir, EditorGroupOpenedHow, EditorKeyRefusedReason, EditorLinkFollowedView, EditorMarkdownShownForm, EditorReplacedScope, Signal, UndoRoutedTo } from "../../vm/signals.gen";
 import { isolateHistory, redo, redoDepth, undo, undoDepth } from "@codemirror/commands";
 import { EnvelopeKind } from "../../vm/envelope_kinds.gen";
 import { sendCommand, shell } from "../state/shell";
@@ -40,7 +40,6 @@ import { setBeforeTurn, type BeforeTurnResult } from "../../vm/session_controlle
 import type { Chip } from "../state/input_bar";
 import { addFrom, addItem, carriesChip, dragChip, fileChip } from "./chips";
 import { openMenu, type MenuItem } from "../state/context_menu";
-import { StatusLine } from "./StatusLine";
 import { BytesView, formOf, type ByteBuffer } from "./BytesView";
 import { LinesView } from "./LinesView";
 
@@ -313,6 +312,9 @@ export function outlineOf(state: EditorState): { kind: string; name: string; lin
  *  goes to that line once the file is shown. Sprint 441: `show` false adds the tab and keeps the shown one
  *  (quick open's ⌘↵); every open goes to the front of the recent list. */
 export function openFile(rel: string, paneId: number, how: EditorFileOpenedHow = EditorFileOpenedHow.TREE, line?: number, show = true): void {
+  // Sprint 504: a file is open in one group; opened again, its group takes the focus and shows it.
+  const holder = groupHolding(paneId, rel);
+  if (holder !== null && show) focusGroup(paneId, holder);
   const editor = editorFor(paneId);
   const st = editor.getSnapshot();
   const tabs = st.tabs.includes(rel) ? st.tabs : [...st.tabs, rel];
@@ -331,7 +333,48 @@ export function closeFile(rel: string, paneId: number): void {
   if (storeSession) SHOWN.delete(bufferKey(storeSession, rel));
   editor.set({ tabs, rendered: st.rendered.filter((x) => x !== rel), active: st.active === rel ? tabs[Math.min(at, tabs.length - 1)] ?? null : st.active });
   emitSignal(Signal.EDITOR_FILE_CLOSED, { tab_count: tabs.length }, { pane_id: paneId });
+  // Sprint 504: a group's last tab closed closes the group, unless it is the only one.
+  if (!tabs.length) closeFocusedGroup(paneId, EditorGroupClosedHow.LAST_TAB);
 }
+
+/** Sprint 504: splits the focused group; the new group opens empty and takes the focus. Past three across or down,
+ *  refused. */
+export function splitGroup(paneId: number, dir: "right" | "down", how: EditorGroupOpenedHow, key = dir === "right" ? "Meta+d" : "Meta+Shift+D"): void {
+  const made = splitEditorGroup(paneId, dir);
+  if (!made) { emitSignal(Signal.EDITOR_KEY_REFUSED, { key, reason: EditorKeyRefusedReason.SPLIT_LIMIT }, { pane_id: paneId }); return; }
+  emitSignal(Signal.EDITOR_GROUP_OPENED, { groups: made.groups, dir: dir === "right" ? EditorGroupOpenedDir.RIGHT : EditorGroupOpenedDir.DOWN, how }, { pane_id: paneId });
+}
+
+/** Sprint 504: closes the focused group (its tabs go with it); false for the only group. */
+export function closeFocusedGroup(paneId: number, how: EditorGroupClosedHow): boolean {
+  const lay = groupLayout(paneId).getSnapshot();
+  if (lay.cells.length < 2) return false;
+  for (const t of editorFor(paneId).getSnapshot().tabs) if (storeSession) SHOWN.delete(bufferKey(storeSession, t));
+  if (!closeEditorGroup(paneId, lay.focused)) return false;
+  emitSignal(Signal.EDITOR_GROUP_CLOSED, { groups: lay.cells.length - 1, how }, { pane_id: paneId });
+  return true;
+}
+
+/** Sprint 504: moves tab `rel` from group `from` into group `to`, where it shows; `from` closes if emptied. */
+export function moveTab(paneId: number, from: number, to: number, rel: string): void {
+  if (from === to) return;
+  focusGroup(paneId, from);
+  const src = editorFor(paneId), st = src.getSnapshot();
+  const at = st.tabs.indexOf(rel);
+  if (at < 0) return;
+  const tabs = st.tabs.filter((x) => x !== rel);
+  const rendered = st.rendered.includes(rel);
+  src.set({ tabs, rendered: st.rendered.filter((x) => x !== rel), active: st.active === rel ? tabs[Math.min(at, tabs.length - 1)] ?? null : st.active });
+  focusGroup(paneId, to);
+  const dst = editorFor(paneId), dt = dst.getSnapshot();
+  dst.set({ tabs: [...dt.tabs, rel], active: rel, rendered: rendered ? [...dt.rendered, rel] : dt.rendered });
+  const groups = groupLayout(paneId).getSnapshot().cells.length;
+  emitSignal(Signal.EDITOR_TAB_MOVED, { groups }, { pane_id: paneId });
+  if (!tabs.length && closeEditorGroup(paneId, from)) emitSignal(Signal.EDITOR_GROUP_CLOSED, { groups: groups - 1, how: EditorGroupClosedHow.MOVED }, { pane_id: paneId });
+}
+
+/** The drag type a tab carries besides its chip, naming its pane and group. */
+export const TAB_TYPE = "application/x-substrate-tab";
 
 /** Sprint 462: a buffer the person reads but cannot change (a file the server reads as `read_only`). */
 const READ_ONLY: Extension[] = [EditorState.readOnly.of(true)];
@@ -361,6 +404,8 @@ function tabMenu(rel: string, paneId: number): MenuItem[] {
     const on = st.rendered.includes(rel);
     items.push({ label: on ? "show source" : "show rendered", run: () => { editor.set({ active: rel }); showMarkdown(rel, paneId, !on); } });
   }
+  items.push({ label: "split right", run: () => splitGroup(paneId, "right", EditorGroupOpenedHow.MENU) });
+  items.push({ label: "split down", run: () => splitGroup(paneId, "down", EditorGroupOpenedHow.MENU) });
   items.push({ label: "close", run: () => closeFile(rel, paneId) });
   if (st.tabs.length > 1) items.push({ label: "close others", run: () => { for (const t of editorFor(paneId).getSnapshot().tabs) if (t !== rel) closeFile(t, paneId); } });
   return items;
@@ -368,16 +413,17 @@ function tabMenu(rel: string, paneId: number): MenuItem[] {
 
 /** A tab (sprint 419). Sprint 445 (BLACKBOARD 2026-11-09, the tab row: "the tab's dot means unsaved changes"; × on
  *  hover): an unsaved file's tab draws a dot in the ×'s place, as VS Code and Xcode do, and hovering shows the ×. */
-function Tab({ rel, active, unsaved, paneId }: { rel: string; active: boolean; unsaved: boolean; paneId: number }): React.ReactElement {
-  const editor = editorFor(paneId);
+function Tab({ rel, active, unsaved, paneId, group, lit }: { rel: string; active: boolean; unsaved: boolean; paneId: number; group: number; lit: boolean }): React.ReactElement {
+  const editor = groupEditor(paneId, group);
   const [hover, setHover] = React.useState(false);
   const name = rel.slice(rel.lastIndexOf("/") + 1);
   return (
     <div data-editor-tab={rel} data-active={active ? "1" : "0"} title={rel} onClick={() => editor.set({ active: rel })}
       onContextMenu={(e) => openMenu(e, ContextMenuOpenedSource.TAB, tabMenu(rel, paneId), paneId)}
-      draggable onDragStart={(e) => dragChip(e, fileChip(rel))} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+      draggable onDragStart={(e) => { dragChip(e, fileChip(rel)); e.dataTransfer.setData(TAB_TYPE, JSON.stringify({ paneId, group, rel })); e.dataTransfer.effectAllowed = "copyMove"; }} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
       style={{ display: "flex", alignItems: "center", gap: 8, padding: "0 14px", height: "100%", cursor: "pointer", fontSize: 12, whiteSpace: "nowrap", flex: "none",
-        background: active ? GROUND : "transparent", color: active ? "#d7dade" : "#9aa0a8", boxShadow: active ? `inset 0 2px 0 ${ACCENT}` : undefined }}>
+        background: active ? GROUND : "transparent", color: active ? "#d7dade" : "#9aa0a8", boxShadow: active ? `inset 0 2px 0 ${lit ? ACCENT : "#4a4e55"}` : undefined }}
+      data-lit={lit ? "1" : "0"}>
       {name}
       <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 8 }}>
         {unsaved && !hover
@@ -476,7 +522,12 @@ export function onBufferEdit(fn: () => void): () => void {
 
 /** The mounted centre's shown buffer (sprint 436), for the workspace search: its path, its text, and a change
  *  of its whole text as one edit, so its own undo can take a replace back. */
-let activeBuffer: { session(): string; path(): string | null; text(): string | null; state(): EditorState | null; put(text: string): void } | null = null;
+type BufferHandle = { session(): string; path(): string | null; text(): string | null; state(): EditorState | null; put(text: string): void };
+/** The focused group's buffer: its selection, its rendered Markdown. */
+let activeBuffer: BufferHandle | null = null;
+/** Sprint 504: every mounted group's buffer, for the reads by path (save before send, search, a write). */
+const MOUNTED = new Set<BufferHandle>();
+const mountedBuffer = (sessionId: string, rel: string): BufferHandle | null => [...MOUNTED].find((b) => b.session() === sessionId && b.path() === rel) ?? null;
 /** The session whose files the editor store's `unsaved` and `conflict` describe: the one the centre last showed
  *  (sprint 444). */
 let storeSession: string | null = null;
@@ -502,7 +553,8 @@ const setUnsaved = (rel: string, on: boolean, store: typeof editor = editor) => 
 export function unsavedBuffers(sessionId: string): Record<string, string> {
   const out: Record<string, string> = {};
   for (const rel of editor.getSnapshot().unsaved) {
-    const text = activeBuffer?.path() === rel ? activeBuffer.text() : BUFFERS.get(bufferKey(sessionId, rel))?.doc.toString();
+    const m = mountedBuffer(sessionId, rel);
+    const text = m ? m.text() : BUFFERS.get(bufferKey(sessionId, rel))?.doc.toString();
     if (typeof text === "string") out[rel] = text;
   }
   return out;
@@ -512,7 +564,8 @@ export function unsavedBuffers(sessionId: string): Record<string, string> {
  *  kept buffer likewise. False when the file has no buffer. */
 export function putBuffer(sessionId: string, rel: string, text: string): boolean {
   const k = bufferKey(sessionId, rel);
-  if (activeBuffer?.path() === rel) { activeBuffer.put(text); return true; }
+  const m = mountedBuffer(sessionId, rel);
+  if (m) { m.put(text); return true; }
   const kept = BUFFERS.get(k);
   if (!kept) return false;
   BUFFERS.set(k, kept.update({ changes: changeTo(kept.doc.toString(), text) }).state);
@@ -536,7 +589,8 @@ export async function writeBuffer(sessionId: string, rel: string, text: string):
   if (r?.ok) {
     DISK.set(k, text);
     SHAS.set(k, ((await r.json()) as { sha256: string }).sha256);
-    const now = activeBuffer?.path() === rel ? activeBuffer.text() : BUFFERS.get(k)?.doc.toString();
+    const m = mountedBuffer(sessionId, rel);
+    const now = m ? m.text() : BUFFERS.get(k)?.doc.toString();
     setUnsaved(rel, now !== text);
   }
   return r?.status ?? 0;
@@ -555,8 +609,8 @@ export async function saveForSend(sessionId: string, paneId: number | null): Pro
   const texts = new Map<string, string>();
   for (const [k, state] of BUFFERS) if (k.startsWith(prefix)) texts.set(k.slice(prefix.length), state.doc.toString());
   const shown = activeBuffer && activeBuffer.session() === sessionId ? activeBuffer.path() : null;
-  const shownText = shown ? activeBuffer!.text() : null;
-  if (shown && shownText !== null) texts.set(shown, shownText);
+  // Sprint 504: every group's shown buffer of this session, not the focused group's alone.
+  for (const b of MOUNTED) { const path = b.path(), t = b.text(); if (b.session() === sessionId && path && t !== null) texts.set(path, t); }
   const pending = [...texts].filter(([rel, text]) => DISK.has(bufferKey(sessionId, rel)) && text !== DISK.get(bufferKey(sessionId, rel)));
   const out: BeforeTurnResult = { saved: 0, refused: [] };
   if (!pending.length) return out;
@@ -577,7 +631,8 @@ export async function saveForSend(sessionId: string, paneId: number | null): Pro
       out.saved++;
       if (!ours) continue;
       // Typing during the save stays unsaved.
-      const now = shown === rel && activeBuffer?.session() === sessionId ? activeBuffer.text() : BUFFERS.get(k)?.doc.toString();
+      const m = mountedBuffer(sessionId, rel);
+      const now = m ? m.text() : BUFFERS.get(k)?.doc.toString();
       setUnsaved(rel, now !== text, editor);
       const facts = editor.getSnapshot().file;
       if (facts && facts.path === rel) editor.set({ file: { ...facts, text } });
@@ -623,8 +678,11 @@ export function addSelection(paneId: number, how: EditorChipAddedHow = EditorChi
   addFrom(paneId, chip, how);
 }
 
-export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionId: string; tabRow: number }): React.ReactElement {
-  const editor = editorFor(paneId);
+export function Centre({ paneId, sessionId, tabRow, group = 1 }: { paneId: number; sessionId: string; tabRow: number; group?: number }): React.ReactElement {
+  // Sprint 504: this group's editor; the pane's own store while the group has the focus.
+  const editor = groupEditor(paneId, group);
+  const layout = groupLayout(paneId);
+  const focused = React.useSyncExternalStore(layout.subscribe, () => layout.getSnapshot().focused === group, () => layout.getSnapshot().focused === group);
   const st = React.useSyncExternalStore(editor.subscribe, editor.getSnapshot, editor.getSnapshot);
   const { binding, look, selectionMatches, scheme } = React.useSyncExternalStore(settings.subscribe, settings.getSnapshot, settings.getSnapshot);
   const host = React.useRef<HTMLDivElement>(null);
@@ -1041,19 +1099,24 @@ export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionI
     },
     focusCode() { view.current?.focus(); },
   };
+  const handle = React.useRef<BufferHandle>({
+    session: () => sessionId,
+    path: () => shown.current,
+    state: () => view.current?.state ?? null,
+    text: () => view.current?.state.doc.toString() ?? null,
+    put: (text) => { const v = view.current; if (v && v.state.doc.toString() !== text) v.dispatch({ changes: changeTo(v.state.doc.toString(), text) }); },
+  }).current;
+  React.useEffect(() => { MOUNTED.add(handle); return () => { MOUNTED.delete(handle); }; }, [handle]);
+  // Sprint 504: the keys and the menu's save, undo and find act on the focused group.
   React.useEffect(() => {
-    activeSave = (command) => { void save(command); };
+    storeSession = sessionId;
+    if (!focused) return;
+    const mine = (command: EditorFileSavedCommand) => { void save(command); };
+    activeSave = mine;
     activeUndo = undoRedo;
     activeFind = findImpl;
-    storeSession = sessionId;
-    activeBuffer = {
-      session: () => sessionId,
-      path: () => shown.current,
-      state: () => view.current?.state ?? null,
-      text: () => view.current?.state.doc.toString() ?? null,
-      put: (text) => { const v = view.current; if (v && v.state.doc.toString() !== text) v.dispatch({ changes: changeTo(v.state.doc.toString(), text) }); },
-    };
-    return () => { activeSave = null; activeUndo = null; activeFind = null; activeBuffer = null; };
+    activeBuffer = handle;
+    return () => { if (activeSave === mine) { activeSave = null; activeUndo = null; activeFind = null; activeBuffer = null; } };
   });
   React.useEffect(() => () => {
     // Leaving the editor: the buffer on screen is kept for its tab (sprint 473: every file; unsaved edits in BUFFERS).
@@ -1082,9 +1145,9 @@ export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionI
   const mdShown = !!st.active && st.rendered.includes(st.active) && !largeText && !bytesFile;
   const mdText = mdShown ? (activeBuffer?.path() === st.active ? activeBuffer.text() : null) ?? showing?.text ?? null : null;
   return (
-    <div data-editor-area="centre" style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, background: GROUND }}>
+    <div data-editor-area="centre" data-editor-group={String(group)} data-focused={focused ? "1" : "0"} style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, minWidth: 0, background: GROUND, position: "relative" }}>
       <div data-editor-tabs={String(st.tabs.length)} style={{ height: tabRow, flex: "none", background: SUNK, display: "flex", overflowX: "auto", overflowY: "hidden" }}>
-        {st.tabs.map((rel) => <Tab key={rel} rel={rel} active={rel === st.active} unsaved={st.unsaved.includes(rel)} paneId={paneId} />)}
+        {st.tabs.map((rel) => <Tab key={rel} rel={rel} active={rel === st.active} unsaved={st.unsaved.includes(rel)} paneId={paneId} group={group} lit={focused} />)}
       </div>
       {st.conflict && st.conflict === st.active && (
         <div data-save-conflict={st.conflict} style={{ display: "flex", gap: 14, alignItems: "center", padding: "6px 14px", background: SUNK, borderBottom: "1px solid rgba(255,255,255,.055)", fontSize: 11, color: "#b9bec5", flex: "none" }}>
@@ -1098,15 +1161,16 @@ export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionI
         <div ref={host} data-editor-code={st.active ?? ""} data-binding={binding}
           onContextMenu={(e) => { const chip = selectionChip(); if (chip) openMenu(e, ContextMenuOpenedSource.CODE, [addItem(paneId, chip)], paneId); }}
           // Sprint 458: a chip's drag is not for the code; stopped here, before the editor's own drop puts its path in the file.
-          onDragOverCapture={(e) => { if (carriesChip(e.dataTransfer)) { e.stopPropagation(); e.dataTransfer.dropEffect = "none"; } }}
-          onDropCapture={(e) => { if (carriesChip(e.dataTransfer)) { e.preventDefault(); e.stopPropagation(); } }} style={{ position: "absolute", inset: 0, display: st.active && !largeText && (!bytesFile || asCode) && !mdShown ? "block" : "none" }} />
+          // Sprint 504: a dragged tab never reaches the code (CodeMirror would paste its path); it moves to this group.
+          onDragOverCapture={(e) => { if (Array.from(e.dataTransfer.types).includes(TAB_TYPE)) { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = "move"; } else if (carriesChip(e.dataTransfer)) { e.stopPropagation(); e.dataTransfer.dropEffect = "none"; } }}
+          onDropCapture={(e) => { const raw = e.dataTransfer.getData(TAB_TYPE); if (raw) { e.preventDefault(); e.stopPropagation(); const tab = JSON.parse(raw) as { paneId: number; group: number; rel: string }; if (tab.paneId === paneId) moveTab(paneId, tab.group, group, tab.rel); } else if (carriesChip(e.dataTransfer)) { e.preventDefault(); e.stopPropagation(); } }} style={{ position: "absolute", inset: 0, display: st.active && !largeText && (!bytesFile || asCode) && !mdShown ? "block" : "none" }} />
         {/* Sprint 503: a Markdown tab switched to its rendered form; the code stays mounted under it, holding the buffer. */}
         {mdShown && st.active && <MarkdownView key={st.active} text={mdText ?? ""} paneId={paneId} sessionId={sessionId} file={st.active} />}
         {/* A file within the limit waits for its buffer to be placed, so the view mounts (and records its opening) once. */}
-        {bytesFile && st.active && (bytesFile.text === null || inBuffer) && <BytesView sessionId={sessionId} path={st.active} size={bytesFile.size} paneId={paneId} buffer={inBuffer ? byteBuffer : undefined} hidden={asCode} />}
+        {bytesFile && st.active && (bytesFile.text === null || inBuffer) && <BytesView sessionId={sessionId} path={st.active} size={bytesFile.size} paneId={paneId} buffer={inBuffer ? byteBuffer : undefined} hidden={asCode} store={editor} />}
         {largeText && st.active && <LinesView sessionId={sessionId} path={st.active} />}
       </div>
-      <StatusLine paneId={paneId} />
+      {!st.active && <div data-editor-empty={String(group)} style={{ position: "absolute", top: tabRow + 40, left: 0, right: 0, textAlign: "center", color: "#4a4e55", fontSize: 11, pointerEvents: "none" }}>open a file from the tree, or drag a tab here</div>}
     </div>
   );
 }

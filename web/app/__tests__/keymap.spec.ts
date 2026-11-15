@@ -110,11 +110,11 @@ test("⌥⌘L, ⌥⌘R and ⌘J fold the editor's columns, and do nothing outsid
   assert.strictEqual(windowKey(key("j", { metaKey: true }), CTX), null);
 });
 
-// Sprint 417: the editor does not split (D49 (c)); ⌘D and ⌘⇧D are refused there and split elsewhere.
-test("⌘D and ⌘⇧D are refused in the editor and split outside it", () => {
+// Sprint 504 (superseding sprint 417): ⌘D and ⌘⇧D split the editor itself in the editor and split the pane elsewhere.
+test("⌘D and ⌘⇧D split the editor in the editor and the pane outside it", () => {
   const ed = { ...CTX, editor: true };
-  assert.deepStrictEqual(windowKey(key("d", { metaKey: true }), ed), { kind: "refuse-split" });
-  assert.deepStrictEqual(windowKey(key("D", { metaKey: true, shiftKey: true }), ed), { kind: "refuse-split" });
+  assert.deepStrictEqual(windowKey(key("d", { metaKey: true }), ed), { kind: "editor-split", dir: "right" });
+  assert.deepStrictEqual(windowKey(key("D", { metaKey: true, shiftKey: true }), ed), { kind: "editor-split", dir: "down" });
   assert.deepStrictEqual(windowKey(key("d", { metaKey: true }), CTX), { kind: "split", dir: "right" });
 });
 

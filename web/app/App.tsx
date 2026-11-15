@@ -26,7 +26,7 @@ import { liveActivity } from "../reveal/activity";
 import { fontSize, loadSettings, settings } from "./state/settings";
 import { closeDialog, dialogOpen, openSettings } from "./state/dialogs";
 import { chrome } from "./state/chrome";
-import { editor as editorStore, editorFor, showEditorFor, dropEditor } from "./state/editor";
+import { editor as editorStore, editorFor, showEditorFor, dropEditor, groupLayout } from "./state/editor";
 import { firstRun } from "./state/first_run";
 import { setTopBarActions, topBar, type TopBarActions, type TopBarState } from "./state/top_bar";
 import { workspaceCard } from "./derive/workspace_card";
@@ -54,7 +54,7 @@ import { AssayPage } from "./AssayPage";
 import { EditorView, foldColumn, toggleDock, toggleFocus, toggleMetaPane, toggleSwap } from "./editor/EditorView";
 import { openSearch } from "./editor/Search";
 import { openQuick } from "./editor/QuickOpen";
-import { addSelection, closeFile, requestSave, routeUndo } from "./editor/Centre";
+import { addSelection, closeFile, closeFocusedGroup, requestSave, routeUndo, splitGroup } from "./editor/Centre";
 import { Dialogs } from "./Dialogs";
 import { FindBar } from "./FindBar";
 import { FirstRun } from "./FirstRun";
@@ -68,7 +68,7 @@ import { TopBar } from "./TopBar";
 import { ContextMenu } from "./ContextMenu";
 import { closeMenu, menuKey, menuOpen } from "./state/context_menu";
 import "./window.css";
-import { Signal, UndoRoutedDirection, UndoRoutedTo, EditorColumnFoldedCause, EditorDrawnBinding, EditorDrawnMode, EditorOpenedBinding, EditorDrawnDock, EditorDrawnLeftTab, EditorDrawnShowing, EditorKeyRefusedReason, SeqSelectedHow, ToolOutputModeSetCause, TopBarCardSetCard, TopBarCardSetCause, DialogClosedOutcome, ContextMenuClosedOutcome, KeyRoutedTarget, RecordOpenedHow, ViewChangedCause, PaneBoundBinding, PaneBoundHow, PaneDrawnConnection, PaneDrawnPickerLine, PaneDrawnState, PaneDrawnTurnState, PaneFocusedCause, PaneOpenedCause, PickerFolderArmedSource, PickerFolderDisarmedCause, PickerLineEnteredCause, PickerLineEnteredLine, type SignalPayloads } from "../vm/signals.gen";
+import { Signal, EditorGroupClosedHow, EditorGroupOpenedHow, UndoRoutedDirection, UndoRoutedTo, EditorColumnFoldedCause, EditorDrawnBinding, EditorDrawnMode, EditorOpenedBinding, EditorDrawnDock, EditorDrawnLeftTab, EditorDrawnShowing, EditorKeyRefusedReason, SeqSelectedHow, ToolOutputModeSetCause, TopBarCardSetCard, TopBarCardSetCause, DialogClosedOutcome, ContextMenuClosedOutcome, KeyRoutedTarget, RecordOpenedHow, ViewChangedCause, PaneBoundBinding, PaneBoundHow, PaneDrawnConnection, PaneDrawnPickerLine, PaneDrawnState, PaneDrawnTurnState, PaneFocusedCause, PaneOpenedCause, PickerFolderArmedSource, PickerFolderDisarmedCause, PickerLineEnteredCause, PickerLineEnteredLine, type SignalPayloads } from "../vm/signals.gen";
 import type { Activity } from "../reveal/activity";
 
 // UI sprint 132 (kernel K288, session vocabulary § R): the guidance levels the bar offers, each with
@@ -198,7 +198,7 @@ const KEY_TARGET: Partial<Record<KeyAction["kind"], KeyRoutedTarget>> = {
   picker: KeyRoutedTarget.PICKER,
   language: KeyRoutedTarget.LANGUAGE,
   "fold-editor": KeyRoutedTarget.EDITOR,
-  "refuse-split": KeyRoutedTarget.EDITOR,
+  "editor-split": KeyRoutedTarget.EDITOR,
   "editor-find": KeyRoutedTarget.EDITOR,
   "editor-search": KeyRoutedTarget.EDITOR,
   "tree-find": KeyRoutedTarget.EDITOR,
@@ -730,7 +730,7 @@ export class App extends React.Component<AppProps, AppState> {
       else if (command === "settings") openSettings();
       // Sprint 419: in the editor ⌘W closes the active tab and never ends the session (roadmap r8 key table).
       // Sprint 425 (roadmap r8, the key table): ⌘W with no tab open in the editor, and ⌘S, refused and written.
-      else if (command === "close-pane" && this.state.vs.view === "editor") { const a = editorFor(this.state.focused).getSnapshot().active; if (a) closeFile(a, this.state.focused); else emitSignal(Signal.EDITOR_KEY_REFUSED, { key: "Meta+w", reason: EditorKeyRefusedReason.NO_FILE }, { pane_id: this.state.focused }); }
+      else if (command === "close-pane" && this.state.vs.view === "editor") { const a = editorFor(this.state.focused).getSnapshot().active; if (a) closeFile(a, this.state.focused); else if (closeFocusedGroup(this.state.focused, EditorGroupClosedHow.KEY)) { /* sprint 504: ⌘W on an empty group closes it */ } else emitSignal(Signal.EDITOR_KEY_REFUSED, { key: "Meta+w", reason: EditorKeyRefusedReason.NO_FILE }, { pane_id: this.state.focused }); }
       // Sprint 426: Edit ▸ Undo and Redo, routed (roadmap r8 key table; BLACKBOARD 2026-11-09 the undo boundary).
       else if (command === "undo" || command === "redo") {
         const to = this.state.vs.view === "editor" ? routeUndo(command) : document.execCommand(command) ? UndoRoutedTo.PAGE : UndoRoutedTo.NONE;
@@ -848,7 +848,7 @@ export class App extends React.Component<AppProps, AppState> {
     e.preventDefault();
     if (action.kind === "toggle-meta") this.toggleMeta(ViewChangedCause.KEY);
     else if (action.kind === "toggle-editor") this.toggleEditor(ViewChangedCause.KEY, name);
-    else if (action.kind === "refuse-split") emitSignal(Signal.EDITOR_KEY_REFUSED, { key: name, reason: EditorKeyRefusedReason.NO_SPLIT }, { pane_id: s.focused });
+    else if (action.kind === "editor-split") splitGroup(s.focused, action.dir, EditorGroupOpenedHow.KEY, name);
     else if (action.kind === "fold-editor") foldColumn(action.column, !editorFor(s.focused).getSnapshot().folded[action.column], EditorColumnFoldedCause.KEY, s.focused);
     // Sprint 428: ⌘F and ⌥⌘F in the editor go to the inspector's FIND / REPLACE, unfolding it if folded.
     else if (action.kind === "editor-find") {
@@ -1052,6 +1052,8 @@ export class App extends React.Component<AppProps, AppState> {
       // Sprint 422: what the inspector draws.
       outline_rows: editorStore.getSnapshot().inspector.outlineRows, hunks: editorStore.getSnapshot().inspector.hunks,
       activity_rows: editorStore.getSnapshot().inspector.activityRows, history_rows: editorStore.getSnapshot().inspector.historyRows,
+      // Sprint 504 (v0.73): the editor's groups.
+      groups: groupLayout(s.focused).getSnapshot().cells.length,
     };
     const key = JSON.stringify(drawn);
     if (key === this.lastEditorDrawn) return;

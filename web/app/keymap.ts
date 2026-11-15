@@ -66,7 +66,7 @@ export type KeyAction =
   | { kind: "toggle-editor" } | { kind: "add-selection" }
   | { kind: "editor-find"; field: "query" | "replace" } | { kind: "editor-search" } | { kind: "tree-find" } | { kind: "quick-open" }
   | { kind: "fold-editor"; column: "left" | "right" | "bottom" }
-  | { kind: "refuse-split" }
+  | { kind: "editor-split"; dir: "right" | "down" }
   | { kind: "menu" } | { kind: "close-menu" }
   | { kind: "close-find" } | { kind: "close-dialog" } | { kind: "close-cards" } | { kind: "close-surface" }
   | { kind: "interrupt"; tier: TurnInterruptedTier };
@@ -100,7 +100,8 @@ export function windowKey(ev: KeyLike, ctx: KeyContext): KeyAction | null {
   if (ctx.editor && cmd && ev.altKey && !ev.shiftKey && ev.code === "KeyR") return { kind: "fold-editor", column: "right" };
   if (ctx.editor && plainCmd && key === "j") return { kind: "fold-editor", column: "bottom" };
   // Sprint 417 (roadmap r8, E1): the editor does not split (D49 (c), spec r6 §4); ⌘D and ⌘⇧D are refused there.
-  if (ev.metaKey && key === "d") return ctx.editor ? { kind: "refuse-split" } : { kind: "split", dir: ev.shiftKey ? "down" : "right" };
+  // Sprint 504 (the Architect, 2026-11-14, superseding D49 (c)): in the editor ⌘D and ⌘⇧D split the editor itself.
+  if (ev.metaKey && key === "d") return ctx.editor ? { kind: "editor-split", dir: ev.shiftKey ? "down" : "right" } : { kind: "split", dir: ev.shiftKey ? "down" : "right" };
   // Sprint 428 (roadmap r10 key table): in the editor, ⌘F finds in the open file and ⌥⌘F replaces there,
   // in the inspector's FIND / REPLACE; with the focus in the terminal, ⌘F is the transcript's find.
   // Sprint 437: ⌥⌘F with the tree focused finds in the tree by name; elsewhere it is replace in the file

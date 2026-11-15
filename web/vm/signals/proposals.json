@@ -1602,6 +1602,26 @@
       "rationale": "A followed link is a person's act with three outcomes the screen alone cannot tell apart from a missed click; the kind and whether its target was found reconstruct it without its address.",
       "ratified": true,
       "ratified_by": "agent-resolved 2026-11-14, sprint 503; grounds: project — the user entries of 2026-11-14, E1 (no addresses in the trace); SDD — hard rule 2, grammar Layers 1–2; practice — VS Code: ⌘-click follows a link in the editor, a click in the Markdown preview"
+    },
+    {
+      "id": "P-0.73-EDITOR-GROUPS",
+      "kind": "NEW_TAG_PROPOSED",
+      "layer": 1,
+      "element": "EDITOR_GROUP_OPENED, EDITOR_GROUP_CLOSED, EDITOR_TAB_MOVED; EDITOR_DRAWN.groups",
+      "source": "roadmap 2026-11-14-editor-features r4 E6, sprint 504; the Architect, 2026-11-14: ⌘D and ⌘⇧D split the editor, up to three by three",
+      "rationale": "The editor splits into groups; the trace says when a group opens, closes and takes a tab, and every draw counts them, so a gate pairs the screen's groups with the record.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-14, sprint 504; grounds: project — the user entry of 2026-11-14 on splits, superseding D49 (c); SDD — hard rule 2, grammar Layers 1–2; practice — VS Code editor groups (split, move a tab, close the last tab closes the group)"
+    },
+    {
+      "id": "P-0.73-SPLIT-LIMIT",
+      "kind": "PAYLOAD_FIELD_PROPOSED",
+      "layer": 2,
+      "element": "EDITOR_KEY_REFUSED.reason split_limit; no_split no longer written",
+      "source": "roadmap 2026-11-14-editor-features r4 E6, sprint 504; the Architect, 2026-11-14: ⌘D and ⌘⇧D split the editor, up to three by three",
+      "rationale": "⌘D and ⌘⇧D split the editor now (the Architect, 2026-11-14, superseding D49 (c)); a split past three across or three down is the one refusal left.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-14, sprint 504; grounds: project — the user entry of 2026-11-14 on splits, superseding D49 (c); SDD — hard rule 2, grammar Layers 1–2; practice — VS Code editor groups (split, move a tab, close the last tab closes the group)"
     }
   ]
 }

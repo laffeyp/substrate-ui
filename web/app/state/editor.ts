@@ -5,6 +5,8 @@
 
 import { createStore } from "../store";
 import type { Store } from "../store";
+import { SINGLE, type Cell, type Grid } from "../derive/panes";
+import { closeGroup, splitGroup as splitLayout } from "../derive/editor_groups";
 import type { Anchor, Anchor2, Anchor3 } from "../derive/anchor";
 import type { VimMode } from "../derive/status_line";
 
@@ -97,7 +99,7 @@ export interface EditorState {
 const initial = (): EditorState => ({ treeRows: 0, modifiedDots: 0, folded: { left: false, right: false, bottom: false }, tabs: [], active: null, rendered: [], file: null, bytesForm: {}, bytesCaret: null, language: null, hunks: [], bufferHunks: null, outline: [], caretLine: 1, unsaved: [], mode: null, caretCol: 1, vsBase: null, nanoHelp: false, anchor3: null, conflict: null, find: { search: "", caseSensitive: false, regexp: false, replace: "", wholeWord: false, preserveCase: false, inSelection: false }, findCount: { total: 0, current: 0 }, findFocus: 0, showing: "inspector", leftTab: "files", search: { query: "", replace: "", caseSensitive: false, regexp: false, word: false, include: "", exclude: "", details: false }, searchFocus: 0, quickOpen: 0, recent: [], focusOnOpen: null, reveal: null, treeFindFocus: 0, jump: null, follow: [], followLanded: null, inspector: { outlineRows: 0, hunks: 0, activityRows: 0, historyRows: 0 }, anchor2: null, dock: "bottom", swapped: false, focus: { on: false, before: null }, anchor: null });
 
 const KEY = "__substrateEditors";
-type Stores = { byPane: Map<number, Store<EditorState>>; sessionOf: Map<number, string>; shown: number; listeners: Set<() => void> };
+type Stores = { byPane: Map<number, Store<EditorState>>; sessionOf: Map<number, string>; shown: number; listeners: Set<() => void>; groups?: Map<number, PaneGroups> };
 const scope = globalThis as unknown as Record<string, Stores | undefined>;
 const stores: Stores = scope[KEY] ?? (scope[KEY] = { byPane: new Map(), sessionOf: new Map(), shown: 0, listeners: new Set() });
 
@@ -121,7 +123,7 @@ export function showEditorFor(paneId: number, sessionId: string): void {
   const was = stores.sessionOf.get(paneId);
   stores.sessionOf.set(paneId, sessionId);
   const rebound = was !== undefined && was !== sessionId;
-  if (rebound) stores.byPane.delete(paneId);
+  if (rebound) { stores.byPane.delete(paneId); groupMap().delete(paneId); }
   if (stores.shown === paneId && !rebound) return;
   stores.shown = paneId;
   editorFor(paneId);
@@ -130,7 +132,7 @@ export function showEditorFor(paneId: number, sessionId: string): void {
 }
 
 /** A pane gone: its editor state goes with it. */
-export function dropEditor(paneId: number): void { stores.byPane.delete(paneId); stores.sessionOf.delete(paneId); }
+export function dropEditor(paneId: number): void { stores.byPane.delete(paneId); stores.sessionOf.delete(paneId); groupMap().delete(paneId); }
 
 /** The shown pane's editor. */
 export const editor: Store<EditorState> = {
@@ -142,3 +144,123 @@ export const editor: Store<EditorState> = {
 // The gates read the editor on screen as `globalThis.__substrateEditor` (sprints 436–447); since sprint 499
 // that is the shown pane's store.
 (globalThis as unknown as Record<string, Store<EditorState>>).__substrateEditor = editor;
+
+// Sprint 504: the editor's groups. A pane's editor holds one group or more, laid out as the pane grid lays out
+// panes (derive/editor_groups.ts). The fields in GROUP_FIELDS belong to a group; every other field to the pane.
+// `editorFor(paneId)` is the pane's store, and its group fields are the focused group's, so the tree, quick open,
+// the inspector, search and save-before-send act on the focused group as they acted on the one editor before. Each
+// other group keeps its own fields in its own store; `groupEditor(paneId, group)` is a store for one group (its own
+// fields over the pane's), stable for the group's life, so a closure kept by a group's code view writes to that
+// group whether or not it has the focus. `focusGroup` swaps the fields.
+
+export const GROUP_FIELDS = ["tabs", "active", "rendered", "file", "bytesCaret", "language", "hunks", "bufferHunks", "outline", "caretLine", "caretCol", "mode", "vsBase", "conflict", "findCount", "jump", "focusOnOpen"] as const;
+type GroupKey = (typeof GROUP_FIELDS)[number];
+type GroupFields = Pick<EditorState, GroupKey>;
+const pickGroup = (st: EditorState): GroupFields => Object.fromEntries(GROUP_FIELDS.map((k) => [k, st[k]])) as unknown as GroupFields;
+const isGroupKey = (k: string) => (GROUP_FIELDS as readonly string[]).includes(k);
+
+export interface GroupLayout { grid: Grid; cells: Cell[]; focused: number; nextId: number }
+type PaneGroups = { layout: Store<GroupLayout>; own: Map<number, Store<GroupFields>>; facades: Map<number, Store<EditorState>> };
+
+function groupMap(): Map<number, PaneGroups> { return (stores.groups ??= new Map()); }
+
+function groupsOf(paneId: number): PaneGroups {
+  let pg = groupMap().get(paneId);
+  if (!pg) {
+    pg = { layout: createStore<GroupLayout>({ grid: SINGLE, cells: [{ id: 1, col: 1, row: 1, cw: 1, rh: 1 }], focused: 1, nextId: 2 }), own: new Map(), facades: new Map() };
+    // Listeners of `editor` (App's EDITOR_DRAWN) hear the shown pane's groups change.
+    pg.layout.subscribe(() => { if (stores.shown === paneId) for (const l of [...stores.listeners]) l(); });
+    groupMap().set(paneId, pg);
+  }
+  return pg;
+}
+
+function ownOf(pg: PaneGroups, group: number): Store<GroupFields> {
+  let made = pg.own.get(group);
+  if (!made) { made = createStore<GroupFields>(pickGroup(initial())); pg.own.set(group, made); }
+  return made;
+}
+
+/** The pane's group layout, for drawing it. */
+export function groupLayout(paneId: number): Store<GroupLayout> { return groupsOf(paneId).layout; }
+
+/** One group's editor: its own fields over the pane's; the pane's store itself while the group has the focus. */
+export function groupEditor(paneId: number, group: number): Store<EditorState> {
+  const pg = groupsOf(paneId);
+  const had = pg.facades.get(group);
+  if (had) return had;
+  const focused = () => pg.layout.getSnapshot().focused === group;
+  let cache: { p: EditorState; own: GroupFields; v: EditorState } | null = null;
+  const facade: Store<EditorState> = {
+    getSnapshot: () => {
+      const p = editorFor(paneId).getSnapshot();
+      if (focused()) return p;
+      const own = ownOf(pg, group).getSnapshot();
+      if (cache && cache.p === p && cache.own === own) return cache.v;
+      cache = { p, own, v: { ...p, ...own } };
+      return cache.v;
+    },
+    set: (patch) => {
+      if (focused()) { editorFor(paneId).set(patch); return; }
+      const next = typeof patch === "function" ? patch(facade.getSnapshot()) : patch;
+      const mine: Record<string, unknown> = {}, rest: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(next)) (isGroupKey(k) ? mine : rest)[k] = v;
+      if (Object.keys(mine).length) ownOf(pg, group).set(mine as Partial<GroupFields>);
+      if (Object.keys(rest).length) editorFor(paneId).set(rest as Partial<EditorState>);
+    },
+    subscribe: (listener) => {
+      const offs = [editorFor(paneId).subscribe(listener), ownOf(pg, group).subscribe(listener), pg.layout.subscribe(listener)];
+      return () => { for (const off of offs) off(); };
+    },
+  };
+  pg.facades.set(group, facade);
+  return facade;
+}
+
+/** Gives `group` the focus: the focused group's fields go to its own store, and `group`'s come into the pane's. */
+export function focusGroup(paneId: number, group: number): void {
+  const pg = groupsOf(paneId), lay = pg.layout.getSnapshot();
+  if (lay.focused === group || !lay.cells.some((c) => c.id === group)) return;
+  const pane = editorFor(paneId);
+  ownOf(pg, lay.focused).set(pickGroup(pane.getSnapshot()));
+  pg.layout.set({ focused: group });
+  pane.set(ownOf(pg, group).getSnapshot());
+}
+
+/** Splits the focused group; the new group opens empty and takes the focus. Null past three across or down. */
+export function splitEditorGroup(paneId: number, dir: "right" | "down"): { group: number; groups: number } | null {
+  const pg = groupsOf(paneId), lay = pg.layout.getSnapshot();
+  const out = splitLayout(lay.grid, lay.cells, lay.focused, dir, lay.nextId);
+  if (!out) return null;
+  const group = lay.nextId;
+  pg.own.set(group, createStore<GroupFields>(pickGroup(initial())));
+  pg.layout.set({ grid: out.grid, cells: out.cells, nextId: group + 1 });
+  focusGroup(paneId, group);
+  return { group, groups: out.cells.length };
+}
+
+/** Closes `group`; its space goes to a neighbour. False for the last group. */
+export function closeEditorGroup(paneId: number, group: number): boolean {
+  const pg = groupsOf(paneId), lay = pg.layout.getSnapshot();
+  const out = closeGroup(lay.grid, lay.cells, group);
+  if (!out) return false;
+  if (lay.focused === group) {
+    pg.layout.set({ grid: out.grid, cells: out.cells, focused: out.focused });
+    editorFor(paneId).set(ownOf(pg, out.focused).getSnapshot());
+  } else {
+    pg.layout.set({ grid: out.grid, cells: out.cells });
+  }
+  pg.own.delete(group);
+  pg.facades.delete(group);
+  return true;
+}
+
+/** The group whose tabs hold `rel`, or null. */
+export function groupHolding(paneId: number, rel: string): number | null {
+  const pg = groupsOf(paneId), lay = pg.layout.getSnapshot();
+  for (const c of lay.cells) {
+    const tabs = c.id === lay.focused ? editorFor(paneId).getSnapshot().tabs : ownOf(pg, c.id).getSnapshot().tabs;
+    if (tabs.includes(rel)) return c.id;
+  }
+  return null;
+}

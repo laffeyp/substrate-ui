@@ -22,8 +22,8 @@ const doubled = (weights: readonly number[]) => weights.flatMap((wt) => [wt, wt]
 
 /** The grid and panes after `focused` splits; the new pane takes the right or lower half and the
  *  fields of `fresh`. Null at the cap. A pane with no geometry yet covers the whole grid. */
-export function splitPane<T extends Cell>(grid: Grid, panes: readonly T[], focused: number, dir: SplitDir, fresh: Omit<T, keyof Cell> & { id: number }): { grid: Grid; panes: T[]; made: T } | null {
-  if (panes.length >= MAX_PANES) return null;
+export function splitPane<T extends Cell>(grid: Grid, panes: readonly T[], focused: number, dir: SplitDir, fresh: Omit<T, keyof Cell> & { id: number }, max: number = MAX_PANES): { grid: Grid; panes: T[]; made: T } | null {
+  if (panes.length >= max) return null;
   let { cols, rows, colW, rowW } = grid;
   const next = panes.map((p) => ({ ...p, col: p.col || 1, row: p.row || 1, cw: p.cw || cols, rh: p.rh || rows }));
   const target = next.find((p) => p.id === focused) ?? next[0];

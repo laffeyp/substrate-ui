@@ -57,8 +57,9 @@ export function pickBytesForm(paneId: number, path: string, form: BytesForm, siz
   emitSignal(Signal.EDITOR_BYTES_VIEWED, { form: FORM_SIGNAL[form], how: EditorBytesViewedHow.SELECTOR, bytes: size }, { pane_id: paneId });
 }
 
-export function BytesView({ sessionId, path, size: diskSize, paneId, buffer, hidden }: { sessionId: string; path: string; size: number; paneId: number; buffer?: ByteBuffer; hidden?: boolean }): React.ReactElement {
-  const editor = editorFor(paneId);
+export function BytesView({ sessionId, path, size: diskSize, paneId, buffer, hidden, store }: { sessionId: string; path: string; size: number; paneId: number; buffer?: ByteBuffer; hidden?: boolean; store?: ReturnType<typeof editorFor> }): React.ReactElement {
+  // Sprint 504: a group's view writes its caret through its group's store, not the focused group's.
+  const editor = store ?? editorFor(paneId);
   const forms = React.useSyncExternalStore(editor.subscribe, () => editor.getSnapshot().bytesForm, () => editor.getSnapshot().bytesForm);
   const form: BytesForm = (BYTES_FORMS as readonly string[]).includes(forms[path] ?? "") ? (forms[path] as BytesForm) : "hex";
   const scroller = React.useRef<HTMLDivElement>(null);

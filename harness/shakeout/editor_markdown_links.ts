@@ -8,7 +8,7 @@
 // at a heading, two headings of this file, an external address, and a file that is not there. Each is followed from
 // the source (⌘-click) and from the rendered view (click). main's shell.openExternal is replaced for the run, so the
 // browser never opens and the address it was given is read back. These agree:
-//   menu   — the tab's menu holds add to message, show rendered, close, close others; then show source;
+//   menu   — the tab's menu holds add to message, show rendered, split right, split down (sprint 504), close, close others; then show source;
 //   source — the file link opens its file (tab active); the heading links put the caret on the heading's line, in
 //            this file and in RUNBOOK.md; the external link reaches openExternal; the missing file opens nothing;
 //   view   — rendered: every heading drawn with its anchor, the six links drawn, the code hidden; the link's pixels
@@ -131,7 +131,7 @@ async function main(): Promise<void> {
     // The menu.
     const items = await menuItems(win, guide);
     seen.push(`menu ${JSON.stringify(items)}`);
-    if (JSON.stringify(items.slice(1)) !== JSON.stringify(["show rendered", "close"])) errs.push(`one tab: menu ${JSON.stringify(items)}`);
+    if (JSON.stringify(items.slice(1)) !== JSON.stringify(["show rendered", "split right", "split down", "close"])) errs.push(`one tab: menu ${JSON.stringify(items)}`);
     await win.keyboard.press("Escape");
 
     // Source: ⌘-click each link.
@@ -173,7 +173,7 @@ async function main(): Promise<void> {
     // Rendered.
     await showTab(win, guide);
     const items2 = await menuItems(win, guide);
-    if (JSON.stringify(items2.slice(1)) !== JSON.stringify(["show rendered", "close", "close others"])) errs.push(`three tabs: menu ${JSON.stringify(items2)}`);
+    if (JSON.stringify(items2.slice(1)) !== JSON.stringify(["show rendered", "split right", "split down", "close", "close others"])) errs.push(`three tabs: menu ${JSON.stringify(items2)}`);
     await pick(win, "show rendered");
     await win.locator("[data-md-view]").first().waitFor({ state: "visible", timeout: 10_000 });
     const drawn = await win.evaluate(() => ({

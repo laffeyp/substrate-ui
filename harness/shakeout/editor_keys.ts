@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2026 Peter Laffey
 // The window's keys inside the editor (sprint 417; roadmap 2026-11-09-code-editor r8, E1; D49 (c),
-// spec r6 §4, D86). Real key presses on the running window: ⌘D and ⌘⇧D are refused (the editor does
-// not split), ⌘, opens settings over the editor and Escape closes them back to it, ⌘3 opens the assay
+// spec r6 §4, D86). Real key presses on the running window: ⌘D and ⌘⇧D split the editor into groups
+// (sprint 504, superseding sprint 417's refusal) and open no pane, ⌘, opens settings over the editor and Escape closes them back to it, ⌘3 opens the assay
 // page and Escape returns to the editor, ⌘M opens the meta pane inside the editor and ⌘M closes it
 // (sprint 430: the Architect, 2026-11-09). These agree:
-//   DOM    — the editor still shown after each refusal, one pane, the dialog and page over the editor;
-//   pixels — the anchor decodes after the refusals and names an EDITOR_DRAWN (lib/editor_pixels.ts);
-//   signals (after close) — EDITOR_KEY_REFUSED for Meta+d and Meta+Shift+D with reason no_split, no
+//   DOM    — the editor still shown after each split, three editor groups, one pane, the dialog and page over the editor;
+//   pixels — the anchor decodes after the splits and names an EDITOR_DRAWN (lib/editor_pixels.ts);
+//   signals (after close) — EDITOR_GROUP_OPENED right then down by key (groups 2, 3), no EDITOR_KEY_REFUSED, no
 //            PANE_OPENED for a second pane, DIALOG_OPENED and DIALOG_CLOSED, and VIEW_CHANGED in order.
 // SHAKEOUT_APP=<Substrate.app> runs the bundle.
 
@@ -49,8 +49,10 @@ async function main(): Promise<void> {
       await settled(win);
       if (!(await shown(win, "[data-editor-view]"))) throw new Error(`${k} left the editor`);
     }
-    const px = await readPixels(win, join(shots, "after-refusals.png"), 0);
-    if ("error" in px.anchor) throw new Error(`after the refusals the pixel anchor does not decode: ${px.anchor.error}`);
+    const cells = await win.evaluate("document.querySelectorAll('[data-editor-group-cell]').length");
+    if (cells !== 3) throw new Error(`after ⌘D and ⌘⇧D the editor draws ${String(cells)} groups, not 3`);
+    const px = await readPixels(win, join(shots, "after-splits.png"), 0);
+    if ("error" in px.anchor) throw new Error(`after the splits the pixel anchor does not decode: ${px.anchor.error}`);
 
     await win.keyboard.press("Meta+,");
     await win.waitForFunction(() => ((window as unknown as { __vmSignals?: { name: string }[] }).__vmSignals ?? []).some((s) => s.name === "DIALOG_OPENED"), undefined, { timeout: 10_000 });
@@ -72,7 +74,9 @@ async function main(): Promise<void> {
     await app.close();
     const recs = windowRecords(launch);
     const refused = recs.filter((r) => r.name === "EDITOR_KEY_REFUSED").map((r) => `${String(r.payload.key)}:${String(r.payload.reason)}`);
-    if (JSON.stringify(refused) !== JSON.stringify(["Meta+d:no_split", "Meta+Shift+D:no_split"])) throw new Error(`EDITOR_KEY_REFUSED: ${JSON.stringify(refused)}`);
+    if (refused.length) throw new Error(`EDITOR_KEY_REFUSED: ${JSON.stringify(refused)}`);
+    const split = recs.filter((r) => r.name === "EDITOR_GROUP_OPENED").map((r) => `${String(r.payload.dir)}:${String(r.payload.how)}:${String(r.payload.groups)}`);
+    if (JSON.stringify(split) !== JSON.stringify(["right:key:2", "down:key:3"])) throw new Error(`EDITOR_GROUP_OPENED: ${JSON.stringify(split)}`);
     const opened = recs.filter((r) => r.name === "PANE_OPENED").map((r) => r.pane_id);
     if (opened.some((p) => p !== 1)) throw new Error(`a pane other than 1 opened: ${JSON.stringify(opened)}`);
     const dialogs = recs.filter((r) => r.name.startsWith("DIALOG_")).map((r) => r.name);
@@ -89,7 +93,7 @@ async function main(): Promise<void> {
     const boot = readdirSync(traces).sort().pop()!;
     const booted = readFileSync(join(traces, boot, "main.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as { name: string; payload: Record<string, unknown> }).find((r) => r.name === "APP_BOOTED")!.payload;
     if (packaged && booted.packaged !== true) throw new Error(`APP_BOOTED packaged ${String(booted.packaged)}`);
-    console.log(`editor_keys: ok — refused ${refused.join(", ")}; one pane; settings opened and closed over the editor; VIEW_CHANGED ${views.join(", ")}; pixels seq ${anchor.seq} = EDITOR_DRAWN; packaged=${String(booted.packaged)}`);
+    console.log(`editor_keys: ok — split ${split.join(", ")}; three groups drawn; one pane; settings opened and closed over the editor; VIEW_CHANGED ${views.join(", ")}; pixels seq ${anchor.seq} = EDITOR_DRAWN; packaged=${String(booted.packaged)}`);
     code = 0;
   } catch (e) {
     console.error(`editor_keys: FAIL — ${(e as Error).message}`);
