@@ -1,6 +1,6 @@
 # Roadmap — the editor's missing features (round 1)
 
-*2026-11-14. From `RESEARCH-2026-11-14-editor-features.md`. Broad cards, at the Architect's direction ("Let's do broad sprint cards here. A lot of these changes should be pretty simple"). Built and checked on Substrate Next; its install (runbook r10 5A steps 17–20) runs from a terminal or from Substrate.*
+*2026-11-14. From `RESEARCH-2026-11-14-editor-features.md`. Broad cards, at the Architect's direction ("Let's do broad sprint cards here. A lot of these changes should be pretty simple"). Each card is built, checked on its bundle and installed into Substrate (runbook r10 chapter 5, "Build and install — no Apple"); this session runs in Substrate Next, so installing Substrate leaves it running. When E6 closes, the roadmap's work rolls up to Substrate Next (runbook r10 5A: steps 1–16 from here, 17–20 from a terminal or from Substrate).*
 
 | # | Item | Card |
 |---|---|---|

@@ -11,4 +11,4 @@ pass_kind: observation
 
 ## scope
 
-The editor read again against the research's list and the frames: what is still missing goes to a new research round or the backlog. Runbook r10 5A on Substrate Next, the full suites once.
+The editor read again against the research's list and the frames: what is still missing goes to a new research round or the backlog. The full suites once, then the roadmap's work rolled up to Substrate Next by runbook r10 5A: steps 1–16 from here, steps 17–20 from a terminal or from Substrate, since step 17 quits Substrate Next.
