@@ -7,7 +7,9 @@
 // how=activity when it opens a tab).
 
 import * as React from "react";
-import { editor } from "../state/editor";
+import { editor as shownEditor, editorFor } from "../state/editor";
+/** The shown pane's editor, for code here that holds no pane (sprint 499). */
+const editor = shownEditor;
 import { shell } from "../state/shell";
 import { activityFiles } from "../derive/activity_files";
 import { EditorFileOpenedHow } from "../../vm/signals.gen";
@@ -46,6 +48,7 @@ export function OpenTab(): React.ReactElement {
 }
 
 export function ActivityTab({ paneId, workspace }: { paneId: number; workspace: string | null }): React.ReactElement {
+  const editor = editorFor(paneId);
   const st = React.useSyncExternalStore(editor.subscribe, editor.getSnapshot, editor.getSnapshot);
   const envs = React.useSyncExternalStore(shell.subscribe, shell.getSnapshot, shell.getSnapshot).snapshots[paneId]?.rawEnvelopes;
   const files = React.useMemo(() => activityFiles(envs ?? [], workspace), [envs, workspace]);

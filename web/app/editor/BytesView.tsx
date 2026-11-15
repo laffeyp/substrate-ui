@@ -15,7 +15,9 @@
 // answer, BLACKBOARD 2026-11-11 surfaced).
 
 import * as React from "react";
-import { editor } from "../state/editor";
+import { editor as shownEditor, editorFor } from "../state/editor";
+/** The shown pane's editor, for code here that holds no pane (sprint 499). */
+const editor = shownEditor;
 import { BYTES_FORMS, bytesRow, digitColumn, DIGITS, isDigitForm, ROW_BYTES, rowCount, typeDigit, type BytesForm } from "../derive/bytes";
 import { emit as emitSignal } from "../../vm/instrumentation/sdd";
 import { EditorBytesViewedForm, EditorBytesViewedHow, Signal } from "../../vm/signals.gen";
@@ -49,12 +51,14 @@ export const formOf = (path: string): BytesForm => {
 
 /** The status line's pick: the file's form changes, and the trace says so. */
 export function pickBytesForm(paneId: number, path: string, form: BytesForm, size: number): void {
+  const editor = editorFor(paneId);
   if (formOf(path) === form) return;
   editor.set({ bytesForm: { ...editor.getSnapshot().bytesForm, [path]: form } });
   emitSignal(Signal.EDITOR_BYTES_VIEWED, { form: FORM_SIGNAL[form], how: EditorBytesViewedHow.SELECTOR, bytes: size }, { pane_id: paneId });
 }
 
 export function BytesView({ sessionId, path, size: diskSize, paneId, buffer, hidden }: { sessionId: string; path: string; size: number; paneId: number; buffer?: ByteBuffer; hidden?: boolean }): React.ReactElement {
+  const editor = editorFor(paneId);
   const forms = React.useSyncExternalStore(editor.subscribe, () => editor.getSnapshot().bytesForm, () => editor.getSnapshot().bytesForm);
   const form: BytesForm = (BYTES_FORMS as readonly string[]).includes(forms[path] ?? "") ? (forms[path] as BytesForm) : "hex";
   const scroller = React.useRef<HTMLDivElement>(null);

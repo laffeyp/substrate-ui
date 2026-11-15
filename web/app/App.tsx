@@ -26,7 +26,7 @@ import { liveActivity } from "../reveal/activity";
 import { fontSize, loadSettings, settings } from "./state/settings";
 import { closeDialog, dialogOpen, openSettings } from "./state/dialogs";
 import { chrome } from "./state/chrome";
-import { editor as editorStore } from "./state/editor";
+import { editor as editorStore, editorFor, showEditorFor, dropEditor } from "./state/editor";
 import { firstRun } from "./state/first_run";
 import { setTopBarActions, topBar, type TopBarActions, type TopBarState } from "./state/top_bar";
 import { workspaceCard } from "./derive/workspace_card";
@@ -725,7 +725,7 @@ export class App extends React.Component<AppProps, AppState> {
       else if (command === "settings") openSettings();
       // Sprint 419: in the editor ⌘W closes the active tab and never ends the session (roadmap r8 key table).
       // Sprint 425 (roadmap r8, the key table): ⌘W with no tab open in the editor, and ⌘S, refused and written.
-      else if (command === "close-pane" && this.state.vs.view === "editor") { const a = editorStore.getSnapshot().active; if (a) closeFile(a, this.state.focused); else emitSignal(Signal.EDITOR_KEY_REFUSED, { key: "Meta+w", reason: EditorKeyRefusedReason.NO_FILE }, { pane_id: this.state.focused }); }
+      else if (command === "close-pane" && this.state.vs.view === "editor") { const a = editorFor(this.state.focused).getSnapshot().active; if (a) closeFile(a, this.state.focused); else emitSignal(Signal.EDITOR_KEY_REFUSED, { key: "Meta+w", reason: EditorKeyRefusedReason.NO_FILE }, { pane_id: this.state.focused }); }
       // Sprint 426: Edit ▸ Undo and Redo, routed (roadmap r8 key table; BLACKBOARD 2026-11-09 the undo boundary).
       else if (command === "undo" || command === "redo") {
         const to = this.state.vs.view === "editor" ? routeUndo(command) : document.execCommand(command) ? UndoRoutedTo.PAGE : UndoRoutedTo.NONE;
@@ -844,11 +844,11 @@ export class App extends React.Component<AppProps, AppState> {
     if (action.kind === "toggle-meta") this.toggleMeta(ViewChangedCause.KEY);
     else if (action.kind === "toggle-editor") this.toggleEditor(ViewChangedCause.KEY, name);
     else if (action.kind === "refuse-split") emitSignal(Signal.EDITOR_KEY_REFUSED, { key: name, reason: EditorKeyRefusedReason.NO_SPLIT }, { pane_id: s.focused });
-    else if (action.kind === "fold-editor") foldColumn(action.column, !editorStore.getSnapshot().folded[action.column], EditorColumnFoldedCause.KEY, s.focused);
+    else if (action.kind === "fold-editor") foldColumn(action.column, !editorFor(s.focused).getSnapshot().folded[action.column], EditorColumnFoldedCause.KEY, s.focused);
     // Sprint 428: ⌘F and ⌥⌘F in the editor go to the inspector's FIND / REPLACE, unfolding it if folded.
     else if (action.kind === "editor-find") {
-      if (editorStore.getSnapshot().folded.right) foldColumn("right", false, EditorColumnFoldedCause.KEY, s.focused);
-      editorStore.set({ findFocus: editorStore.getSnapshot().findFocus + 1 });
+      if (editorFor(s.focused).getSnapshot().folded.right) foldColumn("right", false, EditorColumnFoldedCause.KEY, s.focused);
+      editorFor(s.focused).set({ findFocus: editorFor(s.focused).getSnapshot().findFocus + 1 });
       requestAnimationFrame(() => { const box = document.querySelector<HTMLInputElement>(`[data-find-input="${action.field}"]`); box?.focus(); box?.select(); });
     }
     // Sprint 434 (roadmap r10 E8): ⌘⇧F in the editor opens the left column's search, unfolding it if folded.
@@ -859,8 +859,8 @@ export class App extends React.Component<AppProps, AppState> {
     else if (action.kind === "add-selection") addSelection(s.focused);
     // Sprint 437: ⌥⌘F in the tree opens its find by name.
     else if (action.kind === "tree-find") {
-      if (editorStore.getSnapshot().folded.left) foldColumn("left", false, EditorColumnFoldedCause.KEY, s.focused);
-      editorStore.set({ leftTab: "files", treeFindFocus: editorStore.getSnapshot().treeFindFocus + 1 });
+      if (editorFor(s.focused).getSnapshot().folded.left) foldColumn("left", false, EditorColumnFoldedCause.KEY, s.focused);
+      editorFor(s.focused).set({ leftTab: "files", treeFindFocus: editorFor(s.focused).getSnapshot().treeFindFocus + 1 });
     }
     else if (action.kind === "toggle-tools") toggleToolOutputMode(ToolOutputModeSetCause.KEY);
     else if (action.kind === "split") this.split(action.dir);
@@ -946,6 +946,7 @@ export class App extends React.Component<AppProps, AppState> {
     for (const p of prev.panes) {
       if (nowIds.has(p.id)) continue;
       emitSignal(Signal.PANE_CLOSED, { pane_id: p.id, had_session: showsBinding(p, prev.controllerSnapshots) }, { pane_id: p.id });
+      dropEditor(p.id); // sprint 499: a closed pane's editor state goes with it
       this.bindHow.delete(p.id);
     }
     for (const p of s.panes) {
@@ -1024,9 +1025,10 @@ export class App extends React.Component<AppProps, AppState> {
    *  the window back to the panes. */
   private noteEditor(prev: AppState): void {
     const s = this.state;
+    const editorStore = editorFor(s.focused); // sprint 499: the focused pane's editor
     const was = editorBase(prev.vs), is = editorBase(s.vs);
     const moved = was && is && prev.focused !== s.focused;
-    if (was && (!is || moved) && s.panes.some((p) => p.id === prev.focused)) emitSignal(Signal.EDITOR_CLOSED, { tab_count: editorStore.getSnapshot().tabs.length }, { pane_id: prev.focused });
+    if (was && (!is || moved) && s.panes.some((p) => p.id === prev.focused)) emitSignal(Signal.EDITOR_CLOSED, { tab_count: editorFor(prev.focused).getSnapshot().tabs.length }, { pane_id: prev.focused });
     if (is && (!was || moved)) { emitSignal(Signal.EDITOR_OPENED, { binding: settings.getSnapshot().binding as EditorOpenedBinding }, { pane_id: s.focused }); this.lastEditorDrawn = null; }
     if (is && !this.snap(s.focused)?.sessionId) { this.viewCause = ViewChangedCause.CLOSE; this.setState({ vs: show("panes") }); return; }
     if (s.vs.view !== "editor") return;

@@ -6,7 +6,9 @@
 // nano there is no mode field, and ⌃G replaces the fields with nano's keys until the next action.
 
 import * as React from "react";
-import { editor } from "../state/editor";
+import { editor as shownEditor, editorFor } from "../state/editor";
+/** The shown pane's editor, for code here that holds no pane (sprint 499). */
+const editor = shownEditor;
 import { settings } from "../state/settings";
 import { modeLabel } from "../derive/status_line";
 import { BYTES_FORMS } from "../derive/bytes";
@@ -16,6 +18,7 @@ import { formOf, pickBytesForm } from "./BytesView";
 const NANO_KEYS = "^O save · ^K cut · ^U paste · ^X leave · ^G close this";
 
 export function StatusLine({ paneId }: { paneId?: number } = {}): React.ReactElement | null {
+  const editor = paneId === undefined ? shownEditor : editorFor(paneId);
   const st = React.useSyncExternalStore(editor.subscribe, editor.getSnapshot, editor.getSnapshot);
   const binding = React.useSyncExternalStore(settings.subscribe, settings.getSnapshot, settings.getSnapshot).binding;
   if (!st.active || !st.file || st.file.path !== st.active) return null;

@@ -31,7 +31,9 @@ import { selectSeqFromEditor, setMode } from "../state/meta";
 import { stopFollowing } from "../../reveal/follow_bottom";
 import { followItems } from "../derive/follow";
 import { ADD_HINT } from "../derive/control_notes";
-import { editor } from "../state/editor";
+import { editor as shownEditor, editorFor, showEditorFor } from "../state/editor";
+/** The shown pane's editor, for code here that holds no pane (sprint 499). */
+const editor = shownEditor;
 import { settings } from "../state/settings";
 import { clampSize, loadSizes, saveSizes, type EditorSizes } from "./sizes";
 import { emit as emitSignal } from "../../vm/instrumentation/sdd";
@@ -43,6 +45,7 @@ export type Column = "left" | "right" | "bottom";
 /** Fold a column to its rail, or the terminal to its sill, or unfold it (sprint 415; D51, D49 (d), frame
  *  16c): the store changes and one EDITOR_COLUMN_FOLDED says which, which way and why. */
 export function foldColumn(column: Column, folded: boolean, cause: EditorColumnFoldedCause, paneId: number): void {
+  const editor = editorFor(paneId);
   const st = editor.getSnapshot();
   if (st.folded[column] === folded) return;
   // A person's own fold or unfold while focus is on ends focus; the layout stays as they left it.
@@ -56,6 +59,7 @@ export function foldColumn(column: Column, folded: boolean, cause: EditorColumnF
 
 /** View ▸ Dock Terminal Right (sprint 416; spec r6 §5.1 (2)): below the centre, or a column right of it. */
 export function toggleDock(paneId: number): void {
+  const editor = editorFor(paneId);
   const dock = editor.getSnapshot().dock === "bottom" ? "right" : "bottom";
   editor.set({ dock });
   emitSignal(Signal.EDITOR_DOCK_SET, { dock: dock as EditorDockSetDock }, { pane_id: paneId });
@@ -63,6 +67,7 @@ export function toggleDock(paneId: number): void {
 
 /** View ▸ Swap Sides (sprint 416; spec r6 §5.1 (3)): the files column and the inspector change sides. */
 export function toggleSwap(paneId: number): void {
+  const editor = editorFor(paneId);
   const swapped = !editor.getSnapshot().swapped;
   editor.set({ swapped });
   emitSignal(Signal.EDITOR_SIDES_SWAPPED, { swapped }, { pane_id: paneId });
@@ -72,6 +77,7 @@ export function toggleSwap(paneId: number): void {
  *  pane"): the meta pane opens inside the editor view, in the right column where the inspector is, and
  *  closes again; the column unfolds if it was folded. */
 export function toggleMetaPane(paneId: number, to?: "inspector" | "meta"): void {
+  const editor = editorFor(paneId);
   const st = editor.getSnapshot();
   const showing = to ?? (st.showing === "inspector" ? "meta" : "inspector");
   if (st.folded.right) foldColumn("right", false, EditorColumnFoldedCause.KEY, paneId);
@@ -87,6 +93,7 @@ export function toggleMetaPane(paneId: number, to?: "inspector" | "meta"): void 
  *  wins): the centre marks and scrolls only the file it shows; the tree marks the others. Mounted with the
  *  editor view, so no editor record is written outside its run (S11); its marks go with it. */
 function Follow({ paneId, workspace }: { paneId: number; workspace: string | null }): null {
+  const editor = editorFor(paneId);
   const envs = React.useSyncExternalStore(shell.subscribe, shell.getSnapshot, shell.getSnapshot).snapshots[paneId]?.rawEnvelopes ?? [];
   const since = React.useRef<number | null>(null);
   if (since.current === null) since.current = envs.length ? envs[envs.length - 1].seq : -1;
@@ -136,6 +143,7 @@ export function openSeq(seq: number, paneId: number, sessionId: string | null): 
 /** View ▸ Focus (sprint 416; spec r6 §5.1 (4), frame 16c): everything folds but the prompt; again, the
  *  folds focus made are undone and the layout before it returns (BLACKBOARD 2026-11-09, focus). */
 export function toggleFocus(paneId: number): void {
+  const editor = editorFor(paneId);
   const st = editor.getSnapshot();
   const cols: Column[] = ["left", "right", "bottom"];
   if (!st.focus.on) {
@@ -210,6 +218,8 @@ export function workspaceFoot(path: string | null, shape: string | null): string
 }
 
 export function EditorView({ paneId, fontSize, sessionId, workspace, shape }: { paneId: number; fontSize: number; sessionId: string; workspace: string | null; shape: string | null }): React.ReactElement {
+  const editor = editorFor(paneId);
+  showEditorFor(paneId);
   // Sprint 414 (R10): each side column's width and the terminal's height follow a drag of their edge,
   // are kept per mode, and each finished drag is one EDITOR_COLUMN_RESIZED.
   const [sizes, setSizes] = React.useState<EditorSizes>(() => loadSizes("code", storage()));

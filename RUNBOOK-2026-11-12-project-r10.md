@@ -150,7 +150,7 @@ Run from this repo's root. Each command's log goes to `runs/packaged/<sprint-id>
 | 17 | `osascript -e 'tell application "Substrate" to quit'` | 0 or non-zero | Both allowed. Wait up to 60 s for the pid to go. Quitting ends every session in Substrate and stops their running commands, so run this chapter from a terminal or from Substrate Next, not from a session in Substrate. |
 | 18 | `mv /Applications/Substrate.app ~/.Trash/Substrate-<old-CFBundleVersion>-replaced-<stamp>.app` | 0 | Only when `/Applications/Substrate.app` existed. |
 | 19 | `ditto dist-electron/mac-arm64/Substrate.app /Applications/Substrate.app && xattr -dr com.apple.quarantine /Applications/Substrate.app` | 0 | Install. The bundle is unsigned, so there is no `codesign --verify` after. |
-| 20 | `open /Applications/Substrate.app` | 0 | Launch. |
+| 20 | `env -i HOME="$HOME" USER="$USER" PATH=/usr/bin:/bin:/usr/sbin:/sbin open /Applications/Substrate.app` | 0 | Launch with launchd's environment. A shell in a Substrate Next session carries `SUBSTRATE_HOME=~/.substrate-next`, and a plain `open` from it starts Substrate on Substrate Next's store (2026-11-14: its boot scan marked two live Substrate Next sessions interrupted). |
 
 ### 5.1 Verification
 
@@ -185,7 +185,7 @@ Substrate Next is the build the work happens in, updated when a roadmap closes; 
 | 17a | `npx tsx harness/shakeout/two_installs.ts` | 0 | Needs Substrate running. Opens the new bundle beside it and checks that each keeps to its own lock, store and logs. |
 | 18 | `mv "/Applications/Substrate Next.app" ~/.Trash/"Substrate Next-<old-CFBundleVersion>-replaced-<stamp>.app"` | 0 | Only when it existed. |
 | 19 | `ditto "$APP" "/Applications/Substrate Next.app" && xattr -dr com.apple.quarantine "/Applications/Substrate Next.app"` | 0 | Install. |
-| 20 | `open -g "/Applications/Substrate Next.app"` | 0 | Launch, in the background. |
+| 20 | `env -i HOME="$HOME" USER="$USER" PATH=/usr/bin:/bin:/usr/sbin:/sbin open -g "/Applications/Substrate Next.app"` | 0 | Launch, in the background, with launchd's environment (step 20 of chapter 5 says why). |
 
 ### 5A.1 Verification
 

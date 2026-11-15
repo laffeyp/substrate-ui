@@ -19,7 +19,9 @@
 // its line ("cart.ts 85"; BLACKBOARD 2026-11-11). Sprint 458: each of those rows drags the same chip to the bar.
 
 import * as React from "react";
-import { editor } from "../state/editor";
+import { editor as shownEditor, editorFor } from "../state/editor";
+/** The shown pane's editor, for code here that holds no pane (sprint 499). */
+const editor = shownEditor;
 import { nameParts, searchRows, type SearchName, type SearchResult } from "../derive/search";
 import { emit as emitSignal } from "../../vm/instrumentation/sdd";
 import { ContextMenuOpenedSource, EditorColumnFoldedCause, EditorFileOpenedHow, EditorSearchReplacedScope, Signal } from "../../vm/signals.gen";
@@ -40,6 +42,7 @@ const SETTLE_MS = 200;
 
 /** ⌘⇧F (App's key route): the search tab shown, the column unfolded, the query focused. */
 export function openSearch(paneId: number): void {
+  const editor = editorFor(paneId);
   if (editor.getSnapshot().folded.left) foldColumn("left", false, EditorColumnFoldedCause.KEY, paneId);
   editor.set({ leftTab: "search", searchFocus: editor.getSnapshot().searchFocus + 1 });
 }
@@ -50,6 +53,7 @@ type Target = { path: string; line?: number; index?: number };
 type Done = { files: { path: string; before: string; buffer: boolean; sha: string | null }[]; count: number };
 
 export function SearchTab({ sessionId, paneId }: { sessionId: string; paneId: number }): React.ReactElement {
+  const editor = editorFor(paneId);
   const st = React.useSyncExternalStore(editor.subscribe, editor.getSnapshot, editor.getSnapshot);
   const spec = st.search;
   const [result, setResult] = React.useState<SearchResult | null>(null);

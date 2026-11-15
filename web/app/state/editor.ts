@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2026 Peter Laffey
 // What the editor view's areas report for App's EDITOR_DRAWN (sprint 410): the files tree writes how
-// many rows it draws; App reads it after each commit. One instance per window, as in shell.ts.
+// many rows it draws; App reads it after each commit. One instance per pane (sprint 499).
 
 import { createStore } from "../store";
+import type { Store } from "../store";
 import type { Anchor, Anchor2, Anchor3 } from "../derive/anchor";
 import type { VimMode } from "../derive/status_line";
 
@@ -86,6 +87,49 @@ export interface EditorState {
   anchor: Anchor | null;
 }
 
-const KEY = "__substrateEditor";
-const scope = globalThis as unknown as Record<string, ReturnType<typeof createStore<EditorState>> | undefined>;
-export const editor = scope[KEY] ?? (scope[KEY] = createStore<EditorState>({ treeRows: 0, modifiedDots: 0, folded: { left: false, right: false, bottom: false }, tabs: [], active: null, file: null, bytesForm: {}, bytesCaret: null, language: null, hunks: [], bufferHunks: null, outline: [], caretLine: 1, unsaved: [], mode: null, caretCol: 1, vsBase: null, nanoHelp: false, anchor3: null, conflict: null, find: { search: "", caseSensitive: false, regexp: false, replace: "", wholeWord: false, preserveCase: false, inSelection: false }, findCount: { total: 0, current: 0 }, findFocus: 0, showing: "inspector", leftTab: "files", search: { query: "", replace: "", caseSensitive: false, regexp: false, word: false, include: "", exclude: "", details: false }, searchFocus: 0, quickOpen: 0, recent: [], focusOnOpen: null, reveal: null, treeFindFocus: 0, jump: null, follow: [], followLanded: null, inspector: { outlineRows: 0, hunks: 0, activityRows: 0, historyRows: 0 }, anchor2: null, dock: "bottom", swapped: false, focus: { on: false, before: null }, anchor: null }));
+// Sprint 499: one editor per pane. Before, one store per window held every pane's tabs, active file,
+// unsaved paths, recent files, find and search, so a second pane's editor drew the first pane's tabs
+// (files of another session's workspace, which do not open). A pane's editor reads and writes
+// `editorFor(paneId)`. `editor` is the store of the pane whose editor is shown, for callers that act on
+// the shown editor and hold no pane (the bindings' hooks, quick open, the footer).
+const initial = (): EditorState => ({ treeRows: 0, modifiedDots: 0, folded: { left: false, right: false, bottom: false }, tabs: [], active: null, file: null, bytesForm: {}, bytesCaret: null, language: null, hunks: [], bufferHunks: null, outline: [], caretLine: 1, unsaved: [], mode: null, caretCol: 1, vsBase: null, nanoHelp: false, anchor3: null, conflict: null, find: { search: "", caseSensitive: false, regexp: false, replace: "", wholeWord: false, preserveCase: false, inSelection: false }, findCount: { total: 0, current: 0 }, findFocus: 0, showing: "inspector", leftTab: "files", search: { query: "", replace: "", caseSensitive: false, regexp: false, word: false, include: "", exclude: "", details: false }, searchFocus: 0, quickOpen: 0, recent: [], focusOnOpen: null, reveal: null, treeFindFocus: 0, jump: null, follow: [], followLanded: null, inspector: { outlineRows: 0, hunks: 0, activityRows: 0, historyRows: 0 }, anchor2: null, dock: "bottom", swapped: false, focus: { on: false, before: null }, anchor: null });
+
+const KEY = "__substrateEditors";
+type Stores = { byPane: Map<number, Store<EditorState>>; shown: number; listeners: Set<() => void> };
+const scope = globalThis as unknown as Record<string, Stores | undefined>;
+const stores: Stores = scope[KEY] ?? (scope[KEY] = { byPane: new Map(), shown: 0, listeners: new Set() });
+
+/** The editor state of pane `paneId`, made on first use. */
+export function editorFor(paneId: number): Store<EditorState> {
+  let st = stores.byPane.get(paneId);
+  if (!st) {
+    st = createStore<EditorState>(initial());
+    const own = st;
+    own.subscribe(() => { if (stores.byPane.get(stores.shown) === own) for (const l of [...stores.listeners]) l(); });
+    stores.byPane.set(paneId, own);
+  }
+  return st;
+}
+
+/** The pane whose editor is shown (EditorView, when it renders). Listeners of `editor` hear the switch. */
+export function showEditorFor(paneId: number): void {
+  if (stores.shown === paneId) return;
+  stores.shown = paneId;
+  editorFor(paneId);
+  // After the render that asked: a store notified during render would update other components mid-render.
+  queueMicrotask(() => { for (const l of [...stores.listeners]) l(); });
+}
+
+/** A pane gone: its editor state goes with it. */
+export function dropEditor(paneId: number): void { stores.byPane.delete(paneId); }
+
+/** The shown pane's editor. */
+export const editor: Store<EditorState> = {
+  getSnapshot: () => editorFor(stores.shown).getSnapshot(),
+  set: (patch) => editorFor(stores.shown).set(patch),
+  subscribe: (listener) => { stores.listeners.add(listener); return () => { stores.listeners.delete(listener); }; },
+};
+
+// The gates read the editor on screen as `globalThis.__substrateEditor` (sprints 436–447); since sprint 499
+// that is the shown pane's store.
+(globalThis as unknown as Record<string, Store<EditorState>>).__substrateEditor = editor;

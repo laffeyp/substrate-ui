@@ -21,7 +21,9 @@ import { languages } from "@codemirror/language-data";
 import { tags as t } from "@lezer/highlight";
 import { preserveCase } from "../derive/preserve_case";
 import { LOOK, SYNTAX_GHOST, type Look, type Scheme, type Syntax } from "../derive/look";
-import { editor } from "../state/editor";
+import { editor as shownEditor, editorFor } from "../state/editor";
+/** The shown pane's editor, for code here that holds no pane (sprint 499). */
+const editor = shownEditor;
 import { emit as emitSignal } from "../../vm/instrumentation/sdd";
 import { ContextMenuOpenedSource, DiffReadBase, EditorChipAddedHow, EditorConflictResolvedChoice, EditorFileOpenedHow, EditorFileSavedCommand, EditorKeyRefusedReason, EditorReplacedScope, Signal, UndoRoutedTo } from "../../vm/signals.gen";
 import { isolateHistory, redo, redoDepth, undo, undoDepth } from "@codemirror/commands";
@@ -308,6 +310,7 @@ export function outlineOf(state: EditorState): { kind: string; name: string; lin
  *  goes to that line once the file is shown. Sprint 441: `show` false adds the tab and keeps the shown one
  *  (quick open's ⌘↵); every open goes to the front of the recent list. */
 export function openFile(rel: string, paneId: number, how: EditorFileOpenedHow = EditorFileOpenedHow.TREE, line?: number, show = true): void {
+  const editor = editorFor(paneId);
   const st = editor.getSnapshot();
   const tabs = st.tabs.includes(rel) ? st.tabs : [...st.tabs, rel];
   const recent = [rel, ...st.recent.filter((p) => p !== rel)].slice(0, 20);
@@ -316,6 +319,7 @@ export function openFile(rel: string, paneId: number, how: EditorFileOpenedHow =
 }
 
 export function closeFile(rel: string, paneId: number): void {
+  const editor = editorFor(paneId);
   const st = editor.getSnapshot();
   const at = st.tabs.indexOf(rel);
   if (at < 0) return;
@@ -336,6 +340,7 @@ const BYTE_TEXT: Extension[] = [EditorState.lineSeparator.of("\n"), highlightSpe
 /** A tab (sprint 419). Sprint 445 (BLACKBOARD 2026-11-09, the tab row: "the tab's dot means unsaved changes"; × on
  *  hover): an unsaved file's tab draws a dot in the ×'s place, as VS Code and Xcode do, and hovering shows the ×. */
 function Tab({ rel, active, unsaved, paneId }: { rel: string; active: boolean; unsaved: boolean; paneId: number }): React.ReactElement {
+  const editor = editorFor(paneId);
   const [hover, setHover] = React.useState(false);
   const name = rel.slice(rel.lastIndexOf("/") + 1);
   return (
@@ -514,6 +519,7 @@ export async function writeBuffer(sessionId: string, rel: string, text: string):
  *  server will not write keeps its buffer and its reason goes back to the turn; when it is the file shown, the
  *  centre draws its offer to reload or overwrite. */
 export async function saveForSend(sessionId: string, paneId: number | null): Promise<BeforeTurnResult> {
+  const editor = paneId === null ? shownEditor : editorFor(paneId);
   const prefix = bufferKey(sessionId, "");
   const texts = new Map<string, string>();
   for (const [k, state] of BUFFERS) if (k.startsWith(prefix)) texts.set(k.slice(prefix.length), state.doc.toString());
@@ -585,6 +591,7 @@ export function addSelection(paneId: number, how: EditorChipAddedHow = EditorChi
 }
 
 export function Centre({ paneId, sessionId, tabRow }: { paneId: number; sessionId: string; tabRow: number }): React.ReactElement {
+  const editor = editorFor(paneId);
   const st = React.useSyncExternalStore(editor.subscribe, editor.getSnapshot, editor.getSnapshot);
   const { binding, look, selectionMatches, scheme } = React.useSyncExternalStore(settings.subscribe, settings.getSnapshot, settings.getSnapshot);
   const host = React.useRef<HTMLDivElement>(null);

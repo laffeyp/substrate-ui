@@ -11,7 +11,9 @@
 // each drawn hunk is an EDITOR_HUNK_DRAWN.
 
 import * as React from "react";
-import { editor } from "../state/editor";
+import { editor as shownEditor, editorFor } from "../state/editor";
+/** The shown pane's editor, for code here that holds no pane (sprint 499). */
+const editor = shownEditor;
 import { shell } from "../state/shell";
 import { authorLabel, fileActivity, fileHistoryState, fileType, hunkAuthor, linesText, litRow, stepText } from "../derive/inspector";
 import { emit as emitSignal } from "../../vm/instrumentation/sdd";
@@ -116,6 +118,7 @@ function encodingName(encoding: string | null): string {
 }
 
 export function Inspector({ paneId, workspace }: { paneId: number; workspace: string | null }): React.ReactElement | null {
+  const editor = editorFor(paneId);
   const st = React.useSyncExternalStore(editor.subscribe, editor.getSnapshot, editor.getSnapshot);
   const paneSnap = React.useSyncExternalStore(shell.subscribe, shell.getSnapshot, shell.getSnapshot).snapshots[paneId];
   const envs = paneSnap?.rawEnvelopes ?? [];

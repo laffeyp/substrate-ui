@@ -22,7 +22,9 @@
 // a folder, Escape closes the find. Each result drawn is one EDITOR_TREE_FOUND.
 
 import * as React from "react";
-import { editor } from "../state/editor";
+import { editor as shownEditor, editorFor } from "../state/editor";
+/** The shown pane's editor, for code here that holds no pane (sprint 499). */
+const editor = shownEditor;
 import { openFile } from "./Centre";
 import { filterRows, matchesBelow, nameHits } from "../derive/tree_find";
 import { emit as emitSignal } from "../../vm/instrumentation/sdd";
@@ -43,6 +45,7 @@ const FIND_SETTLE_MS = 150;
 const parents = (rel: string) => rel.split("/").slice(0, -1).map((_, n, a) => a.slice(0, n + 1).join("/"));
 
 export function FileTree({ sessionId, paneId }: { sessionId: string; paneId: number }): React.ReactElement {
+  const editor = editorFor(paneId);
   const [listings, setListings] = React.useState<Record<string, Listing>>({});
   const [open, setOpen] = React.useState<Record<string, boolean>>({});
   const [changed, setChanged] = React.useState<Set<string>>(new Set());

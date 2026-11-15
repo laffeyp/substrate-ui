@@ -9,7 +9,9 @@
 // how=quick_open for a file it opens).
 
 import * as React from "react";
-import { editor } from "../state/editor";
+import { editor as shownEditor, editorFor } from "../state/editor";
+/** The shown pane's editor, for code here that holds no pane (sprint 499). */
+const editor = shownEditor;
 import { quickMatches, type QuickMatch } from "../derive/quick_open";
 import { emit as emitSignal } from "../../vm/instrumentation/sdd";
 import { EditorFileOpenedHow, Signal } from "../../vm/signals.gen";
@@ -36,6 +38,7 @@ function Name({ path, lit }: { path: string; lit: number[] }): React.ReactElemen
 }
 
 export function QuickOpen({ sessionId, paneId }: { sessionId: string; paneId: number }): React.ReactElement | null {
+  const editor = editorFor(paneId);
   const st = React.useSyncExternalStore(editor.subscribe, editor.getSnapshot, editor.getSnapshot);
   const [on, setOn] = React.useState(false);
   const [query, setQuery] = React.useState("");
