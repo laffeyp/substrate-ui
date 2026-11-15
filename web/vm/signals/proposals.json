@@ -1572,6 +1572,16 @@
       "rationale": "Save-before-send runs on every turn of a session with unsaved buffers, wherever the turn is sent from (the tag's note, the Architect 2026-11-10); S11 bounded editor tags to an open run and so forbade it.",
       "ratified": true,
       "ratified_by": "agent-resolved 2026-11-14, sprint 500; grounds: project — EDITOR_SAVED_FOR_SEND's note, SAVE-BEFORE-SEND-2026-11-10; SDD — grammar Layer 5, hard rule 2; practice — n/a"
+    },
+    {
+      "id": "P-0.71-DIFF-REPOSITORIES",
+      "kind": "PAYLOAD_FIELD_PROPOSED",
+      "layer": 2,
+      "element": "DIFF_READ.base value repositories; DIFF_READ.repositories (int, optional)",
+      "source": "sprint 502: Agent Orchestration, a plain folder holding substrate/ and substrate-ui/, showed no change marks",
+      "rationale": "A plain workspace's changes are its repositories' changes; the trace says it read them and how many.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-14, sprint 502; grounds: project — the user entries of 2026-11-14 on change marks; SDD — hard rule 2, grammar Layer 2; practice — VS Code's Source Control lists each repository found in a multi-repository folder"
     }
   ]
 }

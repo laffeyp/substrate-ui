@@ -11,7 +11,8 @@
 // watch stream tells the tree, which reads the diff again. At each step:
 //   truth  — `git` in the session's workspace: the files changed since HEAD, the branch's last commit (sprint 483), plus
 //            untracked files not ignored;
-//   DOM    — the rows drawn with [data-tree-dot];
+//   DOM    — the file rows drawn with [data-tree-dot="1"], and (sprint 502) the folder rows with [data-tree-dot="dir"]:
+//            every drawn folder above a changed file;
 //   pixels — the anchor's modified_dots, and the row bands holding the accent colour (#82a5c8);
 // after close, the signals: the EDITOR_DRAWN whose proc_seq the anchor carries holds those fields,
 // and each DIFF_READ in server.jsonl names base head and the truth's file count.
@@ -55,23 +56,39 @@ async function size(app: ElectronApplication, win: Page): Promise<void> {
 }
 
 async function domDots(win: Page): Promise<string[]> {
-  return win.evaluate(() => Array.from(document.querySelectorAll("[data-tree-dot]")).map((d) => d.parentElement!.getAttribute("data-tree-row")!).sort());
+  return win.evaluate(() => Array.from(document.querySelectorAll('[data-tree-dot="1"]')).map((d) => d.parentElement!.getAttribute("data-tree-row")!).sort());
+}
+
+async function domDirDots(win: Page): Promise<string[]> {
+  return win.evaluate(() => Array.from(document.querySelectorAll('[data-tree-dot="dir"]')).map((d) => d.parentElement!.getAttribute("data-tree-row")!).sort());
+}
+
+/** Sprint 502: the drawn folders above the changed files (the workspace is the repository, so every one). */
+async function wantDirs(win: Page, files: string[]): Promise<string[]> {
+  const drawn = new Set(await win.evaluate(() => Array.from(document.querySelectorAll("[data-tree-row]")).map((e) => e.getAttribute("data-tree-row")!)));
+  const dirs = new Set(files.flatMap((f) => f.split("/").slice(0, -1).map((_, n, a) => a.slice(0, n + 1).join("/"))));
+  return [...dirs].filter((d) => drawn.has(d)).sort();
 }
 
 /** Wait until the DOM's dots and the anchor's count both equal `want` among the drawn rows; return the reading. */
 async function settle(win: Page, want: string[], file: string, what: string): Promise<Pixels> {
   const deadline = Date.now() + 20_000;
   let dom = await domDots(win);
+  let dirs = await domDirDots(win);
+  let wantD = await wantDirs(win, want);
   let px = await readPixels(win, file, await win.locator("[data-tree-row]").count());
-  while (Date.now() < deadline && !(JSON.stringify(dom) === JSON.stringify(want) && !("error" in px.anchor) && px.anchor.modified_dots === want.length)) {
+  while (Date.now() < deadline && !(JSON.stringify(dom) === JSON.stringify(want) && JSON.stringify(dirs) === JSON.stringify(wantD) && !("error" in px.anchor) && px.anchor.modified_dots === want.length && px.dotted === want.length + wantD.length)) {
     await settled(win);
     dom = await domDots(win);
+    dirs = await domDirDots(win);
+    wantD = await wantDirs(win, want);
     px = await readPixels(win, file, await win.locator("[data-tree-row]").count());
   }
+  if (JSON.stringify(dirs) !== JSON.stringify(wantD)) throw new Error(`${what}: folder dots on ${JSON.stringify(dirs)}; the changed files lie under ${JSON.stringify(wantD)}`);
   if (JSON.stringify(dom) !== JSON.stringify(want)) throw new Error(`${what}: dots drawn on ${JSON.stringify(dom)}; git says ${JSON.stringify(want)}`);
   if ("error" in px.anchor) throw new Error(`${what}: the pixel anchor does not decode: ${px.anchor.error}`);
   if (px.anchor.modified_dots !== want.length) throw new Error(`${what}: the pixels say ${px.anchor.modified_dots} dots; git says ${want.length}`);
-  if (px.dotted !== want.length) throw new Error(`${what}: ${px.dotted} row bands hold the accent dot on screen; ${want.length} should`);
+  if (px.dotted !== want.length + wantD.length) throw new Error(`${what}: ${px.dotted} row bands hold the accent dot on screen; ${want.length} files and ${wantD.length} folders should`);
   return px;
 }
 

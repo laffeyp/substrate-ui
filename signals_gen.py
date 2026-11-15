@@ -5,7 +5,7 @@ Regenerate: python3 scripts/gen_signals.py. tests/test_signals_generated.py fail
 
 from enum import StrEnum
 
-VOCAB_VERSION = "0.70"
+VOCAB_VERSION = "0.71"
 
 
 class Signal(StrEnum):
@@ -777,6 +777,7 @@ class DiffReadBase(StrEnum):
     HEAD = "head"
     NO_COMMIT = "no_commit"
     NONE = "none"
+    REPOSITORIES = "repositories"
 
 
 class FilesReplacePreparedScope(StrEnum):

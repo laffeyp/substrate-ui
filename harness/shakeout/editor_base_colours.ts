@@ -46,7 +46,7 @@ async function look(repo: string, file: string, shot: string, packaged: boolean,
     while (!(lines.length > 1 && lines[0].text === "line one" && (wantAdded ? lines.some((l) => l.added) : changesMeta === "no base")) && Date.now() < deadline) { await settled(win); lines = await drawn(win); changesMeta = await meta(); }
     await settled(win);
     lines = await drawn(win);
-    const dots = await win.locator("[data-tree-dot]").count();
+    const dots = await win.locator('[data-tree-dot="1"]').count();
     const status = await win.evaluate(`(function () { var e = document.querySelector("[data-status-vs]"); return e ? e.textContent : null; })()`) as string | null;
     await win.screenshot({ path: shot });
     await app.close();

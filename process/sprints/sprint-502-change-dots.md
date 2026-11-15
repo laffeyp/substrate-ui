@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 502
-status: pending
+status: closed
 phase: editor features (roadmap 2026-11-14 r4, E4)
 pass_kind: functional
 ---
@@ -24,3 +24,20 @@ Gate on the bundle on a large real fixture: a plain folder holding two repositor
 ## done criteria
 
 What changed shows from the top folder down to the file, in a repository or in a folder of repositories.
+
+## close
+
+`server.py`: `_repositories_under` finds the repositories inside a plain workspace (a folder holding `.git`, not entered; hidden folders, `node_modules`, `.venv`, `dist`, `build`, `target` skipped; four folders deep). `_workspace_diff` reads each against its own HEAD and returns workspace paths with `repos`; a workspace inside a repository returns `repos: [""]`. `_workspace_hunks` reads a file through the nearest repository above it. `FileTree.tsx` dots every folder above a changed or deleted file, from its repository's folder down, and nothing above. Vocabulary 0.71 (P-0.71-DIFF-REPOSITORIES): `DIFF_READ.base` `repositories`, `DIFF_READ.repositories`.
+
+On Agent Orchestration itself the scan found `substrate`, `substrate-ui` and the two folders under `substrate-ui-old-versions/`, in 858 ms; a loose file at the top reads `none`.
+
+Found and fixed by the gate's screenshot: a long file name took the row's ellipsis and clipped its own dot. The name now takes the ellipsis; the dot and the find badge sit outside it.
+
+`EDITOR_DRAWN.modified_dots` still counts files. The card proposed a field for folders; it is not added, as the folder dots follow from the files and the gate counts them on screen.
+
+- Gate `editor_dots_repositories` (new; in `gates:electron`), source and bundle 1794707995: two file dots, folder dots `projects/alpha` down to `…/d/e`, six accent bands; `projects/`, `projects/beta`, `notes/`, `loose.txt` undotted; the edited file reads `+1 −0 vs head`; `DIFF_READ` repositories:2 files 2, one-file head; no `.git` made. Mutants: no repositories found (no dots at all); folders above the repository dotted (`projects` dotted). Both fail.
+- `editor_dots`, `editor_base_colours`, `editor_follow` select file dots as `[data-tree-dot="1"]`; `editor_dots` now counts folder dots too.
+- `tests/test_diff_repositories_502.py` (new) and the diff tests: 72 passed; the four pins of the exact response gained `repos`. 231 unit specs 0. On the bundle: editor_dots, editor_base_colours, editor_tree, editor_tree_find, editor_centre, editor_status, editor_follow, editor_inspector, editor_two_panes, editor_focus_switches 0.
+- Installed into Substrate: 1794707995 replaced 1794706163; `APP_BOOTED` vocabulary 0.71, home_kind default. Substrate Next ran throughout (pid 89496).
+
+Rubber Duck Pass: one observation, recorded: the gate's pane, attached through the API, reads "unbound — pick a workspace" in the footer; the gate path, not a person's.

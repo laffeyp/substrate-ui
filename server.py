@@ -2005,6 +2005,54 @@ def _git_bytes(root: Path, *args: str, ok: tuple[int, ...] = (0,)) -> bytes | No
     return proc.stdout if proc.returncode in ok else None
 
 
+# Sprint 502: folders a scan for repositories inside a plain workspace does not enter.
+_REPO_SCAN_SKIP = frozenset(
+    {"node_modules", ".venv", "venv", "__pycache__", "dist", "build", "target"}
+)
+_REPO_SCAN_DEPTH = 4
+
+
+def _repositories_under(root: Path) -> list[str]:
+    """Sprint 502 (the Architect, 2026-11-14: "the change recognition starts at the repository level always"): the
+    git repositories inside a workspace that is not itself in one, as workspace-relative folders, sorted. A folder
+    holding `.git` (a folder, or a file as a worktree or submodule has) is a repository, and the scan does not enter
+    it; hidden folders and `_REPO_SCAN_SKIP` are not entered; the scan goes `_REPO_SCAN_DEPTH` folders deep."""
+    found: list[str] = []
+
+    def walk(d: Path, rel: str, depth: int) -> None:
+        try:
+            entries = sorted(os.scandir(d), key=lambda e: e.name)
+        except OSError:
+            return
+        for e in entries:
+            if e.name.startswith(".") or e.name in _REPO_SCAN_SKIP:
+                continue
+            try:
+                if not e.is_dir(follow_symlinks=False):
+                    continue
+            except OSError:
+                continue
+            child = f"{rel}/{e.name}" if rel else e.name
+            if (Path(e.path) / ".git").exists():
+                found.append(child)
+            elif depth < _REPO_SCAN_DEPTH:
+                walk(Path(e.path), child, depth + 1)
+
+    walk(root, "", 1)
+    return found
+
+
+def _repository_of(root: Path, rel: str) -> str | None:
+    """Sprint 502: the repository inside a plain workspace that holds `rel`, the nearest folder above it with `.git`;
+    None when no folder on its path is one."""
+    parts = rel.strip("/").split("/")[:-1]
+    for n in range(len(parts), 0, -1):
+        cand = "/".join(parts[:n])
+        if (root / cand / ".git").exists():
+            return cand
+    return None
+
+
 def _workspace_diff(root: Path) -> dict[str, object]:
     """What changed in a session's workspace since its branch's last commit (UI sprint 412; D48: modified dots from
     the real diff; sprint 483: the base is HEAD on any branch, `_diff_base`); no base and no files in a repository
@@ -2013,8 +2061,19 @@ def _workspace_diff(root: Path) -> dict[str, object]:
     workspace's own index is never written, as the kernel's `worktree_diff` does. Paths are relative to
     the workspace; ignored files are left out. Each file is `{path, status}`, status `A`, `M` or `D`."""
     base_kind, base = _diff_base(root)
+    if base_kind == DiffReadBase.NONE:
+        # Sprint 502: a plain workspace is read through the repositories inside it, each against its own HEAD,
+        # paths relative to the workspace; `repos` names them, so the tree marks folders only from a repository down.
+        repos = _repositories_under(root)
+        if not repos:
+            return {"base": base_kind, "files": [], "repos": []}
+        files: list[dict[str, str]] = []
+        for repo in repos:
+            inner = cast(list[dict[str, str]], _workspace_diff(root / repo)["files"])
+            files += [{"path": f"{repo}/{f['path']}", "status": f["status"]} for f in inner]
+        return {"base": DiffReadBase.REPOSITORIES, "files": files, "repos": repos}
     if base is None:
-        return {"base": base_kind, "files": []}
+        return {"base": base_kind, "files": [], "repos": [""]}
     with _scratch_index(root) as env:
         out = (
             _git_out(root, "diff", "--name-status", "--no-renames", "--relative", base, env=env)
@@ -2025,7 +2084,8 @@ def _workspace_diff(root: Path) -> dict[str, object]:
         status, _, path = line.partition("\t")
         if path:
             files.append({"path": path, "status": status[:1]})
-    return {"base": base_kind, "files": files}
+    # Sprint 502: "" is the workspace itself, inside a repository.
+    return {"base": base_kind, "files": files, "repos": [""]}
 
 
 def _diff_base(root: Path) -> tuple[DiffReadBase, str | None]:
@@ -2072,6 +2132,13 @@ def _workspace_hunks(root: Path, rel: str) -> dict[str, object]:
     base is `none` and there are no hunks. The path is held to the workspace (`_workspace_target`)."""
     target = _workspace_target(root, rel)
     base_kind, base = _diff_base(root)
+    if base_kind == DiffReadBase.NONE:
+        # Sprint 502: in a plain workspace, the file's hunks are its repository's, against that repository's HEAD.
+        repo = _repository_of(root, rel)
+        if repo is None:
+            return {"base": base_kind, "path": rel, "hunks": []}
+        inner = _workspace_hunks(root / repo, rel.strip("/")[len(repo) + 1 :])
+        return {**inner, "path": rel}
     if base is None:
         return {"base": base_kind, "path": rel, "hunks": []}
     if target.is_file():
@@ -5196,6 +5263,12 @@ class Handler(BaseHTTPRequestHandler):
                 "session_id": session_id,
                 "base": diff["base"],
                 "files": len(cast(list[Any], diff["files"])),
+                # v0.71: the repositories read inside a plain workspace.
+                **(
+                    {"repositories": len(cast(list[Any], diff["repos"]))}
+                    if diff["base"] == DiffReadBase.REPOSITORIES
+                    else {}
+                ),
             },
         )
         self._json(diff)

@@ -90,7 +90,7 @@ async function main(): Promise<void> {
     if (tabs !== 1) throw new Error(`turn 1 opened another tab (${tabs} tabs): the person's focus should win`);
     const inView = await win.evaluate(`(() => { var r = document.querySelector("[data-editor-code]").shadowRoot; var box = document.querySelector("[data-editor-code]").getBoundingClientRect(); var hit = Array.from(r.querySelectorAll(".cm-line")).find(function (e) { return e.textContent.indexOf("line10 = 1000") >= 0; }); if (!hit) return false; var b = hit.getBoundingClientRect(); return b.top >= box.top && b.bottom <= box.bottom; })()`);
     if (!inView) throw new Error("turn 1: the changed line is not in view");
-    await until(win, "other.ts's dot", () => win.evaluate(() => !!document.querySelector('[data-tree-row="src/other.ts"] [data-tree-dot]')), (v) => v);
+    await until(win, "other.ts's dot", () => win.evaluate(() => !!document.querySelector('[data-tree-row="src/other.ts"] [data-tree-dot="1"]')), (v) => v);
 
     // Turn 2: the message sent, then several lines typed and the last line deleted while the model waits on
     // `sleep 3`; then the model's edit of two lines into three lands on the file under the unsaved buffer.

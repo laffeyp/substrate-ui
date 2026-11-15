@@ -8,7 +8,8 @@
 // case); the tree keeps its order. The number of rows drawn goes to state/editor.ts for EDITOR_DRAWN.
 //
 // Sprint 413 (R5): a file changed against main (GET /api/session/<id>/diff, server.py _session_diff,
-// which writes DIFF_READ) carries one accent dot after its name, as 24a draws it; folders carry none.
+// which writes DIFF_READ) carries one accent dot after its name, as 24a draws it. Sprint 502: so does every
+// folder above it, from its repository's folder down; nothing outside a repository is marked.
 // The server's watch stream (GET /api/session/<id>/files/watch) says when files change; the tree then
 // reads the diff and every folder it has read again, so new files and dots appear as the work lands
 // (D93). The number of dots drawn goes to state/editor.ts too.
@@ -49,6 +50,8 @@ export function FileTree({ sessionId, paneId }: { sessionId: string; paneId: num
   const [listings, setListings] = React.useState<Record<string, Listing>>({});
   const [open, setOpen] = React.useState<Record<string, boolean>>({});
   const [changed, setChanged] = React.useState<Set<string>>(new Set());
+  /** Sprint 502: the folders holding a change, from its repository's folder down (never above it). */
+  const [changedDirs, setChangedDirs] = React.useState<Set<string>>(new Set());
   const asked = React.useRef(new Set<string>());
   const [find, setFind] = React.useState<{ on: boolean; query: string; fuzzy: boolean; filter: boolean }>({ on: false, query: "", fuzzy: true, filter: true });
   const [found, setFound] = React.useState<Found | null>(null);
@@ -68,9 +71,17 @@ export function FileTree({ sessionId, paneId }: { sessionId: string; paneId: num
 
   const readDiff = React.useCallback(() => {
     fetch(`/api/session/${encodeURIComponent(sessionId)}/diff`)
-      .then((r) => (r.ok ? (r.json() as Promise<{ files: { path: string; status: string }[] }>) : { files: [] }))
-      .catch(() => ({ files: [] }))
-      .then((d) => setChanged(new Set(d.files.filter((f) => f.status !== "D").map((f) => f.path))));
+      .then((r) => (r.ok ? (r.json() as Promise<{ files: { path: string; status: string }[]; repos?: string[] }>) : { files: [], repos: [] }))
+      .catch(() => ({ files: [], repos: [] as string[] }))
+      .then((d) => {
+        setChanged(new Set(d.files.filter((f) => f.status !== "D").map((f) => f.path)));
+        // Sprint 502 (the Architect, 2026-11-14: "the blue dot by the folder and then all the folders and all the way
+        // down to the file"; "the change recognition starts at the repository level always"): every folder above a
+        // changed or deleted file, up to and including its repository's folder ("" is the workspace itself).
+        const repos = d.repos ?? [""];
+        const inRepo = (dir: string) => repos.some((r) => r === "" || dir === r || dir.startsWith(r + "/"));
+        setChangedDirs(new Set(d.files.flatMap((f) => parents(f.path)).filter(inRepo)));
+      });
   }, [sessionId]);
 
   React.useEffect(() => { read(""); readDiff(); }, [read, readDiff]);
@@ -217,18 +228,22 @@ export function FileTree({ sessionId, paneId }: { sessionId: string; paneId: num
           title={r.rel}
           style={{
             height: TREE_ROW, lineHeight: `${TREE_ROW}px`, fontSize: 12, paddingLeft: TREE_LEFT + TREE_INDENT * r.depth, paddingRight: 8,
-            whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+            // Sprint 502: the name takes the ellipsis, not the row, so a long name cannot clip its dot or badge.
+            whiteSpace: "nowrap", overflow: "hidden", display: "flex", alignItems: "center",
             color: r.kind === "error" ? "#c26058" : following.has(r.rel) ? "#82a5c8" : r.kind === "dir" ? "#b9bec5" : "#9aa0a8",
             cursor: r.kind === "error" ? "default" : "pointer",
             background: (at >= 0 && order[at] === r.rel) || r.rel === editor.getSnapshot().active ? "#2e3138" : undefined,
           }}
         >
-          {r.kind === "dir" ? <>{r.open ? "▾" : "▸"} {lit(r.name)}/</> : lit(r.name)}
+          <span data-tree-name="1" style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "pre" }}>{r.kind === "dir" ? <>{r.open ? "▾" : "▸"} {lit(r.name)}/</> : lit(r.name)}</span>
           {find.on && !filtering && found && r.kind === "dir" && !r.open && matchesBelow(r.rel, matches) > 0 && (
-            <span data-tree-badge={r.rel} title={`folder holds ${matchesBelow(r.rel, matches)} matches`} style={{ marginLeft: 6, padding: "0 4px", borderRadius: 6, background: "#2e3138", color: "#9aa0a8", fontSize: 9.5 }}>{matchesBelow(r.rel, matches)}</span>
+            <span data-tree-badge={r.rel} title={`folder holds ${matchesBelow(r.rel, matches)} matches`} style={{ flex: "none", marginLeft: 6, padding: "0 4px", borderRadius: 6, background: "#2e3138", color: "#9aa0a8", fontSize: 9.5 }}>{matchesBelow(r.rel, matches)}</span>
+          )}
+          {r.kind === "dir" && changedDirs.has(r.rel) && (
+            <span data-tree-dot="dir" style={{ flex: "none", display: "inline-block", width: 5, height: 5, borderRadius: "50%", background: "#82a5c8", marginLeft: 6, verticalAlign: "middle" }} />
           )}
           {r.kind !== "dir" && r.kind !== "error" && changed.has(r.rel) && (
-            <span data-tree-dot="1" style={{ display: "inline-block", width: 5, height: 5, borderRadius: "50%", background: "#82a5c8", marginLeft: 6, verticalAlign: "middle" }} />
+            <span data-tree-dot="1" style={{ flex: "none", display: "inline-block", width: 5, height: 5, borderRadius: "50%", background: "#82a5c8", marginLeft: 6, verticalAlign: "middle" }} />
           )}
         </div>
       ))}

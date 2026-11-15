@@ -87,7 +87,7 @@ def test_a_subfolder_workspace_lists_its_own_paths(feature: Path) -> None:
 def test_a_commit_clears_the_changes(feature: Path) -> None:
     # Sprint 483: commit on the branch, and nothing is left to mark.
     commit_all(feature, "the rest")
-    assert server._workspace_diff(feature) == {"base": "head", "files": []}
+    assert server._workspace_diff(feature) == {"base": "head", "files": [], "repos": [""]}
 
 
 def test_no_main_compares_with_the_last_commit(tmp_path: Path) -> None:
@@ -97,7 +97,7 @@ def test_no_main_compares_with_the_last_commit(tmp_path: Path) -> None:
     commit_all(root, "one")
     (root / "b.txt").write_text("2\n")
     commit_all(root, "two")
-    assert server._workspace_diff(root) == {"base": "head", "files": []}
+    assert server._workspace_diff(root) == {"base": "head", "files": [], "repos": [""]}
     (root / "b.txt").write_text("2\nmore\n")
     out = server._workspace_diff(root)
     assert out["base"] == "head"
@@ -110,7 +110,7 @@ def test_a_repository_with_no_commit_has_no_base(tmp_path: Path) -> None:
     # Sprint 450: git's empty tree as the base marked every line added, and the editor drew the text teal.
     root = repo(tmp_path / "empty")
     (root / "x.txt").write_text("x\n")
-    assert server._workspace_diff(root) == {"base": "no_commit", "files": []}
+    assert server._workspace_diff(root) == {"base": "no_commit", "files": [], "repos": [""]}
     assert server._workspace_hunks(root, "x.txt") == {
         "base": "no_commit",
         "path": "x.txt",
@@ -121,4 +121,4 @@ def test_a_repository_with_no_commit_has_no_base(tmp_path: Path) -> None:
 def test_a_plain_folder_has_no_base_and_no_files(tmp_path: Path) -> None:
     (tmp_path / "plain").mkdir()
     (tmp_path / "plain" / "f.txt").write_text("f\n")
-    assert server._workspace_diff(tmp_path / "plain") == {"base": "none", "files": []}
+    assert server._workspace_diff(tmp_path / "plain") == {"base": "none", "files": [], "repos": []}
