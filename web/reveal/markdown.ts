@@ -16,7 +16,8 @@ export interface MdOptions { links?: boolean }
 
 export type ParsedBlock =
   | { kind: "p"; inlines: InlineSegment[] }
-  | { kind: "code_block"; lang: string; text: string }
+  // Sprint 512: `closed` is false while a streaming reply has not yet written the closing fence.
+  | { kind: "code_block"; lang: string; text: string; closed: boolean }
   | { kind: "ul"; items: { inlines: InlineSegment[] }[] }
   | { kind: "ol"; items: { inlines: InlineSegment[] }[] }
   | { kind: "heading"; level: number; inlines: InlineSegment[] }
@@ -42,6 +43,8 @@ export interface RenderedBlock {
   isTable: boolean;
   hasLang: boolean;
   lang: string;
+  /** Sprint 512: a code block's closing fence has landed. */
+  closed: boolean;
   text: string;
   inlines: RenderedInline[];
   items: { inlines: RenderedInline[] }[];
@@ -96,8 +99,9 @@ export function mdBlocks(text: string, opts: MdOptions = {}): ParsedBlock[] {
         body.push(lines[i]);
         i++;
       }
-      if (i < lines.length) i++;
-      blocks.push({ kind: "code_block", lang, text: body.join("\n") });
+      const closed = i < lines.length;
+      if (closed) i++;
+      blocks.push({ kind: "code_block", lang, text: body.join("\n"), closed });
       continue;
     }
     const heading = trimmed.match(/^(#{1,4})\s+(.*)$/);
@@ -212,6 +216,7 @@ export function renderBlock(blk: ParsedBlock): RenderedBlock {
     isTable: false,
     hasLang: false,
     lang: "",
+    closed: true,
     text: "",
     inlines: [],
     items: [],
@@ -227,6 +232,7 @@ export function renderBlock(blk: ParsedBlock): RenderedBlock {
     rendered.text = blk.text || "";
     rendered.lang = blk.lang || "";
     rendered.hasLang = !!blk.lang;
+    rendered.closed = blk.closed;
   } else if (blk.kind === "ul") {
     rendered.isUl = true;
     rendered.items = blk.items.map((item) => ({ inlines: item.inlines.map(renderInline) }));

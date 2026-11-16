@@ -54,7 +54,11 @@ function plainLines(text: string): Token[][] {
   return text.split("\n").map((l) => [{ t: l }]);
 }
 
+/** Parses per text, for gates (sprint 512: a reply's block is parsed once, not per streamed chunk). */
+const PARSES = ((globalThis as unknown as Record<string, Record<string, number>>).__substrateCodeParses ??= {});
+
 async function highlight(code: string, desc: LanguageDescription): Promise<Token[][]> {
+  PARSES[code] = (PARSES[code] ?? 0) + 1;
   const support = desc.support ?? (await desc.load());
   const tree = support.language.parser.parse(code);
   const lines: Token[][] = [[]];
@@ -74,8 +78,8 @@ export function TerminalText({ text }: { text: string }): React.ReactElement {
 }
 
 /** `code`'s tokens in `format`: plain until its parse lands, then highlighted; kept by text across remounts. */
-function useDrawn(code: string, format: TextFormat): Drawn {
-  const desc = code.length <= HIGHLIGHT_MAX ? descOf(format) : null;
+function useDrawn(code: string, format: TextFormat, named?: LanguageDescription | null): Drawn {
+  const desc = code.length > HIGHLIGHT_MAX ? null : named !== undefined ? named : descOf(format);
   const key = `${desc?.name ?? "-"}\u0000${code}`;
   const [made, setDrawn] = React.useState<Drawn | null>(() => CACHE.get(key) ?? null);
   // A drawing made for other text is never shown: until this text's parse lands, it is drawn plain.
@@ -212,5 +216,19 @@ export function ToolText({ text, format }: { text: string; format: TextFormat })
         </div>
       ))}
     </div>
+  );
+}
+
+/** A fenced block in a reply (sprint 512; the Architect, 2026-11-15: "Each block may highlight once its closing fence
+ *  arrives, but it must be built in the correct format while that happens"). The box, label, font and wrap are the
+ *  reply's own and do not change; the text is one `pre`, plain while the fence is open and coloured once it closes, so
+ *  no line moves when the colours land. The fence's language is named as the editor names one (`c++`, `sh`, `ts`). */
+export function ReplyCode({ text, lang, closed }: { text: string; lang: string; closed: boolean }): React.ReactElement {
+  const desc = React.useMemo(() => (closed && lang ? LanguageDescription.matchLanguageName(languages, lang, true) : null), [closed, lang]);
+  const drawn = useDrawn(text, { kind: "text" }, desc);
+  return (
+    <pre data-reply-code={lang || "1"} data-closed={closed ? "1" : "0"} data-tool-lang={drawn.lang ?? ""} style={{ margin: 0, whiteSpace: "pre-wrap", font: "inherit", color: "inherit" }}>
+      {drawn.lang ? drawn.lines.map((line, i) => <React.Fragment key={i}>{i ? "\n" : null}{line.map(tokenSpan)}</React.Fragment>) : text}
+    </pre>
   );
 }

@@ -103,7 +103,7 @@ test("renderBlock: heading level 2 → 15px, level 3+ → 13px", () => {
 });
 
 test("renderBlock: code block carries lang + text + hasLang", () => {
-  const styled = renderBlock({ kind: "code_block", lang: "js", text: "let x = 1" });
+  const styled = renderBlock({ kind: "code_block", lang: "js", text: "let x = 1", closed: true });
   assert.strictEqual(styled.isCode, true);
   assert.strictEqual(styled.lang, "js");
   assert.strictEqual(styled.text, "let x = 1");
@@ -113,7 +113,7 @@ test("renderBlock: code block carries lang + text + hasLang", () => {
 test("mdBlocks: a fence's language may hold +, - and the like (sprint 343, F358)", () => {
   for (const lang of ["c++", "objective-c", "shell-session"]) {
     const blocks = mdBlocks("```" + lang + "\nx = 1\n```");
-    assert.deepStrictEqual(blocks, [{ kind: "code_block", lang, text: "x = 1" }]);
+    assert.deepStrictEqual(blocks, [{ kind: "code_block", lang, text: "x = 1", closed: true }]);
   }
   // A ``` line the fence rule refuses is a paragraph, and the parser goes on past it (it hung here).
   const odd = mdBlocks("```js title=x\nbody");
@@ -132,4 +132,12 @@ test("sprint 503: links read only when asked; the transcript's parse is unchange
 test("sprint 503: an image reads as one segment in link mode, not as a stray ! and a link", () => {
   assert.deepEqual(mdInlines("![alt text](docs/a.png) after", { links: true }), [{ t: "alt text", image: "docs/a.png" }, { t: " after" }]);
   assert.deepEqual(mdInlines("![alt text](docs/a.png)"), [{ t: "![alt text](docs/a.png)" }]);
+});
+
+test("sprint 512: an open fence is a code block, not closed, with its language and lines so far", () => {
+  const open = mdBlocks("Here:\n\n```rust\nfn main() {\n    let x = 1;");
+  assert.deepStrictEqual(open[1], { kind: "code_block", lang: "rust", text: "fn main() {\n    let x = 1;", closed: false });
+  const shut = mdBlocks("Here:\n\n```rust\nfn main() {\n    let x = 1;\n```\nafter");
+  assert.deepStrictEqual(shut[1], { kind: "code_block", lang: "rust", text: "fn main() {\n    let x = 1;", closed: true });
+  assert.equal(renderBlock(open[1]).closed, false);
 });

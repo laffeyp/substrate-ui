@@ -10,6 +10,7 @@
 import * as React from "react";
 import { mdBlocks, renderBlock } from "../markdown";
 import type { RenderedBlock, RenderedInline } from "../markdown";
+import { ReplyCode } from "./ToolText";
 
 interface Props { text: string }
 
@@ -55,7 +56,7 @@ function blockElement(block: RenderedBlock, key: number): React.ReactElement | n
         {block.hasLang ? (
           <div style={{ color: "#62676f", fontSize: 10, textTransform: "lowercase", marginBottom: 6 }}>{block.lang}</div>
         ) : null}
-        <pre style={{ margin: 0, whiteSpace: "pre-wrap", font: "inherit", color: "inherit" }}>{block.text}</pre>
+        <ReplyCode text={block.text} lang={block.lang} closed={block.closed} />
       </div>
     );
   }
@@ -120,7 +121,10 @@ function blockElement(block: RenderedBlock, key: number): React.ReactElement | n
 const ModelReplyInner: React.FC<Props> = ({ text }) => {
   const blocks = mdBlocks(text).map(renderBlock);
   return (
-    <span style={{ display: "inline-block", verticalAlign: "top", maxWidth: "calc(100% - 24px)" }}>
+    // Sprint 512: a set width, not shrink-to-fit. A reply's box took its widest content, so a code box grew with the
+    // reply's text (570.8 px with a block cut off, 715.2 px whole) and its long lines rewrapped; card 506 set tool cards
+    // the same way.
+    <span style={{ display: "inline-block", verticalAlign: "top", width: "calc(100% - 24px)" }}>
       {blocks.map((block, key) => blockElement(block, key))}
     </span>
   );
