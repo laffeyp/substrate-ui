@@ -12,7 +12,7 @@ import { LanguageDescription } from "@codemirror/language";
 import { languages } from "@codemirror/language-data";
 import { highlightCode, tagHighlighter, tags as t } from "@lezer/highlight";
 import { AnsiTerminal, type Sgr } from "./ansi";
-import { grepLines, jsonText, needsTerminal, splitNumbered, type TextFormat } from "../tool_format";
+import { grepLines, type GrepRow, jsonText, needsTerminal, splitNumbered, type TextFormat } from "../tool_format";
 
 /** Text past this many characters is drawn plain: a parse of it would hold the window. */
 const HIGHLIGHT_MAX = 200_000;
@@ -169,16 +169,18 @@ function DiffFile({ path, lines }: { path: string | null; lines: DiffLine[] }): 
 }
 
 /** Grep hits of one file in a row: the matched text highlighted in that file's language. */
-function GrepRun({ rows }: { rows: { path: string | null; line: string | null; sep: string; text: string }[] }): React.ReactElement {
-  const drawn = useDrawn(rows.map((r) => r.text).join("\n"), rows[0].path ? { kind: "code", path: rows[0].path } : { kind: "text" });
+function GrepRun({ rows }: { rows: GrepRow[] }): React.ReactElement {
+  const drawn = useDrawn(rows.map((r) => r.text).join("\n"), rows[0].file ? { kind: "code", path: rows[0].file } : { kind: "text" });
   return (
     <>
       {rows.map((r, i) => (
-        <div key={i} data-grep={r.path ? "hit" : "other"} style={ROW}>
+        <div key={i} data-grep={r.file ? "hit" : "other"} style={ROW}>
           {r.path ? <span data-grep-path="1" style={{ flex: "none", color: DIM, whiteSpace: "pre" }}>{r.path}</span> : null}
-          {r.line ? <span data-grep-line="1" style={{ flex: "none", color: "#4a4e55" }}>{r.sep}{r.line}</span> : null}
-          {r.path ? <span style={{ flex: "none", color: "#4a4e55", paddingRight: 8 }}>{r.sep}</span> : null}
-          <span style={{ minWidth: 0 }}>{r.path ? (drawn.lines[i] ?? [{ t: r.text }]).map(tokenSpan) : r.text}</span>
+          {r.path && r.line ? <span data-grep-line="1" style={{ flex: "none", color: "#4a4e55" }}>{r.sep}{r.line}</span> : null}
+          {/* One file searched: its line numbers in a gutter, as a read draws them. */}
+          {!r.path && r.line ? <span data-grep-line="1" data-tool-gutter="1" style={{ flex: "none", width: "3.5em", textAlign: "right", color: "#4a4e55", userSelect: "none" }}>{r.line}</span> : null}
+          {r.file ? <span style={{ flex: "none", color: "#4a4e55", paddingRight: 8, paddingLeft: r.path ? 0 : 2 }}>{r.path ? r.sep : r.sep === "-" ? " " : ""}</span> : null}
+          <span style={{ minWidth: 0 }}>{r.file ? (drawn.lines[i] ?? [{ t: r.text }]).map(tokenSpan) : r.text}</span>
         </div>
       ))}
     </>
@@ -195,10 +197,10 @@ export function ToolText({ text, format }: { text: string; format: TextFormat })
   if (format.kind === "diff") {
     return <div data-tool-text="diff" style={{ whiteSpace: "pre-wrap", wordBreak: "break-word", color: "#d7dade" }}>{diffFiles(text).map((f, i) => <DiffFile key={i} path={f.path} lines={f.lines} />)}</div>;
   }
-  const hits = format.kind === "grep" ? grepLines(text) : null;
+  const hits = format.kind === "grep" ? grepLines(text, format.file) : null;
   if (hits) {
     const runs: (typeof hits)[] = [];
-    for (const hit of hits) { const last = runs[runs.length - 1]; if (last && last[0].path === hit.path) last.push(hit); else runs.push([hit]); }
+    for (const hit of hits) { const last = runs[runs.length - 1]; if (last && last[0].file === hit.file) last.push(hit); else runs.push([hit]); }
     return <div data-tool-text="grep" style={{ whiteSpace: "pre-wrap", wordBreak: "break-word", color: "#d7dade" }}>{runs.map((r, i) => <GrepRun key={i} rows={r} />)}</div>;
   }
   return (

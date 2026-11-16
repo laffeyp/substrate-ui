@@ -85,7 +85,13 @@ const ToolCardInner: React.FC<Props> = ({ call, result, progressText, progressEo
   // Caret convention: ▸ points right when the card is closed (content
   // hidden), ▾ points down when the card is open (content flows below).
   const cardCaret = isOpen ? "▾" : "▸";
-  const argList = (call.args ?? []).map((value, index) => ({ i: `[${index}]`, v: value }));
+  // Sprint 511: an edit's old text before its new, whatever order the record's keys arrive in (they arrive sorted, so a
+  // Claude Code Edit read new_string first). `at` is the arg's index in the call, for its format.
+  const rows = (call.args ?? []).map((value, at) => ({ at, v: value }));
+  const oldAt = rows.findIndex((r) => splitArg(r.v).key === "old_string");
+  const newAt = rows.findIndex((r) => splitArg(r.v).key === "new_string");
+  if (oldAt > newAt && newAt >= 0) [rows[oldAt], rows[newAt]] = [rows[newAt], rows[oldAt]];
+  const argList = rows.map((row, index) => ({ i: `[${index}]`, v: row.v, at: row.at }));
 
   // Output shows when the tool is not running and either there was no stream or the stream has
   // sealed with eof.
@@ -179,7 +185,8 @@ const ToolCardInner: React.FC<Props> = ({ call, result, progressText, progressEo
         color: "#b9bec5",
       }}>
         <div style={{ color: "#62676f" }}>args</div>
-        {argList.map((argRow, index) => {
+        {argList.map((argRow) => {
+          const index = argRow.at;
           // Sprint 505: a command as shell, a file's body as that file's code; a short plain value stays on its line.
           const format = argFormat(toolName, call.args ?? [], index);
           const { key, value } = splitArg(argRow.v);

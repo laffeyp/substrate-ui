@@ -88,9 +88,25 @@ test("sprint 510: diffs and grep hits are read by their shape", () => {
   assert.equal(isDiff("diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1 +1 @@\n-a\n+b"), true);
   assert.equal(isDiff("no changes"), false);
   const hits = grepLines("src/a.py:12:class Cart:\nsrc/b.py-13-    pass\n--\nsrc/c.py:40:x = Cart()")!;
-  assert.deepEqual(hits[0], { path: "src/a.py", line: "12", sep: ":", text: "class Cart:" });
-  assert.deepEqual(hits[1], { path: "src/b.py", line: "13", sep: "-", text: "    pass" });
+  assert.deepEqual(hits[0], { path: "src/a.py", line: "12", sep: ":", text: "class Cart:", file: "src/a.py" });
+  assert.deepEqual(hits[1], { path: "src/b.py", line: "13", sep: "-", text: "    pass", file: "src/b.py" });
   assert.equal(hits[2].path, null);
-  assert.deepEqual(grepLines("a.ts:const x = 1")![0], { path: "a.ts", line: null, sep: ":", text: "const x = 1" });
+  assert.deepEqual(grepLines("a.ts:const x = 1")![0], { path: "a.ts", line: null, sep: ":", text: "const x = 1", file: "a.ts" });
   assert.equal(grepLines("Usage: grep [OPTION]... PATTERNS [FILE]..."), null);
+});
+
+test("sprint 511: grep of one file, as Claude Code's Bash ran it", () => {
+  assert.deepEqual(commandFormat('grep -n "class " /w/src/models.py'), { kind: "grep", file: "/w/src/models.py" });
+  assert.deepEqual(commandFormat("grep -rn x src"), { kind: "grep" });
+  assert.deepEqual(commandFormat("grep -n -e x a.py b.py"), { kind: "grep" });
+  assert.deepEqual(commandFormat("rg -n x a.py"), { kind: "grep" }, "rg searches recursively; its hits carry a path");
+  const rows = grepLines("59:class A(Exception):\n69-    pass", "/w/m.py")!;
+  assert.deepEqual(rows[0], { path: null, line: "59", sep: ":", text: "class A(Exception):", file: "/w/m.py" });
+  assert.equal(rows[1].sep, "-");
+  assert.equal(grepLines("59:class A"), null, "without the file, a bare line:text is not a hit");
+  assert.deepEqual(outputFormat("Bash", ['command=grep -n "class " /w/m.py', "description=Find"], "59:class A:\n69:class B:"), { kind: "grep", file: "/w/m.py" });
+});
+
+test("sprint 511: a shell's error is not a grep hit", () => {
+  assert.equal(grepLines("(eval):1: no matches found: --include=*.go"), null);
 });

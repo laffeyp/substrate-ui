@@ -7,7 +7,7 @@
 
 /** What a piece of tool text is drawn as: code of the file named `path` (its language by its name), shell, JSON, or
  *  text, whose ANSI colours the terminal model keeps. */
-export type TextFormat = { kind: "code"; path: string } | { kind: "shell" } | { kind: "json" } | { kind: "diff" } | { kind: "grep" } | { kind: "text" };
+export type TextFormat = { kind: "code"; path: string } | { kind: "shell" } | { kind: "json" } | { kind: "diff" } | { kind: "grep"; file?: string } | { kind: "text" };
 
 const READS = new Set(["read_file", "Read", "NotebookRead"]);
 const WRITES = new Set(["write_file", "Write"]);
@@ -57,7 +57,7 @@ export function outputFormat(toolName: string, args: readonly string[], output: 
     // A JSON file shown by `cat` is laid out as JSON is, not left on its one line.
     if (fmt?.kind === "code") return /\.json$/i.test(fmt.path) && jsonText(output) !== null ? { kind: "json" } : fmt;
     if (fmt?.kind === "diff" && isDiff(output)) return fmt;
-    if (fmt?.kind === "grep" && grepLines(output) !== null) return fmt;
+    if (fmt?.kind === "grep" && grepLines(output, fmt.file) !== null) return fmt;
   }
   if (jsonText(output) !== null) return { kind: "json" };
   return { kind: "text" };
@@ -100,7 +100,7 @@ export function commandFormat(cmd: string): TextFormat | null {
     if (!words.length) continue;
     const name = words[0].slice(words[0].lastIndexOf("/") + 1);
     if (DIFFS([name, ...words.slice(1)])) return { kind: "diff" };
-    if (GREPS([name, ...words.slice(1)])) { file = null; if (words === stages[stages.length - 1]) return { kind: "grep" }; continue; }
+    if (GREPS([name, ...words.slice(1)])) { file = null; if (words === stages[stages.length - 1]) return grepFormat(words); continue; }
     const takes = SHOWS[name];
     if (!takes) { file = null; continue; }
     const rest: string[] = [];
@@ -118,24 +118,51 @@ export function commandFormat(cmd: string): TextFormat | null {
   return file ? { kind: "code", path: file } : null;
 }
 
+/** Flags of grep, rg and ag that take a value. */
+const GREP_VALUE = new Set(["-e", "-f", "-m", "-A", "-B", "-C", "--include", "--exclude", "--exclude-dir", "-g", "--glob", "-t", "--type", "--max-count", "--context"]);
+
+/** A grep command's format (sprint 511): searching one named file, not recursively, its hits carry no path (`59:class
+ *  …`, as Claude Code's `grep -n` of one file printed), so the file is kept for their language. */
+function grepFormat(words: string[]): TextFormat {
+  const rest: string[] = [];
+  let pattern = false, recursive = words[0] === "rg" || words[0] === "ag" || words[1] === "grep";
+  for (let i = 1; i < words.length; i++) {
+    const word = words[i];
+    if (word === "grep" && i === 1) continue;
+    if (GREP_VALUE.has(word)) { if (word === "-e" || word === "-f") pattern = true; i++; continue; }
+    if (word.startsWith("-")) { if (/^-[A-Za-z]*[rR]/.test(word) || word === "--recursive") recursive = true; continue; }
+    rest.push(word);
+  }
+  if (!pattern) rest.shift();
+  return !recursive && rest.length === 1 ? { kind: "grep", file: rest[0] } : { kind: "grep" };
+}
+
 /** Whether text reads as a unified diff: a hunk header, or a file header pair. */
 export function isDiff(text: string): boolean {
   return /^@@ -\d/m.test(text) || (/^--- /m.test(text) && /^\+\+\+ /m.test(text));
 }
 
-/** Grep hits, `path:line:text` (or `path:text`, `path-line-text` for context), each line split apart; null when fewer
- *  than four lines in five read as hits. `--` separators and blank lines stay as they are. */
-export function grepLines(text: string): { path: string | null; line: string | null; sep: string; text: string }[] | null {
+export interface GrepRow { path: string | null; line: string | null; sep: string; text: string; file: string | null }
+
+/** Grep hits, `path:line:text` (or `path:text`, `path-line-text` for context), each line split apart; with `file`, a
+ *  search of that one file, hits are `line:text`. `file` on a row names the file whose language its text is in. Null
+ *  when fewer than four lines in five read as hits. `--` separators and blank lines stay as they are. */
+export function grepLines(text: string, file?: string): GrepRow[] | null {
   const rows = text.replace(/\n$/, "").split("\n");
-  const out = rows.map((r) => {
-    const m = /^([^\s:][^:\n]*?)([:-])(\d+)\2(.*)$/.exec(r) ?? null;
-    if (m) return { path: m[1], line: m[3], sep: m[2], text: m[4] };
+  const out: GrepRow[] = rows.map((r) => {
+    if (file) {
+      const one = /^(\d+)([:-])(.*)$/.exec(r);
+      if (one) return { path: null, line: one[1], sep: one[2], text: one[3], file };
+    }
+    // A path starts with neither a space nor "(": a shell's own error, `(eval):1: no matches found`, is not a hit.
+    const m = /^([^\s:(][^:\n]*?)([:-])(\d+)\2(.*)$/.exec(r) ?? null;
+    if (m) return { path: m[1], line: m[3], sep: m[2], text: m[4], file: m[1] };
     const p = /^([^\s:][^:\n]*\.[A-Za-z0-9]+):(.*)$/.exec(r);
-    if (p) return { path: p[1], line: null, sep: ":", text: p[2] };
-    return { path: null, line: null, sep: "", text: r };
+    if (p) return { path: p[1], line: null, sep: ":", text: p[2], file: p[1] };
+    return { path: null, line: null, sep: "", text: r, file: null };
   });
-  const filled = out.filter((row) => row.text.length || row.path);
-  const hits = out.filter((row) => row.path).length;
+  const filled = out.filter((row) => row.text.length || row.file);
+  const hits = out.filter((row) => row.file).length;
   if (!hits || hits * 5 < filled.filter((row) => row.text !== "--").length * 4) return null;
   return out;
 }

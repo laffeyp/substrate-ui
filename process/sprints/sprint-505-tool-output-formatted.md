@@ -30,7 +30,7 @@ Gate on the bundle with real fixtures for each kind; pixels decoded as in `edito
 - The live stream drew escape codes as text (`[31mfailed [0m`), seen in the screenshot; the gate did not check it until then.
 - `editor_view` pinned `EDITOR_DRAWN`'s whole payload and failed on card 504's `groups` field; card 504 had not run it. Pin updated.
 
-**Gate `tool_output_formatted`** (new; in `gates:electron`). One scripted deterministic turn on the large fixtures: `read_file` of the real `models.py` (211 lines), `bash` with ANSI red, bold and a carriage return, `bash` printing one-line JSON, `write_file` of TypeScript. From source and on bundle 1794725844:
+**Gate `tool_output_formatted`** (new; in `gates:electron`). One scripted deterministic turn on the large fixtures: `read_file` of the real `models.py` (804 lines; the kernel's `read_file` returned its first 211), `bash` with ANSI red, bold and a carriage return, `bash` printing one-line JSON, `write_file` of TypeScript. From source and on bundle 1794725844:
 - formats drawn: Python code, Shell, terminal (stream and output), JSON, TypeScript;
 - 211 line numbers in the gutter, none left in the code; no escape drawn as text; `100% done` replaces `50%`; JSON on 16 lines;
 - ink, CIEDE2000 from the screenshot: Python keyword 2.3 from the keyword colour (10.7 from the old grey), string 1.4, ANSI red 3.0 from the failed red, shell string 1.4; ghost scheme keyword 0.5 from the ghost grey.
