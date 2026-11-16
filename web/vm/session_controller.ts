@@ -910,6 +910,7 @@ export class SessionController {
       length?: string | null;
       tone?: string | null;
       handoff?: string | null;
+      next_turn_index?: number;
     }>(`/api/session/${encodeURIComponent(sessionId)}`);
     if (!result.ok) {
       this.patch({ lastError: `attach: ${result.detail}` });
@@ -933,7 +934,8 @@ export class SessionController {
       handoff: manifest.handoff ?? null,
       workspacePath: manifest.workspace ?? null,
       workspaceShape: manifest.workspace_shape ?? null,
-      turnIndex: 0,
+      // Sprint 507: the record's next turn, not 0, so a turn sent before the replay lands is keyed right.
+      turnIndex: typeof manifest.next_turn_index === "number" ? manifest.next_turn_index : 0,
       transcript: [],
       rawEnvelopes: [],
       progressByCallId: {},
@@ -1473,6 +1475,10 @@ export class SessionController {
       this.ackPending = null;
       this.emit(Signal.TURN_ACK, { session_id: sessionId });
     }
+    // Sprint 507: a turn on the record moves the count past it, whoever sent it (a queued message the server started,
+    // another client), so this window's next turn is keyed by the index the server will give it.
+    const recorded = env.kind === EnvelopeKind.UserMessage ? env.payload?.turn_index : undefined;
+    if (typeof recorded === "number" && recorded + 1 > this.snap.turnIndex) this.patch({ turnIndex: recorded + 1 });
     this.patch({ rawEnvelopes: [...existing, env] });
     this.envelopeToRows(sessionId, env);
     this.noteSkipped(env);

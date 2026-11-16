@@ -5733,6 +5733,9 @@ class Handler(BaseHTTPRequestHandler):
                 if manifest.driver_params is not None
                 else None,
                 "tools": list(manifest.tools) if manifest.tools is not None else None,
+                # Sprint 507: the index the next turn takes, so a window that attaches counts from the record,
+                # not from 0 (a reattached pane acked its new turn on the replay of an old one).
+                "next_turn_index": self.app.registry.next_turn_index(session_id),
             }
         )
 
