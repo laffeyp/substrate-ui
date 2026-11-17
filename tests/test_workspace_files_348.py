@@ -88,3 +88,21 @@ def test_the_routes_serve_a_sessions_workspace(app: server.App, tmp_path: Path, 
         assert status == 404, missing
         status, unknown = call("GET", base + "/api/session/s_nope/files")
         assert status == 404, unknown
+
+
+def test_file_api_responses_are_not_cached(app: server.App, tmp_path: Path, ws: Path) -> None:
+    """Sprint 514: the browser must not serve a stale JSON listing after a workspace reorganization."""
+    from urllib.request import urlopen
+
+    app.install_registry(tmp_path / "sessions")
+    with serving(app) as base:
+        status, body = call(
+            "POST", base + "/api/session", {"driver": "deterministic", "workspace": str(ws)}
+        )
+        assert status == 200, body
+        sid = body["session_id"]
+        with urlopen(base + f"/api/session/{sid}/files?dir=src") as r:
+            cc = r.headers.get("Cache-Control", "")
+            assert "no-store" in cc, cc
+            assert "no-cache" in cc, cc
+            assert "max-age=0" in cc, cc
