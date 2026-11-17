@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 516
-status: active
+status: closed
 phase: daily-driver fixes (roadmap 2026-11-17-daily-driver-fixes r1, E1)
 pass_kind: functional
 ---
@@ -75,7 +75,7 @@ No dated pixel baseline: the pixel capture's 14 screens never open the editor, s
 - `npx tsx harness/shakeout/editor_highlight_seen.ts` and `npx tsx harness/shakeout/editor_selection_matches.ts` from source return 0
 - `npx tsx harness/shakeout/editor_colours_seen.ts` from source returns 0 (a census; it prints, and its mask covers both grounds)
 - `npm run pack:dev` returns 0; the four gates against the bundle return 0
-- `npm run pixel:capture s516-check && npm run pixel:diff baseline-2026-11-05-b6 s516-check` returns 0 (no captured screen opens the editor, so the diff is clean)
+- `npx tsx harness/pixel/capture.ts s516-control` (from the pre-sprint `web/`) and `npx tsx harness/pixel/capture.ts s516-check` (from the sprint's), then `npx tsx harness/pixel/diff.ts s516-control s516-check` returns 0 — 28 of 28, 0 pixels differ. The card first asserted a clean diff against `baseline-2026-11-05-b6`; that baseline is stale (sprints 506–515 changed the screens), so the control capture, not the baseline, isolates this sprint.
 
 ## observation contract
 
