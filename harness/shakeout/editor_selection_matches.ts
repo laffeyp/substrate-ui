@@ -7,7 +7,7 @@
 //   code   — in models.py, a double-click on `Responder` selects it; the marked occurrences (.cm-selectionMatch) are
 //            the other occurrences of `Responder` in the lines on screen (between the fully and the partly visible
 //            lines' count), the selection itself unmarked; in the screenshot each mark's box holds a tint over the
-//            ground (its commonest colour is not the ground #212327);
+//            ground (its commonest colour is not the ground — #1a1c20 under the `new` look, sprint 516);
 //   prose  — in README-substrate-ui.md (Markdown) a double-click on a word seen several times marks nothing;
 //   off    — with Settings › match highlight off, the same double-click in models.py marks nothing; on again, it marks.
 // SHAKEOUT_APP=<Substrate.app> runs the bundle.
@@ -116,7 +116,7 @@ async function main(): Promise<void> {
       const counts = new Map<string, number>();
       for (let yy = Math.ceil(y * scale); yy < Math.floor((y + h) * scale); yy++) for (let xx = Math.ceil(x * scale); xx < Math.floor((x + w) * scale); xx++) { const i = (yy * png.width + xx) * 4; const k = `${png.data[i]},${png.data[i + 1]},${png.data[i + 2]}`; counts.set(k, (counts.get(k) ?? 0) + 1); }
       const top = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
-      if (top && top !== "33,35,39") tinted++;
+      if (top && top !== "26,28,32") tinted++;
     }
     report.push(`${tinted}/${code.boxes.length} marks tinted on screen`);
     if (tinted !== code.boxes.length) throw new Error(`only ${tinted} of ${code.boxes.length} marks hold a tint over the ground`);

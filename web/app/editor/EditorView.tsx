@@ -203,7 +203,6 @@ function AnchorStrip(): React.ReactElement | null {
 }
 
 const SUNK = "#1a1c20";
-const GROUND = "#212327";
 const SELECT = "#2e3138";
 const DIVIDER = "1px solid #2d2f33";
 const LABEL: React.CSSProperties = { fontSize: 10, letterSpacing: ".08em", color: "#62676f", whiteSpace: "nowrap" };
@@ -327,7 +326,7 @@ export function EditorView({ paneId, fontSize, sessionId, workspace, shape }: { 
           if (box) { box.focus(); box.setSelectionRange(box.value.length, box.value.length); }
         });
       }}
-      style={{ flex: "none", display: "flex", alignItems: "center", gap: 12, padding: "0 12px", borderTop: DIVIDER, background: GROUND }}>
+      style={{ flex: "none", display: "flex", alignItems: "center", gap: 12, padding: "0 12px", borderTop: DIVIDER, background: LOOK[look].ground }}>
       <div style={{ flex: 1, minWidth: 0 }}><InputBar paneId={paneId} compact /></div>
       <span data-editor-fold="bottom" onClick={() => foldColumn("bottom", false, EditorColumnFoldedCause.RAIL, paneId)} style={{ ...GLYPH, fontSize: 10.5 }}>▴ history{parked ? <span style={{ color: "#82a5c8" }}> · ◐ parked</span> : null}</span>
     </div>
@@ -335,8 +334,8 @@ export function EditorView({ paneId, fontSize, sessionId, workspace, shape }: { 
   // The terminal: below the centre, or docked right as a column between the centre and the end column.
   const terminal = (
     <div data-editor-area="bottom" data-editor-dock={dock}
-      style={dock === "bottom" ? { height: sizes.bottom, flex: "none", display: "flex", flexDirection: "column", borderTop: DIVIDER, background: GROUND, minHeight: 0 }
-        : { flex: `0 1 ${sizes.side}px`, minWidth: 0, display: "flex", flexDirection: "column", borderLeft: DIVIDER, background: GROUND, minHeight: 0 }}>
+      style={dock === "bottom" ? { height: sizes.bottom, flex: "none", display: "flex", flexDirection: "column", borderTop: DIVIDER, background: LOOK[look].ground, minHeight: 0 }
+        : { flex: `0 1 ${sizes.side}px`, minWidth: 0, display: "flex", flexDirection: "column", borderLeft: DIVIDER, background: LOOK[look].ground, minHeight: 0 }}>
       {/* Sprint 458 (24k; D40): the header's hint, as its tooltip. */}
       <div data-editor-terminal-head="1" title={ADD_HINT} style={{ flex: "none", padding: "6px 16px 2px", display: "flex", ...LABEL }}>SUBSTRATE TERMINAL<span style={{ flex: 1 }} /><span data-editor-fold="bottom" title="fold the terminal (⌘J)" onClick={() => foldColumn("bottom", true, EditorColumnFoldedCause.RAIL, paneId)} style={GLYPH}>▾</span></div>
       <div style={{ flex: "none" }}><FindBar view="meta" /></div>
@@ -356,14 +355,14 @@ export function EditorView({ paneId, fontSize, sessionId, workspace, shape }: { 
   const startKey: "left" | "right" = swapped ? "right" : "left";
   const endKey: "left" | "right" = swapped ? "left" : "right";
   return (
-    <div ref={viewRef} data-editor-view="1" data-pane-id={String(paneId)} data-editor-swapped={swapped ? "1" : "0"} style={{ flex: 1, display: "flex", minHeight: 0, minWidth: 0, background: GROUND, position: "relative" }}>
+    <div ref={viewRef} data-editor-view="1" data-pane-id={String(paneId)} data-editor-swapped={swapped ? "1" : "0"} style={{ flex: 1, display: "flex", minHeight: 0, minWidth: 0, background: LOOK[look].ground, position: "relative" }}>
       <AnchorStrip />
       <Follow paneId={paneId} workspace={workspace} />
       {startCol}
       {!folded[startKey] && <Handle column={startKey} across={false} onGrab={grab} />}
       <div data-editor-centre-column="1" style={{ flex: "1 1 0", display: "flex", flexDirection: "column", minWidth: EDITOR_SIZES.centreMin, minHeight: 0, position: "relative" }}>
         <QuickOpen sessionId={sessionId} paneId={paneId} />
-        <Groups paneId={paneId} sessionId={sessionId} />
+        <Groups paneId={paneId} sessionId={sessionId} ground={LOOK[look].ground} />
         <StatusLine paneId={paneId} />
         {dock === "bottom" && !folded.bottom && <Handle column="bottom" across onGrab={grab} />}
         {folded.bottom ? sill : dock === "bottom" ? terminal : null}
@@ -378,7 +377,7 @@ export function EditorView({ paneId, fontSize, sessionId, workspace, shape }: { 
 
 /** Sprint 504: the editor's groups, laid out by the pane grid's own rules (editor_groups.ts). Each
  *  group takes the focus on pointerdown, before any click inside it runs, and takes a dragged tab. */
-function Groups({ paneId, sessionId }: { paneId: number; sessionId: string }): React.ReactElement {
+function Groups({ paneId, sessionId, ground }: { paneId: number; sessionId: string; ground: string }): React.ReactElement {
   const layout = groupLayout(paneId);
   const lay = React.useSyncExternalStore(layout.subscribe, layout.getSnapshot, layout.getSnapshot);
   const drop = (to: number) => (ev: React.DragEvent): void => {
@@ -397,7 +396,7 @@ function Groups({ paneId, sessionId }: { paneId: number; sessionId: string }): R
     <div data-editor-groups={String(lay.cells.length)} style={{ flex: "1 1 0", display: "grid", gridTemplateColumns: trackList(lay.grid.colW), gridTemplateRows: trackList(lay.grid.rowW), gap: 1, background: SUNK, minHeight: 0, minWidth: 0 }}>
       {lay.cells.map((cell) => (
         <div key={cell.id} data-editor-group-cell={String(cell.id)} onPointerDownCapture={() => focusGroup(paneId, cell.id)} onDragOver={over} onDrop={drop(cell.id)}
-          style={{ gridColumn: `${cell.col} / span ${cell.cw}`, gridRow: `${cell.row} / span ${cell.rh}`, display: "flex", flexDirection: "column", minHeight: 0, minWidth: 0, background: GROUND }}>
+          style={{ gridColumn: `${cell.col} / span ${cell.cw}`, gridRow: `${cell.row} / span ${cell.rh}`, display: "flex", flexDirection: "column", minHeight: 0, minWidth: 0, background: ground }}>
           <Centre paneId={paneId} sessionId={sessionId} tabRow={EDITOR_SIZES.tabRow} group={cell.id} />
         </div>
       ))}

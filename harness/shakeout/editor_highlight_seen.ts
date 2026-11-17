@@ -25,7 +25,9 @@ const git = (cwd: string, ...args: string[]) => execFileSync("git", ["-C", cwd, 
 type Rgb = [number, number, number];
 const hex = (h: string): Rgb => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
 const dist = (a: Rgb, b: Rgb) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
-const GROUND = hex("#212327");
+/** The editor's ground per check (sprint 516: `new` draws the inset's colour). The ghost checks run with the look
+ *  still on `original` (only the scheme chip is clicked), so their ground is the original's. */
+const GROUND: Record<"new" | "original" | "ghost", Rgb> = { new: hex("#1a1c20"), original: hex("#212327"), ghost: hex("#212327") };
 /** Each look's palette, as `web/app/derive/look.ts` holds it: sprint 481's notes (new) and sprint 475's (original). */
 type Cls = "keyword" | "string" | "number" | "type" | "name" | "meta";
 const PALETTE: Record<"new" | "original" | "ghost", Record<Cls, string>> = {
@@ -116,7 +118,7 @@ async function main(): Promise<void> {
             for (let x = Math.ceil(b.x * scale); x < Math.floor((b.x + b.w) * scale); x++) {
               const i = (y * img.width + x) * 4;
               const c: Rgb = [img.data[i], img.data[i + 1], img.data[i + 2]];
-              px.push({ c, d: dist(c, GROUND) });
+              px.push({ c, d: dist(c, GROUND[look]) });
             }
           }
           px.sort((a, z) => z.d - a.d);

@@ -10,6 +10,8 @@ import * as React from "react";
 import { mdBlocks, renderInline, type InlineSegment, type ParsedBlock } from "../../reveal/markdown";
 import { EditorLinkFollowedView } from "../../vm/signals.gen";
 import { headingSlug, linkKind } from "../derive/md_links";
+import { LOOK } from "../derive/look";
+import { settings } from "../state/settings";
 import { followLink } from "./links";
 
 const MONO = "ui-monospace,'SF Mono',Menlo,monospace";
@@ -31,7 +33,7 @@ function Inline({ seg, onLink }: { seg: InlineSegment; onLink: (href: string) =>
 const inlines = (segs: InlineSegment[], onLink: (href: string) => void) => segs.map((s, i) => <Inline key={i} seg={s} onLink={onLink} />);
 const textOf = (segs: InlineSegment[]) => segs.map((s) => s.t).join("");
 
-function Block({ b, slug, onLink }: { b: ParsedBlock; slug?: string; onLink: (href: string) => void }): React.ReactElement {
+function Block({ b, slug, onLink, raised }: { b: ParsedBlock; slug?: string; onLink: (href: string) => void; raised: string }): React.ReactElement {
   switch (b.kind) {
     case "heading": {
       const size = b.level === 1 ? 22 : b.level === 2 ? 18 : b.level === 3 ? 15 : 13;
@@ -39,7 +41,7 @@ function Block({ b, slug, onLink }: { b: ParsedBlock; slug?: string; onLink: (hr
     }
     case "code_block":
       return (
-        <div data-md-code={b.lang || "1"} style={{ margin: "0 0 14px", background: "#1a1c20", borderRadius: 6, padding: "10px 14px", fontFamily: MONO, fontSize: 12, color: "#b9bec5", overflowX: "auto" }}>
+        <div data-md-code={b.lang || "1"} style={{ margin: "0 0 14px", background: raised, borderRadius: 6, padding: "10px 14px", fontFamily: MONO, fontSize: 12, color: "#b9bec5", overflowX: "auto" }}>
           {b.lang ? <div style={{ color: "#62676f", fontSize: 10, marginBottom: 6 }}>{b.lang}</div> : null}
           <pre style={{ margin: 0, whiteSpace: "pre", font: "inherit", color: "inherit" }}>{b.text}</pre>
         </div>
@@ -53,7 +55,7 @@ function Block({ b, slug, onLink }: { b: ParsedBlock; slug?: string; onLink: (hr
       return (
         <table style={{ margin: "0 0 14px", borderCollapse: "collapse", fontSize: 12 }}>
           <thead><tr>{b.headers.map((c, i) => <th key={i} style={{ borderBottom: "1px solid #2e3138", padding: "4px 10px", textAlign: "left", fontWeight: 600, color: "#e2e5e9" }}>{inlines(c, onLink)}</th>)}</tr></thead>
-          <tbody>{b.rows.map((row, ri) => <tr key={ri}>{row.map((c, ci) => <td key={ci} style={{ borderBottom: "1px solid #1a1c20", padding: "4px 10px" }}>{inlines(c, onLink)}</td>)}</tr>)}</tbody>
+          <tbody>{b.rows.map((row, ri) => <tr key={ri}>{row.map((c, ci) => <td key={ci} style={{ borderBottom: `1px solid ${raised}`, padding: "4px 10px" }}>{inlines(c, onLink)}</td>)}</tr>)}</tbody>
         </table>
       );
     default:
@@ -63,6 +65,9 @@ function Block({ b, slug, onLink }: { b: ParsedBlock; slug?: string; onLink: (hr
 
 export function MarkdownView({ text, paneId, sessionId, file }: { text: string; paneId: number; sessionId: string; file: string }): React.ReactElement {
   const root = React.useRef<HTMLDivElement>(null);
+  // Sprint 516: the code blocks and table separators sit a step above the look's ground.
+  const look = React.useSyncExternalStore(settings.subscribe, settings.getSnapshot, settings.getSnapshot).look;
+  const raised = LOOK[look].raised;
   const blocks = React.useMemo(() => mdBlocks(text, { links: true }), [text]);
   // Anchors as GitHub writes them: a repeated heading takes -1, -2.
   const slugs = React.useMemo(() => {
@@ -85,7 +90,7 @@ export function MarkdownView({ text, paneId, sessionId, file }: { text: string; 
   return (
     <div ref={root} data-md-view={file} style={{ position: "absolute", inset: 0, overflowY: "auto", padding: "18px 28px 40px", color: "#c9ccd0", fontSize: 13, lineHeight: 1.6 }}>
       <div style={{ maxWidth: 820, position: "relative" }}>
-        {blocks.map((b, i) => <Block key={i} b={b} slug={slugs[i]} onLink={onLink} />)}
+        {blocks.map((b, i) => <Block key={i} b={b} slug={slugs[i]} onLink={onLink} raised={raised} />)}
       </div>
     </div>
   );

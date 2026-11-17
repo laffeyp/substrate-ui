@@ -44,7 +44,6 @@ import { BytesView, formOf, type ByteBuffer } from "./BytesView";
 import { LinesView } from "./LinesView";
 
 const SUNK = "#1a1c20";
-const GROUND = "#212327";
 const ACCENT = "#82a5c8";
 const ADDED = "#7fb3b8";
 const REMOVED = "#c26058";
@@ -65,7 +64,7 @@ function languageOf(path: string): LanguageDescription | null {
 
 /** 24a's code: near-monochrome, comments dim (D7: no yellow, no green; colour carries data only). */
 /** Sprint 475 (BLACKBOARD 2026-11-11: "it's like it's all white text still"): hues a person tells apart, within D7 (no
- *  green, no yellow, red for failed only), each readable on the ground #212327. A style on a parent tag applies to its
+ *  green, no yellow, red for failed only), each readable on the look's ground (sprint 516: `#1a1c20` under `new`). A style on a parent tag applies to its
  *  children (@lezer/highlight), so `t.keyword` covers control, definition, module and operator keywords. */
 /** The code's highlighting for a look's palette (sprint 481: the colours come from `derive/look.ts`). */
 const highlightFor = (c: Syntax) => HighlightStyle.define([
@@ -85,9 +84,9 @@ const highlightFor = (c: Syntax) => HighlightStyle.define([
 ]);
 
 const THEME = EditorView.theme({
-  "&": { height: "100%", backgroundColor: GROUND, color: "#d7dade", fontSize: "13px" },
+  "&": { height: "100%", color: "#d7dade", fontSize: "13px" },
   ".cm-scroller": { fontFamily: "ui-monospace,'SF Mono',Menlo,Consolas,monospace", paddingTop: "12px" },
-  ".cm-gutters": { backgroundColor: GROUND, border: "none", color: "#62676f" },
+  ".cm-gutters": { border: "none", color: "#62676f" },
   ".cm-lineNumbers .cm-gutterElement": { padding: "0 12px 0 20px", minWidth: "28px" },
   ".cm-content": { caretColor: ACCENT },
   // An added line keeps its syntax colours; the change gutter's teal + marks it (the Architect, 2026-11-11: frame 24a's
@@ -108,7 +107,9 @@ const THEME = EditorView.theme({
   // Sprint 431: a session edit in flight, its lines edged in the accent.
   ".cm-follow": { boxShadow: `inset 2px 0 0 ${ACCENT}`, backgroundColor: "rgba(130,165,200,.08)" },
   // vim's block cursor in the one UI accent (D7); the package draws it pink, which here reads as a removal.
-  ".cm-fat-cursor": { background: `${ACCENT} !important`, color: `${GROUND} !important` },
+  // vim's block cursor in the one UI accent (D7); the package draws it pink, which here reads as a removal. Its text
+  // takes the look's ground in `lookTheme`.
+  ".cm-fat-cursor": { background: `${ACCENT} !important` },
   "&:not(.cm-focused) .cm-fat-cursor": { background: "none !important", outline: `solid 1px ${ACCENT} !important`, color: "transparent !important" },
 }, { dark: true });
 
@@ -413,7 +414,7 @@ function tabMenu(rel: string, paneId: number): MenuItem[] {
 
 /** A tab (sprint 419). Sprint 445 (BLACKBOARD 2026-11-09, the tab row: "the tab's dot means unsaved changes"; × on
  *  hover): an unsaved file's tab draws a dot in the ×'s place, as VS Code and Xcode do, and hovering shows the ×. */
-function Tab({ rel, active, unsaved, paneId, group, lit }: { rel: string; active: boolean; unsaved: boolean; paneId: number; group: number; lit: boolean }): React.ReactElement {
+function Tab({ rel, active, unsaved, paneId, group, lit, ground }: { rel: string; active: boolean; unsaved: boolean; paneId: number; group: number; lit: boolean; ground: string }): React.ReactElement {
   const editor = groupEditor(paneId, group);
   const [hover, setHover] = React.useState(false);
   const name = rel.slice(rel.lastIndexOf("/") + 1);
@@ -422,7 +423,7 @@ function Tab({ rel, active, unsaved, paneId, group, lit }: { rel: string; active
       onContextMenu={(e) => openMenu(e, ContextMenuOpenedSource.TAB, tabMenu(rel, paneId), paneId)}
       draggable onDragStart={(e) => { dragChip(e, fileChip(rel)); e.dataTransfer.setData(TAB_TYPE, JSON.stringify({ paneId, group, rel })); e.dataTransfer.effectAllowed = "copyMove"; }} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
       style={{ display: "flex", alignItems: "center", gap: 8, padding: "0 14px", height: "100%", cursor: "pointer", fontSize: 12, whiteSpace: "nowrap", flex: "none",
-        background: active ? GROUND : "transparent", color: active ? "#d7dade" : "#9aa0a8", boxShadow: active ? `inset 0 2px 0 ${lit ? ACCENT : "#4a4e55"}` : undefined }}
+        background: active ? ground : "transparent", color: active ? "#d7dade" : "#9aa0a8", boxShadow: active ? `inset 0 2px 0 ${lit ? ACCENT : "#4a4e55"}` : undefined }}
       data-lit={lit ? "1" : "0"}>
       {name}
       <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 8 }}>
@@ -448,7 +449,17 @@ const matchesFor = (on: boolean, lang: string | null) => (on && lang && !PROSE.h
 const HIGHLIGHTS: Record<Look, ReturnType<typeof highlightFor>> = { new: highlightFor(LOOK.new.syntax), original: highlightFor(LOOK.original.syntax) };
 /** Sprint 485: ghost, the same notes in greys, whatever the look. */
 const GHOST = highlightFor(SYNTAX_GHOST);
-const lookTheme = (look: Look, scheme: Scheme): Extension[] => [EditorView.theme({ ".cm-scroller": { lineHeight: `${LOOK[look].codeLineHeight}px` } }), syntaxHighlighting(scheme === "ghost" ? GHOST : HIGHLIGHTS[look])];
+// Sprint 516: the ground is the look's (`derive/look.ts`); the static THEME above sets no background, so this
+// theme's `&` and `.cm-gutters` are the code area's ground, and the fat cursor's text keeps its contrast on it.
+const lookTheme = (look: Look, scheme: Scheme): Extension[] => [
+  EditorView.theme({
+    "&": { backgroundColor: LOOK[look].ground },
+    ".cm-gutters": { backgroundColor: LOOK[look].ground },
+    ".cm-scroller": { lineHeight: `${LOOK[look].codeLineHeight}px` },
+    ".cm-fat-cursor": { color: `${LOOK[look].ground} !important` },
+  }),
+  syntaxHighlighting(scheme === "ghost" ? GHOST : HIGHLIGHTS[look]),
+];
 /** Each file's base text (sprint 424, the status line's `vs main`), by session and path; absent outside git and in a
  *  repository with no commit (sprint 450). */
 const BASES = new Map<string, { name: string; text: string }>();
@@ -1145,9 +1156,9 @@ export function Centre({ paneId, sessionId, tabRow, group = 1 }: { paneId: numbe
   const mdShown = !!st.active && st.rendered.includes(st.active) && !largeText && !bytesFile;
   const mdText = mdShown ? (activeBuffer?.path() === st.active ? activeBuffer.text() : null) ?? showing?.text ?? null : null;
   return (
-    <div data-editor-area="centre" data-editor-group={String(group)} data-focused={focused ? "1" : "0"} style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, minWidth: 0, background: GROUND, position: "relative" }}>
+    <div data-editor-area="centre" data-editor-group={String(group)} data-focused={focused ? "1" : "0"} style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, minWidth: 0, background: LOOK[look].ground, position: "relative" }}>
       <div data-editor-tabs={String(st.tabs.length)} style={{ height: tabRow, flex: "none", background: SUNK, display: "flex", overflowX: "auto", overflowY: "hidden" }}>
-        {st.tabs.map((rel) => <Tab key={rel} rel={rel} active={rel === st.active} unsaved={st.unsaved.includes(rel)} paneId={paneId} group={group} lit={focused} />)}
+        {st.tabs.map((rel) => <Tab key={rel} rel={rel} active={rel === st.active} unsaved={st.unsaved.includes(rel)} paneId={paneId} group={group} lit={focused} ground={LOOK[look].ground} />)}
       </div>
       {st.conflict && st.conflict === st.active && (
         <div data-save-conflict={st.conflict} style={{ display: "flex", gap: 14, alignItems: "center", padding: "6px 14px", background: SUNK, borderBottom: "1px solid rgba(255,255,255,.055)", fontSize: 11, color: "#b9bec5", flex: "none" }}>

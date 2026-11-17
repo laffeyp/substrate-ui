@@ -17,6 +17,11 @@ export interface LookValues {
   terminalLineHeight: number;
   /** The code editor's line height in px (`editor/Centre.tsx`, `.cm-scroller`). */
   codeLineHeight: number;
+  /** The editor view's ground (sprint 516; `editor/Centre.tsx`, `editor/EditorView.tsx`). */
+  ground: string;
+  /** A step above the editor's ground: the rendered Markdown's code blocks and table separators
+   *  (sprint 516; `editor/MarkdownView.tsx`). */
+  raised: string;
   /** The model's reply in the transcript (`--transcript-reply`, read by `reveal/transcript/Row.tsx`). */
   replyColor: string;
   /** The person's message in the transcript (`--transcript-message`). */
@@ -58,10 +63,13 @@ export const SCHEMES: readonly Scheme[] = ["colour", "ghost"];
 export const SYNTAX_GHOST: Syntax = { comment: "#62676f", keyword: "#93969a", string: "#aeb1b5", number: "#a0a3a7", type: "#bbbec3", name: "#e8eaee", property: "#c9ccd0", meta: "#86898d", punctuation: "#7a7c80" };
 
 export const LOOK: Record<Look, LookValues> = {
-  // As drawn before sprint 477 (git e804ee3^).
-  original: { paneLineHeight: 2, metaLineHeight: 1.95, terminalLineHeight: 1.7, codeLineHeight: 23, replyColor: "#b9bec5", messageColor: "#e2e5e9", syntax: SYNTAX_475 },
+  // As drawn before sprint 477 (git e804ee3^). The ground and the raised step as drawn before sprint 516.
+  original: { paneLineHeight: 2, metaLineHeight: 1.95, terminalLineHeight: 1.7, codeLineHeight: 23, ground: "#212327", raised: "#1a1c20", replyColor: "#b9bec5", messageColor: "#e2e5e9", syntax: SYNTAX_475 },
   // Sprint 477 (E16): the transcript at 20 px on 13 px; sprint 479 (E18): the code at 20 px (RESEARCH-2026-11-11-colour-spacing-wrap).
   // The reply's and message's colours stay as they were: sprint 479 made the reply brighter, and the Architect reverted it
   // ("this is actually too bright … everything was perfect", 2026-11-11).
-  new: { paneLineHeight: 1.54, metaLineHeight: 1.54, terminalLineHeight: 1.54, codeLineHeight: 20, replyColor: "#b9bec5", messageColor: "#e2e5e9", syntax: SYNTAX_481 },
+  // Sprint 516 (roadmap 2026-11-17-daily-driver-fixes E1; the Architect, 2026-11-17: "The editor background is too
+  // light. It needs to be the same background as the inset in the panes … that black background"): the ground is the
+  // inset's colour, and the raised step is the ground the editor had.
+  new: { paneLineHeight: 1.54, metaLineHeight: 1.54, terminalLineHeight: 1.54, codeLineHeight: 20, ground: "#1a1c20", raised: "#212327", replyColor: "#b9bec5", messageColor: "#e2e5e9", syntax: SYNTAX_481 },
 };
