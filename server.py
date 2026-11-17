@@ -7120,16 +7120,26 @@ def main() -> None:
             uds_srv.shutdown()
         srv.shutdown()  # returns once serve_forever() on the main thread exits
 
+    _SHUTDOWN_HARD_DEADLINE_S = 60.0
     _shutdown_claim_lock = threading.Lock()
 
     def _claim_shutdown() -> bool:
         """True for the first caller only (Sprint 215d: a second SIGTERM, or
         SIGTERM racing the watchdog, is a no-op). Called from threads, never
-        from the signal handler."""
+        from the signal handler.
+
+        Sprint 515: the first claim arms a hard-exit timer. A sweep that wedges
+        (a session whose interrupt hangs) used to leave the backend alive and
+        SIGTERM-deaf, because the same `shutdown_started` flag that the watchdog
+        reads was already set. The timer os._exit(0)s past the deadline no matter
+        what the sweep is stuck on, so the process cannot outlive its parent."""
         with _shutdown_claim_lock:
             if app.shutdown_started.is_set():
                 return False
             app.shutdown_started.set()
+            _hard_exit = threading.Timer(_SHUTDOWN_HARD_DEADLINE_S, os._exit, args=(0,))
+            _hard_exit.daemon = True  # never blocks the clean path's own exit
+            _hard_exit.start()
             return True
 
     # Self-pipe: the signal handler writes one byte and does nothing else. The
