@@ -88,6 +88,8 @@ def test_shutdown_buckets_fresh_session_as_skipped_fresh(
         "skipped_fresh": 1,
         "skipped_ended": 0,
         "failed": 0,
+        "busy": 0,
+        "deferred": 0,
         "background_stopped": 0,
     }
 
@@ -149,5 +151,7 @@ def test_shutdown_mixes_fresh_parked_and_ended_buckets(
         "skipped_fresh": 1,
         "skipped_ended": 1,
         "failed": 0,
+        "busy": 0,
+        "deferred": 0,
         "background_stopped": 0,
     }

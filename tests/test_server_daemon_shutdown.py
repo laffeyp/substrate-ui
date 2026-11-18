@@ -83,6 +83,8 @@ def test_shutdown_ends_every_parked_session_with_reason_daemon_shutdown(
         "skipped_fresh": 0,
         "skipped_ended": 0,
         "failed": 0,
+        "busy": 0,
+        "deferred": 0,
         "background_stopped": 0,
     }
 
@@ -140,6 +142,8 @@ def test_shutdown_skips_already_ended_sessions(app: server.App, base: tuple[str,
         "skipped_fresh": 0,
         "skipped_ended": 1,
         "failed": 0,
+        "busy": 0,
+        "deferred": 0,
         "background_stopped": 0,
     }
     # The already-ended session's record still shows the earlier reason,
@@ -177,6 +181,8 @@ def test_shutdown_continues_when_one_session_fails(
         "skipped_fresh": 0,
         "skipped_ended": 0,
         "failed": 1,
+        "busy": 0,
+        "deferred": 0,
         "background_stopped": 0,
     }
     # The good session ended cleanly.

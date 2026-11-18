@@ -339,6 +339,9 @@ const HEALTH_POLL_MS = 200;
 // clean shutdowns short and left sessions `interrupted` on next boot (Review
 // 2026-09-28 § F9). Give the server enough time to finish its own
 // shutdown work; still hard-cap so a wedged daemon can't hold the app open.
+// Sprint 519: later than server.py's SHUTDOWN_HARD_DEADLINE_S (40 s), so the server ends itself
+// first; its sweep stops starting sessions at SHUTDOWN_SWEEP_DEADLINE_S (30 s).
+// tests/test_quit_clocks_519.py holds the order.
 const KILL_GRACE_MS = 45_000;
 const PORT_READBACK_RE = /^substrate-ui port=(\d+)$/m;
 const SERVER_LOSS_RE = /^substrate-ui trace_lost=(\d+)$/;

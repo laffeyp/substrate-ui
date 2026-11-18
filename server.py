@@ -427,7 +427,11 @@ def _load_daemon_config(config_path: Path | None = None) -> dict[str, Any]:
 
 
 def _interrupt_then_end(
-    app: App, session_id: str, source: str, timeout_seconds: float
+    app: App,
+    session_id: str,
+    source: str,
+    timeout_seconds: float,
+    lock_timeout_seconds: float | None = None,
 ) -> tuple[Any, Path]:
     """End a session, interrupting its running turn first. UI sprint 101 (quit) and 107 (`/end`
     and the child cascade): turns have no time limit and the end turn waits for the session's
@@ -448,7 +452,18 @@ def _interrupt_then_end(
         session_id,
         resume_event=SessionEndRequested(session_id=session_id, source=source),
         timeout_seconds=timeout_seconds,
+        lock_timeout_seconds=lock_timeout_seconds,
     )
+
+
+# Sprint 519: the quit's clocks, in one place. The sweep stops starting sessions at
+# SHUTDOWN_SWEEP_DEADLINE_S; the server ends itself at SHUTDOWN_HARD_DEADLINE_S whatever the sweep
+# is doing (sprint 515's timer); Electron kills the process group at KILL_GRACE_MS
+# (electron/main.ts), which must be later, so the server always ends itself first. Before 519 the
+# server's deadline was 60 s against Electron's 45 s, and the server's timer never fired under
+# Electron (review 2026-11-18, § 3.1). tests/test_quit_clocks_519.py holds the order.
+SHUTDOWN_SWEEP_DEADLINE_S = 30.0
+SHUTDOWN_HARD_DEADLINE_S = 40.0
 
 
 # The domain an /api/ path belongs to (API_REFUSED.area, SERVER_FAULTED.area; vocabulary v0.11).
@@ -630,7 +645,12 @@ def _install_fault_hooks() -> None:
     sys.excepthook = on_main
 
 
-def _shutdown_all_sessions(app: App, *, per_session_timeout: float = 10.0) -> dict[str, int]:
+def _shutdown_all_sessions(
+    app: App,
+    *,
+    per_session_timeout: float = 10.0,
+    deadline_s: float = SHUTDOWN_SWEEP_DEADLINE_S,
+) -> dict[str, int]:
     """Sprint 215d + 217a: end every running/parked session cleanly on daemon
     shutdown. For each manifest whose status is not `ended` or `interrupted`,
     inject `SessionEndRequested(session_id, source="daemon_shutdown")` via
@@ -656,15 +676,24 @@ def _shutdown_all_sessions(app: App, *, per_session_timeout: float = 10.0) -> di
       - skipped_ended: manifest already had status "ended" or "interrupted"
                        before the sweep — nothing to do
       - failed:        an unexpected exception on one session; the sweep continued
+      - busy:          another turn held the session's lock past `per_session_timeout`
+                       (sprint 519, kernel K356); the sweep moved on
+      - deferred:      the sweep's `deadline_s` passed before it reached the session; its
+                       record says where it stands and the next boot reads it
       - background_stopped: bash background tasks stopped at quit (UI sprint 103)
     """
+    from substrate.topologies.session_registry import SessionBusy
+
     result = {
         "ended": 0,
         "skipped_fresh": 0,
         "skipped_ended": 0,
         "failed": 0,
+        "busy": 0,
+        "deferred": 0,
         "background_stopped": 0,
     }
+    started = time.monotonic()
     if app.registry is None:
         return result
     # UI sprint 103: background commands do not outlive the daemon (Claude Code cleans its
@@ -679,9 +708,20 @@ def _shutdown_all_sessions(app: App, *, per_session_timeout: float = 10.0) -> di
         if manifest.status in (SessionStatus.ENDED, SessionStatus.INTERRUPTED):
             result["skipped_ended"] += 1
             continue
+        remaining = deadline_s - (time.monotonic() - started)
+        if remaining <= 0:
+            result["deferred"] += 1
+            print(f"[shutdown] deferred {manifest.session_id}: the sweep's deadline passed")
+            continue
+        wait = min(per_session_timeout, remaining)
         try:
-            _interrupt_then_end(app, manifest.session_id, "daemon_shutdown", per_session_timeout)
+            _interrupt_then_end(
+                app, manifest.session_id, "daemon_shutdown", wait, lock_timeout_seconds=wait
+            )
             result["ended"] += 1
+        except SessionBusy:
+            result["busy"] += 1
+            print(f"[shutdown] busy {manifest.session_id}: a turn held its lock past {wait:.0f}s")
         except Exception as exc:  # noqa: BLE001 — best-effort; log and move on
             if isinstance(exc, FreshSessionRequiresUserMessage):
                 # Fresh session: no record on disk to end. Transition the
@@ -7118,14 +7158,15 @@ def main() -> None:
             f"shutdown: ended={outcome['ended']} "
             f"skipped_fresh={outcome['skipped_fresh']} "
             f"skipped_ended={outcome['skipped_ended']} "
-            f"failed={outcome['failed']}"
+            f"failed={outcome['failed']} busy={outcome['busy']} deferred={outcome['deferred']}"
         )
         TRACE.emit(
             Signal.SERVER_STOPPED,
             {
                 "ended": outcome["ended"],
                 "skipped": outcome["skipped_fresh"] + outcome["skipped_ended"],
-                "failed": outcome["failed"],
+                # Sprint 519: a session not ended cleanly, for whatever reason, counts here.
+                "failed": outcome["failed"] + outcome["busy"] + outcome["deferred"],
             },
         )
         TRACE.flush_loss()
@@ -7133,7 +7174,7 @@ def main() -> None:
             uds_srv.shutdown()
         srv.shutdown()  # returns once serve_forever() on the main thread exits
 
-    _SHUTDOWN_HARD_DEADLINE_S = 60.0
+    _SHUTDOWN_HARD_DEADLINE_S = SHUTDOWN_HARD_DEADLINE_S
     _shutdown_claim_lock = threading.Lock()
 
     def _claim_shutdown() -> bool:
