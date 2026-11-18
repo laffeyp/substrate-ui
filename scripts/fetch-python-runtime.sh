@@ -150,14 +150,16 @@ done
 find "$STDLIB" -maxdepth 1 -type f -name "*.py" -delete 2>/dev/null
 
 # 6. Consolidate pure-Python site-packages into a single _bundle.zip
-#    inside site-packages/, added to sys.path via a .pth file. Two
-#    packages stay LOOSE on disk:
+#    inside site-packages/, added to sys.path via a .pth file. These stay
+#    LOOSE on disk:
 #
-#      - msgspec: ships a .so C-extension; zipimport cannot dlopen .so
-#        files, so it has to be a real directory.
-#      - tokenizers: the same (tokenizers.abi3.so); kernel K352 counts a
-#        prompt's tokens with it. Zipped, `from tokenizers import Tokenizer`
-#        failed with "No module named 'tokenizers.tokenizers'" (sprint 508).
+#      - every package that ships a compiled extension (.so, .dylib):
+#        zipimport cannot dlopen one, so the package has to be a real
+#        directory. msgspec was the first; tokenizers (kernel K352) failed
+#        zipped with "No module named 'tokenizers.tokenizers'" (sprint 508);
+#        then hf_xet and yaml, which huggingface-hub brings in with it, were
+#        caught by the check after the zip (sprint 520). The list is found,
+#        not written, so a new dependency cannot repeat it.
 #      - substrate: ships role prompts and other package-data .md
 #        files that the runtime reads via
 #        `Path(substrate.__file__).parent / "topologies/session/prompts/..."`.
@@ -169,26 +171,31 @@ find "$STDLIB" -maxdepth 1 -type f -name "*.py" -delete 2>/dev/null
 #        topologies/session/prompts/" message. Keep substrate loose
 #        until it grows an importlib.resources-based prompt loader.
 KEEP="$(mktemp -d)"
-mv "$SP/msgspec" "$KEEP/msgspec"
-mv "$SP"/msgspec-*.dist-info "$KEEP/"
-mv "$SP/tokenizers" "$KEEP/tokenizers"
-mv "$SP"/tokenizers-*.dist-info "$KEEP/"
-mv "$SP/substrate" "$KEEP/substrate"
+LOOSE=(substrate)
+for entry in "$SP"/*; do
+  name="$(basename "$entry")"
+  case "$name" in substrate|*.dist-info|*.pth|__pycache__) continue ;; esac
+  if [ -n "$(find "$entry" \( -name '*.so' -o -name '*.dylib' \) -print -quit)" ]; then
+    LOOSE+=("$name")
+  fi
+done
+echo "[fetch-python-runtime] loose on disk: ${LOOSE[*]}"
+for name in "${LOOSE[@]}"; do
+  mv "$SP/$name" "$KEEP/$name"
+done
 mv "$SP"/substrate_kernel-*.dist-info "$KEEP/"
 "$PY" -m compileall -q -b -j 0 --invalidation-mode unchecked-hash "$SP" >/dev/null || true
 ( cd "$SP" && zip -q -r ./_bundle.zip . -x "_bundle.zip" )
 for entry in $(ls -1 "$SP" | grep -v "^_bundle.zip$"); do
   rm -rf "$SP/$entry"
 done
-mv "$KEEP/msgspec" "$SP/msgspec"
-mv "$KEEP"/msgspec-*.dist-info "$SP/"
-mv "$KEEP/tokenizers" "$SP/tokenizers"
-mv "$KEEP"/tokenizers-*.dist-info "$SP/"
-mv "$KEEP/substrate" "$SP/substrate"
+for name in "${LOOSE[@]}"; do
+  mv "$KEEP/$name" "$SP/$name"
+done
 mv "$KEEP"/substrate_kernel-*.dist-info "$SP/"
 rmdir "$KEEP"
 echo "_bundle.zip" > "$SP/_bundle.pth"
-# A compiled extension in the zip cannot load; one there is a package missing from the list above.
+# A compiled extension in the zip cannot load; one there means the search above missed it.
 if unzip -Z1 "$SP/_bundle.zip" | grep -qE '\.(so|dylib)$'; then
   echo "[fetch-python-runtime] compiled extension inside _bundle.zip:" >&2
   unzip -Z1 "$SP/_bundle.zip" | grep -E '\.(so|dylib)$' >&2
@@ -240,7 +247,7 @@ find "$OUT" -type d -name "__pycache__" -prune -exec rm -rf {} + 2>/dev/null || 
 # 10. Bytecode for the packages that stay loose on disk (substrate, msgspec), written AFTER the
 # sweep so it survives. __pycache__ layout (their .py files are present), unchecked-hash so Python
 # never rewrites them; the code signature then covers exactly these files.
-PYTHONDONTWRITEBYTECODE=1 "$PY" -m compileall -q -j 0 --invalidation-mode unchecked-hash "$SP/substrate" "$SP/msgspec" "$SP/tokenizers" >/dev/null
+PYTHONDONTWRITEBYTECODE=1 "$PY" -m compileall -q -j 0 --invalidation-mode unchecked-hash "${LOOSE[@]/#/$SP/}" >/dev/null
 echo "[fetch-python-runtime] precompiled: $(find "$OUT" -name '*.pyc' | wc -l | tr -d ' ') .pyc files (plus those inside the zips)"
 
 # 11. Code placement per Apple's "Placing Content in a Bundle" (review 2026-09-28 F10; quoted in
