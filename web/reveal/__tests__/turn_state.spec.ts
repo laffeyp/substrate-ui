@@ -148,3 +148,24 @@ test("a turn that ended with Returned is over: no pulse, no ticking clock", () =
   assert.strictEqual(a.turnWord, "turn 0");
   assert.strictEqual(a.restText, "1.38s · no tools · returned (replied)");
 });
+
+test("an interrupted session says a message continues it (sprint 522)", async () => {
+  // The app was killed during turn 44: the record ends with its UserMessage, the boot scan marks
+  // the session interrupted, and the next message resumes it.
+  const client = {
+    fetchJson: async () => ({
+      ok: true,
+      data: { session_id: "s_int", status: "interrupted", driver: "claude", next_turn_index: 45 },
+    }),
+    streamRecord: () => () => undefined,
+    streamRecordByPath: () => () => undefined,
+  } as unknown as SubstrateClient;
+  const c = new SessionController(client);
+  await c.attachExisting("s_int");
+  const f = c.snapshot().turnFailure;
+  assert.ok(f, "turnFailure set");
+  const a = liveActivity(snap([um(1, f.atT - 9, 44)], f));
+  assert.ok(a);
+  assert.strictEqual(a.kind, "failed");
+  assert.match(a.restText, /· ended: the app stopped during this turn; a message continues the session$/);
+});

@@ -942,9 +942,16 @@ export class SessionController {
       parkReason: null,
       // UI sprint 101: the server's status at attach. A session that is not running has no
       // turn in flight, so a last turn on the record without a Park ended some other way.
+      // Sprint 522: an `interrupted` session is one the app stopped mid-turn (killed, crashed); the
+      // turn ended with no reply, and the next message resumes the session.
       turnFailure:
         manifest.status && manifest.status !== SessionStatus.RUNNING
-          ? { detail: `the turn ended without parking (session ${manifest.status})`, atT: Date.now() / 1000 }
+          ? {
+              detail: manifest.status === SessionStatus.INTERRUPTED
+                ? "the app stopped during this turn; a message continues the session"
+                : `the turn ended without parking (session ${manifest.status})`,
+              atT: Date.now() / 1000,
+            }
           : null,
       language: null,
       languageOff: false,
