@@ -1382,6 +1382,7 @@ export class SessionController {
       interrupted?: boolean;
       landed?: boolean;
       signal?: boolean;
+      pending?: boolean;
       tier?: string;
       scope?: "session" | "descent";
       record_root?: string;
@@ -1400,11 +1401,15 @@ export class SessionController {
     const wasInterrupted = result.data?.interrupted === true;
     const landed = result.data?.landed === true;
     const isSignal = result.data?.signal === true;
+    // Kernel K355: the turn was still loading its record; the cancel runs as it finishes.
+    const isPending = result.data?.pending === true;
     const scope = result.data?.scope === "descent" ? "descent" : "session";
     const scopeSuffix = scope === "descent" ? " · scoped to child" : "";
     let text: string;
     if (isSignal) {
       text = `^C — soft interrupt requested; the model will stop after this tool${scopeSuffix}`;
+    } else if (isPending && !landed) {
+      text = "^C — interrupt taken; the turn stops when it finishes loading";
     } else if (wasInterrupted && tier === TurnInterruptedTier.HARD) {
       text = scope === "descent"
         ? "^C — hard interrupt; tool cancelled · cancel_producer on the child's runtime"

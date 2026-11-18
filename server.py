@@ -5640,10 +5640,27 @@ class Handler(BaseHTTPRequestHandler):
         # record_root string. Empty / absent → session scope.
         record_root_raw = qs.get("record_root", [""])[0].strip()
         record_root_arg = record_root_raw or None
+        record_root = Path(record_root_arg) if record_root_arg else Path(manifest.record_root)
+
+        def _cancels() -> list[dict[str, Any]]:
+            try:
+                return [
+                    env
+                    for env in api.read_record(record_root)
+                    if env.get("kind") == api.PRODUCER_CANCELLED
+                ]
+            except _RECORD_IO_ERRORS:  # REVIEW-2026-08-28 Q6: narrow mid-write catch
+                return []
+
+        cancels_before = len(_cancels())
         ref = self.app.registry.interrupt(session_id, tier=tier_raw, record_root=record_root_arg)
         if ref is None:
             self._json({"interrupted": False, "landed": False, "session_id": session_id})
             return
+        # Kernel K355: the turn is in flight but its loop cannot take the cancel yet (a bootstrap
+        # reading the record). The cancel runs once the loop frees; it names no instance, so the
+        # poll below looks for any ProducerCancelled that lands after the request.
+        pending = isinstance(ref, dict) and ref.get("kind") == "pending"
         # Poll the record for a matching ProducerCancelled envelope. Poll interval
         # 50 ms; cap at max_wait_ms. Match on the (kind, instance) pair the
         # dispatch returned; a caller who reads landed=true knows the envelope
@@ -5654,21 +5671,16 @@ class Handler(BaseHTTPRequestHandler):
             target_instance = str(ref.get("instance", ""))
             # Descent scope: poll the CHILD's record for the ProducerCancelled
             # or InterruptRequested envelope. Session scope: parent's record.
-            record_root = Path(record_root_arg) if record_root_arg else Path(manifest.record_root)
             while time.monotonic() < deadline:
-                try:
-                    for env in api.read_record(record_root):
-                        if env.get("kind") != api.PRODUCER_CANCELLED:
-                            continue
-                        producer = (env.get("payload") or {}).get("producer") or {}
-                        if (
-                            isinstance(producer, dict)
-                            and producer.get("instance") == target_instance
-                        ):
-                            landed = True
-                            break
-                except _RECORD_IO_ERRORS:  # REVIEW-2026-08-28 Q6: narrow mid-write catch
-                    pass
+                cancels = _cancels()
+                if pending:
+                    landed = len(cancels) > cancels_before
+                else:
+                    landed = any(
+                        isinstance((env.get("payload") or {}).get("producer"), dict)
+                        and env["payload"]["producer"].get("instance") == target_instance
+                        for env in cancels
+                    )
                 if landed:
                     break
                 time.sleep(0.05)
@@ -5681,6 +5693,7 @@ class Handler(BaseHTTPRequestHandler):
             {
                 "interrupted": True,
                 "landed": landed or is_signal,
+                "pending": pending,
                 "tier": tier_raw,
                 "signal": is_signal,
                 "producer": ref,

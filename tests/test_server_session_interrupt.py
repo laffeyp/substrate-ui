@@ -257,3 +257,19 @@ def test_interrupt_malformed_max_wait_ms_returns_400(base: str, tmp_path: Path) 
     status, body = _post_json(base + f"/api/session/{sid}/interrupt?max_wait_ms=abc", None)
     assert status == 400
     assert "max_wait_ms" in body["error"]
+
+
+@pytest.mark.timeout(10)
+def test_a_pending_interrupt_says_so(
+    app: server.App, base: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Kernel K355: an interrupt the turn cannot take yet (its loop busy with a bootstrap) answers
+    the pending reference; the endpoint reports `pending: true` and, with no cancel on the record
+    within the wait, `landed: false` (sprint 518)."""
+    from substrate.topologies.session_registry import PENDING_INTERRUPT
+
+    sid = _create(base, tmp_path / "wsp")
+    monkeypatch.setattr(app.registry, "interrupt", lambda *_a, **_k: dict(PENDING_INTERRUPT))
+    status, body = _post_json(base + f"/api/session/{sid}/interrupt?max_wait_ms=200", None)
+    assert status == 200
+    assert body["interrupted"] is True and body["pending"] is True and body["landed"] is False
