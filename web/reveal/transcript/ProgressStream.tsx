@@ -9,8 +9,9 @@ import * as React from "react";
 import { TerminalText } from "./ToolText";
 import { needsTerminal } from "../tool_format";
 
-/** Sprint 505: past this, a stream redrawn on every chunk is drawn plain rather than through the terminal model. */
-const TERMINAL_MAX = 200_000;
+/** Sprint 505: past this, a stream redrawn on every chunk is drawn plain rather than through the terminal model.
+ *  Exported for sprint 517's plain block, which draws the stream the same way. */
+export const TERMINAL_MAX = 200_000;
 
 interface Props {
   progressText: string;

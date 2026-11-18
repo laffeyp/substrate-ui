@@ -7,13 +7,14 @@
 
 import * as React from "react";
 import type { TranscriptRow } from "../../vm";
-import { ProgressStream } from "./ProgressStream";
+import { ProgressStream, TERMINAL_MAX } from "./ProgressStream";
 import { defaultOpen } from "../../vm/tool_output_mode";
 import { useToolOutputMode } from "./useToolOutputMode";
 import { emit as emitSignal } from "../../vm/instrumentation/sdd";
 import { Signal } from "../../vm/signals.gen";
-import { SummaryText, ToolText } from "./ToolText";
-import { argFormat, outputFormat, shellResult, splitArg, summaryOf } from "../tool_format";
+import { SummaryText, TerminalText, ToolText } from "./ToolText";
+import { argFormat, needsTerminal, outputFormat, shellResult, splitArg, summaryOf } from "../tool_format";
+import { useToolView } from "./useToolView";
 
 const hasResultText = (r: TranscriptRow | undefined) => !!r && typeof r.output === "string" && r.output.length > 0;
 
@@ -53,6 +54,7 @@ const ToolCardInner: React.FC<Props> = ({ call, result, progressText, progressEo
   // open state per call, not per recurring call id (UI sprint 101)
   const openKey = call.callKey ?? callId;
   const toggle = useToolOutputMode();
+  const toolView = useToolView();
   const seeded = openKey ? openByCallId.get(openKey) : undefined;
   const initialOpen = seeded !== undefined && seeded.generation === toggle.generation
     ? seeded.open
@@ -101,6 +103,45 @@ const ToolCardInner: React.FC<Props> = ({ call, result, progressText, progressEo
   const shell = React.useMemo(() => (hasResultText(result) ? shellResult(toolName, outputText) : null), [toolName, outputText, result]);
   const errorText = result?.error ?? "";
   const hasError = !!errorText;
+
+  // Sprint 517: the plain presentation's content. A write or edit's body text first (old before new,
+  // sprint 511's order in `rows`), then the output: the stream's text while the tool runs, the
+  // result's when it lands — one block across the boundary. The kernel's bash result caps stdout at
+  // 8,000 bytes (tools.py _BASH_STDOUT_BYTES) while the stream carried it all, so a stream longer
+  // than the result's stdout is kept, and the result's stderr, exit and truncation note append.
+  const plainBodies = argList
+    .map((a) => ({ key: a.i, text: splitArg(a.v).value, format: argFormat(toolName, call.args ?? [], a.at) }))
+    .filter((b) => b.format.kind === "code");
+  const resultStdout = shell?.stdout ?? outputText;
+  const keptStream = hasResult && streamingShow && progressText.length > resultStdout.length ? progressText : null;
+  const cutNote = keptStream && shell ? (/\[bash: stdout cut[^\]]*\]/.exec(shell.stdout)?.[0] ?? null) : null;
+  let plainOutput: React.ReactNode = null;
+  if (!hasResult) {
+    plainOutput = progressText
+      ? needsTerminal(progressText) && progressText.length <= TERMINAL_MAX
+        ? <TerminalText text={progressText} />
+        : progressText
+      : null;
+  } else if (keptStream) {
+    plainOutput = (
+      <>
+        {needsTerminal(keptStream) && keptStream.length <= TERMINAL_MAX ? <TerminalText text={keptStream} /> : keptStream}
+        {shell?.stderr ? <><div data-tool-stderr="1" style={{ color: "#62676f", marginTop: 6 }}>stderr</div><ToolText text={shell.stderr} format={{ kind: "text" }} /></> : null}
+        {shell && shell.exit !== null && shell.exit !== 0 ? <div data-tool-exit={String(shell.exit)} style={{ color: "#c26058", marginTop: 6 }}>exit {shell.exit}</div> : null}
+        {cutNote ? <div style={{ color: "#62676f", marginTop: 6 }}>{cutNote}</div> : null}
+      </>
+    );
+  } else if (shell) {
+    plainOutput = (
+      <>
+        {shell.stdout ? <ToolText text={shell.stdout} format={outputFormat(toolName, call.args ?? [], shell.stdout)} /> : null}
+        {shell.stderr ? <><div data-tool-stderr="1" style={{ color: "#62676f", marginTop: shell.stdout ? 6 : 0 }}>stderr</div><ToolText text={shell.stderr} format={{ kind: "text" }} /></> : null}
+        {shell.exit !== null && shell.exit !== 0 ? <div data-tool-exit={String(shell.exit)} style={{ color: "#c26058", marginTop: 6 }}>exit {shell.exit}</div> : null}
+      </>
+    );
+  } else {
+    plainOutput = outputText ? <ToolText text={outputText} format={outputFormat(toolName, call.args ?? [], outputText)} /> : null;
+  }
 
   // The descend control: only delegate tool results carry a child_root, and the control shows whenever
   // the paired ToolResult's output names one. (It does nothing: F329, left as it is, 2026-11-05.)
@@ -174,6 +215,26 @@ const ToolCardInner: React.FC<Props> = ({ call, result, progressText, progressEo
           title="descend into the child record — the pane's stream switches to the delegate's own envelopes"
         >· descend ⏎</span>
       ) : null}
+      {toolView === "text" ? (plainBodies.length > 0 || plainOutput !== null || hasError) && (
+        <div data-tool-plain="1" style={{
+          margin: "2px 0 8px 24px",
+          background: "#1a1c20",
+          borderRadius: 5,
+          padding: "8px 12px",
+          maxHeight: 220,
+          overflow: "auto",
+          fontFamily: "ui-monospace,'SF Mono',Menlo,monospace",
+          fontSize: 11,
+          lineHeight: 1.7,
+          color: "#b9bec5",
+          whiteSpace: "pre-wrap",
+          overflowWrap: "anywhere",
+        }}>
+          {plainBodies.map((b) => <ToolText key={b.key} text={b.text} format={b.format} />)}
+          {plainOutput}
+          {hasError ? <div style={{ marginTop: 6, color: "#c26058" }}>error {errorText}</div> : null}
+        </div>
+      ) : (
       <div data-tool-card-body="1" style={{
         margin: "6px 0 8px 24px",
         background: "#26292e",
@@ -231,6 +292,7 @@ const ToolCardInner: React.FC<Props> = ({ call, result, progressText, progressEo
           call_id {call.callId ?? ""} · step {call.toolStep ?? ""} · {status} · {outputText.length} bytes
         </div>
       </div>
+      )}
     </details>
   );
 };

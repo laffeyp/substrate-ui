@@ -9,6 +9,7 @@
 
 import { createStore } from "../store";
 import { LOOKS, SCHEMES, type Look, type Scheme } from "../derive/look";
+import { setToolView, TOOL_VIEWS, type ToolView } from "../../vm/tool_view";
 
 export type Theme = "dark" | "light" | "system";
 export const THEMES: readonly Theme[] = ["dark", "light", "system"];
@@ -34,13 +35,16 @@ export interface SettingsState {
   selectionMatches: boolean;
   /** Sprint 485: the code's colours, `colour` or `ghost`. */
   scheme: Scheme;
+  /** Sprint 517: how a tool call draws its output — `cards` (the boxed card) or `text` (plain, on the
+   *  inset's ground). Mirrored into `web/vm/tool_view.ts` for the transcript, which imports no web/app. */
+  toolView: ToolView;
 }
 
 // One instance per window, kept on globalThis as in shell.ts. The page once loaded two copies of this
 // module (sprint 213); Vite now bundles one, and the shared key costs nothing.
 const KEY_SHARED = "__substrateSettings";
 const scope = globalThis as unknown as Record<string, ReturnType<typeof createStore<SettingsState>> | undefined>;
-export const settings = scope[KEY_SHARED] ?? (scope[KEY_SHARED] = createStore<SettingsState>({ theme: "dark", fontOverride: null, settingsNote: "", binding: "standard", look: "new", selectionMatches: true, scheme: "colour" }));
+export const settings = scope[KEY_SHARED] ?? (scope[KEY_SHARED] = createStore<SettingsState>({ theme: "dark", fontOverride: null, settingsNote: "", binding: "standard", look: "new", selectionMatches: true, scheme: "colour", toolView: "cards" }));
 
 /** The saved fields that pass their checks; anything else is left at its default. */
 export function readSaved(raw: string | null): Partial<SettingsState> {
@@ -56,18 +60,20 @@ export function readSaved(raw: string | null): Partial<SettingsState> {
   if (LOOKS.includes(saved.look as Look)) patch.look = saved.look as Look;
   if (typeof saved.selectionMatches === "boolean") patch.selectionMatches = saved.selectionMatches;
   if (SCHEMES.includes(saved.scheme as Scheme)) patch.scheme = saved.scheme as Scheme;
+  if (TOOL_VIEWS.includes(saved.toolView as ToolView)) patch.toolView = saved.toolView as ToolView;
   return patch;
 }
 
 /** Load once at mount. localStorage may be unavailable; the defaults then stand. */
 export function loadSettings(): void {
   try { settings.set(readSaved(window.localStorage.getItem(KEY))); } catch { /* defaults stand */ }
+  setToolView(settings.getSnapshot().toolView);
 }
 
 function save(): void {
   try {
-    const { theme, fontOverride, binding, look, selectionMatches, scheme } = settings.getSnapshot();
-    window.localStorage.setItem(KEY, JSON.stringify({ theme, fontOverride, binding, look, selectionMatches, scheme }));
+    const { theme, fontOverride, binding, look, selectionMatches, scheme, toolView } = settings.getSnapshot();
+    window.localStorage.setItem(KEY, JSON.stringify({ theme, fontOverride, binding, look, selectionMatches, scheme, toolView }));
   } catch { /* not saved */ }
 }
 
@@ -90,6 +96,14 @@ export function stepFont(delta: number, fallback: number): void {
 
 export function pickScheme(scheme: Scheme): void {
   settings.set({ scheme });
+  save();
+}
+
+/** Sprint 517: the tool output's presentation. Mirrored into `web/vm/tool_view.ts`, which the
+ *  transcript reads (it imports no web/app module). */
+export function pickToolView(toolView: ToolView): void {
+  settings.set({ toolView });
+  setToolView(toolView);
   save();
 }
 

@@ -9,8 +9,9 @@
 import * as React from "react";
 import { useSyncExternalStore } from "react";
 import { closeDialog, dialogs } from "./state/dialogs";
-import { BINDINGS as EDITOR_BINDINGS, fontSize, pickBinding, pickLook, pickScheme, pickSelectionMatches, pickTheme, settings, stepFont, THEMES } from "./state/settings";
+import { BINDINGS as EDITOR_BINDINGS, fontSize, pickBinding, pickLook, pickScheme, pickSelectionMatches, pickTheme, pickToolView, settings, stepFont, THEMES } from "./state/settings";
 import { LOOKS, SCHEMES } from "./derive/look";
+import { TOOL_VIEWS } from "../vm/tool_view";
 import { DialogClosedOutcome, PaneDrawnConnection } from "../vm/signals.gen";
 
 interface VmLike {
@@ -72,6 +73,15 @@ function SettingsDialog({ defaultFontSize }: { defaultFontSize: number }): React
           <span style={{ display: "flex", border: "1px solid rgba(255,255,255,.09)", borderRadius: 5, overflow: "hidden" }}>
             {SCHEMES.map((c) => (
               <span key={c} data-setting-scheme={c} data-lit={st.scheme === c ? "1" : "0"} onClick={() => pickScheme(c)} style={{ padding: "3px 12px", cursor: "pointer", color: st.scheme === c ? "#e2e5e9" : "#62676f", background: st.scheme === c ? "#2e3138" : "transparent" }}>{c}</span>
+            ))}
+          </span>
+        </div>
+        {/* Sprint 517: the tool output's presentation (roadmap 2026-11-17-daily-driver-fixes E3). */}
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <span style={label}>tool output</span>
+          <span style={{ display: "flex", border: "1px solid rgba(255,255,255,.09)", borderRadius: 5, overflow: "hidden" }}>
+            {TOOL_VIEWS.map((v) => (
+              <span key={v} data-setting-tool-view={v} data-lit={st.toolView === v ? "1" : "0"} onClick={() => pickToolView(v)} style={{ padding: "3px 12px", cursor: "pointer", color: st.toolView === v ? "#e2e5e9" : "#62676f", background: st.toolView === v ? "#2e3138" : "transparent" }}>{v}</span>
             ))}
           </span>
         </div>

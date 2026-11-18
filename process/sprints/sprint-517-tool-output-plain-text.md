@@ -3,7 +3,7 @@
 ```yaml
 ---
 id: 517
-status: pending
+status: closed
 phase: daily-driver fixes (roadmap 2026-11-17-daily-driver-fixes r1, E3)
 pass_kind: functional
 ---
@@ -51,6 +51,8 @@ A tool call in the transcript gains a plain-text presentation: its summary line 
 
 ### Files created
 
+- `web/vm/tool_view.ts` — the presentation setting's store, in web/vm so the transcript reads it without importing web/app (mirrored from `state/settings.ts`, as `tool_output_mode.ts` lives in web/vm).
+- `web/reveal/transcript/useToolView.ts` — the cards' hook on the store.
 - `harness/shakeout/tool_output_text.ts` — the gate below.
 
 ### Files modified
