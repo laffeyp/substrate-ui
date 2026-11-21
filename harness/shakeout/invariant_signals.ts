@@ -59,7 +59,7 @@ const PLANTS: [string, number, ReturnType<typeof rec>[]][] = [
   ["S8", 942, [rec(942, "TURN_ACK", { session_id: "plant-942" })]],
   ["S9", 943, [rec(943, "TURN_REFUSED", { failure_class: "http_error", detail: "plant" })]],
   // The timing rules (sprint 375): waits no record answers. T4 breaks after 1 s, T5 and T6 after 10 s.
-  ["T4", 931, [rec(931, "STREAM_ENVELOPE_APPENDED", { seq: 7, kind: "ModelReply" })]],
+  ["T4", 931, [rec(931, "STREAM_BATCH_FOLDED", { count: 1, first_seq: 7, last_seq: 7 })]],
   ["T5", 932, [rec(932, "SESSION_OPEN_REQUESTED", { driver: "deterministic", workspace: null, bundle: null })]],
   ["T6", 933, [rec(933, "SESSION_ATTACH_STARTED", { session_id: "plant-933" }), rec(933, "TURN_SUBMITTED", { session_id: "plant-933", turn_index: 0, text_length: 1 })]],
 ];

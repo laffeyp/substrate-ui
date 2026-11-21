@@ -46,7 +46,9 @@ async function main(): Promise<void> {
       const ctl = (window as any).__vm.get(1);
       const s = ctl.snapshot();
       const last = s.rawEnvelopes[s.rawEnvelopes.length - 1];
-      ctl.patch({ rawEnvelopes: [...s.rawEnvelopes, { seq: last.seq + 1, kind: "UserMessage", t: Date.now() / 1000 - 5, payload: { turn_index: 1 } }] });
+      // Sprint 530: the activity scan reads the snapshot's indexed lastUserMessage, not rawEnvelopes.
+      // A live turn is a UserMessage whose seq is above the last turn-end's, its t 5s ago.
+      ctl.patch({ lastUserMessage: { seq: last.seq + 1, kind: "UserMessage", t: Date.now() / 1000 - 5, payload: { turn_index: 1 } } });
     });
     await win.waitForFunction((sel) => /ctrl\+c to stop/.test(document.querySelector(sel)?.textContent ?? ""), LINE, { timeout: 5_000 });
     const first = await read(win);
@@ -64,8 +66,10 @@ async function main(): Promise<void> {
     await win.evaluate(() => {
       const ctl = (window as any).__vm.get(1);
       const s = ctl.snapshot();
-      const last = s.rawEnvelopes[s.rawEnvelopes.length - 1];
-      ctl.patch({ rawEnvelopes: [...s.rawEnvelopes, { seq: last.seq + 1, kind: "Returned", t: Date.now() / 1000, payload: { reason: "replied" } }] });
+      // The turn ends: a turn-end (Returned) whose seq is above the live UserMessage's, so the scan
+      // reads the turn as done (lastTurnEnd.seq > lastUserMessage.seq) and the recap returns.
+      const um = s.lastUserMessage;
+      ctl.patch({ lastTurnEnd: { seq: um.seq + 1, kind: "Returned", t: Date.now() / 1000, payload: { reason: "replied" } } });
     });
     await win.waitForFunction((sel) => /returned/.test(document.querySelector(sel)?.textContent ?? ""), LINE, { timeout: 5_000 });
     const back = await read(win);

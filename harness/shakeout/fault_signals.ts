@@ -73,6 +73,20 @@ async function first(): Promise<string> {
   await waitForApp(win);
   await bindPaneAsUser(win, "deterministic");
 
+  // Sprint 528 (W6) gave the window two recovery dialogs — one on `unresponsive`, one on
+  // `render-process-gone` — each an `await dialog.showMessageBox(...)` that blocks until a button is
+  // clicked. This gate plants both faults and no human clicks, so without a mock the first dialog
+  // hangs the launch (the 18 s `unresponsive_ms`) and later `evaluate` calls hit a window stuck
+  // behind a modal. Auto-answer each dialog with its own `defaultId` — "Keep Waiting" on the
+  // unresponsive one (no action), "Reopen" on the crash one (recover) — so neither aborts the
+  // planted sequence. Same pattern as renderer_crash_recovery.ts. No restore: the launch is SIGKILLed.
+  await app.evaluate(({ dialog }) => {
+    dialog.showMessageBox = (async (...args: unknown[]) => {
+      const opts = (args.length > 1 ? args[1] : args[0]) as { defaultId?: number } | undefined;
+      return { response: opts?.defaultId ?? 0, checkboxChecked: false };
+    }) as typeof dialog.showMessageBox;
+  });
+
   // A hang. Electron fires unresponsive only when no debugger is attached to the page (measured on
   // Electron 44, 2026-11-08: a 45 s spin with a debugger attached gave responsive alone; without one,
   // unresponsive at 16.6 s), and Playwright attaches one to every page, so a real spin is never

@@ -5963,6 +5963,21 @@ class Handler(BaseHTTPRequestHandler):
             self._error(404, f"unknown session_id {session_id!r}")
             return
         record_root = Path(manifest.record_root)
+        # Sprint 533: resume by SSE event id. The writer below stamps each frame `id: <seq>`.
+        # A reconnecting browser EventSource replays the last id it received as the
+        # `Last-Event-ID` request header (WHATWG SSE), carried only on the EventSource's own
+        # built-in auto-retry; the controller's own reconnect builds a fresh EventSource, whose
+        # constructor cannot set an initial Last-Event-ID, so it carries the same cursor in the
+        # `since_seq` query parameter instead. Honour whichever is further along, so neither path
+        # replays the backlog it already holds. A malformed or absent header leaves `since_seq` as
+        # given (the full stream from the query cursor); the controller's `seenSeqs` is the net for
+        # any seq that still slips through.
+        last_event_id = self.headers.get("Last-Event-ID")
+        if last_event_id is not None:
+            try:
+                since_seq = max(since_seq, int(last_event_id))
+            except ValueError:
+                pass
         # SSE headers per the WHATWG spec: text/event-stream, no cache, keep-alive.
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream")
@@ -5978,9 +5993,18 @@ class Handler(BaseHTTPRequestHandler):
             while True:
                 batch = follower.read_new()
                 for env in batch:
-                    if int(env.get("seq", -1)) <= since_seq:
+                    seq = int(env.get("seq", -1))
+                    if seq <= since_seq:
                         continue
-                    frame = b"data: " + msgspec.json.encode(env) + b"\n\n"
+                    # Sprint 533: `id: <seq>` precedes the data line so a resuming EventSource
+                    # echoes it as Last-Event-ID; the id is the envelope's seq as a string.
+                    frame = (
+                        b"id: "
+                        + str(seq).encode()
+                        + b"\ndata: "
+                        + msgspec.json.encode(env)
+                        + b"\n\n"
+                    )
                     self.wfile.write(frame)
                     self.wfile.flush()
                     last_write = time.monotonic()

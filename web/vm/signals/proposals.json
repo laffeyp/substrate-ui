@@ -26,7 +26,7 @@
       "kind": "ENTITY_MERGE_PROPOSED",
       "layer": 0,
       "element": "Session: the app's notion and the kernel's are one entity; the kernel is its home; app tags carry session_id and do not redeclare its kinds.",
-      "source": "substrate.topologies.session_registry; session vocabulary § B; WORKING_AGREEMENT.md (substrate-ui never redeclares kernel names)",
+      "source": "substrate.topologies.session_registry; session vocabulary \u00a7 B; WORKING_AGREEMENT.md (substrate-ui never redeclares kernel names)",
       "rationale": "The app reads and shows the kernel's sessions; a second definition would split one thing in two and break the join to the record.",
       "ratified": true,
       "ratified_by": "agent-resolved 2026-11-05, sprint 350 Step 1"
@@ -36,7 +36,7 @@
       "kind": "ENTITY_MERGE_PROPOSED",
       "layer": 0,
       "element": "Turn: the app's notion and the kernel's are one entity; the kernel is its home; app tags carry session_id + turn_index and do not redeclare its kinds.",
-      "source": "session vocabulary § C (UserMessage.turn_index); WORKING_AGREEMENT.md (substrate-ui never redeclares kernel names)",
+      "source": "session vocabulary \u00a7 C (UserMessage.turn_index); WORKING_AGREEMENT.md (substrate-ui never redeclares kernel names)",
       "rationale": "The app reads and shows the kernel's sessions; a second definition would split one thing in two and break the join to the record.",
       "ratified": true,
       "ratified_by": "agent-resolved 2026-11-05, sprint 350 Step 1"
@@ -56,7 +56,7 @@
       "kind": "ENTITY_MERGE_PROPOSED",
       "layer": 0,
       "element": "Run: the app's notion and the kernel's are one entity; the kernel is its home; app tags carry run_id and do not redeclare its kinds.",
-      "source": "session vocabulary § Z; WORKING_AGREEMENT.md (substrate-ui never redeclares kernel names)",
+      "source": "session vocabulary \u00a7 Z; WORKING_AGREEMENT.md (substrate-ui never redeclares kernel names)",
       "rationale": "The app reads and shows the kernel's sessions; a second definition would split one thing in two and break the join to the record.",
       "ratified": true,
       "ratified_by": "agent-resolved 2026-11-05, sprint 350 Step 1"
@@ -317,7 +317,7 @@
       "layer": 1,
       "element": "TRANSCRIPT_ROW_DRAWN",
       "source": "web/reveal/transcript/ (row commit)",
-      "rationale": "A record entry of a session became a row on screen. The view pair of every kernel session kind the window shows (kernel session vocabulary § G).",
+      "rationale": "A record entry of a session became a row on screen. The view pair of every kernel session kind the window shows (kernel session vocabulary \u00a7 G).",
       "ratified": true,
       "ratified_by": "agent-resolved 2026-11-05, sprint 350 Step 2"
     },
@@ -497,7 +497,7 @@
       "layer": 1,
       "element": "INVARIANT_BROKEN",
       "source": "the runtime checker (plan item 5)",
-      "rationale": "A Layer 4–5 rule failed at runtime; context holds the recent trace and the state involved.",
+      "rationale": "A Layer 4\u20135 rule failed at runtime; context holds the recent trace and the state involved.",
       "ratified": true,
       "ratified_by": "agent-resolved 2026-11-05, sprint 350 Step 2"
     },
@@ -648,7 +648,7 @@
       "kind": "PAYLOAD_FIELD_PROPOSED",
       "layer": 2,
       "element": "WINDOW_OPENED.cause: enum boot | menu | activate, without second_instance and deep_link",
-      "source": "electron/main.js: createWindow is called at boot, from File ▸ New Window and on activate; second-instance and open-url focus the current window",
+      "source": "electron/main.js: createWindow is called at boot, from File \u25b8 New Window and on activate; second-instance and open-url focus the current window",
       "rationale": "No code path opens a window for a second instance or a deep link; the two values named events that cannot happen.",
       "ratified": true,
       "ratified_by": "agent-resolved 2026-11-06, sprint 356"
@@ -749,7 +749,7 @@
       "layer": 2,
       "element": "PANE_FOCUSED.cause loses key, gains close",
       "source": "web/app/keymap.ts has no key that moves focus between panes; App.tsx closePaneNow gives focus to the closed pane's neighbour",
-      "rationale": "key could not happen; close happens on every ⌘W with more than one pane and had no value.",
+      "rationale": "key could not happen; close happens on every \u2318W with more than one pane and had no value.",
       "ratified": true,
       "ratified_by": "agent-resolved 2026-11-07, sprint 360"
     },
@@ -858,7 +858,7 @@
       "kind": "PAYLOAD_FIELD_PROPOSED",
       "layer": 2,
       "element": "RECORD_OPENED.how: open_record | deep_link | run (records_page dropped, run added); outcome decided by the record stream's first open or error",
-      "source": "callers of web/vm/session_controller.ts attachRecordRoot: web/reveal.ts (menu open-record; substrate://record/ deep link), web/app/App.tsx openKey (⌘O), attachRun (UI sprint 182 run panes); the records page opens sessions through attachExisting, not records",
+      "source": "callers of web/vm/session_controller.ts attachRecordRoot: web/reveal.ts (menu open-record; substrate://record/ deep link), web/app/App.tsx openKey (\u2318O), attachRun (UI sprint 182 run panes); the records page opens sessions through attachExisting, not records",
       "rationale": "No path attaches a record from the records page, and the run pane, which does, had no value.",
       "ratified": true,
       "ratified_by": "agent-resolved 2026-11-07, sprint 371"
@@ -1038,8 +1038,8 @@
       "kind": "PAYLOAD_FIELD_PROPOSED",
       "layer": 2,
       "element": "KEY_ROUTED.target gains enum value editor",
-      "source": "the code editor view: keys routed to the editor (⌘P, ⌘F when CM focused, ⌘⇧F) need a target value",
-      "rationale": "KEY_ROUTED.target distinguishes where a named key was dispatched. Menu keys like ⌘P that route to the editor when it is open have a different target from the same key when the editor is closed. The existing values stay; editor is added.",
+      "source": "the code editor view: keys routed to the editor (\u2318P, \u2318F when CM focused, \u2318\u21e7F) need a target value",
+      "rationale": "KEY_ROUTED.target distinguishes where a named key was dispatched. Menu keys like \u2318P that route to the editor when it is open have a different target from the same key when the editor is closed. The existing values stay; editor is added.",
       "ratified": true,
       "ratified_by": "agent-resolved 2026-11-09, vocabulary session"
     },
@@ -1048,10 +1048,10 @@
       "kind": "PAYLOAD_FIELD_PROPOSED",
       "layer": 2,
       "element": "VIEW_CHANGED from and to take the value editor",
-      "source": "spec r6 §4; D86; frames 24a, 24h; web/app/derive/open_view.ts header",
+      "source": "spec r6 \u00a74; D86; frames 24a, 24h; web/app/derive/open_view.ts header",
       "rationale": "The editor is an open view beside panes and meta, so a change into or out of it is a VIEW_CHANGED like any other.",
       "ratified": true,
-      "ratified_by": "agent-resolved 2026-11-09, sprint 404; grounds: project — spec r6 §4, D86, 24h; SDD — PRINCIPLES commitment 1; practice — n/a"
+      "ratified_by": "agent-resolved 2026-11-09, sprint 404; grounds: project \u2014 spec r6 \u00a74, D86, 24h; SDD \u2014 PRINCIPLES commitment 1; practice \u2014 n/a"
     },
     {
       "id": "P-0.29-PANE-DRAWN-EDITOR-RETIRED",
@@ -1059,9 +1059,9 @@
       "layer": 2,
       "element": "PANE_DRAWN.state loses the value editor (added in v0.28 by P-0.28-PANE-DRAWN-EDITOR)",
       "source": "BLACKBOARD 2026-11-09 agent-resolved: the editor is a window view",
-      "rationale": "Panes are not drawn while the editor view shows, as while meta shows; the value was emitted only by the build sprints 389–402 made, set aside in _deprecated/editor-phase-1-2026-11-09/.",
+      "rationale": "Panes are not drawn while the editor view shows, as while meta shows; the value was emitted only by the build sprints 389\u2013402 made, set aside in _deprecated/editor-phase-1-2026-11-09/.",
       "ratified": true,
-      "ratified_by": "agent-resolved 2026-11-09, sprint 404; grounds: project — spec r6 §4, D35, frame 24a; SDD — PRINCIPLES commitment 1 (retire explicitly); practice — n/a"
+      "ratified_by": "agent-resolved 2026-11-09, sprint 404; grounds: project \u2014 spec r6 \u00a74, D35, frame 24a; SDD \u2014 PRINCIPLES commitment 1 (retire explicitly); practice \u2014 n/a"
     },
     {
       "id": "P-0.29-KEY-REFUSED-NO-SESSION",
@@ -1069,19 +1069,19 @@
       "layer": 2,
       "element": "EDITOR_KEY_REFUSED.reason gains no_session",
       "source": "roadmap r6 R1",
-      "rationale": "⌘⇧E at a picker with no session does nothing; the refusal must be in the trace so a key that 'does nothing' says why.",
+      "rationale": "\u2318\u21e7E at a picker with no session does nothing; the refusal must be in the trace so a key that 'does nothing' says why.",
       "ratified": true,
-      "ratified_by": "agent-resolved 2026-11-09, sprint 404; grounds: project — roadmap r6 R1; App.toggleMeta refuses the same case; SDD — BOOTSTRAP step 8 (incident tags carry a diagnostic); practice — n/a"
+      "ratified_by": "agent-resolved 2026-11-09, sprint 404; grounds: project \u2014 roadmap r6 R1; App.toggleMeta refuses the same case; SDD \u2014 BOOTSTRAP step 8 (incident tags carry a diagnostic); practice \u2014 n/a"
     },
     {
       "id": "P-0.29-COLUMN-FOLDED-CAUSE",
       "kind": "PAYLOAD_FIELD_PROPOSED",
       "layer": 2,
       "element": "EDITOR_COLUMN_FOLDED gains required cause: key | menu | rail | focus",
-      "source": "spec r6 §5.1 (1), (4); D51; frame 16c",
+      "source": "spec r6 \u00a75.1 (1), (4); D51; frame 16c",
       "rationale": "A fold comes from a key, the View menu, a click on the rail, or focus; a reader needs to tell focus's folds from a person's.",
       "ratified": true,
-      "ratified_by": "agent-resolved 2026-11-09, sprint 404; grounds: project — spec r6 §5.1; SDD — BOOTSTRAP step 3 (payload carries what a consumer acts on differently); practice — n/a"
+      "ratified_by": "agent-resolved 2026-11-09, sprint 404; grounds: project \u2014 spec r6 \u00a75.1; SDD \u2014 BOOTSTRAP step 3 (payload carries what a consumer acts on differently); practice \u2014 n/a"
     },
     {
       "id": "P-0.29-BINDING-OPTIONAL",
@@ -1091,67 +1091,67 @@
       "source": "D6; roadmap r6 (no binding setting before Phase 2)",
       "rationale": "No vim/nano setting exists in Phase 1; a required field would force an invented value.",
       "ratified": true,
-      "ratified_by": "agent-resolved 2026-11-09, sprint 404; grounds: project — D6; SDD — PRINCIPLES commitment 2 (validated at the mouth: a required field must be true); practice — n/a"
+      "ratified_by": "agent-resolved 2026-11-09, sprint 404; grounds: project \u2014 D6; SDD \u2014 PRINCIPLES commitment 2 (validated at the mouth: a required field must be true); practice \u2014 n/a"
     },
     {
       "id": "P-0.29-EDITOR-DRAWN-LAYOUT",
       "kind": "PAYLOAD_FIELD_PROPOSED",
       "layer": 2,
       "element": "EDITOR_DRAWN gains dock, sides_swapped, focus, tree_rows, modified_dots",
-      "source": "roadmap r6 R4–R9; frames 24a, 16c",
+      "source": "roadmap r6 R4\u2013R9; frames 24a, 16c",
       "rationale": "Each behaviour Phase 1 adds needs its drawn counterpart in the view tag (dual contract).",
       "ratified": true,
-      "ratified_by": "agent-resolved 2026-11-09, sprint 404; grounds: project — spec r6 §5.1; SDD — BOOTSTRAP step 9 (dual-contract audit); practice — n/a"
+      "ratified_by": "agent-resolved 2026-11-09, sprint 404; grounds: project \u2014 spec r6 \u00a75.1; SDD \u2014 BOOTSTRAP step 9 (dual-contract audit); practice \u2014 n/a"
     },
     {
       "id": "P-0.29-EDITOR-LAYOUT-TAGS",
       "kind": "NEW_TAG_PROPOSED",
       "layer": 1,
       "element": "EDITOR_DOCK_SET, EDITOR_SIDES_SWAPPED, EDITOR_FOCUS_SET, EDITOR_COLUMN_RESIZED (editor); DIFF_READ (server)",
-      "source": "spec r6 §5.1 (2)–(5); D48 (dots from the real diff); roadmap r6 R5, R7–R10",
-      "rationale": "Each is a distinct change a person makes or the server computes; none had a tag, so sprints 398–400 closed with no signal at all.",
+      "source": "spec r6 \u00a75.1 (2)\u2013(5); D48 (dots from the real diff); roadmap r6 R5, R7\u2013R10",
+      "rationale": "Each is a distinct change a person makes or the server computes; none had a tag, so sprints 398\u2013400 closed with no signal at all.",
       "ratified": true,
-      "ratified_by": "agent-resolved 2026-11-09, sprint 404; grounds: project — spec r6 §5.1, D48; SDD — BOOTSTRAP step 2 (one tag per observability point); practice — n/a"
+      "ratified_by": "agent-resolved 2026-11-09, sprint 404; grounds: project \u2014 spec r6 \u00a75.1, D48; SDD \u2014 BOOTSTRAP step 2 (one tag per observability point); practice \u2014 n/a"
     },
     {
       "id": "P-0.30-KEY-REFUSED-NO-SPLIT",
       "kind": "PAYLOAD_FIELD_PROPOSED",
       "layer": 2,
       "element": "EDITOR_KEY_REFUSED.reason gains no_split",
-      "source": "roadmap r8 E1; D49 (c); spec r6 §4 (\"no splitting in this view\")",
-      "rationale": "⌘D and ⌘⇧D split the window outside the editor; inside it they are refused, and the refusal must say why in the trace, as ⌘⇧E's at a picker does.",
+      "source": "roadmap r8 E1; D49 (c); spec r6 \u00a74 (\"no splitting in this view\")",
+      "rationale": "\u2318D and \u2318\u21e7D split the window outside the editor; inside it they are refused, and the refusal must say why in the trace, as \u2318\u21e7E's at a picker does.",
       "ratified": true,
-      "ratified_by": "agent-resolved 2026-11-09, sprint 417; grounds: project — D49 (c), spec r6 §4; SDD — BOOTSTRAP step 8 (an incident carries its diagnostic); practice — n/a"
+      "ratified_by": "agent-resolved 2026-11-09, sprint 417; grounds: project \u2014 D49 (c), spec r6 \u00a74; SDD \u2014 BOOTSTRAP step 8 (an incident carries its diagnostic); practice \u2014 n/a"
     },
     {
       "id": "P-0.31-DIFF-READ-HUNKS",
       "kind": "PAYLOAD_FIELD_PROPOSED",
       "layer": 2,
       "element": "DIFF_READ gains optional hunks",
-      "source": "roadmap r8 E2; review of r7, finding 2; spec r6 §5 (\"each hunk vs main\"; \"+2 −1 vs main\"); frame 24a",
-      "rationale": "The editor draws each hunk inline, counts +N −M in the status line and lists hunks in CHANGES IN THIS FILE; the server's per-file read must say how many it found.",
+      "source": "roadmap r8 E2; review of r7, finding 2; spec r6 \u00a75 (\"each hunk vs main\"; \"+2 \u22121 vs main\"); frame 24a",
+      "rationale": "The editor draws each hunk inline, counts +N \u2212M in the status line and lists hunks in CHANGES IN THIS FILE; the server's per-file read must say how many it found.",
       "ratified": true,
-      "ratified_by": "agent-resolved 2026-11-09, sprint 418; grounds: project — roadmap r8 E2, 24a; SDD — BOOTSTRAP step 3 (payload carries what a consumer acts on); practice — n/a"
+      "ratified_by": "agent-resolved 2026-11-09, sprint 418; grounds: project \u2014 roadmap r8 E2, 24a; SDD \u2014 BOOTSTRAP step 3 (payload carries what a consumer acts on); practice \u2014 n/a"
     },
     {
       "id": "P-0.32-EDITOR-DRAWN-INSPECTOR",
       "kind": "PAYLOAD_FIELD_PROPOSED",
       "layer": 2,
       "element": "EDITOR_DRAWN gains outline_rows, hunks, activity_rows, history_rows",
-      "source": "roadmap r8 E6; spec r6 §5.0; frame 24a",
+      "source": "roadmap r8 E6; spec r6 \u00a75.0; frame 24a",
       "rationale": "Each inspector section the editor draws needs its drawn counterpart in the view tag and the pixel anchor, so the trace and the screen can be checked against the record (dual contract).",
       "ratified": true,
-      "ratified_by": "agent-resolved 2026-11-09, sprint 422; grounds: project — 24a's inspector; SDD — BOOTSTRAP step 9 (dual-contract audit); practice — n/a"
+      "ratified_by": "agent-resolved 2026-11-09, sprint 422; grounds: project \u2014 24a's inspector; SDD \u2014 BOOTSTRAP step 9 (dual-contract audit); practice \u2014 n/a"
     },
     {
       "id": "P-0.33-EDITOR-DRAWN-BUFFER",
       "kind": "PAYLOAD_FIELD_PROPOSED",
       "layer": 2,
       "element": "EDITOR_DRAWN gains mode, read_only, unsaved",
-      "source": "roadmap r8 E4; spec r6 §5 \"Code\" (the status line); frame 24a",
+      "source": "roadmap r8 E4; spec r6 \u00a75 \"Code\" (the status line); frame 24a",
       "rationale": "The status line's mode and the buffer's editable and unsaved states are drawn; each needs its counterpart in the view tag and the pixel anchor so the screen can be checked against the record.",
       "ratified": true,
-      "ratified_by": "agent-resolved 2026-11-09, sprint 424; grounds: project — 24a's status line, roadmap r8 E4; SDD — BOOTSTRAP step 9 (dual-contract audit); practice — n/a"
+      "ratified_by": "agent-resolved 2026-11-09, sprint 424; grounds: project \u2014 24a's status line, roadmap r8 E4; SDD \u2014 BOOTSTRAP step 9 (dual-contract audit); practice \u2014 n/a"
     },
     {
       "id": "P-0.33-BINDING-REQUIRED",
@@ -1161,17 +1161,17 @@
       "source": "v0.29 note (optional until the binding setting exists); sprint 423 (the setting)",
       "rationale": "The setting exists and every record carries the binding; required, the checker refuses a record without it.",
       "ratified": true,
-      "ratified_by": "agent-resolved 2026-11-09, sprint 424; grounds: project — sprint 423; SDD — vocabulary as contract (a field always written is required); practice — n/a"
+      "ratified_by": "agent-resolved 2026-11-09, sprint 424; grounds: project \u2014 sprint 423; SDD \u2014 vocabulary as contract (a field always written is required); practice \u2014 n/a"
     },
     {
       "id": "P-0.34-KEY-REFUSED-SAVE",
       "kind": "PAYLOAD_FIELD_PROPOSED",
       "layer": 2,
       "element": "EDITOR_KEY_REFUSED.reason gains not_editor and no_file; EDITOR_DRAWN gains conflict",
-      "source": "roadmap r8, the key table (⌘S outside the editor: refused, written; ⌘W with no tab open: refused and written); roadmap r8 E4 (the 409 offer)",
+      "source": "roadmap r8, the key table (\u2318S outside the editor: refused, written; \u2318W with no tab open: refused and written); roadmap r8 E4 (the 409 offer)",
       "rationale": "Each refusal the key table names needs a reason a reader can act on; the drawn offer needs its view-tag field.",
       "ratified": true,
-      "ratified_by": "agent-resolved 2026-11-09, sprint 425; grounds: project — roadmap r8 key table and E4; SDD — BOOTSTRAP step 2 (payload carries what a consumer acts on), step 9 (dual contract); practice — n/a"
+      "ratified_by": "agent-resolved 2026-11-09, sprint 425; grounds: project \u2014 roadmap r8 key table and E4; SDD \u2014 BOOTSTRAP step 2 (payload carries what a consumer acts on), step 9 (dual contract); practice \u2014 n/a"
     },
     {
       "id": "P-0.34-SAVE-CONFLICT",
@@ -1181,17 +1181,17 @@
       "source": "roadmap r8 E4: a stale save (409) offers to reload the file or overwrite it",
       "rationale": "The server's API_REFUSED 409 says a write was refused; nothing said the editor drew the offer or which answer the reader gave.",
       "ratified": true,
-      "ratified_by": "agent-resolved 2026-11-09, sprint 425; grounds: project — roadmap r8 E4; SDD — vocabulary as contract (a real event with no tag is a vocabulary gap); practice — n/a"
+      "ratified_by": "agent-resolved 2026-11-09, sprint 425; grounds: project \u2014 roadmap r8 E4; SDD \u2014 vocabulary as contract (a real event with no tag is a vocabulary gap); practice \u2014 n/a"
     },
     {
       "id": "P-0.35-UNDO-ROUTED",
       "kind": "NEW_TAG_PROPOSED",
       "layer": 1,
       "element": "UNDO_ROUTED (direction undo | redo; to buffer | history | page | none)",
-      "source": "roadmap r8 key table (⌘Z, ⌘⇧Z: menu-owned, window-routed); BLACKBOARD 2026-11-09 the undo boundary",
+      "source": "roadmap r8 key table (\u2318Z, \u2318\u21e7Z: menu-owned, window-routed); BLACKBOARD 2026-11-09 the undo boundary",
       "rationale": "The menu's MENU_COMMAND_SENT says Undo was chosen; nothing said whether the buffer, HISTORY or the page took it, which is the boundary the decision defines.",
       "ratified": true,
-      "ratified_by": "agent-resolved 2026-11-09, sprint 426; grounds: project — roadmap r8 key table, the undo boundary decision; SDD — a real event with no tag is a vocabulary gap; practice — n/a"
+      "ratified_by": "agent-resolved 2026-11-09, sprint 426; grounds: project \u2014 roadmap r8 key table, the undo boundary decision; SDD \u2014 a real event with no tag is a vocabulary gap; practice \u2014 n/a"
     },
     {
       "id": "P-0.36-JUST-AN-EDITOR",
@@ -1201,27 +1201,27 @@
       "source": "the Architect, 2026-11-09 (BLACKBOARD user entries): the editor is an editor whether the session is on or off; a normal editor by default, vim and nano optional",
       "rationale": "A save into a session that is off writes the file without a record entry, and the trace must say so; the default binding is standard; nothing is read-only, so the field would be false forever.",
       "ratified": true,
-      "ratified_by": "agent-resolved 2026-11-09, sprint 427; grounds: project — the Architect's rulings; SDD — vocabulary as contract (a field that cannot vary is removed, a new state is named); practice — n/a"
+      "ratified_by": "agent-resolved 2026-11-09, sprint 427; grounds: project \u2014 the Architect's rulings; SDD \u2014 vocabulary as contract (a field that cannot vary is removed, a new state is named); practice \u2014 n/a"
     },
     {
       "id": "P-0.37-FIND-IN-FILE",
       "kind": "NEW_TAG_PROPOSED",
       "layer": 1,
       "element": "EDITOR_FIND_QUERIED (regex, case_sensitive, match_count); EDITOR_REPLACED (scope one | all, count)",
-      "source": "roadmap r10 E6 (FIND / REPLACE: ⌘F, ⌥⌘F; Aa, .*; 1 of N; ↵ all); frame 24a",
-      "rationale": "EDITOR_SEARCH_QUERIED is the workspace search (⌘⇧F) with file counts; a find in the open file and a replace in its buffer had no tags.",
+      "source": "roadmap r10 E6 (FIND / REPLACE: \u2318F, \u2325\u2318F; Aa, .*; 1 of N; \u21b5 all); frame 24a",
+      "rationale": "EDITOR_SEARCH_QUERIED is the workspace search (\u2318\u21e7F) with file counts; a find in the open file and a replace in its buffer had no tags.",
       "ratified": true,
-      "ratified_by": "agent-resolved 2026-11-09, sprint 428; grounds: project — roadmap r10 E6, 24a; SDD — a real event with no tag is a vocabulary gap; practice — n/a"
+      "ratified_by": "agent-resolved 2026-11-09, sprint 428; grounds: project \u2014 roadmap r10 E6, 24a; SDD \u2014 a real event with no tag is a vocabulary gap; practice \u2014 n/a"
     },
     {
       "id": "P-0.38-RECORD-COLUMN",
       "kind": "PAYLOAD_FIELD_PROPOSED",
       "layer": 2,
       "element": "SEQ_SELECTED.how gains editor_activity",
-      "source": "roadmap r10 E5 and E6 (ACTIVITY's ◂ opens the seq in the record column); frame 24b",
+      "source": "roadmap r10 E5 and E6 (ACTIVITY's \u25c2 opens the seq in the record column); frame 24b",
       "rationale": "A seq lit from the editor's ACTIVITY is a distinct way in; consumers of SEQ_SELECTED tell the editor's jump from meta's clicks.",
       "ratified": true,
-      "ratified_by": "agent-resolved 2026-11-09, sprint 430; grounds: project — roadmap r10 E5; SDD — BOOTSTRAP step 2; practice — n/a"
+      "ratified_by": "agent-resolved 2026-11-09, sprint 430; grounds: project \u2014 roadmap r10 E5; SDD \u2014 BOOTSTRAP step 2; practice \u2014 n/a"
     },
     {
       "id": "P-0.40-FOLLOW-PAIRS",
@@ -1231,7 +1231,7 @@
       "source": "roadmap r10 E7 (\"the three follow tags carry the call's seq (and the result's where there is one), and rule S10 gets its checker\")",
       "rationale": "S10 named the same seq for a mark and its resolution while the tags carried different seqs, so no checker could pair them.",
       "ratified": true,
-      "ratified_by": "agent-resolved 2026-11-10, sprint 431; grounds: project — roadmap r10 E7; SDD — an invariant a checker cannot evaluate is not a contract; practice — n/a"
+      "ratified_by": "agent-resolved 2026-11-10, sprint 431; grounds: project \u2014 roadmap r10 E7; SDD \u2014 an invariant a checker cannot evaluate is not a contract; practice \u2014 n/a"
     },
     {
       "id": "P-0.40-FOLLOW-DRAWN",
@@ -1241,7 +1241,7 @@
       "source": "roadmap r10 E7; D93",
       "rationale": "The marks the editor draws for session edits in flight need their counterpart in the view tag and the pixel anchor.",
       "ratified": true,
-      "ratified_by": "agent-resolved 2026-11-10, sprint 431; grounds: project — D93; SDD — BOOTSTRAP step 9; practice — n/a"
+      "ratified_by": "agent-resolved 2026-11-10, sprint 431; grounds: project \u2014 D93; SDD \u2014 BOOTSTRAP step 9; practice \u2014 n/a"
     },
     {
       "id": "P-0.41-FILES-SEARCHED",
@@ -1251,7 +1251,7 @@
       "source": "roadmap r10 E8; frame 24j",
       "rationale": "The workspace search is a server read like FILES_LISTED, FILE_READ and DIFF_READ; the editor's EDITOR_SEARCH_QUERIED needs its server-side counterpart.",
       "ratified": true,
-      "ratified_by": "agent-resolved 2026-11-10, sprint 434; grounds: project — roadmap r10 E8; SDD — BOOTSTRAP step 9; practice — n/a"
+      "ratified_by": "agent-resolved 2026-11-10, sprint 434; grounds: project \u2014 roadmap r10 E8; SDD \u2014 BOOTSTRAP step 9; practice \u2014 n/a"
     },
     {
       "id": "P-0.41-LEFT-TAB-ANCHOR",
@@ -1261,7 +1261,7 @@
       "source": "roadmap r10 E8",
       "rationale": "left_tab was written as files always; with the search tab it follows the drawn tab, and the pixel anchor carries it as it carries every live drawn field.",
       "ratified": true,
-      "ratified_by": "agent-resolved 2026-11-10, sprint 434; grounds: project — roadmap r10 E8; SDD — BOOTSTRAP step 9; practice — n/a"
+      "ratified_by": "agent-resolved 2026-11-10, sprint 434; grounds: project \u2014 roadmap r10 E8; SDD \u2014 BOOTSTRAP step 9; practice \u2014 n/a"
     },
     {
       "id": "P-0.42-SEARCH-STANDARD",
@@ -1271,7 +1271,7 @@
       "source": "RESEARCH-2026-11-10-editor-search-r2",
       "rationale": "The search moves off git grep to the server's own walk and Python's re, with whole word, as editors search.",
       "ratified": true,
-      "ratified_by": "agent-resolved 2026-11-10, sprint 435; grounds: project — the research r2; SDD — BOOTSTRAP step 9; practice — VS Code's ripgrepTextSearchEngine.ts"
+      "ratified_by": "agent-resolved 2026-11-10, sprint 435; grounds: project \u2014 the research r2; SDD \u2014 BOOTSTRAP step 9; practice \u2014 VS Code's ripgrepTextSearchEngine.ts"
     },
     {
       "id": "P-0.42-SEARCH-REPLACE",
@@ -1281,7 +1281,7 @@
       "source": "RESEARCH-2026-11-10-editor-search-r2",
       "rationale": "Replace one match, in one file, or all, worked out on the server with the search's own engine and written by the page through the file API; each side of it needs its tag.",
       "ratified": true,
-      "ratified_by": "agent-resolved 2026-11-10, sprint 435; grounds: project — the research r2; SDD — BOOTSTRAP step 9; practice — VS Code's replaceService.ts"
+      "ratified_by": "agent-resolved 2026-11-10, sprint 435; grounds: project \u2014 the research r2; SDD \u2014 BOOTSTRAP step 9; practice \u2014 VS Code's replaceService.ts"
     },
     {
       "id": "P-0.43-SEARCH-BUFFERS",
@@ -1291,7 +1291,7 @@
       "source": "RESEARCH-2026-11-10-editor-search-r2",
       "rationale": "The search reads the editor's unsaved text in place of the disk, and a replace changes and saves those buffers, as VS Code's searchService.ts and replaceService.ts do; the count says how many.",
       "ratified": true,
-      "ratified_by": "agent-resolved 2026-11-10, sprint 436; grounds: project — the research r2; SDD — BOOTSTRAP step 9; practice — VS Code getOpenEditorResults"
+      "ratified_by": "agent-resolved 2026-11-10, sprint 436; grounds: project \u2014 the research r2; SDD \u2014 BOOTSTRAP step 9; practice \u2014 VS Code getOpenEditorResults"
     },
     {
       "id": "P-0.43-REPLACE-UNDONE",
@@ -1301,7 +1301,7 @@
       "source": "RESEARCH-2026-11-10-editor-search-r2",
       "rationale": "A replace across files is undone in one step, as VS Code's bulk edit records one undo element over every file.",
       "ratified": true,
-      "ratified_by": "agent-resolved 2026-11-10, sprint 436; grounds: project — the research r2; SDD — BOOTSTRAP step 9; practice — VS Code bulkTextEdits.ts MultiModelEditStackElement"
+      "ratified_by": "agent-resolved 2026-11-10, sprint 436; grounds: project \u2014 the research r2; SDD \u2014 BOOTSTRAP step 9; practice \u2014 VS Code bulkTextEdits.ts MultiModelEditStackElement"
     },
     {
       "id": "P-0.44-TREE-FIND",
@@ -1311,7 +1311,7 @@
       "source": "RESEARCH-2026-11-10-editor-search-r2",
       "rationale": "The tree's find by name, as VS Code's ExplorerFindProvider: the server finds names over the whole workspace and the tree filters or highlights; each side has its tag.",
       "ratified": true,
-      "ratified_by": "agent-resolved 2026-11-10, sprint 437; grounds: project — the research r2; SDD — BOOTSTRAP step 9; practice — VS Code explorerViewer.ts"
+      "ratified_by": "agent-resolved 2026-11-10, sprint 437; grounds: project \u2014 the research r2; SDD \u2014 BOOTSTRAP step 9; practice \u2014 VS Code explorerViewer.ts"
     },
     {
       "id": "P-0.45-FIND-OPTIONS",
@@ -1321,7 +1321,7 @@
       "source": "RESEARCH-2026-11-10-editor-search-r2",
       "rationale": "The open file's find gains VS Code's Match Whole Word, Find in Selection and Preserve Case. The walk's skipped folders are counted, not dropped in silence.",
       "ratified": true,
-      "ratified_by": "agent-resolved 2026-11-10, sprint 438; grounds: project — the research r2; SDD — BOOTSTRAP step 9; practice — VS Code codebasics and src/vs/base/common/search.ts"
+      "ratified_by": "agent-resolved 2026-11-10, sprint 438; grounds: project \u2014 the research r2; SDD \u2014 BOOTSTRAP step 9; practice \u2014 VS Code codebasics and src/vs/base/common/search.ts"
     },
     {
       "id": "P-0.46-OPEN-HOW",
@@ -1331,7 +1331,7 @@
       "source": "roadmap r10 E8",
       "rationale": "The roadmap's E8 names the two; the activity tab opens files.",
       "ratified": true,
-      "ratified_by": "agent-resolved 2026-11-10, sprint 440; grounds: project — roadmap r10 E8; SDD — BOOTSTRAP step 9; practice — n/a"
+      "ratified_by": "agent-resolved 2026-11-10, sprint 440; grounds: project \u2014 roadmap r10 E8; SDD \u2014 BOOTSTRAP step 9; practice \u2014 n/a"
     },
     {
       "id": "P-0.47-FILES-LISTED-ALL",
@@ -1341,7 +1341,7 @@
       "source": "roadmap r10 E9; research r2",
       "rationale": "Quick open's file list is a server read like FILES_LISTED and FILES_FOUND, from the search's walk in place of git ls-files.",
       "ratified": true,
-      "ratified_by": "agent-resolved 2026-11-10, sprint 441; grounds: project — roadmap r10 E9, research r2; SDD — BOOTSTRAP step 9; practice — n/a"
+      "ratified_by": "agent-resolved 2026-11-10, sprint 441; grounds: project \u2014 roadmap r10 E9, research r2; SDD \u2014 BOOTSTRAP step 9; practice \u2014 n/a"
     },
     {
       "id": "P-0.48-SEARCH-NAMES",
@@ -1361,7 +1361,7 @@
       "source": "roadmap r11 E10; D94",
       "rationale": "Chips are added, removed and sent with the message; each step has its tag.",
       "ratified": true,
-      "ratified_by": "agent-resolved 2026-11-10, sprint 443; grounds: project — D94, roadmap r11 E10; SDD — BOOTSTRAP step 9; practice — n/a"
+      "ratified_by": "agent-resolved 2026-11-10, sprint 443; grounds: project \u2014 D94, roadmap r11 E10; SDD \u2014 BOOTSTRAP step 9; practice \u2014 n/a"
     },
     {
       "id": "P-0.50-SAVE-FOR-SEND",
@@ -1371,7 +1371,7 @@
       "source": "BLACKBOARD 2026-11-10 user (save before send); SAVE-BEFORE-SEND-2026-11-10; roadmap r13 E10.0",
       "rationale": "A turn now saves the session's unsaved buffers before it is posted; the saves and their refusals need a tag, and the turn the count it waited for.",
       "ratified": true,
-      "ratified_by": "agent-resolved 2026-11-10, sprint 444; grounds: project — the Architect's ruling of 2026-11-10, roadmap r13 E10.0; SDD — hard rule 2, BOOTSTRAP step 9; practice — n/a"
+      "ratified_by": "agent-resolved 2026-11-10, sprint 444; grounds: project \u2014 the Architect's ruling of 2026-11-10, roadmap r13 E10.0; SDD \u2014 hard rule 2, BOOTSTRAP step 9; practice \u2014 n/a"
     },
     {
       "id": "P-0.51-BY-REFERENCE",
@@ -1381,7 +1381,7 @@
       "source": "ADD-TO-MESSAGE-2026-11-10-r3 rules 2-8; roadmap r13 E10.1; BLACKBOARD 2026-11-10 user (never refuse)",
       "rationale": "An attachment now goes as content or as its reference; the turn's record of acceptance says how many went by reference.",
       "ratified": true,
-      "ratified_by": "agent-resolved 2026-11-10, sprint 446; grounds: project — round 3 rules 2-8, roadmap r13 E10.1; SDD — hard rule 2; practice — n/a"
+      "ratified_by": "agent-resolved 2026-11-10, sprint 446; grounds: project \u2014 round 3 rules 2-8, roadmap r13 E10.1; SDD \u2014 hard rule 2; practice \u2014 n/a"
     },
     {
       "id": "P-0.52-RESIZE-ENDED",
@@ -1391,7 +1391,7 @@
       "source": "BLACKBOARD 2026-11-10 open question (editor_resize on the bundle: a drag whose pointerup never reached the handle)",
       "rationale": "A drag now ends on lostpointercapture too; the record says which way it ended, so a lost pointerup is visible in the trace.",
       "ratified": true,
-      "ratified_by": "agent-resolved 2026-11-10, sprint 448; grounds: project — the open question of this date; SDD — hard rule 2; practice — MDN, lostpointercapture"
+      "ratified_by": "agent-resolved 2026-11-10, sprint 448; grounds: project \u2014 the open question of this date; SDD \u2014 hard rule 2; practice \u2014 MDN, lostpointercapture"
     },
     {
       "id": "P-0.53-GATE-ISOLATED",
@@ -1401,7 +1401,7 @@
       "source": "BLACKBOARD 2026-11-10 user (the machine in active use) and surfaced (a buttonless move ends a drag); sprint 449",
       "rationale": "A launch whose windows are isolated for a gate says so in its first record, as a mock path must say it is one.",
       "ratified": true,
-      "ratified_by": "agent-resolved 2026-11-10, sprint 449; grounds: project — the user entry of this date; SDD — hard rule 2, PRINCIPLES (runtime grammar: a test path must be able to say it is one); practice — n/a"
+      "ratified_by": "agent-resolved 2026-11-10, sprint 449; grounds: project \u2014 the user entry of this date; SDD \u2014 hard rule 2, PRINCIPLES (runtime grammar: a test path must be able to say it is one); practice \u2014 n/a"
     },
     {
       "id": "P-0.54-DIFF-BASE",
@@ -1411,7 +1411,7 @@
       "source": "BLACKBOARD 2026-11-10 user (the editor's text blue) and agent-resolved (the base without main); sprint 450",
       "rationale": "The base is now HEAD when there is no main or default branch, and absent in a repository with no commit; the trace names which.",
       "ratified": true,
-      "ratified_by": "agent-resolved 2026-11-10, sprint 450; grounds: project — design spec r6 §5, D6; SDD — PRINCIPLES commitment 1; practice — git-diff(1)"
+      "ratified_by": "agent-resolved 2026-11-10, sprint 450; grounds: project \u2014 design spec r6 \u00a75, D6; SDD \u2014 PRINCIPLES commitment 1; practice \u2014 git-diff(1)"
     },
     {
       "id": "P-0.55-DRAFT-RESTORED",
@@ -1421,7 +1421,7 @@
       "source": "ADD-TO-MESSAGE-2026-11-10-r3 (what you see); roadmap r13 E10.2; sprint 451",
       "rationale": "A refused message's draft and chips go back into the bar; the trace records it.",
       "ratified": true,
-      "ratified_by": "agent-resolved 2026-11-10, sprint 451; grounds: project — round 3, roadmap r13 E10.2; SDD — hard rule 2, BOOTSTRAP step 9; practice — n/a"
+      "ratified_by": "agent-resolved 2026-11-10, sprint 451; grounds: project \u2014 round 3, roadmap r13 E10.2; SDD \u2014 hard rule 2, BOOTSTRAP step 9; practice \u2014 n/a"
     },
     {
       "id": "P-0.56-CHIPS-DRAWN",
@@ -1431,37 +1431,37 @@
       "source": "ADD-TO-MESSAGE-2026-11-10-r3 (what you see); roadmap r13 E10.2; sprint 452",
       "rationale": "The sent message draws its chips and marks the ones sent by reference; the view side of TURN_ACCEPTED's counts.",
       "ratified": true,
-      "ratified_by": "agent-resolved 2026-11-10, sprint 452; grounds: project — round 3, D94, roadmap r13 E10.2; SDD — BOOTSTRAP step 9 (dual-contract pairing); practice — n/a"
+      "ratified_by": "agent-resolved 2026-11-10, sprint 452; grounds: project \u2014 round 3, D94, roadmap r13 E10.2; SDD \u2014 BOOTSTRAP step 9 (dual-contract pairing); practice \u2014 n/a"
     },
     {
       "id": "P-0.57-CHIP-HOW",
       "kind": "PAYLOAD_FIELD_PROPOSED",
       "layer": 2,
       "element": "EDITOR_CHIP_ADDED gains how (alt_click | key)",
-      "source": "roadmap r13 E10.3; BLACKBOARD 2026-11-10 (⌘⇧A); sprint 454",
+      "source": "roadmap r13 E10.3; BLACKBOARD 2026-11-10 (\u2318\u21e7A); sprint 454",
       "rationale": "Chips now come from two gestures; the trace says which.",
       "ratified": true,
-      "ratified_by": "agent-resolved 2026-11-10, sprint 454; grounds: project — roadmap r13 E10.3; SDD — hard rule 2; practice — n/a"
+      "ratified_by": "agent-resolved 2026-11-10, sprint 454; grounds: project \u2014 roadmap r13 E10.3; SDD \u2014 hard rule 2; practice \u2014 n/a"
     },
     {
       "id": "P-0.58-OPTION-A",
       "kind": "INVARIANT_PROPOSED",
       "layer": 7,
-      "element": "notes: EDITOR_CHIP_ADDED.how key is ⌥A; KEY_ROUTED names an acting ⌥ chord by its physical letter",
-      "source": "BLACKBOARD 2026-11-10 user (⌥, not ⌘⇧); sprint 456",
-      "rationale": "The selection's key changes, and an ⌥ chord's key would otherwise be a typed character in the trace.",
+      "element": "notes: EDITOR_CHIP_ADDED.how key is \u2325A; KEY_ROUTED names an acting \u2325 chord by its physical letter",
+      "source": "BLACKBOARD 2026-11-10 user (\u2325, not \u2318\u21e7); sprint 456",
+      "rationale": "The selection's key changes, and an \u2325 chord's key would otherwise be a typed character in the trace.",
       "ratified": true,
-      "ratified_by": "agent-resolved 2026-11-10, sprint 456; grounds: project — the user entry of this date, KEY_ROUTED's field note; SDD — hard rule 2; practice — n/a"
+      "ratified_by": "agent-resolved 2026-11-10, sprint 456; grounds: project \u2014 the user entry of this date, KEY_ROUTED's field note; SDD \u2014 hard rule 2; practice \u2014 n/a"
     },
     {
       "id": "P-0.59-CONTEXT-MENU",
       "kind": "NEW_TAG_PROPOSED",
       "layer": 1,
       "element": "CONTEXT_MENU_OPENED (window) {source, items}; CONTEXT_MENU_CLOSED (window) {outcome}; EDITOR_CHIP_ADDED.how gains menu",
-      "source": "D94 (right-click › Add to message); roadmap r13 E10.4; BLACKBOARD 2026-11-11 (the menu drawn in the page); sprint 457",
+      "source": "D94 (right-click \u203a Add to message); roadmap r13 E10.4; BLACKBOARD 2026-11-11 (the menu drawn in the page); sprint 457",
       "rationale": "The window gains its first right-click menu; its opening and its end are events the trace otherwise lacks (a menu closed with Escape adds nothing), and the chip it adds names its gesture.",
       "ratified": true,
-      "ratified_by": "agent-resolved 2026-11-11, sprint 457; grounds: project — D94, roadmap r13 E10.4, the BLACKBOARD entries of this date; SDD — hard rule 2, BOOTSTRAP step 9 (the menu's open and close pair); practice — n/a"
+      "ratified_by": "agent-resolved 2026-11-11, sprint 457; grounds: project \u2014 D94, roadmap r13 E10.4, the BLACKBOARD entries of this date; SDD \u2014 hard rule 2, BOOTSTRAP step 9 (the menu's open and close pair); practice \u2014 n/a"
     },
     {
       "id": "P-0.60-CHIP-DRAG",
@@ -1471,7 +1471,7 @@
       "source": "D94 (drag a thing into the prompt); roadmap r13 E10.4; BLACKBOARD 2026-11-11 (what a drag carries); sprint 458",
       "rationale": "Chips now come by drag as well; the trace says which gesture added each.",
       "ratified": true,
-      "ratified_by": "agent-resolved 2026-11-11, sprint 458; grounds: project — D94, roadmap r13 E10.4; SDD — hard rule 2; practice — n/a"
+      "ratified_by": "agent-resolved 2026-11-11, sprint 458; grounds: project \u2014 D94, roadmap r13 E10.4; SDD \u2014 hard rule 2; practice \u2014 n/a"
     },
     {
       "id": "P-0.61-ENCODINGS",
@@ -1481,7 +1481,7 @@
       "source": "roadmap r13 E14; RESEARCH-2026-11-11-binary-files-and-highlighting; BLACKBOARD 2026-11-11; sprint 462",
       "rationale": "The file API now reads text in any encoding and names it; the editor refuses to save such a file, and the trace says why.",
       "ratified": true,
-      "ratified_by": "agent-resolved 2026-11-11, sprint 462; grounds: project — roadmap r13 E14, the user entries of 2026-11-10 and 2026-11-11; SDD — hard rule 2; practice — n/a"
+      "ratified_by": "agent-resolved 2026-11-11, sprint 462; grounds: project \u2014 roadmap r13 E14, the user entries of 2026-11-10 and 2026-11-11; SDD \u2014 hard rule 2; practice \u2014 n/a"
     },
     {
       "id": "P-0.62-BYTES",
@@ -1491,7 +1491,7 @@
       "source": "roadmap r13 E14 (corrected 2026-11-11); BLACKBOARD 2026-11-11 user; sprint 463",
       "rationale": "Every file that is not text opens as its bytes, read in pieces; the server's reads and the view's forms are events the trace otherwise lacks.",
       "ratified": true,
-      "ratified_by": "agent-resolved 2026-11-11, sprint 463; grounds: project — roadmap r13 E14, the user entries of 2026-11-11; SDD — hard rule 2, BOOTSTRAP step 9 (the read and the view pair); practice — n/a"
+      "ratified_by": "agent-resolved 2026-11-11, sprint 463; grounds: project \u2014 roadmap r13 E14, the user entries of 2026-11-11; SDD \u2014 hard rule 2, BOOTSTRAP step 9 (the read and the view pair); practice \u2014 n/a"
     },
     {
       "id": "P-0.63-WRITE-ENCODING",
@@ -1501,7 +1501,7 @@
       "source": "BLACKBOARD 2026-11-11 user (every file editable by hand, by default); roadmap r13 E14; sprint 465",
       "rationale": "A save now writes a file in its own encoding or byte for byte; the trace says which.",
       "ratified": true,
-      "ratified_by": "agent-resolved 2026-11-11, sprint 465; grounds: project — the user entry of this date, roadmap r13 E14; SDD — hard rule 2; practice — n/a"
+      "ratified_by": "agent-resolved 2026-11-11, sprint 465; grounds: project \u2014 the user entry of this date, roadmap r13 E14; SDD \u2014 hard rule 2; practice \u2014 n/a"
     },
     {
       "id": "P-0.64-LINES",
@@ -1511,7 +1511,7 @@
       "source": "BLACKBOARD 2026-11-11 user (every file opens, at any size); roadmap r13 E14; sprint 469",
       "rationale": "A text file over the read limit is read by line range; the trace counts each range read, as FILE_BYTES_READ counts each slice of bytes.",
       "ratified": true,
-      "ratified_by": "agent-resolved 2026-11-11, sprint 469; grounds: project — the user entries of this date, roadmap r13 E14; SDD — hard rule 2; practice — n/a"
+      "ratified_by": "agent-resolved 2026-11-11, sprint 469; grounds: project \u2014 the user entries of this date, roadmap r13 E14; SDD \u2014 hard rule 2; practice \u2014 n/a"
     },
     {
       "id": "P-0.65-FILE-SHOWN",
@@ -1521,7 +1521,7 @@
       "source": "BLACKBOARD 2026-11-11 user (files no longer open quickly; the tab switches before the text) and surfaced (no signal records the time to show a file); sprint 473",
       "rationale": "An open that took two seconds left no trace a gate could check; the time to show a file becomes a signal.",
       "ratified": true,
-      "ratified_by": "agent-resolved 2026-11-11, sprint 473; grounds: project — the user and surfaced entries of this date; SDD — hard rule 2, foundation 01 performance timelines; practice — n/a"
+      "ratified_by": "agent-resolved 2026-11-11, sprint 473; grounds: project \u2014 the user and surfaced entries of this date; SDD \u2014 hard rule 2, foundation 01 performance timelines; practice \u2014 n/a"
     },
     {
       "id": "P-0.66-BASE-HEAD",
@@ -1531,7 +1531,7 @@
       "source": "BLACKBOARD 2026-11-11 user (the marks represent git, against the branch the workspace is on); sprint 483",
       "rationale": "A branch's committed work stayed marked against main until merged; git's own diff of a branch is against its HEAD, and a commit clears it.",
       "ratified": true,
-      "ratified_by": "agent-resolved 2026-11-11, sprint 483; grounds: project — the user entry of this date; SDD — hard rule 2; practice — git-diff(1), `git diff HEAD`"
+      "ratified_by": "agent-resolved 2026-11-11, sprint 483; grounds: project \u2014 the user entry of this date; SDD \u2014 hard rule 2; practice \u2014 git-diff(1), `git diff HEAD`"
     },
     {
       "id": "P-0.67-TURN-ACK",
@@ -1541,7 +1541,7 @@
       "source": "editor_follow on build 1794460484 (2026-11-11): T6 broken on a 13 s turn; TURN_ACCEPTED 1 ms after TURN_SUBMITTED, TURN_ACK at the turn's end; sprint 483",
       "rationale": "The POST returns at the turn's end, and turns have no time limit; the acknowledgement T6 times must be the kernel's acceptance, which the turn's UserMessage on the stream shows.",
       "ratified": true,
-      "ratified_by": "agent-resolved 2026-11-11, sprint 483; grounds: project — server.py `_session_turn` (`turn_sync`), the trace; SDD — hard rule 2, grammar Layer 4; practice — Nielsen 1993 (response time limits)"
+      "ratified_by": "agent-resolved 2026-11-11, sprint 483; grounds: project \u2014 server.py `_session_turn` (`turn_sync`), the trace; SDD \u2014 hard rule 2, grammar Layer 4; practice \u2014 Nielsen 1993 (response time limits)"
     },
     {
       "id": "P-0.68-APP-NAME",
@@ -1551,7 +1551,7 @@
       "source": "roadmap 2026-11-11-second-build r1 E4; PAPER-2026-11-11-second-build-r2.md section 6: two packaged installs (Substrate, Substrate Next) write the same APP_BOOTED but for its version fields; sprint 490",
       "rationale": "With a working install and a test install on one machine, a reader and the Rubber Duck Pass must tell from the trace which app spoke; the name main.ts sets is the install's identity.",
       "ratified": true,
-      "ratified_by": "agent-resolved 2026-11-11, sprint 490; grounds: project — electron/identity.json, the user entries of 2026-11-11 on the second build; SDD — hard rule 2, grammar Layer 2; practice — microsoft/vscode product.json (one identity record per build)"
+      "ratified_by": "agent-resolved 2026-11-11, sprint 490; grounds: project \u2014 electron/identity.json, the user entries of 2026-11-11 on the second build; SDD \u2014 hard rule 2, grammar Layer 2; practice \u2014 microsoft/vscode product.json (one identity record per build)"
     },
     {
       "id": "P-0.69-CONTINUED-FROM",
@@ -1561,7 +1561,7 @@
       "source": "roadmap 2026-11-12-continue-a-session r1 E5; sprint 494: a session created to continue a Claude Code session",
       "rationale": "The server trace says, at creation, whether a session continues another tool's session; the record's continued_session fragment holds what it continued.",
       "ratified": true,
-      "ratified_by": "agent-resolved 2026-11-12, sprint 494; grounds: project — kernel session vocabulary v0.19 § AD, the user entries of 2026-11-12; SDD — hard rule 2, grammar Layer 2; practice — n/a"
+      "ratified_by": "agent-resolved 2026-11-12, sprint 494; grounds: project \u2014 kernel session vocabulary v0.19 \u00a7 AD, the user entries of 2026-11-12; SDD \u2014 hard rule 2, grammar Layer 2; practice \u2014 n/a"
     },
     {
       "id": "P-0.70-S11-SEND",
@@ -1571,7 +1571,7 @@
       "source": "sprint 500, gate editor_unsaved_per_pane: a turn sent from pane 1 with its editor closed wrote EDITOR_SAVED_FOR_SEND and broke S11",
       "rationale": "Save-before-send runs on every turn of a session with unsaved buffers, wherever the turn is sent from (the tag's note, the Architect 2026-11-10); S11 bounded editor tags to an open run and so forbade it.",
       "ratified": true,
-      "ratified_by": "agent-resolved 2026-11-14, sprint 500; grounds: project — EDITOR_SAVED_FOR_SEND's note, SAVE-BEFORE-SEND-2026-11-10; SDD — grammar Layer 5, hard rule 2; practice — n/a"
+      "ratified_by": "agent-resolved 2026-11-14, sprint 500; grounds: project \u2014 EDITOR_SAVED_FOR_SEND's note, SAVE-BEFORE-SEND-2026-11-10; SDD \u2014 grammar Layer 5, hard rule 2; practice \u2014 n/a"
     },
     {
       "id": "P-0.71-DIFF-REPOSITORIES",
@@ -1581,47 +1581,67 @@
       "source": "sprint 502: Agent Orchestration, a plain folder holding substrate/ and substrate-ui/, showed no change marks",
       "rationale": "A plain workspace's changes are its repositories' changes; the trace says it read them and how many.",
       "ratified": true,
-      "ratified_by": "agent-resolved 2026-11-14, sprint 502; grounds: project — the user entries of 2026-11-14 on change marks; SDD — hard rule 2, grammar Layer 2; practice — VS Code's Source Control lists each repository found in a multi-repository folder"
+      "ratified_by": "agent-resolved 2026-11-14, sprint 502; grounds: project \u2014 the user entries of 2026-11-14 on change marks; SDD \u2014 hard rule 2, grammar Layer 2; practice \u2014 VS Code's Source Control lists each repository found in a multi-repository folder"
     },
     {
       "id": "P-0.72-MARKDOWN-SHOWN",
       "kind": "NEW_TAG_PROPOSED",
       "layer": 1,
       "element": "EDITOR_MARKDOWN_SHOWN (form rendered | source)",
-      "source": "roadmap 2026-11-14-editor-features r4 E5, sprint 503; the Architect, 2026-11-14: ⌘-click a Markdown link; a rendered view from the tab's menu",
+      "source": "roadmap 2026-11-14-editor-features r4 E5, sprint 503; the Architect, 2026-11-14: \u2318-click a Markdown link; a rendered view from the tab's menu",
       "rationale": "The trace says when a Markdown file is shown rendered and when as source, so a gate can pair the switch with what the screen draws.",
       "ratified": true,
-      "ratified_by": "agent-resolved 2026-11-14, sprint 503; grounds: project — the user entries of 2026-11-14, E1 (no addresses in the trace); SDD — hard rule 2, grammar Layers 1–2; practice — VS Code: ⌘-click follows a link in the editor, a click in the Markdown preview"
+      "ratified_by": "agent-resolved 2026-11-14, sprint 503; grounds: project \u2014 the user entries of 2026-11-14, E1 (no addresses in the trace); SDD \u2014 hard rule 2, grammar Layers 1\u20132; practice \u2014 VS Code: \u2318-click follows a link in the editor, a click in the Markdown preview"
     },
     {
       "id": "P-0.72-LINK-FOLLOWED",
       "kind": "NEW_TAG_PROPOSED",
       "layer": 1,
       "element": "EDITOR_LINK_FOLLOWED (kind, view, found); EDITOR_FILE_OPENED.how link",
-      "source": "roadmap 2026-11-14-editor-features r4 E5, sprint 503; the Architect, 2026-11-14: ⌘-click a Markdown link; a rendered view from the tab's menu",
+      "source": "roadmap 2026-11-14-editor-features r4 E5, sprint 503; the Architect, 2026-11-14: \u2318-click a Markdown link; a rendered view from the tab's menu",
       "rationale": "A followed link is a person's act with three outcomes the screen alone cannot tell apart from a missed click; the kind and whether its target was found reconstruct it without its address.",
       "ratified": true,
-      "ratified_by": "agent-resolved 2026-11-14, sprint 503; grounds: project — the user entries of 2026-11-14, E1 (no addresses in the trace); SDD — hard rule 2, grammar Layers 1–2; practice — VS Code: ⌘-click follows a link in the editor, a click in the Markdown preview"
+      "ratified_by": "agent-resolved 2026-11-14, sprint 503; grounds: project \u2014 the user entries of 2026-11-14, E1 (no addresses in the trace); SDD \u2014 hard rule 2, grammar Layers 1\u20132; practice \u2014 VS Code: \u2318-click follows a link in the editor, a click in the Markdown preview"
     },
     {
       "id": "P-0.73-EDITOR-GROUPS",
       "kind": "NEW_TAG_PROPOSED",
       "layer": 1,
       "element": "EDITOR_GROUP_OPENED, EDITOR_GROUP_CLOSED, EDITOR_TAB_MOVED; EDITOR_DRAWN.groups",
-      "source": "roadmap 2026-11-14-editor-features r4 E6, sprint 504; the Architect, 2026-11-14: ⌘D and ⌘⇧D split the editor, up to three by three",
+      "source": "roadmap 2026-11-14-editor-features r4 E6, sprint 504; the Architect, 2026-11-14: \u2318D and \u2318\u21e7D split the editor, up to three by three",
       "rationale": "The editor splits into groups; the trace says when a group opens, closes and takes a tab, and every draw counts them, so a gate pairs the screen's groups with the record.",
       "ratified": true,
-      "ratified_by": "agent-resolved 2026-11-14, sprint 504; grounds: project — the user entry of 2026-11-14 on splits, superseding D49 (c); SDD — hard rule 2, grammar Layers 1–2; practice — VS Code editor groups (split, move a tab, close the last tab closes the group)"
+      "ratified_by": "agent-resolved 2026-11-14, sprint 504; grounds: project \u2014 the user entry of 2026-11-14 on splits, superseding D49 (c); SDD \u2014 hard rule 2, grammar Layers 1\u20132; practice \u2014 VS Code editor groups (split, move a tab, close the last tab closes the group)"
     },
     {
       "id": "P-0.73-SPLIT-LIMIT",
       "kind": "PAYLOAD_FIELD_PROPOSED",
       "layer": 2,
       "element": "EDITOR_KEY_REFUSED.reason split_limit; no_split no longer written",
-      "source": "roadmap 2026-11-14-editor-features r4 E6, sprint 504; the Architect, 2026-11-14: ⌘D and ⌘⇧D split the editor, up to three by three",
-      "rationale": "⌘D and ⌘⇧D split the editor now (the Architect, 2026-11-14, superseding D49 (c)); a split past three across or three down is the one refusal left.",
+      "source": "roadmap 2026-11-14-editor-features r4 E6, sprint 504; the Architect, 2026-11-14: \u2318D and \u2318\u21e7D split the editor, up to three by three",
+      "rationale": "\u2318D and \u2318\u21e7D split the editor now (the Architect, 2026-11-14, superseding D49 (c)); a split past three across or three down is the one refusal left.",
       "ratified": true,
-      "ratified_by": "agent-resolved 2026-11-14, sprint 504; grounds: project — the user entry of 2026-11-14 on splits, superseding D49 (c); SDD — hard rule 2, grammar Layers 1–2; practice — VS Code editor groups (split, move a tab, close the last tab closes the group)"
+      "ratified_by": "agent-resolved 2026-11-14, sprint 504; grounds: project \u2014 the user entry of 2026-11-14 on splits, superseding D49 (c); SDD \u2014 hard rule 2, grammar Layers 1\u20132; practice \u2014 VS Code editor groups (split, move a tab, close the last tab closes the group)"
+    },
+    {
+      "id": "P-0.76-SIGNAL-PATH-BATCHES",
+      "kind": "NEW_TAG_PROPOSED",
+      "layer": 1,
+      "element": "STREAM_BATCH_FOLDED (count, first_seq, last_seq); TRANSCRIPT_ROWS_SKIPPED (count, reasons, last_seq)",
+      "source": "roadmap 2026-11-18-window-productionizing r1 W10, sprint 532; the controller folds a pane's stream per animation frame (sprint 524) and the trace carried one STREAM_ENVELOPE_APPENDED + per-skip TRANSCRIPT_ROW_SKIPPED per envelope",
+      "rationale": "A long session folds tens of thousands of envelopes per frame; one STREAM_BATCH_FOLDED summarises the frame's fold and one TRANSCRIPT_ROWS_SKIPPED the frame's skipped rows, so the trace carries one summary per frame, not one record per envelope. last_seq on each lets the T4 progress watchdog (electron/invariants.ts) read the pane's appended and answered high-water as before.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-20, sprint 532; grounds: project \u2014 W10 scope and the T4 watchdog (sprint 535) reads the appended/answered high-water seqs, so each batch summary carries last_seq; SDD \u2014 hard rule 2 (vocabulary is the contract), grammar Layers 1-2; practice \u2014 requestAnimationFrame batching of a streaming UI, the W2 envelope fold (sprint 524)"
+    },
+    {
+      "id": "P-0.76-DEPRECATE-PER-ENVELOPE",
+      "kind": "TAG_DEPRECATION_PROPOSED",
+      "layer": 1,
+      "element": "STREAM_ENVELOPE_APPENDED retired, replaced_by STREAM_BATCH_FOLDED; TRANSCRIPT_ROW_SKIPPED retired, replaced_by TRANSCRIPT_ROWS_SKIPPED; both kept with deprecated_at 0.76",
+      "source": "roadmap 2026-11-18-window-productionizing r1 W10, sprint 532; P-0.76-SIGNAL-PATH-BATCHES replaces them",
+      "rationale": "The per-envelope tags name an event the system no longer admits: the window never folds one envelope at a time, so no code emits them. They stay in the vocabulary (retired, with deprecated_at and replaced_by) so a trace from before 0.76 still reads; the parity linter fails any code that emits a retired tag.",
+      "ratified": true,
+      "ratified_by": "agent-resolved 2026-11-20, sprint 532; grounds: project \u2014 W10 scope; SDD \u2014 hard rule 2 and grammar/PRINCIPLES.md TAG_DEPRECATION_PROPOSED (old names retired explicitly, never silently); practice \u2014 deprecate-then-remove, old names retired with a deprecation entry (TECHNIQUES.md #45)"
     }
   ]
 }

@@ -60,8 +60,13 @@ def live_tags(vocab: dict) -> list[dict]:
 
 
 def enum_fields(vocab: dict) -> list[tuple[dict, str, list[str]]]:
+    # All tags, not only live ones (sprint 532): a deprecated tag's enum values stay part of the
+    # vocabulary and are still referenced by the replacement code (TranscriptRowSkippedReason, from the
+    # retired TRANSCRIPT_ROW_SKIPPED, names the keys of TRANSCRIPT_ROWS_SKIPPED.reasons). The Signal
+    # enum and SignalPayloads still drop retired tags (live_tags); only the standalone field enums keep
+    # the deprecated ones.
     out = []
-    for t in live_tags(vocab):
+    for t in vocab["tags"]:
         for f, spec in t.get("field_types", {}).items():
             base, values, _ = parse_type(spec)
             if base == "enum":

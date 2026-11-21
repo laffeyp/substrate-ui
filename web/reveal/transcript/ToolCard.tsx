@@ -23,6 +23,7 @@ interface Props {
   result?: TranscriptRow | undefined;  // paired ToolResult (or absent while running)
   progressText: string;
   progressEof: boolean;
+  droppedLines: number;
   streamingShow: boolean;
   onDescend?: (recordRoot: string) => void;
   /** The pane and session the card is drawn in, for TOOL_CARD_TOGGLED (v0.24). */
@@ -47,7 +48,7 @@ function statusColor(toolRunning: boolean, failed: boolean): string {
 // expand/collapse-all toggle supersedes every earlier click.
 const openByCallId: Map<string, { open: boolean; generation: number }> = new Map();
 
-const ToolCardInner: React.FC<Props> = ({ call, result, progressText, progressEof, streamingShow, onDescend, paneId, sessionId }) => {
+const ToolCardInner: React.FC<Props> = ({ call, result, progressText, progressEof, droppedLines, streamingShow, onDescend, paneId, sessionId }) => {
   const toolRunning = !result;
   const failed = result?.toolOk === false;
   const callId = call.callId ?? "";
@@ -216,7 +217,7 @@ const ToolCardInner: React.FC<Props> = ({ call, result, progressText, progressEo
         >· descend ⏎</span>
       ) : null}
       {toolView === "text" ? (plainBodies.length > 0 || plainOutput !== null || hasError) && (
-        <div data-tool-plain="1" style={{
+        <div data-tool-plain="1" data-dropped-lines={droppedLines > 0 ? String(droppedLines) : undefined} style={{
           margin: "2px 0 8px 24px",
           background: "#1a1c20",
           borderRadius: 5,
@@ -230,6 +231,7 @@ const ToolCardInner: React.FC<Props> = ({ call, result, progressText, progressEo
           whiteSpace: "pre-wrap",
           overflowWrap: "anywhere",
         }}>
+          {droppedLines > 0 ? <div style={{ color: "#62676f", fontSize: 11, marginBottom: 4 }}>{droppedLines} earlier lines not shown</div> : null}
           {plainBodies.map((b) => <ToolText key={b.key} text={b.text} format={b.format} />)}
           {plainOutput}
           {hasError ? <div style={{ marginTop: 6, color: "#c26058" }}>error {errorText}</div> : null}
@@ -264,7 +266,7 @@ const ToolCardInner: React.FC<Props> = ({ call, result, progressText, progressEo
           );
         })}
         {streamingShow ? (
-          <ProgressStream progressText={progressText} eof={progressEof} />
+          <ProgressStream progressText={progressText} eof={progressEof} droppedLines={droppedLines} />
         ) : null}
         {hasResult ? (
           <>

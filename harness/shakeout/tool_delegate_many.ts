@@ -22,7 +22,7 @@ export const flow: Flow = {
     "SESSION_OPEN_REQUESTED",
     "SESSION_OPEN_ACKED",
     "TURN_SUBMITTED",
-    "STREAM_ENVELOPE_APPENDED",
+    "STREAM_BATCH_FOLDED",
     "TURN_PARKED",
   ],
   async run(): Promise<{ emitted: EmittedRecord[]; defects: Defect[] }> {

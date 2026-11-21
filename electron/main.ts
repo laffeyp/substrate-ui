@@ -21,7 +21,7 @@ import * as path from "node:path";
 import { installMenu } from "./menu";
 import { commitsFromPlist } from "./build_commits";
 import { createChecker, type Broken, type CheckedRecord } from "./invariants";
-import { Signal, VOCAB_VERSION, AppBootedHomeKind, AppQuitRequestedCause, ChildProcessGoneReason, ChildProcessGoneType, DeepLinkReceivedLinkKind, MainFaultedSource, NativeDialogClosedDialog, NativeDialogClosedOutcome, NavigationBlockedTargetKind, RendererGoneReason, TraceLostProcess, TraceOpenedProcess, WindowFaultedSource, WindowOpenedCause, type SignalPayloads } from "./signals.gen";
+import { Signal, VOCAB_VERSION, AppBootedHomeKind, AppQuitRequestedCause, ChildProcessGoneReason, ChildProcessGoneType, DeepLinkReceivedLinkKind, MainFaultedSource, NativeDialogClosedDialog, NativeDialogClosedOutcome, NavigationBlockedTargetKind, RendererGoneReason, RendererRecoveryChosenAction, RendererRecoveryOfferedReason, TraceLostProcess, TraceOpenedProcess, WindowFaultedSource, WindowOpenedCause, type SignalPayloads } from "./signals.gen";
 
 // ── The trace (vocabulary v0.7; plan process/planning/2026-11-05-sdd-signals, item 2) ─────────────
 // Each launch writes <logs>/traces/<boot_id>/: main.jsonl (main's records), window-<id>.jsonl (each
@@ -41,32 +41,78 @@ const TRACE_FILE_CAP = Number(process.env.SUBSTRATE_TRACE_CAP) > 0 ? Number(proc
  *  focus, so the person's keys stay in their own app, and lets the OS's mouse through, since a buttonless move ends
  *  a drag's pointer capture (BLACKBOARD 2026-11-10). Playwright's input is injected into the page and still arrives. */
 const GATE_ISOLATED = process.env.SUBSTRATE_GATE_ISOLATE === "1";
+const RAPID_CRASH_GUARD_MS = 60_000;
+const lastReopenAt = new Map<number, number>();
+const unresponsiveDialogShown = new Set<number>();
 const BOOT_ID = new Date().toISOString().replace(/[-:.]/g, "").replace("T", "-").slice(0, 15) + "-" + Math.random().toString(16).slice(2, 8);
-const trace: { [key: string]: any } = { dir: null, opened: false, held: [], files: new Map(), written: 0, lost: 0, mainSeq: 0, windowSeq: new Map(), windowsOpened: 0, serverLost: 0 };
+const trace: { [key: string]: any } = { dir: null, opened: false, held: [], files: new Map(), written: 0, lost: 0, mainSeq: 0, windowSeq: new Map(), windowsOpened: 0, serverLost: 0, sealing: false };
 
 function traceFile(name) {
   let f = trace.files.get(name);
   if (f) return f;
-  f = { fd: null, bytes: 0, lost: 0, unreported: 0, announced: false, capped: false };
+  f = { fd: null, bytes: 0, lost: 0, unreported: 0, announced: false, capped: false, queue: [], draining: false };
   try { f.fd = fs.openSync(path.join(trace.dir, name), "a"); } catch { f.fd = null; }
   trace.files.set(name, f);
   return f;
 }
 
+// Sprint 532: the hot path no longer blocks main's thread on each write. A line is accepted into the
+// file's queue synchronously — the cap, byte and loss accounting below stay synchronous, so the loss
+// gate (SUBSTRATE_TRACE_CAP) and the TRACE_LOST reporting are unchanged — and drained to disk with
+// async fs.write, one write in flight per file so lines keep their order. Electron's guidance is to
+// keep synchronous file I/O off the main thread; a 25,000-chunk streaming session stays responsive.
+// `trace.sealing` is set at the quit flush: the async drain stops continuing and flushTraceSync writes
+// what is left, so the trace is whole before the fds close.
+function drainTrace(f) {
+  if (trace.sealing) return;
+  if (f.fd === null) { f.queue.length = 0; f.draining = false; return; }
+  if (f.queue.length === 0) { f.draining = false; return; }
+  f.draining = true;
+  const line = f.queue.shift();
+  fs.write(f.fd, line, (err) => {
+    if (err) { f.lost += 1; f.unreported += 1; trace.lost += 1; } else { trace.written += 1; }
+    drainTrace(f);
+  });
+}
+
 function traceWrite(name, record) {
   if (!trace.dir) return false;
   const f = traceFile(name);
-  const line = JSON.stringify(record) + "\n";
-  let ok = false;
+  let line: string;
+  try {
+    line = JSON.stringify(record) + "\n";
+  } catch {
+    // A record too large to serialize as one string (RangeError: Invalid string length) must not
+    // throw out of the writer and crash main; count it as a lost write, like a failed write.
+    f.lost += 1; f.unreported += 1; trace.lost += 1;
+    return false;
+  }
   // The test cap binds window files only: main.jsonl must stay whole to report their losses.
   const cap = name.startsWith("window-") ? TRACE_FILE_CAP : Infinity;
   if (f.fd !== null && !f.capped && f.bytes + line.length <= cap) {
-    try { fs.writeSync(f.fd, line); f.bytes += line.length; trace.written += 1; ok = true; } catch { ok = false; }
+    f.bytes += line.length;
+    f.queue.push(line);
+    if (!f.draining) drainTrace(f);
+    return true;
   } else if (f.fd !== null && !f.capped) {
     f.capped = true;
   }
-  if (!ok) { f.lost += 1; f.unreported += 1; trace.lost += 1; }
-  return ok;
+  f.lost += 1; f.unreported += 1; trace.lost += 1;
+  return false;
+}
+
+// At quit, drain every file's queue synchronously so the trace is whole and the written/lost counts are
+// final before the closing record (S2) and the fd close. `trace.sealing` stops the async drain from
+// racing these writes; a single in-flight async write (already handed to libuv) completes on its own.
+function flushTraceSync() {
+  trace.sealing = true;
+  for (const f of trace.files.values()) {
+    if (f.fd === null) { f.queue.length = 0; continue; }
+    while (f.queue.length > 0) {
+      const line = f.queue.shift();
+      try { fs.writeSync(f.fd, line); trace.written += 1; } catch { f.lost += 1; f.unreported += 1; trace.lost += 1; }
+    }
+  }
 }
 
 // A file's losses reach main.jsonl as TRACE_LOST: the first loss at once, later ones as one count
@@ -137,7 +183,15 @@ function mainRecord<K extends Signal>(tag: K, payload: SignalPayloads[K], window
 function writeMainRecord(tag, payload, windowId, wall) {
   const rec = { boot_id: BOOT_ID, process: "main", proc_seq: trace.mainSeq++, wall, window_id: windowId, name: tag, payload };
   const wrote = traceWrite("main.jsonl", rec);
-  checkRecord(rec);
+  // The checker emits an INVARIANT_BROKEN through mainRecord when a record breaks a rule; that note
+  // must be written but NOT itself checked, or it recurses — checkRecord → writeBroken → mainRecord →
+  // writeMainRecord → checkRecord — and the nested contexts grow until JSON.stringify overflows and
+  // main crashes (RangeError: Invalid string length). inMainRecord breaks the cycle: only the
+  // top-level record is checked; notes written during that check are not re-checked.
+  if (!inMainRecord) {
+    inMainRecord = true;
+    try { checkRecord(rec); } finally { inMainRecord = false; }
+  }
   return wrote;
 }
 
@@ -269,9 +323,7 @@ app.on("child-process-gone", (_e, details) => {
 
 // A window's records. The window stamps proc_seq and pane_id (sprint 352); main adds the launch and
 // window. Until a window stamps its own proc_seq, main numbers what it receives from that window.
-ipcMain.on("native:signal", (event, record) => {
-  const win = BrowserWindow.fromWebContents(event.sender);
-  const windowId = win ? win.id : null;
+function writeWindowRecord(windowId, record) {
   const key = "window-" + windowId + ".jsonl";
   const seq = trace.windowSeq.get(key) ?? 0;
   trace.windowSeq.set(key, seq + 1);
@@ -280,6 +332,20 @@ ipcMain.on("native:signal", (event, record) => {
   const wrote = traceWrite(key, rec);
   reportLoss(key, TraceLostProcess.WINDOW, wrote);
   checkRecord(rec);
+}
+ipcMain.on("native:signal", (event, record) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  writeWindowRecord(win ? win.id : null, record);
+});
+// Sprint 532: one frame's records, written in order. The window buffers its records and sends them
+// once per animation frame (web/vm/instrumentation/sdd.ts), so the per-record IPC during a streaming
+// flood becomes one send per frame. Each record is stamped, written and checked exactly as a single
+// native:signal, in the order the array holds.
+ipcMain.on("native:signals", (event, records) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  const windowId = win ? win.id : null;
+  if (!Array.isArray(records)) return;
+  for (const record of records) writeWindowRecord(windowId, record);
 });
 
 // Sprint 489: which install this is. electron/identity.json holds one record per install (sprint
@@ -683,16 +749,88 @@ function createWindow(cause: WindowOpenedCause) {
   win.on("closed", () => traceEmit(Signal.WINDOW_CLOSED, {}, windowId));
   // A window's renderer that dies or hangs, and a preload that throws (v0.24, P-0.24-FAULTS): the
   // window cannot write these itself. Listening changes nothing; Electron does what it did before.
-  win.webContents.on("render-process-gone", (_e, details) => {
-    traceEmit(Signal.RENDERER_GONE, { reason: asEnum(RendererGoneReason, details.reason, RendererGoneReason.ABNORMAL_EXIT), exit_code: details.exitCode }, windowId);
+  win.webContents.on("render-process-gone", async (_e, details) => {
+    const reason = asEnum(RendererGoneReason, details.reason, RendererGoneReason.ABNORMAL_EXIT);
+    traceEmit(Signal.RENDERER_GONE, { reason, exit_code: details.exitCode }, windowId);
+    const lastReopen = lastReopenAt.get(windowId);
+    const rapid = lastReopen != null && Date.now() - lastReopen < RAPID_CRASH_GUARD_MS;
+    traceEmit(Signal.RENDERER_RECOVERY_OFFERED, {
+      reason: asEnum(RendererRecoveryOfferedReason, details.reason, RendererRecoveryOfferedReason.ABNORMAL_EXIT),
+      exit_code: details.exitCode, rapid,
+    }, windowId);
+    const { response } = rapid
+      ? await dialog.showMessageBox({
+          type: "error",
+          title: "This window crashed again",
+          message: "This window crashed again",
+          detail: "The window terminated unexpectedly (reason: '" + reason + "', code: '" + details.exitCode + "') within " + Math.round(RAPID_CRASH_GUARD_MS / 1000) + " seconds of the last reopen.\n\nReopen without loading the previous sessions?",
+          buttons: ["Reopen Empty", "Close"],
+          defaultId: 0,
+          cancelId: 1,
+        })
+      : await dialog.showMessageBox({
+          type: "error",
+          title: "This window terminated unexpectedly",
+          message: "This window terminated unexpectedly",
+          detail: "The window terminated unexpectedly (reason: '" + reason + "', code: '" + details.exitCode + "').",
+          buttons: ["Reopen", "Close"],
+          defaultId: 0,
+          cancelId: 1,
+        });
+    if (response === 0) {
+      const action = rapid ? RendererRecoveryChosenAction.REOPEN_EMPTY : RendererRecoveryChosenAction.REOPEN;
+      traceEmit(Signal.RENDERER_RECOVERY_CHOSEN, { action }, windowId);
+      lastReopenAt.set(windowId, Date.now());
+      if (rapid) {
+        const url = "http://127.0.0.1:" + serverPort + "/?atom-transcript=1&electron=1&no-restore=1";
+        setTimeout(() => { if (!win.isDestroyed()) win.loadURL(url); }, 0);
+      } else {
+        setTimeout(() => { if (!win.isDestroyed()) win.webContents.reload(); }, 0);
+      }
+      win.webContents.once("did-finish-load", () => {
+        traceEmit(Signal.WINDOW_REOPENED, {}, windowId);
+      });
+    } else {
+      traceEmit(Signal.RENDERER_RECOVERY_CHOSEN, { action: RendererRecoveryChosenAction.CLOSE }, windowId);
+      if (!win.isDestroyed()) win.close();
+    }
   });
   let unresponsiveAt: number | null = null;
   // Electron repeats unresponsive about every 16 s while a renderer stays hung (measured on Electron 44,
   // 2026-11-08): one record per hang, timed from its first report.
-  win.on("unresponsive", () => {
+  win.on("unresponsive", async () => {
     if (unresponsiveAt !== null) return;
     unresponsiveAt = performance.now();
     traceEmit(Signal.WINDOW_UNRESPONSIVE, {}, windowId);
+    if (unresponsiveDialogShown.has(windowId)) return;
+    unresponsiveDialogShown.add(windowId);
+    const { response } = await dialog.showMessageBox({
+      type: "warning",
+      title: "This window is not responding",
+      message: "This window is not responding",
+      detail: "The window stopped responding. It may recover on its own, or it can be reloaded.",
+      buttons: ["Reopen", "Keep Waiting", "Close"],
+      defaultId: 1,
+      cancelId: 1,
+    });
+    unresponsiveDialogShown.delete(windowId);
+    if (response === 0) {
+      traceEmit(Signal.RENDERER_RECOVERY_OFFERED, {
+        reason: RendererRecoveryOfferedReason.ABNORMAL_EXIT, exit_code: 0, rapid: false,
+      }, windowId);
+      traceEmit(Signal.RENDERER_RECOVERY_CHOSEN, { action: RendererRecoveryChosenAction.REOPEN }, windowId);
+      lastReopenAt.set(windowId, Date.now());
+      setTimeout(() => { if (!win.isDestroyed()) win.webContents.reload(); }, 0);
+      win.webContents.once("did-finish-load", () => {
+        traceEmit(Signal.WINDOW_REOPENED, {}, windowId);
+      });
+    } else if (response === 2) {
+      traceEmit(Signal.RENDERER_RECOVERY_OFFERED, {
+        reason: RendererRecoveryOfferedReason.ABNORMAL_EXIT, exit_code: 0, rapid: false,
+      }, windowId);
+      traceEmit(Signal.RENDERER_RECOVERY_CHOSEN, { action: RendererRecoveryChosenAction.CLOSE }, windowId);
+      if (!win.isDestroyed()) win.close();
+    }
   });
   win.on("responsive", () => {
     if (unresponsiveAt === null) return;
@@ -787,10 +925,16 @@ function closeTrace() {
   // A timing rule whose window passed before the close is written before the closing record (S2).
   readServerRecords();
   writeBroken(checker.tick());
+  // Drain the async write queues synchronously so written/lost are final before the closing record,
+  // and seal them so no later async drain races the quit-time writes (sprint 532).
+  flushTraceSync();
   traceEmit(Signal.APP_QUIT_COMPLETED, {
     server_exit_code: trace.serverExitCode ?? null, windows_opened: trace.windowsOpened,
     signals_written: trace.written, signals_lost: trace.lost,
   });
+  // The closing record was enqueued under the seal; write it (and any INVARIANT_BROKEN the checker
+  // emitted while checking it) before the fds close.
+  flushTraceSync();
   trace.closed = true;
   for (const f of trace.files.values()) { if (f.fd !== null) { try { fs.closeSync(f.fd); } catch { /* closing at exit */ } } }
 }

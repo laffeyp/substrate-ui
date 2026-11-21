@@ -74,5 +74,9 @@ contextBridge.exposeInMainWorld("native", {
   openRecordDialog: () => ipcRenderer.invoke("native:open-record"),
   // The window's vocabulary records; main writes them to this launch's trace folder (window-<id>.jsonl).
   signal: (record) => ipcRenderer.send("native:signal", record),
+  // Sprint 532: one frame's records in one IPC. The window buffers records and flushes once per
+  // animation frame (web/vm/instrumentation/sdd.ts), so the per-record IPC during a streaming flood
+  // becomes one send per frame; main writes each in order (native:signals).
+  signalBatch: (records) => ipcRenderer.send("native:signals", records),
 });
 

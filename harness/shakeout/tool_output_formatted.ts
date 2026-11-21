@@ -91,6 +91,11 @@ async function main(): Promise<void> {
     const { session_id: sid } = await (await post("/api/session", { driver: "deterministic", workspace: ws.root, driver_params: { script } })).json() as { session_id: string };
     await win.evaluate(`(function () { var vm = window.__vm; return (vm.get(1) || vm.spawn(1)).attachExisting(${JSON.stringify(sid)}); })()`);
     await win.waitForFunction(`window.__vm.get(1).snapshot().sessionId === ${JSON.stringify(sid)}`, undefined, { timeout: 15_000 });
+    // This gate reads the formatting of all nine tool cards. The transcript is windowed (sprint 529),
+    // so off-screen cards are spacers, not DOM nodes, and a DOM read finds only the few near the
+    // viewport (eight of nine, the read card spaced out at the top). Render every row for this gate;
+    // windowing itself is proven under load by long_session_open (W1).
+    await win.evaluate("window.__noTranscriptWindowing = true");
     const r = await post(`/api/session/${sid}/turn`, { text: "read, run, write" });
     if (!r.ok) throw new Error(`turn: HTTP ${r.status}`);
     const t0 = Date.now();

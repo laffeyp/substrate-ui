@@ -116,7 +116,7 @@ export const flow: Flow = {
           const timer = setTimeout(() => { stop(); resolve(); }, PARK_TIMEOUT_MS);
           const stop = client.streamRecord(sid, -1, {
             onEnvelope: (env: { kind?: string; payload?: Record<string, unknown> }) => {
-              emitted.push({ tag: "STREAM_ENVELOPE_APPENDED", payload: { kind: env.kind } });
+              emitted.push({ tag: "STREAM_BATCH_FOLDED", payload: { kind: env.kind } });
               if (env.kind === "ModelReply") {
                 const text = typeof env.payload?.text === "string" ? env.payload.text : "";
                 if (text.trim().length > 0) sawModelReply = true;

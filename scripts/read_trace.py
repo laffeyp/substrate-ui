@@ -14,8 +14,8 @@ SERVER_SPAWNED before the server's k-th SERVER_STARTED, main's WINDOW_OPENED bef
 first record. Records those leave unordered go by their wall time, which never overrides an order the
 trace states. t is seconds from the launch's first wall time, for reading only.
 
-Join. A record that names a session and a seq (TRANSCRIPT_ROW_DRAWN, TRANSCRIPT_ROW_SKIPPED, and a
-pane's STREAM_ENVELOPE_APPENDED, whose session is the pane's last acked or attached one) is followed by
+Join. A record that names a session and a seq (TRANSCRIPT_ROW_DRAWN, whose session is the pane's last
+acked or attached one) is followed by
 the kernel's entry at that seq, read with substrate's read_record from the record_root the session's
 manifest names: `↳ kernel seq=<n> <kind> producer=<p> <payload, cut to 120 characters>`. An entry
 that is not there prints as `↳ kernel seq=<n> not in the record of <session> (... ends at seq <m>)`
@@ -51,7 +51,10 @@ from substrate.api import read_record
 
 ROOT = Path(__file__).resolve().parent.parent
 VOCAB = ROOT / "web" / "vm" / "signals" / "versions" / "current.json"
-JOINED = {"TRANSCRIPT_ROW_DRAWN", "TRANSCRIPT_ROW_SKIPPED", "STREAM_ENVELOPE_APPENDED"}
+# Sprint 532: STREAM_ENVELOPE_APPENDED and TRANSCRIPT_ROW_SKIPPED became per-batch summaries
+# (STREAM_BATCH_FOLDED, TRANSCRIPT_ROWS_SKIPPED) that carry no single per-row seq or session, so only
+# the per-row TRANSCRIPT_ROW_DRAWN joins to the kernel record.
+JOINED = {"TRANSCRIPT_ROW_DRAWN"}
 
 
 def paths(home: str | None) -> tuple[Path, Path]:

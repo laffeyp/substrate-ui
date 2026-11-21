@@ -237,6 +237,13 @@ const EMPTY_SNAPSHOT: Snapshot = {
   topologyGraph: null,
   rawEnvelopes: [],
   progressByCallId: {},
+  envelopeCount: 0,
+  writeCount: 0,
+  resultByCallId: {},
+  lastUserMessage: null,
+  lastTurnEnd: null,
+  turnToolCount: 0,
+  turnLiveToolName: "",
 };
 
 /** Sprint 444 (roadmap r13 E10.0; the Architect, 2026-11-10: "Save every unsaved buffer when a message is sent,
@@ -251,6 +258,21 @@ const NOTHING_SAVED: BeforeTurnResult = { saved: 0, refused: [] };
 type BeforeTurn = (sessionId: string, paneId: number | null) => Promise<BeforeTurnResult>;
 let beforeTurn: BeforeTurn | null = null;
 export function setBeforeTurn(fn: BeforeTurn | null): void { beforeTurn = fn; }
+
+/** Sprint 524: ms per frame the batch drain budgets before yielding to the next rAF. */
+const BATCH_FRAME_BUDGET_MS = 8;
+
+/** Sprint 526: each call's streaming output keeps at most this many lines in the page. */
+const STREAM_LINE_LIMIT = 1000;
+
+/** Trim `text` to its last STREAM_LINE_LIMIT lines. Returns the trimmed text and how many
+ *  lines were dropped. A partial last line (no trailing newline) counts as one of the kept lines. */
+function trimStreamText(text: string): { text: string; droppedLines: number } {
+  const lines = text.split("\n");
+  if (lines.length <= STREAM_LINE_LIMIT + 1) return { text, droppedLines: 0 };
+  const kept = lines.slice(lines.length - (STREAM_LINE_LIMIT + 1));
+  return { text: kept.join("\n"), droppedLines: lines.length - (STREAM_LINE_LIMIT + 1) };
+}
 
 export class SessionController {
   private snap: Snapshot = { ...EMPTY_SNAPSHOT };
@@ -271,6 +293,29 @@ export class SessionController {
   /** The seqs in `rawEnvelopes`, so a replayed envelope is found without a scan (sprint 338, plan row
    *  F3, F335); cleared wherever `rawEnvelopes` is. */
   private readonly seenSeqs = new Set<number>();
+  /** Sprint 524: seqs that produced a transcript row, maintained by `appendTranscript`;
+   *  read by `noteSkipped` in place of the O(n) `transcript.some()` scan. */
+  private readonly rowSeqs = new Set<number>();
+  /** Sprint 524: queued envelopes awaiting the next batch drain. */
+  private readonly envelopeQueue: { sessionId: string; env: RecordEnvelope }[] = [];
+  /** Sprint 524: the rAF id of the pending drain callback, or null if none is scheduled. */
+  private batchRafId: number | null = null;
+  /** Sprint 524: true while `drainBatch` is processing; `patch` suppresses listeners during a drain. */
+  private draining = false;
+  /** Chunk buffer for ToolProgress during a batch drain; keyed by callKey, joined at flush. */
+  private batchChunks: Map<string, string[]> | null = null;
+  /** Sprint 532: per-batch signal accumulators. One STREAM_BATCH_FOLDED and at most one
+   *  TRANSCRIPT_ROWS_SKIPPED are emitted per frame batch in place of the per-envelope
+   *  STREAM_ENVELOPE_APPENDED and TRANSCRIPT_ROW_SKIPPED. `batchFirstSeq`/`batchLastSeq`/`batchSkipLastSeq`
+   *  are -1 until an envelope with a numeric seq is seen. */
+  private batchAppendCount = 0;
+  private batchFirstSeq = -1;
+  private batchLastSeq = -1;
+  private batchSkipCount = 0;
+  private batchSkipReasons: Record<string, number> = {};
+  private batchSkipLastSeq = -1;
+  /** Sprint 530: outstanding tool calls in the current turn, for `turnLiveToolName`. */
+  private activityOutstanding = new Map<string, string>();
   /** callId → callKey of the ToolCall currently open under that id (UI sprint 101). */
   private openCallKey = new Map<string, string>();
   /** UI sprint 129: a harness call's tool name by call id, for its result row. */
@@ -588,8 +633,11 @@ export class SessionController {
     const ack = result.data;
     this.lastSeq = -1;
     this.seenSeqs.clear();
+    this.rowSeqs.clear();
+    this.cancelPendingBatch();
     this.waitingEchoes.length = 0;
     this.openCallKey.clear();
+    this.activityOutstanding.clear();
     this.harnessToolNames.clear();
     this.endedEmittedFor = null;
     this.lastCompactionCut = null;
@@ -608,6 +656,13 @@ export class SessionController {
       transcript: carryOver,
       rawEnvelopes: [],
       progressByCallId: {},
+      envelopeCount: 0,
+      writeCount: 0,
+      resultByCallId: {},
+      lastUserMessage: null,
+      lastTurnEnd: null,
+      turnToolCount: 0,
+      turnLiveToolName: "",
       parkReason: null,
       turnFailure: null,
       backgroundTasks: [],
@@ -844,8 +899,11 @@ export class SessionController {
     if (this.unsubscribeStream) { this.unsubscribeStream(); this.unsubscribeStream = null; }
     this.lastSeq = -1;
     this.seenSeqs.clear();
+    this.rowSeqs.clear();
+    this.cancelPendingBatch();
     this.waitingEchoes.length = 0;
     this.openCallKey.clear();
+    this.activityOutstanding.clear();
     this.harnessToolNames.clear();
     this.endedEmittedFor = null;
     this.lastCompactionCut = null;
@@ -856,6 +914,13 @@ export class SessionController {
       transcript: [],
       rawEnvelopes: [],
       progressByCallId: {},
+      envelopeCount: 0,
+      writeCount: 0,
+      resultByCallId: {},
+      lastUserMessage: null,
+      lastTurnEnd: null,
+      turnToolCount: 0,
+      turnLiveToolName: "",
       parkReason: null,
       turnFailure: null,
       backgroundTasks: [],
@@ -895,7 +960,7 @@ export class SessionController {
     // new one's attach for the length of this fetch.
     if (this.snap.sessionId && this.snap.sessionId !== sessionId) {
       if (this.unsubscribeStream) { this.unsubscribeStream(); this.unsubscribeStream = null; }
-      this.patch({ transcript: [], rawEnvelopes: [] });
+      this.patch({ transcript: [], rawEnvelopes: [], envelopeCount: 0, writeCount: 0, resultByCallId: {}, lastUserMessage: null, lastTurnEnd: null, turnToolCount: 0, turnLiveToolName: "" });
     }
     // Look up the manifest so the snapshot's name/driver/workspace
     // fields carry through the same way openSession does.
@@ -919,8 +984,11 @@ export class SessionController {
     const manifest = result.data;
     this.lastSeq = -1;
     this.seenSeqs.clear();
+    this.rowSeqs.clear();
+    this.cancelPendingBatch();
     this.waitingEchoes.length = 0;
     this.openCallKey.clear();
+    this.activityOutstanding.clear();
     this.harnessToolNames.clear();
     this.endedEmittedFor = null;
     this.lastCompactionCut = null;
@@ -939,6 +1007,13 @@ export class SessionController {
       transcript: [],
       rawEnvelopes: [],
       progressByCallId: {},
+      envelopeCount: 0,
+      writeCount: 0,
+      resultByCallId: {},
+      lastUserMessage: null,
+      lastTurnEnd: null,
+      turnToolCount: 0,
+      turnLiveToolName: "",
       parkReason: null,
       // UI sprint 101: the server's status at attach. A session that is not running has no
       // turn in flight, so a last turn on the record without a Park ended some other way.
@@ -1435,13 +1510,24 @@ export class SessionController {
   disconnect(): void {
     if (this.reconnectTimer) { clearTimeout(this.reconnectTimer); this.reconnectTimer = null; }
     if (this.unsubscribeStream) { this.unsubscribeStream(); this.unsubscribeStream = null; }
+    this.cancelPendingBatch();
     this.listeners.clear();
+  }
+
+  private cancelPendingBatch(): void {
+    this.envelopeQueue.length = 0;
+    if (this.batchRafId !== null) { cancelAnimationFrame(this.batchRafId); this.batchRafId = null; }
   }
 
   // ── internal ────────────────────────────────────────────────────────
   private attachStream(sessionId: string): void {
     if (this.unsubscribeStream) { this.unsubscribeStream(); this.unsubscribeStream = null; }
     this.patch({ connection: PaneDrawnConnection.CONNECTING });
+    // Sprint 533: `this.lastSeq` is the resume cursor the controller's own reconnect carries. A
+    // reconnect through `handleStreamError` builds a fresh EventSource, which cannot set an initial
+    // Last-Event-ID; `streamRecord` passes `this.lastSeq` as the `since_seq` query parameter, which
+    // the server honours the same way as a Last-Event-ID header, so the reconnect resumes past the
+    // last seq it drew rather than replaying the record and leaning on `seenSeqs`.
     this.unsubscribeStream = this.client.streamRecord(sessionId, this.lastSeq, {
       onOpen: () => { this.patch({ connection: PaneDrawnConnection.CONNECTED }); this.emit(Signal.STREAM_ATTACHED, { session_id: sessionId }); },
       onEnvelope: (env) => this.handleEnvelope(sessionId, env),
@@ -1470,43 +1556,190 @@ export class SessionController {
   }
 
   private handleEnvelope(sessionId: string, env: RecordEnvelope): void {
-    // A reconnecting EventSource asks for the same URL again, so the server replays envelopes
-    // this controller already holds. UI sprint 102: skip them whole. Before, rawEnvelopes was
-    // deduped but the switch below still ran, so every reconnect appended the transcript again.
-    const existing = this.snap.rawEnvelopes;
+    // Sprint 524: queue the envelope and schedule a batch drain on the next animation frame.
+    // Duplicate-seq detection stays synchronous so a reconnect's replay never queues.
     if (typeof env.seq === "number" && this.seenSeqs.has(env.seq)) {
-      if (this.paneId !== null) this.emit(Signal.TRANSCRIPT_ROW_SKIPPED, { pane_id: this.paneId, session_id: this.snap.sessionId, seq: env.seq, kind: env.kind, reason: TranscriptRowSkippedReason.DUPLICATE_SEQ });
+      // A replayed envelope is its own one-row batch skip (sprint 532): it is rejected before the queue,
+      // so it is not part of any frame's fold.
+      if (this.paneId !== null) this.emit(Signal.TRANSCRIPT_ROWS_SKIPPED, { count: 1, reasons: { [TranscriptRowSkippedReason.DUPLICATE_SEQ]: 1 }, last_seq: env.seq });
       return;
     }
+    this.envelopeQueue.push({ sessionId, env });
+    if (typeof requestAnimationFrame === "function") {
+      if (this.batchRafId === null) {
+        this.batchRafId = requestAnimationFrame(() => { this.batchRafId = null; void this.drainBatch(); });
+      }
+    } else {
+      // No requestAnimationFrame (node tests): each envelope is its own batch.
+      this.beginBatch();
+      this.processEnvelope(sessionId, env);
+      this.envelopeQueue.length = 0;
+      this.emitBatchSummaries();
+      this.notifyListeners();
+    }
+  }
+
+  /** Sprint 532: reset the per-batch signal accumulators at the start of a frame's fold. */
+  private beginBatch(): void {
+    this.batchAppendCount = 0;
+    this.batchFirstSeq = -1;
+    this.batchLastSeq = -1;
+    this.batchSkipCount = 0;
+    this.batchSkipReasons = {};
+    this.batchSkipLastSeq = -1;
+  }
+
+  /** Sprint 532: emit the frame's batch summaries — one STREAM_BATCH_FOLDED for the envelopes folded,
+   *  one TRANSCRIPT_ROWS_SKIPPED for the rows skipped — in place of the per-envelope tags. STREAM_BATCH_FOLDED
+   *  comes first (it raises T4's appended high-water); TRANSCRIPT_ROWS_SKIPPED's last_seq advances T4's
+   *  answered high-water for the skipped rows (electron/invariants.ts). */
+  private emitBatchSummaries(): void {
+    if (this.batchAppendCount > 0) {
+      this.emit(Signal.STREAM_BATCH_FOLDED, { count: this.batchAppendCount, first_seq: this.batchFirstSeq, last_seq: this.batchLastSeq });
+    }
+    if (this.batchSkipCount > 0 && this.paneId !== null) {
+      this.emit(Signal.TRANSCRIPT_ROWS_SKIPPED, { count: this.batchSkipCount, reasons: this.batchSkipReasons, last_seq: this.batchSkipLastSeq });
+    }
+  }
+
+  /** Drain the envelope queue in one pass, then fire listeners once.
+   *  For large backlogs (opening a long session), yields after BATCH_FRAME_BUDGET_MS
+   *  and resumes in the next frame. During the drain, rawEnvelopes, transcript, and
+   *  progressByCallId are mutated in place; flushBatch creates fresh references at the end. */
+  drainBatch(): void | Promise<void> {
+    this.draining = true;
+    this.batchChunks = new Map();
+    this.beginBatch();
+    const start = performance.now();
+    while (this.envelopeQueue.length > 0) {
+      if (performance.now() - start > BATCH_FRAME_BUDGET_MS) {
+        this.draining = false;
+        this.flushBatch();
+        this.notifyListeners();
+        this.batchRafId = requestAnimationFrame(() => { this.batchRafId = null; void this.drainBatch(); });
+        return;
+      }
+      const { sessionId, env } = this.envelopeQueue.shift()!;
+      this.processEnvelope(sessionId, env);
+    }
+    this.draining = false;
+    this.flushBatch();
+    this.notifyListeners();
+  }
+
+  /** Join chunk buffers and create fresh collection references so React detects the change. */
+  private flushBatch(): void {
+    if (this.batchChunks) {
+      for (const [key, chunks] of this.batchChunks) {
+        const entry = this.snap.progressByCallId[key];
+        if (entry) {
+          const trimmed = trimStreamText(chunks.join(""));
+          entry.text = trimmed.text;
+          entry.droppedLines += trimmed.droppedLines;
+        }
+      }
+      this.batchChunks = null;
+    }
+    this.snap = {
+      ...this.snap,
+      rawEnvelopes: this.snap.rawEnvelopes.slice(),
+      transcript: this.snap.transcript.slice(),
+      progressByCallId: { ...this.snap.progressByCallId },
+      resultByCallId: { ...this.snap.resultByCallId },
+    };
+    // Sprint 532: one STREAM_BATCH_FOLDED / TRANSCRIPT_ROWS_SKIPPED per frame, after the snapshot is
+    // fresh. A mid-drain yield flushes a partial batch; the next frame's drainBatch calls beginBatch.
+    this.emitBatchSummaries();
+  }
+
+  /** Sprint 524: process one envelope into the snapshot — the work handleEnvelope did before batching. */
+  private processEnvelope(sessionId: string, env: RecordEnvelope): void {
     if (typeof env.seq === "number") this.seenSeqs.add(env.seq);
     if (typeof env.seq === "number" && env.seq > this.lastSeq) this.lastSeq = env.seq;
-    this.emit(Signal.STREAM_ENVELOPE_APPENDED, { seq: env.seq, kind: env.kind });
-    // Sprint 483: the submitted turn's UserMessage on the stream acknowledges it (see `ackPending`).
+    // Sprint 532: accumulate into the frame's batch instead of emitting STREAM_ENVELOPE_APPENDED per
+    // envelope; emitBatchSummaries fires one STREAM_BATCH_FOLDED at flush.
+    this.batchAppendCount += 1;
+    if (typeof env.seq === "number") {
+      if (this.batchFirstSeq < 0) this.batchFirstSeq = env.seq;
+      this.batchLastSeq = env.seq;
+    }
     const pending = this.ackPending;
     if (pending && pending.sessionId === sessionId && env.kind === EnvelopeKind.UserMessage && env.payload?.turn_index === pending.turnIndex) {
       this.ackPending = null;
       this.emit(Signal.TURN_ACK, { session_id: sessionId });
     }
-    // Sprint 507: a turn on the record moves the count past it, whoever sent it (a queued message the server started,
-    // another client), so this window's next turn is keyed by the index the server will give it.
     const recorded = env.kind === EnvelopeKind.UserMessage ? env.payload?.turn_index : undefined;
     if (typeof recorded === "number" && recorded + 1 > this.snap.turnIndex) this.patch({ turnIndex: recorded + 1 });
-    this.patch({ rawEnvelopes: [...existing, env] });
+    const isWrite = env.kind === EnvelopeKind.ToolResult || env.kind === EnvelopeKind.FileWritten;
+    const isCall = env.kind === EnvelopeKind.ToolCall || env.kind === EnvelopeKind.HarnessToolCall;
+    const isResult = env.kind === EnvelopeKind.ToolResult || env.kind === EnvelopeKind.HarnessToolResult;
+    const isTurnEnd = env.kind === EnvelopeKind.Returned || env.kind === EnvelopeKind.Park || env.kind === EnvelopeKind.SessionEnded;
+    if (this.draining) {
+      this.snap.rawEnvelopes.push(env);
+      this.snap.envelopeCount++;
+      if (isWrite) this.snap.writeCount++;
+      if (env.kind === EnvelopeKind.UserMessage) {
+        this.snap.lastUserMessage = env;
+        this.snap.turnToolCount = 0;
+        this.snap.turnLiveToolName = "";
+        this.activityOutstanding.clear();
+      }
+      if (isTurnEnd) this.snap.lastTurnEnd = env;
+      if (isCall) {
+        this.snap.turnToolCount++;
+        const callId = typeof env.payload?.call_id === "string" ? env.payload.call_id : "";
+        const toolName = typeof env.payload?.tool === "string" ? env.payload.tool : "tool";
+        if (callId) this.activityOutstanding.set(callId, toolName);
+        this.snap.turnLiveToolName = toolName;
+      }
+      if (isResult) {
+        const callId = typeof env.payload?.call_id === "string" ? env.payload.call_id : "";
+        if (callId) this.activityOutstanding.delete(callId);
+        const last = this.activityOutstanding.size ? Array.from(this.activityOutstanding.values()).pop()! : "";
+        this.snap.turnLiveToolName = last;
+      }
+    } else {
+      const activityPatch: Partial<Snapshot> = {};
+      if (env.kind === EnvelopeKind.UserMessage) {
+        activityPatch.lastUserMessage = env;
+        activityPatch.turnToolCount = 0;
+        activityPatch.turnLiveToolName = "";
+        this.activityOutstanding.clear();
+      }
+      if (isTurnEnd) activityPatch.lastTurnEnd = env;
+      if (isCall) {
+        activityPatch.turnToolCount = this.snap.turnToolCount + 1;
+        const callId = typeof env.payload?.call_id === "string" ? env.payload.call_id : "";
+        const toolName = typeof env.payload?.tool === "string" ? env.payload.tool : "tool";
+        if (callId) this.activityOutstanding.set(callId, toolName);
+        activityPatch.turnLiveToolName = toolName;
+      }
+      if (isResult) {
+        const callId = typeof env.payload?.call_id === "string" ? env.payload.call_id : "";
+        if (callId) this.activityOutstanding.delete(callId);
+        activityPatch.turnLiveToolName = this.activityOutstanding.size ? Array.from(this.activityOutstanding.values()).pop()! : "";
+      }
+      this.patch({ rawEnvelopes: [...this.snap.rawEnvelopes, env], envelopeCount: this.snap.envelopeCount + 1, ...(isWrite ? { writeCount: this.snap.writeCount + 1 } : {}), ...activityPatch });
+    }
     this.envelopeToRows(sessionId, env);
     this.noteSkipped(env);
   }
 
   /** T4 (v0.12): an entry that made no transcript row of its own is TRANSCRIPT_ROW_SKIPPED, with the
    *  reason the controller's own table gives; a row it made is drawn by Row.tsx, or folded into its
-   *  call's card by Transcript.tsx. */
+   *  call's card by Transcript.tsx. Sprint 524: reads from `rowSeqs` instead of scanning transcript. */
   private noteSkipped(env: RecordEnvelope): void {
-    // A controller with no pane (a test's) draws nothing on screen, so it writes no row records.
     if (typeof env.seq !== "number" || this.paneId === null) return;
-    if (this.snap.transcript.some((row) => row.seq === env.seq)) return;
+    if (this.rowSeqs.has(env.seq)) return;
     const reason = env.kind === EnvelopeKind.ToolProgress
       ? TranscriptRowSkippedReason.FOLDED
       : KIND_DISPOSITION_BY_VALUE[env.kind] === "ignored" ? TranscriptRowSkippedReason.HIDDEN_KIND : TranscriptRowSkippedReason.OTHER;
-    this.emit(Signal.TRANSCRIPT_ROW_SKIPPED, { pane_id: this.paneId, session_id: this.snap.sessionId, seq: env.seq, kind: env.kind, reason });
+    // Sprint 532: accumulate into the frame's batch; emitBatchSummaries fires one TRANSCRIPT_ROWS_SKIPPED
+    // at flush. last_seq is the highest skipped seq in the batch, which T4 reads to advance the pane's
+    // answered high-water (electron/invariants.ts).
+    this.batchSkipCount += 1;
+    this.batchSkipReasons[reason] = (this.batchSkipReasons[reason] ?? 0) + 1;
+    if (env.seq > this.batchSkipLastSeq) this.batchSkipLastSeq = env.seq;
   }
 
   /** The envelope's effect on the snapshot: a transcript row, a state change, or nothing. */
@@ -1558,6 +1791,7 @@ export class SessionController {
         const warningSeq = echoIndex >= 0 ? this.saveWarnings.get(transcript[echoIndex].seq) : undefined;
         const warning = warningSeq === undefined ? undefined : rest.find((r) => r.seq === warningSeq);
         if (warningSeq !== undefined) this.saveWarnings.delete(transcript[echoIndex].seq);
+        if (typeof env.seq === "number") this.rowSeqs.add(env.seq);
         this.patch({ transcript: [...rest.filter((r) => r !== warning), { ...row, seq: env.seq } as TranscriptRow, ...(warning ? [warning] : [])] });
         return;
       }
@@ -1657,11 +1891,18 @@ export class SessionController {
         const key = this.openCallKey.get(callId) ?? callId;
         const chunk = typeof payload.chunk === "string" ? payload.chunk : "";
         const eof = payload.eof === true;
-        const prior = this.snap.progressByCallId[key] ?? { text: "", eof: false };
-        const nextEntry = { text: prior.text + chunk, eof: prior.eof || eof };
-        this.patch({
-          progressByCallId: { ...this.snap.progressByCallId, [key]: nextEntry },
-        });
+        const prior = this.snap.progressByCallId[key] ?? { text: "", eof: false, droppedLines: 0 };
+        if (this.draining && this.batchChunks) {
+          if (!this.batchChunks.has(key)) this.batchChunks.set(key, [prior.text]);
+          this.batchChunks.get(key)!.push(chunk);
+          this.snap.progressByCallId[key] = { text: prior.text, eof: prior.eof || eof, droppedLines: prior.droppedLines };
+        } else {
+          const trimmed = trimStreamText(prior.text + chunk);
+          const nextEntry = { text: trimmed.text, eof: prior.eof || eof, droppedLines: prior.droppedLines + trimmed.droppedLines };
+          this.patch({
+            progressByCallId: { ...this.snap.progressByCallId, [key]: nextEntry },
+          });
+        }
         return;
       }
       case EnvelopeKind.ToolResult: {
@@ -1698,12 +1939,16 @@ export class SessionController {
         if (callKey && this.snap.progressByCallId[callKey]) {
           const entry = this.snap.progressByCallId[callKey];
           if (!entry.eof) {
-            this.patch({
-              progressByCallId: {
-                ...this.snap.progressByCallId,
-                [callKey]: { text: entry.text, eof: true },
-              },
-            });
+            if (this.draining) {
+              entry.eof = true;
+            } else {
+              this.patch({
+                progressByCallId: {
+                  ...this.snap.progressByCallId,
+                  [callKey]: { text: entry.text, eof: true, droppedLines: entry.droppedLines },
+                },
+              });
+            }
           }
         }
         return;
@@ -1916,11 +2161,26 @@ export class SessionController {
   }
 
   private appendTranscript(row: TranscriptRow): void {
-    this.patch({ transcript: [...this.snap.transcript, row] });
+    if (typeof row.seq === "number") this.rowSeqs.add(row.seq);
+    const isResult = row.kind === EnvelopeKind.ToolResult || row.kind === EnvelopeKind.HarnessToolResult;
+    const rKey = isResult ? (row.callKey ?? row.callId) : undefined;
+    if (this.draining) {
+      this.snap.transcript.push(row);
+      if (rKey) this.snap.resultByCallId[rKey] = row;
+    } else {
+      const resultPatch = rKey ? { resultByCallId: { ...this.snap.resultByCallId, [rKey]: row } } : {};
+      this.patch({ transcript: [...this.snap.transcript, row], ...resultPatch });
+    }
   }
 
   private patch(delta: Partial<Snapshot>): void {
     this.snap = { ...this.snap, ...delta };
+    if (!this.draining) {
+      for (const listener of this.listeners) listener(this.snap);
+    }
+  }
+
+  private notifyListeners(): void {
     for (const listener of this.listeners) listener(this.snap);
   }
 }

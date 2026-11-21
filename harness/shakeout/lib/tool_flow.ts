@@ -30,7 +30,7 @@ export function makeToolFlow(cfg: ToolFlowConfig): Flow {
       "SESSION_OPEN_REQUESTED",
       "SESSION_OPEN_ACKED",
       "TURN_SUBMITTED",
-      "STREAM_ENVELOPE_APPENDED",
+      "STREAM_BATCH_FOLDED",
       "TURN_PARKED",
     ],
     async run(): Promise<{ emitted: EmittedRecord[]; defects: Defect[] }> {
@@ -64,8 +64,9 @@ export function makeToolFlow(cfg: ToolFlowConfig): Flow {
       }
 
       // Verify the ToolCall + ToolResult envelope pair landed in the
-      // transcript. Every envelope also lands in emitted as
-      // STREAM_ENVELOPE_APPENDED, so we walk that list.
+      // transcript. We read the snapshot's transcript (sprint 532: the
+      // folded envelopes are summarised per frame as STREAM_BATCH_FOLDED,
+      // not one record per envelope, so the snapshot is the row source).
       const toolCalls = snap.transcript.filter((r) => r.kind === "ToolCall");
       const toolResults = snap.transcript.filter((r) => r.kind === "ToolResult");
       const calledOurTool = toolCalls.some((r) => {

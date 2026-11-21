@@ -131,7 +131,7 @@ def home(tmp_path: Path) -> Path:
             _rec(
                 "window",
                 3,
-                "STREAM_ENVELOPE_APPENDED",
+                "TRANSCRIPT_ROW_DRAWN",
                 "2026-11-08T10:00:03.100Z",
                 {"seq": 1, "kind": "ModelReply"},
                 window_id=1,
@@ -140,7 +140,7 @@ def home(tmp_path: Path) -> Path:
             _rec(
                 "window",
                 4,
-                "STREAM_ENVELOPE_APPENDED",
+                "TRANSCRIPT_ROW_DRAWN",
                 "2026-11-08T10:00:03.200Z",
                 {"seq": 7, "kind": "ModelReply"},
                 window_id=1,

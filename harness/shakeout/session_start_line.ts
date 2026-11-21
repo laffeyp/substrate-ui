@@ -16,7 +16,10 @@ async function firstRows(win: Page, mount: string): Promise<string[]> {
   return win.evaluate((m) => {
     const root = Array.from(document.querySelectorAll(`[data-vm-transcript-mount="${m}"]`)).find((e) => (e as HTMLElement).offsetParent !== null);
     const list = root?.firstElementChild?.firstElementChild;
-    return list ? Array.from(list.children).slice(0, 2).map((c) => (c.textContent || "").trim()) : [];
+    // The transcript is windowed (sprint 529): off-screen rows are replaced by `data-windowing-spacer`
+    // divs that sit among the content. Read the first two CONTENT children (the start line, then the
+    // first row), skipping spacers, so the check holds at any scroll position.
+    return list ? Array.from(list.children).filter((c) => !(c as HTMLElement).hasAttribute("data-windowing-spacer")).slice(0, 2).map((c) => (c.textContent || "").trim()) : [];
   }, mount);
 }
 

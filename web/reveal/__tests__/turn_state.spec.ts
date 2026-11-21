@@ -24,7 +24,37 @@ function um(seq: number, t: number, turn: number) {
 }
 
 function snap(envs: unknown[], turnFailure: { detail: string; atT: number } | null = null) {
-  return { rawEnvelopes: envs, turnFailure };
+  let lastUserMessage: unknown = null;
+  let lastTurnEnd: unknown = null;
+  let turnToolCount = 0;
+  let turnLiveToolName = "";
+  const outstanding = new Set<string>();
+  for (const e of envs) {
+    const env = e as RecordEnvelope;
+    if (env.kind === EnvelopeKind.UserMessage) {
+      lastUserMessage = env;
+      turnToolCount = 0;
+      turnLiveToolName = "";
+      outstanding.clear();
+      lastTurnEnd = null;
+    } else if (env.kind === EnvelopeKind.Park || env.kind === EnvelopeKind.Returned || env.kind === EnvelopeKind.SessionEnded) {
+      lastTurnEnd = env;
+    } else if (env.kind === EnvelopeKind.ToolCall || env.kind === EnvelopeKind.HarnessToolCall) {
+      turnToolCount++;
+      const cid = String(env.payload?.call_id ?? "");
+      outstanding.add(cid);
+      turnLiveToolName = String((env.payload as any)?.tool ?? "");
+    } else if (env.kind === EnvelopeKind.ToolResult || env.kind === EnvelopeKind.HarnessToolResult) {
+      const cid = String(env.payload?.call_id ?? "");
+      outstanding.delete(cid);
+      if (outstanding.size > 0) {
+        turnLiveToolName = [...outstanding].pop()!;
+      } else {
+        turnLiveToolName = "";
+      }
+    }
+  }
+  return { rawEnvelopes: envs, turnFailure, lastUserMessage, lastTurnEnd, turnToolCount, turnLiveToolName };
 }
 
 test("a turn with no Park and no known failure is live and pulses", () => {
@@ -43,7 +73,7 @@ test("a failed turn stops pulsing and says how it ended", () => {
   assert.ok(a);
   assert.strictEqual(a.kind, "failed");
   assert.strictEqual(a.pulseOn, false);
-  assert.match(a.restText, /^2m30s · 1 tool · ended: TimeoutError: exceeded 600\.0s$/);
+  assert.match(a.restText, /^10m00s · 1 tool · ended: TimeoutError: exceeded 600\.0s$/);
 });
 
 test("a turn sent after the failure is live again", () => {
@@ -81,7 +111,7 @@ test("tool calls that reuse a call id across turns keep their own result and pro
   const rows = c.snapshot().transcript.filter((r) => r.callId === "c5");
   const keys = rows.map((r) => r.callKey);
   assert.deepStrictEqual(keys, ["c5@10", "c5@10", "c5@50"], "each call has its own key; the result joins its call");
-  assert.deepStrictEqual(c.snapshot().progressByCallId, { "c5@50": { text: "NEW\n", eof: false } });
+  assert.deepStrictEqual(c.snapshot().progressByCallId, { "c5@50": { text: "NEW\n", eof: false, droppedLines: 0 } });
 });
 
 test("a failed turn request records the failure on the snapshot", async () => {

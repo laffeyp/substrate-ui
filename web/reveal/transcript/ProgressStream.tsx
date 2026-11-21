@@ -16,14 +16,18 @@ export const TERMINAL_MAX = 200_000;
 interface Props {
   progressText: string;
   eof: boolean;
+  droppedLines?: number;
 }
 
-const ProgressStreamInner: React.FC<Props> = ({ progressText, eof }) => {
+const ProgressStreamInner: React.FC<Props> = ({ progressText, eof, droppedLines }) => {
   return (
     <>
       <div style={{ marginTop: 8, color: "#62676f" }}>
         streaming{eof ? <span style={{ color: "#4a4e55" }}> · eof</span> : null}
       </div>
+      {(droppedLines ?? 0) > 0 ? (
+        <div style={{ color: "#62676f", fontSize: 11, padding: "2px 12px 0" }}>{droppedLines} earlier lines not shown</div>
+      ) : null}
       <div style={{
         background: "#1a1c20",
         borderRadius: 5,

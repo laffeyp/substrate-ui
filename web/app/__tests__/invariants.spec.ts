@@ -76,7 +76,7 @@ test("a reload's attach before the pane opens, and the records page switching a 
     win("TRANSCRIPT_ROW_DRAWN", { pane_id: 1, session_id: "r1", seq: 4, kind: EnvelopeKind.ModelReply }),
     win("TURN_SUBMITTED", { session_id: "r1", turn_index: 0, text_length: 5 }),
     win("SESSION_ATTACH_STARTED", { session_id: "r2" }),
-    win("TRANSCRIPT_ROW_SKIPPED", { pane_id: 1, session_id: "r2", seq: 0, kind: EnvelopeKind.RunStarted, reason: "hidden_kind" }),
+    win("TRANSCRIPT_ROWS_SKIPPED", { count: 1, reasons: { hidden_kind: 1 }, last_seq: 0 }),
     win("TRANSCRIPT_ROW_DRAWN", { pane_id: 1, session_id: null, seq: 1, kind: EnvelopeKind.UserMessage }),
     win("TURN_SUBMITTED", { session_id: "r2", turn_index: 0, text_length: 2 }),
   ]), []);
@@ -162,10 +162,9 @@ test("answers inside their windows break no timing rule", () => {
   step(5_000, win("SESSION_OPEN_REQUESTED", { driver: "deterministic", workspace: null, bundle: null }));
   step(14_800, srv("SESSION_CREATED", { session_id: "s1", driver: "deterministic", workspace_shape: "sandbox" }));
   step(14_900, win("SESSION_OPEN_ACKED", { session_id: "s1", name: null, driver: "deterministic" }));
-  step(15_000, win("STREAM_ENVELOPE_APPENDED", { seq: 7, kind: EnvelopeKind.ModelReply }));
-  step(15_100, win("STREAM_ENVELOPE_APPENDED", { seq: 8, kind: EnvelopeKind.RunStarted }));
+  step(15_000, win("STREAM_BATCH_FOLDED", { count: 2, first_seq: 7, last_seq: 8 }));
   step(15_900, win("TRANSCRIPT_ROW_DRAWN", { pane_id: 1, session_id: "s1", seq: 7, kind: EnvelopeKind.ModelReply }));
-  step(16_000, win("TRANSCRIPT_ROW_SKIPPED", { pane_id: 1, session_id: "s1", seq: 8, kind: EnvelopeKind.RunStarted, reason: "hidden_kind" }));
+  step(16_000, win("TRANSCRIPT_ROWS_SKIPPED", { count: 1, reasons: { hidden_kind: 1 }, last_seq: 8 }));
   step(16_000, win("TURN_SUBMITTED", { session_id: "s1", turn_index: 0, text_length: 5 }));
   step(24_900, srv("TURN_ACCEPTED", { session_id: "s1", turn_index: 0, attachments: 0 }));
   step(25_000, win("TURN_ACK", { session_id: "s1" }));
@@ -179,7 +178,7 @@ test("answers inside their windows break no timing rule", () => {
 test("a wait whose pane or window is gone breaks nothing", () => {
   const { c, at } = clocked();
   const seen: Broken[] = [];
-  seen.push(...c.see(win("STREAM_ENVELOPE_APPENDED", { seq: 1, kind: EnvelopeKind.ModelReply }, 2)));
+  seen.push(...c.see(win("STREAM_BATCH_FOLDED", { count: 1, first_seq: 1, last_seq: 1 }, 2)));
   seen.push(...c.see(win("PANE_CLOSED", { pane_id: 2, had_session: true }, 2)));
   seen.push(...c.see(win("SESSION_ATTACH_STARTED", { session_id: "s" }, 1)));
   seen.push(...c.see(win("TURN_SUBMITTED", { session_id: "s", turn_index: 0, text_length: 1 }, 1)));
@@ -194,7 +193,7 @@ test("each timing rule breaks once its window passes, found by tick or by the ne
   const cases: [string, Rec, number][] = [
     ["T1", main("SERVER_SPAWNED", { pid: 1, packaged: false }), 5_001],
     ["T3", main("APP_QUIT_REQUESTED", { cause: "menu" }), 45_001],
-    ["T4", win("STREAM_ENVELOPE_APPENDED", { seq: 9, kind: EnvelopeKind.ModelReply }), 1_001],
+    ["T4", win("STREAM_BATCH_FOLDED", { count: 1, first_seq: 9, last_seq: 9 }), 1_001],
     ["T5", win("SESSION_OPEN_REQUESTED", { driver: "deterministic", workspace: null, bundle: null }), 10_001],
     ["T6", win("TURN_SUBMITTED", { session_id: "s", turn_index: 0, text_length: 1 }), 10_001],
   ];
@@ -213,6 +212,60 @@ test("each timing rule breaks once its window passes, found by tick or by the ne
       assert.strictEqual(got[0].window_id, from.process === "window" ? 1 : null);
     }
   }
+});
+
+// Sprint 535: T4 is a progress watchdog, not a per-envelope wait. A pane that keeps drawing drains a
+// batched backlog without breaking it; a pane that stops drawing with rows pending breaks it once.
+test("T4: a backlog that keeps draining breaks nothing, even when a row's own draw lags past the window", () => {
+  const { c, at } = clocked();
+  const seen: Broken[] = [];
+  const step = (ms: number, r: Rec) => { at(ms); seen.push(...c.see(r)); };
+  // 20 envelopes fold in one frame batch (sprint 524/532), appended high-water seq 19 at t=0.
+  step(0, win("STREAM_BATCH_FOLDED", { count: 20, first_seq: 0, last_seq: 19 }));
+  // The backlog drains one row every 700 ms (under the 1,000 ms window) over ~14 s. Row 0 draws at
+  // t=800 (lag 800 from its append); row 5, appended at t=5, draws at t=4,300 — a >1,000 ms lag from
+  // its own append, yet no break, because the pane never stops drawing.
+  for (let i = 0; i < 20; i += 1) step(800 + i * 700, win("TRANSCRIPT_ROW_DRAWN", { pane_id: 1, session_id: null, seq: i, kind: EnvelopeKind.ModelReply }));
+  assert.ok(800 + 5 * 700 - 5 > 1_000, "row 5's draw does lag its append past the window");
+  at(200_000); seen.push(...c.tick());
+  assert.deepStrictEqual(seen.map((b) => b.rule), [], JSON.stringify(seen.map((b) => b.rule)));
+});
+
+test("T4: rows the window leaves undrawn break nothing while the latest row is drawn (sprint 529)", () => {
+  const { c, at } = clocked();
+  const seen: Broken[] = [];
+  const step = (ms: number, r: Rec) => { at(ms); seen.push(...c.see(r)); };
+  // 30 rows fold in one frame batch, appended high-water seq 29 at t=0.
+  step(0, win("STREAM_BATCH_FOLDED", { count: 30, first_seq: 0, last_seq: 29 }));
+  // The windowed transcript (sprint 529) draws the first ten and the last ten; the middle (seqs 10-19)
+  // scroll out of the DOM window and are never drawn or skipped — as 229 rows were in the W1 replay.
+  for (const i of [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29]) {
+    step(100 + i, win("TRANSCRIPT_ROW_DRAWN", { pane_id: 1, session_id: null, seq: i, kind: EnvelopeKind.ModelReply }));
+  }
+  // At rest the highest appended seq (29) is drawn, so the pane is not behind, now or ever.
+  at(1_000_000); seen.push(...c.tick());
+  assert.deepStrictEqual(seen.map((b) => b.rule), [], JSON.stringify(seen.map((b) => b.rule)));
+});
+
+test("T4: a pane with a row appended that then draws or skips nothing for its window breaks T4 once", () => {
+  const { c, at } = clocked();
+  at(1_000);
+  assert.deepStrictEqual(c.see(win("STREAM_BATCH_FOLDED", { count: 1, first_seq: 1, last_seq: 1 })), []);
+  at(1_999);
+  assert.deepStrictEqual(c.tick(), [], "inside the window");
+  at(2_001);
+  const got = c.tick();
+  assert.deepStrictEqual(got.map((b) => b.rule), ["T4"]);
+  const state = got[0].context.state as { from: Rec; waited_ms: number; within_ms: number };
+  assert.strictEqual(state.from.name, "STREAM_BATCH_FOLDED");
+  assert.ok(state.waited_ms > state.within_ms);
+  assert.strictEqual(got[0].window_id, 1);
+  at(4_000);
+  assert.deepStrictEqual(c.tick().map((b) => b.rule), [], "a persistent stall does not re-break every tick");
+  // A draw that answers the pending append clears the backlog; a later tick finds nothing.
+  at(4_100); c.see(win("TRANSCRIPT_ROW_DRAWN", { pane_id: 1, session_id: null, seq: 1, kind: EnvelopeKind.ModelReply }));
+  at(6_000);
+  assert.deepStrictEqual(c.tick().map((b) => b.rule), [], "answered: no backlog, no break");
 });
 
 // The server's records (sprint 376, vocabulary v0.22).
@@ -281,16 +334,16 @@ test("each planted break of a server pairing breaks its rule", () => {
 test("from the quit on, only the quit's own wait stays: a window's waits end and none opens", () => {
   const { c, at } = clocked();
   const seen: Broken[] = [];
-  seen.push(...c.see(win("STREAM_ENVELOPE_APPENDED", { seq: 38, kind: EnvelopeKind.SessionEnded })));
+  seen.push(...c.see(win("STREAM_BATCH_FOLDED", { count: 1, first_seq: 38, last_seq: 38 })));
   at(500);
   seen.push(...c.see(main("APP_QUIT_REQUESTED", { cause: "menu" })));
-  seen.push(...c.see(win("STREAM_ENVELOPE_APPENDED", { seq: 39, kind: EnvelopeKind.RunFinalised })));
+  seen.push(...c.see(win("STREAM_BATCH_FOLDED", { count: 1, first_seq: 39, last_seq: 39 })));
   at(20_000); seen.push(...c.tick());
   assert.deepStrictEqual(seen.map((b) => b.rule), []);
   at(46_000);
   assert.deepStrictEqual(c.tick().map((b) => b.rule), ["T3"], "the quit's own wait still breaks");
   const late = clocked();
-  late.c.see(win("STREAM_ENVELOPE_APPENDED", { seq: 1, kind: EnvelopeKind.ModelReply }));
+  late.c.see(win("STREAM_BATCH_FOLDED", { count: 1, first_seq: 1, last_seq: 1 }));
   late.at(1_500);
   assert.deepStrictEqual(late.c.see(main("APP_QUIT_REQUESTED", { cause: "menu" })).map((b) => b.rule), ["T4"], "a wait late before the quit breaks");
 });

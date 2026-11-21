@@ -107,7 +107,7 @@ async function smoke(BASE: string) {
     "STREAM_ATTACHED",
     "TURN_SUBMITTED",
     "TURN_ACK",
-    "STREAM_ENVELOPE_APPENDED",
+    "STREAM_BATCH_FOLDED",
     "TURN_PARKED",
     "SLASH_ROUTED",
     "DRIVER_PICKED",

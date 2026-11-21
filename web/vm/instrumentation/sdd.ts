@@ -53,6 +53,53 @@ let procSeq = storedSeq();
 let sendLost = 0;
 let reportingLoss = false;
 
+// The window's records go to main in batches, not one IPC per record (sprint 532). An emit pushes its
+// record here; a microtask flush sends every record emitted in the current synchronous burst — a React
+// commit that mounts a frame's worth of rows, the controller's per-frame envelope fold (sprint 524), an
+// event handler — to main in one IPC (native.signalBatch). A microtask, not a requestAnimationFrame
+// callback: the transcript's scroll anchor (web/reveal/transcript/useScrollAnchor.ts) tells its own
+// programmatic scrolls from the user's by counting animation frames (its own-write window lasts two
+// frames), and a competing rAF perturbs that timing and drops the follow-the-bottom state on a long
+// session (the W1 gate). A microtask runs at the end of the task, before the next frame's rendering and
+// scroll steps, so it coalesces the sends without touching frame timing. Without queueMicrotask (node
+// tests) each record is sent synchronously, as before.
+const pendingNative: SignalRecord[] = [];
+let nativeFlushScheduled = false;
+
+function scheduleNativeFlush(): void {
+  if (typeof queueMicrotask === "function") {
+    if (!nativeFlushScheduled) { nativeFlushScheduled = true; queueMicrotask(() => { nativeFlushScheduled = false; flushNative(); }); }
+  } else {
+    flushNative();
+  }
+}
+
+// Send every pending record to main and account for losses. The batch IPC (native.signalBatch) is one
+// send: if it throws (a record main cannot receive) the whole batch is lost. The per-record fallback
+// (native.signal) counts each refused record on its own. Either way the count is kept, and the next
+// send that lands is followed by a TRACE_LOST with it, so a lost record is never silent. A failed send
+// never stops an emit.
+function flushNative(): void {
+  if (typeof window === "undefined" || pendingNative.length === 0) { pendingNative.length = 0; return; }
+  const native = (window as unknown as { native?: { signal?: (r: SignalRecord) => void; signalBatch?: (r: SignalRecord[]) => void } }).native;
+  if (!native?.signal && !native?.signalBatch) { pendingNative.length = 0; return; }
+  const batch = pendingNative.splice(0, pendingNative.length);
+  let sentAny = false;
+  if (native.signalBatch) {
+    try { native.signalBatch(batch); sentAny = batch.length > 0; } catch { sendLost += batch.length; }
+  } else {
+    for (const r of batch) {
+      try { native.signal!(r); sentAny = true; } catch { sendLost += 1; }
+    }
+  }
+  if (sentAny && sendLost > 0 && !reportingLoss) {
+    const count = sendLost;
+    sendLost = 0;
+    reportingLoss = true;
+    try { emit(Signal.TRACE_LOST, { process: TraceLostProcess.WINDOW, count }); } finally { reportingLoss = false; }
+  }
+}
+
 export function emit<K extends Signal>(name: K, payload: SignalPayloads[K], context: { pane_id?: number | null } = {}): SignalRecord {
   const spec = VOCABULARY[name];
   const record: SignalRecord = {
@@ -71,18 +118,11 @@ export function emit<K extends Signal>(name: K, payload: SignalPayloads[K], cont
     (window as unknown as { __vmSignals: SignalRecord[] }).__vmSignals = buffer;
     // The trace on disk (v0.7, plan 2026-11-05-sdd-signals item 2): inside Electron each record also
     // goes to main, which writes it to this launch's window-<id>.jsonl with the boot and window ids.
-    // A send that throws is counted, and the next send that works is followed by a TRACE_LOST with
-    // the count, so a lost record is never silent. A failed send never stops an emit.
-    const native = (window as unknown as { native?: { signal?: (r: SignalRecord) => void } }).native;
-    if (native?.signal) {
-      let sent = false;
-      try { native.signal(record); sent = true; } catch { sendLost += 1; }
-      if (sent && sendLost > 0 && !reportingLoss) {
-        const count = sendLost;
-        sendLost = 0;
-        reportingLoss = true;
-        try { emit(Signal.TRACE_LOST, { process: TraceLostProcess.WINDOW, count }); } finally { reportingLoss = false; }
-      }
+    // The send is deferred to the next frame's batch flush (sprint 532).
+    const native = (window as unknown as { native?: { signal?: (r: SignalRecord) => void; signalBatch?: (r: SignalRecord[]) => void } }).native;
+    if (native?.signal || native?.signalBatch) {
+      pendingNative.push(record);
+      scheduleNativeFlush();
     }
   }
   return record;

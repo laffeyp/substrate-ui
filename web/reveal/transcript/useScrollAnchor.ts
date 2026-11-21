@@ -35,6 +35,7 @@ import { emit as emitSignal } from "../../vm/instrumentation/sdd";
 export interface ScrollAnchor {
   registerRow: (seq: number, element: HTMLElement | null) => void;
   attachTo: (mount: HTMLElement | null) => void;
+  scrollerRef: { readonly current: HTMLElement | null };
 }
 
 // Distance from the bottom, in px, that still counts as "at the bottom" (shared with the stream).
@@ -66,6 +67,7 @@ export function useScrollAnchor(key: string, paneId: number): ScrollAnchor {
   // the bottom, written while following, matched the user's scroll back to the bottom, which then
   // read as the hook's own; transcript_follow failed its switch step about one run in five).
   const ownWritesRef = useRef<Map<number, number>>(new Map());
+  const rafIdRef = useRef<number | null>(null);
   // The scrollTop this hook last wrote or read. A different one at settle time is the user's
   // scroll, its event not yet dispatched: settle reads it first rather than writing over it
   // (2026-10-14: a render in the same frame as a scroll to the bottom held the old reading place
@@ -189,6 +191,14 @@ export function useScrollAnchor(key: string, paneId: number): ScrollAnchor {
     report(cause);
   }, [place, report]);
 
+  const scheduleSettle = useCallback((cause: ScrollCause) => {
+    if (rafIdRef.current !== null) return;
+    rafIdRef.current = requestAnimationFrame(() => {
+      rafIdRef.current = null;
+      settle(cause);
+    });
+  }, [settle]);
+
   const onScroll = useCallback(() => {
     const scroller = scrollerRef.current;
     if (!scroller || scroller.clientHeight === 0) return; // hidden: keep the saved state
@@ -245,7 +255,7 @@ export function useScrollAnchor(key: string, paneId: number): ScrollAnchor {
         report(TranscriptScrolledCause.VIEW_SWITCH);
         return;
       }
-      settle(TranscriptScrolledCause.RESIZED);
+      scheduleSettle(TranscriptScrolledCause.RESIZED);
     });
     observer.observe(scroller);
     observer.observe(mount);
@@ -253,16 +263,16 @@ export function useScrollAnchor(key: string, paneId: number): ScrollAnchor {
       scroller.removeEventListener("scroll", onScroll);
       mount.removeEventListener("click", onClick, true);
       observer.disconnect();
+      if (rafIdRef.current !== null) { cancelAnimationFrame(rafIdRef.current); rafIdRef.current = null; }
     };
-  }, [findScroller, key, onScroll, place, report, settle, updateAnchor, write]);
+  }, [findScroller, key, onScroll, place, report, scheduleSettle, settle, updateAnchor, write]);
 
-  // Every commit (new rows, streaming text) settles before paint.
-  useLayoutEffect(() => { settle(TranscriptScrolledCause.ROW_ARRIVED); });
+  useLayoutEffect(() => { scheduleSettle(TranscriptScrolledCause.ROW_ARRIVED); });
 
   const registerRow = useCallback((seq: number, element: HTMLElement | null) => {
     if (element) rowRefs.current.set(seq, element);
     else rowRefs.current.delete(seq);
   }, []);
 
-  return { registerRow, attachTo };
+  return { registerRow, attachTo, scrollerRef };
 }

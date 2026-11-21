@@ -17,7 +17,7 @@ export const flow: Flow = {
   declared: [
     "SESSION_ATTACH_STARTED",
     "STREAM_ATTACHED",
-    "STREAM_ENVELOPE_APPENDED",
+    "STREAM_BATCH_FOLDED",
   ],
   async run(): Promise<{ emitted: EmittedRecord[]; defects: Defect[] }> {
     const driver = await sessionDriver(BASE_URL);
@@ -58,19 +58,24 @@ export const flow: Flow = {
     await new Promise((r) => setTimeout(r, 2500));
 
     const defects: Defect[] = [];
-    const appendCount = emitted.filter((e) => e.tag === "STREAM_ENVELOPE_APPENDED").length;
+    // Sprint 532: the controller folds its stream per frame and emits one STREAM_BATCH_FOLDED per
+    // batch with the count; the envelope count is the sum. The per-envelope kinds are read from the
+    // snapshot (rawEnvelopes), the controller's own record of what it folded.
+    const appendCount = emitted
+      .filter((e) => e.tag === "STREAM_BATCH_FOLDED")
+      .reduce((n, e) => n + (typeof e.payload.count === "number" ? e.payload.count : 0), 0);
     if (appendCount < 3) {
       defects.push({
         category: "attach_replays_too_little",
-        observed: `attachExisting appended ${appendCount} envelopes`,
+        observed: `attachExisting folded ${appendCount} envelopes`,
         expected: "at least UserMessage + ModelReply + Park from the opener turn",
         reproduces: true,
         severity: "high",
       });
     }
     const kinds = new Set<string>();
-    for (const e of emitted) {
-      if (e.tag === "STREAM_ENVELOPE_APPENDED") kinds.add(String(e.payload.kind));
+    for (const env of controller.snapshot().rawEnvelopes) {
+      if (env && typeof env.kind === "string") kinds.add(env.kind);
     }
     if (!kinds.has("UserMessage") || !kinds.has("ModelReply")) {
       defects.push({

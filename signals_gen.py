@@ -5,7 +5,7 @@ Regenerate: python3 scripts/gen_signals.py. tests/test_signals_generated.py fail
 
 from enum import StrEnum
 
-VOCAB_VERSION = "0.73"
+VOCAB_VERSION = "0.76"
 
 
 class Signal(StrEnum):
@@ -29,7 +29,7 @@ class Signal(StrEnum):
     STREAM_ATTACHED = "STREAM_ATTACHED"
     STREAM_CLOSED = "STREAM_CLOSED"
     STREAM_RECONNECTING = "STREAM_RECONNECTING"
-    STREAM_ENVELOPE_APPENDED = "STREAM_ENVELOPE_APPENDED"
+    STREAM_BATCH_FOLDED = "STREAM_BATCH_FOLDED"
     SESSIONS_LOADED = "SESSIONS_LOADED"
     CHILD_RECORD_ATTACH_REQUESTED = "CHILD_RECORD_ATTACH_REQUESTED"
     TOPOLOGY_LOADED = "TOPOLOGY_LOADED"
@@ -78,7 +78,7 @@ class Signal(StrEnum):
     LENS_CHANGED = "LENS_CHANGED"
     TRANSCRIPT_ROW_DRAWN = "TRANSCRIPT_ROW_DRAWN"
     TRANSCRIPT_CHIPS_DRAWN = "TRANSCRIPT_CHIPS_DRAWN"
-    TRANSCRIPT_ROW_SKIPPED = "TRANSCRIPT_ROW_SKIPPED"
+    TRANSCRIPT_ROWS_SKIPPED = "TRANSCRIPT_ROWS_SKIPPED"
     WORKSPACE_ADDED = "WORKSPACE_ADDED"
     CONTROLS_PICKED = "CONTROLS_PICKED"
     SESSION_RENAMED = "SESSION_RENAMED"
@@ -106,6 +106,9 @@ class Signal(StrEnum):
     WINDOW_UNRESPONSIVE = "WINDOW_UNRESPONSIVE"
     WINDOW_RESPONSIVE = "WINDOW_RESPONSIVE"
     CHILD_PROCESS_GONE = "CHILD_PROCESS_GONE"
+    RENDERER_RECOVERY_OFFERED = "RENDERER_RECOVERY_OFFERED"
+    RENDERER_RECOVERY_CHOSEN = "RENDERER_RECOVERY_CHOSEN"
+    WINDOW_REOPENED = "WINDOW_REOPENED"
     RUN_FAULTED = "RUN_FAULTED"
     SERVER_UNCAUGHT = "SERVER_UNCAUGHT"
     STREAM_DIRECTION_SET = "STREAM_DIRECTION_SET"
@@ -420,6 +423,20 @@ class TraceLostProcess(StrEnum):
     SERVER = "server"
 
 
+class SignalRejectedProcess(StrEnum):
+    MAIN = "main"
+    WINDOW = "window"
+    SERVER = "server"
+
+
+class SignalRejectedProblem(StrEnum):
+    UNKNOWN_TAG = "unknown_tag"
+    MISSING_FIELD = "missing_field"
+    EXTRA_FIELD = "extra_field"
+    WRONG_TYPE = "wrong_type"
+    OUT_OF_RANGE = "out_of_range"
+
+
 class RecordOpenedHow(StrEnum):
     OPEN_RECORD = "open_record"
     DEEP_LINK = "deep_link"
@@ -515,6 +532,23 @@ class ChildProcessGoneReason(StrEnum):
     LAUNCH_FAILED = "launch_failed"
     INTEGRITY_FAILURE = "integrity_failure"
     MEMORY_EVICTION = "memory_eviction"
+
+
+class RendererRecoveryOfferedReason(StrEnum):
+    CLEAN_EXIT = "clean_exit"
+    ABNORMAL_EXIT = "abnormal_exit"
+    KILLED = "killed"
+    CRASHED = "crashed"
+    OOM = "oom"
+    LAUNCH_FAILED = "launch_failed"
+    INTEGRITY_FAILURE = "integrity_failure"
+    MEMORY_EVICTION = "memory_eviction"
+
+
+class RendererRecoveryChosenAction(StrEnum):
+    REOPEN = "reopen"
+    REOPEN_EMPTY = "reopen_empty"
+    CLOSE = "close"
 
 
 class StreamDirectionSetDirection(StrEnum):

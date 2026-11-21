@@ -11,10 +11,10 @@ import { Signal } from "../../vm/signals.gen";
 
 test("past the cap the oldest signals go, in order", () => {
   clearBuffer();
-  for (let i = 0; i < SIGNAL_CAP + 25; i++) emit(Signal.STREAM_ENVELOPE_APPENDED, { seq: i, kind: "x" });
+  for (let i = 0; i < SIGNAL_CAP + 25; i++) emit(Signal.STREAM_BATCH_FOLDED, { count: 1, first_seq: i, last_seq: i });
   const kept = snapshot();
   assert.strictEqual(kept.length, SIGNAL_CAP);
-  assert.strictEqual(kept[0].payload.seq, 25);
-  assert.strictEqual(kept[kept.length - 1].payload.seq, SIGNAL_CAP + 24);
+  assert.strictEqual(kept[0].payload.last_seq, 25);
+  assert.strictEqual(kept[kept.length - 1].payload.last_seq, SIGNAL_CAP + 24);
   clearBuffer();
 });

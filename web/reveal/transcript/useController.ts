@@ -56,6 +56,13 @@ const EMPTY_SNAPSHOT: Snapshot = {
   topologyGraph: null,
   rawEnvelopes: [],
   progressByCallId: {},
+  envelopeCount: 0,
+  writeCount: 0,
+  resultByCallId: {},
+  lastUserMessage: null,
+  lastTurnEnd: null,
+  turnToolCount: 0,
+  turnLiveToolName: "",
 };
 
 export function useController(paneId: number): Snapshot {

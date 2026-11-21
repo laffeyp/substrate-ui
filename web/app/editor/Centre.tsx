@@ -30,7 +30,6 @@ const editor = shownEditor;
 import { emit as emitSignal } from "../../vm/instrumentation/sdd";
 import { ContextMenuOpenedSource, DiffReadBase, EditorChipAddedHow, EditorConflictResolvedChoice, EditorFileOpenedHow, EditorFileSavedCommand, EditorGroupClosedHow, EditorGroupOpenedDir, EditorGroupOpenedHow, EditorKeyRefusedReason, EditorLinkFollowedView, EditorMarkdownShownForm, EditorReplacedScope, Signal, UndoRoutedTo } from "../../vm/signals.gen";
 import { isolateHistory, redo, redoDepth, undo, undoDepth } from "@codemirror/commands";
-import { EnvelopeKind } from "../../vm/envelope_kinds.gen";
 import { sendCommand, shell } from "../state/shell";
 import { settings, type Binding } from "../state/settings";
 import { bindingExtension, type BindingHooks } from "./bindings";
@@ -722,8 +721,7 @@ export function Centre({ paneId, sessionId, tabRow, group = 1 }: { paneId: numbe
   const [facts, setFacts] = React.useState<{ path: string; file: FileFacts } | null>(null);
   // The record's tool results and hand writes: when one lands, the open file is read again (sprint 422),
   // so the centre and the inspector never describe a file the session has since changed.
-  const writes = React.useSyncExternalStore(shell.subscribe, shell.getSnapshot, shell.getSnapshot).snapshots[paneId]?.rawEnvelopes
-    ?.filter((e) => e.kind === EnvelopeKind.ToolResult || e.kind === EnvelopeKind.FileWritten).length ?? 0;
+  const writes = React.useSyncExternalStore(shell.subscribe, shell.getSnapshot, shell.getSnapshot).snapshots[paneId]?.writeCount ?? 0;
 
   const unsaved = (rel: string | null) => !!rel && editor.getSnapshot().unsaved.includes(rel);
   const markUnsaved = (rel: string, on: boolean) => {

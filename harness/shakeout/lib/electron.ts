@@ -66,6 +66,22 @@ export function launchArgs(opts: { roster?: "offline" | "live"; csp?: "bypass" |
   };
 }
 
+/** Read a JSONL file line by line without building one giant string. A streaming window trace can
+ *  exceed V8's ~512 MB string limit, so `readFileSync(file, "utf8").split("\n")` throws
+ *  ERR_STRING_TOO_LONG; reading the file as a Buffer and slicing on newline bytes decodes one line at
+ *  a time instead. */
+export function forEachJsonlLine(file: string, fn: (line: string) => void): void {
+  const buf = readFileSync(file);
+  let start = 0;
+  for (let i = 0; i < buf.length; i++) {
+    if (buf[i] === 0x0a) {
+      if (i > start) fn(buf.toString("utf8", start, i));
+      start = i + 1;
+    }
+  }
+  if (start < buf.length) fn(buf.toString("utf8", start, buf.length));
+}
+
 /** Every INVARIANT_BROKEN in a launch's main.jsonl files, as "rule state" lines. */
 function brokenRules(state: string): string[] {
   const traces = join(state, "electron", "logs", "traces");
@@ -74,12 +90,12 @@ function brokenRules(state: string): string[] {
   for (const boot of readdirSync(traces)) {
     const file = join(traces, boot, "main.jsonl");
     if (!existsSync(file)) continue;
-    for (const line of readFileSync(file, "utf8").split("\n")) {
-      if (!line.includes('"INVARIANT_BROKEN"')) continue;
+    forEachJsonlLine(file, (line) => {
+      if (!line.includes('"INVARIANT_BROKEN"')) return;
       const p = (JSON.parse(line) as { payload: { rule: string; context: { state: unknown; recent: { name: string; process: string; pane_id?: number | null; payload?: Record<string, unknown> }[] } } }).payload;
       const last = p.context.recent.slice(-8).map((r) => `${r.process}${r.pane_id != null ? ":" + r.pane_id : ""} ${r.name}${r.payload?.seq !== undefined ? " seq=" + String(r.payload.seq) : ""}`).join(", ");
       out.push(`${p.rule} ${JSON.stringify(p.context.state).slice(0, 300)}; last records: ${last}`);
-    }
+    });
   }
   return out;
 }

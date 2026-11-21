@@ -68,6 +68,10 @@ async function main(): Promise<void> {
     const { session_id: sid } = await (await post("/api/session", { driver: "deterministic", workspace: ws.root, driver_params: { script } })).json() as { session_id: string };
     await win.evaluate(`(function () { var vm = window.__vm; return (vm.get(1) || vm.spawn(1)).attachExisting(${JSON.stringify(sid)}); })()`);
     await win.waitForFunction(`window.__vm.get(1).snapshot().sessionId === ${JSON.stringify(sid)}`, undefined, { timeout: 15_000 });
+    // This gate reads every tool summary at once. The transcript is windowed (sprint 529), so off-screen
+    // rows are spacers, not DOM nodes; render every row for this gate (windowing is proven under load by
+    // long_session_open, W1).
+    await win.evaluate("window.__noTranscriptWindowing = true");
     if (!(await post(`/api/session/${sid}/turn`, { text: "run four commands" })).ok) throw new Error("the turn was refused");
     await win.waitForFunction("window.__vm.get(1).snapshot().parkReason", undefined, { timeout: 30_000 });
     await win.waitForFunction(() => document.querySelectorAll("[data-tool-summary]").length >= 6, undefined, { timeout: 15_000 });

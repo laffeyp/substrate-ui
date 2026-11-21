@@ -173,14 +173,17 @@ async function main(): Promise<void> {
       throw new Error(`S7: SESSION_CREATED ${JSON.stringify(created.map((r) => r.payload))} vs SESSION_OPEN_ACKED ${JSON.stringify(acked.map((r) => r.payload))}`);
     }
     const sid = created[0].payload?.session_id;
-    // T4 (sprint 358): every entry the pane received is drawn or skipped, same pane and seq, within 1 s.
-    const wallMs = (r: Rec & { wall?: string }) => Date.parse(String((r as { wall?: string }).wall));
-    const appended = recs.filter((r) => r.name === "STREAM_ENVELOPE_APPENDED");
-    const settled = recs.filter((r) => r.name === "TRANSCRIPT_ROW_DRAWN" || r.name === "TRANSCRIPT_ROW_SKIPPED");
-    const unsettled = appended.filter((a) => !settled.some((d) => d.payload?.seq === a.payload?.seq && d.payload?.pane_id === a.pane_id && wallMs(d) - wallMs(a) <= 1000));
-    if (!appended.length || unsettled.length) throw new Error(`T4: ${unsettled.length} of ${appended.length} received entries neither drawn nor skipped within 1 s: ${JSON.stringify(unsettled.map((r) => r.payload))}`);
-    const reply = appended.find((r) => r.payload?.kind === "ModelReply");
-    if (!reply || !settled.some((d) => d.name === "TRANSCRIPT_ROW_DRAWN" && d.payload?.seq === reply.payload?.seq && d.payload?.session_id === sid)) throw new Error("the reply was received but not drawn");
+    // T4 (sprint 358; sprint 532 reads the batched tags): every seq the pane folded is drawn or
+    // skipped. The appended high-water is the greatest STREAM_BATCH_FOLDED.last_seq; the answered
+    // high-water is the greatest TRANSCRIPT_ROW_DRAWN.seq or TRANSCRIPT_ROWS_SKIPPED.last_seq. At rest
+    // the pane has caught up, so answered >= appended.
+    const maxOf = (rs: Rec[], field: string) => rs.reduce((m, r) => { const v = Number(r.payload?.[field]); return Number.isFinite(v) && v > m ? v : m; }, -1);
+    const batches = recs.filter((r) => r.name === "STREAM_BATCH_FOLDED");
+    const drawnRows = recs.filter((r) => r.name === "TRANSCRIPT_ROW_DRAWN");
+    const appendedHigh = maxOf(batches, "last_seq");
+    const answeredHigh = Math.max(maxOf(drawnRows, "seq"), maxOf(recs.filter((r) => r.name === "TRANSCRIPT_ROWS_SKIPPED"), "last_seq"));
+    if (!batches.length || answeredHigh < appendedHigh) throw new Error(`T4: appended high-water seq ${appendedHigh} (${batches.length} batch summaries) left unanswered (drawn/skipped high-water ${answeredHigh})`);
+    if (!drawnRows.some((d) => d.payload?.kind === "ModelReply" && d.payload?.session_id === sid)) throw new Error("the reply was received but not drawn");
     const accepted = server.filter((r) => r.name === "TURN_ACCEPTED");
     const turnAcks = recs.filter((r) => r.name === "TURN_ACK");
     if (accepted.length !== 1 || accepted[0].payload?.session_id !== sid || accepted[0].payload?.turn_index !== 0 || turnAcks.length !== 1 || turnAcks[0].payload?.session_id !== sid) {
@@ -195,7 +198,7 @@ async function main(): Promise<void> {
     if (!drawn.some((r) => r.proc_seq > ackSeq && r.payload?.turn_state === "parked" && r.payload?.connection === "connected")) {
       throw new Error(`PANE_DRAWN: pane 1 not drawn parked after TURN_ACK on ${String(sid)}: ${JSON.stringify(drawn.map((r) => [r.proc_seq, r.payload?.connection, r.payload?.turn_state]))}`);
     }
-    console.log(`trace_files: ok — ${traceDir}: main ${main.length} lines (APP_BOOTED … APP_QUIT_COMPLETED), server ${server.length} (SERVER_STARTED … SERVER_STOPPED), ${winFiles[0]} ${recs.length} lines, PICKER_FOLDER_ARMED present, session ${String(sid)} created and acked, turn 0 accepted and acked, ${appended.length} received entries each drawn or skipped (T4)`);
+    console.log(`trace_files: ok — ${traceDir}: main ${main.length} lines (APP_BOOTED … APP_QUIT_COMPLETED), server ${server.length} (SERVER_STARTED … SERVER_STOPPED), ${winFiles[0]} ${recs.length} lines, PICKER_FOLDER_ARMED present, session ${String(sid)} created and acked, turn 0 accepted and acked, appended high-water seq ${appendedHigh} over ${batches.length} batch summaries each drawn or skipped (T4)`);
     code = 0;
   } catch (e) {
     console.error(`trace_files: FAIL — ${(e as Error).message}${traceDir ? ` (${traceDir})` : ""}`);

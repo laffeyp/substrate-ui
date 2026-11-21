@@ -1,0 +1,69 @@
+# Research — the editor, feature by feature: install, lift, or build our own (round 2)
+
+*2026-11-20. Supersedes round 1 (`superseded/RESEARCH-2026-11-20-vscode-integration-r1.md`), which framed the question as "swap our editor for VS Code's" and answered feasibility. The real question is narrower and more useful: for each capability the ⌘⇧E editor needs, do we install a package, lift specific code, or build the slice ourselves — using VS Code's and CodeMirror's source as a quarry to read, not a product to adopt. Both are MIT; the shipped Microsoft VS Code binary is proprietary, so every lift here is from the repositories, never the product. Written during the 2026-11-18 freeze: these are findings, not a build order.*
+
+---
+
+## The answer
+
+The editor already splits the right way, and it was mostly built, not installed. Two capabilities stay installed because owning them is foolish. Everything that touches a file, a pane, or the agent is already ours, built on top, and reading the reference implementations confirms that was the correct call — not one of those VS Code subsystems detaches from its service layer, and the one liftable widget drags the whole non-React `vs/base` engine with it.
+
+The research turned up no capability where we should swap to a VS Code or CodeMirror subsystem. It turned up four concrete changes worth making and one product choice, all of them "read their code, write our own," none of them "adopt their component." Those are gathered at the end.
+
+## What stays installed, and why owning it would be foolish
+
+**The text-editing engine** — `@codemirror/state` + `@codemirror/view`. The document model, the cursor and selection, and the trick of rendering only the lines in view while tracking the height of the whole file. Both VS Code and CodeMirror work this way — the full document lives in memory, only the drawing is virtualized — and both took years to get the edge cases right. The hard, correctness-critical algebra the rest of the editor leans on (change inversion, composition, position-mapping) lives in `@codemirror/state`'s `ChangeSet`, which the editor cannot drop; its document model *is* `ChangeSet`. VERDICT: **install.** Not negotiable.
+
+**The language grammars** — `@codemirror/language`, `@codemirror/language-data` (143 of them), the `lang-*` packages, `@codemirror/legacy-modes`, `@lezer/highlight`. A grammar is enormous, generic, and shared; these are mature incremental parsers. VS Code solves this no better — same class of thing, done through TextMate and language servers. VERDICT: **install.** Never write a grammar cold.
+
+## The capabilities we build, checked against the references
+
+**In-file find and replace.** Today the editor uses CodeMirror's `@codemirror/search` match engine but draws its own fields, not the package's panel. The read confirms this is right: the match engine (`SearchCursor`, `RegExpCursor`, `SearchQuery`) is ~400 lines of Unicode-cluster, surrogate, and multiline edge-handling that matches chunk-by-chunk so a large file is never copied, and it is already decoupled from the panel. Re-owning it buys nothing. One gap: case-preserving replace (type `foo`, replace with `Bar`, each hit keeps its own capitalization) exists in neither CodeMirror nor our find — it is a VS Code feature, ours to write if wanted. VERDICT: **keep the package's match engine; build case-preserving replace ourselves if the feature is wanted.**
+
+**File-by-name / quick open.** Today a Python backend walks the workspace and the renderer shows the list. The read found VS Code's fuzzy ranking — the thing that makes its quick-open feel right — is a self-contained recipe in `fuzzyScorer.ts`: a dynamic-programming match with a ~40-line bonus table (first-three-consecutive, start-of-name, after a `/`, after `_ - . space`, camelCase humps). A workspace file list is a few thousand strings, not megabytes; matching it is pure in-memory string scoring, so the Python round-trip adds latency for no benefit. VERDICT: **build our own in the renderer, porting the `fuzzyScorer.ts` weight table; drop quick-open from the backend.**
+
+**Workspace text search.** Today a Python `re` walk re-implements `.gitignore` matching. The read is blunt: VS Code's search is not its TypeScript — that file is glue — it shells out to the bundled `ripgrep` binary, which does ignore-handling, encoding, multiline, and auto-PCRE2 natively and far faster. A Python `re` crawl loses on speed and gitignore fidelity the moment a workspace is large. VERDICT: **keep a backend, swap the engine to a bundled `ripgrep`** (`@vscode/ripgrep`, MIT, or ship `rg`); read `ripgrepTextSearchEngine.ts` only for the flag list (`--hidden --no-require-git --json --crlf`, `-g` globs, `--engine auto`) and the JSON-parse shape — ~150 lines of parse glue, not the 1000-line wrapper.
+
+**Undo and redo, and the default keymap.** Today both come from `@codemirror/commands`. The read makes the keep-it case specific, not lazy: the correctness-critical part of undo — inversion, coalescing fast edits into one step, mapping event positions past an out-of-band edit — rides on `@codemirror/state`, which the editor keeps anyway; `history.ts` is a thin, well-factored state machine over it. The routed-undo design (CodeMirror's buffer undo while the file is dirty, then step the agent HISTORY) is already built on the package's public facets (`isolateHistory`, `invertedEffects`, `addToHistory`, `undoDepth`) — exactly the control points a custom routing layer wants. The default keymap's editor-grade commands (auto-indent on Enter, `selectParentSyntax`, comment-toggle, bracket-matching) are welded to `@codemirror/language` + Lezer, which the editor keeps for highlighting; and the keymap is already *data* we override per key, as `bindings.ts` does for nano. VERDICT: **keep `@codemirror/commands` for both.** MIT, so vendor-to-patch stays open if one behavior ever needs a tweak.
+
+**Diff against `main`, drawn inline.** Today a Python backend runs `git diff` per file and the editor renders hunks with CodeMirror decorations. The read confirms both halves. The rendering is already the model VS Code uses — decorations keyed to line ranges, a widget for the removed-line block — so there is nothing to lift. The algorithm is Myers whether we write it or borrow it, and `git diff` is already Myers-family, so computing hunks ourselves buys nothing for a baseline-vs-HEAD view. One reframe, which is a product choice not a library one: VS Code's inline diff is not a `git diff` shell-out — it holds git's copy of the file and re-diffs it against the live buffer in a worker on every keystroke, debounced 200 ms, so the marks move as you type. Ours re-reads on save. VERDICT: **keep the backend `git diff` and the CodeMirror decorations.** The only case that justifies lifting VS Code's `diff.ts` (one self-contained MIT file plus four helpers, fed line arrays) is if live-as-you-type hunks become a requirement — a `git diff` per keystroke would be the wrong tool for that.
+
+**Very large files.** Today a hand-written lines view pages a giant file from the backend in 1,000-line blocks and a "whole line" reader wraps a multi-megabyte single line. The read validates it: neither VS Code nor CodeMirror streams a file from disk — both load the whole document into memory and virtualize only the drawing, and VS Code hard-throws past 256M characters and kills tokenization past 20 MB. Our pager is the only one of the three that avoids holding the whole file in RAM, and it targets exactly the long-single-line case both engines name as their weak point. VERDICT: **keep the pager; name the handoff threshold explicitly** (the point where the editor hands a file from CodeMirror to the lines view), aligned to VS Code's documented 20 MB / 300K-line figures.
+
+**The outline.** Today the inspector derives symbols by walking CodeMirror's Lezer parse tree. The read confirms the architecture is right for us — VS Code's outline leans on a language server we deliberately do not run (D53), and our in-process tree walk is the same syntactic derivation without the extra process. But our walk is narrow: it stops at class-then-method depth (a function inside a function never appears, because the walk returns early on a function node) and knows five kinds. VERDICT: **keep the Lezer walk, widen it** — recurse into functions for arbitrary nesting, and add the kinds the languages actually have (TypeScript `interface`, `enum`, `type`, top-level `const`), whose Lezer node names already exist. VS Code's 26-value `SymbolKind` enum is the menu of what is worth surfacing.
+
+**The file tree and the tabs.** CodeMirror ships neither, and VS Code publishes no standalone package, so "install" is off the table. The read found both VS Code subsystems bound tight to its dependency-injection and workbench services — the explorer's data source alone demands eight `@IService` tokens, the tab control fourteen — and the one layer that is not DI-bound, the `vs/base` tree-and-list widget, is thousands of lines of imperative self-rendering DOM that would need a React wrapper around an engine that draws itself. Our tree already does the same lazy-resolve-and-cache the VS Code explorer does; our unsaved-dot already reflects buffer state the way VS Code's tab reflects `isDirty()`. VERDICT: **build our own — already done, and correct.** Three mechanisms are worth reading (not copying) if the tree ever grows: lazy resolve-and-cache (`explorerModel.ts`), find-in-closed-folders done as a workspace file-search that splices placeholder nodes in rather than a recursive walk (`explorerViewer.ts`), and git status delivered as a decoration-service entry decoupled from the tree, not computed by the explorer.
+
+## The capabilities that were never a library question
+
+These touch the pane or the agent, so no reference component applies; they are ours and stay ours.
+
+- **Vim bindings** — `@replit/codemirror-vim`, a full modal editor. High effort to own, low value, since users want a faithful vim. VERDICT: **install; never rewrite.**
+- **Nano bindings** — ~50 hand-written lines in `bindings.ts`, because nano is tiny. VERDICT: **ours, keep.**
+- **The agent-following** — mark the lines a tool call will hit, confirm or withdraw at the result, keep the person's focus. This is the reason the editor exists, and no editor library has it. VERDICT: **ours; the one thing nothing external offers.**
+- **Save, the stale-write guard, save-before-send; encodings and line endings** — these live in our file API and the save path, not in an editor library. VERDICT: **ours.**
+- **Markdown render toggle, the selection-to-message chip, the status line, the inspector sections** — product surfaces built on the core. VERDICT: **ours.**
+
+## What actually falls out of this
+
+Five things, in rough order of payoff. All are "read their code, write our own," none is "adopt their component." All wait on the freeze lifting.
+
+1. **Workspace text search → a bundled `ripgrep`.** Drop the Python `re` + hand-rolled `.gitignore` walk. Biggest correctness and speed gain; the current walk degrades on any large workspace.
+2. **Quick-open fuzzy match → the renderer.** Port VS Code's `fuzzyScorer` weight table; drop the Python round-trip. Better ranking, lower latency, one fewer backend path.
+3. **Outline → recurse and widen the kinds.** A small change to the tree walk for arbitrary nesting plus TypeScript `interface`/`enum`/`type`/`const`.
+4. **Large-file handoff → an explicit, documented threshold** aligned to VS Code's 20 MB / 300K lines.
+5. **Product choice: live-as-you-type diff.** Only if wanted. If so, lift `diff.ts` and diff the buffer against a cached git-original in a worker; do not run `git diff` per keystroke. Case-preserving replace is a second optional build, since no reference has it.
+
+## The rule
+
+Install only the two hard, generic things: the editing engine and the grammars. Build everything that touches a file, a pane, or the agent, reading VS Code's and CodeMirror's source as the reference that saves us from solving it cold. Lift actual code only when a piece is both self-contained and not worth re-deriving — which, across every capability read here, it never quite was. Any new capability follows the same rule: language intelligence, if it is ever wanted, rides on LSP attached to the editor already in the window, not on adopting a VS Code subsystem.
+
+---
+
+## Sources
+
+Reference source read this round (all MIT; read from the repositories, not the shipped product):
+
+- CodeMirror — `@codemirror/search` (`src/cursor.ts`, `src/regexp.ts`, `src/search.ts`); `@codemirror/commands` (`src/history.ts`, `src/commands.ts`); the viewport/large-document notes in the CodeMirror 6 guide.
+- VS Code (`microsoft/vscode`) — `src/vs/base/common/fuzzyScorer.ts`; `src/vs/workbench/services/search/node/ripgrepTextSearchEngine.ts`; `src/vs/base/common/diff/diff.ts` and `src/vs/editor/common/diff/defaultLinesDiffComputer/`; `src/vs/workbench/contrib/scm/browser/quickDiffDecorator.ts` and `quickDiffModel.ts`; `src/vs/editor/common/model/textModel.ts`; `src/vs/editor/contrib/documentSymbols/browser/outlineModel.ts` and `src/vs/editor/common/languages.ts`; `src/vs/workbench/contrib/files/browser/views/explorerViewer.ts`, `explorerModel.ts`, `explorerDecorationsProvider.ts`; `src/vs/workbench/browser/parts/editor/multiEditorTabsControl.ts` and `editorTabsControl.ts`; `src/vs/platform/undoRedo/` and `src/vs/editor/common/model/editStack.ts` (read for contrast, not for lifting).
+- In-repo, for current state: `web/app/editor/Centre.tsx`, `EditorView.tsx`, `LinesView.tsx`, `bindings.ts`; `package.json` (the installed `@codemirror/*` and `@replit/codemirror-vim` pins); `process/planning/2026-11-09-code-editor/ROADMAP-2026-11-09-code-editor-r20.md` (the capability enumeration, E1–E25).

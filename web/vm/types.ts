@@ -281,7 +281,21 @@ export interface Snapshot {
    * marks the entry closed). The tool card renders `progressByCallId[cid]`
    * beneath the running row and seals when the paired ToolResult lands.
    * Empty for calls that never streamed (calculator, read_file, etc.). */
-  progressByCallId: Record<string, { text: string; eof: boolean }>;
+  progressByCallId: Record<string, { text: string; eof: boolean; droppedLines: number }>;
+  /** Sprint 530: the count of envelopes the session has received. */
+  envelopeCount: number;
+  /** Sprint 530: the count of ToolResult and FileWritten envelopes received. */
+  writeCount: number;
+  /** Sprint 530: each tool call's result row, keyed by callKey (or callId). */
+  resultByCallId: Record<string, TranscriptRow>;
+  /** Sprint 530: the last UserMessage envelope on the record, for the activity strip. */
+  lastUserMessage: RecordEnvelope | null;
+  /** Sprint 530: the last Returned / Park / SessionEnded envelope, for the activity strip. */
+  lastTurnEnd: RecordEnvelope | null;
+  /** Sprint 530: tool calls started since the last UserMessage. */
+  turnToolCount: number;
+  /** Sprint 530: the name of the most recently opened tool call in the current turn (empty when none is open). */
+  turnLiveToolName: string;
 }
 
 /** UI sprint 169: one point of a watched measure's series (kernel `app.language_view`). */

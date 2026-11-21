@@ -46,6 +46,7 @@ import { language, setLanguageLane } from "./state/language";
 import { languageKey, selectedTurn } from "./derive/language_keys";
 import { ARROWS, windowKey, type KeyAction } from "./keymap";
 import { findText, streamRows } from "./derive/stream";
+import { appInputs, sameAppInputs, type AppInputs } from "./derive/app_inputs";
 import { onCommand, shell } from "./state/shell";
 import { emit as emitSignal } from "../vm/instrumentation/sdd";
 import { closePage, editorBase, metaBase, pageOf, show, START, toggleEditor, toggleMeta, togglePage, type Page, type ViewState } from "./derive/open_view";
@@ -66,9 +67,10 @@ import { RecordsPage } from "./RecordsPage";
 import { StudioPage } from "./StudioPage";
 import { TopBar } from "./TopBar";
 import { ContextMenu } from "./ContextMenu";
+import { ErrorBoundary } from "./ErrorBoundary";
 import { closeMenu, menuKey, menuOpen } from "./state/context_menu";
 import "./window.css";
-import { Signal, EditorGroupClosedHow, EditorGroupOpenedHow, UndoRoutedDirection, UndoRoutedTo, EditorColumnFoldedCause, EditorDrawnBinding, EditorDrawnMode, EditorOpenedBinding, EditorDrawnDock, EditorDrawnLeftTab, EditorDrawnShowing, EditorKeyRefusedReason, SeqSelectedHow, ToolOutputModeSetCause, TopBarCardSetCard, TopBarCardSetCause, DialogClosedOutcome, ContextMenuClosedOutcome, KeyRoutedTarget, RecordOpenedHow, ViewChangedCause, PaneBoundBinding, PaneBoundHow, PaneDrawnConnection, PaneDrawnPickerLine, PaneDrawnState, PaneDrawnTurnState, PaneFocusedCause, PaneOpenedCause, PickerFolderArmedSource, PickerFolderDisarmedCause, PickerLineEnteredCause, PickerLineEnteredLine, type SignalPayloads } from "../vm/signals.gen";
+import { Signal, EditorGroupClosedHow, EditorGroupOpenedHow, UndoRoutedDirection, UndoRoutedTo, EditorColumnFoldedCause, EditorDrawnBinding, EditorDrawnMode, EditorOpenedBinding, EditorDrawnDock, EditorDrawnLeftTab, EditorDrawnShowing, EditorKeyRefusedReason, SeqSelectedHow, ToolOutputModeSetCause, TopBarCardSetCard, TopBarCardSetCause, DialogClosedOutcome, ContextMenuClosedOutcome, KeyRoutedTarget, RecordOpenedHow, ViewChangedCause, PaneBoundBinding, PaneBoundHow, PaneDrawnConnection, PaneDrawnPickerLine, PaneDrawnState, PaneDrawnTurnState, PaneFocusedCause, PaneOpenedCause, PickerFolderArmedSource, PickerFolderDisarmedCause, PickerLineEnteredCause, PickerLineEnteredLine, WindowFaultedSource, type SignalPayloads } from "../vm/signals.gen";
 import type { Activity } from "../reveal/activity";
 
 // UI sprint 132 (kernel K288, session vocabulary § R): the guidance levels the bar offers, each with
@@ -258,6 +260,9 @@ export class App extends React.Component<AppProps, AppState> {
   private lastDrawn = new Map<number, string>();
   /** The editor view's last EDITOR_DRAWN payload (sprint 407), so a record is written only on a change. */
   private lastEditorDrawn: string | null = null;
+  /** Sprint 531 (W9): the projection of the fields App draws, at the last shell-driven render. A snapshot
+   *  that changes no drawn field (a non-focused pane's streaming envelope) skips the render and publish. */
+  private lastAppInputs: AppInputs | null = null;
 
   private snap(paneId: number): Snapshot | undefined { return this.state.controllerSnapshots[paneId]; }
   private setPane(paneId: number, patch: Partial<AppPane>): void {
@@ -665,6 +670,17 @@ export class App extends React.Component<AppProps, AppState> {
     const applyShell = () => {
       const { snapshots, changedPane } = shell.getSnapshot();
       if (changedPane == null) return;
+      // Sprint 531 (W9): App re-renders and publish() runs only when a field App draws changed. A
+      // non-focused pane's streaming envelope — a growing progressByCallId, a fresh rawEnvelope — touches
+      // no field App draws, so its snapshot updates its own controller's readers (its Transcript) without
+      // re-rendering the root. appInputs names the drawn fields; a projection equal to the last one skips
+      // the setState below (and so componentDidUpdate's publish). The focused pane's rawEnvelopes is a
+      // fresh array per batch (sprint 524), compared by reference, so the focused pane still renders per
+      // batch; the language tick and the session-id URL side effects below both read fields the projection
+      // carries, so an early return never skips a render those would have driven.
+      const inputs = appInputs(snapshots, this.state.focused, this.state.panes);
+      if (this.lastAppInputs && sameAppInputs(this.lastAppInputs, inputs)) return;
+      this.lastAppInputs = inputs;
       const snap = snapshots[changedPane];
       const focusedId = this.state.focused;
       let revealed: boolean | undefined;
@@ -776,6 +792,9 @@ export class App extends React.Component<AppProps, AppState> {
     target.addEventListener(type, fn, capture);
     this.offs.push(() => target.removeEventListener(type, fn, capture));
   }
+  private onBoundaryError = (area: string, error: Error): void => {
+    emitSignal(Signal.WINDOW_FAULTED, { error_type: error?.name || "non-error", source: WindowFaultedSource.ERROR, where: "ErrorBoundary", area });
+  };
 
   // The window's keys: web/app/keymap.ts (sprint 327, F336) says which action a key takes.
   private onKey(e: KeyboardEvent): void {
@@ -1270,22 +1289,24 @@ export class App extends React.Component<AppProps, AppState> {
               <div style={{ flex: state.metaSplit.toFixed(3) + " 1 0%", display: "flex", flexDirection: "column", minWidth: 0, background: "#212327" }}>
                 <div data-view="meta" data-pane-id={String(fp.id)} style={{ flex: "none" }}><FindBar view="meta" /></div>
                 <div onClick={() => setFindScope("transcript")} style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "20px 26px", lineHeight: LOOK[settings.getSnapshot().look].metaLineHeight, fontSize: transcriptSize, minWidth: 0, ...transcriptVars(LOOK[settings.getSnapshot().look], settings.getSnapshot().scheme) } as React.CSSProperties}>
-                  <div key={fp.id} data-vm-transcript-mount="reveal" data-pane-id={String(fp.id)}>
-                    <div data-vm-atom-root="reveal" data-pane-id={String(fp.id)}><Transcript paneId={fp.id} view="reveal" /></div>
-                  </div>
+                  <ErrorBoundary area="transcript" onError={this.onBoundaryError}>
+                    <div key={fp.id} data-vm-transcript-mount="reveal" data-pane-id={String(fp.id)}>
+                      <div data-vm-atom-root="reveal" data-pane-id={String(fp.id)}><Transcript paneId={fp.id} view="reveal" /></div>
+                    </div>
+                  </ErrorBoundary>
                 </div>
                 <div data-view="meta" data-pane-id={String(fp.id)} style={{ flex: "none" }}><ActivityLine paneId={fp.id} view="meta" /></div>
                 <div data-view="meta" data-pane-id={String(fp.id)} style={{ flex: "none" }}><TaskRows paneId={fp.id} view="meta" /></div>
                 <div data-view="meta" data-pane-id={String(fp.id)} style={{ flex: "none", padding: "12px 26px 18px" }}><InputBar paneId={fp.id} /></div>
               </div>
-              <MetaView key={fp.id} paneId={fp.id} />
+              <ErrorBoundary area="meta" onError={this.onBoundaryError}><MetaView key={fp.id} paneId={fp.id} /></ErrorBoundary>
             </div>
           </div>
         )}
-        {showEditor && <EditorView key={fp.id} paneId={fp.id} fontSize={transcriptSize} sessionId={this.snap(fp.id)?.sessionId ?? ""} workspace={this.snap(fp.id)?.workspacePath ?? (fp.ws || null)} shape={fp.shape || null} />}
-        {surf === Surface.Records && <div data-app-mount="records" style={{ flex: 1, overflow: "auto", background: "#212327", padding: "22px 22px" }}><RecordsPage /></div>}
-        {surf === Surface.Assay && <div data-app-mount="assays" style={{ flex: 1, overflow: "auto", background: "#212327", padding: "20px 40px" }}><AssayPage /></div>}
-        {surf === Surface.Studio && <StudioPage />}
+        {showEditor && <ErrorBoundary area="editor" onError={this.onBoundaryError}><EditorView key={fp.id} paneId={fp.id} fontSize={transcriptSize} sessionId={this.snap(fp.id)?.sessionId ?? ""} workspace={this.snap(fp.id)?.workspacePath ?? (fp.ws || null)} shape={fp.shape || null} /></ErrorBoundary>}
+        {surf === Surface.Records && <ErrorBoundary area="records" onError={this.onBoundaryError}><div data-app-mount="records" style={{ flex: 1, overflow: "auto", background: "#212327", padding: "22px 22px" }}><RecordsPage /></div></ErrorBoundary>}
+        {surf === Surface.Assay && <ErrorBoundary area="assays" onError={this.onBoundaryError}><div data-app-mount="assays" style={{ flex: 1, overflow: "auto", background: "#212327", padding: "20px 40px" }}><AssayPage /></div></ErrorBoundary>}
+        {surf === Surface.Studio && <ErrorBoundary area="studio" onError={this.onBoundaryError}><StudioPage /></ErrorBoundary>}
         <div style={{ flex: "none" }}><Footer /></div>
         <Dialogs defaultFontSize={this.props.transcriptFontSize ?? 13} />
         <ContextMenu />

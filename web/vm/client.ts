@@ -96,6 +96,12 @@ export class BrowserSubstrateClient implements SubstrateClient {
   }
 
   private _openSse(url: string, handlers: StreamHandlers): Unsubscribe {
+    // Sprint 533: the server (`server.py` _session_events) stamps each frame `id: <seq>`. On this
+    // EventSource's own built-in auto-retry (a transient drop the browser recovers without a new
+    // instance), the browser replays the last id it saw as the `Last-Event-ID` request header, and
+    // the server resumes past it — no client code sets the header, and the constructor cannot set an
+    // initial one. The controller's explicit reconnect builds a fresh EventSource and resumes through
+    // the `since_seq` query parameter instead (SessionController.attachStream).
     const source = new EventSource(url);
     source.onopen = () => { handlers.onOpen?.(); };
     source.onmessage = (ev) => {

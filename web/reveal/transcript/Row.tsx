@@ -27,6 +27,7 @@ export interface RowProps {
   paired?: TranscriptRow;
   progressText: string;
   progressEof: boolean;
+  droppedLines: number;
   registerRow?: (seq: number, el: HTMLElement | null) => void;
   /** The pane and its session, for TRANSCRIPT_ROW_DRAWN (v0.12); absent outside a pane. */
   paneId?: number;
@@ -74,7 +75,7 @@ function drawnSeq(row: TranscriptRow): { seq: number | null; kind: string } {
     : { seq: null, kind: `local:${row.kind || row.role}` };
 }
 
-const RowInner: React.FC<RowProps> = ({ row, paired, progressText, progressEof, registerRow, paneId, sessionId }) => {
+const RowInner: React.FC<RowProps> = ({ row, paired, progressText, progressEof, droppedLines, registerRow, paneId, sessionId }) => {
   const style = styleFor(row);
   const text = row.text ?? "";
   const isModel = row.role === "model";
@@ -109,6 +110,7 @@ const RowInner: React.FC<RowProps> = ({ row, paired, progressText, progressEof, 
           result={paired}
           progressText={progressText}
           progressEof={progressEof}
+          droppedLines={droppedLines}
           streamingShow={streamingShow}
           paneId={paneId}
           sessionId={sessionId ?? null}

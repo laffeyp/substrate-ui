@@ -294,7 +294,7 @@ export function EditorView({ paneId, fontSize, sessionId, workspace, shape }: { 
   // The right column (sprint 430): the inspector (its width the column's, 300 px at first), or, with ⌘M, the
   // meta pane opened inside the editor view at 400 px (24b's column, the Architect's ruling of 2026-11-09).
   const metaOpen = ed.showing === "meta";
-  const events = snap?.rawEnvelopes?.length ?? 0;
+  const events = snap?.envelopeCount ?? 0;
   const inspectorColumn = (start: boolean) => folded.right ? <Rail column="right" label={metaOpen ? "META" : "INSPECTOR"} start={start} paneId={paneId} /> : (
     <div data-editor-area="right" data-showing={ed.showing} style={{ flex: metaOpen ? "0 1 400px" : `0 1 ${sizes.right}px`, minWidth: 0, overflow: "hidden", display: "flex", flexDirection: "column", background: SUNK, [start ? "borderRight" : "borderLeft"]: DIVIDER, minHeight: 0, position: "relative" }}>
       <div style={{ height: EDITOR_SIZES.tabRow, flex: "none", display: "flex", alignItems: "center", padding: "0 14px", gap: 8, borderBottom: "1px solid rgba(255,255,255,.055)", whiteSpace: "nowrap" }}>

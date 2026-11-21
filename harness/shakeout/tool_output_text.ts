@@ -88,6 +88,10 @@ async function main(): Promise<void> {
     const { session_id: sid } = await (await post("/api/session", { driver: "deterministic", workspace: ws.root, driver_params: { script } })).json() as { session_id: string };
     await win.evaluate(`(function () { var vm = window.__vm; return (vm.get(1) || vm.spawn(1)).attachExisting(${JSON.stringify(sid)}); })()`);
     await win.waitForFunction(`window.__vm.get(1).snapshot().sessionId === ${JSON.stringify(sid)}`, undefined, { timeout: 15_000 });
+    // This gate reads the plain presentation of every tool call. The transcript is windowed (sprint
+    // 529), so off-screen cards are spacers, not DOM nodes, and a read finds only the few near the
+    // viewport. Render every row for this gate; windowing is proven under load by long_session_open (W1).
+    await win.evaluate("window.__noTranscriptWindowing = true");
 
     // The default: the cards chip is lit.
     await win.keyboard.press("Meta+,");
@@ -132,14 +136,27 @@ async function main(): Promise<void> {
     if (counts.args !== 0) errs.push(`${counts.args} arg rows under text`);
     if (counts.footer) errs.push("a plain block holds the call_id footer");
 
-    // The 38 KB stream keeps its text past the result's cap.
+    // A 9000-line stream is bounded, not drawn whole: the live stream trims to its last 1000 lines
+    // (session_controller.ts STREAM_LINE_LIMIT) and the kernel caps a bash result at 8000 bytes, so the
+    // block shows far fewer than 9000 lines and says so — the dropped-lines note or the stdout-cut note.
+    // This is the memory bound the window-productionizing project exists for; drawing all 9000 is the
+    // crash it removes.
     const big = await win.evaluate(() => {
-      const el = Array.from(document.querySelectorAll("[data-tool-plain]")).find((e) => ((e.textContent ?? "").match(/\n/g) ?? []).length > 8000);
+      // Rows render as separate elements, so textContent carries no "\n"; measure the bound by size,
+      // not by counting newlines. The seq block drops its earlier lines to a note and holds the tail.
+      const el = Array.from(document.querySelectorAll("[data-tool-plain]")).find((e) => (e.textContent ?? "").includes("earlier lines not shown"));
       const t = el?.textContent ?? "";
-      return { lines: (t.match(/\n/g) ?? []).length, end: t.includes("9000"), note: t.includes("[bash: stdout cut") };
+      return { found: !!el, len: t.length, bounded: t.length < 20_000, cut: /earlier lines not shown/.test(t) && /head, tail or grep|stdout cut/.test(t) };
     });
-    if (!(big.lines > 8000 && big.end && big.note)) errs.push(`the long stream: ${big.lines} lines, ends at 9000: ${big.end}, the note: ${big.note}`);
-    else seen.push("the 38 KB stream kept its text, with the truncation note");
+    if (!(big.found && big.bounded && big.cut)) errs.push(`the long stream: found ${big.found}, ${big.len} chars, bounded under 20000: ${big.bounded}, truncation note: ${big.cut}`);
+    else seen.push(`the 9000-line stream bounded to ${big.len} chars, earlier lines dropped to a note`);
+
+    // Open every card to read its output, as a person clicks one open. A completed tool defaults closed
+    // (web/vm/tool_output_mode.ts defaultOpen: auto opens a card only while its tool runs), in the text
+    // presentation as in the boxed one, so its body is hidden until opened — the same step
+    // tool_output_formatted takes before it inspects.
+    await win.evaluate(`(function () { var s = window.__substrateToolOutputMode; if (s) { s.state = { mode: "expanded", generation: (s.state.generation || 0) + 1 }; s.listeners.forEach(function (f) { f(); }); } })()`);
+    await settled(win);
 
     // The formatting is alive without the box: the read's code, its gutter, a keyword's ink; the write's body.
     const read = win.locator('[data-tool-plain] [data-tool-text="code"][data-tool-lang="Python"]').first();
