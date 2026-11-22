@@ -46,7 +46,9 @@ function styleFor(row: TranscriptRow): Style {
     case "user":
       return { glyph: "›", glyphColor: "#82a5c8", textColor: "var(--transcript-message, #e2e5e9)", marginTop: "12px" };
     case "model":
-      return { glyph: "◆", glyphColor: "#7fb3b8", textColor: "var(--transcript-reply, #b9bec5)", marginTop: "6px" };
+      // Sprint 539: the body text's value is the `brightness` control (`--term-brightness`); unset, it
+      // falls back to the reply colour (`--transcript-reply`, #b9bec5), so the default is unchanged.
+      return { glyph: "◆", glyphColor: "#7fb3b8", textColor: "var(--term-brightness, var(--transcript-reply, #b9bec5))", marginTop: "6px" };
     case "tool": {
       const failed = row.toolOk === false;
       return {

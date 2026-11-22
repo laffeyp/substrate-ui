@@ -96,6 +96,11 @@ async function main(): Promise<void> {
     // viewport (eight of nine, the read card spaced out at the top). Render every row for this gate;
     // windowing itself is proven under load by long_session_open (W1).
     await win.evaluate("window.__noTranscriptWindowing = true");
+    // Raw is the default tool view (sprint 538 follow-up); this gate tests the boxed cards presentation, so pick it.
+    await win.keyboard.press("Meta+,");
+    await win.locator('[data-setting-tool-view="cards"]').first().click();
+    await win.keyboard.press("Escape");
+    await settled(win);
     const r = await post(`/api/session/${sid}/turn`, { text: "read, run, write" });
     if (!r.ok) throw new Error(`turn: HTTP ${r.status}`);
     const t0 = Date.now();

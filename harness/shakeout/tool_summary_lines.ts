@@ -72,6 +72,11 @@ async function main(): Promise<void> {
     // rows are spacers, not DOM nodes; render every row for this gate (windowing is proven under load by
     // long_session_open, W1).
     await win.evaluate("window.__noTranscriptWindowing = true");
+    // Raw is the default tool view (sprint 538 follow-up); this gate tests the boxed cards summaries, so pick cards.
+    await win.keyboard.press("Meta+,");
+    await win.locator('[data-setting-tool-view="cards"]').first().click();
+    await win.keyboard.press("Escape");
+    await settled(win);
     if (!(await post(`/api/session/${sid}/turn`, { text: "run four commands" })).ok) throw new Error("the turn was refused");
     await win.waitForFunction("window.__vm.get(1).snapshot().parkReason", undefined, { timeout: 30_000 });
     await win.waitForFunction(() => document.querySelectorAll("[data-tool-summary]").length >= 6, undefined, { timeout: 15_000 });

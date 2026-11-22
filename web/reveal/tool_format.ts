@@ -79,6 +79,38 @@ export function shellWords(cmd: string): string[] {
   return out;
 }
 
+/** Break a shell command onto new lines at its top-level `&&`, `||` and `;`, the operator kept at the end
+ *  of its line, so a long chained command reads as a column instead of one flat line (sprint 538; the
+ *  Architect, 2026-11-21: "a new line whenever there's an 'and'"). Quotes (`'`, `"`, `` ` ``) and nesting
+ *  (`$(...)`, `(...)`, `${...}`, `{...}`) are tracked, so an operator or pipe inside them is left alone —
+ *  the pipes in `$(git log | wc -l)` stay on the line. A single `|` (pipe) and a single `&` (background)
+ *  are left where they are. */
+export function formatShellCommand(cmd: string): string {
+  let out = "";
+  let quote: string | null = null;
+  let depth = 0;
+  for (let i = 0; i < cmd.length; i++) {
+    const c = cmd[i];
+    if (quote) {
+      out += c;
+      if (c === "\\" && quote !== "'" && i + 1 < cmd.length) { out += cmd[++i]; continue; }
+      if (c === quote) quote = null;
+      continue;
+    }
+    if (c === "'" || c === '"' || c === "`") { quote = c; out += c; continue; }
+    if (c === "\\" && i + 1 < cmd.length) { out += c + cmd[++i]; continue; }
+    if (c === "(" || c === "{") { depth++; out += c; continue; }
+    if ((c === ")" || c === "}") && depth > 0) { depth--; out += c; continue; }
+    if (depth === 0) {
+      if (c === "&" && cmd[i + 1] === "&") { out += "&&\n"; i++; while (cmd[i + 1] === " ") i++; continue; }
+      if (c === "|" && cmd[i + 1] === "|") { out += "||\n"; i++; while (cmd[i + 1] === " ") i++; continue; }
+      if (c === ";") { out += ";\n"; while (cmd[i + 1] === " ") i++; continue; }
+    }
+    out += c;
+  }
+  return out;
+}
+
 /** Commands whose output is a file's text, and the flags of each that take a value. */
 const SHOWS: Record<string, Set<string>> = {
   cat: new Set(), bat: new Set(["-l", "--language", "-r", "--line-range"]), less: new Set(), nl: new Set(),

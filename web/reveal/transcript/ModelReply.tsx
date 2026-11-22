@@ -35,8 +35,9 @@ function inlineSpan(inline: RenderedInline, key: number) {
 
 function blockElement(block: RenderedBlock, key: number): React.ReactElement | null {
   if (block.isP) {
+    // Sprint 539: the gap between blocks is the `paragraph` control (`--term-paragraph`); unset, 10px.
     return (
-      <div key={key} style={{ margin: "0 0 10px" }}>
+      <div key={key} style={{ margin: "0 0 var(--term-paragraph, 10px)" }}>
         {block.inlines.map(inlineSpan)}
       </div>
     );
@@ -84,7 +85,7 @@ function blockElement(block: RenderedBlock, key: number): React.ReactElement | n
   }
   if (block.isH) {
     return (
-      <div key={key} style={{ fontSize: block.hSize, fontWeight: 600, color: "#e2e5e9", margin: "16px 0 6px" }}>
+      <div key={key} style={{ fontSize: block.hSize, fontWeight: 600, color: "var(--term-emphasis-value, #cdd1d7)", margin: "16px 0 6px" }}>
         {block.inlines.map(inlineSpan)}
       </div>
     );
@@ -95,7 +96,7 @@ function blockElement(block: RenderedBlock, key: number): React.ReactElement | n
         <thead>
           <tr>
             {block.tableHeaders.map((cell, ci) => (
-              <th key={ci} style={{ borderBottom: "1px solid #2e3138", padding: "4px 10px", textAlign: "left", fontWeight: 600, color: "#e2e5e9" }}>
+              <th key={ci} style={{ borderBottom: "1px solid #2e3138", padding: "4px 10px", textAlign: "left", fontWeight: 600, color: "var(--term-emphasis-value, #cdd1d7)" }}>
                 {cell.map(inlineSpan)}
               </th>
             ))}

@@ -5,6 +5,8 @@
 // `new` holds the values the appearance work sets. Each appearance change adds its value here, the original beside it,
 // and its component reads the table for the look the viewer picked in Settings.
 
+import { DEFAULT_TERMINAL_TYPE, terminalTypeVars, type TerminalType } from "./terminal_type";
+
 export type Look = "new" | "original";
 export const LOOKS: readonly Look[] = ["new", "original"];
 
@@ -43,13 +45,14 @@ const SYNTAX_475: Syntax = { comment: "#62676f", keyword: "#82a5c8", string: "#b
 const SYNTAX_481: Syntax = { ...SYNTAX_475, keyword: "#7da3ca", type: "#b0bbd2", string: "#c7ade6", number: "#d496c3", meta: "#948dc5" };
 
 /** The transcript's colours as CSS variables, set on each transcript container; the rows read them (the transcript does
- *  not import the app). */
-export function transcriptVars(v: LookValues, scheme: Scheme = "colour"): Record<string, string> {
+ *  not import the app). Sprint 539: a terminal-type choice adds the `--term-*` typography variables (null parameters emit
+ *  nothing, so the default appearance is byte-identical). */
+export function transcriptVars(v: LookValues, scheme: Scheme = "colour", terminalType: TerminalType = DEFAULT_TERMINAL_TYPE): Record<string, string> {
   // Sprint 505: the code colours of tool output, `--syntax-<class>`, from the same palette the editor draws with.
   const syntax = scheme === "ghost" ? SYNTAX_GHOST : v.syntax;
   const out: Record<string, string> = { "--transcript-reply": v.replyColor, "--transcript-message": v.messageColor };
   for (const [k, c] of Object.entries(syntax)) out[`--syntax-${k}`] = c;
-  return out;
+  return { ...out, ...terminalTypeVars(terminalType) };
 }
 
 /** The code's colour scheme (sprint 485): `colour`, the look's palette; `ghost`, the same notes in whites and greys
@@ -68,8 +71,10 @@ export const LOOK: Record<Look, LookValues> = {
   // Sprint 477 (E16): the transcript at 20 px on 13 px; sprint 479 (E18): the code at 20 px (RESEARCH-2026-11-11-colour-spacing-wrap).
   // The reply's and message's colours stay as they were: sprint 479 made the reply brighter, and the Architect reverted it
   // ("this is actually too bright … everything was perfect", 2026-11-11).
-  // Sprint 516 (roadmap 2026-11-17-daily-driver-fixes E1; the Architect, 2026-11-17: "The editor background is too
-  // light. It needs to be the same background as the inset in the panes … that black background"): the ground is the
-  // inset's colour, and the raised step is the ground the editor had.
-  new: { paneLineHeight: 1.54, metaLineHeight: 1.54, terminalLineHeight: 1.54, codeLineHeight: 20, ground: "#1a1c20", raised: "#212327", replyColor: "#b9bec5", messageColor: "#e2e5e9", syntax: SYNTAX_481 },
+  // Sprint 516 (roadmap 2026-11-17-daily-driver-fixes E1) set the ground to the inset's #1a1c20 and the raised step to
+  // the editor's old #212327. Sprint 537 reverts those two values (the Architect, 2026-11-21: sprint 516 "basically
+  // turned the entire editor pane black … we just need to revert that change"): the editor's ground is the gray
+  // #212327 again, as `original` carries it, and the rendered Markdown's raised step is #1a1c20. Only these two values
+  // revert; the line heights (sprints 477/479) and the syntax palette (sprint 481) stay.
+  new: { paneLineHeight: 1.54, metaLineHeight: 1.54, terminalLineHeight: 1.54, codeLineHeight: 20, ground: "#212327", raised: "#1a1c20", replyColor: "#b9bec5", messageColor: "#e2e5e9", syntax: SYNTAX_481 },
 };

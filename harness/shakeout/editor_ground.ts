@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2026 Peter Laffey
-// The editor's ground is the look's (sprint 516; roadmap 2026-11-17-daily-driver-fixes E1; the Architect,
-// 2026-11-17: "The editor background is too light. It needs to be the same background as the inset in the
-// panes … that black background"). Decodes the pixels (ADDENDUMS.md A2): under `new`, the code area, the
-// terminal's header and the folded sill read #1a1c20, and the rendered Markdown's code block reads the
-// raised step #212327; under `original` (Settings › look), the grounds read #212327 and the block #1a1c20.
-// The deterministic driver. SHAKEOUT_APP=<Substrate.app> runs the bundle.
+// The editor's ground is the look's (sprint 516; roadmap 2026-11-17-daily-driver-fixes E1). Sprint 537
+// reverted sprint 516's two colour values (the Architect, 2026-11-21: sprint 516 "turned the entire editor
+// pane black … we just need to revert that change"), so `new` carries the same ground and raised step as
+// `original`. Decodes the pixels (ADDENDUMS.md A2): under both looks the code area, the terminal's header
+// and the folded sill read the gray #212327, and the rendered Markdown's code block reads the raised step
+// #1a1c20. The deterministic driver. SHAKEOUT_APP=<Substrate.app> runs the bundle.
 
 import { execFileSync } from "node:child_process";
 import { copyFileSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
@@ -109,17 +109,18 @@ async function main(): Promise<void> {
       if (d >= 6) errs.push(`${name} decodes rgb(${got.join(",")}), want rgb(${want.join(",")})`);
     };
 
-    // The `new` look: the code area's ground below the text, and the open terminal's header.
+    // The `new` look (reverted to the gray in sprint 537): the code area's ground below the text, and the
+    // open terminal's header.
     let shot = await shoot();
-    await codeGround("new code ground", INSET, shot.img, shot.scale);
-    await probe("new terminal head", "[data-editor-terminal-head]", 300, 3, INSET, shot.img, shot.scale);
+    await codeGround("new code ground", RAISED, shot.img, shot.scale);
+    await probe("new terminal head", "[data-editor-terminal-head]", 300, 3, RAISED, shot.img, shot.scale);
 
     // The folded sill.
     await win.keyboard.press("Meta+j");
     await win.locator("[data-editor-sill]").waitFor({ state: "visible", timeout: 5_000 });
     await settled(win);
     shot = await shoot();
-    await probe("new sill", "[data-editor-sill]", 3, 4, INSET, shot.img, shot.scale);
+    await probe("new sill", "[data-editor-sill]", 3, 4, RAISED, shot.img, shot.scale);
     await win.locator('[data-editor-sill] [data-editor-fold="bottom"]').click();
     await settled(win);
 
@@ -135,9 +136,9 @@ async function main(): Promise<void> {
     await win.locator("[data-md-code]").first().scrollIntoViewIfNeeded();
     await settled(win);
     shot = await shoot();
-    await probe("new md ground", "[data-md-view]", 4, 4, INSET, shot.img, shot.scale);
+    await probe("new md ground", "[data-md-view]", 4, 4, RAISED, shot.img, shot.scale);
     // (10, 10): inside the block's rounded corner and its padding, on its background.
-    await probe("new md code block", "[data-md-code]", 10, 10, RAISED, shot.img, shot.scale);
+    await probe("new md code block", "[data-md-code]", 10, 10, INSET, shot.img, shot.scale);
 
     // The `original` look: the grounds back to #212327, the block back to #1a1c20.
     await win.keyboard.press("Meta+,");

@@ -10,6 +10,7 @@
 import { createStore } from "../store";
 import { LOOKS, SCHEMES, type Look, type Scheme } from "../derive/look";
 import { setToolView, TOOL_VIEWS, type ToolView } from "../../vm/tool_view";
+import { DEFAULT_TERMINAL_TYPE, DENSE_PRESET, sanitizeTerminalType, type TerminalType } from "../derive/terminal_type";
 
 export type Theme = "dark" | "light" | "system";
 export const THEMES: readonly Theme[] = ["dark", "light", "system"];
@@ -35,16 +36,21 @@ export interface SettingsState {
   selectionMatches: boolean;
   /** Sprint 485: the code's colours, `colour` or `ghost`. */
   scheme: Scheme;
-  /** Sprint 517: how a tool call draws its output — `cards` (the boxed card) or `text` (plain, on the
-   *  inset's ground). Mirrored into `web/vm/tool_view.ts` for the transcript, which imports no web/app. */
+  /** Sprint 517: how a tool call draws its output — `cards` (the boxed card), `text` (plain, on the inset's
+   *  ground), or `raw` (sprint 538: the plain terminal column, no box, on the pane's ground). Mirrored into
+   *  `web/vm/tool_view.ts` for the transcript, which imports no web/app. */
   toolView: ToolView;
+  /** Sprint 539: the terminal window's typography (DESIGN-2026-11-21-terminal-typography-r1). Each of
+   *  the nine parameters is null until the viewer moves its control; `transcriptVars` writes the
+   *  `--term-*` variables the transcript reads, falling back to today's values when null. */
+  terminalType: TerminalType;
 }
 
 // One instance per window, kept on globalThis as in shell.ts. The page once loaded two copies of this
 // module (sprint 213); Vite now bundles one, and the shared key costs nothing.
 const KEY_SHARED = "__substrateSettings";
 const scope = globalThis as unknown as Record<string, ReturnType<typeof createStore<SettingsState>> | undefined>;
-export const settings = scope[KEY_SHARED] ?? (scope[KEY_SHARED] = createStore<SettingsState>({ theme: "dark", fontOverride: null, settingsNote: "", binding: "standard", look: "new", selectionMatches: true, scheme: "colour", toolView: "cards" }));
+export const settings = scope[KEY_SHARED] ?? (scope[KEY_SHARED] = createStore<SettingsState>({ theme: "dark", fontOverride: null, settingsNote: "", binding: "standard", look: "new", selectionMatches: true, scheme: "colour", toolView: "raw", terminalType: { ...DEFAULT_TERMINAL_TYPE } }));
 
 /** The saved fields that pass their checks; anything else is left at its default. */
 export function readSaved(raw: string | null): Partial<SettingsState> {
@@ -61,6 +67,7 @@ export function readSaved(raw: string | null): Partial<SettingsState> {
   if (typeof saved.selectionMatches === "boolean") patch.selectionMatches = saved.selectionMatches;
   if (SCHEMES.includes(saved.scheme as Scheme)) patch.scheme = saved.scheme as Scheme;
   if (TOOL_VIEWS.includes(saved.toolView as ToolView)) patch.toolView = saved.toolView as ToolView;
+  if (saved.terminalType && typeof saved.terminalType === "object") patch.terminalType = sanitizeTerminalType(saved.terminalType);
   return patch;
 }
 
@@ -72,8 +79,8 @@ export function loadSettings(): void {
 
 function save(): void {
   try {
-    const { theme, fontOverride, binding, look, selectionMatches, scheme, toolView } = settings.getSnapshot();
-    window.localStorage.setItem(KEY, JSON.stringify({ theme, fontOverride, binding, look, selectionMatches, scheme, toolView }));
+    const { theme, fontOverride, binding, look, selectionMatches, scheme, toolView, terminalType } = settings.getSnapshot();
+    window.localStorage.setItem(KEY, JSON.stringify({ theme, fontOverride, binding, look, selectionMatches, scheme, toolView, terminalType }));
   } catch { /* not saved */ }
 }
 
@@ -120,6 +127,25 @@ export function pickLook(look: Look): void {
 export function pickBinding(binding: Binding): void {
   settings.set({ binding });
   save();
+}
+
+/** Sprint 539: move one or more terminal-type parameters. A field set to its own value stays as the
+ *  viewer chose it; `resetTerminalType` returns every parameter to null (today's value). */
+export function setTerminalType(patch: Partial<TerminalType>): void {
+  settings.set({ terminalType: { ...settings.getSnapshot().terminalType, ...patch } });
+  save();
+}
+
+/** Sprint 539: every parameter back to null — the transcript draws today's values again. */
+export function resetTerminalType(): void {
+  settings.set({ terminalType: { ...DEFAULT_TERMINAL_TYPE } });
+  save();
+}
+
+/** Sprint 539: the "dense" preset — tight leading and negative tracking at once (the Architect's
+ *  "tight," "dense"). Leaves the other parameters as they are. */
+export function denseTerminalType(): void {
+  setTerminalType(DENSE_PRESET);
 }
 
 export function clearNote(): void {

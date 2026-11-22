@@ -13,7 +13,7 @@ import { useToolOutputMode } from "./useToolOutputMode";
 import { emit as emitSignal } from "../../vm/instrumentation/sdd";
 import { Signal } from "../../vm/signals.gen";
 import { SummaryText, TerminalText, ToolText } from "./ToolText";
-import { argFormat, needsTerminal, outputFormat, shellResult, splitArg, summaryOf } from "../tool_format";
+import { argFormat, formatShellCommand, needsTerminal, outputFormat, shellResult, splitArg, summaryOf } from "../tool_format";
 import { useToolView } from "./useToolView";
 
 const hasResultText = (r: TranscriptRow | undefined) => !!r && typeof r.output === "string" && r.output.length > 0;
@@ -84,6 +84,10 @@ const ToolCardInner: React.FC<Props> = ({ call, result, progressText, progressEo
   const toolName = call.toolName ?? "";
   // Sprint 509: the summary's text and its format, without a harness call's `key=`.
   const summary = summaryOf(toolName, call.args ?? []);
+  // Raw (sprint 538): a chained shell command reads as a column — broken at its top-level && || ; .
+  const previewText = toolView === "raw" && summary.format === "shell" ? formatShellCommand(summary.text) : summary.text;
+  // Compact (sprint 538 follow-up): a variation of cards with a one-line preview, not three.
+  const clampLines = toolView === "compact" ? 1 : SUMMARY_LINES;
   const status = toolRunning ? "running" : failed ? "err · " + (result?.error ?? "") : "ok";
   // Caret convention: ▸ points right when the card is closed (content
   // hidden), ▾ points down when the card is open (content flows below).
@@ -186,10 +190,32 @@ const ToolCardInner: React.FC<Props> = ({ call, result, progressText, progressEo
           verticalAlign: "top",
         }}
       >
-        <span data-tool-preview="1" style={{
+        <span data-tool-preview="1" style={toolView === "raw" && isOpen ? {
+          // Raw, expanded: the whole command in place (clamp lifts); its continuation lines hang-indent
+          // under the first, to the right of the tool label — not flat against the left margin. The
+          // command text takes the transcript's base size, like the other text, not the smaller 11px.
+          whiteSpace: "pre-wrap",
+          overflowWrap: "anywhere",
+          minWidth: 0,
+          flex: "0 1 auto",
+          paddingLeft: `${toolName.length + 1}ch`,
+          textIndent: `-${toolName.length + 1}ch`,
+        } : toolView === "raw" ? {
+          // Raw, collapsed: three lines, the command's continuation lines hang-indent under the first.
           display: "-webkit-box",
           WebkitBoxOrient: "vertical",
           WebkitLineClamp: SUMMARY_LINES,
+          overflow: "hidden",
+          whiteSpace: "pre-wrap",
+          overflowWrap: "anywhere",
+          minWidth: 0,
+          flex: "0 1 auto",
+          paddingLeft: `${toolName.length + 1}ch`,
+          textIndent: `-${toolName.length + 1}ch`,
+        } : {
+          display: "-webkit-box",
+          WebkitBoxOrient: "vertical",
+          WebkitLineClamp: clampLines,
           overflow: "hidden",
           whiteSpace: "pre-wrap",
           overflowWrap: "anywhere",
@@ -200,14 +226,16 @@ const ToolCardInner: React.FC<Props> = ({ call, result, progressText, progressEo
           <span>
             <span style={{ color: "#9aa0a8", fontFamily: "ui-monospace,'SF Mono',Menlo,monospace" }}>{toolName}</span>
             {" "}
-            <span style={{ fontFamily: "ui-monospace,'SF Mono',Menlo,monospace" }}><SummaryText text={summary.text} format={summary.format} /></span>
+            <span style={{ fontFamily: "ui-monospace,'SF Mono',Menlo,monospace" }}><SummaryText text={previewText} format={summary.format} /></span>
           </span>
         </span>
+        {toolView === "raw" ? null : (
         <span data-tool-status="1" style={{ flex: "none", marginLeft: 6, maxWidth: "40%", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
           <span style={{ color: "#4a4e55" }}>{" · "}</span>
           <span style={{ color: statusColor(toolRunning, failed), fontFamily: "ui-monospace,'SF Mono',Menlo,monospace" }}>{status}</span>
           <span style={{ color: "#4a4e55", marginLeft: 8 }}>{cardCaret}</span>
         </span>
+        )}
       </summary>
       {descendShow ? (
         <span
@@ -226,6 +254,26 @@ const ToolCardInner: React.FC<Props> = ({ call, result, progressText, progressEo
           overflow: "auto",
           fontFamily: "ui-monospace,'SF Mono',Menlo,monospace",
           fontSize: 11,
+          lineHeight: 1.7,
+          color: "#b9bec5",
+          whiteSpace: "pre-wrap",
+          overflowWrap: "anywhere",
+        }}>
+          {droppedLines > 0 ? <div style={{ color: "#62676f", fontSize: 11, marginBottom: 4 }}>{droppedLines} earlier lines not shown</div> : null}
+          {plainBodies.map((b) => <ToolText key={b.key} text={b.text} format={b.format} />)}
+          {plainOutput}
+          {hasError ? <div style={{ marginTop: 6, color: "#c26058" }}>error {errorText}</div> : null}
+        </div>
+      ) : toolView === "raw" ? (plainBodies.length > 0 || plainOutput !== null || hasError) && (
+        // Sprint 538 — the plain terminal column (RESEARCH-2026-11-20-tool-output-text-presentation-r2).
+        // No box, no status chip, no caret: the command preview above clamps to three lines closed and shows
+        // in full open (the clamp lifts in place — the command is not drawn again here), and this holds only
+        // its output, on the pane ground. Clicking the command toggles open/closed. The ANSI model and the
+        // sprints-505–512 language/diff/grep formatting are reused unchanged.
+        <div data-tool-raw="1" data-dropped-lines={droppedLines > 0 ? String(droppedLines) : undefined} style={{
+          // The output takes the transcript's base text size, like the other text — no 11px override.
+          margin: "2px 0 8px 24px",
+          fontFamily: "ui-monospace,'SF Mono',Menlo,monospace",
           lineHeight: 1.7,
           color: "#b9bec5",
           whiteSpace: "pre-wrap",
@@ -265,6 +313,19 @@ const ToolCardInner: React.FC<Props> = ({ call, result, progressText, progressEo
             </div>
           );
         })}
+        {toolView === "compact" ? (
+          // Compact: one box. plainOutput is the live stream while the command runs and the stream-or-result
+          // once it lands, so the stream IS the output — no separate streaming box and result box.
+          plainOutput !== null ? (
+            <>
+              <div style={{ marginTop: 8, color: "#62676f" }}>output</div>
+              <div data-tool-compact-output="1" style={{ background: "#1a1c20", borderRadius: 5, padding: "8px 12px", maxHeight: 220, overflow: "auto", color: "#9aa0a8" }}>
+                {droppedLines > 0 ? <div style={{ color: "#62676f", fontSize: 11, marginBottom: 4 }}>{droppedLines} earlier lines not shown</div> : null}
+                {plainOutput}
+              </div>
+            </>
+          ) : null
+        ) : (<>
         {streamingShow ? (
           <ProgressStream progressText={progressText} eof={progressEof} droppedLines={droppedLines} />
         ) : null}
@@ -287,6 +348,7 @@ const ToolCardInner: React.FC<Props> = ({ call, result, progressText, progressEo
             ) : <ToolText text={outputText} format={outputFormat(toolName, call.args ?? [], outputText)} />}</div>
           </>
         ) : null}
+        </>)}
         {hasError ? (
           <div style={{ marginTop: 6, color: "#c26058" }}>error {errorText}</div>
         ) : null}

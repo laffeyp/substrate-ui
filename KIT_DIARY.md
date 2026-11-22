@@ -1092,3 +1092,9 @@ The clean build that followed was reported as "every suite has run". It had not:
 - The packaged build built the CPython runtime and kernel wheel three times, because `pack:dev` and `pack:next` each re-run `pack:runtime` and the chain also ran it as its own step. The build took roughly half an hour; most of it was redundant. Pack once.
 
 **What this says about the next kit version.** Two concrete additions. First, a worker's dispatched grade commands should be the project's full pre-build check set (lint, format-check, generated-file check), not a subset, so a worker cannot pass a grade the packaged build then fails. Second, AGENTS.md hard rule 6 could name "a change to a surface that many gates or views observe" as an explicit cross-cutting case that must split into a chain and re-run every observer at close — the windowing change is the worked example.
+
+## 2026-11-22 — sprint 539 (terminal typography panel) + the scroll fix
+
+**What got in the way.** A gate read by its tail, not its verdict, hid a regression. After the first bottom-stutter fix I ran `transcript_follow` and read only its last lines — all `ok` — and called it green. The failing checks (`resume`, the `switch scrolled up` trace) print earlier in the output; the tail missed them. The full `gates:electron` re-run later surfaced both. A gate's pass/fail is its verdict line, not the end of its log; read the verdict or grep `FAIL`, never the tail.
+
+**What worked.** The regression's shape named its own cause. The first fix released follow on any `scrollTop` decrease; `transcript_follow` scrolls with `el.scrollTop = …`, a programmatic set, and that read as a user up-scroll on a resume. Keying the release to the `wheel` event instead — a flag set only by `deltaY`, which a programmatic scroll never fires — separated a real scroll-up from a layout shift and passed the gate twice. The gate's own driving method (programmatic, not wheel) was the tell for which signal to trust.

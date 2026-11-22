@@ -13,6 +13,7 @@
 import * as React from "react";
 import { Transcript } from "../../reveal/transcript";
 import { LOOK, transcriptVars } from "../derive/look";
+import { transcriptTypeStyle } from "../derive/terminal_type";
 import { ActivityLine, TaskRows } from "../ActivityLine";
 import { FindBar } from "../FindBar";
 import { InputBar } from "../InputBar";
@@ -225,7 +226,7 @@ export function EditorView({ paneId, fontSize, sessionId, workspace, shape }: { 
   // are kept per mode, and each finished drag is one EDITOR_COLUMN_RESIZED.
   const [sizes, setSizes] = React.useState<EditorSizes>(() => loadSizes("code", storage()));
   const ed = React.useSyncExternalStore(editor.subscribe, editor.getSnapshot, editor.getSnapshot);
-  const { look, scheme } = React.useSyncExternalStore(settings.subscribe, settings.getSnapshot, settings.getSnapshot);
+  const { look, scheme, terminalType } = React.useSyncExternalStore(settings.subscribe, settings.getSnapshot, settings.getSnapshot);
   const { folded, dock, swapped } = ed;
   const snap = React.useSyncExternalStore(shell.subscribe, shell.getSnapshot, shell.getSnapshot).snapshots[paneId];
   const parked = !!snap?.parkReason;
@@ -339,7 +340,7 @@ export function EditorView({ paneId, fontSize, sessionId, workspace, shape }: { 
       {/* Sprint 458 (24k; D40): the header's hint, as its tooltip. */}
       <div data-editor-terminal-head="1" title={ADD_HINT} style={{ flex: "none", padding: "6px 16px 2px", display: "flex", ...LABEL }}>SUBSTRATE TERMINAL<span style={{ flex: 1 }} /><span data-editor-fold="bottom" title="fold the terminal (⌘J)" onClick={() => foldColumn("bottom", true, EditorColumnFoldedCause.RAIL, paneId)} style={GLYPH}>▾</span></div>
       <div style={{ flex: "none" }}><FindBar view="meta" /></div>
-      <div onClick={() => setFindScope("transcript")} style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "2px 16px", lineHeight: LOOK[look].terminalLineHeight, fontSize, minWidth: 0, minHeight: 0, ...transcriptVars(LOOK[look], scheme) } as React.CSSProperties}>
+      <div onClick={() => setFindScope("transcript")} style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "2px 16px", minWidth: 0, minHeight: 0, ...transcriptTypeStyle(fontSize, LOOK[look].terminalLineHeight), ...transcriptVars(LOOK[look], scheme, terminalType) } as React.CSSProperties}>
         <div data-vm-transcript-mount="editor" data-pane-id={String(paneId)}>
           {/* The reveal's scroll anchor: meta and the editor are never shown together. */}
           <div data-vm-atom-root="editor" data-pane-id={String(paneId)}><Transcript paneId={paneId} view="reveal" /></div>

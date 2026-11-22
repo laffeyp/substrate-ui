@@ -9,8 +9,9 @@
 import * as React from "react";
 import { useSyncExternalStore } from "react";
 import { closeDialog, dialogs } from "./state/dialogs";
-import { BINDINGS as EDITOR_BINDINGS, fontSize, pickBinding, pickLook, pickScheme, pickSelectionMatches, pickTheme, pickToolView, settings, stepFont, THEMES } from "./state/settings";
+import { BINDINGS as EDITOR_BINDINGS, denseTerminalType, fontSize, pickBinding, pickLook, pickScheme, pickSelectionMatches, pickTheme, pickToolView, resetTerminalType, setTerminalType, settings, stepFont, THEMES } from "./state/settings";
 import { LOOKS, SCHEMES } from "./derive/look";
+import { TERM_ALIGNS, TERM_SLIDERS } from "./derive/terminal_type";
 import { TOOL_VIEWS } from "../vm/tool_view";
 import { DialogClosedOutcome, PaneDrawnConnection } from "../vm/signals.gen";
 
@@ -91,6 +92,35 @@ function SettingsDialog({ defaultFontSize }: { defaultFontSize: number }): React
           <span onClick={() => stepFont(-1, defaultFontSize)} style={stepper}>−</span>
           <span style={{ color: "#e2e5e9" }}>{fontSize(defaultFontSize) + "px"}</span>
           <span onClick={() => stepFont(1, defaultFontSize)} style={stepper}>+</span>
+        </div>
+        {/* Sprint 539: the terminal window's typography (DESIGN-2026-11-21-terminal-typography-r1). Each
+            control writes a `--term-*` CSS variable the transcript reads; a parameter the viewer has not
+            moved stays null, so the default appearance is unchanged. A slider per numeric parameter, a
+            segmented control for alignment, and the reset and dense presets. */}
+        <div data-settings-section="terminal-type" style={section}>TERMINAL TYPE</div>
+        {TERM_SLIDERS.map((s) => {
+          const val = st.terminalType[s.key];
+          return (
+            <div key={s.key} style={{ display: "flex", alignItems: "center", gap: 14 }}>
+              <span style={label}>{s.label}</span>
+              <input type="range" data-term-control={s.key} min={s.min} max={s.max} step={s.step} value={val ?? s.display}
+                onChange={(ev) => setTerminalType({ [s.key]: Number(ev.target.value) })} style={{ width: 170, accentColor: "#82a5c8" }} />
+              <span data-term-value={s.key} style={{ color: val == null ? "#4a4e55" : "#e2e5e9", minWidth: 54, fontSize: 11 }}>{val == null ? "default" : String(val)}</span>
+            </div>
+          );
+        })}
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <span style={label}>alignment</span>
+          <span style={{ display: "flex", border: "1px solid rgba(255,255,255,.09)", borderRadius: 5, overflow: "hidden" }}>
+            {TERM_ALIGNS.map((a) => (
+              <span key={a} data-term-align={a} data-lit={st.terminalType.align === a ? "1" : "0"} onClick={() => setTerminalType({ align: a })} style={{ padding: "3px 12px", cursor: "pointer", color: st.terminalType.align === a ? "#e2e5e9" : "#62676f", background: st.terminalType.align === a ? "#2e3138" : "transparent" }}>{a}</span>
+            ))}
+          </span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <span style={label}>presets</span>
+          <span data-term-preset="dense" onClick={denseTerminalType} style={{ ...stepper, padding: "2px 12px" }}>dense</span>
+          <span data-term-reset onClick={resetTerminalType} style={{ ...stepper, padding: "2px 12px" }}>reset to default</span>
         </div>
         <div data-settings-section="editor" style={section}>EDITOR</div>
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>

@@ -198,7 +198,10 @@ export function renderInline(seg: InlineSegment): RenderedInline {
   }
   if (seg.bold) {
     styled.fw = "600";
-    styled.color = "#e2e5e9";
+    // Bold reads by its weight; its brightness is pulled down toward the body text (was #e2e5e9), so it
+    // no longer glares against the other text (the Architect, 2026-11-21: "too bright … take it down ~50%").
+    // Sprint 539: this value is the `emphasis` control (`--term-emphasis-value`); unset, #cdd1d7.
+    styled.color = "var(--term-emphasis-value, #cdd1d7)";
   }
   if (seg.italic) {
     styled.fs = "italic";

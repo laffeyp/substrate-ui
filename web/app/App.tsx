@@ -22,6 +22,7 @@ import { GUIDANCE_LEVEL_BUNDLES, LENGTH_DEFAULT, LengthPosition, TONE_DEFAULT, T
 import { buildLanguageLens, type Lens } from "../reveal/language_lens";
 import { Transcript } from "../reveal/transcript";
 import { LOOK, transcriptVars } from "./derive/look";
+import { transcriptTypeStyle } from "./derive/terminal_type";
 import { liveActivity } from "../reveal/activity";
 import { fontSize, loadSettings, settings } from "./state/settings";
 import { closeDialog, dialogOpen, openSettings } from "./state/dialogs";
@@ -1288,7 +1289,7 @@ export class App extends React.Component<AppProps, AppState> {
             <div style={{ flex: 1, display: "flex", minHeight: 0, position: "relative" }}>
               <div style={{ flex: state.metaSplit.toFixed(3) + " 1 0%", display: "flex", flexDirection: "column", minWidth: 0, background: "#212327" }}>
                 <div data-view="meta" data-pane-id={String(fp.id)} style={{ flex: "none" }}><FindBar view="meta" /></div>
-                <div onClick={() => setFindScope("transcript")} style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "20px 26px", lineHeight: LOOK[settings.getSnapshot().look].metaLineHeight, fontSize: transcriptSize, minWidth: 0, ...transcriptVars(LOOK[settings.getSnapshot().look], settings.getSnapshot().scheme) } as React.CSSProperties}>
+                <div onClick={() => setFindScope("transcript")} style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "20px 26px", minWidth: 0, ...transcriptTypeStyle(transcriptSize, LOOK[settings.getSnapshot().look].metaLineHeight), ...transcriptVars(LOOK[settings.getSnapshot().look], settings.getSnapshot().scheme, settings.getSnapshot().terminalType) } as React.CSSProperties}>
                   <ErrorBoundary area="transcript" onError={this.onBoundaryError}>
                     <div key={fp.id} data-vm-transcript-mount="reveal" data-pane-id={String(fp.id)}>
                       <div data-vm-atom-root="reveal" data-pane-id={String(fp.id)}><Transcript paneId={fp.id} view="reveal" /></div>

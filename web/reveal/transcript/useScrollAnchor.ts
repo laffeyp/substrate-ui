@@ -73,6 +73,9 @@ export function useScrollAnchor(key: string, paneId: number): ScrollAnchor {
   // (2026-10-14: a render in the same frame as a scroll to the bottom held the old reading place
   // and the scroll was lost; transcript_follow's switch step failed one run in five).
   const seenTopRef = useRef<number | null>(null);
+  // Set true on a real wheel-up, false on a wheel-down. Read in readUserScroll so a slow scroll-up at the
+  // bottom releases follow (the 2026-11-21 bottom-stutter bug) while a programmatic or layout scroll does not.
+  const wheeledUpRef = useRef<boolean>(false);
 
   const findScroller = useCallback((mount: HTMLElement): HTMLElement | null => {
     let node: HTMLElement | null = mount.parentElement;
@@ -148,7 +151,11 @@ export function useScrollAnchor(key: string, paneId: number): ScrollAnchor {
       pinRef.current = null; // the user scrolled: the clicked header is no longer held
       if (mountRef.current) mountRef.current.style.paddingBottom = "";
     }
-    const following = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <= STICK_PX;
+    // A real wheel-up releases follow even within STICK_PX of the bottom, so a slow scroll-up at the bottom
+    // is not snapped back (2026-11-21: the bottom-stutter bug). wheeledUpRef is set on the wheel event, not
+    // from a scrollTop delta, so a programmatic or layout scroll (resume, a view switch) does not read as a
+    // user up-scroll and keeps following. A wheel-down to the bottom clears the flag and follow resumes.
+    const following = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <= STICK_PX && !wheeledUpRef.current;
     followingRef.current = following;
     seenTopRef.current = scroller.scrollTop;
     savedByKey.set(key, { scrollTop: scroller.scrollTop, following });
@@ -230,6 +237,14 @@ export function useScrollAnchor(key: string, paneId: number): ScrollAnchor {
     updateAnchor();
     report(TranscriptScrolledCause.VIEW_SWITCH);
     scroller.addEventListener("scroll", onScroll, { passive: true });
+    // A real wheel-up releases follow even at the bottom, so a slow scroll-up there is honoured; a
+    // wheel-down clears it so follow resumes. The scroll event alone cannot tell a user scroll from a
+    // layout shift, so the direction is read from the wheel itself.
+    const onWheel = (event: WheelEvent): void => {
+      if (event.deltaY < -0.5) wheeledUpRef.current = true;
+      else if (event.deltaY > 0.5) wheeledUpRef.current = false;
+    };
+    scroller.addEventListener("wheel", onWheel, { passive: true });
     // A click on a card header pins it before the card opens or closes (capture: before the
     // <details> toggles and the layout changes).
     const onClick = (event: Event): void => {
@@ -261,6 +276,7 @@ export function useScrollAnchor(key: string, paneId: number): ScrollAnchor {
     observer.observe(mount);
     cleanupRef.current = () => {
       scroller.removeEventListener("scroll", onScroll);
+      scroller.removeEventListener("wheel", onWheel);
       mount.removeEventListener("click", onClick, true);
       observer.disconnect();
       if (rafIdRef.current !== null) { cancelAnimationFrame(rafIdRef.current); rafIdRef.current = null; }

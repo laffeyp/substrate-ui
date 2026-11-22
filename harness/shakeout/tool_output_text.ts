@@ -93,10 +93,8 @@ async function main(): Promise<void> {
     // viewport. Render every row for this gate; windowing is proven under load by long_session_open (W1).
     await win.evaluate("window.__noTranscriptWindowing = true");
 
-    // The default: the cards chip is lit.
+    // Raw is the default now; this gate tests the text presentation, so open Settings and pick it.
     await win.keyboard.press("Meta+,");
-    await win.locator('[data-setting-tool-view="cards"][data-lit="1"]').waitFor({ state: "visible", timeout: 5_000 });
-    seen.push("default: cards lit");
     await win.locator('[data-setting-tool-view="text"]').first().click();
     await win.keyboard.press("Escape");
     await settled(win);
